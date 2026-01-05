@@ -1,0 +1,137 @@
+# Soul Player - Workspace Configuration
+# New structure: libraries/ and applications/
+
+[workspace]
+resolver = "2"
+members = [
+    # Rust libraries
+    "libraries/soul-core",
+    "libraries/soul-storage",
+    "libraries/soul-audio",
+    "libraries/soul-audio-desktop",
+    "libraries/soul-audio-mobile",
+    "libraries/soul-audio-embedded",
+    "libraries/soul-playback",
+    "libraries/soul-metadata",
+    "libraries/soul-sync",
+    "libraries/soul-discovery",
+
+    # Applications
+    "applications/desktop/src-tauri",
+    # "applications/mobile/src-tauri",  # Will be created when initializing Tauri mobile
+    "applications/server",
+
+    # Firmware (temporarily disabled - needs ESP toolchain)
+    # "applications/firmware",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Soul Player Contributors"]
+license = "AGPL-3.0"
+repository = "https://github.com/yourusername/soul-player"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
+tokio = { version = "1.35", features = ["full"] }
+async-trait = "0.1"
+
+# Audio - Decoder
+symphonia = { version = "0.5", features = ["all"] }
+rubato = "0.15" # Sample rate conversion
+
+# Audio - Platform outputs
+cpal = "0.15"  # Desktop
+# iOS/Android use native bridges (Swift/Kotlin)
+# ESP32 uses awedio_esp32
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"] }
+redb = "2.1"
+
+# Metadata
+lofty = "0.18" # Audio tag reading/writing
+
+# Server
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+jsonwebtoken = "9.2"
+bcrypt = "0.15"
+
+# Sync
+reqwest = { version = "0.11", features = ["json"] }
+
+# Utilities
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+config = "0.14"
+
+# Desktop/Mobile (Tauri)
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-shell = "2.0.0"
+
+# Testing
+proptest = "1.4"
+criterion = "0.5"
+testcontainers = "0.15"
+mockall = "0.12"
+
+# ESP32-specific (only for soul-audio-embedded)
+esp-idf-hal = "0.43"
+esp-idf-sys = "0.34"
+embassy-executor = { version = "0.5", features = ["arch-xtensa"] }
+embassy-time = "0.3"
+awedio_esp32 = "0.2"
+
+# Internal workspace crates (libraries)
+soul-core = { path = "libraries/soul-core" }
+soul-storage = { path = "libraries/soul-storage" }
+soul-audio = { path = "libraries/soul-audio" }
+soul-audio-desktop = { path = "libraries/soul-audio-desktop" }
+soul-audio-mobile = { path = "libraries/soul-audio-mobile" }
+soul-audio-embedded = { path = "libraries/soul-audio-embedded" }
+soul-playback = { path = "libraries/soul-playback" }
+soul-metadata = { path = "libraries/soul-metadata" }
+soul-discovery = { path = "libraries/soul-discovery" }
+soul-sync = { path = "libraries/soul-sync" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "deny"
+pedantic = "warn"
+cargo = "warn"
+# Allow some pedantic lints that are too noisy
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+# Optimize dependencies even in dev builds for better audio performance
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+strip = false

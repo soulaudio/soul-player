@@ -1,0 +1,240 @@
+/// Soul Server - Multi-user music streaming server
+use axum::{
+    middleware as axum_middleware,
+    routing::{delete, get, post, put},
+    Router,
+};
+use clap::{Parser, Subcommand};
+use soul_core::Storage;
+use soul_server::{
+    api, config::ServerConfig, jobs, middleware, services::{AuthService, FileStorage, TranscodingService},
+    state::AppState,
+};
+use soul_storage::Database;
+use std::{net::SocketAddr, sync::Arc};
+use tower_http::{
+    cors::CorsLayer,
+    trace::{DefaultMakeSpan, TraceLayer},
+};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Parser)]
+#[command(name = "soul-server")]
+#[command(about = "Soul Player multi-user streaming server", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Start the HTTP server
+    Serve {
+        /// Configuration file path
+        #[arg(short, long)]
+        config: Option<String>,
+    },
+    /// Create a new user
+    AddUser {
+        /// Username
+        #[arg(short, long)]
+        username: String,
+        /// Password
+        #[arg(short, long)]
+        password: String,
+    },
+    /// List all users
+    ListUsers,
+    /// Scan a directory for music files
+    Scan {
+        /// Directory path to scan
+        path: String,
+    },
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Initialize tracing
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "soul_server=info,tower_http=info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Serve { config: _ } => {
+            serve().await?;
+        }
+        Commands::AddUser { username, password } => {
+            add_user(&username, &password).await?;
+        }
+        Commands::ListUsers => {
+            list_users().await?;
+        }
+        Commands::Scan { path } => {
+            scan_directory(&path).await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn serve() -> anyhow::Result<()> {
+    // Load configuration
+    let config = ServerConfig::load()?;
+    config.validate()?;
+
+    tracing::info!("Starting Soul Server");
+    tracing::info!("Host: {}", config.server.host);
+    tracing::info!("Port: {}", config.server.port);
+
+    // Initialize database
+    let db = Database::new(&config.storage.database_url).await?;
+    let db = Arc::new(db);
+    tracing::info!("Database connected");
+
+    // Initialize file storage
+    let file_storage = FileStorage::new(config.storage.music_storage_path.clone());
+    file_storage.initialize().await?;
+    let file_storage = Arc::new(file_storage);
+    tracing::info!("File storage initialized");
+
+    // Initialize auth service
+    let auth_service = AuthService::new(
+        config.auth.jwt_secret.clone(),
+        config.auth.jwt_expiration_hours,
+        config.auth.jwt_refresh_expiration_days,
+    );
+    let auth_service = Arc::new(auth_service);
+    tracing::info!("Auth service initialized");
+
+    // Initialize transcoding service
+    let transcoding_service = TranscodingService::new(config.transcoding.ffmpeg_path.clone());
+    let transcoding_service = Arc::new(transcoding_service);
+
+    // Initialize transcoding queue
+    if config.transcoding.enabled {
+        let queue = Arc::new(jobs::TranscodingQueue::new(
+            Arc::clone(&transcoding_service),
+            Arc::clone(&file_storage),
+            config.transcoding.workers,
+        ));
+        Arc::clone(&queue).start().await;
+        tracing::info!("Transcoding queue started with {} workers", config.transcoding.workers);
+    }
+
+    // Build application state
+    let app_state = AppState::new(db, Arc::clone(&auth_service), file_storage);
+
+    // Build router
+    let app = create_router(app_state, auth_service);
+
+    // Create server address
+    let addr = SocketAddr::from((
+        config.server.host.parse::<std::net::IpAddr>()?,
+        config.server.port,
+    ));
+
+    tracing::info!("Server listening on {}", addr);
+
+    // Start server
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}
+
+fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router {
+    // Public routes (no auth required)
+    let public_routes = Router::new()
+        .route("/auth/login", post(api::auth::login))
+        .route("/auth/refresh", post(api::auth::refresh));
+
+    // Protected routes (auth required)
+    let protected_routes = Router::new()
+        // Tracks
+        .route("/tracks", get(api::tracks::list_tracks))
+        .route("/tracks/:id", get(api::tracks::get_track))
+        .route("/tracks/import", post(api::tracks::import_track))
+        .route("/tracks/:id", delete(api::tracks::delete_track))
+        // Playlists
+        .route("/playlists", get(api::playlists::list_playlists))
+        .route("/playlists", post(api::playlists::create_playlist))
+        .route("/playlists/:id", get(api::playlists::get_playlist))
+        .route("/playlists/:id", put(api::playlists::update_playlist))
+        .route("/playlists/:id", delete(api::playlists::delete_playlist))
+        .route("/playlists/:id/tracks", post(api::playlists::add_track_to_playlist))
+        .route("/playlists/:id/tracks/:track_id", delete(api::playlists::remove_track_from_playlist))
+        .route("/playlists/:id/share", post(api::playlists::share_playlist))
+        .route("/playlists/:id/share/:user_id", delete(api::playlists::unshare_playlist))
+        // Streaming
+        .route("/stream/:track_id", get(api::stream::stream_track))
+        // Admin
+        .route("/admin/users", post(api::admin::create_user))
+        .route("/admin/users", get(api::admin::list_users))
+        .route("/admin/users/:id", delete(api::admin::delete_user))
+        .route("/admin/scan", post(api::admin::trigger_scan))
+        .route("/admin/scan/status", get(api::admin::scan_status))
+        .layer(axum_middleware::from_fn_with_state(
+            Arc::clone(&auth_service),
+            middleware::auth_middleware,
+        ));
+
+    // Combine routes
+    Router::new()
+        .nest("/api", public_routes.merge(protected_routes))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::default().include_headers(true)),
+        )
+        .layer(CorsLayer::permissive())
+        .with_state(app_state)
+}
+
+async fn add_user(username: &str, password: &str) -> anyhow::Result<()> {
+    let config = ServerConfig::load()?;
+    let db = Database::new(&config.storage.database_url).await?;
+    let auth_service = AuthService::new(
+        config.auth.jwt_secret.clone(),
+        config.auth.jwt_expiration_hours,
+        config.auth.jwt_refresh_expiration_days,
+    );
+
+    // Create user
+    let user = db.create_user(username).await?;
+    tracing::info!("Created user: {} ({})", user.name, user.id.as_str());
+
+    // Hash password
+    let password_hash = auth_service.hash_password(password)?;
+
+    // Store credentials
+    // TODO: Implement database storage for credentials
+    tracing::info!("Password hash: {}", password_hash);
+    tracing::warn!("Password credential storage not yet implemented in database");
+
+    Ok(())
+}
+
+async fn list_users() -> anyhow::Result<()> {
+    let config = ServerConfig::load()?;
+    let db = Database::new(&config.storage.database_url).await?;
+
+    let users = db.get_all_users().await?;
+
+    println!("Users:");
+    for user in users {
+        println!("  {} - {}", user.id.as_str(), user.name);
+    }
+
+    Ok(())
+}
+
+async fn scan_directory(_path: &str) -> anyhow::Result<()> {
+    // TODO: Implement directory scanning
+    tracing::warn!("Directory scanning not yet implemented");
+    Ok(())
+}

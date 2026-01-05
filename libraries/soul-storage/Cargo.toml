@@ -1,0 +1,24 @@
+[package]
+name = "soul-storage"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+soul-core = { workspace = true, features = ["sqlx-support"] }
+sqlx = { workspace = true, features = ["macros", "migrate"] }
+tokio.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+testcontainers.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile = "3.24"
+
+[lints]
+workspace = true

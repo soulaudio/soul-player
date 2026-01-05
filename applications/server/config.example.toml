@@ -1,0 +1,31 @@
+# Soul Server Configuration Example
+# Copy this to config.toml and adjust values as needed
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[storage]
+database_url = "sqlite://./data/soul.db"
+music_storage_path = "./data/tracks"
+scan_directories = ["/music", "/imports"]
+
+[auth]
+# REQUIRED: Set this via environment variable SOUL_AUTH_JWT_SECRET
+jwt_secret = "CHANGE_THIS_TO_A_SECURE_RANDOM_STRING"
+jwt_expiration_hours = 24
+jwt_refresh_expiration_days = 30
+
+[transcoding]
+enabled = true
+# Supported formats: mp3, flac, ogg, wav, opus
+# Multiple formats can be specified for different quality tiers
+formats = ["mp3"]
+workers = 2
+ffmpeg_path = "/usr/bin/ffmpeg"
+
+# Example: Multiple formats with different qualities
+# [transcoding]
+# enabled = true
+# formats = ["mp3", "flac", "ogg"]  # High = flac, Medium/Low = mp3, etc.
+# workers = 4

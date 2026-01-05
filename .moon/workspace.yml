@@ -1,0 +1,81 @@
+# Moon workspace configuration
+# https://moonrepo.dev/docs/config/workspace
+
+$schema: 'https://moonrepo.dev/schemas/workspace.json'
+
+# Extend from base configuration
+extends: 'https://raw.githubusercontent.com/moonrepo/moon-configs/master/rust/workspace.yml'
+
+# Project discovery - Updated for new folder structure
+projects:
+  globs:
+    - 'libraries/*'
+    - 'applications/*'
+    - 'applications/firmware/*'
+  sources:
+    # Core libraries
+    soul-core: 'libraries/soul-core'
+    soul-storage: 'libraries/soul-storage'
+    soul-metadata: 'libraries/soul-metadata'
+    soul-discovery: 'libraries/soul-discovery'
+    soul-sync: 'libraries/soul-sync'
+
+    # Audio libraries
+    soul-audio: 'libraries/soul-audio'
+    soul-audio-desktop: 'libraries/soul-audio-desktop'
+    soul-audio-mobile: 'libraries/soul-audio-mobile'
+    soul-audio-embedded: 'libraries/soul-audio-embedded'
+
+    # Applications
+    desktop: 'applications/desktop'
+    server: 'applications/server'
+    mobile: 'applications/mobile'
+    firmware: 'applications/firmware'
+    shared: 'applications/shared'
+
+    # Firmware sub-projects
+    soul-player-dap: 'applications/firmware/soul-player-dap'
+
+# Runner configuration
+runner:
+  archivableTargets:
+    - 'build'
+    - 'build-release'
+    - 'build-firmware'
+
+  cacheLifetime: '7 days'
+
+  logRunningCommand: true
+
+  # Inherit colors from terminal
+  inheritColorsForPipedTasks: true
+
+# Version control
+vcs:
+  manager: 'git'
+  defaultBranch: 'main'
+
+  # Sync projects with remote changes
+  syncHooks: true
+
+# Hashing - for smart caching
+hasher:
+  batchSize: 2500
+  optimization: 'performance'
+
+  # Ignore these patterns when hashing
+  ignoreMissingPatterns: true
+  ignorePatterns:
+    - '*.md'
+    - 'docs/**/*'
+    - '.github/**/*'
+    - 'target/**/*'
+    - '.moon/**/*'
+
+# Notifier (optional - for team notifications)
+notifier:
+  webhookUrl: null
+
+# Constraints - ensure proper tooling versions
+constraints:
+  enforceProjectTypeRelationships: true

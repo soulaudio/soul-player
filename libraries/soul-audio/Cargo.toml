@@ -1,0 +1,25 @@
+[package]
+name = "soul-audio"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+soul-core.workspace = true
+symphonia = { workspace = true, features = ["mp3", "isomp4", "flac", "vorbis", "wav", "aac", "ogg"] }
+cpal = { workspace = true, optional = true }
+thiserror.workspace = true
+
+[features]
+default = []
+desktop = ["cpal"]
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile = "3.24"
+
+[lints]
+workspace = true

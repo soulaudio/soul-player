@@ -1,0 +1,61 @@
+[package]
+name = "soul-player-esp32"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Embassy async runtime
+embassy-executor = { version = "0.6", features = ["arch-xtensa", "executor-thread"] }
+embassy-time = { version = "0.3", features = ["generic-queue"] }
+embassy-sync = "0.6"
+embassy-futures = "0.1"
+
+# ESP32-S3 HAL
+esp-hal = { version = "0.20", features = ["esp32s3"] }
+esp-hal-embassy = "0.3"
+esp-backtrace = { version = "0.14", features = ["esp32s3", "exception-handler", "panic-handler", "println"] }
+esp-println = { version = "0.11", features = ["esp32s3", "log"] }
+esp-alloc = "0.4"
+
+# Peripherals (to be enabled as drivers are implemented)
+# esp-wifi = { version = "0.9", features = ["esp32s3", "ble", "embassy-net"], optional = true }
+# embedded-sdmmc = { version = "0.8", optional = true }
+# embedded-graphics = { version = "0.8", optional = true }
+# epd-waveshare = { version = "0.6", optional = true }
+
+# Soul Player library crates
+soul-core = { path = "../../libraries/soul-core" }
+soul-audio = { path = "../../libraries/soul-audio" }
+# soul-audio-embedded = { path = "../../libraries/soul-audio-embedded" }
+# soul-storage = { path = "../../libraries/soul-storage" }
+# soul-metadata = { path = "../../libraries/soul-metadata" }
+
+# Utilities
+heapless = "0.8"                # No-alloc collections
+static_cell = "2.1"             # Static mutable cells
+critical-section = "1.1"        # Critical section primitives
+log = "0.4"                     # Logging facade
+
+[features]
+default = []
+# bluetooth = ["esp-wifi"]
+# display = ["embedded-graphics", "epd-waveshare"]
+# sdcard = ["embedded-sdmmc"]
+
+[profile.release]
+opt-level = "z"                  # Optimize for size
+lto = true                       # Link-time optimization
+codegen-units = 1                # Better optimization
+overflow-checks = false          # Reduce binary size
+strip = true                     # Strip debug symbols
+
+[profile.dev]
+debug = true                     # Keep debug info for development
+opt-level = "s"                  # Some optimization for size
+
+[lints]
+workspace = true

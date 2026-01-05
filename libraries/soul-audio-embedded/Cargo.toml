@@ -1,0 +1,14 @@
+[package]
+name = "soul-audio-embedded"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Will implement ESP32 audio output here
+# For now, placeholder crate
+
+[lints]
+workspace = true

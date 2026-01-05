@@ -1,0 +1,77 @@
+[package]
+name = "soul-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "soul_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "soul-server"
+path = "src/main.rs"
+
+[dependencies]
+# Internal workspace crates
+soul-core.workspace = true
+soul-storage.workspace = true
+soul-metadata = { path = "../../libraries/soul-metadata" }
+
+# Web framework
+axum.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+
+# Authentication
+jsonwebtoken.workspace = true
+bcrypt.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Configuration
+config.workspace = true
+toml = "0.8"
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Utilities
+chrono.workspace = true
+uuid.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+# File handling
+tokio-util = { version = "0.7", features = ["io"] }
+multer = "3.0"
+mime_guess = "2.0"
+bytes = "1.5"
+futures-util = "0.3"
+
+# HTTP
+http = "1.0"
+http-body-util = "0.1"
+
+# CLI
+clap = { version = "4.4", features = ["derive", "env"] }
+
+# Database
+sqlx = { workspace = true, features = ["migrate"] }
+
+[dev-dependencies]
+testcontainers.workspace = true
+tempfile = "3.8"
+tokio = { workspace = true, features = ["test-util"] }
+tower = { workspace = true, features = ["util"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

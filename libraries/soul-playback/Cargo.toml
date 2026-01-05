@@ -1,0 +1,26 @@
+[package]
+name = "soul-playback"
+version = "0.1.0"
+edition = "2021"
+authors = ["Soul Audio Team"]
+license = "MIT OR Apache-2.0"
+description = "Platform-agnostic playback management for Soul Player"
+repository = "https://github.com/yourusername/soul-player"
+
+[dependencies]
+soul-audio = { workspace = true, optional = true }
+
+thiserror = { workspace = true }
+serde = { workspace = true }
+rand = "0.8"
+
+[features]
+default = ["effects"]
+effects = ["soul-audio"]
+
+[dev-dependencies]
+proptest = "1.4"
+
+[lib]
+name = "soul_playback"
+path = "src/lib.rs"

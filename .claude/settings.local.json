@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "WebSearch",
+      "Bash(cargo tree:*)",
+      "WebFetch(domain:v2.tauri.app)",
+      "Bash(cargo fmt:*)",
+      "Bash(tree:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo metadata:*)",
+      "Bash(ls:*)",
+      "Bash(moon:*)",
+      "Bash(test:*)",
+      "Bash(cat:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cargo clean:*)",
+      "Bash(DATABASE_URL=\"sqlite:libraries/soul-storage/.tmp/dev.db\" sqlx database create:*)",
+      "Bash(DATABASE_URL=\"sqlite:libraries/soul-storage/.tmp/dev.db\" cargo build:*)",
+      "Bash(DATABASE_URL=\"sqlite:///mnt/d/dev/soulaudio/soul-player/libraries/soul-storage/.tmp/dev.db\" cargo build:*)"
+    ]
+  }
+}

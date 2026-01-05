@@ -1,0 +1,385 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Code Quality Checks
+  # ============================================================================
+
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Check formatting (via Moon)
+        run: moon run :format
+
+  clippy:
+    name: Clippy Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Run Clippy (via Moon)
+        run: moon run :lint
+
+  # ============================================================================
+  # Security
+  # ============================================================================
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Run security audit (via Moon)
+        run: moon run :audit
+
+  # ============================================================================
+  # Tests - Multi-Platform
+  # ============================================================================
+
+  test:
+    name: Test Suite
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # Install system dependencies for audio (Linux)
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      # Install system dependencies (macOS)
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkg-config
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      # Run unit tests (libraries + applications)
+      - name: Run unit tests (via Moon)
+        run: moon run :test
+
+      # Run integration tests
+      - name: Run integration tests (via Moon)
+        run: moon run :test-integration
+        env:
+          RUST_TEST_THREADS: 4
+
+  # ============================================================================
+  # Integration Tests with Testcontainers (Linux only)
+  # ============================================================================
+
+  test-containers:
+    name: Integration Tests (Testcontainers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      # Docker is available by default on GitHub Actions Ubuntu runners
+      - name: Run testcontainer integration tests
+        run: cargo test --workspace --test '*' -- --test-threads=1
+
+  # ============================================================================
+  # Code Coverage
+  # ============================================================================
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin --locked
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Generate coverage (via Moon)
+        run: moon run :test-coverage
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/tarpaulin-report.html
+          fail_ci_if_error: false # Don't fail CI on coverage upload issues
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ============================================================================
+  # Build Checks - Multi-Platform
+  # ============================================================================
+
+  build:
+    name: Build Check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkg-config
+
+      # Install cross-compilation tools for ARM64 on Linux
+      - name: Install cross-compilation tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Build workspace (via Moon)
+        run: moon run :build
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+
+  # ============================================================================
+  # Firmware Build Check (ESP32-S3 DAP)
+  # ============================================================================
+
+  check-firmware:
+    name: Firmware Build Check (ESP32-S3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-key: "esp32"
+
+      # Install ESP32 toolchain
+      - name: Install ESP32 toolchain
+        run: |
+          cargo install espup --locked
+          espup install
+          . $HOME/export-esp.sh
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      # Check that firmware compiles
+      - name: Check ESP32-S3 DAP compilation
+        run: |
+          . $HOME/export-esp.sh
+          cargo check -p soul-player-dap --target xtensa-esp32s3-espidf
+
+      # Check that embedded crates are compatible
+      - name: Check embedded library compatibility
+        run: |
+          . $HOME/export-esp.sh
+          cargo check -p soul-core --target xtensa-esp32s3-espidf
+          cargo check -p soul-audio-embedded --target xtensa-esp32s3-espidf
+
+  # ============================================================================
+  # Documentation
+  # ============================================================================
+
+  docs:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Setup Moon
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Check documentation (via Moon)
+        run: moon run :doc
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+  # ============================================================================
+  # MSRV (Minimum Supported Rust Version)
+  # ============================================================================
+
+  msrv:
+    name: MSRV Check (Rust 1.75)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.75"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Check MSRV compilation
+        run: cargo check --workspace --all-targets
+
+  # ============================================================================
+  # All Checks Summary (Required for PR merge)
+  # ============================================================================
+
+  ci-success:
+    name: CI Success
+    needs:
+      - format
+      - clippy
+      - audit
+      - test
+      - test-containers
+      - build
+      - check-firmware
+      - docs
+      - msrv
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          if [[ "${{ needs.format.result }}" != "success" || \
+                "${{ needs.clippy.result }}" != "success" || \
+                "${{ needs.audit.result }}" != "success" || \
+                "${{ needs.test.result }}" != "success" || \
+                "${{ needs.test-containers.result }}" != "success" || \
+                "${{ needs.build.result }}" != "success" || \
+                "${{ needs.check-firmware.result }}" != "success" || \
+                "${{ needs.docs.result }}" != "success" || \
+                "${{ needs.msrv.result }}" != "success" ]]; then
+            echo "One or more CI jobs failed"
+            exit 1
+          fi

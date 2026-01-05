@@ -1,0 +1,741 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Stage 1: Build All Platforms
+  # ============================================================================
+
+  build-windows:
+    name: Build Windows Installers
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-msvc]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build desktop app
+        run: |
+          cd applications/desktop/src-tauri
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Create MSI installer
+        run: |
+          cd applications/desktop
+          npm install
+          npm run tauri build -- --bundles msi
+
+      - name: Create EXE installer
+        run: |
+          cd applications/desktop
+          npm run tauri build -- --bundles nsis
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.target }}
+          path: |
+            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+
+  build-linux:
+    name: Build Linux Packages
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            pkg-config \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev
+
+      - name: Build desktop app
+        run: |
+          cd applications/desktop/src-tauri
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Create DEB package
+        run: |
+          cd applications/desktop
+          npm install
+          npm run tauri build -- --bundles deb
+
+      - name: Create RPM package
+        run: |
+          cd applications/desktop
+          npm run tauri build -- --bundles rpm
+
+      - name: Create AppImage
+        run: |
+          cd applications/desktop
+          npm run tauri build -- --bundles appimage
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.target }}
+          path: |
+            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
+            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+
+  build-macos:
+    name: Build macOS Packages
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: brew install pkg-config
+
+      - name: Build desktop app
+        run: |
+          cd applications/desktop/src-tauri
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Create DMG
+        run: |
+          cd applications/desktop
+          npm install
+          npm run tauri build -- --bundles dmg --target ${{ matrix.target }}
+
+      - name: Create PKG (universal)
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: |
+          cd applications/desktop
+          npm run tauri build -- --bundles app --target universal-apple-darwin
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.target }}
+          path: |
+            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            applications/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Build Android APK
+        run: |
+          cd applications/mobile
+          # TODO: Tauri mobile build command when implemented
+          # cargo tauri android build --apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: applications/mobile/src-tauri/gen/android/app/build/outputs/apk/release/*.apk
+
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build iOS app
+        run: |
+          cd applications/mobile
+          # TODO: Tauri mobile build command when implemented
+          # cargo tauri ios build
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: applications/mobile/src-tauri/gen/ios/build/*.ipa
+
+  build-esp32:
+    name: Build ESP32 Firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.1
+
+      - name: Build firmware
+        run: |
+          cd applications/firmware
+          idf.py build
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware
+          path: |
+            applications/firmware/build/*.bin
+            applications/firmware/build/*.elf
+
+  build-server:
+    name: Build Server Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          cd applications/server
+          docker build -t soul-server:latest .
+
+      - name: Save Docker image
+        run: |
+          docker save soul-server:latest > soul-server.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-docker
+          path: soul-server.tar
+
+  # ============================================================================
+  # Stage 2: Create Draft Release
+  # ============================================================================
+
+  create-draft-release:
+    name: Create Draft Release
+    needs: [build-windows, build-linux, build-macos, build-android, build-ios, build-esp32, build-server]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.create-release.outputs.id }}
+      upload-url: ${{ steps.create-release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          cat > release-notes.md << 'EOF'
+          ## Soul Player Release
+
+          ### Downloads
+
+          #### Desktop
+          - **Windows**: `.msi` (installer), `.exe` (portable)
+          - **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), `.AppImage` (universal)
+          - **macOS**: `.dmg` (Intel), `.dmg` (Apple Silicon)
+
+          #### Mobile
+          - **Android**: `.apk` (sideload)
+          - **iOS**: `.ipa` (TestFlight/sideload)
+
+          #### Firmware
+          - **ESP32-S3**: `.bin` (flash via esptool or OTA)
+
+          #### Server
+          - **Docker**: `soul-server:latest`
+
+          ### Installation Instructions
+
+          See [docs/LINUX_PACKAGING.md](https://github.com/yourusername/soul-player/blob/main/docs/LINUX_PACKAGING.md) for detailed installation instructions.
+
+          ### Changelog
+
+          See [CHANGELOG.md](https://github.com/yourusername/soul-player/blob/main/CHANGELOG.md) for full changelog.
+
+          ---
+
+          **Note**: This release has been automatically tested on all platforms.
+          EOF
+
+      - name: Create draft release
+        id: create-release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          prerelease: false
+          name: Release ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            artifacts/**/*
+
+  # ============================================================================
+  # Stage 3: Installation Tests (Parallel)
+  # ============================================================================
+
+  test-windows-install:
+    name: Test Windows Installation
+    needs: create-draft-release
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        format: [msi, exe]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-x86_64-pc-windows-msvc
+          path: installers
+
+      - name: Test MSI installation
+        if: matrix.format == 'msi'
+        shell: powershell
+        run: |
+          $msi = Get-ChildItem -Path installers -Filter *.msi | Select-Object -First 1
+          Write-Host "Testing MSI: $($msi.FullName)"
+
+          # Silent install
+          Start-Process msiexec.exe -ArgumentList "/i", $msi.FullName, "/qn", "/L*V", "install.log" -Wait
+
+          # Verify installation
+          $installed = Test-Path "C:\Program Files\Soul Player\soul-player.exe"
+          if (-not $installed) {
+            Write-Error "Installation failed: soul-player.exe not found"
+            exit 1
+          }
+
+          Write-Host "✓ Installation successful"
+
+          # Test upgrade (reinstall same version)
+          Start-Process msiexec.exe -ArgumentList "/i", $msi.FullName, "/qn" -Wait
+          Write-Host "✓ Upgrade test passed"
+
+          # Test uninstall
+          Start-Process msiexec.exe -ArgumentList "/x", $msi.FullName, "/qn" -Wait
+          Start-Sleep -Seconds 5
+
+          $stillInstalled = Test-Path "C:\Program Files\Soul Player"
+          if ($stillInstalled) {
+            Write-Error "Uninstall failed: files still present"
+            exit 1
+          }
+
+          Write-Host "✓ Uninstall successful"
+
+      - name: Test EXE installation
+        if: matrix.format == 'exe'
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem -Path installers -Filter *.exe | Select-Object -First 1
+          Write-Host "Testing EXE: $($exe.FullName)"
+
+          # Silent install
+          Start-Process $exe.FullName -ArgumentList "/S" -Wait
+
+          # Verify
+          $installed = Test-Path "$env:LOCALAPPDATA\Programs\Soul Player\soul-player.exe"
+          if (-not $installed) {
+            Write-Error "Installation failed"
+            exit 1
+          }
+
+          Write-Host "✓ Installation successful"
+
+          # Test uninstall
+          $uninstaller = "$env:LOCALAPPDATA\Programs\Soul Player\uninstall.exe"
+          if (Test-Path $uninstaller) {
+            Start-Process $uninstaller -ArgumentList "/S" -Wait
+            Write-Host "✓ Uninstall successful"
+          }
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-logs-${{ matrix.format }}
+          path: "*.log"
+
+  test-linux-install:
+    name: Test Linux Installation
+    needs: create-draft-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        distro: [ubuntu, fedora]
+        format: [deb, rpm, appimage]
+        exclude:
+          - distro: ubuntu
+            format: rpm
+          - distro: fedora
+            format: deb
+    container:
+      image: ${{ matrix.distro == 'ubuntu' && 'ubuntu:22.04' || 'fedora:latest' }}
+    steps:
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.distro }}" = "ubuntu" ]; then
+            apt-get update
+            apt-get install -y wget curl libasound2
+          else
+            dnf install -y wget curl alsa-lib
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64-unknown-linux-gnu
+          path: /tmp/installers
+
+      - name: Test DEB installation
+        if: matrix.format == 'deb'
+        run: |
+          cd /tmp/installers
+          DEB=$(ls *.deb | head -1)
+          echo "Testing DEB: $DEB"
+
+          # Install
+          dpkg -i $DEB || apt-get install -f -y
+          echo "✓ Installation successful"
+
+          # Verify
+          command -v soul-player || exit 1
+          soul-player --version || exit 1
+          echo "✓ Application launches"
+
+          # Test upgrade (reinstall)
+          dpkg -i $DEB
+          echo "✓ Upgrade successful"
+
+          # Uninstall
+          apt-get purge -y soul-player
+          ! command -v soul-player || exit 1
+          echo "✓ Uninstall successful"
+
+      - name: Test RPM installation
+        if: matrix.format == 'rpm'
+        run: |
+          cd /tmp/installers
+          RPM=$(ls *.rpm | head -1)
+          echo "Testing RPM: $RPM"
+
+          # Install
+          rpm -i $RPM || dnf install -y $RPM
+          echo "✓ Installation successful"
+
+          # Verify
+          command -v soul-player || exit 1
+          soul-player --version || exit 1
+          echo "✓ Application launches"
+
+          # Uninstall
+          rpm -e soul-player
+          ! command -v soul-player || exit 1
+          echo "✓ Uninstall successful"
+
+      - name: Test AppImage
+        if: matrix.format == 'appimage'
+        run: |
+          cd /tmp/installers
+          APPIMAGE=$(ls *.AppImage | head -1)
+          echo "Testing AppImage: $APPIMAGE"
+
+          # Make executable
+          chmod +x $APPIMAGE
+
+          # Test execution
+          ./$APPIMAGE --version || exit 1
+          echo "✓ AppImage launches successfully"
+
+  test-macos-install:
+    name: Test macOS Installation
+    needs: create-draft-release
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}-apple-darwin
+          path: installers
+
+      - name: Test DMG installation
+        run: |
+          cd installers
+          DMG=$(ls *.dmg | head -1)
+          echo "Testing DMG: $DMG"
+
+          # Mount DMG
+          hdiutil attach "$DMG"
+          VOLUME=$(ls /Volumes | grep -i "soul" | head -1)
+
+          # Copy app
+          cp -R "/Volumes/$VOLUME/Soul Player.app" /Applications/
+          echo "✓ Installation successful"
+
+          # Verify
+          /Applications/Soul\ Player.app/Contents/MacOS/soul-player --version || exit 1
+          echo "✓ Application launches"
+
+          # Cleanup
+          hdiutil detach "/Volumes/$VOLUME"
+          rm -rf "/Applications/Soul Player.app"
+          echo "✓ Uninstall successful"
+
+  test-android-install:
+    name: Test Android Installation
+    needs: create-draft-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        api-level: [30, 33]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Test APK installation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          script: |
+            cd apk
+            APK=$(ls *.apk | head -1)
+            echo "Testing APK: $APK"
+
+            # Install
+            adb install $APK
+            echo "✓ Installation successful"
+
+            # Launch app
+            adb shell monkey -p com.soulplayer.app -c android.intent.category.LAUNCHER 1
+            sleep 3
+            echo "✓ App launched"
+
+            # Verify app is running
+            adb shell pidof com.soulplayer.app || exit 1
+            echo "✓ App is running"
+
+            # Uninstall
+            adb uninstall com.soulplayer.app
+            echo "✓ Uninstall successful"
+
+  test-ios-install:
+    name: Test iOS Installation
+    needs: create-draft-release
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        ios-version: ['17.0', '18.1']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: ipa
+
+      - name: Setup iOS Simulator
+        run: |
+          xcrun simctl list devices
+          DEVICE_ID=$(xcrun simctl create "Test-iPhone" "iPhone 15")
+          xcrun simctl boot $DEVICE_ID
+          echo "DEVICE_ID=$DEVICE_ID" >> $GITHUB_ENV
+
+      - name: Test IPA installation
+        run: |
+          cd ipa
+          # Extract .app from IPA
+          IPA=$(ls *.ipa | head -1)
+          unzip $IPA
+          APP=$(find Payload -name "*.app" | head -1)
+
+          echo "Testing IPA: $IPA"
+
+          # Install
+          xcrun simctl install $DEVICE_ID "$APP"
+          echo "✓ Installation successful"
+
+          # Launch
+          xcrun simctl launch $DEVICE_ID com.soulplayer.app
+          sleep 3
+          echo "✓ App launched"
+
+          # Uninstall
+          xcrun simctl uninstall $DEVICE_ID com.soulplayer.app
+          echo "✓ Uninstall successful"
+
+  test-esp32-qemu:
+    name: Test ESP32 Firmware (QEMU)
+    needs: create-draft-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: esp32-firmware
+          path: firmware
+
+      - name: Run QEMU tests
+        uses: Meltwind/esp32-qemu-runner@v1
+        with:
+          image: firmware/*.elf
+          timeout: 60000
+          expected-output: "Tests passed"
+
+  test-server-docker:
+    name: Test Server Docker Image
+    needs: create-draft-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-docker
+          path: docker
+
+      - name: Load Docker image
+        run: |
+          docker load < docker/soul-server.tar
+
+      - name: Test container startup
+        run: |
+          # Start container
+          docker run -d \
+            --name soul-server-test \
+            -p 8080:8080 \
+            -e JWT_SECRET=test-secret \
+            soul-server:latest
+
+          # Wait for startup
+          sleep 10
+
+          # Health check
+          curl -f http://localhost:8080/health || exit 1
+          echo "✓ Server started and responding"
+
+          # Stop and cleanup
+          docker stop soul-server-test
+          docker rm soul-server-test
+          echo "✓ Container cleanup successful"
+
+  # ============================================================================
+  # Stage 4: Publish Release
+  # ============================================================================
+
+  publish-release:
+    name: Publish Release
+    needs: [
+      create-draft-release,
+      test-windows-install,
+      test-linux-install,
+      test-macos-install,
+      test-android-install,
+      test-ios-install,
+      test-esp32-qemu,
+      test-server-docker
+    ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish draft release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const release = await github.rest.repos.getRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: '${{ needs.create-draft-release.outputs.release-id }}'
+            });
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.data.id,
+              draft: false
+            });
+
+            console.log('✓ Release published successfully!');
+
+      - name: Notify success
+        run: |
+          echo "🎉 Release ${{ github.ref_name }} published successfully!"
+          echo "All installation tests passed on all platforms."

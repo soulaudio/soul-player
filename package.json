@@ -1,0 +1,23 @@
+{
+  "name": "soul-player",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "applications/shared",
+    "applications/desktop",
+    "applications/mobile"
+  ],
+  "scripts": {
+    "dev:desktop": "yarn workspace soul-player-desktop tauri:dev",
+    "dev:mobile": "yarn workspace soul-player-mobile tauri:dev",
+    "build:desktop": "yarn workspace soul-player-desktop tauri:build",
+    "build:mobile": "yarn workspace soul-player-mobile tauri:build",
+    "test": "yarn workspaces foreach run test",
+    "lint": "yarn workspaces foreach run lint",
+    "type-check": "yarn workspaces foreach run type-check"
+  },
+  "packageManager": "yarn@4.0.2",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

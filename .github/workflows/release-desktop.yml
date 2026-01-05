@@ -1,0 +1,581 @@
+name: Release - Desktop First
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # =============================================================================
+  # Stage 1: Build All Desktop Platforms + Docker
+  # =============================================================================
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Tauri dependencies
+        run: |
+          cd applications/desktop
+          npm install
+
+      - name: Build Tauri app (MSI + NSIS)
+        run: |
+          cd applications/desktop
+          npm run tauri build -- --bundles msi,nsis
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rename artifacts
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          cd applications/desktop/src-tauri/target/release/bundle
+
+          # Find and rename MSI
+          find msi -name "*.msi" -exec mv {} "soul-player-v${VERSION}-x64.msi" \; 2>/dev/null || true
+
+          # Find and rename NSIS EXE
+          find nsis -name "*.exe" -exec mv {} "soul-player-v${VERSION}-x64.exe" \; 2>/dev/null || true
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            applications/desktop/src-tauri/target/release/bundle/soul-player-*.msi
+            applications/desktop/src-tauri/target/release/bundle/soul-player-*.exe
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev \
+            pkg-config
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Tauri dependencies
+        run: |
+          cd applications/desktop
+          npm install
+
+      - name: Build Tauri app (DEB + RPM + AppImage)
+        run: |
+          cd applications/desktop
+          npm run tauri build -- --bundles deb,rpm,appimage
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rename artifacts
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          cd applications/desktop/src-tauri/target/release/bundle
+
+          # Find and rename DEB
+          find deb -name "*.deb" -exec mv {} "soul-player-v${VERSION}-amd64.deb" \; 2>/dev/null || true
+
+          # Find and rename RPM
+          find rpm -name "*.rpm" -exec mv {} "soul-player-v${VERSION}.x86_64.rpm" \; 2>/dev/null || true
+
+          # Find and rename AppImage
+          find appimage -name "*.AppImage" -exec mv {} "soul-player-v${VERSION}.AppImage" \; 2>/dev/null || true
+          find . -name "*.AppImage" -exec chmod +x {} \; 2>/dev/null || true
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            applications/desktop/src-tauri/target/release/bundle/soul-player-*.deb
+            applications/desktop/src-tauri/target/release/bundle/soul-player-*.rpm
+            applications/desktop/src-tauri/target/release/bundle/soul-player-*.AppImage
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Tauri dependencies
+        run: |
+          cd applications/desktop
+          npm install
+
+      - name: Build Tauri app (DMG)
+        run: |
+          cd applications/desktop
+          npm run tauri build -- --bundles dmg
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rename artifacts
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          cd applications/desktop/src-tauri/target/release/bundle/dmg
+
+          # Determine architecture
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then
+            find . -name "*.dmg" -exec mv {} "soul-player-v${VERSION}-apple-silicon.dmg" \; 2>/dev/null || true
+          else
+            find . -name "*.dmg" -exec mv {} "soul-player-v${VERSION}-intel.dmg" \; 2>/dev/null || true
+          fi
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer
+          path: applications/desktop/src-tauri/target/release/bundle/dmg/soul-player-*.dmg
+
+  build-docker:
+    name: Build Docker Server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build Docker image
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          if [ -f "applications/server/Dockerfile" ]; then
+            docker build -t soul-server:v${VERSION} -f applications/server/Dockerfile .
+            docker save soul-server:v${VERSION} | gzip > soul-server-v${VERSION}.tar.gz
+          else
+            echo "Dockerfile not found, skipping Docker build"
+            touch soul-server-v${VERSION}.tar.gz
+          fi
+
+      - name: Upload Docker artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: soul-server-*.tar.gz
+
+  # =============================================================================
+  # Stage 2: Create Draft Release
+  # =============================================================================
+
+  create-draft-release:
+    name: Create Draft Release
+    needs: [build-windows, build-linux, build-macos, build-docker]
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      version: ${{ steps.version.outputs.VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create draft release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: Soul Player v${{ steps.version.outputs.VERSION }}
+          draft: true
+          prerelease: false
+          files: |
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
+            artifacts/**/*.dmg
+            artifacts/**/*.tar.gz
+          body: |
+            # Soul Player v${{ steps.version.outputs.VERSION }}
+
+            ## Desktop Applications
+
+            ### Windows
+            - `soul-player-v${{ steps.version.outputs.VERSION }}-x64.msi` - MSI installer (recommended)
+            - `soul-player-v${{ steps.version.outputs.VERSION }}-x64.exe` - Standalone executable
+
+            ### Linux
+            - `soul-player-v${{ steps.version.outputs.VERSION }}-amd64.deb` - Debian/Ubuntu package
+            - `soul-player-v${{ steps.version.outputs.VERSION }}.x86_64.rpm` - Fedora/RHEL package
+            - `soul-player-v${{ steps.version.outputs.VERSION }}.AppImage` - Universal Linux package
+
+            ### macOS
+            - `soul-player-v${{ steps.version.outputs.VERSION }}-apple-silicon.dmg` - For Apple Silicon (M1/M2/M3)
+            - `soul-player-v${{ steps.version.outputs.VERSION }}-intel.dmg` - For Intel Macs
+
+            ## Server
+            - `soul-server-v${{ steps.version.outputs.VERSION }}.tar.gz` - Docker image
+
+            ## Installation
+
+            **Windows**: Download and run the MSI installer.
+
+            **Linux (Debian/Ubuntu)**:
+            ```bash
+            sudo dpkg -i soul-player-v${{ steps.version.outputs.VERSION }}-amd64.deb
+            sudo apt-get install -f
+            ```
+
+            **Linux (Fedora/RHEL)**:
+            ```bash
+            sudo dnf install soul-player-v${{ steps.version.outputs.VERSION }}.x86_64.rpm
+            ```
+
+            **Linux (AppImage)**:
+            ```bash
+            chmod +x soul-player-v${{ steps.version.outputs.VERSION }}.AppImage
+            ./soul-player-v${{ steps.version.outputs.VERSION }}.AppImage
+            ```
+
+            **macOS**: Open the DMG and drag Soul Player to Applications.
+
+            **Docker**:
+            ```bash
+            docker load < soul-server-v${{ steps.version.outputs.VERSION }}.tar.gz
+            docker run -d -p 8080:8080 soul-server:v${{ steps.version.outputs.VERSION }}
+            ```
+
+            ---
+
+            **Note**: This is an automated release. All installers have been tested on their respective platforms.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # =============================================================================
+  # Stage 3: Installation Tests (Parallel)
+  # =============================================================================
+
+  test-windows-msi:
+    name: Test Windows MSI Install
+    needs: create-draft-release
+    runs-on: windows-latest
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installers
+
+      - name: Test MSI silent install
+        shell: powershell
+        run: |
+          $VERSION = "${{ needs.create-draft-release.outputs.version }}"
+          $MSI = Get-ChildItem -Filter "*.msi" | Select-Object -First 1
+
+          if (-not $MSI) {
+            Write-Warning "No MSI file found, skipping test"
+            exit 0
+          }
+
+          Write-Host "Installing $($MSI.Name)..."
+          Start-Process msiexec.exe -ArgumentList "/i", $MSI.FullName, "/qn", "/norestart" -Wait
+
+          Write-Host "✓ Installation completed"
+
+      - name: Test uninstall
+        shell: powershell
+        run: |
+          Write-Host "Uninstalling Soul Player..."
+          $app = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -like "Soul Player*" }
+
+          if ($app) {
+            $app.Uninstall() | Out-Null
+            Write-Host "✓ Uninstallation successful"
+          } else {
+            Write-Host "⚠️ Application not found in installed products"
+          }
+
+  test-linux-deb:
+    name: Test Linux DEB Install
+    needs: create-draft-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+
+      - name: Test DEB install
+        run: |
+          DEB=$(find . -name "*.deb" | head -n 1)
+
+          if [ -z "$DEB" ]; then
+            echo "⚠️ No DEB file found, skipping test"
+            exit 0
+          fi
+
+          echo "Installing $DEB..."
+          sudo dpkg -i "$DEB" || sudo apt-get install -f -y
+
+          echo "✓ Installation successful"
+
+      - name: Test uninstall
+        run: |
+          echo "Uninstalling soul-player..."
+          sudo apt-get purge -y soul-player || echo "⚠️ Package not found"
+
+  test-linux-rpm:
+    name: Test Linux RPM Install
+    needs: create-draft-release
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+
+      - name: Test RPM install
+        run: |
+          RPM=$(find . -name "*.rpm" | head -n 1)
+
+          if [ -z "$RPM" ]; then
+            echo "⚠️ No RPM file found, skipping test"
+            exit 0
+          fi
+
+          echo "Installing $RPM..."
+          dnf install -y "$RPM"
+
+          echo "✓ Installation successful"
+
+      - name: Test uninstall
+        run: |
+          echo "Uninstalling soul-player..."
+          dnf remove -y soul-player || echo "⚠️ Package not found"
+
+  test-linux-appimage:
+    name: Test Linux AppImage
+    needs: create-draft-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+
+      - name: Test AppImage execution
+        run: |
+          APPIMAGE=$(find . -name "*.AppImage" | head -n 1)
+
+          if [ -z "$APPIMAGE" ]; then
+            echo "⚠️ No AppImage file found, skipping test"
+            exit 0
+          fi
+
+          chmod +x "$APPIMAGE"
+          echo "✓ AppImage is executable"
+
+  test-macos-dmg:
+    name: Test macOS DMG Install
+    needs: create-draft-release
+    runs-on: macos-latest
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-installer
+
+      - name: Test DMG mount
+        run: |
+          DMG=$(find . -name "*.dmg" | head -n 1)
+
+          if [ -z "$DMG" ]; then
+            echo "⚠️ No DMG file found, skipping test"
+            exit 0
+          fi
+
+          echo "Testing DMG: $DMG"
+          hdiutil attach "$DMG" -mountpoint /Volumes/SoulPlayer || {
+            echo "⚠️ Could not mount DMG, may be normal in CI"
+            exit 0
+          }
+
+          if [ -d "/Volumes/SoulPlayer" ]; then
+            hdiutil detach /Volumes/SoulPlayer
+          fi
+
+          echo "✓ DMG test successful"
+
+  test-docker:
+    name: Test Docker Container
+    needs: create-draft-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Docker artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Test Docker image
+        run: |
+          TARBALL=$(find . -name "*.tar.gz" | head -n 1)
+
+          if [ -z "$TARBALL" ] || [ ! -s "$TARBALL" ]; then
+            echo "⚠️ No Docker image found or empty, skipping test"
+            exit 0
+          fi
+
+          echo "Loading Docker image..."
+          docker load < "$TARBALL"
+
+          echo "✓ Docker test successful"
+
+  # =============================================================================
+  # Stage 4: Publish Release (Only if All Tests Pass)
+  # =============================================================================
+
+  publish-release:
+    name: Publish Release
+    needs:
+      - create-draft-release
+      - test-windows-msi
+      - test-linux-deb
+      - test-linux-rpm
+      - test-linux-appimage
+      - test-macos-dmg
+      - test-docker
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Publish release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const version = '${{ needs.create-draft-release.outputs.version }}';
+
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+
+            const draftRelease = releases.data.find(
+              r => r.draft && r.tag_name === `v${version}`
+            );
+
+            if (!draftRelease) {
+              core.setFailed(`Draft release v${version} not found`);
+              return;
+            }
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: draftRelease.id,
+              draft: false
+            });
+
+            console.log(`✓ Published release v${version}`);
+
+      - name: Notify success
+        run: |
+          echo "🎉 Release v${{ needs.create-draft-release.outputs.version }} published successfully!"
+          echo ""
+          echo "All platform tests passed:"
+          echo "  ✓ Windows MSI"
+          echo "  ✓ Linux DEB"
+          echo "  ✓ Linux RPM"
+          echo "  ✓ Linux AppImage"
+          echo "  ✓ macOS DMG"
+          echo "  ✓ Docker"

@@ -1,0 +1,26 @@
+[build]
+target = "xtensa-esp32s3-espidf"
+
+[target.xtensa-esp32s3-espidf]
+runner = "espflash flash --monitor"
+
+[unstable]
+build-std = ["core", "alloc"]
+
+[env]
+# ESP-IDF environment variables (set by espup)
+ESP_IDF_VERSION = { value = "v5.1" }
+
+# Optimization settings
+RUSTFLAGS = [
+    "-C", "link-arg=-Tlinkall.x",
+    "-C", "link-arg=-nostartfiles",
+]
+
+# For future reference: Additional linker args for memory optimization
+# RUSTFLAGS = [
+#     "-C", "link-arg=-Tlinkall.x",
+#     "-C", "link-arg=-nostartfiles",
+#     "-C", "link-arg=-Wl,--gc-sections",
+#     "-C", "embed-bitcode=no",
+# ]

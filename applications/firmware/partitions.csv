@@ -1,0 +1,39 @@
+# ESP32-S3 Partition Table for Soul Player DAP
+# Total Flash: 16MB (0x1000000)
+#
+# Partition Layout:
+# - Bootloader: 32KB (auto-generated, not in this table)
+# - Partition Table: 4KB (auto-generated)
+# - NVS: 24KB (settings, WiFi, BLE bonding)
+# - PHY Init: 4KB (RF calibration data)
+# - Factory App: 1.5MB (fallback firmware for recovery)
+# - OTA 0: 1.5MB (primary app partition)
+# - OTA 1: 1.5MB (secondary app partition for updates)
+# - SPIFFS: 512KB (config files, cache)
+# - Remaining: ~11.5MB (reserved for future use)
+
+# Name,           Type,    SubType,  Offset,   Size,      Flags
+# NVS partition for non-volatile storage (settings, BLE keys, etc.)
+nvs,              data,    nvs,      0x9000,   0x6000,
+
+# PHY init data for WiFi/BLE radio calibration
+phy_init,         data,    phy,      0xf000,   0x1000,
+
+# Factory app partition (fallback firmware, never overwritten by OTA)
+factory,          app,     factory,  0x10000,  0x180000,
+
+# OTA partition 0 (primary application partition)
+ota_0,            app,     ota_0,    0x190000, 0x180000,
+
+# OTA partition 1 (secondary application partition for OTA updates)
+ota_1,            app,     ota_1,    0x310000, 0x180000,
+
+# OTA data partition (stores which OTA partition to boot from)
+otadata,          data,    ota,      0x490000, 0x2000,
+
+# SPIFFS partition for configuration files and cache
+spiffs,           data,    spiffs,   0x492000, 0x80000,
+
+# Reserved for future expansion (e.g., firmware signing keys, user data)
+# Uncomment and adjust sizes as needed
+# reserved,         data,    0x99,     0x512000, 0xAEE000,

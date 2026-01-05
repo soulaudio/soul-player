@@ -1,0 +1,24 @@
+[package]
+name = "soul-metadata"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+soul-core.workspace = true
+lofty.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+walkdir = "2.4"
+num_cpus = "1.16"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile = "3.24"
+soul-storage.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,35 @@
+[package]
+name = "soul-audio-desktop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+soul-core.workspace = true
+soul-audio.workspace = true
+soul-playback.workspace = true
+cpal.workspace = true
+thiserror.workspace = true
+rubato = "0.15"  # Sample rate conversion
+crossbeam-channel = "0.5"  # Thread-safe channels for audio thread communication
+reqwest = { workspace = true, features = ["stream"] }  # For streaming from server
+tokio = { workspace = true, features = ["sync"] }  # For async streaming
+
+[dev-dependencies]
+tempfile = "3.24"
+rand = "0.8"
+
+[lints.rust]
+# Override workspace forbid to allow unsafe Send/Sync impls for CPAL Stream
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"
+cargo = "warn"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"

@@ -1,0 +1,92 @@
+name: ESP32-S3 Build
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'crates/soul-player-esp32/**'
+      - 'crates/soul-core/**'
+      - 'crates/soul-audio/**'
+      - '.github/workflows/esp32.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'crates/soul-player-esp32/**'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-esp32:
+    name: Build ESP32-S3 Firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache espup installation
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.espup
+            ~/.rustup/toolchains/esp
+          key: ${{ runner.os }}-espup-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install espup
+        run: |
+          cargo install espup
+          espup install
+
+      - name: Source ESP environment
+        run: . $HOME/export-esp.sh
+
+      - name: Build firmware
+        working-directory: crates/soul-player-esp32
+        run: |
+          . $HOME/export-esp.sh
+          cargo build --release
+
+      - name: Check binary size
+        working-directory: crates/soul-player-esp32
+        run: |
+          . $HOME/export-esp.sh
+          cargo size --release -- -A
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: soul-player-esp32-firmware
+          path: |
+            crates/soul-player-esp32/target/xtensa-esp32s3-espidf/release/soul-player-esp32
+            crates/soul-player-esp32/target/xtensa-esp32s3-espidf/release/soul-player-esp32.bin
+
+  check-size:
+    name: Check Firmware Size
+    runs-on: ubuntu-latest
+    needs: build-esp32
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: soul-player-esp32-firmware
+          path: firmware
+
+      - name: Check size constraints
+        run: |
+          size=$(stat -f%z firmware/soul-player-esp32.bin 2>/dev/null || stat -c%s firmware/soul-player-esp32.bin)
+          max_size=$((2 * 1024 * 1024)) # 2MB limit
+
+          echo "Firmware size: $size bytes"
+          echo "Maximum allowed: $max_size bytes"
+
+          if [ $size -gt $max_size ]; then
+            echo "❌ Firmware too large! Exceeds 2MB limit."
+            exit 1
+          else
+            echo "✅ Firmware size OK"
+          fi

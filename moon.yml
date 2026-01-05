@@ -1,0 +1,310 @@
+# Moon task configuration for Soul Player workspace
+# https://moonrepo.dev/docs/config/project
+
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+# Workspace-level tasks
+tasks:
+  # ============================================================================
+  # Build Tasks
+  # ============================================================================
+
+  build:
+    command: 'cargo build --workspace'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+      - '**/Cargo.toml'
+      - 'Cargo.lock'
+    outputs:
+      - 'target/debug/**'
+    options:
+      cache: true
+      runInCI: true
+
+  build-release:
+    command: 'cargo build --workspace --release'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+      - '**/Cargo.toml'
+      - 'Cargo.lock'
+    outputs:
+      - 'target/release/**'
+    options:
+      cache: true
+      runInCI: false
+
+  build-desktop:
+    command: 'cargo build -p soul-player-desktop'
+    inputs:
+      - 'applications/desktop/**/*.rs'
+      - 'libraries/**/*.rs'
+    outputs:
+      - 'target/debug/soul-player-desktop*'
+    options:
+      cache: true
+
+  build-server:
+    command: 'cargo build -p soul-server'
+    inputs:
+      - 'applications/server/**/*.rs'
+      - 'libraries/**/*.rs'
+    outputs:
+      - 'target/debug/soul-server*'
+    options:
+      cache: true
+
+  build-firmware:
+    command: 'cargo build -p soul-player-dap --release'
+    inputs:
+      - 'applications/firmware/**/*.rs'
+      - 'libraries/soul-audio-embedded/**/*.rs'
+      - 'libraries/soul-core/**/*.rs'
+    outputs:
+      - 'target/release/soul-player-dap*'
+    options:
+      cache: true
+      runInCI: false
+
+  # ============================================================================
+  # Test Tasks
+  # ============================================================================
+
+  test:
+    command: 'cargo test --workspace --lib --bins'
+    deps:
+      - '~:build'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+      - '**/Cargo.toml'
+    options:
+      cache: false  # Tests should always run
+      runInCI: true
+      retryCount: 2
+
+  test-integration:
+    command: 'cargo test --workspace --test "*"'
+    deps:
+      - '~:build'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+      - '**/tests/**/*.rs'
+    env:
+      RUST_TEST_THREADS: '4'
+    options:
+      cache: false
+      runInCI: true
+      retryCount: 2
+
+  test-all:
+    command: 'cargo test --workspace --all-targets'
+    deps:
+      - '~:build'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+    options:
+      cache: false
+      runInCI: true
+
+  test-coverage:
+    command: 'cargo tarpaulin --workspace --out Html --output-dir coverage'
+    deps:
+      - '~:build'
+    outputs:
+      - 'coverage/**'
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # Quality Tasks
+  # ============================================================================
+
+  lint:
+    command: 'cargo clippy --workspace --all-targets --all-features -- -D warnings'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+      - '**/Cargo.toml'
+    options:
+      cache: true
+      runInCI: true
+
+  lint-fix:
+    command: 'cargo clippy --workspace --all-targets --all-features --fix --allow-dirty'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+    options:
+      cache: false
+      runInCI: false
+
+  format:
+    command: 'cargo fmt --all -- --check'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+    options:
+      cache: true
+      runInCI: true
+
+  format-fix:
+    command: 'cargo fmt --all'
+    inputs:
+      - 'libraries/**/*.rs'
+      - 'applications/**/*.rs'
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # Security & Dependencies
+  # ============================================================================
+
+  audit:
+    command: 'cargo audit'
+    inputs:
+      - 'Cargo.lock'
+    options:
+      cache: true
+      runInCI: true
+
+  audit-fix:
+    command: 'cargo audit fix'
+    inputs:
+      - 'Cargo.lock'
+    options:
+      cache: false
+      runInCI: false
+
+  outdated:
+    command: 'cargo outdated --workspace'
+    inputs:
+      - '**/Cargo.toml'
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # Documentation
+  # ============================================================================
+
+  doc:
+    command: 'cargo doc --workspace --no-deps'
+    deps:
+      - '~:build'
+    outputs:
+      - 'target/doc/**'
+    options:
+      cache: true
+      runInCI: false
+
+  doc-open:
+    command: 'cargo doc --workspace --no-deps --open'
+    deps:
+      - '~:build'
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # Benchmarks
+  # ============================================================================
+
+  bench:
+    command: 'cargo bench --workspace'
+    deps:
+      - '~:build-release'
+    inputs:
+      - 'libraries/**/*.rs'
+      - '**/benches/**/*.rs'
+    outputs:
+      - 'target/criterion/**'
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # Clean Tasks
+  # ============================================================================
+
+  clean:
+    command: 'cargo clean'
+    options:
+      cache: false
+      runInCI: false
+
+  clean-cache:
+    command: 'rm -rf .moon/cache'
+    options:
+      cache: false
+      runInCI: false
+
+  # ============================================================================
+  # CI/CD Pipeline Tasks
+  # ============================================================================
+
+  ci-check:
+    deps:
+      - '~:format'
+      - '~:lint'
+      - '~:test'
+      - '~:audit'
+    options:
+      runInCI: true
+
+  ci-full:
+    deps:
+      - '~:format'
+      - '~:lint'
+      - '~:test-all'
+      - '~:audit'
+      - '~:build-release'
+    options:
+      runInCI: true
+
+  # ============================================================================
+  # Development Tasks
+  # ============================================================================
+
+  dev-desktop:
+    command: 'cargo run -p soul-player-desktop'
+    deps:
+      - '~:build-desktop'
+    options:
+      cache: false
+      runInCI: false
+
+  dev-server:
+    command: 'cargo run -p soul-server'
+    deps:
+      - '~:build-server'
+    options:
+      cache: false
+      runInCI: false
+
+  watch:
+    command: 'cargo watch -x "test --workspace"'
+    options:
+      cache: false
+      runInCI: false
+      persistent: true
+
+# File groups for inputs
+fileGroups:
+  sources:
+    - 'libraries/**/*.rs'
+    - 'applications/**/*.rs'
+
+  configs:
+    - '**/Cargo.toml'
+    - 'Cargo.lock'
+    - 'rust-toolchain.toml'
+
+  tests:
+    - '**/tests/**/*.rs'
+    - '**/benches/**/*.rs'
