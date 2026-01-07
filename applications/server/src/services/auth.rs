@@ -14,9 +14,9 @@ pub struct AuthService {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,  // Subject (user ID)
-    pub exp: i64,     // Expiration time
-    pub iat: i64,     // Issued at
+    pub sub: String, // Subject (user ID)
+    pub exp: i64,    // Expiration time
+    pub iat: i64,    // Issued at
     pub token_type: TokenType,
 }
 
@@ -28,11 +28,7 @@ pub enum TokenType {
 }
 
 impl AuthService {
-    pub fn new(
-        secret: String,
-        access_expiration_hours: u64,
-        refresh_expiration_days: u64,
-    ) -> Self {
+    pub fn new(secret: String, access_expiration_hours: u64, refresh_expiration_days: u64) -> Self {
         Self {
             secret,
             access_token_expiration: Duration::hours(access_expiration_hours as i64),

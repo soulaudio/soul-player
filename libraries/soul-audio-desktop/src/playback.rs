@@ -7,7 +7,7 @@ use cpal::{
     Device, Stream, StreamConfig,
 };
 use crossbeam_channel::{bounded, Receiver, Sender};
-use soul_playback::{PlaybackManager, PlaybackConfig, QueueTrack};
+use soul_playback::{PlaybackConfig, PlaybackManager, QueueTrack};
 use std::sync::{Arc, Mutex};
 
 use crate::error::Result;
@@ -203,7 +203,10 @@ impl DesktopPlayback {
                 // Error processing audio - fill with silence
                 data.fill(0.0);
                 event_tx
-                    .send(PlaybackEvent::Error(format!("Audio processing error: {}", e)))
+                    .send(PlaybackEvent::Error(format!(
+                        "Audio processing error: {}",
+                        e
+                    )))
                     .ok();
             }
         }
@@ -219,10 +222,48 @@ impl DesktopPlayback {
 
         match command {
             PlaybackCommand::Play => {
+                eprintln!("[PlaybackCommand::Play] Received");
                 mgr.play()?;
-                event_tx
-                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
-                    .ok();
+
+                let state = mgr.get_state();
+                eprintln!("[PlaybackCommand::Play] State after play(): {:?}", state);
+
+                // If state is Loading, we need to load the audio source
+                if state == soul_playback::PlaybackState::Loading {
+                    if let Some(track) = mgr.get_current_track().cloned() {
+                        eprintln!("[PlaybackCommand::Play] Loading track: {} from {}", track.title, track.path.display());
+                        // Create audio source from file path
+                        match crate::sources::local::LocalAudioSource::new(&track.path) {
+                            Ok(source) => {
+                                eprintln!("[PlaybackCommand::Play] Audio source loaded successfully");
+                                mgr.set_audio_source(Box::new(source));
+                                event_tx
+                                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
+                                    .ok();
+                                event_tx
+                                    .send(PlaybackEvent::TrackChanged(Some(track.clone())))
+                                    .ok();
+                            }
+                            Err(e) => {
+                                eprintln!("[PlaybackCommand::Play] Failed to load audio: {}", e);
+                                event_tx
+                                    .send(PlaybackEvent::Error(format!(
+                                        "Failed to load audio: {}",
+                                        e
+                                    )))
+                                    .ok();
+                                mgr.stop();
+                            }
+                        }
+                    } else {
+                        eprintln!("[PlaybackCommand::Play] No current track to load");
+                    }
+                } else {
+                    eprintln!("[PlaybackCommand::Play] State is {:?}, not loading audio", state);
+                    event_tx
+                        .send(PlaybackEvent::StateChanged(mgr.get_state()))
+                        .ok();
+                }
             }
             PlaybackCommand::Pause => {
                 mgr.pause();
@@ -238,25 +279,77 @@ impl DesktopPlayback {
             }
             PlaybackCommand::Next => {
                 mgr.next()?;
-                event_tx
-                    .send(PlaybackEvent::TrackChanged(
-                        mgr.get_current_track().cloned(),
-                    ))
-                    .ok();
+
+                // If state is Loading, we need to load the audio source
+                if mgr.get_state() == soul_playback::PlaybackState::Loading {
+                    if let Some(track) = mgr.get_current_track().cloned() {
+                        match crate::sources::local::LocalAudioSource::new(&track.path) {
+                            Ok(source) => {
+                                mgr.set_audio_source(Box::new(source));
+                                event_tx
+                                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
+                                    .ok();
+                                event_tx
+                                    .send(PlaybackEvent::TrackChanged(Some(track.clone())))
+                                    .ok();
+                            }
+                            Err(e) => {
+                                event_tx
+                                    .send(PlaybackEvent::Error(format!(
+                                        "Failed to load audio: {}",
+                                        e
+                                    )))
+                                    .ok();
+                                mgr.stop();
+                            }
+                        }
+                    }
+                } else {
+                    event_tx
+                        .send(PlaybackEvent::TrackChanged(
+                            mgr.get_current_track().cloned(),
+                        ))
+                        .ok();
+                }
             }
             PlaybackCommand::Previous => {
                 mgr.previous()?;
-                event_tx
-                    .send(PlaybackEvent::TrackChanged(
-                        mgr.get_current_track().cloned(),
-                    ))
-                    .ok();
+
+                // If state is Loading, we need to load the audio source
+                if mgr.get_state() == soul_playback::PlaybackState::Loading {
+                    if let Some(track) = mgr.get_current_track().cloned() {
+                        match crate::sources::local::LocalAudioSource::new(&track.path) {
+                            Ok(source) => {
+                                mgr.set_audio_source(Box::new(source));
+                                event_tx
+                                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
+                                    .ok();
+                                event_tx
+                                    .send(PlaybackEvent::TrackChanged(Some(track.clone())))
+                                    .ok();
+                            }
+                            Err(e) => {
+                                event_tx
+                                    .send(PlaybackEvent::Error(format!(
+                                        "Failed to load audio: {}",
+                                        e
+                                    )))
+                                    .ok();
+                                mgr.stop();
+                            }
+                        }
+                    }
+                } else {
+                    event_tx
+                        .send(PlaybackEvent::TrackChanged(
+                            mgr.get_current_track().cloned(),
+                        ))
+                        .ok();
+                }
             }
             PlaybackCommand::Seek(seconds) => {
                 mgr.seek_to(std::time::Duration::from_secs_f64(seconds))?;
-                event_tx
-                    .send(PlaybackEvent::PositionUpdated(seconds))
-                    .ok();
+                event_tx.send(PlaybackEvent::PositionUpdated(seconds)).ok();
             }
             PlaybackCommand::SetVolume(volume) => {
                 mgr.set_volume(volume);
@@ -302,9 +395,9 @@ impl DesktopPlayback {
 
     /// Send command to playback thread
     pub fn send_command(&self, command: PlaybackCommand) -> Result<()> {
-        self.command_tx
-            .send(command)
-            .map_err(|_| crate::error::AudioError::PlaybackError("Failed to send command".into()))?;
+        self.command_tx.send(command).map_err(|_| {
+            crate::error::AudioError::PlaybackError("Failed to send command".into())
+        })?;
         Ok(())
     }
 
@@ -333,20 +426,30 @@ impl DesktopPlayback {
         self.manager.lock().unwrap().get_position()
     }
 
-    /// Get current volume
-    pub fn get_volume(&self) -> u8 {
-        self.manager.lock().unwrap().get_volume()
-    }
-
     /// Get queue
-    pub fn get_queue(&self) -> Vec<QueueTrack> {
+    pub fn get_queue(&self) -> Vec<soul_playback::QueueTrack> {
         self.manager
             .lock()
             .unwrap()
             .get_queue()
-            .iter()
-            .map(|t| (*t).clone())
+            .into_iter()
+            .cloned()
             .collect()
+    }
+
+    /// Check if there is a next track
+    pub fn has_next(&self) -> bool {
+        self.manager.lock().unwrap().has_next()
+    }
+
+    /// Check if there is a previous track
+    pub fn has_previous(&self) -> bool {
+        self.manager.lock().unwrap().has_previous()
+    }
+
+    /// Get current volume
+    pub fn get_volume(&self) -> u8 {
+        self.manager.lock().unwrap().get_volume()
     }
 }
 
@@ -364,7 +467,10 @@ mod tests {
                 // Success
             }
             Err(e) => {
-                eprintln!("Note: Audio device not available in test environment: {}", e);
+                eprintln!(
+                    "Note: Audio device not available in test environment: {}",
+                    e
+                );
             }
         }
     }

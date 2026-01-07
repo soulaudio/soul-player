@@ -274,7 +274,11 @@ fn test_volume_affects_audio_output() {
     // Buffer should be attenuated
     // At 50% volume, samples should be quieter than 0.5
     let max_sample = buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
-    assert!(max_sample < 0.5, "Expected volume reduction, got max: {}", max_sample);
+    assert!(
+        max_sample < 0.5,
+        "Expected volume reduction, got max: {}",
+        max_sample
+    );
 }
 
 #[test]
@@ -291,7 +295,10 @@ fn test_mute_silences_output() {
     manager.process_audio(&mut buffer).ok();
 
     // All samples should be zero (silence)
-    assert!(buffer.iter().all(|s| *s == 0.0), "Expected silence when muted");
+    assert!(
+        buffer.iter().all(|s| *s == 0.0),
+        "Expected silence when muted"
+    );
 }
 
 #[test]

@@ -39,12 +39,10 @@ pub async fn auth_middleware(
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Verify token
-    let user_id = auth_service
-        .verify_access_token(token)
-        .map_err(|e| {
-            tracing::warn!("Token verification failed: {}", e);
-            StatusCode::UNAUTHORIZED
-        })?;
+    let user_id = auth_service.verify_access_token(token).map_err(|e| {
+        tracing::warn!("Token verification failed: {}", e);
+        StatusCode::UNAUTHORIZED
+    })?;
 
     // Insert user ID into request extensions
     request.extensions_mut().insert(AuthenticatedUser(user_id));

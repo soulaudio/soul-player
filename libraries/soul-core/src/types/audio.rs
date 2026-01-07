@@ -15,6 +15,7 @@ impl SampleRate {
     pub const HIGH_RES_192: Self = Self(192_000);
 
     /// Create a new sample rate
+    #[must_use]
     pub fn new(hz: u32) -> Self {
         Self(hz)
     }

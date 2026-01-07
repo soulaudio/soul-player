@@ -1,0 +1,87 @@
+{
+  "app": {
+    "title": "Soul Player",
+    "loading": "読み込み中..."
+  },
+  "nav": {
+    "library": "ライブラリ",
+    "playlists": "プレイリスト",
+    "settings": "設定",
+    "import": "インポート"
+  },
+  "playback": {
+    "play": "再生",
+    "pause": "一時停止",
+    "next": "次のトラック",
+    "previous": "前のトラック",
+    "shuffle": "シャッフル",
+    "repeat": "リピート",
+    "volume": "音量",
+    "mute": "ミュート",
+    "unmute": "ミュート解除"
+  },
+  "library": {
+    "tracks": "トラック",
+    "albums": "アルバム",
+    "artists": "アーティスト",
+    "noTracks": "ライブラリにトラックがありません",
+    "addTracks": "音楽を追加して始めましょう"
+  },
+  "settings": {
+    "title": "設定",
+    "appearance": "外観",
+    "theme": "テーマ",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeOcean": "オーシャン",
+    "language": "言語",
+    "audio": "オーディオ",
+    "outputDevice": "出力デバイス",
+    "updates": "アップデート",
+    "autoUpdate": "自動的にアップデートを確認",
+    "silentUpdate": "自動的にアップデートをインストール",
+    "checkNow": "今すぐ確認",
+    "shortcuts": "キーボードショートカット",
+    "resetShortcuts": "デフォルトに戻す",
+    "about": "について",
+    "version": "バージョン"
+  },
+  "shortcuts": {
+    "playPause": "再生/一時停止",
+    "next": "次のトラック",
+    "previous": "前のトラック",
+    "volumeUp": "音量を上げる",
+    "volumeDown": "音量を下げる",
+    "mute": "ミュート",
+    "toggleShuffle": "シャッフル切り替え",
+    "toggleRepeat": "リピート切り替え"
+  },
+  "import": {
+    "title": "音楽をインポート",
+    "selectFiles": "ファイルを選択",
+    "selectFolder": "フォルダを選択",
+    "importing": "インポート中...",
+    "imported": "{{count}}トラックをインポートしました",
+    "cancel": "インポートをキャンセル"
+  },
+  "playlist": {
+    "create": "プレイリストを作成",
+    "name": "プレイリスト名",
+    "description": "説明",
+    "addTrack": "プレイリストに追加",
+    "removeTrack": "プレイリストから削除",
+    "deletePlaylist": "プレイリストを削除"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "edit": "編集",
+    "close": "閉じる",
+    "search": "検索",
+    "duration": "再生時間",
+    "artist": "アーティスト",
+    "album": "アルバム",
+    "title": "タイトル"
+  }
+}

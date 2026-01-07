@@ -3,13 +3,35 @@
 //! This module wraps the DesktopPlayback system and provides
 //! a clean interface for Tauri commands and event emission.
 
-use soul_audio_desktop::{DesktopPlayback, LocalAudioSource, PlaybackCommand, PlaybackEvent};
-use soul_playback::{PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMode};
-use std::path::PathBuf;
+use soul_audio_desktop::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
+use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode};
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+
+/// Track info for frontend events (with duration in seconds)
+#[derive(Debug, Clone, Serialize)]
+struct FrontendTrackEvent {
+    id: String,
+    title: String,
+    artist: String,
+    album: Option<String>,
+    duration: f64, // seconds
+}
+
+impl From<&QueueTrack> for FrontendTrackEvent {
+    fn from(track: &QueueTrack) -> Self {
+        Self {
+            id: track.id.clone(),
+            title: track.title.clone(),
+            artist: track.artist.clone(),
+            album: track.album.clone(),
+            duration: track.duration.as_secs_f64(),
+        }
+    }
+}
 
 /// Playback manager for Tauri application
 ///
@@ -55,6 +77,8 @@ impl PlaybackManager {
     ///
     /// Polls for playback events and emits them to the frontend via Tauri events.
     fn event_emission_loop(playback: Arc<Mutex<DesktopPlayback>>, app_handle: AppHandle) {
+        let mut last_position_emit = std::time::Instant::now();
+
         loop {
             // Poll for events
             let event = {
@@ -69,7 +93,9 @@ impl PlaybackManager {
                         app_handle.emit("playback:state-changed", state)
                     }
                     PlaybackEvent::TrackChanged(track) => {
-                        app_handle.emit("playback:track-changed", track)
+                        // Convert QueueTrack to FrontendTrackEvent with duration in seconds
+                        let frontend_track = track.as_ref().map(FrontendTrackEvent::from);
+                        app_handle.emit("playback:track-changed", frontend_track)
                     }
                     PlaybackEvent::PositionUpdated(position) => {
                         app_handle.emit("playback:position-updated", position)
@@ -82,26 +108,42 @@ impl PlaybackManager {
                 };
             }
 
+            // Emit position updates every 250ms during playback
+            if last_position_emit.elapsed() >= Duration::from_millis(250) {
+                let pb = playback.lock().unwrap();
+                let position = pb.get_position();
+                let state = pb.get_state();
+                drop(pb);
+
+                if state == soul_playback::PlaybackState::Playing {
+                    let _ = app_handle.emit("playback:position-updated", position.as_secs_f64());
+                }
+
+                last_position_emit = std::time::Instant::now();
+            }
+
             // Sleep briefly to avoid busy-waiting
             thread::sleep(Duration::from_millis(50));
         }
     }
 
     /// Play a track from local file
-    pub fn play_track(&self, path: PathBuf) -> Result<(), String> {
-        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
+    ///
+    /// # Arguments
+    /// * `track` - Track metadata including file path
+    pub fn play_track(&self, track: QueueTrack) -> Result<(), String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
 
-        // Create audio source
-        let source = LocalAudioSource::new(&path).map_err(|e| e.to_string())?;
-
-        // Set audio source and play
+        // Clear queue and add this track
         playback
-            .send_command(PlaybackCommand::Stop)
+            .send_command(PlaybackCommand::ClearQueue)
             .map_err(|e| e.to_string())?;
 
-        // TODO: Set audio source (need to expose this in DesktopPlayback)
-        // For now, just send play command
+        playback
+            .send_command(PlaybackCommand::AddToQueue(track))
+            .map_err(|e| e.to_string())?;
 
+        // Start playback
         playback
             .send_command(PlaybackCommand::Play)
             .map_err(|e| e.to_string())?;
@@ -196,6 +238,24 @@ impl PlaybackManager {
         playback
             .send_command(PlaybackCommand::SetRepeat(mode))
             .map_err(|e| e.to_string())
+    }
+
+    /// Get queue
+    pub fn get_queue(&self) -> Vec<QueueTrack> {
+        let playback = self.playback.lock().unwrap();
+        playback.get_queue()
+    }
+
+    /// Check if there is a next track
+    pub fn has_next(&self) -> bool {
+        let playback = self.playback.lock().unwrap();
+        playback.has_next()
+    }
+
+    /// Check if there is a previous track
+    pub fn has_previous(&self) -> bool {
+        let playback = self.playback.lock().unwrap();
+        playback.has_previous()
     }
 
     /// Add track to queue

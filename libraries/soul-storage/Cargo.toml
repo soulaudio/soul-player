@@ -14,11 +14,14 @@ tokio.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
 async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 testcontainers.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tempfile = "3.24"
+rand = "0.8"
 
 [lints]
 workspace = true

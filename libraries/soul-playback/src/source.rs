@@ -91,7 +91,8 @@ impl AudioSource for DummyAudioSource {
         }
 
         // Update position
-        let samples_read_duration = Duration::from_secs_f64(to_read as f64 / samples_per_second as f64);
+        let samples_read_duration =
+            Duration::from_secs_f64(to_read as f64 / samples_per_second as f64);
         self.position += samples_read_duration;
 
         Ok(to_read)

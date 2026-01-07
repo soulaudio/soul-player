@@ -1,0 +1,87 @@
+{
+  "app": {
+    "title": "Soul Player",
+    "loading": "Wird geladen..."
+  },
+  "nav": {
+    "library": "Bibliothek",
+    "playlists": "Wiedergabelisten",
+    "settings": "Einstellungen",
+    "import": "Importieren"
+  },
+  "playback": {
+    "play": "Abspielen",
+    "pause": "Pausieren",
+    "next": "Nächster Titel",
+    "previous": "Vorheriger Titel",
+    "shuffle": "Zufällig",
+    "repeat": "Wiederholen",
+    "volume": "Lautstärke",
+    "mute": "Stummschalten",
+    "unmute": "Stummschaltung aufheben"
+  },
+  "library": {
+    "tracks": "Titel",
+    "albums": "Alben",
+    "artists": "Künstler",
+    "noTracks": "Keine Titel in Ihrer Bibliothek",
+    "addTracks": "Fügen Sie Musik hinzu, um zu beginnen"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "appearance": "Erscheinungsbild",
+    "theme": "Thema",
+    "themeLight": "Hell",
+    "themeDark": "Dunkel",
+    "themeOcean": "Ozean",
+    "language": "Sprache",
+    "audio": "Audio",
+    "outputDevice": "Ausgabegerät",
+    "updates": "Updates",
+    "autoUpdate": "Automatisch nach Updates suchen",
+    "silentUpdate": "Updates automatisch installieren",
+    "checkNow": "Jetzt prüfen",
+    "shortcuts": "Tastenkombinationen",
+    "resetShortcuts": "Auf Standard zurücksetzen",
+    "about": "Über",
+    "version": "Version"
+  },
+  "shortcuts": {
+    "playPause": "Wiedergabe/Pause",
+    "next": "Nächster Titel",
+    "previous": "Vorheriger Titel",
+    "volumeUp": "Lauter",
+    "volumeDown": "Leiser",
+    "mute": "Stummschalten",
+    "toggleShuffle": "Zufallsmodus umschalten",
+    "toggleRepeat": "Wiederholungsmodus umschalten"
+  },
+  "import": {
+    "title": "Musik importieren",
+    "selectFiles": "Dateien auswählen",
+    "selectFolder": "Ordner auswählen",
+    "importing": "Wird importiert...",
+    "imported": "{{count}} Titel importiert",
+    "cancel": "Import abbrechen"
+  },
+  "playlist": {
+    "create": "Wiedergabeliste erstellen",
+    "name": "Name der Wiedergabeliste",
+    "description": "Beschreibung",
+    "addTrack": "Zur Wiedergabeliste hinzufügen",
+    "removeTrack": "Aus Wiedergabeliste entfernen",
+    "deletePlaylist": "Wiedergabeliste löschen"
+  },
+  "common": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "close": "Schließen",
+    "search": "Suchen",
+    "duration": "Dauer",
+    "artist": "Künstler",
+    "album": "Album",
+    "title": "Titel"
+  }
+}

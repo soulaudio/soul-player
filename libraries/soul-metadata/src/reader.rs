@@ -1,7 +1,8 @@
 /// Metadata reader implementation using lofty
 use crate::error::MetadataError;
 use lofty::{AudioFile, TaggedFileExt};
-use soul_core::{MetadataReader, TrackMetadata};
+use soul_core::traits::MetadataReader;
+use soul_core::types::TrackMetadata;
 use std::path::Path;
 
 /// Metadata reader using the lofty library
@@ -15,9 +16,11 @@ impl LoftyMetadataReader {
 
     /// Extract metadata from lofty tag
     fn extract_from_tag(tag: &lofty::Tag) -> TrackMetadata {
-        let mut metadata = TrackMetadata::new();
+        let mut metadata = TrackMetadata::default();
 
         // lofty 0.18 API - iterate through items
+        // NOTE: Legacy TrackMetadata only supports title, artist, album, duration_ms
+        // TODO: Update to use full TrackMetadata from track.rs when scanner is refactored
         for item in tag.items() {
             match item.key() {
                 lofty::ItemKey::TrackTitle => {
@@ -29,27 +32,12 @@ impl LoftyMetadataReader {
                 lofty::ItemKey::AlbumTitle => {
                     metadata.album = item.value().text().map(|s| s.to_string());
                 }
-                lofty::ItemKey::AlbumArtist => {
-                    metadata.album_artist = item.value().text().map(|s| s.to_string());
-                }
-                lofty::ItemKey::Genre => {
-                    metadata.genre = item.value().text().map(|s| s.to_string());
-                }
-                lofty::ItemKey::Year => {
-                    if let Some(text) = item.value().text() {
-                        metadata.year = text.parse().ok();
-                    }
-                }
-                lofty::ItemKey::TrackNumber => {
-                    if let Some(text) = item.value().text() {
-                        metadata.track_number = text.parse().ok();
-                    }
-                }
-                lofty::ItemKey::DiscNumber => {
-                    if let Some(text) = item.value().text() {
-                        metadata.disc_number = text.parse().ok();
-                    }
-                }
+                // Fields below are ignored in legacy TrackMetadata
+                // lofty::ItemKey::AlbumArtist => ...
+                // lofty::ItemKey::Genre => ...
+                // lofty::ItemKey::Year => ...
+                // lofty::ItemKey::TrackNumber => ...
+                // lofty::ItemKey::DiscNumber => ...
                 _ => {}
             }
         }
@@ -89,7 +77,7 @@ impl MetadataReader for LoftyMetadataReader {
             meta
         } else {
             // No tags found - return empty metadata with just duration
-            let mut meta = TrackMetadata::new();
+            let mut meta = TrackMetadata::default();
             meta.duration_ms = duration_ms;
             meta
         };

@@ -1,431 +1,549 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Instructions for Claude Code when working with Soul Player codebase.
 
 ---
 
-## Project Overview
+## Project Identity
 
-**Soul Player** is a local-first, cross-platform music player with multi-user server streaming and embedded hardware support (ESP32-S3).
+**Soul Player**: Cross-platform music player (Desktop/Server/ESP32-S3)
+- **Structure**: Cargo workspace monorepo + Moon tasks + Tauri desktop
+- **Storage**: SQLite everywhere, multi-user schema from day 1
+- **Audio**: Symphonia decoder + platform-specific output (CPAL/ESP32)
+- **Languages**: Rust (backend/libs) + TypeScript/React (Tauri frontend)
 
-**Key Characteristics**:
-- Monorepo using Cargo workspaces + Moon task runner
-- Shared Rust core logic across desktop, server, and embedded platforms
-- Multi-user database schema from the start (reused across all modes)
-- Trait-based architecture for platform-specific adapters
-- Quality-focused testing (50-60% coverage, no shallow tests)
+---
+
+## Critical Constraints
+
+### MUST Follow
+
+1. **Multi-User Always**: Every database query MUST respect user context
+   - Desktop = `user_id = 1` (default user)
+   - Server = authenticated user ID
+   - Never query playlists/settings without user context
+
+2. **Platform-Agnostic Core**: Libraries under `libraries/` MUST NOT depend on platform-specific crates
+   - Use traits for platform abstraction
+   - Platform code in `applications/` only
+
+3. **Real-Time Audio Safety**: Audio callback paths MUST NOT allocate
+   - No `Vec::new()`, `Box::new()`, `String::from()` in `process()` methods
+   - Pre-allocate buffers, use fixed-size arrays
+
+4. **Test Quality**: NO shallow tests
+   - ❌ Don't test: getters, setters, constructors, `Default` impls
+   - ✅ DO test: business logic, edge cases, error paths, integration points
+   - Use testcontainers with real SQLite (never in-memory)
+
+5. **Error Handling**: Libraries use `Result<T>`, applications can panic
+   - Libraries: `thiserror` for errors, no `.unwrap()` in public APIs
+   - Applications: `.expect()` with clear messages is fine
+
+### Directory Structure
+
+```
+applications/
+  ├── desktop/        # Tauri app (Rust + TypeScript/React)
+  ├── server/         # Axum HTTP server
+  └── shared/         # Shared TypeScript components/hooks
+
+libraries/
+  ├── soul-core/      # Core traits & types (no platform deps)
+  ├── soul-storage/   # SQLite + sqlx (multi-user schema)
+  ├── soul-audio/     # Decoder + effects (Symphonia)
+  ├── soul-audio-desktop/   # CPAL output
+  ├── soul-audio-mobile/    # Mobile audio output
+  ├── soul-audio-embedded/  # ESP32 I2S output
+  ├── soul-metadata/  # Tag reading (MP3/FLAC/etc)
+  ├── soul-playback/  # Queue/shuffle/history logic
+  └── soul-importer/  # Library scanning & import
+```
 
 ---
 
 ## Essential Commands
 
-### Development
 ```bash
-# Build all workspace crates
+# First-time setup
+./scripts/setup-sqlx.sh
+
+# Build & Test
 cargo build --all
-
-# Run desktop app (Tauri)
-cd crates/soul-player-desktop && cargo tauri dev
-
-# Run server
-cargo run -p soul-server
-
-# ESP32-S3 build
-cd crates/soul-player-esp32 && cargo build --release
-
-# Format all code
+cargo test --all
+cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all
 
-# Lint with clippy
-cargo clippy --all-targets --all-features -- -D warnings
+# Desktop app
+cd applications/desktop && npm run tauri dev
 
-# Run tests
-cargo test --all
+# Server
+cargo run -p soul-server
 
-# Integration tests with testcontainers
-cargo test --all --features testcontainers
+# Database migrations (after schema changes)
+sqlx migrate run --source libraries/soul-storage/migrations
+cd libraries/soul-storage && cargo sqlx prepare -- --lib
 
-# Security audit
-cargo audit
-```
-
-### Moon Tasks
-```bash
-# Run via Moon (task orchestration)
+# Moon tasks
 moon run :build
 moon run :test
 moon run :lint
 ```
 
----
-
-## Architecture Quick Reference
-
-### Crate Dependency Graph
-```
-soul-core (traits & types)
-    ↓
-├─→ soul-storage (SQLite, multi-user schema)
-├─→ soul-audio (Symphonia decoder + CPAL/ESP32 output)
-├─→ soul-metadata (tag reading, library scanning)
-├─→ soul-discovery (Bandcamp, Discogs - Phase 4)
-└─→ soul-sync (client-server sync protocol)
-    ↓
-├─→ soul-player-desktop (Tauri app)
-├─→ soul-server (Axum server, multi-user auth)
-└─→ soul-player-esp32 (Embassy firmware)
-```
-
-### Key Design Decisions
-
-1. **Storage**: SQLite everywhere (desktop, server, ESP32 SD card)
-   - Multi-user schema from the start
-   - Users table + user-owned playlists
-   - Shared library of tracks
-   - Server uses same schema, same crate
-
-2. **Audio Pipeline**:
-   - Decoder: Symphonia (MP3, FLAC, OGG, WAV, AAC, OPUS)
-   - Desktop output: CPAL
-   - ESP32 output: awedio_esp32 (uses Symphonia internally)
-   - Effect chain: Trait-based (EQ + Compressor for MVP)
-
-3. **Platforms**:
-   - Desktop: Tauri v2 (Windows, macOS, Linux)
-   - Server: Docker container, one-click setup
-   - Embedded: ESP32-S3 (NOT STM32 - needs std support)
-
-4. **No DSD support in MVP** (add later if needed)
+**For SQLx issues, configuration, or troubleshooting: See [docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md)**
 
 ---
 
-## Critical Architecture Constraints
+## Code Patterns & Best Practices
 
-### Embedded-First Design
-- Core logic must work on ESP32-S3 (std, not no_std)
-- Vertical slicing: Features work across all platforms when implemented
-- Platform-specific code isolated via traits or `cfg` flags
+### Database: Compile-Time Query Verification (REQUIRED)
 
-### Multi-User from Day 1
-- Database schema supports multiple users natively
-- Desktop app uses "default user" (user_id = 1)
-- Server mode: Real multi-user with authentication
-- Same storage crate, same schema, reused everywhere
+**ALL database queries MUST use compile-time macros (`query!` / `query_as!`).**
 
-### Effect Chain Architecture
 ```rust
-// Real-time audio processing (NO allocations in callback)
-trait AudioEffect: Send {
-    fn process(&mut self, buffer: &mut [f32], sample_rate: u32);
+// ✅ CORRECT: Compile-time verified query
+pub async fn get_by_id(pool: &SqlitePool, id: i64) -> Result<Option<Track>> {
+    let row = sqlx::query_as!(
+        Track,
+        "SELECT id, title, artist_id, album_id, duration_ms, file_hash
+         FROM tracks
+         WHERE id = ?",
+        id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
 }
 
-// Chain multiple effects
-struct EffectChain {
-    effects: Vec<Box<dyn AudioEffect>>,
+// ✅ CORRECT: Insert with query!
+pub async fn create(pool: &SqlitePool, name: &str) -> Result<i64> {
+    let result = sqlx::query!(
+        "INSERT INTO artists (name, sort_name) VALUES (?, ?)",
+        name,
+        name
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.last_insert_rowid())
+}
+
+// ❌ WRONG: Runtime query (not type-safe)
+pub async fn get_by_id(pool: &SqlitePool, id: i64) -> Result<Option<Track>> {
+    let row = sqlx::query("SELECT * FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    // ❌ No compile-time verification, error-prone
 }
 ```
 
----
+**Why compile-time queries:**
+- ✅ Typos in column names = compile error (not runtime crash)
+- ✅ Schema changes = immediate feedback on what broke
+- ✅ Type mismatches = compile error
+- ✅ Better IDE support (auto-completion, type hints)
+- ✅ Refactoring safety
 
-## Testing Philosophy
+**Setup required:** See [docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md)
 
-**Quality over quantity** - See [`docs/TESTING.md`](docs/TESTING.md) for full details.
+### Database: Multi-User Queries
 
-### Key Principles
-- ❌ NO shallow tests (getters, setters, trivial constructors)
-- ✅ Focus on business logic, edge cases, integration points
-- ✅ Use testcontainers with **real SQLite** (NOT in-memory)
-- ✅ Target 50-60% coverage (meaningful, not line-counting)
-
-### Test Commands
-```bash
-# Unit tests
-cargo test --lib --all
-
-# Integration tests
-cargo test --test '*' --all
-
-# With testcontainers (storage, server)
-cargo test --features testcontainers
-
-# Property-based tests (proptest for audio/algorithms)
-cargo test --all -- --ignored
-```
-
----
-
-## CI/CD Requirements
-
-### Blocking PR Checks
-- ❌ Clippy warnings (`-D warnings`)
-- ❌ Rustfmt differences
-- ❌ Test failures
-- ❌ Security vulnerabilities (`cargo audit`)
-
-### Non-Blocking
-- ⚠️ Code coverage report (target 50-60%, don't block)
-
-### Build Matrix
-- **Platforms**: Linux (x64, ARM64), macOS (Intel, Apple Silicon), Windows (x64)
-- **Targets**: Desktop binaries, Server binary, ESP32-S3 firmware
-
----
-
-## Common Patterns
-
-### Adding a New Crate
-1. Create in `crates/` directory
-2. Add to workspace `Cargo.toml`
-3. Update `moon.yml` task configuration
-4. Follow structure: `src/lib.rs`, `error.rs`, `types/`, `services/`
-5. Add tests in `tests/` directory
-
-### Platform-Specific Code
 ```rust
-// Preferred: Trait abstraction
-pub trait AudioOutput {
-    fn play(&mut self, buffer: &AudioBuffer) -> Result<()>;
-}
-
-// Fallback: Conditional compilation
-#[cfg(target_os = "espidf")]
-use awedio_esp32;
-
-#[cfg(not(target_os = "espidf"))]
-use cpal;
-```
-
-### Database Queries (Multi-User)
-```rust
-// ALWAYS include user context for playlists
-async fn get_user_playlists(
-    &self,
-    user_id: UserId
-) -> Result<Vec<Playlist>> {
+// ✅ CORRECT: Always filter by user
+pub async fn get_playlists(pool: &SqlitePool, user_id: i64) -> Result<Vec<Playlist>> {
     sqlx::query_as!(
         Playlist,
-        "SELECT * FROM playlists WHERE owner_id = ? OR id IN (
-            SELECT playlist_id FROM playlist_shares WHERE shared_with_user_id = ?
-        )",
-        user_id,
+        "SELECT id, owner_id, name, created_at, updated_at
+         FROM playlists
+         WHERE owner_id = ?",
         user_id
     )
-    .fetch_all(&self.pool)
+    .fetch_all(pool)
     .await
+    .map_err(Into::into)
+}
+
+// ❌ WRONG: Global query without user context
+pub async fn get_all_playlists(pool: &SqlitePool) -> Result<Vec<Playlist>> {
+    sqlx::query_as!(Playlist, "SELECT * FROM playlists")
+        .fetch_all(pool).await
+        .map_err(Into::into)
+}
+```
+
+### Database: Query Patterns
+
+```rust
+// Pattern 1: SELECT with specific columns (preferred)
+sqlx::query_as!(
+    Artist,
+    "SELECT id, name, sort_name, musicbrainz_id, created_at, updated_at
+     FROM artists
+     WHERE id = ?",
+    id
+)
+
+// Pattern 2: INSERT and return ID
+let result = sqlx::query!(
+    "INSERT INTO tracks (title, duration_ms) VALUES (?, ?)",
+    title,
+    duration_ms
+)
+.execute(pool)
+.await?;
+
+let id = result.last_insert_rowid();
+
+// Pattern 3: UPDATE with multiple columns
+sqlx::query!(
+    "UPDATE tracks SET title = ?, updated_at = datetime('now')
+     WHERE id = ?",
+    new_title,
+    track_id
+)
+.execute(pool)
+.await?;
+
+// Pattern 4: DELETE
+sqlx::query!("DELETE FROM tracks WHERE id = ?", track_id)
+    .execute(pool)
+    .await?;
+
+// Pattern 5: JOIN queries
+sqlx::query_as!(
+    Album,
+    "SELECT a.id, a.title, a.artist_id, ar.name as artist_name,
+            a.year, a.cover_art_path, a.musicbrainz_id,
+            a.created_at, a.updated_at
+     FROM albums a
+     LEFT JOIN artists ar ON a.artist_id = ar.id
+     WHERE a.id = ?",
+    id
+)
+```
+
+### Platform Abstraction: Traits
+
+```rust
+// ✅ CORRECT: Trait in soul-core, impls in platform crates
+pub trait AudioOutput: Send {
+    fn play(&mut self, buffer: &[f32]) -> Result<()>;
+}
+
+// Desktop: soul-audio-desktop
+impl AudioOutput for CpalOutput { ... }
+
+// ESP32: soul-audio-embedded
+impl AudioOutput for I2sOutput { ... }
+```
+
+### Audio Processing: No Allocations
+
+```rust
+// ✅ CORRECT: Pre-allocated buffer
+pub struct Compressor {
+    envelope: Vec<f32>,  // Pre-allocated in new()
+}
+
+impl AudioEffect for Compressor {
+    fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
+        // Only indexing, no allocations
+        for (i, sample) in buffer.iter_mut().enumerate() {
+            self.envelope[i] = (*sample).abs();
+        }
+    }
+}
+
+// ❌ WRONG: Allocates in hot path
+fn process(&mut self, buffer: &mut [f32]) {
+    let envelope = buffer.iter().map(|s| s.abs()).collect::<Vec<f32>>();
+}
+```
+
+### Error Types: Library vs Application
+
+```rust
+// ✅ Libraries: thiserror + Result
+#[derive(Debug, thiserror::Error)]
+pub enum StorageError {
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+
+    #[error("Track not found: {0}")]
+    TrackNotFound(i64),
+}
+
+pub fn get_track(&self, id: i64) -> Result<Track, StorageError> { ... }
+
+// ✅ Applications: can use expect/unwrap with context
+let track = storage.get_track(id)
+    .expect("Failed to load track from database");
+```
+
+### Testing: Meaningful Tests Only
+
+```rust
+// ✅ GOOD: Tests business logic
+#[test]
+fn shuffle_respects_no_repeat_within_window() {
+    let mut shuffle = Shuffle::new(10, 3); // window_size = 3
+    let mut seen = Vec::new();
+
+    for _ in 0..20 {
+        let idx = shuffle.next();
+        assert!(!seen[seen.len().saturating_sub(3)..].contains(&idx));
+        seen.push(idx);
+    }
+}
+
+// ❌ BAD: Shallow test
+#[test]
+fn shuffle_new_returns_instance() {
+    let shuffle = Shuffle::new(10, 3);
+    assert_eq!(shuffle.size(), 10);  // Just testing a getter
 }
 ```
 
 ---
 
-## Important Files
+## Architecture Rules
 
-### Documentation
-- [`ROADMAP.md`](ROADMAP.md) - Implementation phases and timeline
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - System design and crate details
-- [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) - Coding standards and best practices
-- [`docs/TESTING.md`](docs/TESTING.md) - Testing strategy and patterns
+### Dependency Flow (MUST Enforce)
 
-### Configuration
-- `Cargo.toml` - Workspace configuration
-- `moon.yml` - Task orchestration (build, test, lint)
-- `.github/workflows/` - CI/CD pipelines
+```
+libraries/soul-core
+    ↓ (traits & types only)
+libraries/soul-{storage,audio,metadata,playback,importer}
+    ↓ (business logic, platform-agnostic)
+libraries/soul-audio-{desktop,mobile,embedded}
+    ↓ (platform-specific implementations)
+applications/{desktop,server}
+    ↓ (composition & UI)
+```
+
+**Never reverse this flow**: Applications can't be dependencies of libraries.
+
+### Feature Flags: Minimal Usage
+
+Only use features for:
+- Test utilities (`testcontainers`)
+- Optional external integrations (future: Bandcamp API)
+
+**Don't use features for**: Platform selection (use separate crates instead)
+
+### Async Runtime: Tokio Everywhere
+
+- Desktop: Tokio (via Tauri)
+- Server: Tokio (via Axum)
+- Libraries: Runtime-agnostic where possible (accept `&Pool` not `Runtime`)
 
 ---
 
-## Database Schema (Multi-User)
+## Database Schema (Core Tables)
 
-Core tables (see `soul-storage/migrations/`):
 ```sql
-users              -- User accounts
-tracks             -- Shared library of tracks
-playlists          -- User-owned playlists (owner_id FK)
-playlist_tracks    -- Many-to-many (playlists ↔ tracks)
-playlist_shares    -- Playlist collaboration (shared playlists)
+-- Multi-user foundation
+users (id, username, email, created_at)
+user_settings (user_id, key, value)
+
+-- Audio library (shared across users)
+tracks (id, title, duration_ms, file_hash, ...)
+albums (id, title, year, ...)
+artists (id, name, ...)
+genres (id, name)
+
+-- User-owned data
+playlists (id, owner_id, name, created_at)
+playlist_tracks (playlist_id, track_id, position)
+
+-- Multi-source support
+sources (id, name, type)  -- local/http/webdav
+track_sources (track_id, source_id, path)
 ```
 
-**Key Insight**: Same schema used in desktop (single user), server (multi-user), and ESP32 (offline user).
+**Migration Location**: `libraries/soul-storage/migrations/*.sql`
 
 ---
 
-## Audio Formats Support
+## Testing Strategy
 
-| Format | Desktop | Server | ESP32-S3 |
-|--------|---------|--------|----------|
-| MP3    | ✅      | ✅     | ✅       |
-| FLAC   | ✅      | ✅     | ✅       |
-| OGG    | ✅      | ✅     | ✅       |
-| WAV    | ✅      | ✅     | ✅       |
-| AAC    | ✅      | ✅     | ✅       |
-| OPUS   | ✅      | ✅     | ✅       |
-| DSD    | ❌ (future) | ❌ | ❌  |
+### Test Organization
 
-All use **Symphonia** decoder (pure Rust, cross-platform).
+```
+libraries/soul-*/
+  ├── src/
+  └── tests/
+      ├── integration_test.rs      # End-to-end scenarios
+      ├── property_test.rs         # Proptest for algorithms
+      └── test_helpers.rs          # Shared test utilities
+```
+
+### Database Tests: Use Testcontainers
+
+```rust
+use soul_storage::test_helpers::create_test_context;
+
+#[tokio::test]
+async fn test_create_playlist() {
+    let ctx = create_test_context().await;
+    let user_id = 1;
+
+    let playlist = ctx.playlists()
+        .create(user_id, "My Playlist")
+        .await
+        .unwrap();
+
+    assert_eq!(playlist.owner_id, user_id);
+}
+```
+
+### Coverage Target: 50-60% (Quality, Not Quantity)
+
+Focus coverage on:
+- ✅ Business logic (shuffle, queue, effects)
+- ✅ Error handling paths
+- ✅ Database queries (user isolation)
+- ✅ Audio processing (correctness)
+
+Ignore:
+- ❌ Generated code (Tauri commands)
+- ❌ Simple getters/setters
+- ❌ Type definitions
 
 ---
 
-## Server Deployment
+## Frontend (Tauri Desktop)
 
-```bash
-# Build Docker image
-docker build -t soul-server .
+### Technology Stack
 
-# Run container
-docker run -d \
-  -p 8080:8080 \
-  -v /path/to/music:/music \
-  -v /path/to/data:/data \
-  -e JWT_SECRET=your-secret \
-  soul-server
+- **Framework**: React 18 + TypeScript
+- **State**: Zustand (lightweight, no Redux)
+- **Styling**: TailwindCSS
+- **Icons**: Lucide React
+- **Tauri**: v2 (invoke commands from Rust backend)
 
-# One-click setup script (future)
-./scripts/setup-server.sh
+### Tauri Command Pattern
+
+```rust
+// Rust: applications/desktop/src-tauri/src/main.rs
+#[tauri::command]
+async fn create_playlist(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<Playlist, String> {
+    state.storage
+        .playlists()
+        .create(1, &name)  // user_id = 1 (desktop default)
+        .await
+        .map_err(|e| e.to_string())
+}
+```
+
+```typescript
+// TypeScript: applications/desktop/src/
+import { invoke } from '@tauri-apps/api/core';
+
+async function createPlaylist(name: string): Promise<Playlist> {
+  return await invoke('create_playlist', { name });
+}
+```
+
+### State Management: Zustand
+
+```typescript
+import { create } from 'zustand';
+
+interface PlaybackState {
+  isPlaying: boolean;
+  currentTrack: Track | null;
+  play: () => void;
+  pause: () => void;
+}
+
+export const usePlayback = create<PlaybackState>((set) => ({
+  isPlaying: false,
+  currentTrack: null,
+  play: () => set({ isPlaying: true }),
+  pause: () => set({ isPlaying: false }),
+}));
 ```
 
 ---
 
-## ESP32-S3 Development
+## Performance Guidelines
 
+### Audio Hot Paths
+
+- Pre-allocate all buffers in `new()`
+- Use `&mut [f32]` slices, not `Vec<f32>`
+- Profile with `cargo bench` (criterion)
+
+### Database
+
+- Use `sqlx::query!` macros (compile-time checked)
+- Index foreign keys: `owner_id`, `track_id`, `playlist_id`
+- Batch inserts for imports (use transactions)
+
+### Desktop UI
+
+- Virtualize long lists (react-window)
+- Debounce search input (300ms)
+- Cache album art (Tauri asset protocol)
+
+---
+
+## Security Checklist
+
+When touching:
+
+- **Auth code**: Validate JWT exp, check user_id in claims
+- **File paths**: Sanitize input, prevent path traversal
+- **SQL queries**: Use parameterized queries (sqlx handles this)
+- **API endpoints**: Validate input schemas (serde)
+
+---
+
+## Before Committing
+
+Run locally:
 ```bash
-# Install ESP toolchain
-espup install
-
-# Build firmware
-cd crates/soul-player-esp32
-cargo build --release
-
-# Flash to device
-espflash flash target/xtensa-esp32s3-espidf/release/soul-player-esp32
-
-# Monitor serial output
-espflash monitor
-```
-
-**Hardware**: ESP32-S3 with:
-- I2S DAC for audio output
-- SD card (SDMMC interface)
-- E-ink display (SPI)
-- WiFi for server sync
-
----
-
-## Troubleshooting
-
-### Build Issues
-- **Tauri build fails**: Check Node.js version (16+), install system dependencies
-- **ESP32 build fails**: Ensure `espup` toolchain installed, set `LIBCLANG_PATH`
-- **SQLite errors**: Check migrations ran, verify schema version
-
-### Test Issues
-- **Testcontainers failing**: Ensure Docker running, check port conflicts
-- **Audio tests failing**: Check audio device availability, run headless tests with dummy output
-- **Integration tests timeout**: Increase timeout, check database cleanup
-
----
-
-## Dependencies to Know
-
-### Core
-- `symphonia` - Audio decoding (all formats)
-- `sqlx` - SQLite database (compile-time checked queries)
-- `serde` - Serialization (JSON, TOML)
-- `thiserror` - Error handling (libraries)
-
-### Desktop
-- `tauri` - Desktop app framework
-- `cpal` - Cross-platform audio output
-
-### Server
-- `axum` - HTTP server
-- `tokio` - Async runtime
-- `jsonwebtoken` - JWT authentication
-
-### Embedded
-- `embassy-executor` - Async embedded runtime
-- `embassy-stm32` - Wait, this is ESP32! Use `esp-idf-hal`
-- `awedio_esp32` - Audio output for ESP32
-
-### Testing
-- `testcontainers` - Database integration tests
-- `proptest` - Property-based testing
-- `criterion` - Benchmarking
-
----
-
-## Development Workflow
-
-1. **Start with tests** (TDD encouraged for complex logic)
-2. **Implement core logic** in trait-based way
-3. **Add platform-specific adapters** (desktop, server, ESP32)
-4. **Verify cross-platform** compilation
-5. **Run full test suite** (unit + integration)
-6. **Update documentation** if architecture changes
-
----
-
-## Code Review Checklist
-
-Before submitting PR:
-- [ ] Tests added for new functionality (no shallow tests!)
-- [ ] Multi-user implications considered (if touching storage)
-- [ ] Platform-specific code isolated (traits or `cfg`)
-- [ ] Documentation updated (if public API changed)
-- [ ] Error handling complete (no unwraps in library code)
-- [ ] Performance implications reviewed (audio hot path?)
-- [ ] Security reviewed (user input validation, SQL injection?)
-
----
-
-## Need Help?
-
-1. **Architecture questions**: See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-2. **Coding standards**: See [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)
-3. **Testing approach**: See [`docs/TESTING.md`](docs/TESTING.md)
-4. **Implementation plan**: See [`ROADMAP.md`](ROADMAP.md)
-
----
-
-## Quick Start for New Contributors
-
-```bash
-# Clone and setup
-git clone https://github.com/yourusername/soul-player.git
-cd soul-player
-
-# Install Rust toolchain
-rustup update stable
-
-# Install Moon task runner
-curl -fsSL https://moonrepo.dev/install/moon.sh | bash
-
-# Build everything
-cargo build --all
-
-# Run tests
+cargo fmt --all --check
+cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all
-
-# Start desktop app
-cd crates/soul-player-desktop && cargo tauri dev
+DATABASE_URL="sqlite:test.db" cargo check  # Verify sqlx queries
 ```
 
----
-
-## Project Status
-
-**Current Phase**: Phase 1 - Desktop Foundation (see ROADMAP.md)
-
-**Next Milestones**:
-1. Complete storage layer with multi-user schema
-2. Implement audio engine with effect chain
-3. Build Tauri desktop UI
-4. Set up CI/CD pipelines
+CI will block PRs if:
+- ❌ Rustfmt fails
+- ❌ Clippy warnings present
+- ❌ Tests fail
+- ❌ `cargo audit` finds vulnerabilities
 
 ---
 
-## Important Notes for Claude Code
+## Quick Reference: Key Files
 
-- This project uses **late 2025/early 2026 Rust best practices**
-- Embedded target is **ESP32-S3** (std, not no_std) - NOT STM32
-- Multi-user database schema is **fundamental** - not bolted on later
-- Testing uses **real databases** (testcontainers) - never in-memory SQLite
-- Code coverage targets are **guidelines** (50-60%) - quality over quantity
-- Always **vertically slice** features (desktop + server + ESP32 when possible)
+- `Cargo.toml` - Workspace dependencies
+- `.moon/workspace.yml` - Task runner config
+- `applications/desktop/src-tauri/tauri.conf.json` - Tauri settings
+- `libraries/soul-storage/migrations/` - Database schema
+- `ROADMAP.md` - Implementation phases
+
+---
+
+## When in Doubt
+
+1. **Multi-user**: Always require `user_id` parameter
+2. **Platform code**: Use traits, isolate in applications/
+3. **Tests**: Skip if it's just testing a getter
+4. **Errors**: Return `Result` in libraries, `.expect()` in apps
+5. **Allocations**: Never in audio `process()` methods
+6. **Dependencies**: Libraries can't depend on applications
+
+---
+
+**Last Updated**: 2026-01-06
+**Rust Edition**: 2021
+**Target Platforms**: Windows, macOS, Linux, ESP32-S3

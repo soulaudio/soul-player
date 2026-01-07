@@ -23,9 +23,18 @@ async fn test_file_storage_initialization() {
     assert!(storage_path.exists(), "Base storage path should be created");
 
     // Verify quality subdirectories are created
-    for quality in &[Quality::Original, Quality::High, Quality::Medium, Quality::Low] {
+    for quality in &[
+        Quality::Original,
+        Quality::High,
+        Quality::Medium,
+        Quality::Low,
+    ] {
         let quality_path = storage_path.join(quality.subdirectory());
-        assert!(quality_path.exists(), "Quality subdirectory {} should be created", quality.subdirectory());
+        assert!(
+            quality_path.exists(),
+            "Quality subdirectory {} should be created",
+            quality.subdirectory()
+        );
     }
 }
 
@@ -42,7 +51,10 @@ async fn test_store_original_file() {
     let file_data = b"fake audio data for testing";
 
     // Store original file
-    let stored_path = storage.store_original(&track_id, "mp3", file_data).await.unwrap();
+    let stored_path = storage
+        .store_original(&track_id, "mp3", file_data)
+        .await
+        .unwrap();
 
     // Verify file exists at returned path
     assert!(stored_path.exists(), "Stored file should exist");
@@ -52,12 +64,17 @@ async fn test_store_original_file() {
     assert_eq!(contents, file_data, "File contents should match");
 
     // Verify file is in original directory
-    assert!(stored_path.starts_with(storage_path.join("original")),
-        "File should be in original directory");
+    assert!(
+        stored_path.starts_with(storage_path.join("original")),
+        "File should be in original directory"
+    );
 
     // Verify file has correct extension
-    assert_eq!(stored_path.extension().unwrap(), "mp3",
-        "File should have correct extension");
+    assert_eq!(
+        stored_path.extension().unwrap(),
+        "mp3",
+        "File should have correct extension"
+    );
 }
 
 /// Test storing transcoded file
@@ -73,12 +90,10 @@ async fn test_store_variant_file() {
     let file_data = b"transcoded mp3 data";
 
     // Store transcoded file
-    let stored_path = storage.store_variant(
-        &track_id,
-        Quality::High,
-        AudioFormat::Mp3,
-        file_data
-    ).await.unwrap();
+    let stored_path = storage
+        .store_variant(&track_id, Quality::High, AudioFormat::Mp3, file_data)
+        .await
+        .unwrap();
 
     // Verify file exists
     assert!(stored_path.exists(), "Transcoded file should exist");
@@ -88,8 +103,10 @@ async fn test_store_variant_file() {
     assert_eq!(contents, file_data, "File contents should match");
 
     // Verify file is in high quality directory
-    assert!(stored_path.starts_with(storage_path.join("high")),
-        "File should be in high quality directory");
+    assert!(
+        stored_path.starts_with(storage_path.join("high")),
+        "File should be in high quality directory"
+    );
 
     // Verify file has mp3 extension
     assert_eq!(stored_path.extension().unwrap(), "mp3");
@@ -108,31 +125,51 @@ async fn test_store_multiple_quality_variants() {
 
     // Store original
     let original_data = b"original flac data";
-    storage.store_original(&track_id, "flac", original_data).await.unwrap();
+    storage
+        .store_original(&track_id, "flac", original_data)
+        .await
+        .unwrap();
 
     // Store high quality mp3
     let high_data = b"high quality mp3";
-    storage.store_variant(&track_id, Quality::High, AudioFormat::Mp3, high_data).await.unwrap();
+    storage
+        .store_variant(&track_id, Quality::High, AudioFormat::Mp3, high_data)
+        .await
+        .unwrap();
 
     // Store medium quality ogg
     let medium_data = b"medium quality ogg";
-    storage.store_variant(&track_id, Quality::Medium, AudioFormat::Ogg, medium_data).await.unwrap();
+    storage
+        .store_variant(&track_id, Quality::Medium, AudioFormat::Ogg, medium_data)
+        .await
+        .unwrap();
 
     // Store low quality mp3
     let low_data = b"low quality mp3";
-    storage.store_variant(&track_id, Quality::Low, AudioFormat::Mp3, low_data).await.unwrap();
+    storage
+        .store_variant(&track_id, Quality::Low, AudioFormat::Mp3, low_data)
+        .await
+        .unwrap();
 
     // Verify all files exist and have correct content
-    let original_path = storage.get_track_path(&track_id, Quality::Original, Some(AudioFormat::Flac)).unwrap();
+    let original_path = storage
+        .get_track_path(&track_id, Quality::Original, Some(AudioFormat::Flac))
+        .unwrap();
     assert_eq!(std::fs::read(&original_path).unwrap(), original_data);
 
-    let high_path = storage.get_track_path(&track_id, Quality::High, Some(AudioFormat::Mp3)).unwrap();
+    let high_path = storage
+        .get_track_path(&track_id, Quality::High, Some(AudioFormat::Mp3))
+        .unwrap();
     assert_eq!(std::fs::read(&high_path).unwrap(), high_data);
 
-    let medium_path = storage.get_track_path(&track_id, Quality::Medium, Some(AudioFormat::Ogg)).unwrap();
+    let medium_path = storage
+        .get_track_path(&track_id, Quality::Medium, Some(AudioFormat::Ogg))
+        .unwrap();
     assert_eq!(std::fs::read(&medium_path).unwrap(), medium_data);
 
-    let low_path = storage.get_track_path(&track_id, Quality::Low, Some(AudioFormat::Mp3)).unwrap();
+    let low_path = storage
+        .get_track_path(&track_id, Quality::Low, Some(AudioFormat::Mp3))
+        .unwrap();
     assert_eq!(std::fs::read(&low_path).unwrap(), low_data);
 }
 
@@ -148,12 +185,22 @@ async fn test_get_track_path() {
     let track_id = TrackId::new("test-track-path".to_string());
 
     // Store files
-    storage.store_original(&track_id, "mp3", b"data").await.unwrap();
-    storage.store_variant(&track_id, Quality::High, AudioFormat::Mp3, b"data").await.unwrap();
+    storage
+        .store_original(&track_id, "mp3", b"data")
+        .await
+        .unwrap();
+    storage
+        .store_variant(&track_id, Quality::High, AudioFormat::Mp3, b"data")
+        .await
+        .unwrap();
 
     // Get paths
-    let original_path = storage.get_track_path(&track_id, Quality::Original, Some(AudioFormat::Mp3)).unwrap();
-    let high_path = storage.get_track_path(&track_id, Quality::High, Some(AudioFormat::Mp3)).unwrap();
+    let original_path = storage
+        .get_track_path(&track_id, Quality::Original, Some(AudioFormat::Mp3))
+        .unwrap();
+    let high_path = storage
+        .get_track_path(&track_id, Quality::High, Some(AudioFormat::Mp3))
+        .unwrap();
 
     assert!(original_path.to_string_lossy().contains("original"));
     assert!(high_path.to_string_lossy().contains("high"));
@@ -171,16 +218,30 @@ async fn test_best_available_quality_fallback() {
     let track_id = TrackId::new("test-track-fallback".to_string());
 
     // Only store original and low quality
-    storage.store_original(&track_id, "flac", b"original").await.unwrap();
-    storage.store_variant(&track_id, Quality::Low, AudioFormat::Mp3, b"low").await.unwrap();
+    storage
+        .store_original(&track_id, "flac", b"original")
+        .await
+        .unwrap();
+    storage
+        .store_variant(&track_id, Quality::Low, AudioFormat::Mp3, b"low")
+        .await
+        .unwrap();
 
     // Request high quality - should fall back to original
     let quality = storage.get_best_available_quality(&track_id, Quality::High);
-    assert_eq!(quality, Quality::Original, "Should fall back to original when high not available");
+    assert_eq!(
+        quality,
+        Quality::Original,
+        "Should fall back to original when high not available"
+    );
 
     // Request medium quality - should fall back to original
     let quality = storage.get_best_available_quality(&track_id, Quality::Medium);
-    assert_eq!(quality, Quality::Original, "Should fall back to original when medium not available");
+    assert_eq!(
+        quality,
+        Quality::Original,
+        "Should fall back to original when medium not available"
+    );
 
     // Request low quality - should return low
     let quality = storage.get_best_available_quality(&track_id, Quality::Low);
@@ -188,7 +249,11 @@ async fn test_best_available_quality_fallback() {
 
     // Request original - should return original
     let quality = storage.get_best_available_quality(&track_id, Quality::Original);
-    assert_eq!(quality, Quality::Original, "Should return original when available");
+    assert_eq!(
+        quality,
+        Quality::Original,
+        "Should return original when available"
+    );
 }
 
 /// Test best available quality with only transcoded files
@@ -203,15 +268,26 @@ async fn test_best_available_quality_transcoded_only() {
     let track_id = TrackId::new("test-track-transcoded".to_string());
 
     // Only store medium quality
-    storage.store_variant(&track_id, Quality::Medium, AudioFormat::Mp3, b"medium").await.unwrap();
+    storage
+        .store_variant(&track_id, Quality::Medium, AudioFormat::Mp3, b"medium")
+        .await
+        .unwrap();
 
     // Request high quality - should fall back to medium
     let quality = storage.get_best_available_quality(&track_id, Quality::High);
-    assert_eq!(quality, Quality::Medium, "Should fall back to next best available");
+    assert_eq!(
+        quality,
+        Quality::Medium,
+        "Should fall back to next best available"
+    );
 
     // Request original - should fall back to medium
     let quality = storage.get_best_available_quality(&track_id, Quality::Original);
-    assert_eq!(quality, Quality::Medium, "Should fall back to best available");
+    assert_eq!(
+        quality,
+        Quality::Medium,
+        "Should fall back to best available"
+    );
 }
 
 /// Test file existence checking
@@ -229,7 +305,10 @@ async fn test_has_quality() {
     assert!(!storage.has_quality(&track_id, Quality::Original));
 
     // Store file
-    storage.store_original(&track_id, "mp3", b"data").await.unwrap();
+    storage
+        .store_original(&track_id, "mp3", b"data")
+        .await
+        .unwrap();
 
     // File should now exist
     assert!(storage.has_quality(&track_id, Quality::Original));
@@ -250,10 +329,22 @@ async fn test_delete_track() {
     let track_id = TrackId::new("test-delete".to_string());
 
     // Store multiple files
-    storage.store_original(&track_id, "flac", b"original").await.unwrap();
-    storage.store_variant(&track_id, Quality::High, AudioFormat::Mp3, b"high").await.unwrap();
-    storage.store_variant(&track_id, Quality::Medium, AudioFormat::Ogg, b"medium").await.unwrap();
-    storage.store_variant(&track_id, Quality::Low, AudioFormat::Mp3, b"low").await.unwrap();
+    storage
+        .store_original(&track_id, "flac", b"original")
+        .await
+        .unwrap();
+    storage
+        .store_variant(&track_id, Quality::High, AudioFormat::Mp3, b"high")
+        .await
+        .unwrap();
+    storage
+        .store_variant(&track_id, Quality::Medium, AudioFormat::Ogg, b"medium")
+        .await
+        .unwrap();
+    storage
+        .store_variant(&track_id, Quality::Low, AudioFormat::Mp3, b"low")
+        .await
+        .unwrap();
 
     // Verify all files exist
     assert!(storage.has_quality(&track_id, Quality::Original));
@@ -298,13 +389,21 @@ async fn test_path_validation_valid_path() {
 
     // Create a file first (validate_path uses canonicalize which requires file to exist)
     let track_id = TrackId::new("test-validation".to_string());
-    storage.store_original(&track_id, "mp3", b"data").await.unwrap();
+    storage
+        .store_original(&track_id, "mp3", b"data")
+        .await
+        .unwrap();
 
     // Get the actual path and validate it
-    let valid_path = storage.get_track_path(&track_id, Quality::Original, Some(AudioFormat::Mp3)).unwrap();
+    let valid_path = storage
+        .get_track_path(&track_id, Quality::Original, Some(AudioFormat::Mp3))
+        .unwrap();
     let result = storage.validate_path(&valid_path);
 
-    assert!(result.is_ok(), "Valid path within storage should be accepted");
+    assert!(
+        result.is_ok(),
+        "Valid path within storage should be accepted"
+    );
 }
 
 /// Test path validation rejects absolute paths outside storage
@@ -320,7 +419,10 @@ async fn test_path_validation_absolute_path_outside() {
     let malicious_path = Path::new("/etc/passwd");
     let result = storage.validate_path(malicious_path);
 
-    assert!(result.is_err(), "Absolute path outside storage should be rejected");
+    assert!(
+        result.is_err(),
+        "Absolute path outside storage should be rejected"
+    );
 }
 
 /// Test storing file with unusual but valid characters in track ID
@@ -336,7 +438,10 @@ async fn test_store_file_with_special_track_id() {
     let track_id = TrackId::new("track-123_abc-XYZ".to_string());
     let file_data = b"test data";
 
-    let stored_path = storage.store_original(&track_id, "mp3", file_data).await.unwrap();
+    let stored_path = storage
+        .store_original(&track_id, "mp3", file_data)
+        .await
+        .unwrap();
 
     assert!(stored_path.exists());
     assert_eq!(std::fs::read(&stored_path).unwrap(), file_data);
@@ -389,7 +494,10 @@ async fn test_store_empty_file() {
     let empty_data: &[u8] = &[];
 
     // Store empty file
-    let stored_path = storage.store_original(&track_id, "mp3", empty_data).await.unwrap();
+    let stored_path = storage
+        .store_original(&track_id, "mp3", empty_data)
+        .await
+        .unwrap();
 
     // Verify file exists and is empty
     assert!(stored_path.exists());
@@ -410,14 +518,22 @@ async fn test_overwrite_existing_file() {
 
     // Store original file
     let original_data = b"original data";
-    storage.store_original(&track_id, "mp3", original_data).await.unwrap();
+    storage
+        .store_original(&track_id, "mp3", original_data)
+        .await
+        .unwrap();
 
     // Overwrite with new data
     let new_data = b"new overwritten data";
-    storage.store_original(&track_id, "mp3", new_data).await.unwrap();
+    storage
+        .store_original(&track_id, "mp3", new_data)
+        .await
+        .unwrap();
 
     // Verify file contains new data
-    let path = storage.get_track_path(&track_id, Quality::Original, Some(AudioFormat::Mp3)).unwrap();
+    let path = storage
+        .get_track_path(&track_id, Quality::Original, Some(AudioFormat::Mp3))
+        .unwrap();
     let contents = std::fs::read(&path).unwrap();
     assert_eq!(contents, new_data, "File should contain new data");
 }

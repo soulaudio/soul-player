@@ -15,7 +15,8 @@ pub async fn create_test_database() -> Result<Arc<Database>> {
 pub mod fixtures {
     pub const TEST_USERNAME: &str = "testuser";
     pub const TEST_PASSWORD: &str = "TestPassword123!";
-    pub const TEST_PASSWORD_HASH: &str = "$2b$12$KIXvQWqWZ8L8wJ9vL0nLxu3QZHqK4iFr9fVjQyZvZqZ8L8wJ9vL0nL"; // bcrypt hash of "TestPassword123!"
+    pub const TEST_PASSWORD_HASH: &str =
+        "$2b$12$KIXvQWqWZ8L8wJ9vL0nLxu3QZHqK4iFr9fVjQyZvZqZ8L8wJ9vL0nL"; // bcrypt hash of "TestPassword123!"
 
     pub const ADMIN_USERNAME: &str = "admin";
     pub const ADMIN_PASSWORD: &str = "AdminPassword456!";

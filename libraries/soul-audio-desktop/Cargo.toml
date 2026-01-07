@@ -12,6 +12,7 @@ soul-audio.workspace = true
 soul-playback.workspace = true
 cpal.workspace = true
 thiserror.workspace = true
+symphonia.workspace = true  # For streaming audio decoding
 rubato = "0.15"  # Sample rate conversion
 crossbeam-channel = "0.5"  # Thread-safe channels for audio thread communication
 reqwest = { workspace = true, features = ["stream"] }  # For streaming from server

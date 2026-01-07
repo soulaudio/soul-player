@@ -5,7 +5,6 @@
 
 use soul_core::types::*;
 use sqlx::SqlitePool;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// Test database wrapper that cleans up on drop
@@ -18,10 +17,9 @@ impl TestDb {
     /// Create a new test database with migrations applied
     pub async fn new() -> Self {
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-        let db_path = temp_dir.path().join("test.db");
-        let db_url = format!("sqlite://{}", db_path.display());
 
-        let pool = soul_storage::create_pool(&db_url)
+        // Use in-memory database for tests
+        let pool = SqlitePool::connect("sqlite::memory:")
             .await
             .expect("Failed to create pool");
 
@@ -42,30 +40,30 @@ impl TestDb {
     }
 }
 
+/// Simple setup function that returns a pool directly
+pub async fn setup_test_db() -> SqlitePool {
+    let test_db = TestDb::new().await;
+    test_db.pool
+}
+
 /// Test fixture: Create a test user
 pub async fn create_test_user(pool: &SqlitePool, username: &str) -> UserId {
-    let result = sqlx::query!(
-        "INSERT INTO users (username) VALUES (?)",
-        username
-    )
-    .execute(pool)
-    .await
-    .expect("Failed to create test user");
+    let result = sqlx::query("INSERT INTO users (name) VALUES (?)")
+        .bind(username)
+        .execute(pool)
+        .await
+        .expect("Failed to create test user");
 
     result.last_insert_rowid()
 }
 
 /// Test fixture: Create a test source
-pub async fn create_test_source(
-    pool: &SqlitePool,
-    name: &str,
-    source_type: &str,
-) -> SourceId {
-    let result = sqlx::query!(
-        "INSERT INTO sources (name, source_type, is_online) VALUES (?, ?, 1)",
-        name,
-        source_type
+pub async fn create_test_source(pool: &SqlitePool, name: &str, source_type: &str) -> SourceId {
+    let result = sqlx::query(
+        "INSERT INTO sources (name, source_type, is_online) VALUES (?, ?, 1)"
     )
+    .bind(name)
+    .bind(source_type)
     .execute(pool)
     .await
     .expect("Failed to create test source");
@@ -79,11 +77,11 @@ pub async fn create_test_artist(
     name: &str,
     sort_name: Option<&str>,
 ) -> ArtistId {
-    let result = sqlx::query!(
-        "INSERT INTO artists (name, sort_name) VALUES (?, ?)",
-        name,
-        sort_name
+    let result = sqlx::query(
+        "INSERT INTO artists (name, sort_name) VALUES (?, ?)"
     )
+    .bind(name)
+    .bind(sort_name)
     .execute(pool)
     .await
     .expect("Failed to create test artist");
@@ -98,12 +96,12 @@ pub async fn create_test_album(
     artist_id: Option<ArtistId>,
     year: Option<i32>,
 ) -> AlbumId {
-    let result = sqlx::query!(
-        "INSERT INTO albums (title, artist_id, year) VALUES (?, ?, ?)",
-        title,
-        artist_id,
-        year
+    let result = sqlx::query(
+        "INSERT INTO albums (title, artist_id, year) VALUES (?, ?, ?)"
     )
+    .bind(title)
+    .bind(artist_id)
+    .bind(year)
     .execute(pool)
     .await
     .expect("Failed to create test album");
@@ -119,41 +117,57 @@ pub async fn create_test_track(
     album_id: Option<AlbumId>,
     origin_source_id: SourceId,
     local_file_path: Option<&str>,
-) -> TrackId {
-    let result = sqlx::query!(
-        "INSERT INTO tracks (title, artist_id, album_id, origin_source_id, file_format)
-         VALUES (?, ?, ?, ?, 'mp3')",
-        title,
-        artist_id,
-        album_id,
-        origin_source_id
+) -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Generate unique track ID using timestamp + random component
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_micros();
+    let track_id = format!("track-{}-{}", timestamp, rand::random::<u32>());
+
+    let file_path = local_file_path.unwrap_or("/test/path/song.mp3");
+    let added_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    sqlx::query(
+        "INSERT INTO tracks (id, title, artist_id, album_id, origin_source_id, file_format, file_path, added_at)
+         VALUES (?, ?, ?, ?, ?, 'mp3', ?, ?)"
     )
+    .bind(&track_id)
+    .bind(title)
+    .bind(artist_id)
+    .bind(album_id)
+    .bind(origin_source_id)
+    .bind(file_path)
+    .bind(added_at)
     .execute(pool)
     .await
     .expect("Failed to create test track");
 
-    let track_id = result.last_insert_rowid();
-
     // Create track availability
     if let Some(path) = local_file_path {
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO track_sources (track_id, source_id, status, local_file_path)
-             VALUES (?, ?, 'local_file', ?)",
-            track_id,
-            origin_source_id,
-            path
+             VALUES (?, ?, 'local_file', ?)"
         )
+        .bind(&track_id)
+        .bind(origin_source_id)
+        .bind(path)
         .execute(pool)
         .await
         .expect("Failed to create track availability");
     }
 
     // Initialize stats
-    sqlx::query!(
+    sqlx::query(
         "INSERT INTO track_stats (track_id, play_count, skip_count)
-         VALUES (?, 0, 0)",
-        track_id
+         VALUES (?, 0, 0)"
     )
+    .bind(&track_id)
     .execute(pool)
     .await
     .expect("Failed to create track stats");
@@ -162,16 +176,12 @@ pub async fn create_test_track(
 }
 
 /// Test fixture: Create a complete playlist
-pub async fn create_test_playlist(
-    pool: &SqlitePool,
-    name: &str,
-    owner_id: UserId,
-) -> PlaylistId {
-    let result = sqlx::query!(
-        "INSERT INTO playlists (name, owner_id) VALUES (?, ?)",
-        name,
-        owner_id
+pub async fn create_test_playlist(pool: &SqlitePool, name: &str, owner_id: UserId) -> PlaylistId {
+    let result = sqlx::query(
+        "INSERT INTO playlists (name, owner_id) VALUES (?, ?)"
     )
+    .bind(name)
+    .bind(owner_id)
     .execute(pool)
     .await
     .expect("Failed to create test playlist");

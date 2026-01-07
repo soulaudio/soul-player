@@ -1,15 +1,14 @@
+mod chain;
+mod compressor;
 ///! Audio effects processing
 ///!
 ///! This module provides a trait-based effect chain architecture for real-time audio processing.
 ///! All effects operate on f32 samples in [-1.0, 1.0] range.
-
 mod eq;
-mod compressor;
-mod chain;
 
-pub use eq::{ParametricEq, EqBand};
+pub use chain::{AudioEffect, EffectChain};
 pub use compressor::{Compressor, CompressorSettings};
-pub use chain::{EffectChain, AudioEffect};
+pub use eq::{EqBand, ParametricEq};
 
 #[cfg(test)]
 mod tests {

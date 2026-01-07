@@ -20,7 +20,7 @@ impl SymphoniaDecoder {
         Self
     }
 
-    /// Convert Symphonia audio buffer to our AudioBuffer format
+    /// Convert Symphonia audio buffer to our `AudioBuffer` format
     fn convert_buffer(decoded: AudioBufferRef, sample_rate: u32) -> Result<AudioBuffer> {
         // Get channel count
         let channels = decoded.spec().channels.count() as u16;
@@ -30,7 +30,11 @@ impl SymphoniaDecoder {
             AudioBufferRef::F32(buf) => {
                 // Already f32, just interleave channels
                 let left = buf.chan(0);
-                let right = if channels > 1 { buf.chan(1) } else { buf.chan(0) };
+                let right = if channels > 1 {
+                    buf.chan(1)
+                } else {
+                    buf.chan(0)
+                };
                 Self::interleave_f32(left, right)
             }
             AudioBufferRef::F64(buf) => {

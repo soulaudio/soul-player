@@ -8,8 +8,8 @@
 
 mod test_helpers;
 
-use test_helpers::*;
 use soul_core::types::*;
+use test_helpers::*;
 
 #[tokio::test]
 async fn test_get_all_sources_includes_default_local() {
@@ -21,7 +21,10 @@ async fn test_get_all_sources_includes_default_local() {
         .await
         .expect("Failed to get sources");
 
-    assert!(!sources.is_empty(), "Should have at least default local source");
+    assert!(
+        !sources.is_empty(),
+        "Should have at least default local source"
+    );
     assert_eq!(sources[0].id, 1);
     assert_eq!(sources[0].source_type, SourceType::Local);
     assert_eq!(sources[0].name, "Local Files");
@@ -74,7 +77,11 @@ async fn test_create_server_source() {
     assert_eq!(source.source_type, SourceType::Server);
 
     match source.config {
-        SourceConfig::Server { url, username, token } => {
+        SourceConfig::Server {
+            url,
+            username,
+            token,
+        } => {
             assert_eq!(url, "https://home.example.com");
             assert_eq!(username, "user");
             assert_eq!(token, Some("test-token".to_string()));
@@ -269,14 +276,15 @@ async fn test_local_source_cannot_be_set_active() {
     let pool = test_db.pool();
 
     // Try to set local source (id=1) as active
-    soul_storage::sources::set_active(pool, 1)
-        .await
-        .unwrap();
+    soul_storage::sources::set_active(pool, 1).await.unwrap();
 
     // Should have no effect (local sources are always active but not in the "active server" sense)
     let active = soul_storage::sources::get_active_server(pool)
         .await
         .unwrap();
 
-    assert!(active.is_none(), "Local sources should not appear as active servers");
+    assert!(
+        active.is_none(),
+        "Local sources should not appear as active servers"
+    );
 }

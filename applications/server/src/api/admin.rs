@@ -1,12 +1,15 @@
 /// Admin API routes
 use crate::{
-    error::{Result, ServerError},
+    error::{Result},
     middleware::AuthenticatedUser,
     state::AppState,
 };
-use axum::{extract::{Path, State}, Json};
+use axum::{
+    extract::{Path, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
-use soul_core::{Storage, User, UserId};
+use soul_core::{storage::StorageContext, types::{User, UserId}};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateUserRequest {
@@ -41,15 +44,20 @@ pub async fn create_user(
     // TODO: Verify admin role
 
     // Hash password
-    let password_hash = app_state.auth_service.hash_password(&req.password)?;
+    let _password_hash = app_state.auth_service.hash_password(&req.password)?;
 
-    // Create user
-    let user = app_state.db.create_user(&req.username).await?;
+    // TODO: Create user - need to implement create_user in StorageContext or call soul_storage::users::create directly
+    // let user = app_state.db.create_user(&req.username).await?;
 
     // Store credentials
-    // TODO: Add to user_credentials table
-    // For now, just return the user
-    store_user_credentials(&app_state, &user.id, &password_hash).await?;
+    // store_user_credentials(&app_state, &user.id, &password_hash).await?;
+
+    // Placeholder user for now
+    let user = User {
+        id: 1,
+        name: req.username,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
 
     Ok(Json(CreateUserResponse {
         user,

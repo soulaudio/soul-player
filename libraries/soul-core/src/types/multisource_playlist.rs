@@ -1,9 +1,7 @@
 //! Multi-source playlist types
 
 use serde::{Deserialize, Serialize};
-
-pub type PlaylistId = i64;
-pub type UserId = i64;
+use super::ids::{PlaylistId, UserId};
 
 /// Playlist with multi-user support
 #[derive(Debug, Clone, Serialize, Deserialize)]

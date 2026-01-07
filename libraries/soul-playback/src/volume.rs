@@ -267,8 +267,8 @@ mod tests {
 
         // Each step should feel like equal volume change
         // Verify dB scale is used (not linear)
-        assert!(vol_25.gain() < 0.01);  // Much quieter than 25% linear
-        assert!(vol_50.gain() < 0.1);   // Much quieter than 50% linear
-        assert!(vol_75.gain() < 0.5);   // Quieter than 75% linear
+        assert!(vol_25.gain() < 0.01); // Much quieter than 25% linear
+        assert!(vol_50.gain() < 0.1); // Much quieter than 50% linear
+        assert!(vol_75.gain() < 0.5); // Quieter than 75% linear
     }
 }

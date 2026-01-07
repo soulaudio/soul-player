@@ -265,7 +265,9 @@ impl CpalOutput {
             let mut playback_state = state.state.lock().unwrap();
             *playback_state = PlaybackState::Stopped;
         } else {
-            state.position.store(pos % buffer_len.max(1), Ordering::Relaxed);
+            state
+                .position
+                .store(pos % buffer_len.max(1), Ordering::Relaxed);
         }
     }
 
@@ -337,29 +339,31 @@ impl AudioOutput for CpalOutput {
             .send(AudioCommand::Play {
                 samples: Arc::new(samples),
             })
-            .map_err(|e| soul_core::SoulError::audio(format!("Failed to send play command: {}", e)))?;
+            .map_err(|e| {
+                soul_core::SoulError::audio(format!("Failed to send play command: {}", e))
+            })?;
 
         Ok(())
     }
 
     fn pause(&mut self) -> soul_core::Result<()> {
-        self.command_tx
-            .send(AudioCommand::Pause)
-            .map_err(|e| soul_core::SoulError::audio(format!("Failed to send pause command: {}", e)))?;
+        self.command_tx.send(AudioCommand::Pause).map_err(|e| {
+            soul_core::SoulError::audio(format!("Failed to send pause command: {}", e))
+        })?;
         Ok(())
     }
 
     fn resume(&mut self) -> soul_core::Result<()> {
-        self.command_tx
-            .send(AudioCommand::Resume)
-            .map_err(|e| soul_core::SoulError::audio(format!("Failed to send resume command: {}", e)))?;
+        self.command_tx.send(AudioCommand::Resume).map_err(|e| {
+            soul_core::SoulError::audio(format!("Failed to send resume command: {}", e))
+        })?;
         Ok(())
     }
 
     fn stop(&mut self) -> soul_core::Result<()> {
-        self.command_tx
-            .send(AudioCommand::Stop)
-            .map_err(|e| soul_core::SoulError::audio(format!("Failed to send stop command: {}", e)))?;
+        self.command_tx.send(AudioCommand::Stop).map_err(|e| {
+            soul_core::SoulError::audio(format!("Failed to send stop command: {}", e))
+        })?;
         Ok(())
     }
 
@@ -370,7 +374,9 @@ impl AudioOutput for CpalOutput {
 
         self.command_tx
             .send(AudioCommand::SetVolume(volume))
-            .map_err(|e| soul_core::SoulError::audio(format!("Failed to send volume command: {}", e)))?;
+            .map_err(|e| {
+                soul_core::SoulError::audio(format!("Failed to send volume command: {}", e))
+            })?;
 
         // Also update local state for volume() getter
         let mut vol = self.state.volume.lock().unwrap();

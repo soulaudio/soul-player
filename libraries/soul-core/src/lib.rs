@@ -30,29 +30,47 @@
 //! ```
 
 #![forbid(unsafe_code)]
-#![warn(missing_docs)]
 
 pub mod error;
+pub mod storage;
 pub mod traits;
 pub mod types;
-pub mod storage;
 
 // Re-export commonly used types
 pub use error::{Result, SoulError};
-pub use traits::{AudioDecoder, AudioEffect, AudioOutput, MetadataReader, Storage};
 pub use storage::StorageContext;
+pub use traits::{AudioDecoder, AudioEffect, AudioOutput, MetadataReader, Storage};
 
 // Export all types
 pub use types::{
+    Album,
+    AlbumId,
+    Artist,
+    ArtistId,
     // Audio types
-    AudioBuffer, AudioFormat, SampleRate,
+    AudioBuffer,
+    AudioFormat,
+    AvailabilityStatus,
+    CreateAlbum,
+    CreateArtist,
+    CreatePlaylist,
+    CreateSource,
+    CreateTrack,
+    MetadataSource,
+    Playlist,
+    PlaylistId,
+    PlaylistTrack,
+    SampleRate,
+    // Multi-source types (i64-based IDs)
+    Source,
+    SourceConfig,
+    SourceId,
+    SourceType,
+    Track,
+    TrackAvailability,
+    TrackId,
+    UpdateTrack,
     // User
     User,
-    // Multi-source types (i64-based IDs)
-    Source, SourceType, SourceConfig, CreateSource, SourceId,
-    Artist, CreateArtist, ArtistId,
-    Album, CreateAlbum, AlbumId,
-    Track, TrackId, CreateTrack, UpdateTrack, TrackAvailability, AvailabilityStatus, MetadataSource,
-    Playlist, CreatePlaylist, PlaylistTrack,
-    PlaylistId, UserId,
+    UserId,
 };

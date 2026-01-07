@@ -15,9 +15,5 @@ pub mod state;
 // Re-export commonly used types for convenience
 pub use config::{AudioFormat, Quality, ServerConfig};
 pub use error::{Result, ServerError};
-pub use services::{
-    auth::AuthService,
-    file_storage::FileStorage,
-    transcoding::TranscodingService,
-};
+pub use services::{auth::AuthService, file_storage::FileStorage, transcoding::TranscodingService};
 pub use state::AppState;

@@ -1,7 +1,7 @@
 {
   "productName": "Soul Player",
   "version": "0.1.0",
-  "identifier": "com.soulaudio.player",
+  "identifier": "soul-player",
   "build": {
     "beforeDevCommand": "yarn dev",
     "beforeBuildCommand": "yarn build",
@@ -11,17 +11,35 @@
   "app": {
     "windows": [
       {
+        "label": "splash",
+        "title": "Soul Player",
+        "width": 600,
+        "height": 400,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": true,
+        "center": true,
+        "visible": true,
+        "url": "splash.html",
+        "alwaysOnTop": true,
+        "skipTaskbar": true
+      },
+      {
+        "label": "main",
         "title": "Soul Player",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "visible": false,
+        "dragDropEnabled": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; media-src 'self' data:; script-src 'self' 'wasm-unsafe-eval';"
     }
   },
   "bundle": {
@@ -34,6 +52,68 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "fileAssociations": [
+      {
+        "ext": ["mp3"],
+        "mimeType": "audio/mpeg",
+        "description": "MP3 Audio File",
+        "rank": "Owner"
+      },
+      {
+        "ext": ["flac"],
+        "mimeType": "audio/flac",
+        "description": "FLAC Audio File",
+        "rank": "Owner"
+      },
+      {
+        "ext": ["wav"],
+        "mimeType": "audio/wav",
+        "description": "WAV Audio File",
+        "rank": "Default"
+      },
+      {
+        "ext": ["ogg", "oga"],
+        "mimeType": "audio/ogg",
+        "description": "OGG Audio File",
+        "rank": "Default"
+      },
+      {
+        "ext": ["m4a", "mp4", "aac"],
+        "mimeType": "audio/mp4",
+        "description": "M4A/AAC Audio File",
+        "rank": "Default"
+      },
+      {
+        "ext": ["opus"],
+        "mimeType": "audio/opus",
+        "description": "Opus Audio File",
+        "rank": "Default"
+      },
+      {
+        "ext": ["wma"],
+        "mimeType": "audio/x-ms-wma",
+        "description": "Windows Media Audio File",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["aiff", "aif"],
+        "mimeType": "audio/aiff",
+        "description": "AIFF Audio File",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["ape"],
+        "mimeType": "audio/x-ape",
+        "description": "Monkey's Audio File",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["wv"],
+        "mimeType": "audio/x-wavpack",
+        "description": "WavPack Audio File",
+        "rank": "Alternate"
+      }
+    ],
     "linux": {
       "deb": {
         "depends": []
@@ -43,6 +123,15 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/soulaudio/soul-player/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_YOUR_TAURI_PUBLIC_KEY"
+    },
+    "deepLink": {
+      "schemes": ["soul"]
     }
   }
 }

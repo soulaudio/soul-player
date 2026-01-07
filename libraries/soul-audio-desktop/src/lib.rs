@@ -37,7 +37,6 @@
 //! ```
 
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 mod error;
 mod output;

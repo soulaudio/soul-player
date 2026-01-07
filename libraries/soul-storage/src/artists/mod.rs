@@ -1,8 +1,8 @@
-use sqlx::{Row, SqlitePool};
 use soul_core::{error::Result, types::*};
+use sqlx::SqlitePool;
 
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Artist>> {
-    let rows = sqlx::query(
+    let rows = sqlx::query!(
         "SELECT id, name, sort_name, musicbrainz_id, created_at, updated_at
          FROM artists
          ORDER BY sort_name, name"
@@ -10,64 +10,67 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Artist>> {
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().map(|row| Artist {
-        id: row.get("id"),
-        name: row.get("name"),
-        sort_name: row.get("sort_name"),
-        musicbrainz_id: row.get("musicbrainz_id"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| Artist {
+            id: row.id.expect("artist id should not be null"),
+            name: row.name,
+            sort_name: row.sort_name,
+            musicbrainz_id: row.musicbrainz_id,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+        .collect())
 }
 
 pub async fn get_by_id(pool: &SqlitePool, id: ArtistId) -> Result<Option<Artist>> {
-    let row = sqlx::query(
+    let row = sqlx::query!(
         "SELECT id, name, sort_name, musicbrainz_id, created_at, updated_at
          FROM artists
-         WHERE id = ?"
+         WHERE id = ?",
+        id
     )
-    .bind(id)
     .fetch_optional(pool)
     .await?;
 
     Ok(row.map(|row| Artist {
-        id: row.get("id"),
-        name: row.get("name"),
-        sort_name: row.get("sort_name"),
-        musicbrainz_id: row.get("musicbrainz_id"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
+        id: row.id,
+        name: row.name,
+        sort_name: row.sort_name,
+        musicbrainz_id: row.musicbrainz_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     }))
 }
 
 pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Artist>> {
-    let row = sqlx::query(
+    let row = sqlx::query!(
         "SELECT id, name, sort_name, musicbrainz_id, created_at, updated_at
          FROM artists
-         WHERE name = ?"
+         WHERE name = ?",
+        name
     )
-    .bind(name)
     .fetch_optional(pool)
     .await?;
 
     Ok(row.map(|row| Artist {
-        id: row.get("id"),
-        name: row.get("name"),
-        sort_name: row.get("sort_name"),
-        musicbrainz_id: row.get("musicbrainz_id"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
+        id: row.id.expect("artist id should not be null"),
+        name: row.name,
+        sort_name: row.sort_name,
+        musicbrainz_id: row.musicbrainz_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     }))
 }
 
 pub async fn create(pool: &SqlitePool, artist: CreateArtist) -> Result<Artist> {
-    let result = sqlx::query(
+    let result = sqlx::query!(
         "INSERT INTO artists (name, sort_name, musicbrainz_id)
-         VALUES (?, ?, ?)"
+         VALUES (?, ?, ?)",
+        artist.name,
+        artist.sort_name,
+        artist.musicbrainz_id
     )
-    .bind(&artist.name)
-    .bind(&artist.sort_name)
-    .bind(&artist.musicbrainz_id)
     .execute(pool)
     .await?;
 

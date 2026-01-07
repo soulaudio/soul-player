@@ -1,0 +1,87 @@
+{
+  "app": {
+    "title": "Soul Player",
+    "loading": "Loading..."
+  },
+  "nav": {
+    "library": "Library",
+    "playlists": "Playlists",
+    "settings": "Settings",
+    "import": "Import"
+  },
+  "playback": {
+    "play": "Play",
+    "pause": "Pause",
+    "next": "Next Track",
+    "previous": "Previous Track",
+    "shuffle": "Shuffle",
+    "repeat": "Repeat",
+    "volume": "Volume",
+    "mute": "Mute",
+    "unmute": "Unmute"
+  },
+  "library": {
+    "tracks": "Tracks",
+    "albums": "Albums",
+    "artists": "Artists",
+    "noTracks": "No tracks in your library",
+    "addTracks": "Add some music to get started"
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeOcean": "Ocean",
+    "language": "Language",
+    "audio": "Audio",
+    "outputDevice": "Output Device",
+    "updates": "Updates",
+    "autoUpdate": "Automatically check for updates",
+    "silentUpdate": "Install updates silently",
+    "checkNow": "Check Now",
+    "shortcuts": "Keyboard Shortcuts",
+    "resetShortcuts": "Reset to Defaults",
+    "about": "About",
+    "version": "Version"
+  },
+  "shortcuts": {
+    "playPause": "Play/Pause",
+    "next": "Next Track",
+    "previous": "Previous Track",
+    "volumeUp": "Volume Up",
+    "volumeDown": "Volume Down",
+    "mute": "Mute",
+    "toggleShuffle": "Toggle Shuffle",
+    "toggleRepeat": "Toggle Repeat"
+  },
+  "import": {
+    "title": "Import Music",
+    "selectFiles": "Select Files",
+    "selectFolder": "Select Folder",
+    "importing": "Importing...",
+    "imported": "Imported {{count}} tracks",
+    "cancel": "Cancel Import"
+  },
+  "playlist": {
+    "create": "Create Playlist",
+    "name": "Playlist Name",
+    "description": "Description",
+    "addTrack": "Add to Playlist",
+    "removeTrack": "Remove from Playlist",
+    "deletePlaylist": "Delete Playlist"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "search": "Search",
+    "duration": "Duration",
+    "artist": "Artist",
+    "album": "Album",
+    "title": "Title"
+  }
+}

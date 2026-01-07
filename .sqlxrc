@@ -1,0 +1,11 @@
+# SQLx Configuration File
+# This file configures sqlx-cli behavior for the project
+
+# Run migrations from the library directory
+[migrations]
+source = "libraries/soul-storage/migrations"
+
+# Use offline mode by default in CI
+# (can be overridden with --offline false)
+[prepare]
+check = false

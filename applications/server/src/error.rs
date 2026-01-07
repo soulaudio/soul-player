@@ -48,6 +48,13 @@ pub enum ServerError {
     Bcrypt(#[from] bcrypt::BcryptError),
 }
 
+impl From<soul_storage::StorageError> for ServerError {
+    fn from(err: soul_storage::StorageError) -> Self {
+        // Convert StorageError -> SoulError -> ServerError
+        ServerError::Database(err.into())
+    }
+}
+
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
@@ -57,23 +64,38 @@ impl IntoResponse for ServerError {
             ServerError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             ServerError::Database(ref e) => {
                 tracing::error!("Database error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Database error".to_string(),
+                )
             }
             ServerError::Storage(ref msg) => {
                 tracing::error!("Storage error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Storage error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Storage error".to_string(),
+                )
             }
             ServerError::Config(ref msg) => {
                 tracing::error!("Config error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Configuration error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Configuration error".to_string(),
+                )
             }
             ServerError::Transcoding(ref msg) => {
                 tracing::error!("Transcoding error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Transcoding error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Transcoding error".to_string(),
+                )
             }
             ServerError::Internal(ref msg) => {
                 tracing::error!("Internal error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
             }
             ServerError::Io(ref e) => {
                 tracing::error!("IO error: {:?}", e);
@@ -85,7 +107,10 @@ impl IntoResponse for ServerError {
             }
             ServerError::Bcrypt(ref e) => {
                 tracing::error!("Bcrypt error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Password error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Password error".to_string(),
+                )
             }
         };
 

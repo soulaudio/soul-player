@@ -235,7 +235,11 @@ fn test_local_source_handles_multiple_formats() {
         // Verify we can read samples
         let mut buffer = vec![0.0f32; 1024];
         let samples_read = source.read_samples(&mut buffer).unwrap();
-        assert!(samples_read > 0, "Should read samples from {}s file", duration);
+        assert!(
+            samples_read > 0,
+            "Should read samples from {}s file",
+            duration
+        );
     }
 }
 
@@ -279,7 +283,10 @@ fn test_local_source_reset_functionality() {
     source.reset().unwrap();
 
     // Verify position is back to zero
-    assert!(source.position().as_secs_f64() < 0.01, "Should reset to beginning");
+    assert!(
+        source.position().as_secs_f64() < 0.01,
+        "Should reset to beginning"
+    );
     assert!(!source.is_finished(), "Should not be finished after reset");
 }
 
@@ -328,7 +335,10 @@ fn test_streaming_source_seek_not_supported() {
 
     // Seeking should return error
     let result = source.seek(Duration::from_secs(30));
-    assert!(result.is_err(), "Streaming source should not support seeking");
+    assert!(
+        result.is_err(),
+        "Streaming source should not support seeking"
+    );
 }
 
 #[test]

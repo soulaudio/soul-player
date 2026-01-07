@@ -4,20 +4,27 @@ mod common;
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode, header},
+    http::{header, Request, StatusCode},
     Router,
 };
 use common::create_test_database;
 use soul_core::{Storage, Track, UserId};
 use soul_server::{
-    api, middleware, services::{AuthService, FileStorage}, state::AppState,
+    api, middleware,
+    services::{AuthService, FileStorage},
+    state::AppState,
 };
 use std::sync::Arc;
 use tempfile::TempDir;
 use tower::util::ServiceExt;
 
 /// Helper to create test app router
-async fn create_test_app() -> (Router, Arc<AuthService>, TempDir, Arc<soul_storage::Database>) {
+async fn create_test_app() -> (
+    Router,
+    Arc<AuthService>,
+    TempDir,
+    Arc<soul_storage::Database>,
+) {
     let db = create_test_database().await.unwrap();
 
     let temp_dir = TempDir::new().unwrap();
@@ -27,8 +34,8 @@ async fn create_test_app() -> (Router, Arc<AuthService>, TempDir, Arc<soul_stora
 
     let auth_service = Arc::new(AuthService::new(
         "test-secret-key".to_string(),
-        1,  // 1 hour access
-        1,  // 1 day refresh
+        1, // 1 hour access
+        1, // 1 day refresh
     ));
 
     let app_state = AppState::new(db.clone(), Arc::clone(&auth_service), file_storage);
@@ -41,11 +48,26 @@ async fn create_test_app() -> (Router, Arc<AuthService>, TempDir, Arc<soul_stora
     let protected_routes = Router::new()
         .route("/tracks", axum::routing::get(api::tracks::list_tracks))
         .route("/tracks/:id", axum::routing::get(api::tracks::get_track))
-        .route("/tracks/import", axum::routing::post(api::tracks::import_track))
-        .route("/tracks/:id", axum::routing::delete(api::tracks::delete_track))
-        .route("/playlists", axum::routing::get(api::playlists::list_playlists))
-        .route("/playlists", axum::routing::post(api::playlists::create_playlist))
-        .route("/playlists/:id", axum::routing::get(api::playlists::get_playlist))
+        .route(
+            "/tracks/import",
+            axum::routing::post(api::tracks::import_track),
+        )
+        .route(
+            "/tracks/:id",
+            axum::routing::delete(api::tracks::delete_track),
+        )
+        .route(
+            "/playlists",
+            axum::routing::get(api::playlists::list_playlists),
+        )
+        .route(
+            "/playlists",
+            axum::routing::post(api::playlists::create_playlist),
+        )
+        .route(
+            "/playlists/:id",
+            axum::routing::get(api::playlists::get_playlist),
+        )
         .route("/admin/users", axum::routing::post(api::admin::create_user))
         .route("/admin/users", axum::routing::get(api::admin::list_users))
         .layer(axum::middleware::from_fn_with_state(
@@ -105,7 +127,9 @@ async fn test_login_flow() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Parse response to get tokens
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let login_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert!(login_response["access_token"].is_string());
@@ -194,7 +218,9 @@ async fn test_get_tracks_authenticated() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let tracks_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert!(tracks_response["tracks"].is_array());
@@ -210,7 +236,10 @@ async fn test_get_tracks_with_data() {
     let user = db.create_user("testuser").await.unwrap();
 
     // Add test tracks
-    let track = Track::new("Test Song".to_string(), std::path::PathBuf::from("/fake/path.mp3"));
+    let track = Track::new(
+        "Test Song".to_string(),
+        std::path::PathBuf::from("/fake/path.mp3"),
+    );
     db.add_track(track.clone()).await.unwrap();
 
     let access_token = auth_service.create_access_token(&user.id).unwrap();
@@ -225,7 +254,9 @@ async fn test_get_tracks_with_data() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let tracks_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(tracks_response["total"], 1);
@@ -241,8 +272,14 @@ async fn test_get_tracks_with_search() {
     let user = db.create_user("testuser").await.unwrap();
 
     // Add multiple tracks
-    let track1 = Track::new("Rock Song".to_string(), std::path::PathBuf::from("/fake/rock.mp3"));
-    let track2 = Track::new("Jazz Song".to_string(), std::path::PathBuf::from("/fake/jazz.mp3"));
+    let track1 = Track::new(
+        "Rock Song".to_string(),
+        std::path::PathBuf::from("/fake/rock.mp3"),
+    );
+    let track2 = Track::new(
+        "Jazz Song".to_string(),
+        std::path::PathBuf::from("/fake/jazz.mp3"),
+    );
     db.add_track(track1).await.unwrap();
     db.add_track(track2).await.unwrap();
 
@@ -259,7 +296,9 @@ async fn test_get_tracks_with_search() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let tracks_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(tracks_response["total"], 1);
@@ -275,7 +314,10 @@ async fn test_get_tracks_with_pagination() {
 
     // Add 5 tracks
     for i in 1..=5 {
-        let track = Track::new(format!("Song {}", i), std::path::PathBuf::from(format!("/fake/{}.mp3", i)));
+        let track = Track::new(
+            format!("Song {}", i),
+            std::path::PathBuf::from(format!("/fake/{}.mp3", i)),
+        );
         db.add_track(track).await.unwrap();
     }
 
@@ -292,7 +334,9 @@ async fn test_get_tracks_with_pagination() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let tracks_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(tracks_response["total"], 5);
@@ -324,7 +368,9 @@ async fn test_create_playlist() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let playlist_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(playlist_response["name"], "My Playlist");
@@ -353,7 +399,9 @@ async fn test_get_playlists() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let playlists: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert!(playlists.is_array());
@@ -387,7 +435,9 @@ async fn test_create_user() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let user_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(user_response["user"]["name"], "newuser");
@@ -415,7 +465,9 @@ async fn test_list_users() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let users: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert!(users.is_array());
@@ -440,7 +492,11 @@ async fn test_invalid_json_request() {
 }
 
 // Helper function to store credentials for testing
-async fn store_test_credentials(db: &Arc<soul_storage::Database>, user_id: &UserId, password_hash: &str) {
+async fn store_test_credentials(
+    db: &Arc<soul_storage::Database>,
+    user_id: &UserId,
+    password_hash: &str,
+) {
     use sqlx::Row;
     let pool = db.pool();
     let now = chrono::Utc::now().timestamp();

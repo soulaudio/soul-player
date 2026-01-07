@@ -3,7 +3,7 @@
  * Includes theme selection, import/export, and management features
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTheme } from '../useTheme';
 import { ThemePreview } from './ThemePreview';
 import type { Theme } from '../types';

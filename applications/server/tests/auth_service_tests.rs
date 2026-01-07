@@ -47,7 +47,9 @@ async fn test_password_verification_failure() {
     let hash = auth_service.hash_password(password).unwrap();
 
     // Wrong password should not verify
-    let result = auth_service.verify_password("WrongPassword", &hash).unwrap();
+    let result = auth_service
+        .verify_password("WrongPassword", &hash)
+        .unwrap();
     assert!(!result, "Incorrect password should not verify");
 }
 
@@ -72,7 +74,10 @@ async fn test_access_token_generation_and_validation() {
 
     // Validate token
     let decoded_user_id = auth_service.verify_access_token(&token).unwrap();
-    assert_eq!(user_id, decoded_user_id, "Decoded user ID should match original");
+    assert_eq!(
+        user_id, decoded_user_id,
+        "Decoded user ID should match original"
+    );
 }
 
 /// Test JWT refresh token generation and validation
@@ -87,7 +92,10 @@ async fn test_refresh_token_generation_and_validation() {
 
     // Validate token
     let decoded_user_id = auth_service.verify_refresh_token(&token).unwrap();
-    assert_eq!(user_id, decoded_user_id, "Decoded user ID should match original");
+    assert_eq!(
+        user_id, decoded_user_id,
+        "Decoded user ID should match original"
+    );
 }
 
 /// Test that access token cannot be used as refresh token
@@ -100,7 +108,10 @@ async fn test_token_type_enforcement_access_as_refresh() {
 
     // Attempting to verify access token as refresh token should fail
     let result = auth_service.verify_refresh_token(&access_token);
-    assert!(result.is_err(), "Access token should not validate as refresh token");
+    assert!(
+        result.is_err(),
+        "Access token should not validate as refresh token"
+    );
 }
 
 /// Test that refresh token cannot be used as access token
@@ -113,7 +124,10 @@ async fn test_token_type_enforcement_refresh_as_access() {
 
     // Attempting to verify refresh token as access token should fail
     let result = auth_service.verify_access_token(&refresh_token);
-    assert!(result.is_err(), "Refresh token should not validate as access token");
+    assert!(
+        result.is_err(),
+        "Refresh token should not validate as access token"
+    );
 }
 
 /// Test token validation with invalid signature
@@ -128,7 +142,10 @@ async fn test_token_validation_invalid_signature() {
 
     // Should fail validation with different secret
     let result = auth_service.verify_access_token(&token);
-    assert!(result.is_err(), "Token with wrong signature should fail validation");
+    assert!(
+        result.is_err(),
+        "Token with wrong signature should fail validation"
+    );
 }
 
 /// Test token validation with malformed token
@@ -160,8 +177,8 @@ async fn test_access_token_expiration() {
     // In production, tokens are validated properly with hour-based expiration
     let auth_service = AuthService::new(
         "test-secret".to_string(),
-        1,  // 1 hour minimum
-        1,  // 1 day
+        1, // 1 hour minimum
+        1, // 1 day
     );
 
     let user_id = UserId::new("user123".to_string());
@@ -189,11 +206,15 @@ async fn test_complete_authentication_flow() {
 
     // Hash and store password
     let password_hash = auth_service.hash_password(fixtures::TEST_PASSWORD).unwrap();
-    store_user_credentials(&db, &user.id, &password_hash).await.unwrap();
+    store_user_credentials(&db, &user.id, &password_hash)
+        .await
+        .unwrap();
 
     // Simulate login: retrieve hash and verify password
     let stored_hash = get_user_password_hash(&db, &user.id).await.unwrap();
-    let password_valid = auth_service.verify_password(fixtures::TEST_PASSWORD, &stored_hash).unwrap();
+    let password_valid = auth_service
+        .verify_password(fixtures::TEST_PASSWORD, &stored_hash)
+        .unwrap();
     assert!(password_valid, "Password should be valid");
 
     // Generate tokens
@@ -220,11 +241,15 @@ async fn test_authentication_wrong_password() {
 
     // Hash and store password
     let password_hash = auth_service.hash_password(fixtures::TEST_PASSWORD).unwrap();
-    store_user_credentials(&db, &user.id, &password_hash).await.unwrap();
+    store_user_credentials(&db, &user.id, &password_hash)
+        .await
+        .unwrap();
 
     // Try to authenticate with wrong password
     let stored_hash = get_user_password_hash(&db, &user.id).await.unwrap();
-    let password_valid = auth_service.verify_password("WrongPassword", &stored_hash).unwrap();
+    let password_valid = auth_service
+        .verify_password("WrongPassword", &stored_hash)
+        .unwrap();
     assert!(!password_valid, "Wrong password should not be valid");
 }
 
@@ -248,13 +273,17 @@ async fn test_multiple_users_authentication() {
     let user1 = db.create_user("user1").await.unwrap();
     let password1 = "Password1!";
     let hash1 = auth_service.hash_password(password1).unwrap();
-    store_user_credentials(&db, &user1.id, &hash1).await.unwrap();
+    store_user_credentials(&db, &user1.id, &hash1)
+        .await
+        .unwrap();
 
     // Create second user
     let user2 = db.create_user("user2").await.unwrap();
     let password2 = "Password2!";
     let hash2 = auth_service.hash_password(password2).unwrap();
-    store_user_credentials(&db, &user2.id, &hash2).await.unwrap();
+    store_user_credentials(&db, &user2.id, &hash2)
+        .await
+        .unwrap();
 
     // Verify user1 can authenticate with password1
     let hash = get_user_password_hash(&db, &user1.id).await.unwrap();
@@ -277,7 +306,9 @@ async fn test_password_update() {
     let user = db.create_user(fixtures::TEST_USERNAME).await.unwrap();
     let old_password = "OldPassword123!";
     let old_hash = auth_service.hash_password(old_password).unwrap();
-    store_user_credentials(&db, &user.id, &old_hash).await.unwrap();
+    store_user_credentials(&db, &user.id, &old_hash)
+        .await
+        .unwrap();
 
     // Verify old password works
     let hash = get_user_password_hash(&db, &user.id).await.unwrap();
@@ -286,7 +317,9 @@ async fn test_password_update() {
     // Update password
     let new_password = "NewPassword456!";
     let new_hash = auth_service.hash_password(new_password).unwrap();
-    update_user_credentials(&db, &user.id, &new_hash).await.unwrap();
+    update_user_credentials(&db, &user.id, &new_hash)
+        .await
+        .unwrap();
 
     // Verify old password no longer works
     let hash = get_user_password_hash(&db, &user.id).await.unwrap();
@@ -301,8 +334,8 @@ async fn test_password_update() {
 fn create_test_auth_service() -> AuthService {
     AuthService::new(
         "test-secret-key-for-testing".to_string(),
-        1,    // 1 hour access token
-        1,    // 1 day refresh token
+        1, // 1 hour access token
+        1, // 1 day refresh token
     )
 }
 
@@ -335,12 +368,10 @@ async fn get_user_password_hash(
     use sqlx::Row;
     let pool = db.pool();
 
-    let row = sqlx::query(
-        "SELECT password_hash FROM user_credentials WHERE user_id = ?"
-    )
-    .bind(user_id.as_str())
-    .fetch_one(pool)
-    .await?;
+    let row = sqlx::query("SELECT password_hash FROM user_credentials WHERE user_id = ?")
+        .bind(user_id.as_str())
+        .fetch_one(pool)
+        .await?;
 
     Ok(row.get("password_hash"))
 }
@@ -354,14 +385,12 @@ async fn update_user_credentials(
     let pool = db.pool();
     let now = chrono::Utc::now().timestamp();
 
-    sqlx::query(
-        "UPDATE user_credentials SET password_hash = ?, updated_at = ? WHERE user_id = ?"
-    )
-    .bind(password_hash)
-    .bind(now)
-    .bind(user_id.as_str())
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE user_credentials SET password_hash = ?, updated_at = ? WHERE user_id = ?")
+        .bind(password_hash)
+        .bind(now)
+        .bind(user_id.as_str())
+        .execute(pool)
+        .await?;
 
     Ok(())
 }

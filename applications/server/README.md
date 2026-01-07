@@ -173,16 +173,68 @@ cargo fmt -p soul-server
 cargo clippy -p soul-server
 ```
 
+## Quick Start
+
+### Using Docker (Recommended for Development)
+
+From the project root:
+
+```bash
+# Start the server
+yarn dev:server
+
+# View logs
+yarn dev:server:logs
+
+# Stop the server
+yarn dev:server:down
+
+# Clean up (removes volumes/data)
+yarn dev:server:clean
+```
+
+The server will be available at `http://localhost:8080`.
+
 ## Deployment
 
-### Docker (Coming Soon)
+### Docker Compose (Recommended)
+
+From the project root:
+
 ```bash
-docker build -t soul-server .
+# Start services
+docker compose up -d
+
+# View logs
+docker compose logs -f server
+
+# Stop services
+docker compose down
+```
+
+Configuration via environment variables (see `docker-compose.yml` and `.env.server`).
+
+### Docker (Manual)
+
+```bash
+# Build from project root
+docker build -f applications/server/Dockerfile -t soul-server .
+
+# Run
 docker run -d -p 8080:8080 \
-  -v ./data:/data \
-  -v ./music:/music \
+  -v soul-data:/app/data \
   -e SOUL_AUTH_JWT_SECRET=your-secret \
   soul-server
+```
+
+### Environment Variables for Production
+
+Create a `.env` file (see `.env.server` example):
+
+```env
+JWT_SECRET=$(openssl rand -hex 32)
+SOUL_SERVER_HOST=0.0.0.0
+SOUL_SERVER_PORT=8080
 ```
 
 ## Architecture Decisions

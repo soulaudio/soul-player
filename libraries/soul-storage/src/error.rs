@@ -2,6 +2,7 @@
 use thiserror::Error;
 
 /// Result type alias using `StorageError`
+#[allow(dead_code)]
 pub type Result<T> = std::result::Result<T, StorageError>;
 
 /// Storage error types
@@ -23,7 +24,11 @@ pub enum StorageError {
     #[error("Migration error: {0}")]
     Migration(String),
 
-    /// Database error from SQLx
+    /// Serialization/deserialization error
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
+    /// Database error from `SQLx`
     #[error(transparent)]
     Database(#[from] sqlx::Error),
 

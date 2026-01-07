@@ -1,5 +1,6 @@
 /// Core error types for Soul Player
 use thiserror::Error;
+use crate::types::{PlaylistId, TrackId, UserId};
 
 /// Result type alias using `SoulError`
 pub type Result<T> = std::result::Result<T, SoulError>;
@@ -25,7 +26,7 @@ pub enum SoulError {
 
     /// Track not found
     #[error("Track not found: {0}")]
-    TrackNotFound(i64),
+    TrackNotFound(TrackId),
 
     /// Artist not found
     #[error("Artist not found: {0}")]
@@ -37,7 +38,7 @@ pub enum SoulError {
 
     /// Playlist not found
     #[error("Playlist not found: {0}")]
-    PlaylistNotFound(i64),
+    PlaylistNotFound(PlaylistId),
 
     /// Source not found
     #[error("Source not found: {0}")]
@@ -45,7 +46,7 @@ pub enum SoulError {
 
     /// User not found
     #[error("User not found: {0}")]
-    UserNotFound(i64),
+    UserNotFound(UserId),
 
     /// Permission denied
     #[error("Permission denied")]

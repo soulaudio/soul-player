@@ -1,0 +1,68 @@
+# Moon project configuration for marketing site
+# https://moonrepo.dev/docs/config/project
+
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+type: 'application'
+language: 'typescript'
+platform: 'node'
+
+tags:
+  - 'frontend'
+  - 'nextjs'
+  - 'marketing'
+
+dependsOn:
+  - 'shared'
+
+tasks:
+  dev:
+    command: 'next dev -p 3001'
+    local: true
+    options:
+      runInCI: false
+
+  build:
+    command: 'next build'
+    inputs:
+      - 'src/**/*'
+      - 'pages/**/*'
+      - 'public/**/*'
+      - 'next.config.mjs'
+      - 'tailwind.config.ts'
+      - 'tsconfig.json'
+    outputs:
+      - '.next'
+
+  start:
+    command: 'next start -p 3001'
+    deps:
+      - 'build'
+
+  lint:
+    command: 'next lint'
+    inputs:
+      - 'src/**/*.{ts,tsx}'
+      - 'pages/**/*.{ts,tsx,mdx}'
+
+  type-check:
+    command: 'tsc --noEmit'
+    inputs:
+      - 'src/**/*.{ts,tsx}'
+      - 'pages/**/*.{ts,tsx}'
+      - 'tsconfig.json'
+
+  docker-build:
+    command: 'docker build -t soul-player-marketing .'
+    local: true
+    options:
+      runInCI: false
+
+  deploy:
+    command: 'fly deploy'
+    local: true
+    deps:
+      - 'type-check'
+      - 'lint'
+    options:
+      runInCI: false

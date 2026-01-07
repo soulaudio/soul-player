@@ -206,7 +206,7 @@ mod tests {
         let mut chain = EffectChain::new();
 
         chain.add_effect(Box::new(GainEffect {
-            gain: 0.0, // Would zero the signal
+            gain: 0.0,      // Would zero the signal
             enabled: false, // But it's disabled
         }));
 

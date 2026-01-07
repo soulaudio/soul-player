@@ -1,0 +1,51 @@
+# Build artifacts
+target/
+node_modules/
+dist/
+build/
+
+# Development files
+.git/
+.github/
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+.tmp/
+*.log
+
+# Environment files (will be set via docker-compose)
+.env*
+!.env.example
+!.env.server
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test files
+**/*_test.rs
+**/tests/
+
+# Database files (will be in volumes)
+*.db
+*.db-shm
+*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Moon/CI files
+.moon/
+
+# Frontend applications (server doesn't need these)
+applications/desktop/
+applications/mobile/
+applications/marketing/
+applications/shared/
+
+# SQLx offline data (not needed at runtime)
+.sqlx/

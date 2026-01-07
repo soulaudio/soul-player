@@ -13,14 +13,27 @@ tauri-build = { version = "2.0", features = [] }
 [dependencies]
 soul-core.workspace = true
 soul-storage.workspace = true
+soul-importer.workspace = true
 soul-audio.workspace = true
 soul-audio-desktop.workspace = true
 soul-playback.workspace = true
+sqlx = { workspace = true }
 tauri.workspace = true
 tauri-plugin-shell.workspace = true
+tauri-plugin-updater.workspace = true
+tauri-plugin-global-shortcut.workspace = true
+tauri-plugin-deep-link.workspace = true
+tauri-plugin-notification.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
+url.workspace = true
+chrono.workspace = true
+dotenvy = "0.15"
+rfd = "0.15"
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [features]
 default = ["custom-protocol"]

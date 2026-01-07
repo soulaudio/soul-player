@@ -142,12 +142,16 @@ impl TranscodingService {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ServerError::Transcoding(format!("FFprobe failed: {}", stderr)));
+            return Err(ServerError::Transcoding(format!(
+                "FFprobe failed: {}",
+                stderr
+            )));
         }
 
         let json_output = String::from_utf8_lossy(&output.stdout);
-        let probe_data: serde_json::Value = serde_json::from_str(&json_output)
-            .map_err(|e| ServerError::Transcoding(format!("Failed to parse FFprobe output: {}", e)))?;
+        let probe_data: serde_json::Value = serde_json::from_str(&json_output).map_err(|e| {
+            ServerError::Transcoding(format!("Failed to parse FFprobe output: {}", e))
+        })?;
 
         // Extract relevant metadata
         let format = probe_data

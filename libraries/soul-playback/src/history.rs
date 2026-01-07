@@ -96,9 +96,9 @@ impl Default for History {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::TrackSource;
     use std::path::PathBuf;
     use std::time::Duration;
-    use crate::types::TrackSource;
 
     fn create_test_track(id: &str, title: &str) -> QueueTrack {
         QueueTrack {

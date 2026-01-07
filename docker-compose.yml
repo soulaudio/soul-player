@@ -1,0 +1,48 @@
+version: '3.9'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: applications/server/Dockerfile
+    container_name: soul-server
+    ports:
+      - "8080:8080"
+    environment:
+      # Server configuration
+      SOUL_SERVER_HOST: 0.0.0.0
+      SOUL_SERVER_PORT: 8080
+
+      # Storage configuration
+      SOUL_STORAGE_DATABASE_URL: sqlite:///app/data/soul.db
+      SOUL_STORAGE_MUSIC_STORAGE_PATH: /app/data/tracks
+
+      # Auth configuration (CHANGE THIS IN PRODUCTION!)
+      SOUL_AUTH_JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      SOUL_AUTH_JWT_EXPIRATION_HOURS: 24
+      SOUL_AUTH_JWT_REFRESH_EXPIRATION_DAYS: 30
+
+      # Transcoding configuration
+      SOUL_TRANSCODING_ENABLED: true
+      SOUL_TRANSCODING_WORKERS: 2
+      SOUL_TRANSCODING_FFMPEG_PATH: /usr/bin/ffmpeg
+
+      # Logging
+      RUST_LOG: soul_server=debug,tower_http=debug
+    volumes:
+      # Persist database and music files
+      - soul-data:/app/data
+      # Mount local music directory for development (optional)
+      # Uncomment and adjust path as needed:
+      # - /path/to/your/music:/app/music:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  soul-data:
+    driver: local

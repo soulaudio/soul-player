@@ -1,11 +1,14 @@
 /// Playlists API routes
-use crate::{error::Result, middleware::AuthenticatedUser, state::AppState};
+use crate::{error::Result, error::ServerError, middleware::AuthenticatedUser, state::AppState};
 use axum::{
     extract::{Path, State},
     Json,
 };
-use serde::{Deserialize, Serialize};
-use soul_core::{Permission, Playlist, PlaylistId, Storage, TrackId, UserId};
+use serde::Deserialize;
+use soul_core::{
+    storage::StorageContext,
+    types::{Playlist, PlaylistId, TrackId, UserId, CreatePlaylist},
+};
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePlaylistRequest {
@@ -32,9 +35,12 @@ pub struct SharePlaylistRequest {
 /// Get all playlists accessible to the authenticated user
 pub async fn list_playlists(
     State(app_state): State<AppState>,
-    auth: AuthenticatedUser,
+    _auth: AuthenticatedUser,
 ) -> Result<Json<Vec<Playlist>>> {
-    let playlists = app_state.db.get_accessible_playlists(auth.user_id()).await?;
+    let playlists = app_state
+        .db
+        .get_user_playlists()
+        .await?;
     Ok(Json(playlists))
 }
 
@@ -45,7 +51,16 @@ pub async fn create_playlist(
     auth: AuthenticatedUser,
     Json(req): Json<CreatePlaylistRequest>,
 ) -> Result<Json<Playlist>> {
-    let playlist = app_state.db.create_playlist(auth.user_id(), &req.name).await?;
+    let create_playlist = CreatePlaylist {
+        name: req.name,
+        description: None,
+        owner_id: auth.user_id().clone(),
+        is_favorite: false,
+    };
+    let playlist = app_state
+        .db
+        .create_playlist(create_playlist)
+        .await?;
     Ok(Json(playlist))
 }
 
@@ -54,12 +69,15 @@ pub async fn create_playlist(
 pub async fn get_playlist(
     Path(id): Path<String>,
     State(app_state): State<AppState>,
-) -> Result<Json<PlaylistWithTracks>> {
+) -> Result<Json<Playlist>> {
     let playlist_id = PlaylistId::new(id);
-    let playlist = app_state.db.get_playlist(&playlist_id).await?;
-    let tracks = app_state.db.get_playlist_tracks(&playlist_id).await?;
+    let playlist = app_state
+        .db
+        .get_playlist_with_tracks(playlist_id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound("Playlist not found".to_string()))?;
 
-    Ok(Json(PlaylistWithTracks { playlist, tracks }))
+    Ok(Json(playlist))
 }
 
 /// PUT /api/playlists/:id
@@ -73,7 +91,11 @@ pub async fn update_playlist(
     let playlist_id = PlaylistId::new(id);
 
     // Get existing playlist
-    let mut playlist = app_state.db.get_playlist(&playlist_id).await?;
+    let mut playlist = app_state
+        .db
+        .get_playlist(playlist_id.clone())
+        .await?
+        .ok_or_else(|| ServerError::NotFound("Playlist not found".to_string()))?;
 
     // TODO: Check ownership or write permission
 
@@ -96,7 +118,7 @@ pub async fn delete_playlist(
 
     // TODO: Check ownership
 
-    app_state.db.delete_playlist(&playlist_id).await?;
+    app_state.db.delete_playlist(playlist_id).await?;
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
@@ -113,7 +135,10 @@ pub async fn add_track_to_playlist(
 
     // TODO: Check write permission
 
-    app_state.db.add_track_to_playlist(&playlist_id, &track_id).await?;
+    app_state
+        .db
+        .add_track_to_playlist(playlist_id, track_id)
+        .await?;
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
@@ -129,7 +154,9 @@ pub async fn remove_track_from_playlist(
 
     // TODO: Check write permission
 
-    app_state.db.remove_track_from_playlist(&playlist_id, &track_id)
+    app_state
+        .db
+        .remove_track_from_playlist(playlist_id, track_id)
         .await?;
     Ok(Json(serde_json::json!({ "success": true })))
 }
@@ -139,21 +166,27 @@ pub async fn remove_track_from_playlist(
 pub async fn share_playlist(
     Path(id): Path<String>,
     State(app_state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Json(req): Json<SharePlaylistRequest>,
 ) -> Result<Json<serde_json::Value>> {
     let playlist_id = PlaylistId::new(id);
     let shared_with_user_id = UserId::new(req.user_id);
 
-    // Parse permission
-    let permission = Permission::from_str(&req.permission).ok_or_else(|| {
-        crate::error::ServerError::BadRequest("Invalid permission".to_string())
-    })?;
+    // Validate permission (just check it's either "read" or "write")
+    if req.permission != "read" && req.permission != "write" {
+        return Err(ServerError::BadRequest("Invalid permission. Must be 'read' or 'write'".to_string()));
+    }
 
-    // TODO: Check ownership
+    // Call soul_storage function directly (bypasses the trait)
+    soul_storage::playlists::share_playlist(
+        app_state.db.pool(),
+        playlist_id,
+        shared_with_user_id,
+        &req.permission,
+        auth.user_id().clone(),
+    )
+    .await?;
 
-    app_state.db.share_playlist(&playlist_id, &shared_with_user_id, permission)
-        .await?;
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
@@ -162,19 +195,19 @@ pub async fn share_playlist(
 pub async fn unshare_playlist(
     Path((id, user_id)): Path<(String, String)>,
     State(app_state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
 ) -> Result<Json<serde_json::Value>> {
     let playlist_id = PlaylistId::new(id);
-    let user_id = UserId::new(user_id);
+    let shared_user_id = UserId::new(user_id);
 
-    // TODO: Check ownership
+    // Call soul_storage function directly (bypasses the trait)
+    soul_storage::playlists::unshare_playlist(
+        app_state.db.pool(),
+        playlist_id,
+        shared_user_id,
+        auth.user_id().clone(),
+    )
+    .await?;
 
-    app_state.db.unshare_playlist(&playlist_id, &user_id).await?;
     Ok(Json(serde_json::json!({ "success": true })))
-}
-
-#[derive(Debug, Serialize)]
-pub struct PlaylistWithTracks {
-    pub playlist: Playlist,
-    pub tracks: Vec<soul_core::Track>,
 }

@@ -49,7 +49,10 @@ impl TranscodingQueue {
     /// Enqueue a transcoding job
     pub async fn enqueue(&self, job: TranscodeJob) {
         let mut queue = self.queue.lock().await;
-        tracing::info!("Enqueued transcoding job for track {}", job.track_id.as_str());
+        tracing::info!(
+            "Enqueued transcoding job for track {}",
+            job.track_id.as_str()
+        );
         queue.push_back(job);
     }
 

@@ -20,7 +20,12 @@ impl FileStorage {
     /// Initialize storage directories
     pub async fn initialize(&self) -> Result<()> {
         // Create quality subdirectories
-        for quality in &[Quality::Original, Quality::High, Quality::Medium, Quality::Low] {
+        for quality in &[
+            Quality::Original,
+            Quality::High,
+            Quality::Medium,
+            Quality::Low,
+        ] {
             let dir = self.base_path.join(quality.subdirectory());
             fs::create_dir_all(&dir).await?;
         }
@@ -55,10 +60,7 @@ impl FileStorage {
         data: &[u8],
     ) -> Result<PathBuf> {
         let filename = format!("{}.{}", track_id.as_str(), format.extension());
-        let path = self
-            .base_path
-            .join(quality.subdirectory())
-            .join(&filename);
+        let path = self.base_path.join(quality.subdirectory()).join(&filename);
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
@@ -143,7 +145,12 @@ impl FileStorage {
 
     /// Delete all variants of a track
     pub async fn delete_track(&self, track_id: &TrackId) -> Result<()> {
-        for quality in &[Quality::Original, Quality::High, Quality::Medium, Quality::Low] {
+        for quality in &[
+            Quality::Original,
+            Quality::High,
+            Quality::Medium,
+            Quality::Low,
+        ] {
             let quality_dir = self.base_path.join(quality.subdirectory());
 
             // Try to delete files with all possible extensions

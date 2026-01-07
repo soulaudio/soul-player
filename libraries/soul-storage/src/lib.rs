@@ -1,6 +1,6 @@
 //! Soul Player Storage
 //!
-//! Multi-user, multi-source SQLite database layer for Soul Player.
+//! Multi-user, multi-source `SQLite` database layer for Soul Player.
 //!
 //! This crate provides persistent storage for tracks, playlists, and users
 //! with support for multiple sources (local files + remote servers).
@@ -36,17 +36,27 @@ mod context;
 mod error;
 
 // Vertical slices
-pub mod tracks;
-pub mod artists;
 pub mod albums;
+pub mod artists;
+pub mod genres;
 pub mod playlists;
 pub mod sources;
+pub mod tracks;
+pub mod users;
+
+// User preferences and state
+pub mod settings;
+pub mod shortcuts;
+pub mod window_state;
 
 pub use context::LocalStorageContext;
 pub use error::StorageError;
 
-use sqlx::sqlite::SqlitePool;
+// Type alias for backwards compatibility with server code
+pub type Database = LocalStorageContext;
+
 use sqlx::migrate::Migrator;
+use sqlx::sqlite::SqlitePool;
 
 // Embed migrations into binary
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -63,15 +73,36 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::migrate::Migr
     MIGRATOR.run(pool).await
 }
 
-/// Create a new SQLite pool
+/// Create a new `SQLite` pool
 ///
 /// # Arguments
 ///
-/// * `database_url` - SQLite connection string (e.g., "sqlite://soul.db")
+/// * `database_url` - `SQLite` connection string (e.g., `<sqlite://soul.db>`)
 ///
 /// # Errors
 ///
 /// Returns an error if the connection fails
 pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
-    SqlitePool::connect(database_url).await
+    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+    use std::str::FromStr;
+
+    eprintln!("[soul-storage] Creating pool with URL: {}", database_url);
+
+    // Parse the URL into options so we can configure SQLite behavior
+    let options = SqliteConnectOptions::from_str(database_url)?
+        .create_if_missing(true) // Create database file if it doesn't exist
+        .journal_mode(SqliteJournalMode::Wal) // Use WAL mode for better concurrency
+        .busy_timeout(std::time::Duration::from_secs(30)); // Wait up to 30s for locks
+
+    eprintln!("[soul-storage] ✓ Options configured");
+
+    // Create pool with the configured options
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(options)
+        .await?;
+
+    eprintln!("[soul-storage] ✓ Pool created successfully");
+
+    Ok(pool)
 }

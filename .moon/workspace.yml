@@ -32,6 +32,7 @@ projects:
     mobile: 'applications/mobile'
     firmware: 'applications/firmware'
     shared: 'applications/shared'
+    marketing: 'applications/marketing'
 
     # Firmware sub-projects
     soul-player-dap: 'applications/firmware/soul-player-dap'
@@ -64,7 +65,6 @@ hasher:
   optimization: 'performance'
 
   # Ignore these patterns when hashing
-  ignoreMissingPatterns: true
   ignorePatterns:
     - '*.md'
     - 'docs/**/*'

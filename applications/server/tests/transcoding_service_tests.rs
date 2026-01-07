@@ -65,7 +65,10 @@ fn create_test_audio_file(path: &std::path::Path) -> std::io::Result<()> {
 async fn test_transcoding_service_initialization() {
     let service = TranscodingService::new(PathBuf::from("/usr/bin/ffmpeg"));
     // Service should be created successfully
-    assert_eq!(format!("{:?}", service), "TranscodingService { ffmpeg_path: \"/usr/bin/ffmpeg\" }");
+    assert_eq!(
+        format!("{:?}", service),
+        "TranscodingService { ffmpeg_path: \"/usr/bin/ffmpeg\" }"
+    );
 }
 
 /// Test transcoding to MP3 high quality (requires FFmpeg)
@@ -84,7 +87,9 @@ async fn test_transcode_to_mp3_high() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3)
+        .await;
 
     assert!(result.is_ok(), "Transcoding should succeed");
     assert!(output_path.exists(), "Output file should exist");
@@ -109,7 +114,9 @@ async fn test_transcode_to_mp3_medium() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::Medium, AudioFormat::Mp3).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::Medium, AudioFormat::Mp3)
+        .await;
 
     assert!(result.is_ok());
     assert!(output_path.exists());
@@ -130,7 +137,9 @@ async fn test_transcode_to_mp3_low() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::Low, AudioFormat::Mp3).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::Low, AudioFormat::Mp3)
+        .await;
 
     assert!(result.is_ok());
     assert!(output_path.exists());
@@ -151,7 +160,9 @@ async fn test_transcode_to_flac() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Flac).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Flac)
+        .await;
 
     assert!(result.is_ok());
     assert!(output_path.exists());
@@ -172,7 +183,9 @@ async fn test_transcode_to_ogg() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Ogg).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Ogg)
+        .await;
 
     assert!(result.is_ok());
     assert!(output_path.exists());
@@ -193,7 +206,9 @@ async fn test_transcode_to_wav() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Wav).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Wav)
+        .await;
 
     assert!(result.is_ok());
     assert!(output_path.exists());
@@ -214,7 +229,9 @@ async fn test_transcode_to_opus() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Opus).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Opus)
+        .await;
 
     assert!(result.is_ok());
     assert!(output_path.exists());
@@ -233,7 +250,9 @@ async fn test_transcode_invalid_input() {
     let output_path = temp_dir.path().join("output.mp3");
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3)
+        .await;
 
     assert!(result.is_err(), "Should fail with nonexistent input");
 }
@@ -254,7 +273,9 @@ async fn test_transcode_corrupted_input() {
     std::fs::write(&input_path, b"not a valid audio file").unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3)
+        .await;
 
     assert!(result.is_err(), "Should fail with corrupted input");
 }
@@ -269,7 +290,9 @@ async fn test_transcode_invalid_ffmpeg_path() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("/nonexistent/ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3)
+        .await;
 
     assert!(result.is_err(), "Should fail with invalid FFmpeg path");
 }
@@ -293,7 +316,9 @@ async fn test_transcode_overwrite_output() {
     let old_size = std::fs::metadata(&output_path).unwrap().len();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    let result = service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3).await;
+    let result = service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3)
+        .await;
 
     assert!(result.is_ok(), "Should overwrite existing file");
     assert!(output_path.exists());
@@ -320,16 +345,25 @@ async fn test_quality_affects_file_size() {
 
     // Transcode at high quality
     let high_output = temp_dir.path().join("high.mp3");
-    service.transcode(&input_path, &high_output, Quality::High, AudioFormat::Mp3).await.unwrap();
+    service
+        .transcode(&input_path, &high_output, Quality::High, AudioFormat::Mp3)
+        .await
+        .unwrap();
     let high_size = std::fs::metadata(&high_output).unwrap().len();
 
     // Transcode at low quality
     let low_output = temp_dir.path().join("low.mp3");
-    service.transcode(&input_path, &low_output, Quality::Low, AudioFormat::Mp3).await.unwrap();
+    service
+        .transcode(&input_path, &low_output, Quality::Low, AudioFormat::Mp3)
+        .await
+        .unwrap();
     let low_size = std::fs::metadata(&low_output).unwrap().len();
 
     // High quality should produce larger file
-    assert!(high_size > low_size, "High quality should produce larger file than low quality");
+    assert!(
+        high_size > low_size,
+        "High quality should produce larger file than low quality"
+    );
 }
 
 /// Test multiple concurrent transcoding operations
@@ -353,7 +387,9 @@ async fn test_concurrent_transcoding() {
             create_test_audio_file(&input_path).unwrap();
 
             let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-            service.transcode(&input_path, &output_path, Quality::Medium, AudioFormat::Mp3).await
+            service
+                .transcode(&input_path, &output_path, Quality::Medium, AudioFormat::Mp3)
+                .await
         });
         handles.push(handle);
     }
@@ -386,12 +422,18 @@ async fn test_transcode_preserves_duration() {
     create_test_audio_file(&input_path).unwrap();
 
     let service = TranscodingService::new(PathBuf::from("ffmpeg"));
-    service.transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3).await.unwrap();
+    service
+        .transcode(&input_path, &output_path, Quality::High, AudioFormat::Mp3)
+        .await
+        .unwrap();
 
     // Both files should exist and output should have reasonable size
     assert!(input_path.exists());
     assert!(output_path.exists());
 
     let output_size = std::fs::metadata(&output_path).unwrap().len();
-    assert!(output_size > 1000, "Output file should have reasonable size (> 1KB)");
+    assert!(
+        output_size > 1000,
+        "Output file should have reasonable size (> 1KB)"
+    );
 }

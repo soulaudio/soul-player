@@ -1,0 +1,81 @@
+name: Deploy Marketing Site
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'applications/marketing/**'
+      - 'applications/shared/**'
+      - '.github/workflows/deploy-marketing.yml'
+  # Allow manual trigger
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: "pages-marketing"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Marketing Site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Type check
+        run: yarn workspace @soul-player/marketing type-check
+
+      - name: Lint
+        run: yarn workspace @soul-player/marketing lint
+
+      - name: Build
+        run: yarn workspace @soul-player/marketing build
+        env:
+          NODE_ENV: production
+
+      - name: Add .nojekyll file
+        run: touch applications/marketing/out/.nojekyll
+
+      - name: Add CNAME file for custom domain
+        run: echo "player.soulaudio.co" > applications/marketing/out/CNAME
+
+      - name: Fix file permissions
+        run: |
+          chmod -c -R +rX "applications/marketing/out" | while read line; do
+            echo "::notice title=Fixed permissions::$line"
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: applications/marketing/out
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

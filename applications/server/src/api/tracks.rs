@@ -9,7 +9,10 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use soul_core::{Storage, Track, TrackId};
+use soul_core::{
+    storage::StorageContext,
+    types::{Track, TrackId},
+};
 
 #[derive(Debug, Deserialize)]
 pub struct TrackQuery {
@@ -36,7 +39,7 @@ pub async fn list_tracks(
     State(app_state): State<AppState>,
     Query(query): Query<TrackQuery>,
 ) -> Result<Json<TracksResponse>> {
-    let tracks = if let Some(q) = query.q {
+    let tracks: Vec<Track> = if let Some(q) = query.q {
         app_state.db.search_tracks(&q).await?
     } else {
         app_state.db.get_all_tracks().await?
@@ -62,7 +65,11 @@ pub async fn get_track(
     State(app_state): State<AppState>,
 ) -> Result<Json<Track>> {
     let track_id = TrackId::new(id);
-    let track = app_state.db.get_track(&track_id).await?;
+    let track = app_state
+        .db
+        .get_track(track_id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound("Track not found".to_string()))?;
     Ok(Json(track))
 }
 
@@ -100,9 +107,11 @@ pub async fn import_track(
     let mut metadata_json: Option<String> = None;
 
     // Parse multipart fields
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        ServerError::BadRequest(format!("Failed to parse multipart: {}", e))
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| ServerError::BadRequest(format!("Failed to parse multipart: {}", e)))?
+    {
         let name = field.name().unwrap_or("").to_string();
 
         match name.as_str() {
@@ -124,34 +133,32 @@ pub async fn import_track(
                 );
             }
             "metadata" => {
-                metadata_json = Some(
-                    field
-                        .text()
-                        .await
-                        .map_err(|e| {
-                            ServerError::BadRequest(format!("Failed to read metadata: {}", e))
-                        })?,
-                );
+                metadata_json = Some(field.text().await.map_err(|e| {
+                    ServerError::BadRequest(format!("Failed to read metadata: {}", e))
+                })?);
             }
             _ => {}
         }
     }
 
     let file_data = file_data.ok_or_else(|| ServerError::BadRequest("Missing file".to_string()))?;
-    let file_extension = file_extension.ok_or_else(|| ServerError::BadRequest("Missing file extension".to_string()))?;
-    let metadata_json = metadata_json.ok_or_else(|| ServerError::BadRequest("Missing metadata".to_string()))?;
+    let file_extension = file_extension
+        .ok_or_else(|| ServerError::BadRequest("Missing file extension".to_string()))?;
+    let metadata_json =
+        metadata_json.ok_or_else(|| ServerError::BadRequest("Missing metadata".to_string()))?;
 
     // Parse metadata
     let track: Track = serde_json::from_str(&metadata_json)
         .map_err(|e| ServerError::BadRequest(format!("Invalid metadata: {}", e)))?;
 
     // Store file
-    app_state.file_storage
+    app_state
+        .file_storage
         .store_original(&track.id, &file_extension, &file_data)
         .await?;
 
-    // Save to database
-    app_state.db.add_track(track.clone()).await?;
+    // TODO: Save to database - need to implement create_track with CreateTrack type
+    // app_state.db.create_track(...).await?;
 
     // TODO: Queue transcoding job
 
@@ -170,7 +177,7 @@ pub async fn delete_track(
     app_state.file_storage.delete_track(&track_id).await?;
 
     // Delete from database
-    app_state.db.delete_track(&track_id).await?;
+    app_state.db.delete_track(track_id).await?;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }

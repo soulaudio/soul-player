@@ -20,13 +20,13 @@ export const playerCommands = {
     tauriInvoke<void>('set_volume', { volume }),
 
   seek: (position: number) =>
-    tauriInvoke<void>('seek', { position }),
+    tauriInvoke<void>('seek_to', { position }),
 
   skipNext: () =>
-    tauriInvoke<void>('skip_next'),
+    tauriInvoke<void>('next_track'),
 
   skipPrevious: () =>
-    tauriInvoke<void>('skip_previous'),
+    tauriInvoke<void>('previous_track'),
 };
 
 // Library commands

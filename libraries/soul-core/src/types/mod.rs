@@ -1,27 +1,27 @@
 mod audio;
-mod user;
+mod ids;
 mod legacy;
+mod user;
 
 // Multi-source types (primary types)
-mod source;
-mod artist;
 mod album;
-mod multisource_track;
+mod artist;
+mod genre;
 mod multisource_playlist;
+mod multisource_track;
+mod source;
 
 pub use audio::{AudioBuffer, AudioFormat, SampleRate};
-pub use user::User;
+pub use ids::{PlaylistId, TrackId, UserId};
 pub use legacy::{Permission, PlaylistShare, TrackMetadata};
+pub use user::User;
 
 // Multi-source exports (these are the primary types)
-pub use source::{Source, SourceType, SourceConfig, CreateSource, SourceId};
-pub use artist::{Artist, CreateArtist, ArtistId};
-pub use album::{Album, CreateAlbum, AlbumId};
+pub use album::{Album, AlbumId, CreateAlbum};
+pub use artist::{Artist, ArtistId, CreateArtist};
+pub use genre::{CreateGenre, Genre, GenreId};
+pub use multisource_playlist::{CreatePlaylist, Playlist, PlaylistTrack};
 pub use multisource_track::{
-    Track, TrackId, CreateTrack, UpdateTrack, TrackAvailability,
-    AvailabilityStatus, MetadataSource
+    AvailabilityStatus, CreateTrack, MetadataSource, Track, TrackAvailability, UpdateTrack,
 };
-pub use multisource_playlist::{
-    Playlist, CreatePlaylist, PlaylistTrack,
-    PlaylistId, UserId
-};
+pub use source::{CreateSource, Source, SourceConfig, SourceId, SourceType};

@@ -129,6 +129,4 @@ mod volume;
 pub use error::{PlaybackError, Result};
 pub use manager::PlaybackManager;
 pub use source::AudioSource;
-pub use types::{
-    PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMode, TrackSource,
-};
+pub use types::{PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMode, TrackSource};

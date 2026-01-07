@@ -36,6 +36,21 @@ xcode-select --install
 
 ---
 
+## Database Setup
+
+**First time only**:
+
+```bash
+# Unix/Linux/macOS
+./scripts/setup-sqlx.sh
+
+# Windows - see docs/SQLX_SETUP.md for PowerShell commands
+```
+
+See [docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md) for details.
+
+---
+
 ## Mobile
 
 ```bash
@@ -92,11 +107,16 @@ yarn type-check    # TypeScript type checking
 
 ## Documentation
 
-- `docs/ARCHITECTURE.md` - System design
-- `docs/FOLDER_STRUCTURE.md` - Project layout
-- `docs/TESTING.md` - Testing strategy
-- `docs/architecture/AUDIO_ABSTRACTION.md` - Audio DI pattern
-- `docs/deployment/CI_CD.md` - CI/CD setup
+See **[docs/README.md](./docs/README.md)** for complete documentation index.
+
+### Essential Docs
+
+- **[docs/SOUL_SERVICES_PLAN.md](./docs/SOUL_SERVICES_PLAN.md)** - Future: Subscription-based metadata & discovery platform
+- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - System design and architecture
+- **[docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md)** - Database setup and troubleshooting
+- **[docs/FOLDER_STRUCTURE.md](./docs/FOLDER_STRUCTURE.md)** - Project layout
+- **[docs/TESTING.md](./docs/TESTING.md)** - Testing strategy
+- **[CLAUDE.md](./CLAUDE.md)** - Codebase instructions for Claude Code
 
 ---
 

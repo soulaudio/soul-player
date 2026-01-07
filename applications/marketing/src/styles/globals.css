@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Default theme (light) - Also available as [data-theme="light"] */
+  :root,
+  [data-theme='light'] {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(210 40% 98%) 0%, hsl(214.3 31.8% 91.4%) 100%);
+    --gradient-player: linear-gradient(to bottom, hsl(0 0% 100%) 0%, hsl(210 40% 96.1%) 100%);
+    --gradient-sidebar: linear-gradient(to right, hsl(210 40% 96.1%) 0%, hsl(0 0% 100%) 100%);
+    --gradient-waveform: linear-gradient(90deg, hsl(222.2 47.4% 11.2%) 0%, hsl(210 40% 96.1%) 100%);
+
+    /* Typography */
+    --font-sans: Inter, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', Consolas, monospace;
+    --font-size-base: 16px;
+  }
+
+  /* Dark theme - Also available as .dark class for backward compatibility */
+  [data-theme='dark'],
+  .dark {
+    --background: 250 15% 4%;
+    --foreground: 210 20% 92%;
+    --card: 250 12% 6%;
+    --card-foreground: 210 20% 92%;
+    --popover: 250 12% 6%;
+    --popover-foreground: 210 20% 92%;
+    --primary: 265 60% 55%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 250 10% 12%;
+    --secondary-foreground: 210 20% 92%;
+    --muted: 250 10% 12%;
+    --muted-foreground: 215 10% 55%;
+    --accent: 265 60% 55%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 250 10% 15%;
+    --input: 250 10% 15%;
+    --ring: 265 60% 55%;
+
+    /* Gradients - Deep Midnight Theme */
+    --gradient-hero: linear-gradient(135deg, hsl(250 20% 3%) 0%, hsl(265 25% 8%) 50%, hsl(280 20% 5%) 100%);
+    --gradient-player: linear-gradient(to bottom, hsl(250 15% 4%) 0%, hsl(260 18% 7%) 100%);
+    --gradient-sidebar: linear-gradient(to right, hsl(255 12% 6%) 0%, hsl(250 15% 4%) 100%);
+    --gradient-waveform: linear-gradient(90deg, hsl(265 60% 55%) 0%, hsl(280 50% 45%) 50%, hsl(265 60% 55%) 100%);
+  }
+
+  /* Ocean theme */
+  [data-theme='ocean'] {
+    --background: 210 100% 97%;
+    --foreground: 210 60% 15%;
+    --card: 200 50% 98%;
+    --card-foreground: 210 60% 15%;
+    --popover: 200 50% 98%;
+    --popover-foreground: 210 60% 15%;
+    --primary: 200 90% 50%;
+    --primary-foreground: 210 100% 98%;
+    --secondary: 180 85% 55%;
+    --secondary-foreground: 210 100% 98%;
+    --muted: 200 40% 92%;
+    --muted-foreground: 200 25% 45%;
+    --accent: 180 85% 55%;
+    --accent-foreground: 210 100% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 100% 98%;
+    --border: 200 30% 85%;
+    --input: 200 30% 85%;
+    --ring: 200 90% 50%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(200 90% 50%) 0%, hsl(180 85% 55%) 100%);
+    --gradient-player: linear-gradient(to bottom, hsl(210 100% 97%) 0%, hsl(200 80% 92%) 100%);
+    --gradient-sidebar: linear-gradient(to right, hsl(200 40% 92%) 0%, hsl(210 100% 97%) 100%);
+    --gradient-waveform: linear-gradient(90deg, hsl(200 90% 50%) 0%, hsl(180 85% 55%) 50%, hsl(200 90% 50%) 100%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Grainy gradient effect - applies grain texture to gradient backgrounds */
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    background-repeat: repeat;
+    opacity: 0.6;
+    mix-blend-mode: overlay;
+  }
+
+  .grain-visible::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.35;
+    z-index: 2;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    background-repeat: repeat;
+    filter: contrast(120%) brightness(40%);
+    mix-blend-mode: overlay;
+  }
+
+  /* Staggered fade-in animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.8s ease-out forwards;
+  }
+
+  .animate-fade-in-delay-100 {
+    opacity: 0;
+    animation: fadeIn 0.8s ease-out 0.1s forwards;
+  }
+
+  .animate-fade-in-delay-300 {
+    opacity: 0;
+    animation: fadeIn 0.8s ease-out 0.3s forwards;
+  }
+
+  .animate-fade-in-delay-500 {
+    opacity: 0;
+    animation: fadeIn 0.8s ease-out 0.5s forwards;
+  }
+}
+
+body {
+  font-feature-settings: "rlig" 1, "calt" 1;
+}

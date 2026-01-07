@@ -5,7 +5,7 @@ use crate::{
 };
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
-use soul_core::{Storage, UserId};
+use soul_core::{storage::StorageContext, types::UserId};
 
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
@@ -37,25 +37,34 @@ pub async fn login(
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>> {
     // Look up user by name
-    let users = app_state.db.get_all_users().await?;
+    let users: Vec<soul_core::types::User> = app_state.db.get_all_users().await?;
     let user = users
         .iter()
         .find(|u| u.name == req.username)
         .ok_or_else(|| ServerError::Auth("Invalid username or password".to_string()))?;
 
+    // Convert user.id (i64) to string for get_password_hash
+    let user_id_str = user.id.to_string();
+
     // Get password hash from database
-    // TODO: Need to query user_credentials table
-    // For now, this is a placeholder - we need to add the credentials query
-    let password_hash = get_user_password_hash(&app_state, &user.id).await?;
+    let password_hash = soul_storage::users::get_password_hash(app_state.db.pool(), &user_id_str)
+        .await?
+        .ok_or_else(|| ServerError::Auth("Invalid username or password".to_string()))?;
 
     // Verify password
-    if !app_state.auth_service.verify_password(&req.password, &password_hash)? {
-        return Err(ServerError::Auth("Invalid username or password".to_string()));
+    if !app_state
+        .auth_service
+        .verify_password(&req.password, &password_hash)?
+    {
+        return Err(ServerError::Auth(
+            "Invalid username or password".to_string(),
+        ));
     }
 
-    // Create tokens
-    let access_token = app_state.auth_service.create_access_token(&user.id)?;
-    let refresh_token = app_state.auth_service.create_refresh_token(&user.id)?;
+    // Create tokens - convert i64 to UserId
+    let user_id = UserId::new(user_id_str.clone());
+    let access_token = app_state.auth_service.create_access_token(&user_id)?;
+    let refresh_token = app_state.auth_service.create_refresh_token(&user_id)?;
 
     Ok(Json(LoginResponse {
         access_token,
@@ -70,7 +79,9 @@ pub async fn refresh(
     Json(req): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>> {
     // Verify refresh token
-    let user_id = app_state.auth_service.verify_refresh_token(&req.refresh_token)?;
+    let user_id = app_state
+        .auth_service
+        .verify_refresh_token(&req.refresh_token)?;
 
     // Create new access token
     let access_token = app_state.auth_service.create_access_token(&user_id)?;
@@ -81,19 +92,3 @@ pub async fn refresh(
     }))
 }
 
-/// Helper to get user password hash from database
-async fn get_user_password_hash(app_state: &AppState, user_id: &UserId) -> Result<String> {
-    use sqlx::Row;
-    let pool = app_state.db.pool();
-
-    let row = sqlx::query(
-        "SELECT password_hash FROM user_credentials WHERE user_id = ?"
-    )
-    .bind(user_id.as_str())
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| ServerError::Internal(format!("Database error: {}", e)))?
-    .ok_or_else(|| ServerError::Auth("Invalid username or password".to_string()))?;
-
-    Ok(row.get("password_hash"))
-}

@@ -65,12 +65,7 @@ impl StreamingAudioSource {
     /// # Returns
     /// * `Ok(source)` - Streaming source ready for playback
     /// * `Err(_)` - Failed to initialize stream
-    pub fn new(
-        url: String,
-        sample_rate: u32,
-        channels: u16,
-        duration: Duration,
-    ) -> Result<Self> {
+    pub fn new(url: String, sample_rate: u32, channels: u16, duration: Duration) -> Result<Self> {
         let (chunk_sender, chunk_receiver) = bounded(BUFFER_CHUNKS);
         let stop_signal = Arc::new(AtomicBool::new(false));
         let error = Arc::new(Mutex::new(None));

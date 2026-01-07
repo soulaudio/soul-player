@@ -2,7 +2,6 @@
 ///
 /// Reduces the dynamic range of audio by attenuating signals above a threshold.
 /// Useful for making quiet parts louder and loud parts quieter.
-
 use super::chain::AudioEffect;
 
 /// Compressor settings
@@ -323,11 +322,11 @@ mod tests {
     fn settings_validation() {
         let mut settings = CompressorSettings {
             threshold_db: -100.0, // Out of range
-            ratio: 50.0,           // Out of range
-            attack_ms: 0.01,       // Out of range
-            release_ms: 5000.0,    // Out of range
-            knee_db: 20.0,         // Out of range
-            makeup_gain_db: 50.0,  // Out of range
+            ratio: 50.0,          // Out of range
+            attack_ms: 0.01,      // Out of range
+            release_ms: 5000.0,   // Out of range
+            knee_db: 20.0,        // Out of range
+            makeup_gain_db: 50.0, // Out of range
         };
 
         settings.validate();

@@ -109,10 +109,7 @@ fn test_volume_command_processing() {
         }
     }
 
-    assert!(
-        found_volume_event,
-        "Should receive volume changed event"
-    );
+    assert!(found_volume_event, "Should receive volume changed event");
 }
 
 #[test]

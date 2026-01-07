@@ -198,9 +198,7 @@ impl PlaybackManager {
                 // For now, just error
                 Err(PlaybackError::QueueEmpty)
             }
-            RepeatMode::Off | RepeatMode::One => {
-                Err(PlaybackError::QueueEmpty)
-            }
+            RepeatMode::Off | RepeatMode::One => Err(PlaybackError::QueueEmpty),
         }
     }
 
@@ -395,6 +393,21 @@ impl PlaybackManager {
     /// Get playback history
     pub fn get_history(&self) -> Vec<&QueueTrack> {
         self.history.get_all()
+    }
+
+    /// Get total queue length
+    pub fn get_queue_length(&self) -> usize {
+        self.queue.len()
+    }
+
+    /// Check if there is a next track
+    pub fn has_next(&self) -> bool {
+        !self.queue.is_empty() || self.repeat == RepeatMode::One
+    }
+
+    /// Check if there is a previous track
+    pub fn has_previous(&self) -> bool {
+        !self.history.get_all().is_empty() || self.repeat == RepeatMode::One
     }
 
     // ===== Audio Processing =====

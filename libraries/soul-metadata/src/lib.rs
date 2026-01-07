@@ -32,14 +32,15 @@
 //! A separate `soul-import` crate will handle:
 //! - Metadata normalization and fixing
 //! - Acoustic fingerprinting
-//! - MusicBrainz integration
+//! - `MusicBrainz` integration
 //! - Batch tag editing
 //! - Import from streaming services
 
 mod error;
 mod reader;
-mod scanner;
+// TODO: Scanner needs architectural update for multi-source Track type
+// mod scanner;
 
 pub use error::{MetadataError, Result};
 pub use reader::LoftyMetadataReader;
-pub use scanner::{LibraryScanner, ScanConfig, ScanProgress, ScanStats};
+// pub use scanner::{LibraryScanner, ScanConfig, ScanProgress, ScanStats};

@@ -2,7 +2,6 @@
 ///
 /// These tests verify that the decoder correctly processes real audio files
 /// and produces valid output buffers with proper sample values.
-
 use soul_audio::SymphoniaDecoder;
 use soul_core::AudioDecoder;
 use std::fs::File;
@@ -110,7 +109,9 @@ fn test_decode_mono_wav() {
     create_test_wav(&wav_path, 48000, 0.5, 1);
 
     let mut decoder = SymphoniaDecoder::new();
-    let buffer = decoder.decode(&wav_path).expect("Failed to decode mono WAV");
+    let buffer = decoder
+        .decode(&wav_path)
+        .expect("Failed to decode mono WAV");
 
     // Verify properties
     assert_eq!(buffer.format.sample_rate.0, 48000);

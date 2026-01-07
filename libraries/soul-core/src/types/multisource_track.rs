@@ -3,9 +3,8 @@
 //! Tracks with support for multiple sources and availability tracking
 
 use super::{AlbumId, ArtistId, SourceId};
+use super::ids::TrackId;
 use serde::{Deserialize, Serialize};
-
-pub type TrackId = i64;
 
 /// Track with multi-source support
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +51,7 @@ pub struct CreateTrack {
     pub sample_rate: Option<i32>,
     pub channels: Option<i32>,
     pub file_format: String,
+    pub file_hash: Option<String>,
     pub origin_source_id: SourceId,
     pub local_file_path: Option<String>,
     pub musicbrainz_recording_id: Option<String>,
@@ -91,17 +91,17 @@ pub struct TrackAvailability {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AvailabilityStatus {
-    LocalFile,    // Original file on local filesystem
-    Cached,       // Downloaded from server and cached locally
-    StreamOnly,   // Available for streaming from server
-    Unavailable,  // Source is offline or file deleted
+    LocalFile,   // Original file on local filesystem
+    Cached,      // Downloaded from server and cached locally
+    StreamOnly,  // Available for streaming from server
+    Unavailable, // Source is offline or file deleted
 }
 
 /// Source of track metadata
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MetadataSource {
-    File,        // From file tags
-    Enriched,    // From MusicBrainz/external services
-    UserEdited,  // User manually edited
+    File,       // From file tags
+    Enriched,   // From MusicBrainz/external services
+    UserEdited, // User manually edited
 }

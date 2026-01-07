@@ -1,6 +1,9 @@
 /// Core traits for Soul Player
 use crate::error::Result;
-use crate::types::*;
+use crate::types::{
+    AudioBuffer, Permission, Playlist, PlaylistId, PlaylistShare, Track, TrackId, TrackMetadata,
+    User, UserId,
+};
 use std::path::Path;
 
 /// Audio decoder trait

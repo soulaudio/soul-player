@@ -9,8 +9,8 @@
 
 mod test_helpers;
 
-use test_helpers::*;
 use soul_core::types::*;
+use test_helpers::*;
 
 #[tokio::test]
 async fn test_create_and_get_playlist() {
@@ -122,9 +122,15 @@ async fn test_remove_track_from_playlist_reorders() {
     let track3 = create_test_track(pool, "Track 3", None, None, 1, Some("/3.mp3")).await;
 
     // Add three tracks
-    soul_storage::playlists::add_track(pool, playlist_id, track1, user_id).await.unwrap();
-    soul_storage::playlists::add_track(pool, playlist_id, track2, user_id).await.unwrap();
-    soul_storage::playlists::add_track(pool, playlist_id, track3, user_id).await.unwrap();
+    soul_storage::playlists::add_track(pool, playlist_id, track1, user_id)
+        .await
+        .unwrap();
+    soul_storage::playlists::add_track(pool, playlist_id, track2, user_id)
+        .await
+        .unwrap();
+    soul_storage::playlists::add_track(pool, playlist_id, track3, user_id)
+        .await
+        .unwrap();
 
     // Remove middle track
     soul_storage::playlists::remove_track(pool, playlist_id, track2, user_id)
@@ -159,9 +165,15 @@ async fn test_reorder_tracks_in_playlist() {
     let track2 = create_test_track(pool, "Track 2", None, None, 1, Some("/2.mp3")).await;
     let track3 = create_test_track(pool, "Track 3", None, None, 1, Some("/3.mp3")).await;
 
-    soul_storage::playlists::add_track(pool, playlist_id, track1, user_id).await.unwrap();
-    soul_storage::playlists::add_track(pool, playlist_id, track2, user_id).await.unwrap();
-    soul_storage::playlists::add_track(pool, playlist_id, track3, user_id).await.unwrap();
+    soul_storage::playlists::add_track(pool, playlist_id, track1, user_id)
+        .await
+        .unwrap();
+    soul_storage::playlists::add_track(pool, playlist_id, track2, user_id)
+        .await
+        .unwrap();
+    soul_storage::playlists::add_track(pool, playlist_id, track3, user_id)
+        .await
+        .unwrap();
 
     // Move track 3 to position 0 (first)
     soul_storage::playlists::reorder_tracks(pool, playlist_id, track3, 0, user_id)
@@ -192,7 +204,9 @@ async fn test_delete_playlist() {
 
     // Add a track
     let track_id = create_test_track(pool, "Track", None, None, 1, Some("/music/track.mp3")).await;
-    soul_storage::playlists::add_track(pool, playlist_id, track_id, user_id).await.unwrap();
+    soul_storage::playlists::add_track(pool, playlist_id, track_id, user_id)
+        .await
+        .unwrap();
 
     // Delete playlist
     soul_storage::playlists::delete(pool, playlist_id, user_id)
@@ -200,20 +214,26 @@ async fn test_delete_playlist() {
         .expect("Failed to delete playlist");
 
     // Playlist should be gone
-    let result = soul_storage::playlists::get_by_id(pool, playlist_id, user_id).await.unwrap();
+    let result = soul_storage::playlists::get_by_id(pool, playlist_id, user_id)
+        .await
+        .unwrap();
     assert!(result.is_none());
 
     // Verify playlist_tracks entries deleted (cascade)
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = ?")
-        .bind(playlist_id)
-        .fetch_one(pool)
-        .await
-        .unwrap();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = ?")
+            .bind(playlist_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
 
     assert_eq!(count, 0);
 
     // Track should still exist
-    assert!(soul_storage::tracks::get_by_id(pool, track_id).await.unwrap().is_some());
+    assert!(soul_storage::tracks::get_by_id(pool, track_id)
+        .await
+        .unwrap()
+        .is_some());
 }
 
 #[tokio::test]
@@ -267,7 +287,10 @@ async fn test_shared_user_with_read_permission_cannot_modify() {
     // Shared user tries to add track (should fail)
     let result = soul_storage::playlists::add_track(pool, playlist_id, track_id, shared_user).await;
 
-    assert!(result.is_err(), "Read-only user should not be able to add tracks");
+    assert!(
+        result.is_err(),
+        "Read-only user should not be able to add tracks"
+    );
 }
 
 #[tokio::test]
@@ -318,7 +341,10 @@ async fn test_only_owner_can_delete_playlist() {
     // Shared user tries to delete (should fail even with write permission)
     let result = soul_storage::playlists::delete(pool, playlist_id, shared_user).await;
 
-    assert!(result.is_err(), "Only owner should be able to delete playlist");
+    assert!(
+        result.is_err(),
+        "Only owner should be able to delete playlist"
+    );
 
     // Owner can delete
     soul_storage::playlists::delete(pool, playlist_id, owner)

@@ -5,12 +5,15 @@ use axum::{
     Router,
 };
 use clap::{Parser, Subcommand};
-use soul_core::Storage;
 use soul_server::{
-    api, config::ServerConfig, jobs, middleware, services::{AuthService, FileStorage, TranscodingService},
+    api,
+    config::ServerConfig,
+    jobs, middleware,
+    services::{AuthService, FileStorage, TranscodingService},
     state::AppState,
 };
-use soul_storage::Database;
+use soul_storage::LocalStorageContext;
+use soul_core::types::UserId;
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::{
     cors::CorsLayer,
@@ -93,7 +96,13 @@ async fn serve() -> anyhow::Result<()> {
     tracing::info!("Port: {}", config.server.port);
 
     // Initialize database
-    let db = Database::new(&config.storage.database_url).await?;
+    let pool = soul_storage::create_pool(&config.storage.database_url).await?;
+    soul_storage::run_migrations(&pool).await?;
+
+    // For server, we use a system user (user_id = 1)
+    // The actual user context will be determined by JWT authentication
+    let system_user_id = UserId::new("1".to_string());
+    let db = LocalStorageContext::new(pool, system_user_id);
     let db = Arc::new(db);
     tracing::info!("Database connected");
 
@@ -124,7 +133,10 @@ async fn serve() -> anyhow::Result<()> {
             config.transcoding.workers,
         ));
         Arc::clone(&queue).start().await;
-        tracing::info!("Transcoding queue started with {} workers", config.transcoding.workers);
+        tracing::info!(
+            "Transcoding queue started with {} workers",
+            config.transcoding.workers
+        );
     }
 
     // Build application state
@@ -167,10 +179,19 @@ fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router 
         .route("/playlists/:id", get(api::playlists::get_playlist))
         .route("/playlists/:id", put(api::playlists::update_playlist))
         .route("/playlists/:id", delete(api::playlists::delete_playlist))
-        .route("/playlists/:id/tracks", post(api::playlists::add_track_to_playlist))
-        .route("/playlists/:id/tracks/:track_id", delete(api::playlists::remove_track_from_playlist))
+        .route(
+            "/playlists/:id/tracks",
+            post(api::playlists::add_track_to_playlist),
+        )
+        .route(
+            "/playlists/:id/tracks/:track_id",
+            delete(api::playlists::remove_track_from_playlist),
+        )
         .route("/playlists/:id/share", post(api::playlists::share_playlist))
-        .route("/playlists/:id/share/:user_id", delete(api::playlists::unshare_playlist))
+        .route(
+            "/playlists/:id/share/:user_id",
+            delete(api::playlists::unshare_playlist),
+        )
         // Streaming
         .route("/stream/:track_id", get(api::stream::stream_track))
         // Admin
@@ -197,37 +218,42 @@ fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router 
 
 async fn add_user(username: &str, password: &str) -> anyhow::Result<()> {
     let config = ServerConfig::load()?;
-    let db = Database::new(&config.storage.database_url).await?;
+    let pool = soul_storage::create_pool(&config.storage.database_url).await?;
+    soul_storage::run_migrations(&pool).await?;
+
     let auth_service = AuthService::new(
         config.auth.jwt_secret.clone(),
         config.auth.jwt_expiration_hours,
         config.auth.jwt_refresh_expiration_days,
     );
 
-    // Create user
-    let user = db.create_user(username).await?;
-    tracing::info!("Created user: {} ({})", user.name, user.id.as_str());
+    // TODO: Create user - need to implement user creation
+    // For now, just show what would be done
+    tracing::warn!("User creation not yet implemented");
+    tracing::info!("Would create user: {}", username);
 
     // Hash password
     let password_hash = auth_service.hash_password(password)?;
 
-    // Store credentials
-    // TODO: Implement database storage for credentials
+    // Store credentials using soul_storage::users module directly
+    // TODO: Store in database once user creation is implemented
     tracing::info!("Password hash: {}", password_hash);
-    tracing::warn!("Password credential storage not yet implemented in database");
+    tracing::warn!("Password credential storage not yet implemented");
 
     Ok(())
 }
 
 async fn list_users() -> anyhow::Result<()> {
     let config = ServerConfig::load()?;
-    let db = Database::new(&config.storage.database_url).await?;
+    let pool = soul_storage::create_pool(&config.storage.database_url).await?;
+    soul_storage::run_migrations(&pool).await?;
 
-    let users = db.get_all_users().await?;
+    // Use soul_storage::users::get_all directly
+    let users = soul_storage::users::get_all(&pool).await?;
 
     println!("Users:");
     for user in users {
-        println!("  {} - {}", user.id.as_str(), user.name);
+        println!("  {} - {}", user.id, user.name);
     }
 
     Ok(())

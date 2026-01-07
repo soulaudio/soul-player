@@ -49,8 +49,8 @@
 //! ```
 
 mod decoder;
-mod error;
 pub mod effects;
+mod error;
 
 pub use decoder::SymphoniaDecoder;
 pub use error::{AudioError, Result};

@@ -106,9 +106,9 @@ fn shuffle_smart(tracks: &mut [QueueTrack]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::TrackSource;
     use std::path::PathBuf;
     use std::time::Duration;
-    use crate::types::TrackSource;
 
     fn create_test_track(id: &str, title: &str, artist: &str) -> QueueTrack {
         QueueTrack {
@@ -202,7 +202,11 @@ mod tests {
         // With smart shuffle, should have minimal consecutive same-artist plays
         // In this case (3 A, 3 B), perfect interleaving would have 0 consecutive
         // But randomness means we might have 1-2, never more than that
-        assert!(consecutive_count <= 2, "Too many consecutive same-artist plays: {}", consecutive_count);
+        assert!(
+            consecutive_count <= 2,
+            "Too many consecutive same-artist plays: {}",
+            consecutive_count
+        );
     }
 
     #[test]
@@ -263,7 +267,11 @@ mod tests {
 
         // With 5 artists and 4 songs each, smart shuffle should minimize consecutive plays
         // Maximum should be around 3-4 consecutive (due to randomness)
-        assert!(consecutive_count < 8, "Too many consecutive same-artist plays: {}", consecutive_count);
+        assert!(
+            consecutive_count < 8,
+            "Too many consecutive same-artist plays: {}",
+            consecutive_count
+        );
     }
 
     #[test]

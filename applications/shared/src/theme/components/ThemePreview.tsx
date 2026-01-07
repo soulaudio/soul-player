@@ -2,7 +2,6 @@
  * ThemePreview component - visual preview of a theme
  */
 
-import React from 'react';
 import type { Theme } from '../types';
 
 interface ThemePreviewProps {

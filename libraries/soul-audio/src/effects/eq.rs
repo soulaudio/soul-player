@@ -2,7 +2,6 @@
 ///
 /// Provides low, mid, and high frequency band control with adjustable gain.
 /// Uses biquad filters for each band.
-
 use super::chain::AudioEffect;
 
 /// EQ band configuration

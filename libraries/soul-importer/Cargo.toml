@@ -1,0 +1,49 @@
+[package]
+name = "soul-importer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Workspace dependencies
+soul-core = { workspace = true }
+soul-storage = { workspace = true }
+soul-metadata = { workspace = true }
+
+# Database (for error types)
+sqlx = { workspace = true }
+
+# External dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+
+# File system operations
+walkdir = "2.4"
+sha2 = "0.10"  # For file hashing
+hex = "0.4"    # For hash encoding
+
+# Metadata extraction
+lofty = { workspace = true }
+
+# Fuzzy string matching
+strsim = "0.11"  # Levenshtein distance
+
+# Random ID generation
+rand = "0.8"
+
+# Progress reporting
+indicatif = "0.17"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tempfile = "3.8"
+tracing-subscriber = "0.3"

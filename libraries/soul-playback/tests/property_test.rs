@@ -15,11 +15,11 @@ use std::time::Duration;
 
 fn arbitrary_track() -> impl Strategy<Value = QueueTrack> {
     (
-        "[a-z0-9]{1,10}",           // id
-        "[A-Za-z ]{1,30}",          // title
-        "[A-Za-z ]{1,20}",          // artist
+        "[a-z0-9]{1,10}",                        // id
+        "[A-Za-z ]{1,30}",                       // title
+        "[A-Za-z ]{1,20}",                       // artist
         proptest::option::of("[A-Za-z ]{1,20}"), // album
-        1u64..600,                  // duration (1-600 seconds)
+        1u64..600,                               // duration (1-600 seconds)
     )
         .prop_map(|(id, title, artist, album, duration_secs)| QueueTrack {
             id,

@@ -9,8 +9,8 @@
 
 mod test_helpers;
 
-use test_helpers::*;
 use soul_core::types::*;
+use test_helpers::*;
 
 // ============================================================================
 // Artist Tests
@@ -309,9 +309,7 @@ async fn test_get_all_albums() {
     .await
     .unwrap();
 
-    let albums = soul_storage::albums::get_all(pool)
-        .await
-        .unwrap();
+    let albums = soul_storage::albums::get_all(pool).await.unwrap();
 
     assert!(albums.len() >= 2);
 

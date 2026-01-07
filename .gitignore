@@ -45,7 +45,14 @@ coverage/
 # Env
 .env*
 !.env.example
+!.env.server
 
 # SQLx test database
 libraries/soul-storage/.tmp/
+
+# Development databases
+*.db
+*.db-shm
+*.db-wal
+!test.db
 # Note: .sqlx/ is NOT ignored - it contains query metadata for offline compilation

@@ -199,10 +199,7 @@ fn test_e2e_play_pause_stop_workflow() {
         .iter()
         .any(|e| matches!(e, PlaybackEvent::StateChanged(_)));
 
-    assert!(
-        has_state_events,
-        "Should receive state changed events"
-    );
+    assert!(has_state_events, "Should receive state changed events");
 }
 
 #[test]
@@ -289,10 +286,7 @@ fn test_e2e_repeat_modes() {
 
     // Test all repeat modes
     for mode in [RepeatMode::Off, RepeatMode::All, RepeatMode::One] {
-        assert!(
-            manager.set_repeat(mode).is_ok(),
-            "Should set repeat mode"
-        );
+        assert!(manager.set_repeat(mode).is_ok(), "Should set repeat mode");
         std::thread::sleep(Duration::from_millis(20));
     }
 
@@ -337,7 +331,10 @@ fn test_e2e_queue_management() {
         .filter(|e| matches!(e, PlaybackEvent::QueueUpdated))
         .count();
 
-    assert!(queue_events >= 5, "Should have multiple queue update events");
+    assert!(
+        queue_events >= 5,
+        "Should have multiple queue update events"
+    );
 }
 
 #[test]
@@ -420,6 +417,7 @@ fn test_e2e_complete_user_session() {
             track_number: Some(i),
             source: TrackSource::Playlist {
                 id: "playlist1".to_string(),
+                name: "Test Playlist".to_string(),
             },
         };
         manager.add_to_queue(track).unwrap();
@@ -491,11 +489,17 @@ fn test_e2e_error_handling() {
     assert!(manager.next().is_ok(), "Empty next should be accepted");
     std::thread::sleep(Duration::from_millis(20));
 
-    assert!(manager.previous().is_ok(), "Empty previous should be accepted");
+    assert!(
+        manager.previous().is_ok(),
+        "Empty previous should be accepted"
+    );
     std::thread::sleep(Duration::from_millis(50));
 
     // System should still be responsive
-    assert!(manager.set_volume(50).is_ok(), "Should still respond to commands");
+    assert!(
+        manager.set_volume(50).is_ok(),
+        "Should still respond to commands"
+    );
 }
 
 #[test]
@@ -525,7 +529,10 @@ fn test_e2e_concurrent_operations() {
     std::thread::sleep(Duration::from_millis(100));
 
     // Should still be responsive
-    assert!(manager.set_volume(70).is_ok(), "Should still respond after concurrent access");
+    assert!(
+        manager.set_volume(70).is_ok(),
+        "Should still respond after concurrent access"
+    );
 }
 
 #[test]

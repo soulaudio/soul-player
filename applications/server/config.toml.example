@@ -1,0 +1,27 @@
+# Soul Server Configuration Example
+# Copy this file to config.toml and adjust values as needed
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[storage]
+database_url = "sqlite://./data/soul.db"
+music_storage_path = "./data/tracks"
+scan_directories = [
+    # "/path/to/music/library1",
+    # "/path/to/music/library2"
+]
+
+[auth]
+# REQUIRED: Generate a secure secret for production
+# Generate with: openssl rand -hex 32
+jwt_secret = "change-this-to-a-secure-random-string"
+jwt_expiration_hours = 24
+jwt_refresh_expiration_days = 30
+
+[transcoding]
+enabled = true
+formats = ["mp3"]  # Available: mp3, flac, ogg, wav, opus
+workers = 2
+ffmpeg_path = "/usr/bin/ffmpeg"

@@ -19,7 +19,28 @@
       "Bash(cargo clean:*)",
       "Bash(DATABASE_URL=\"sqlite:libraries/soul-storage/.tmp/dev.db\" sqlx database create:*)",
       "Bash(DATABASE_URL=\"sqlite:libraries/soul-storage/.tmp/dev.db\" cargo build:*)",
-      "Bash(DATABASE_URL=\"sqlite:///mnt/d/dev/soulaudio/soul-player/libraries/soul-storage/.tmp/dev.db\" cargo build:*)"
+      "Bash(DATABASE_URL=\"sqlite:///mnt/d/dev/soulaudio/soul-player/libraries/soul-storage/.tmp/dev.db\" cargo build:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo audit:*)",
+      "Bash(cargo update:*)",
+      "Bash(cargo sqlx:*)",
+      "Bash(grep:*)",
+      "Bash(DATABASE_URL=sqlite:test.db sqlx database:*)",
+      "Bash(DATABASE_URL=sqlite:test.db sqlx migrate run:*)",
+      "Bash(DATABASE_URL=sqlite:test.db cargo check:*)",
+      "Bash(DATABASE_URL=sqlite:///mnt/d/dev/soulaudio/soul-player/test.db cargo check:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(./setup-sqlx.sh:*)",
+      "Bash(node --version)",
+      "Bash(npm --version)",
+      "Bash(npm run build:*)",
+      "Bash(/usr/bin/yarn build:*)",
+      "Bash(wc:*)",
+      "WebFetch(domain:www.shadcnblocks.com)",
+      "Bash(DATABASE_URL=\"sqlite:///mnt/d/dev/soulaudio/soul-player/libraries/soul-storage/test.db\" cargo check:*)",
+      "Bash(node:*)",
+      "Bash(yarn type-check:*)",
+      "Bash(npm run lint)"
     ]
   }
 }

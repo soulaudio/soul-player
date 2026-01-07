@@ -179,10 +179,7 @@ impl Queue {
     ///
     /// Returns explicit queue followed by source queue
     pub fn get_all(&self) -> Vec<&QueueTrack> {
-        self.explicit
-            .iter()
-            .chain(self.source.iter())
-            .collect()
+        self.explicit.iter().chain(self.source.iter()).collect()
     }
 
     /// Get track at index
@@ -247,9 +244,9 @@ impl Default for Queue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::TrackSource;
     use std::path::PathBuf;
     use std::time::Duration;
-    use crate::types::TrackSource;
 
     fn create_test_track(id: &str, title: &str) -> QueueTrack {
         QueueTrack {

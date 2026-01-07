@@ -2,9 +2,8 @@
 ///
 /// These tests verify that metadata extraction and library scanning work correctly
 /// with real audio files and database integration.
-
 use soul_core::{MetadataReader, Storage};
-use soul_metadata::{LoftyMetadataReader, LibraryScanner, ScanConfig};
+use soul_metadata::{LibraryScanner, LoftyMetadataReader, ScanConfig};
 use soul_storage::Database;
 use std::fs::{self, File};
 use std::io::Write;
@@ -88,7 +87,11 @@ async fn test_metadata_reader_basic() {
         eprintln!("Error reading metadata: {:?}", e);
     }
 
-    assert!(result.is_ok(), "Failed to read metadata: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to read metadata: {:?}",
+        result.err()
+    );
 }
 
 #[tokio::test]
@@ -104,7 +107,11 @@ async fn test_metadata_reader_duration() {
     // Should have duration (approximately 100ms = 100 milliseconds)
     assert!(metadata.duration_ms.is_some());
     let duration = metadata.duration_ms.unwrap();
-    assert!(duration > 50 && duration < 150, "Duration should be around 100ms, got: {}", duration);
+    assert!(
+        duration > 50 && duration < 150,
+        "Duration should be around 100ms, got: {}",
+        duration
+    );
 }
 
 #[tokio::test]
@@ -195,12 +202,27 @@ async fn test_scanner_nested_directories() {
     fs::create_dir(&artist2_dir).unwrap();
 
     // Add files to nested directories
-    create_test_wav_with_metadata(&artist1_dir.join("song1.wav"), "Song 1", "Artist 1", "Album 1")
-        .unwrap();
-    create_test_wav_with_metadata(&artist1_dir.join("song2.wav"), "Song 2", "Artist 1", "Album 1")
-        .unwrap();
-    create_test_wav_with_metadata(&artist2_dir.join("song3.wav"), "Song 3", "Artist 2", "Album 2")
-        .unwrap();
+    create_test_wav_with_metadata(
+        &artist1_dir.join("song1.wav"),
+        "Song 1",
+        "Artist 1",
+        "Album 1",
+    )
+    .unwrap();
+    create_test_wav_with_metadata(
+        &artist1_dir.join("song2.wav"),
+        "Song 2",
+        "Artist 1",
+        "Album 1",
+    )
+    .unwrap();
+    create_test_wav_with_metadata(
+        &artist2_dir.join("song3.wav"),
+        "Song 3",
+        "Artist 2",
+        "Album 2",
+    )
+    .unwrap();
 
     let db = create_test_db().await;
     let scanner = LibraryScanner::new(Arc::new(db));
@@ -219,10 +241,20 @@ async fn test_scanner_mixed_file_types() {
     fs::create_dir(&music_dir).unwrap();
 
     // Create audio files
-    create_test_wav_with_metadata(&music_dir.join("song1.wav"), "Song 1", "Artist 1", "Album 1")
-        .unwrap();
-    create_test_wav_with_metadata(&music_dir.join("song2.wav"), "Song 2", "Artist 1", "Album 1")
-        .unwrap();
+    create_test_wav_with_metadata(
+        &music_dir.join("song1.wav"),
+        "Song 1",
+        "Artist 1",
+        "Album 1",
+    )
+    .unwrap();
+    create_test_wav_with_metadata(
+        &music_dir.join("song2.wav"),
+        "Song 2",
+        "Artist 1",
+        "Album 1",
+    )
+    .unwrap();
 
     // Create non-audio files (should be ignored)
     File::create(music_dir.join("readme.txt"))
@@ -279,7 +311,10 @@ async fn test_scanner_progress_reporting() {
     let stats = scan_handle.await.unwrap().unwrap();
 
     // Verify we got progress updates
-    assert!(!progress_updates.is_empty(), "Should receive progress updates");
+    assert!(
+        !progress_updates.is_empty(),
+        "Should receive progress updates"
+    );
 
     // Check for Started event
     let has_started = progress_updates
@@ -305,8 +340,13 @@ async fn test_scanner_with_errors() {
     fs::create_dir(&music_dir).unwrap();
 
     // Create a valid file
-    create_test_wav_with_metadata(&music_dir.join("valid.wav"), "Valid Song", "Artist", "Album")
-        .unwrap();
+    create_test_wav_with_metadata(
+        &music_dir.join("valid.wav"),
+        "Valid Song",
+        "Artist",
+        "Album",
+    )
+    .unwrap();
 
     // Create an invalid file with .wav extension
     let invalid_path = music_dir.join("invalid.wav");
@@ -366,10 +406,20 @@ async fn test_scanner_tracks_persisted_in_database() {
     fs::create_dir(&music_dir).unwrap();
 
     // Create test files
-    create_test_wav_with_metadata(&music_dir.join("song1.wav"), "Song 1", "Artist 1", "Album 1")
-        .unwrap();
-    create_test_wav_with_metadata(&music_dir.join("song2.wav"), "Song 2", "Artist 2", "Album 2")
-        .unwrap();
+    create_test_wav_with_metadata(
+        &music_dir.join("song1.wav"),
+        "Song 1",
+        "Artist 1",
+        "Album 1",
+    )
+    .unwrap();
+    create_test_wav_with_metadata(
+        &music_dir.join("song2.wav"),
+        "Song 2",
+        "Artist 2",
+        "Album 2",
+    )
+    .unwrap();
 
     let db: Arc<Database> = Arc::new(create_test_db().await);
     let scanner = LibraryScanner::new(Arc::clone(&db));

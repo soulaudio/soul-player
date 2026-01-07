@@ -1,6 +1,6 @@
 //! Album types
 
-use super::{ArtistId};
+use super::ArtistId;
 use serde::{Deserialize, Serialize};
 
 pub type AlbumId = i64;

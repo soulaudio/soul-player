@@ -12,7 +12,10 @@ use axum::{
     response::Response,
 };
 use serde::Deserialize;
-use soul_core::{Storage, TrackId};
+use soul_core::{
+    storage::StorageContext,
+    types::TrackId,
+};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
@@ -34,7 +37,11 @@ pub async fn stream_track(
     let track_id = TrackId::new(track_id);
 
     // Verify track exists in database
-    let _track = app_state.db.get_track(&track_id).await?;
+    let _track = app_state
+        .db
+        .get_track(track_id.clone())
+        .await?
+        .ok_or_else(|| ServerError::NotFound("Track not found".to_string()))?;
 
     // Determine quality
     let quality = query
@@ -44,10 +51,14 @@ pub async fn stream_track(
         .unwrap_or(Quality::High);
 
     // Get best available quality
-    let actual_quality = app_state.file_storage.get_best_available_quality(&track_id, quality);
+    let actual_quality = app_state
+        .file_storage
+        .get_best_available_quality(&track_id, quality);
 
     // Get file path
-    let file_path = app_state.file_storage.get_track_path(&track_id, actual_quality, None)?;
+    let file_path = app_state
+        .file_storage
+        .get_track_path(&track_id, actual_quality, None)?;
 
     // Validate path (prevent directory traversal)
     app_state.file_storage.validate_path(&file_path)?;
