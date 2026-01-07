@@ -293,7 +293,54 @@ impl ImportManager {
         });
         eprintln!("[ImportManager::import_files] Import state set");
 
-        let config = self.get_config().await;
+        // IMPORTANT: Reload config from database to ensure we have the latest settings
+        // This prevents race conditions where the UI updates the config but import starts
+        // before the async update completes
+        eprintln!("[ImportManager::import_files] Reloading config from database...");
+
+        let strategy_str: String = soul_storage::settings::get_import_strategy(&self.pool, &self.user_id)
+            .await
+            .map_err(|e| format!("Failed to reload import strategy: {}", e))?;
+
+        let file_strategy = match strategy_str.as_str() {
+            "move" => soul_importer::FileManagementStrategy::Move,
+            "reference" => soul_importer::FileManagementStrategy::Reference,
+            _ => soul_importer::FileManagementStrategy::Copy,
+        };
+
+        let library_path: PathBuf =
+            soul_storage::settings::get_import_library_path(&self.pool, &self.user_id)
+                .await
+                .map_err(|e| format!("Failed to reload library path: {}", e))?
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    // Fallback to cached config's library path if not in database
+                    self.config.try_read().map(|c| c.library_path.clone()).unwrap_or_default()
+                });
+
+        let confidence_threshold: u8 =
+            soul_storage::settings::get_import_confidence_threshold(&self.pool, &self.user_id)
+                .await
+                .map_err(|e| format!("Failed to reload confidence threshold: {}", e))?;
+
+        let file_naming_pattern: String =
+            soul_storage::settings::get_import_file_naming_pattern(&self.pool, &self.user_id)
+                .await
+                .map_err(|e| format!("Failed to reload file naming pattern: {}", e))?;
+
+        let skip_duplicates: bool =
+            soul_storage::settings::get_import_skip_duplicates(&self.pool, &self.user_id)
+                .await
+                .map_err(|e| format!("Failed to reload skip duplicates: {}", e))?;
+
+        let config = ImportConfig {
+            library_path: library_path.clone(),
+            file_strategy,
+            confidence_threshold,
+            file_naming_pattern,
+            skip_duplicates,
+        };
+
         eprintln!(
             "[ImportManager::import_files] Using strategy: {:?}",
             config.file_strategy

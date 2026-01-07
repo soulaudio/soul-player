@@ -44,7 +44,7 @@ jobs:
         run: yarn workspace @soul-player/marketing type-check
 
       - name: Lint
-        run: yarn workspace @soul-player/marketing lint
+        run: ./node_modules/.bin/eslint applications/marketing --ext .ts,.tsx
 
       - name: Build
         run: yarn workspace @soul-player/marketing build

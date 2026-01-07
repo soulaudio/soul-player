@@ -8,7 +8,6 @@ projects:
   globs:
     - 'libraries/*'
     - 'applications/*'
-    - 'applications/firmware/*'
   sources:
     # Core libraries
     soul-core: 'libraries/soul-core'
@@ -30,9 +29,6 @@ projects:
     firmware: 'applications/firmware'
     shared: 'applications/shared'
     marketing: 'applications/marketing'
-
-    # Firmware sub-projects
-    soul-player-dap: 'applications/firmware/soul-player-dap'
 
 # Runner configuration
 runner:
