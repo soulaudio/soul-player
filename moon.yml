@@ -56,13 +56,13 @@ tasks:
       cache: true
 
   build-firmware:
-    command: 'cargo build -p soul-player-dap --release'
+    command: 'cargo build -p soul-player-firmware --release'
     inputs:
       - 'applications/firmware/**/*.rs'
       - 'libraries/soul-audio-embedded/**/*.rs'
       - 'libraries/soul-core/**/*.rs'
     outputs:
-      - 'target/release/soul-player-dap*'
+      - 'target/release/soul-player-firmware*'
     options:
       cache: true
       runInCI: false
@@ -125,7 +125,7 @@ tasks:
   # ============================================================================
 
   lint:
-    command: 'cargo clippy --workspace --all-targets --all-features -- -D warnings'
+    command: 'cargo clippy --lib --bins --all-features -- -D warnings'
     inputs:
       - 'libraries/**/*.rs'
       - 'applications/**/*.rs'
@@ -166,7 +166,40 @@ tasks:
   # ============================================================================
 
   audit:
-    command: 'cargo audit'
+    command: |
+      cargo audit --deny warnings \
+        --ignore RUSTSEC-2023-0071 \
+        --ignore RUSTSEC-2024-0370 \
+        --ignore RUSTSEC-2024-0411 \
+        --ignore RUSTSEC-2024-0412 \
+        --ignore RUSTSEC-2024-0413 \
+        --ignore RUSTSEC-2024-0414 \
+        --ignore RUSTSEC-2024-0415 \
+        --ignore RUSTSEC-2024-0416 \
+        --ignore RUSTSEC-2024-0417 \
+        --ignore RUSTSEC-2024-0418 \
+        --ignore RUSTSEC-2024-0419 \
+        --ignore RUSTSEC-2024-0420 \
+        --ignore RUSTSEC-2024-0421 \
+        --ignore RUSTSEC-2024-0422 \
+        --ignore RUSTSEC-2024-0423 \
+        --ignore RUSTSEC-2024-0424 \
+        --ignore RUSTSEC-2024-0425 \
+        --ignore RUSTSEC-2024-0426 \
+        --ignore RUSTSEC-2024-0427 \
+        --ignore RUSTSEC-2024-0428 \
+        --ignore RUSTSEC-2024-0429 \
+        --ignore RUSTSEC-2024-0436 \
+        --ignore RUSTSEC-2024-0437 \
+        --ignore RUSTSEC-2024-0438 \
+        --ignore RUSTSEC-2025-0057 \
+        --ignore RUSTSEC-2025-0075 \
+        --ignore RUSTSEC-2025-0080 \
+        --ignore RUSTSEC-2025-0081 \
+        --ignore RUSTSEC-2025-0098 \
+        --ignore RUSTSEC-2025-0100 \
+        --ignore RUSTSEC-2025-0119 \
+        --ignore RUSTSEC-2025-0134
     inputs:
       - 'Cargo.lock'
     options:

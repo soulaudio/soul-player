@@ -1,5 +1,10 @@
 name: CI
 
+# NOTE: This workflow uses direct cargo commands instead of Moon task runner
+# to avoid issues with shallow git checkouts in GitHub Actions. For local
+# development, you can use Moon commands (e.g., `moon run :lint`) which are
+# configured identically in moon.yml at the repository root.
+
 on:
   push:
     branches: [main, develop]
@@ -45,7 +50,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       - name: Run Clippy
         run: cargo clippy --lib --bins --all-features -- -D warnings
@@ -68,7 +73,50 @@ jobs:
         run: cargo install cargo-audit --locked
 
       - name: Run security audit
-        run: cargo audit
+        run: |
+          # Ignore known acceptable advisories from dependencies:
+          # - RUSTSEC-2023-0071: rsa timing attack (from sqlx-mysql, not used at runtime)
+          # - RUSTSEC-2024-041x: GTK3 unmaintained (from Tauri, waiting for GTK4 migration)
+          # - RUSTSEC-2024-0429: glib unsoundness (from Tauri GTK dependencies)
+          # - RUSTSEC-2024-0436: paste unmaintained (from lofty metadata library)
+          # - RUSTSEC-2024-0370/0437/0438: proc-macro-error unmaintained (from various deps)
+          # - RUSTSEC-2025-0057: fxhash unmaintained (from Tauri)
+          # - RUSTSEC-2025-007x/008x/010x: unic-* unmaintained (from Tauri)
+          # - RUSTSEC-2025-0119: number_prefix unmaintained (from indicatif progress bar)
+          # - RUSTSEC-2025-0134: rustls-pemfile unmaintained (from reqwest)
+          cargo audit --deny warnings \
+            --ignore RUSTSEC-2023-0071 \
+            --ignore RUSTSEC-2024-0370 \
+            --ignore RUSTSEC-2024-0411 \
+            --ignore RUSTSEC-2024-0412 \
+            --ignore RUSTSEC-2024-0413 \
+            --ignore RUSTSEC-2024-0414 \
+            --ignore RUSTSEC-2024-0415 \
+            --ignore RUSTSEC-2024-0416 \
+            --ignore RUSTSEC-2024-0417 \
+            --ignore RUSTSEC-2024-0418 \
+            --ignore RUSTSEC-2024-0419 \
+            --ignore RUSTSEC-2024-0420 \
+            --ignore RUSTSEC-2024-0421 \
+            --ignore RUSTSEC-2024-0422 \
+            --ignore RUSTSEC-2024-0423 \
+            --ignore RUSTSEC-2024-0424 \
+            --ignore RUSTSEC-2024-0425 \
+            --ignore RUSTSEC-2024-0426 \
+            --ignore RUSTSEC-2024-0427 \
+            --ignore RUSTSEC-2024-0428 \
+            --ignore RUSTSEC-2024-0429 \
+            --ignore RUSTSEC-2024-0436 \
+            --ignore RUSTSEC-2024-0437 \
+            --ignore RUSTSEC-2024-0438 \
+            --ignore RUSTSEC-2025-0057 \
+            --ignore RUSTSEC-2025-0075 \
+            --ignore RUSTSEC-2025-0080 \
+            --ignore RUSTSEC-2025-0081 \
+            --ignore RUSTSEC-2025-0098 \
+            --ignore RUSTSEC-2025-0100 \
+            --ignore RUSTSEC-2025-0119 \
+            --ignore RUSTSEC-2025-0134
 
   # ============================================================================
   # Tests - Multi-Platform
@@ -98,7 +146,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       # Install system dependencies (macOS)
       - name: Install macOS dependencies
@@ -129,7 +177,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       # Docker is available by default on GitHub Actions Ubuntu runners
       - name: Run testcontainer integration tests
@@ -152,7 +200,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       - name: Install tarpaulin
         run: cargo install cargo-tarpaulin --locked
@@ -204,7 +252,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
@@ -273,7 +321,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       - name: Check documentation
         run: cargo doc --workspace --no-deps --all-features
@@ -299,7 +347,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       - name: Check MSRV compilation
         run: cargo check --workspace --all-targets

@@ -1,4 +1,4 @@
-/// Transcoding service - FFmpeg wrapper for format/quality conversion
+/// Transcoding service - `FFmpeg` wrapper for format/quality conversion
 use crate::{
     config::{AudioFormat, Quality},
     error::{Result, ServerError},
@@ -38,8 +38,8 @@ impl TranscodingService {
         match format {
             AudioFormat::Mp3 => {
                 let bitrate = match quality {
-                    Quality::Original => "320k", // Highest MP3 quality
-                    Quality::High => "320k",
+                    // Highest MP3 quality
+                    Quality::Original | Quality::High => "320k",
                     Quality::Medium => "192k",
                     Quality::Low => "128k",
                 };
@@ -49,8 +49,7 @@ impl TranscodingService {
                 let compression = match quality {
                     Quality::Original => "0", // No compression (fastest)
                     Quality::High => "5",     // Moderate compression
-                    Quality::Medium => "8",   // High compression
-                    Quality::Low => "8",
+                    Quality::Medium | Quality::Low => "8",   // High compression
                 };
                 cmd.arg("-compression_level")
                     .arg(compression)
@@ -74,10 +73,8 @@ impl TranscodingService {
             AudioFormat::Wav => {
                 // WAV is typically uncompressed, sample rate determines "quality"
                 let sample_rate = match quality {
-                    Quality::Original => "48000",
-                    Quality::High => "48000",
-                    Quality::Medium => "44100",
-                    Quality::Low => "44100",
+                    Quality::Original | Quality::High => "48000",
+                    Quality::Medium | Quality::Low => "44100",
                 };
                 cmd.arg("-ar")
                     .arg(sample_rate)

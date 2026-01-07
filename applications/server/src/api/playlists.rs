@@ -136,7 +136,7 @@ pub async fn add_track_to_playlist(
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
-/// DELETE /api/playlists/:id/tracks/:track_id
+/// `DELETE /api/playlists/:id/tracks/:track_id`
 /// Remove a track from a playlist
 pub async fn remove_track_from_playlist(
     Path((id, track_id)): Path<(String, String)>,
@@ -186,7 +186,7 @@ pub async fn share_playlist(
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
-/// DELETE /api/playlists/:id/share/:user_id
+/// `DELETE /api/playlists/:id/share/:user_id`
 /// Unshare a playlist
 pub async fn unshare_playlist(
     Path((id, user_id)): Path<(String, String)>,

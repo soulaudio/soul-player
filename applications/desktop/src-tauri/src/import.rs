@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use soul_importer::{ImportConfig, ImportProgress, ImportSummary, MusicImporter};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex, RwLock};
 
 // Re-export SqlitePool from soul_storage

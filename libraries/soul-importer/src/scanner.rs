@@ -8,21 +8,13 @@ use walkdir::WalkDir;
 const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "flac", "ogg", "wav", "aac", "m4a", "opus"];
 
 /// Scanner for audio files in directories
+#[derive(Default)]
 pub struct FileScanner {
     /// Whether to follow symbolic links
     follow_links: bool,
 
     /// Maximum depth to traverse (-1 for unlimited)
     max_depth: Option<usize>,
-}
-
-impl Default for FileScanner {
-    fn default() -> Self {
-        Self {
-            follow_links: false,
-            max_depth: None,
-        }
-    }
 }
 
 impl FileScanner {

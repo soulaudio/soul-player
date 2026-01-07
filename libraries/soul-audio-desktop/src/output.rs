@@ -272,7 +272,7 @@ impl CpalOutput {
     }
 
     /// Resample audio buffer to target sample rate
-    fn resample_buffer(&self, buffer: &AudioBuffer, target_rate: u32) -> Result<Vec<f32>> {
+    fn resample_buffer(buffer: &AudioBuffer, target_rate: u32) -> Result<Vec<f32>> {
         use rubato::{
             Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType,
             WindowFunction,
@@ -302,8 +302,8 @@ impl CpalOutput {
         // Deinterleave input samples
         let mut deinterleaved = vec![Vec::with_capacity(buffer.frames()); channels];
         for frame_idx in 0..buffer.frames() {
-            for ch in 0..channels {
-                deinterleaved[ch].push(buffer.samples[frame_idx * channels + ch]);
+            for (ch, channel_vec) in deinterleaved.iter_mut().enumerate().take(channels) {
+                channel_vec.push(buffer.samples[frame_idx * channels + ch]);
             }
         }
 
@@ -316,8 +316,8 @@ impl CpalOutput {
         let output_frames = resampled[0].len();
         let mut interleaved = Vec::with_capacity(output_frames * channels);
         for frame_idx in 0..output_frames {
-            for ch in 0..channels {
-                interleaved.push(resampled[ch][frame_idx]);
+            for channel_data in resampled.iter().take(channels) {
+                interleaved.push(channel_data[frame_idx]);
             }
         }
 
@@ -328,10 +328,10 @@ impl CpalOutput {
 impl AudioOutput for CpalOutput {
     fn play(&mut self, buffer: &AudioBuffer) -> soul_core::Result<()> {
         // Convert buffer if sample rate doesn't match
-        let samples = if buffer.format.sample_rate.as_hz() != self.sample_rate {
-            self.resample_buffer(buffer, self.sample_rate)?
-        } else {
+        let samples = if buffer.format.sample_rate.as_hz() == self.sample_rate {
             buffer.samples.clone()
+        } else {
+            Self::resample_buffer(buffer, self.sample_rate)?
         };
 
         // Send play command to audio thread

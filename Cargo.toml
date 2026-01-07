@@ -178,6 +178,26 @@ unwrap_or_default = "allow"
 field_reassign_with_default = "allow"
 # Allow method names that might be confused with std traits
 should_implement_trait = "allow"
+# Allow passing by value when it's more convenient
+needless_pass_by_value = "allow"
+# Allow redundant closures for readability
+redundant_closure = "allow"
+# Allow functions with many parameters (common in apps)
+too_many_arguments = "allow"
+# Allow matching over () - sometimes more explicit
+match_unit = "allow"
+ignored_unit_patterns = "allow"
+# Allow items after statements
+items_after_statements = "allow"
+# Allow async functions without await (common in placeholder implementations)
+unused_async = "allow"
+# Allow needless borrow (sometimes more explicit)
+needless_borrow = "allow"
+# Allow Debug formatting in format macros (sometimes convenient)
+use_debug = "allow"
+unnecessary_debug_formatting = "allow"
+# Allow doc markdown lints (URLs, backticks) - we'll fix these incrementally
+doc_markdown = "allow"
 
 [profile.release]
 opt-level = 3

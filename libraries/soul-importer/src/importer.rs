@@ -141,13 +141,13 @@ impl MusicImporter {
         let file_hash = metadata::calculate_file_hash(file_path)?;
 
         // Check for duplicates
-        if config.skip_duplicates {
-            if let Some(_) = soul_storage::tracks::find_by_hash(pool, &file_hash).await? {
-                return Err(ImportError::Duplicate(format!(
-                    "File already exists: {}",
-                    file_path.display()
-                )));
-            }
+        if config.skip_duplicates
+            && (soul_storage::tracks::find_by_hash(pool, &file_hash).await?).is_some()
+        {
+            return Err(ImportError::Duplicate(format!(
+                "File already exists: {}",
+                file_path.display()
+            )));
         }
 
         // Handle file according to strategy (move/copy/reference)

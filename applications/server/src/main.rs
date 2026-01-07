@@ -132,7 +132,7 @@ async fn serve() -> anyhow::Result<()> {
             Arc::clone(&file_storage),
             config.transcoding.workers,
         ));
-        Arc::clone(&queue).start().await;
+        Arc::clone(&queue).start();
         tracing::info!(
             "Transcoding queue started with {} workers",
             config.transcoding.workers

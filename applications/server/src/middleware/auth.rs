@@ -50,7 +50,7 @@ pub async fn auth_middleware(
     Ok(next.run(request).await)
 }
 
-/// Implement FromRequestParts so AuthenticatedUser can be used as an extractor
+/// Implement `FromRequestParts` so `AuthenticatedUser` can be used as an extractor
 #[axum::async_trait]
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where

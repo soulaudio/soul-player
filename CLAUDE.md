@@ -7,7 +7,7 @@ Instructions for Claude Code when working with Soul Player.
 ## Project Overview
 
 **Soul Player**: Cross-platform music player (Desktop/Server/ESP32-S3)
-- **Stack**: Cargo workspace + Yarn workspace + Moon tasks + Tauri
+- **Stack**: Cargo workspace + Yarn workspace + Tauri (Moon tasks optional for local dev)
 - **Storage**: SQLite with multi-user schema from day 1
 - **Audio**: Symphonia decoder + platform-specific output
 - **Languages**: Rust (backend/libs) + TypeScript/React (frontend)

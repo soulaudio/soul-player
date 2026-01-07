@@ -7,7 +7,7 @@ export default function Document() {
         <meta charSet="utf-8" />
         <meta name="description" content="Local-first, cross-platform music player with multi-user server streaming and embedded hardware support" />
         <meta property="og:title" content="Soul Player - Your Music, Your Way" />
-        <meta property="og:description" content="Self-hosted music player with multi-user streaming. No subscriptions, no tracking." />
+        <meta property="og:description" content="Self-hosted music player with multi-user streaming." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://player.soulaudio.co" />
         <meta name="twitter:card" content="summary_large_image" />

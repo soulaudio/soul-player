@@ -5,27 +5,23 @@ use soul_core::types::{Album, Artist, Genre};
 use std::path::PathBuf;
 
 /// File management strategy for imports
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum FileManagementStrategy {
     /// Move files to managed library (recommended - saves disk space)
     Move,
 
     /// Copy files to managed library (recommended - preserves originals)
+    #[default]
     Copy,
 
     /// Reference files in current location (warning: breaks if files move)
     Reference,
 }
 
-impl Default for FileManagementStrategy {
-    fn default() -> Self {
-        Self::Copy
-    }
-}
-
 /// Configuration for import operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ImportConfig {
     /// Path to the managed library folder (e.g., ~/Music/soul-player/library)
     pub library_path: PathBuf,

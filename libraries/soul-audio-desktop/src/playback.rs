@@ -1,6 +1,6 @@
 //! Desktop playback integration
 //!
-//! Combines PlaybackManager with CPAL audio output for desktop playback.
+//! Combines `PlaybackManager` with CPAL audio output for desktop playback.
 
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -82,7 +82,7 @@ pub enum PlaybackEvent {
 
 /// Desktop playback integration
 ///
-/// Manages PlaybackManager + CPAL audio output + event handling
+/// Manages `PlaybackManager` + CPAL audio output + event handling
 pub struct DesktopPlayback {
     /// Command sender
     command_tx: Sender<PlaybackCommand>,
@@ -143,7 +143,7 @@ impl DesktopPlayback {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
-            .ok_or_else(|| crate::error::AudioError::DeviceNotFound)?;
+            .ok_or(crate::error::AudioError::DeviceNotFound)?;
 
         let config = Self::get_stream_config(&device)?;
         let sample_rate = config.sample_rate.0;

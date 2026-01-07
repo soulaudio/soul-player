@@ -1,7 +1,10 @@
 'use client'
 
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { PlayerFooter, QueueSidebar, SourcesDialog } from '@soul-player/shared'
+import { DemoModal } from './DemoModal'
+import { SettingsModalContent } from './SettingsModal'
 // Using inline SVG icons to match desktop app
 
 interface MainLayoutProps {
@@ -15,16 +18,21 @@ interface NavTab {
 }
 
 const NAV_TABS: NavTab[] = [
-  { path: '/', label: 'Library', icon: null },
-  { path: '/playlists', label: 'Playlists', icon: null },
-  { path: '/artists', label: 'Artists', icon: null },
-  { path: '/albums', label: 'Albums', icon: null },
-  { path: '/genres', label: 'Genres', icon: null },
+  { path: '/', label: 'Library', icon: '📚' },
+  { path: '/playlists', label: 'Playlists', icon: '🎵' },
+  { path: '/artists', label: 'Artists', icon: '👤' },
+  { path: '/albums', label: 'Albums', icon: '💿' },
+  { path: '/genres', label: 'Genres', icon: '🎸' },
 ]
 
 export function MainLayout({ children }: MainLayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
+
+  // Modal states
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isSourcesOpen, setIsSourcesOpen] = useState(false)
+  const [showQueue, setShowQueue] = useState(false)
 
   const isActive = (path: string) => {
     if (path === '/') {
@@ -34,7 +42,8 @@ export function MainLayout({ children }: MainLayoutProps) {
   }
 
   return (
-    <div className="flex flex-col bg-background text-foreground" style={{ height: '100%' }}>
+    <div className="flex bg-background text-foreground" style={{ height: '100%' }}>
+      <div className="flex flex-col flex-1">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="flex items-center justify-between px-4 py-2">
@@ -86,10 +95,12 @@ export function MainLayout({ children }: MainLayoutProps) {
             {/* Divider */}
             <div className="w-px h-6 bg-border" />
 
-            {/* Import Button */}
+            {/* Import Button - Demo Only */}
             <button
-              className="p-2 rounded-lg hover:bg-accent transition-colors"
-              aria-label="Import Music"
+              className="p-2 rounded-lg hover:bg-accent transition-colors opacity-50 cursor-not-allowed"
+              aria-label="Import Music (Demo)"
+              title="Import is not available in demo"
+              disabled
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -98,11 +109,25 @@ export function MainLayout({ children }: MainLayoutProps) {
 
             {/* Sources Button */}
             <button
+              onClick={() => setIsSourcesOpen(true)}
               className="p-2 rounded-lg hover:bg-accent transition-colors"
               aria-label="Manage Sources"
+              title="Manage music sources"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+              </svg>
+            </button>
+
+            {/* Queue Button */}
+            <button
+              onClick={() => setShowQueue(!showQueue)}
+              className="p-2 rounded-lg hover:bg-accent transition-colors"
+              aria-label="Toggle queue"
+              title="Show queue"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
             </button>
 
@@ -111,9 +136,10 @@ export function MainLayout({ children }: MainLayoutProps) {
 
             {/* Settings Button */}
             <button
-              onClick={() => navigate('/settings')}
+              onClick={() => setIsSettingsOpen(true)}
               className="p-2 rounded-lg hover:bg-accent transition-colors"
               aria-label="Settings"
+              title="Open settings"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -127,64 +153,30 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-6">{children}</main>
 
-      {/* Player Footer */}
-      <footer className="border-t bg-card">
-        {/* Main controls row */}
-        <div className="p-4">
-          <div className="grid grid-cols-3 items-center gap-4">
-            {/* Left: Track info */}
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-12 h-12 bg-muted rounded flex-shrink-0" />
-              <div className="min-w-0">
-                <div className="text-sm font-medium truncate">Bohemian Rhapsody</div>
-                <div className="text-xs text-muted-foreground truncate">Queen</div>
-              </div>
-            </div>
+      {/* Player Footer - using shared component */}
+      <PlayerFooter />
 
-            {/* Center: Playback controls */}
-            <div className="flex items-center justify-center gap-2">
-              <button className="p-2 hover:bg-accent rounded-full transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M8.445 14.832A1 1 0 0010 14v-2.798l5.445 3.63A1 1 0 0017 14V6a1 1 0 00-1.555-.832L10 8.798V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4z" />
-                </svg>
-              </button>
-              <button className="p-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-full transition-colors">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" />
-                </svg>
-              </button>
-              <button className="p-2 hover:bg-accent rounded-full transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M4.555 5.168A1 1 0 003 6v8a1 1 0 001.555.832L10 11.202V14a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4A1 1 0 0010 6v2.798l-5.445-3.63z" />
-                </svg>
-              </button>
-            </div>
+      {/* Modals */}
+      <DemoModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        title="Settings"
+      >
+        <SettingsModalContent />
+      </DemoModal>
 
-            {/* Right: Volume control */}
-            <div className="flex items-center justify-end gap-2">
-              <button className="p-2 hover:bg-accent rounded-full transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
-                </svg>
-              </button>
-              <div className="w-24 h-1 bg-muted rounded-full overflow-hidden">
-                <div className="h-full w-3/4 bg-primary" />
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Sources Dialog - using shared component */}
+      <SourcesDialog
+        open={isSourcesOpen}
+        onClose={() => setIsSourcesOpen(false)}
+      />
+      </div>
 
-        {/* Progress bar row */}
-        <div className="px-4 pb-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>2:34</span>
-            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full w-1/3 bg-primary" />
-            </div>
-            <span>5:55</span>
-          </div>
-        </div>
-      </footer>
+      {/* Queue Sidebar - using shared component */}
+      <QueueSidebar
+        isOpen={showQueue}
+        onClose={() => setShowQueue(false)}
+      />
     </div>
   )
 }

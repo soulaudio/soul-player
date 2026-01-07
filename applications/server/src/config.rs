@@ -152,13 +152,11 @@ impl ServerConfig {
             ));
         }
 
-        if self.transcoding.enabled {
-            if !self.transcoding.ffmpeg_path.exists() {
-                return Err(ServerError::Config(format!(
-                    "FFmpeg not found at {:?}",
-                    self.transcoding.ffmpeg_path
-                )));
-            }
+        if self.transcoding.enabled && !self.transcoding.ffmpeg_path.exists() {
+            return Err(ServerError::Config(format!(
+                "FFmpeg not found at {}",
+                self.transcoding.ffmpeg_path.display()
+            )));
         }
 
         Ok(())

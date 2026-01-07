@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { playerCommands } from '../lib/tauri';
+import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import { usePlayerStore } from '../stores/player';
 
 interface UseSeekBarReturn {
@@ -18,6 +18,7 @@ interface UseSeekBarReturn {
  * @returns Seek bar state and handlers
  */
 export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
+  const commands = usePlayerCommands();
   const [isDragging, setIsDragging] = useState(false);
   const [seekPosition, setSeekPosition] = useState<number | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,7 +85,7 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
       usePlayerStore.getState().setProgress(progressPercentage);
 
       // Send seek command to backend
-      playerCommands.seek(targetPosition)
+      commands.seek(targetPosition)
         .then(() => {
           console.log('[useSeekBar] Seek command succeeded');
         })
@@ -105,7 +106,7 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
     // Reset dragging state
     setIsDragging(false);
     setSeekPosition(null);
-  }, [seekPosition]);
+  }, [seekPosition, commands]);
 
   return {
     isDragging,

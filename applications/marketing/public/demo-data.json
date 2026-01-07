@@ -1,0 +1,31 @@
+{
+  "tracks": [
+    {
+      "id": "1",
+      "title": "Dark",
+      "artist": "Sebastián Stupák",
+      "album": "Demo Collection",
+      "duration": 42,
+      "trackNumber": 1,
+      "path": "/demo-audio/dark.flac"
+    },
+    {
+      "id": "2",
+      "title": "Eyes",
+      "artist": "Sebastián Stupák",
+      "album": "Demo Collection",
+      "duration": 35,
+      "trackNumber": 2,
+      "path": "/demo-audio/eyes.flac"
+    }
+  ],
+  "albums": [
+    {
+      "id": "1",
+      "title": "Demo Collection",
+      "artist": "Sebastián Stupák",
+      "year": 2024,
+      "trackIds": ["1", "2"]
+    }
+  ]
+}

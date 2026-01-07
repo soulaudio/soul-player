@@ -1,0 +1,141 @@
+'use client';
+
+import { useState } from 'react';
+import { Play, Pause, Music } from 'lucide-react';
+import { usePlayerStore } from '../stores/player';
+import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
+import type { QueueTrack } from '../contexts/PlayerCommandsContext';
+
+export interface Track {
+  id: number | string;
+  title: string;
+  artist?: string;
+  album?: string;
+  duration?: number;
+  trackNumber?: number;
+}
+
+interface TrackListProps {
+  tracks: Track[];
+  /** Callback to build queue from tracks - platform-specific implementation */
+  buildQueue: (tracks: Track[], clickedTrack: Track, clickedIndex: number) => QueueTrack[];
+  onTrackAction?: (track: Track) => void;
+  /** Optional menu component to render for each track */
+  renderMenu?: (track: Track) => React.ReactNode;
+}
+
+function formatDuration(seconds?: number): string {
+  if (!seconds) return '--:--';
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+export function TrackList({ tracks, buildQueue, onTrackAction, renderMenu }: TrackListProps) {
+  const [hoveredTrackId, setHoveredTrackId] = useState<number | string | null>(null);
+  const { currentTrack, isPlaying } = usePlayerStore();
+  const commands = usePlayerCommands();
+
+  const handlePlay = async (track: Track, index: number) => {
+    // Use platform-specific queue building logic
+    const queue = buildQueue(tracks, track, index);
+
+    console.log('[TrackList] Playing queue with', queue.length, 'tracks');
+
+    try {
+      await commands.playQueue(queue, 0);
+      onTrackAction?.(track);
+    } catch (error) {
+      console.error('[TrackList] Failed to play track:', error);
+    }
+  };
+
+  const handlePause = async () => {
+    try {
+      await commands.pausePlayback();
+    } catch (error) {
+      console.error('[TrackList] Failed to pause:', error);
+    }
+  };
+
+  if (tracks.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+        <Music className="w-12 h-12 mb-4 opacity-50" />
+        <p>No tracks found</p>
+        <p className="text-sm mt-1">Add music to get started</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="bg-muted/50">
+        <div className="grid grid-cols-[40px_minmax(200px,1fr)_minmax(150px,200px)_minmax(150px,200px)_80px_40px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground">
+          <div>#</div>
+          <div>Title</div>
+          <div>Artist</div>
+          <div>Album</div>
+          <div className="text-right">Duration</div>
+          <div></div>
+        </div>
+      </div>
+      <div>
+        {tracks.map((track, index) => {
+          const trackId = String(track.id);
+          const isCurrentTrack = String(currentTrack?.id) === trackId;
+          const showPauseButton = isCurrentTrack && isPlaying;
+
+          return (
+            <div
+              key={trackId}
+              className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(150px,200px)_minmax(150px,200px)_80px_40px] gap-4 px-4 py-3 hover:bg-accent/50 border-b last:border-b-0 transition-colors group ${
+                isCurrentTrack ? 'bg-accent/30' : ''
+              }`}
+              onMouseEnter={() => setHoveredTrackId(trackId)}
+              onMouseLeave={() => setHoveredTrackId(null)}
+              onDoubleClick={() => handlePlay(track, index)}
+            >
+              <div className="flex items-center justify-center">
+                {hoveredTrackId === trackId || isCurrentTrack ? (
+                  <button
+                    onClick={() => (showPauseButton ? handlePause() : handlePlay(track, index))}
+                    className="w-8 h-8 flex items-center justify-center rounded hover:bg-primary/10 transition-colors"
+                    aria-label={showPauseButton ? 'Pause' : 'Play'}
+                  >
+                    {showPauseButton ? (
+                      <Pause className="w-4 h-4" fill="currentColor" />
+                    ) : (
+                      <Play className="w-4 h-4" fill="currentColor" />
+                    )}
+                  </button>
+                ) : (
+                  <span className="text-muted-foreground text-sm">
+                    {track.trackNumber || index + 1}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col justify-center min-w-0">
+                <div className={`truncate ${isCurrentTrack ? 'text-primary font-medium' : ''}`}>
+                  {track.title}
+                </div>
+              </div>
+              <div className="flex items-center text-sm text-muted-foreground truncate">
+                {track.artist || 'Unknown Artist'}
+              </div>
+              <div className="flex items-center text-sm text-muted-foreground truncate">
+                {track.album || '—'}
+              </div>
+              <div className="flex items-center justify-end text-sm text-muted-foreground font-mono">
+                {formatDuration(track.duration)}
+              </div>
+              <div className="flex items-center justify-end">
+                {renderMenu?.(track)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

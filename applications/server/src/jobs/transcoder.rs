@@ -36,7 +36,7 @@ impl TranscodingQueue {
     }
 
     /// Start worker tasks
-    pub async fn start(self: Arc<Self>) {
+    pub fn start(self: Arc<Self>) {
         for worker_id in 0..self.workers {
             let queue = Arc::clone(&self);
             tokio::spawn(async move {

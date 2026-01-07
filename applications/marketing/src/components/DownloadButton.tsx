@@ -89,7 +89,7 @@ export function DownloadButton() {
       <a
         href={currentPlatform.downloadUrl}
         data-download-button
-        className="group inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 bg-white text-black rounded-full font-semibold transition-all duration-700 text-sm sm:text-base md:text-lg shadow-lg hover:scale-105"
+        className="group inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 bg-primary text-primary-foreground rounded-full font-semibold transition-all duration-700 text-sm sm:text-base md:text-lg shadow-lg hover:scale-105"
       >
         <Download className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-y-0.5 transition-transform" />
         <span className="whitespace-nowrap">
@@ -101,7 +101,7 @@ export function DownloadButton() {
         <button
           onClick={() => setShowDropdown(!showDropdown)}
           data-other-platforms
-          className="text-sm text-violet-200/80 transition-colors duration-700 inline-flex items-center gap-1 hover:opacity-80"
+          className="text-sm transition-colors duration-700 inline-flex items-center gap-1 hover:opacity-80 text-muted-foreground"
         >
           Other platforms
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
@@ -111,11 +111,7 @@ export function DownloadButton() {
         {showDropdown && mounted && (
           <div
             data-platforms-dropdown
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-2 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden min-w-[220px] z-[9999] transition-colors duration-700 animate-in fade-in slide-in-from-top-2"
-            style={{
-              background: 'rgba(39, 39, 42, 0.95)',
-              border: '1px solid rgba(63, 63, 70, 0.8)'
-            }}
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-2 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden min-w-[220px] z-[9999] transition-colors duration-700 animate-in fade-in slide-in-from-top-2 bg-card border border-border"
           >
             <div className="p-1.5">
               {otherPlatforms.map(([key, info]) => {
@@ -126,29 +122,23 @@ export function DownloadButton() {
                     href={info.downloadUrl}
                     onClick={() => setShowDropdown(false)}
                     data-dropdown-item
-                    className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-zinc-700/50"
-                    style={{
-                      color: 'rgb(228, 228, 231)'
-                    }}
+                    className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-muted text-foreground"
                   >
-                    <PlatformIcon className="w-4 h-4 transition-colors duration-200 group-hover:text-violet-400" style={{ color: 'rgb(161, 161, 170)' }} />
+                    <PlatformIcon className="w-4 h-4 transition-colors duration-200 text-muted-foreground group-hover:text-primary" />
                     <span className="font-medium">{info.name}</span>
                   </a>
                 )
               })}
             </div>
 
-            <div data-dropdown-divider className="p-1.5" style={{ borderTop: '1px solid rgba(63, 63, 70, 0.6)' }}>
+            <div data-dropdown-divider className="p-1.5 border-t border-border">
               <a
                 href="#download-server"
                 onClick={() => setShowDropdown(false)}
                 data-dropdown-item
-                className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-zinc-700/50"
-                style={{
-                  color: 'rgb(228, 228, 231)'
-                }}
+                className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-muted text-foreground"
               >
-                <Boxes className="w-4 h-4 transition-colors duration-200 group-hover:text-violet-400" style={{ color: 'rgb(161, 161, 170)' }} />
+                <Boxes className="w-4 h-4 transition-colors duration-200 text-muted-foreground group-hover:text-primary" />
                 <span className="font-medium">Server (Docker)</span>
               </a>
             </div>

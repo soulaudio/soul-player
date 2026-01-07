@@ -7,7 +7,7 @@ use crate::Result;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for paid features
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PaidFeaturesConfig {
     /// MusicBrainz API key (if using paid tier)
     pub musicbrainz_api_key: Option<String>,
@@ -19,18 +19,8 @@ pub struct PaidFeaturesConfig {
     pub discogs_api_key: Option<String>,
 
     /// Whether paid features are enabled
+    #[serde(default)]
     pub enabled: bool,
-}
-
-impl Default for PaidFeaturesConfig {
-    fn default() -> Self {
-        Self {
-            musicbrainz_api_key: None,
-            acoustid_api_key: None,
-            discogs_api_key: None,
-            enabled: false,
-        }
-    }
 }
 
 /// Metadata from online databases

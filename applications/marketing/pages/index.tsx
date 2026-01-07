@@ -1,18 +1,16 @@
 import { PremiumHero } from '@/components/PremiumHero'
-import { FeaturesSection } from '@/components/FeaturesSection'
 import { ComparisonSection } from '@/components/ComparisonSection'
-import { DiscoveryExplainer } from '@/components/DiscoveryExplainer'
-import { ComingSoonSection } from '@/components/ComingSoonSection'
+import { WhySoulPlayer } from '@/components/WhySoulPlayer'
+import { SupportSection } from '@/components/SupportSection'
 import { Footer } from '@/components/Footer'
 
 export default function Home() {
   return (
-    <main className="min-h-screen" style={{ backgroundColor: 'hsl(250, 15%, 4%)' }}>
+    <main className="min-h-screen bg-background">
       <PremiumHero />
-      <FeaturesSection />
+      <WhySoulPlayer />
       <ComparisonSection />
-      <DiscoveryExplainer />
-      <ComingSoonSection />
+      <SupportSection />
       <Footer />
     </main>
   )

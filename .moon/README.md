@@ -1,6 +1,16 @@
 # Moon Task Orchestration
 
-Soul Player uses [Moon](https://moonrepo.dev) for task orchestration and build management.
+Soul Player uses [Moon](https://moonrepo.dev) for task orchestration and build management in local development.
+
+> **Note**: CI/CD uses direct `cargo` commands to avoid issues with shallow git checkouts in GitHub Actions. Moon tasks are configured identically to CI commands for consistency.
+
+## Validation
+
+To check that Moon configuration is correct without installing Moon:
+
+```bash
+./.moon/validate.sh
+```
 
 ## Quick Start
 

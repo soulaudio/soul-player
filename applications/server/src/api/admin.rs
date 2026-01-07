@@ -120,7 +120,7 @@ pub async fn scan_status(_auth: AuthenticatedUser) -> Result<Json<serde_json::Va
 }
 
 /// Helper to store user credentials (placeholder)
-async fn store_user_credentials(
+fn store_user_credentials(
     _app_state: &AppState,
     _user_id: &UserId,
     _password_hash: &str,

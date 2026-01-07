@@ -182,7 +182,7 @@ impl LocalAudioSource {
         Ok(true)
     }
 
-    /// Convert Symphonia AudioBufferRef to interleaved f32 samples
+    /// Convert Symphonia `AudioBufferRef` to interleaved f32 samples
     fn convert_to_f32_interleaved(
         decoded: AudioBufferRef,
         target_channels: u16,
@@ -369,7 +369,7 @@ impl AudioSource for LocalAudioSource {
             .seek(
                 symphonia::core::formats::SeekMode::Accurate,
                 symphonia::core::formats::SeekTo::TimeStamp {
-                    ts: seek_ts as u64,
+                    ts: seek_ts,
                     track_id: self.track_id,
                 },
             )

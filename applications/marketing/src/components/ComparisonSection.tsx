@@ -18,18 +18,6 @@ export function ComparisonSection() {
         <div className="max-w-5xl mx-auto">
           <ComparisonTable />
         </div>
-
-        <div className="mt-16 text-center">
-          <div className="inline-block bg-violet-950/30 border border-violet-500/30 rounded-2xl p-8 max-w-2xl">
-            <h3 className="text-2xl font-bold mb-3">
-              Own Your Music Library
-            </h3>
-            <p className="text-zinc-400">
-              Soul Player combines the convenience of streaming services with the privacy
-              of self-hosted solutions. No subscriptions, no tracking, no compromises.
-            </p>
-          </div>
-        </div>
       </div>
     </section>
   )

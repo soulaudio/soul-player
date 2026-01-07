@@ -266,7 +266,7 @@ fn normalize_sort_name(name: &str) -> String {
 
 /// Canonicalize genre name (standardize common variations)
 fn canonicalize_genre_name(name: &str) -> String {
-    let normalized = normalize_string(name).replace('-', " ").replace('_', " ");
+    let normalized = normalize_string(name).replace(['-', '_'], " ");
 
     // Map common variations to canonical forms
     match normalized.as_str() {

@@ -22,7 +22,7 @@ pub struct StreamQuery {
     pub quality: Option<String>, // "original", "high", "medium", "low"
 }
 
-/// GET /api/stream/:track_id
+/// `GET /api/stream/:track_id`
 /// Stream audio file with range request support
 pub async fn stream_track(
     Path(track_id): Path<String>,

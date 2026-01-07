@@ -1,12 +1,3 @@
-import nextra from 'nextra'
-
-const withNextra = nextra({
-  latex: false,
-  search: {
-    codeblocks: false
-  }
-})
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
@@ -17,6 +8,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  turbopack: {},
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
@@ -26,4 +18,4 @@ const nextConfig = {
   }
 }
 
-export default withNextra(nextConfig)
+export default nextConfig

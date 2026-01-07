@@ -67,9 +67,9 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     // Extract audio properties
     let properties = tagged_file.properties();
     let duration_seconds = properties.duration().as_secs_f64();
-    let bitrate = properties.audio_bitrate().map(|b| b as u32);
+    let bitrate = properties.audio_bitrate();
     let sample_rate = properties.sample_rate();
-    let channels = properties.channels().map(|c| c as u8);
+    let channels = properties.channels();
 
     // Extract tag metadata
     let (title, artist, album, album_artist, track_number, disc_number, year, genres) =
@@ -80,8 +80,8 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
             let album_artist = tag
                 .get_string(&lofty::ItemKey::AlbumArtist)
                 .map(|s| s.to_string());
-            let track_number = tag.track().map(|t| t as u32);
-            let disc_number = tag.disk().map(|d| d as u32);
+            let track_number = tag.track();
+            let disc_number = tag.disk();
             let year = tag.year().map(|y| y as i32);
 
             // Extract genres (can be multiple, separated by various delimiters)

@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { usePlayerStore } from '@soul-player/shared/stores/player';
-import { TrackList, Track } from '../components/TrackList';
+import { TrackList, type Track, type QueueTrack } from '@soul-player/shared';
 import { AlbumGrid, Album } from '../components/AlbumGrid';
+import { TrackMenu } from '../components/TrackMenu';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Music, Disc3 } from 'lucide-react';
 
 type ViewMode = 'tracks' | 'albums';
@@ -15,16 +16,25 @@ interface DatabaseHealth {
   issues: string[];
 }
 
+// Desktop-specific track interface
+interface DesktopTrack extends Track {
+  artist_name?: string;
+  album_title?: string;
+  duration_seconds?: number;
+  file_path?: string;
+  year?: number;
+}
+
 export function LibraryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('tracks');
-  const [tracks, setTracks] = useState<Track[]>([]);
+  const [tracks, setTracks] = useState<DesktopTrack[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [healthWarning, setHealthWarning] = useState<string | null>(null);
-
-  // Use global player store instead of local state
-  const { currentTrack, isPlaying } = usePlayerStore();
+  const [confirmDelete, setConfirmDelete] = useState<DesktopTrack | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     loadLibrary();
@@ -46,7 +56,7 @@ export function LibraryPage() {
     setHealthWarning(null);
     try {
       const [tracksData, albumsData, health] = await Promise.all([
-        invoke<Track[]>('get_all_tracks'),
+        invoke<DesktopTrack[]>('get_all_tracks'),
         invoke<Album[]>('get_all_albums'),
         invoke<DatabaseHealth>('check_database_health'),
       ]);
@@ -79,14 +89,41 @@ export function LibraryPage() {
     }
   };
 
-  const handleTrackPlay = (track: Track) => {
-    // Playback state will be updated via backend events (usePlaybackEvents)
-    console.log('[LibraryPage] Playing track:', track.title);
-  };
+  // Build queue callback - platform-specific logic
+  const buildQueue = useCallback((_allTracks: Track[], clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
+    // Get desktop tracks to access file_path
+    const desktopTracks = tracks;
 
-  const handleTrackPause = () => {
-    // Playback state will be updated via backend events (usePlaybackEvents)
-    console.log('[LibraryPage] Pausing playback');
+    // Filter out tracks without file paths
+    const validTracks = desktopTracks.filter((t) => t.file_path);
+
+    // Find the valid index of the clicked track in desktopTracks
+    const validClickedIndex = validTracks.findIndex(t => t.id === clickedTrack.id);
+    if (validClickedIndex === -1) {
+      console.error('[LibraryPage] Clicked track not found in valid tracks');
+      return [];
+    }
+
+    // Build queue: all valid tracks starting from clicked one, then wrap around
+    const queue: QueueTrack[] = [
+      ...validTracks.slice(validClickedIndex),
+      ...validTracks.slice(0, validClickedIndex),
+    ].map((t) => ({
+      trackId: String(t.id),
+      title: String(t.title ||'Unknown'),
+      artist: t.artist_name || 'Unknown Artist',
+      album: t.album_title || null,
+      filePath: t.file_path!,
+      durationSeconds: t.duration_seconds || null,
+      trackNumber: t.trackNumber || null,
+    }));
+
+    return queue;
+  }, [tracks]);
+
+  const handleTrackPlay = (track: Track) => {
+    // Playback state will be updated via backend events
+    console.log('[LibraryPage] Playing track:', track.title);
   };
 
   const handleAlbumPlay = async (album: Album) => {
@@ -94,9 +131,33 @@ export function LibraryPage() {
     console.log('Play album:', album);
   };
 
-  const handleTrackDeleted = async (trackId: number) => {
-    console.log('[LibraryPage] Track deleted, refreshing list:', trackId);
-    await loadLibrary();
+  const handleDeleteTrack = (trackId: number) => {
+    const track = tracks.find((t) => t.id === trackId);
+    if (track) {
+      setConfirmDelete(track);
+      setDeleteError(null);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await invoke('delete_track', { id: confirmDelete.id });
+      console.log('[LibraryPage] Track deleted successfully:', confirmDelete.id);
+
+      // Reload library
+      await loadLibrary();
+      setConfirmDelete(null);
+    } catch (error) {
+      console.error('[LibraryPage] Failed to delete track:', error);
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (loading) {
@@ -191,17 +252,40 @@ export function LibraryPage() {
       <div className="flex-1 overflow-auto">
         {viewMode === 'tracks' ? (
           <TrackList
-            tracks={tracks}
-            currentTrackId={currentTrack?.id}
-            isPlaying={isPlaying}
-            onPlay={handleTrackPlay}
-            onPause={handleTrackPause}
-            onTrackDeleted={handleTrackDeleted}
+            tracks={tracks.map(t => ({
+              id: t.id,
+              title: String(t.title || 'Unknown'),
+              artist: t.artist_name,
+              album: t.album_title,
+              duration: t.duration_seconds,
+              trackNumber: t.trackNumber,
+            }))}
+            buildQueue={buildQueue}
+            onTrackAction={handleTrackPlay}
+            renderMenu={(track) => (
+              <TrackMenu
+                trackId={Number(track.id)}
+                trackTitle={track.title}
+                onDelete={() => handleDeleteTrack(Number(track.id))}
+              />
+            )}
           />
         ) : (
           <AlbumGrid albums={albums} onPlay={handleAlbumPlay} />
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Delete Track"
+        message={`Are you sure you want to delete "${confirmDelete?.title}"? This will remove the track from your library.${deleteError ? `\n\nError: ${deleteError}` : ''}`}
+        confirmText="Delete"
+        confirmVariant="danger"
+        onConfirm={handleConfirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

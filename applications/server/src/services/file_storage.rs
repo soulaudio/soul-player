@@ -87,8 +87,8 @@ impl FileStorage {
                 return Ok(path);
             }
             return Err(ServerError::NotFound(format!(
-                "Track file not found: {:?}",
-                path
+                "Track file not found: {}",
+                path.display()
             )));
         }
 
