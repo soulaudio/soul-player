@@ -42,13 +42,13 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
 
-      - name: Run Clippy (via Moon)
-        run: moon run :lint
+      - name: Run Clippy
+        run: cargo clippy --lib --bins --all-features -- -D warnings
 
   # ============================================================================
   # Security
@@ -67,13 +67,8 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
-
-      - name: Run security audit (via Moon)
-        run: moon run :audit
+      - name: Run security audit
+        run: cargo audit
 
   # ============================================================================
   # Tests - Multi-Platform
@@ -111,18 +106,9 @@ jobs:
         run: |
           brew install pkg-config
 
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
-
       # Run unit tests (libraries + applications)
-      - name: Run unit tests (via Moon)
-        run: moon run :test
-
-      # Run integration tests
-      - name: Run integration tests (via Moon)
-        run: moon run :test-integration
+      - name: Run unit tests
+        run: cargo test --workspace --lib --bins
         env:
           RUST_TEST_THREADS: 4
 
@@ -144,11 +130,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev pkg-config
-
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
 
       # Docker is available by default on GitHub Actions Ubuntu runners
       - name: Run testcontainer integration tests
@@ -176,13 +157,8 @@ jobs:
       - name: Install tarpaulin
         run: cargo install cargo-tarpaulin --locked
 
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
-
-      - name: Generate coverage (via Moon)
-        run: moon run :test-coverage
+      - name: Generate coverage
+        run: cargo tarpaulin --workspace --out Html --output-dir coverage
         continue-on-error: true
 
       - name: Upload coverage to Codecov
@@ -241,15 +217,8 @@ jobs:
         run: |
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
-
-      - name: Build workspace (via Moon)
-        run: moon run :build
-        env:
-          CARGO_BUILD_TARGET: ${{ matrix.target }}
+      - name: Build workspace
+        run: cargo build --workspace --all-features --target ${{ matrix.target }}
 
   # ============================================================================
   # Firmware Build Check (ESP32-S3 DAP)
@@ -273,11 +242,6 @@ jobs:
           cargo install espup --locked
           espup install
           . $HOME/export-esp.sh
-
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
 
       # Check that firmware compiles
       - name: Check ESP32-S3 DAP compilation
@@ -311,13 +275,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev pkg-config
 
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
-
-      - name: Check documentation (via Moon)
-        run: moon run :doc
+      - name: Check documentation
+        run: cargo doc --workspace --no-deps --all-features
         env:
           RUSTDOCFLAGS: "-D warnings"
 

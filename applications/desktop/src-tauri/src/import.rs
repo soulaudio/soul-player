@@ -298,9 +298,10 @@ impl ImportManager {
         // before the async update completes
         eprintln!("[ImportManager::import_files] Reloading config from database...");
 
-        let strategy_str: String = soul_storage::settings::get_import_strategy(&self.pool, &self.user_id)
-            .await
-            .map_err(|e| format!("Failed to reload import strategy: {}", e))?;
+        let strategy_str: String =
+            soul_storage::settings::get_import_strategy(&self.pool, &self.user_id)
+                .await
+                .map_err(|e| format!("Failed to reload import strategy: {}", e))?;
 
         let file_strategy = match strategy_str.as_str() {
             "move" => soul_importer::FileManagementStrategy::Move,
@@ -315,7 +316,10 @@ impl ImportManager {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| {
                     // Fallback to cached config's library path if not in database
-                    self.config.try_read().map(|c| c.library_path.clone()).unwrap_or_default()
+                    self.config
+                        .try_read()
+                        .map(|c| c.library_path.clone())
+                        .unwrap_or_default()
                 });
 
         let confidence_threshold: u8 =

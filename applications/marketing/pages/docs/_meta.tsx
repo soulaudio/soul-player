@@ -3,4 +3,4 @@ export default {
   'getting-started': 'Getting Started',
   features: 'Features',
   api: 'API Reference'
-}
+} as const

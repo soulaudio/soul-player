@@ -8,4 +8,4 @@ export default {
     title: 'Documentation',
     type: 'page'
   }
-}
+} as const
