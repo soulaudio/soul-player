@@ -2,8 +2,8 @@
 //!
 //! Tracks with support for multiple sources and availability tracking
 
-use super::{AlbumId, ArtistId, SourceId};
 use super::ids::TrackId;
+use super::{AlbumId, ArtistId, SourceId};
 use serde::{Deserialize, Serialize};
 
 /// Track with multi-source support

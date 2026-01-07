@@ -161,14 +161,7 @@ async fn test_e2e_import_creates_library_file() {
 
     // Create source file
     let source_file = temp_dir.path().join("original.mp3");
-    create_minimal_mp3_with_tags(
-        &source_file,
-        "My Song",
-        "My Artist",
-        None,
-        None,
-    )
-    .unwrap();
+    create_minimal_mp3_with_tags(&source_file, "My Song", "My Artist", None, None).unwrap();
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
@@ -390,14 +383,8 @@ async fn test_e2e_import_estimates_time_remaining() {
     // Create multiple files
     for i in 0..5 {
         let path = temp_dir.path().join(format!("song{}.mp3", i));
-        create_minimal_mp3_with_tags(
-            &path,
-            &format!("Song {}", i),
-            "Test Artist",
-            None,
-            None,
-        )
-        .unwrap();
+        create_minimal_mp3_with_tags(&path, &format!("Song {}", i), "Test Artist", None, None)
+            .unwrap();
     }
 
     let config = ImportConfig {

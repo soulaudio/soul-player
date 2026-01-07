@@ -67,23 +67,18 @@ pub async fn has_credentials(pool: &SqlitePool, user_id: &str) -> Result<bool> {
 
 /// Delete user credentials
 pub async fn delete_credentials(pool: &SqlitePool, user_id: &str) -> Result<()> {
-    sqlx::query!(
-        "DELETE FROM user_credentials WHERE user_id = ?",
-        user_id
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query!("DELETE FROM user_credentials WHERE user_id = ?", user_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
 
 /// Get all users
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<User>> {
-    let rows = sqlx::query!(
-        "SELECT id, name, created_at FROM users ORDER BY name"
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = sqlx::query!("SELECT id, name, created_at FROM users ORDER BY name")
+        .fetch_all(pool)
+        .await?;
 
     let users = rows
         .into_iter()

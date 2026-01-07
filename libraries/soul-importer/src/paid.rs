@@ -74,10 +74,7 @@ pub async fn fingerprint_lookup(
 /// Stub: Download album art from URL
 ///
 /// TODO: Implement album art downloading
-pub async fn download_album_art(
-    _url: &str,
-    _destination: &std::path::Path,
-) -> Result<()> {
+pub async fn download_album_art(_url: &str, _destination: &std::path::Path) -> Result<()> {
     // Stubbed out
     tracing::warn!("Album art download is not yet implemented");
     Ok(())

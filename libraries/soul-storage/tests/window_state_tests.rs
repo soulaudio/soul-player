@@ -1,4 +1,7 @@
-use soul_storage::{create_pool, run_migrations, window_state::{self, WindowState}};
+use soul_storage::{
+    create_pool, run_migrations,
+    window_state::{self, WindowState},
+};
 
 #[tokio::test]
 async fn test_get_default_window_state() {
@@ -75,7 +78,9 @@ async fn test_update_window_state() {
         maximized: false,
         last_route: Some("/".to_string()),
     };
-    window_state::save_window_state(&pool, "1", &state1).await.unwrap();
+    window_state::save_window_state(&pool, "1", &state1)
+        .await
+        .unwrap();
 
     // Update to new state
     let state2 = WindowState {
@@ -86,7 +91,9 @@ async fn test_update_window_state() {
         maximized: true,
         last_route: Some("/playlists".to_string()),
     };
-    window_state::save_window_state(&pool, "1", &state2).await.unwrap();
+    window_state::save_window_state(&pool, "1", &state2)
+        .await
+        .unwrap();
 
     // Verify updated state
     let loaded = window_state::get_window_state(&pool, "1").await.unwrap();
@@ -111,7 +118,7 @@ async fn test_maximized_state() {
 
     // Save maximized state
     let state = WindowState {
-        x: None,  // Position doesn't matter when maximized
+        x: None, // Position doesn't matter when maximized
         y: None,
         width: 1920,
         height: 1080,
@@ -119,7 +126,9 @@ async fn test_maximized_state() {
         last_route: None,
     };
 
-    window_state::save_window_state(&pool, "1", &state).await.unwrap();
+    window_state::save_window_state(&pool, "1", &state)
+        .await
+        .unwrap();
     let loaded = window_state::get_window_state(&pool, "1").await.unwrap();
 
     assert_eq!(loaded.maximized, true);
@@ -158,8 +167,12 @@ async fn test_multi_user_window_states() {
         last_route: Some("/playlists".to_string()),
     };
 
-    window_state::save_window_state(&pool, "1", &state1).await.unwrap();
-    window_state::save_window_state(&pool, "2", &state2).await.unwrap();
+    window_state::save_window_state(&pool, "1", &state1)
+        .await
+        .unwrap();
+    window_state::save_window_state(&pool, "2", &state2)
+        .await
+        .unwrap();
 
     // Verify each user gets their own state
     let loaded1 = window_state::get_window_state(&pool, "1").await.unwrap();
@@ -191,7 +204,9 @@ async fn test_none_position_values() {
         last_route: Some("/".to_string()),
     };
 
-    window_state::save_window_state(&pool, "1", &state).await.unwrap();
+    window_state::save_window_state(&pool, "1", &state)
+        .await
+        .unwrap();
     let loaded = window_state::get_window_state(&pool, "1").await.unwrap();
 
     assert_eq!(loaded.x, None);

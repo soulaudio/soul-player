@@ -46,7 +46,9 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Track>> {
             origin_source_id: row.origin_source_id,
             musicbrainz_recording_id: row.musicbrainz_recording_id,
             fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(row.metadata_source.as_deref().unwrap_or("file")),
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
             created_at: row.created_at,
             updated_at: row.updated_at,
             availability,
@@ -109,7 +111,8 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
             origin_source_id: row.origin_source_id,
             musicbrainz_recording_id: row.musicbrainz_recording_id,
             fingerprint: row.fingerprint,
-            metadata_source: row.metadata_source
+            metadata_source: row
+                .metadata_source
                 .and_then(|s| match s.as_str() {
                     "file" => Some(MetadataSource::File),
                     "enriched" => Some(MetadataSource::Enriched),
@@ -128,7 +131,9 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
 
 /// Get track by ID
 pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> {
-    let id_int: i64 = id.as_str().parse()
+    let id_int: i64 = id
+        .as_str()
+        .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", id)))?;
 
     let row = sqlx::query!(
@@ -175,7 +180,9 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
                 origin_source_id: row.origin_source_id,
                 musicbrainz_recording_id: row.musicbrainz_recording_id,
                 fingerprint: row.fingerprint,
-                metadata_source: parse_metadata_source(row.metadata_source.as_deref().unwrap_or("file")),
+                metadata_source: parse_metadata_source(
+                    row.metadata_source.as_deref().unwrap_or("file"),
+                ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
                 availability,
@@ -233,7 +240,9 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
             origin_source_id: row.origin_source_id,
             musicbrainz_recording_id: row.musicbrainz_recording_id,
             fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(row.metadata_source.as_deref().unwrap_or("file")),
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
             created_at: row.created_at,
             updated_at: row.updated_at,
             availability,
@@ -290,7 +299,9 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
             origin_source_id: row.origin_source_id,
             musicbrainz_recording_id: row.musicbrainz_recording_id,
             fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(row.metadata_source.as_deref().unwrap_or("file")),
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
             created_at: row.created_at,
             updated_at: row.updated_at,
             availability,
@@ -347,7 +358,9 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
             origin_source_id: row.origin_source_id,
             musicbrainz_recording_id: row.musicbrainz_recording_id,
             fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(row.metadata_source.as_deref().unwrap_or("file")),
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
             created_at: row.created_at,
             updated_at: row.updated_at,
             availability,
@@ -416,15 +429,19 @@ pub async fn create(pool: &SqlitePool, track: CreateTrack) -> Result<Track> {
     tx.commit().await?;
 
     // Fetch and return the created track
-    get_by_id(pool, TrackId::new(track_id.to_string())).await?.ok_or_else(|| {
-        soul_core::SoulError::Storage("Failed to retrieve created track".to_string())
-    })
+    get_by_id(pool, TrackId::new(track_id.to_string()))
+        .await?
+        .ok_or_else(|| {
+            soul_core::SoulError::Storage("Failed to retrieve created track".to_string())
+        })
 }
 
 /// Update track metadata
 pub async fn update(pool: &SqlitePool, id: TrackId, track: UpdateTrack) -> Result<Track> {
     let id_clone = id.clone();
-    let id_int: i64 = id.as_str().parse()
+    let id_int: i64 = id
+        .as_str()
+        .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", id)))?;
 
     let mut query_parts = Vec::new();
@@ -498,7 +515,9 @@ pub async fn update(pool: &SqlitePool, id: TrackId, track: UpdateTrack) -> Resul
 
 /// Delete track
 pub async fn delete(pool: &SqlitePool, id: TrackId) -> Result<()> {
-    let id_int: i64 = id.as_str().parse()
+    let id_int: i64 = id
+        .as_str()
+        .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", id)))?;
 
     sqlx::query!("DELETE FROM tracks WHERE id = ?", id_int)
@@ -513,7 +532,9 @@ pub async fn get_availability(
     pool: &SqlitePool,
     track_id: TrackId,
 ) -> Result<Vec<TrackAvailability>> {
-    let track_id_int: i64 = track_id.as_str().parse()
+    let track_id_int: i64 = track_id
+        .as_str()
+        .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", track_id)))?;
 
     let rows = sqlx::query!(
@@ -547,7 +568,9 @@ pub async fn record_play(
     duration_seconds: Option<f64>,
     completed: bool,
 ) -> Result<()> {
-    let track_id_int: i64 = track_id.as_str().parse()
+    let track_id_int: i64 = track_id
+        .as_str()
+        .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", track_id)))?;
 
     let mut tx = pool.begin().await?;
@@ -653,7 +676,9 @@ pub async fn get_recently_played(
             origin_source_id: row.origin_source_id,
             musicbrainz_recording_id: row.musicbrainz_recording_id,
             fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(row.metadata_source.as_deref().unwrap_or("file")),
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
             created_at: row.created_at,
             updated_at: row.updated_at,
             availability,
@@ -665,12 +690,17 @@ pub async fn get_recently_played(
 
 /// Get play count for track
 pub async fn get_play_count(pool: &SqlitePool, track_id: TrackId) -> Result<i32> {
-    let track_id_int: i64 = track_id.as_str().parse()
+    let track_id_int: i64 = track_id
+        .as_str()
+        .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", track_id)))?;
 
-    let row = sqlx::query!("SELECT play_count FROM track_stats WHERE track_id = ?", track_id_int)
-        .fetch_optional(pool)
-        .await?;
+    let row = sqlx::query!(
+        "SELECT play_count FROM track_stats WHERE track_id = ?",
+        track_id_int
+    )
+    .fetch_optional(pool)
+    .await?;
 
     Ok(row.map_or(0, |r| r.play_count as i32))
 }
@@ -720,7 +750,9 @@ pub async fn find_by_hash(pool: &SqlitePool, file_hash: &str) -> Result<Option<T
             origin_source_id: row.origin_source_id,
             musicbrainz_recording_id: row.musicbrainz_recording_id,
             fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(row.metadata_source.as_deref().unwrap_or("file")),
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
             created_at: row.created_at,
             updated_at: row.updated_at,
             availability,

@@ -48,7 +48,10 @@ impl Type<Sqlite> for UserId {
 
 #[cfg(feature = "sqlx")]
 impl<'q> Encode<'q, Sqlite> for UserId {
-    fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'q>>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<SqliteArgumentValue<'q>>,
+    ) -> Result<IsNull, BoxDynError> {
         <String as Encode<Sqlite>>::encode_by_ref(&self.0, args)
     }
 }
@@ -98,7 +101,10 @@ impl Type<Sqlite> for TrackId {
 
 #[cfg(feature = "sqlx")]
 impl<'q> Encode<'q, Sqlite> for TrackId {
-    fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'q>>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<SqliteArgumentValue<'q>>,
+    ) -> Result<IsNull, BoxDynError> {
         <String as Encode<Sqlite>>::encode_by_ref(&self.0, args)
     }
 }
@@ -148,7 +154,10 @@ impl Type<Sqlite> for PlaylistId {
 
 #[cfg(feature = "sqlx")]
 impl<'q> Encode<'q, Sqlite> for PlaylistId {
-    fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'q>>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<SqliteArgumentValue<'q>>,
+    ) -> Result<IsNull, BoxDynError> {
         <String as Encode<Sqlite>>::encode_by_ref(&self.0, args)
     }
 }

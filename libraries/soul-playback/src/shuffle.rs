@@ -60,7 +60,7 @@ fn shuffle_smart(tracks: &mut [QueueTrack]) {
     for track in tracks.iter() {
         by_artist
             .entry(track.artist.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(track.clone());
     }
 

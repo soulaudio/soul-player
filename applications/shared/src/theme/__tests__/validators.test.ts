@@ -330,6 +330,7 @@ describe('validateThemeStructure', () => {
 
     it('should reject theme missing primary color', () => {
       const { primary, ...colorsWithoutPrimary } = lightTheme.colors;
+      void primary; // Explicitly void unused variable
       const invalidTheme = {
         ...lightTheme,
         colors: colorsWithoutPrimary as any,

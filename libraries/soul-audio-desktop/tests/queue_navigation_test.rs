@@ -77,7 +77,10 @@ fn test_has_next_after_queue_consumed() {
     drain_events(&playback);
 
     // No longer has next
-    assert!(!playback.has_next(), "Should not have next after consuming queue");
+    assert!(
+        !playback.has_next(),
+        "Should not have next after consuming queue"
+    );
 }
 
 #[test]
@@ -202,7 +205,10 @@ fn test_get_queue_order_preserved() {
 
     for id in track_ids {
         playback
-            .send_command(PlaybackCommand::AddToQueue(create_track(id, &format!("Track {}", id))))
+            .send_command(PlaybackCommand::AddToQueue(create_track(
+                id,
+                &format!("Track {}", id),
+            )))
             .unwrap();
     }
 
@@ -311,17 +317,17 @@ fn test_navigation_state_through_queue() {
 
     // Initially: has next, no previous
     assert!(playback.has_next(), "Should have next initially");
-    assert!(!playback.has_previous(), "Should not have previous initially");
+    assert!(
+        !playback.has_previous(),
+        "Should not have previous initially"
+    );
 
     // After first next: has next, has previous
     playback.send_command(PlaybackCommand::Next).unwrap();
     std::thread::sleep(Duration::from_millis(50));
     drain_events(&playback);
 
-    assert!(
-        playback.has_next(),
-        "Should have next after first skip"
-    );
+    assert!(playback.has_next(), "Should have next after first skip");
     assert!(
         playback.has_previous(),
         "Should have previous after first skip"
@@ -332,10 +338,7 @@ fn test_navigation_state_through_queue() {
     std::thread::sleep(Duration::from_millis(50));
     drain_events(&playback);
 
-    assert!(
-        playback.has_next(),
-        "Should have next after second skip"
-    );
+    assert!(playback.has_next(), "Should have next after second skip");
     assert!(
         playback.has_previous(),
         "Should have previous after second skip"
@@ -350,10 +353,7 @@ fn test_navigation_state_through_queue() {
         !playback.has_next(),
         "Should not have next after consuming queue"
     );
-    assert!(
-        playback.has_previous(),
-        "Should still have previous at end"
-    );
+    assert!(playback.has_previous(), "Should still have previous at end");
 }
 
 #[test]

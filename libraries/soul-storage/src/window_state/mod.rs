@@ -104,7 +104,7 @@ pub async fn save_window_state(
     state: &WindowState,
 ) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
-    let maximized: i64 = if state.maximized { 1 } else { 0 };
+    let maximized: i64 = i64::from(state.maximized);
     let x = state.x.map(|v| v as i64);
     let y = state.y.map(|v| v as i64);
     let width = state.width as i64;

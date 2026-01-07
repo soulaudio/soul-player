@@ -1,15 +1,14 @@
 /// Admin API routes
-use crate::{
-    error::{Result},
-    middleware::AuthenticatedUser,
-    state::AppState,
-};
+use crate::{error::Result, middleware::AuthenticatedUser, state::AppState};
 use axum::{
     extract::{Path, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
-use soul_core::{storage::StorageContext, types::{User, UserId}};
+use soul_core::{
+    storage::StorageContext,
+    types::{User, UserId},
+};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateUserRequest {

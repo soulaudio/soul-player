@@ -1,6 +1,6 @@
+use crate::types::{PlaylistId, TrackId, UserId};
 /// Core error types for Soul Player
 use thiserror::Error;
-use crate::types::{PlaylistId, TrackId, UserId};
 
 /// Result type alias using `SoulError`
 pub type Result<T> = std::result::Result<T, SoulError>;

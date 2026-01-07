@@ -37,8 +37,13 @@ impl AppState {
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
             eprintln!("Creating directory: {}", parent.display());
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create database directory '{}': {}", parent.display(), e))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                format!(
+                    "Failed to create database directory '{}': {}",
+                    parent.display(),
+                    e
+                )
+            })?;
             eprintln!("✓ Directory created/verified");
 
             // Test write permissions by creating a test file
@@ -83,9 +88,13 @@ impl AppState {
         eprintln!("Database URL: {}", db_url);
         eprintln!("Database file path: {}", db_path.display());
 
-        let pool = soul_storage::create_pool(&db_url)
-            .await
-            .map_err(|e| format!("Failed to create database pool at '{}': {}", db_path.display(), e))?;
+        let pool = soul_storage::create_pool(&db_url).await.map_err(|e| {
+            format!(
+                "Failed to create database pool at '{}': {}",
+                db_path.display(),
+                e
+            )
+        })?;
 
         soul_storage::run_migrations(&pool)
             .await
@@ -104,7 +113,10 @@ impl AppState {
             .await
             .map_err(|e| format!("Failed to create default user: {}", e))?;
 
-        eprintln!("Database initialized successfully at: {}", db_path.display());
+        eprintln!(
+            "Database initialized successfully at: {}",
+            db_path.display()
+        );
 
         // Calculate library path
         let library_path = db_path
@@ -144,10 +156,16 @@ impl AppState {
                     eprintln!("Executable location: {}", exe_dir.display());
                     if let Some(parent) = exe_dir.parent() {
                         let absolute = parent.join(&path);
-                        eprintln!("✓ Resolved relative path '{}' to: {}", custom_path, absolute.display());
+                        eprintln!(
+                            "✓ Resolved relative path '{}' to: {}",
+                            custom_path,
+                            absolute.display()
+                        );
                         absolute
                     } else {
-                        eprintln!("⚠ Could not get parent directory of exe, using relative path as-is");
+                        eprintln!(
+                            "⚠ Could not get parent directory of exe, using relative path as-is"
+                        );
                         path
                     }
                 } else {
@@ -155,11 +173,17 @@ impl AppState {
                     path
                 }
             } else {
-                eprintln!("✓ Using absolute custom database path from env: {}", path.display());
+                eprintln!(
+                    "✓ Using absolute custom database path from env: {}",
+                    path.display()
+                );
                 path
             }
         } else {
-            eprintln!("✓ No DATABASE_PATH in environment, using default: {}", default_path.display());
+            eprintln!(
+                "✓ No DATABASE_PATH in environment, using default: {}",
+                default_path.display()
+            );
             default_path
         };
 

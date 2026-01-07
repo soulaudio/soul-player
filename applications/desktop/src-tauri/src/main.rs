@@ -36,20 +36,17 @@ struct FrontendTrack {
 impl From<soul_core::types::Track> for FrontendTrack {
     fn from(track: soul_core::types::Track) -> Self {
         // Get first available local file path
-        let file_path = track
-            .availability
-            .iter()
-            .find_map(|avail| {
-                if matches!(
-                    avail.status,
-                    soul_core::types::AvailabilityStatus::LocalFile
-                        | soul_core::types::AvailabilityStatus::Cached
-                ) {
-                    avail.local_file_path.clone()
-                } else {
-                    None
-                }
-            });
+        let file_path = track.availability.iter().find_map(|avail| {
+            if matches!(
+                avail.status,
+                soul_core::types::AvailabilityStatus::LocalFile
+                    | soul_core::types::AvailabilityStatus::Cached
+            ) {
+                avail.local_file_path.clone()
+            } else {
+                None
+            }
+        });
 
         Self {
             id: track.id.as_str().parse().unwrap_or(0),
@@ -119,7 +116,8 @@ impl TrackData {
             title: self.title.clone(),
             artist: self.artist.clone(),
             album: self.album.clone(),
-            duration: self.duration_seconds
+            duration: self
+                .duration_seconds
                 .map(|s| Duration::from_secs_f64(s))
                 .unwrap_or(Duration::from_secs(0)),
             track_number: self.track_number,
@@ -163,7 +161,11 @@ async fn play_queue(
     start_index: usize,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    eprintln!("[play_queue] Called with {} tracks, start_index: {}", queue.len(), start_index);
+    eprintln!(
+        "[play_queue] Called with {} tracks, start_index: {}",
+        queue.len(),
+        start_index
+    );
 
     if queue.is_empty() {
         return Err("Queue is empty".to_string());
@@ -175,7 +177,10 @@ async fn play_queue(
 
     // Debug: print first track info
     if let Some(first) = queue.first() {
-        eprintln!("[play_queue] First track: {}, path: {}", first.title, first.file_path);
+        eprintln!(
+            "[play_queue] First track: {}, path: {}",
+            first.title, first.file_path
+        );
     }
 
     // Clear existing queue
@@ -184,7 +189,12 @@ async fn play_queue(
     // Add all tracks to queue in order (they're already ordered correctly from frontend)
     for (i, track_data) in queue.iter().enumerate() {
         let track = track_data.to_queue_track();
-        eprintln!("[play_queue] Adding track {}: {} -> {}", i, track.title, track.path.display());
+        eprintln!(
+            "[play_queue] Adding track {}: {} -> {}",
+            i,
+            track.title,
+            track.path.display()
+        );
         playback.add_to_queue(track)?;
     }
 
@@ -309,12 +319,21 @@ async fn get_all_tracks(state: State<'_, AppState>) -> Result<Vec<FrontendTrack>
     let frontend_tracks: Vec<FrontendTrack> = tracks.into_iter().map(FrontendTrack::from).collect();
 
     // Debug: Log tracks without file paths
-    let tracks_without_paths = frontend_tracks.iter().filter(|t| t.file_path.is_none()).count();
+    let tracks_without_paths = frontend_tracks
+        .iter()
+        .filter(|t| t.file_path.is_none())
+        .count();
     if tracks_without_paths > 0 {
-        eprintln!("[get_all_tracks] WARNING: {} out of {} tracks have no file path",
-                  tracks_without_paths, frontend_tracks.len());
+        eprintln!(
+            "[get_all_tracks] WARNING: {} out of {} tracks have no file path",
+            tracks_without_paths,
+            frontend_tracks.len()
+        );
     } else {
-        eprintln!("[get_all_tracks] All {} tracks have file paths", frontend_tracks.len());
+        eprintln!(
+            "[get_all_tracks] All {} tracks have file paths",
+            frontend_tracks.len()
+        );
     }
 
     Ok(frontend_tracks)
@@ -333,10 +352,7 @@ async fn get_track_by_id(
 }
 
 #[tauri::command]
-async fn delete_track(
-    id: i64,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String> {
     eprintln!("[delete_track] Starting deletion for track ID: {}", id);
 
     let track_id = soul_core::types::TrackId::new(id.to_string());
@@ -356,7 +372,8 @@ async fn delete_track(
     eprintln!("[delete_track] Found track: {}", track.title);
 
     // Get file path from availability
-    let file_path = track.availability
+    let file_path = track
+        .availability
         .iter()
         .find_map(|avail| avail.local_file_path.clone());
 
@@ -409,7 +426,10 @@ async fn delete_track(
                     })?;
                 }
                 Err(e) => {
-                    eprintln!("[delete_track] File deletion failed: {}, rolling back transaction", e);
+                    eprintln!(
+                        "[delete_track] File deletion failed: {}, rolling back transaction",
+                        e
+                    );
 
                     // Rollback transaction
                     tx.rollback().await.map_err(|e| {
@@ -447,16 +467,20 @@ async fn check_database_health(state: State<'_, AppState>) -> Result<DatabaseHea
 
     let total_tracks = tracks.len();
     let tracks_with_file_paths = tracks.iter().filter(|t| !t.availability.is_empty()).count();
-    let tracks_with_local_files = tracks.iter().filter(|t| {
-        t.availability.iter().any(|a| a.local_file_path.is_some())
-    }).count();
+    let tracks_with_local_files = tracks
+        .iter()
+        .filter(|t| t.availability.iter().any(|a| a.local_file_path.is_some()))
+        .count();
 
     Ok(DatabaseHealthReport {
         total_tracks,
         tracks_with_availability: tracks_with_file_paths,
         tracks_with_local_files,
         issues: if total_tracks > 0 && tracks_with_local_files == 0 {
-            vec!["No tracks have local file paths set. You may need to re-import your library.".to_string()]
+            vec![
+                "No tracks have local file paths set. You may need to re-import your library."
+                    .to_string(),
+            ]
         } else {
             vec![]
         },
@@ -534,8 +558,20 @@ fn handle_file_associations(app: AppHandle, files: Vec<PathBuf>) {
                 .map(|ext| {
                     matches!(
                         ext.to_lowercase().as_str(),
-                        "mp3" | "flac" | "wav" | "ogg" | "oga" | "m4a" | "mp4" | "aac"
-                            | "opus" | "wma" | "aiff" | "aif" | "ape" | "wv"
+                        "mp3"
+                            | "flac"
+                            | "wav"
+                            | "ogg"
+                            | "oga"
+                            | "m4a"
+                            | "mp4"
+                            | "aac"
+                            | "opus"
+                            | "wma"
+                            | "aiff"
+                            | "aif"
+                            | "ape"
+                            | "wv"
                     )
                 })
                 .unwrap_or(false)
@@ -634,13 +670,12 @@ fn main() {
                 // Linux: ~/.config/soul-player/
                 let app_data_dir = if cfg!(target_os = "windows") {
                     // Windows: Use "Soul Player" (with space)
-                    let roaming = std::env::var("APPDATA")
-                        .expect("APPDATA environment variable not found");
+                    let roaming =
+                        std::env::var("APPDATA").expect("APPDATA environment variable not found");
                     std::path::PathBuf::from(roaming).join("Soul Player")
                 } else if cfg!(target_os = "macos") {
                     // macOS: Use "soul-player" (with hyphen)
-                    let home = std::env::var("HOME")
-                        .expect("HOME environment variable not found");
+                    let home = std::env::var("HOME").expect("HOME environment variable not found");
                     std::path::PathBuf::from(home)
                         .join("Library")
                         .join("Application Support")
@@ -651,8 +686,8 @@ fn main() {
                     let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
                         std::path::PathBuf::from(xdg_config)
                     } else {
-                        let home = std::env::var("HOME")
-                            .expect("HOME environment variable not found");
+                        let home =
+                            std::env::var("HOME").expect("HOME environment variable not found");
                         std::path::PathBuf::from(home).join(".config")
                     };
                     config_dir.join("soul-player")
@@ -685,14 +720,13 @@ fn main() {
                 // Use the same platform-specific directory as the database
                 let library_path = app_data_dir.join("library");
 
-                let import_config = soul_importer::ImportConfig {
+                let import_manager = ImportManager::new(
+                    pool.clone(),
+                    "1".to_string(), // Desktop uses user_id = "1" as default user
                     library_path,
-                    file_strategy: soul_importer::FileManagementStrategy::Copy,
-                    confidence_threshold: 85,
-                    file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
-                    skip_duplicates: true,
-                };
-                let import_manager = ImportManager::new(pool, import_config);
+                )
+                .await
+                .expect("Failed to initialize import manager");
                 app_handle.manage(import_manager);
 
                 emit_init_progress(&app_handle, "Setting up system tray...", 70).await;

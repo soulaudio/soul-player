@@ -38,6 +38,7 @@ impl History {
     }
 
     /// Get most recent track (without removing)
+    #[allow(dead_code)]
     pub fn peek(&self) -> Option<&QueueTrack> {
         self.tracks.back()
     }
@@ -55,21 +56,25 @@ impl History {
     }
 
     /// Get number of tracks in history
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.tracks.len()
     }
 
     /// Check if history is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.tracks.is_empty()
     }
 
     /// Clear all history
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.tracks.clear();
     }
 
     /// Get maximum history size
+    #[allow(dead_code)]
     pub fn max_size(&self) -> usize {
         self.max_size
     }
@@ -77,6 +82,7 @@ impl History {
     /// Set maximum history size
     ///
     /// If new size is smaller than current, oldest entries are discarded
+    #[allow(dead_code)]
     pub fn set_max_size(&mut self, max_size: usize) {
         self.max_size = max_size;
 

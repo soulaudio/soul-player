@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { ThemeProvider, useTheme } from '../ThemeProvider';
-import { lightTheme, darkTheme } from '../themes';
+import { lightTheme } from '../themes';
 import type { Theme } from '../types';
 
 // Mock localStorage
@@ -98,18 +98,18 @@ function ImportExportConsumer() {
 }
 
 // Test component for delete
-function DeleteConsumer() {
-  const { deleteTheme, availableThemes } = useTheme();
+// function _DeleteConsumer() {
+//   const { deleteTheme, availableThemes } = useTheme();
 
-  return (
-    <div>
-      <div data-testid="theme-count">{availableThemes.length}</div>
-      <button onClick={() => deleteTheme('custom-test')} data-testid="delete-btn">
-        Delete Custom
-      </button>
-    </div>
-  );
-}
+//   return (
+//     <div>
+//       <div data-testid="theme-count">{availableThemes.length}</div>
+//       <button onClick={() => deleteTheme('custom-test')} data-testid="delete-btn">
+//         Delete Custom
+//       </button>
+//     </div>
+//   );
+// }
 
 // Test component for preview
 function PreviewConsumer() {

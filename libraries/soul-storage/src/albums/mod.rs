@@ -44,7 +44,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: AlbumId) -> Result<Option<Album>> 
         id: row.id,
         title: row.title,
         artist_id: row.artist_id,
-        artist_name: row.artist_name.map(String::from),
+        artist_name: row.artist_name,
         year: row.year.map(|y| y as i32),
         cover_art_path: row.cover_art_path,
         musicbrainz_id: row.musicbrainz_id,

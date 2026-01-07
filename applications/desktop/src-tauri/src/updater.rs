@@ -53,10 +53,7 @@ pub fn start_update_checker(app: AppHandle) {
                     if silent_mode {
                         // Silent install
                         let _install_result: Result<(), tauri_plugin_updater::Error> = update
-                            .download_and_install(
-                                |_chunk_length, _content_length| {},
-                                || {}
-                            )
+                            .download_and_install(|_chunk_length, _content_length| {}, || {})
                             .await;
                     } else {
                         // Emit event to frontend for user prompt
@@ -75,10 +72,10 @@ pub fn start_update_checker(app: AppHandle) {
 
 /// Tauri command to manually check for updates
 #[tauri::command]
-pub async fn check_for_updates(
-    app: AppHandle,
-) -> Result<Option<serde_json::Value>, String> {
-    let updater = app.updater().map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
+pub async fn check_for_updates(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
+    let updater = app
+        .updater()
+        .map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
 
     match updater.check().await {
         Ok(Some(update)) => Ok(Some(serde_json::json!({
@@ -94,7 +91,9 @@ pub async fn check_for_updates(
 /// Tauri command to install an available update
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
-    let updater = app.updater().map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
+    let updater = app
+        .updater()
+        .map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
 
     if let Some(update) = updater
         .check()
@@ -112,7 +111,7 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
                     };
                     let _ = app_clone.emit("update-progress", progress);
                 },
-                || {}
+                || {},
             )
             .await
             .map_err(|e: tauri_plugin_updater::Error| e.to_string())?;

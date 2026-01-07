@@ -142,11 +142,13 @@ impl Queue {
     }
 
     /// Clear only explicit queue
+    #[allow(dead_code)]
     pub fn clear_explicit(&mut self) {
         self.explicit.clear();
     }
 
     /// Clear only source queue
+    #[allow(dead_code)]
     pub fn clear_source(&mut self) {
         self.source.clear();
         self.original_source.clear();
@@ -167,6 +169,7 @@ impl Queue {
     }
 
     /// Peek at next track without removing
+    #[allow(dead_code)]
     pub fn peek_next(&self) -> Option<&QueueTrack> {
         if !self.explicit.is_empty() {
             self.explicit.first()
@@ -183,6 +186,7 @@ impl Queue {
     }
 
     /// Get track at index
+    #[allow(dead_code)]
     pub fn get(&self, index: usize) -> Option<&QueueTrack> {
         let explicit_len = self.explicit.len();
         if index < explicit_len {
@@ -203,6 +207,7 @@ impl Queue {
     }
 
     /// Check if source queue is shuffled
+    #[allow(dead_code)]
     pub fn is_shuffled(&self) -> bool {
         self.is_shuffled
     }

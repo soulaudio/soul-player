@@ -26,7 +26,11 @@ impl FuzzyMatcher {
     }
 
     /// Find or create an artist with fuzzy matching
-    pub async fn find_or_create_artist(&self, pool: &SqlitePool, name: &str) -> Result<FuzzyMatch<Artist>> {
+    pub async fn find_or_create_artist(
+        &self,
+        pool: &SqlitePool,
+        name: &str,
+    ) -> Result<FuzzyMatch<Artist>> {
         let normalized_name = normalize_string(name);
 
         // Try exact match first (case-sensitive)
@@ -58,7 +62,8 @@ impl FuzzyMatcher {
         let mut best_match: Option<(Artist, f64)> = None;
 
         for artist in &all_artists {
-            let similarity = normalized_levenshtein(&normalized_name, &normalize_string(&artist.name));
+            let similarity =
+                normalized_levenshtein(&normalized_name, &normalize_string(&artist.name));
 
             if similarity >= (self.fuzzy_threshold as f64 / 100.0) {
                 if let Some((_, best_similarity)) = &best_match {
@@ -147,7 +152,8 @@ impl FuzzyMatcher {
                 continue;
             }
 
-            let similarity = normalized_levenshtein(&normalized_title, &normalize_string(&album.title));
+            let similarity =
+                normalized_levenshtein(&normalized_title, &normalize_string(&album.title));
 
             if similarity >= (self.fuzzy_threshold as f64 / 100.0) {
                 if let Some((_, best_similarity)) = &best_match {
@@ -189,7 +195,11 @@ impl FuzzyMatcher {
     }
 
     /// Find or create a genre with fuzzy matching and canonicalization
-    pub async fn find_or_create_genre(&self, pool: &SqlitePool, name: &str) -> Result<FuzzyMatch<Genre>> {
+    pub async fn find_or_create_genre(
+        &self,
+        pool: &SqlitePool,
+        name: &str,
+    ) -> Result<FuzzyMatch<Genre>> {
         let canonical_name = canonicalize_genre_name(name);
 
         // Try to find by canonical name first (most reliable)
@@ -310,12 +320,10 @@ async fn find_genre_by_canonical(pool: &SqlitePool, canonical_name: &str) -> Res
 async fn find_genre_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Genre>> {
     use sqlx::Row;
 
-    let row = sqlx::query(
-        "SELECT id, name, canonical_name, created_at FROM genres WHERE name = ?"
-    )
-    .bind(name)
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query("SELECT id, name, canonical_name, created_at FROM genres WHERE name = ?")
+        .bind(name)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(row.map(|row| Genre {
         id: row.get("id"),
@@ -327,13 +335,11 @@ async fn find_genre_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Genr
 
 /// Create a new genre
 async fn create_genre(pool: &SqlitePool, name: &str, canonical_name: &str) -> Result<Genre> {
-    let result = sqlx::query(
-        "INSERT INTO genres (name, canonical_name) VALUES (?, ?)"
-    )
-    .bind(name)
-    .bind(canonical_name)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("INSERT INTO genres (name, canonical_name) VALUES (?, ?)")
+        .bind(name)
+        .bind(canonical_name)
+        .execute(pool)
+        .await?;
 
     let id = result.last_insert_rowid();
 

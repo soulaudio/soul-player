@@ -57,7 +57,10 @@ pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Genre>
     }))
 }
 
-pub async fn find_by_canonical_name(pool: &SqlitePool, canonical_name: &str) -> Result<Option<Genre>> {
+pub async fn find_by_canonical_name(
+    pool: &SqlitePool,
+    canonical_name: &str,
+) -> Result<Option<Genre>> {
     let row = sqlx::query!(
         "SELECT id, name, canonical_name, created_at
          FROM genres
@@ -131,7 +134,11 @@ pub async fn add_to_track(pool: &SqlitePool, track_id: TrackId, genre_id: GenreI
 }
 
 /// Remove a genre from a track
-pub async fn remove_from_track(pool: &SqlitePool, track_id: TrackId, genre_id: GenreId) -> Result<()> {
+pub async fn remove_from_track(
+    pool: &SqlitePool,
+    track_id: TrackId,
+    genre_id: GenreId,
+) -> Result<()> {
     sqlx::query!(
         "DELETE FROM track_genres
          WHERE track_id = ? AND genre_id = ?",

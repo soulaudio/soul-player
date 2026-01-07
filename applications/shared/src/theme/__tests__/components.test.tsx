@@ -5,12 +5,12 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+// import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '../ThemeProvider';
 import { ThemePicker } from '../components/ThemePicker';
 import { ThemeSwitcher } from '../components/ThemeSwitcher';
 import { ThemePreview } from '../components/ThemePreview';
-import { lightTheme, darkTheme, oceanTheme } from '../themes';
+import { lightTheme, oceanTheme } from '../themes';
 import type { Theme } from '../types';
 
 // Mock localStorage

@@ -5,6 +5,7 @@ use axum::{
     Router,
 };
 use clap::{Parser, Subcommand};
+use soul_core::types::UserId;
 use soul_server::{
     api,
     config::ServerConfig,
@@ -13,7 +14,6 @@ use soul_server::{
     state::AppState,
 };
 use soul_storage::LocalStorageContext;
-use soul_core::types::UserId;
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::{
     cors::CorsLayer,

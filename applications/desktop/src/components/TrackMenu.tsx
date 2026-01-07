@@ -7,7 +7,7 @@ interface TrackMenuProps {
   onDelete: (trackId: number) => void;
 }
 
-export function TrackMenu({ trackId, trackTitle, onDelete }: TrackMenuProps) {
+export function TrackMenu({ trackId, _trackTitle, onDelete }: TrackMenuProps) {
   const handleDelete = () => {
     onDelete(trackId);
   };

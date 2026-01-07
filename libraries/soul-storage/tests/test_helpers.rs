@@ -59,14 +59,12 @@ pub async fn create_test_user(pool: &SqlitePool, username: &str) -> UserId {
 
 /// Test fixture: Create a test source
 pub async fn create_test_source(pool: &SqlitePool, name: &str, source_type: &str) -> SourceId {
-    let result = sqlx::query(
-        "INSERT INTO sources (name, source_type, is_online) VALUES (?, ?, 1)"
-    )
-    .bind(name)
-    .bind(source_type)
-    .execute(pool)
-    .await
-    .expect("Failed to create test source");
+    let result = sqlx::query("INSERT INTO sources (name, source_type, is_online) VALUES (?, ?, 1)")
+        .bind(name)
+        .bind(source_type)
+        .execute(pool)
+        .await
+        .expect("Failed to create test source");
 
     result.last_insert_rowid()
 }
@@ -77,14 +75,12 @@ pub async fn create_test_artist(
     name: &str,
     sort_name: Option<&str>,
 ) -> ArtistId {
-    let result = sqlx::query(
-        "INSERT INTO artists (name, sort_name) VALUES (?, ?)"
-    )
-    .bind(name)
-    .bind(sort_name)
-    .execute(pool)
-    .await
-    .expect("Failed to create test artist");
+    let result = sqlx::query("INSERT INTO artists (name, sort_name) VALUES (?, ?)")
+        .bind(name)
+        .bind(sort_name)
+        .execute(pool)
+        .await
+        .expect("Failed to create test artist");
 
     result.last_insert_rowid()
 }
@@ -96,15 +92,13 @@ pub async fn create_test_album(
     artist_id: Option<ArtistId>,
     year: Option<i32>,
 ) -> AlbumId {
-    let result = sqlx::query(
-        "INSERT INTO albums (title, artist_id, year) VALUES (?, ?, ?)"
-    )
-    .bind(title)
-    .bind(artist_id)
-    .bind(year)
-    .execute(pool)
-    .await
-    .expect("Failed to create test album");
+    let result = sqlx::query("INSERT INTO albums (title, artist_id, year) VALUES (?, ?, ?)")
+        .bind(title)
+        .bind(artist_id)
+        .bind(year)
+        .execute(pool)
+        .await
+        .expect("Failed to create test album");
 
     result.last_insert_rowid()
 }
@@ -152,7 +146,7 @@ pub async fn create_test_track(
     if let Some(path) = local_file_path {
         sqlx::query(
             "INSERT INTO track_sources (track_id, source_id, status, local_file_path)
-             VALUES (?, ?, 'local_file', ?)"
+             VALUES (?, ?, 'local_file', ?)",
         )
         .bind(&track_id)
         .bind(origin_source_id)
@@ -165,7 +159,7 @@ pub async fn create_test_track(
     // Initialize stats
     sqlx::query(
         "INSERT INTO track_stats (track_id, play_count, skip_count)
-         VALUES (?, 0, 0)"
+         VALUES (?, 0, 0)",
     )
     .bind(&track_id)
     .execute(pool)
@@ -177,14 +171,12 @@ pub async fn create_test_track(
 
 /// Test fixture: Create a complete playlist
 pub async fn create_test_playlist(pool: &SqlitePool, name: &str, owner_id: UserId) -> PlaylistId {
-    let result = sqlx::query(
-        "INSERT INTO playlists (name, owner_id) VALUES (?, ?)"
-    )
-    .bind(name)
-    .bind(owner_id)
-    .execute(pool)
-    .await
-    .expect("Failed to create test playlist");
+    let result = sqlx::query("INSERT INTO playlists (name, owner_id) VALUES (?, ?)")
+        .bind(name)
+        .bind(owner_id)
+        .execute(pool)
+        .await
+        .expect("Failed to create test playlist");
 
     result.last_insert_rowid()
 }

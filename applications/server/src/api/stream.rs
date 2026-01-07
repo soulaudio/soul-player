@@ -12,10 +12,7 @@ use axum::{
     response::Response,
 };
 use serde::Deserialize;
-use soul_core::{
-    storage::StorageContext,
-    types::TrackId,
-};
+use soul_core::{storage::StorageContext, types::TrackId};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 

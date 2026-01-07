@@ -86,7 +86,7 @@ impl ShortcutAction {
 pub struct GlobalShortcut {
     /// Action triggered by this shortcut
     pub action: ShortcutAction,
-    /// Keyboard accelerator (e.g., "MediaPlayPause", "CommandOrControl+P")
+    /// Keyboard accelerator (e.g., `MediaPlayPause`, `CommandOrControl+P`)
     pub accelerator: String,
     /// Whether this shortcut is enabled
     pub enabled: bool,
@@ -96,7 +96,7 @@ pub struct GlobalShortcut {
 
 /// Get default keyboard shortcuts
 ///
-/// These are the built-in shortcuts using CommandOrControl modifier
+/// These are the built-in shortcuts using `CommandOrControl` modifier
 /// (Command on macOS, Control on Windows/Linux)
 pub fn default_shortcuts() -> Vec<GlobalShortcut> {
     vec![

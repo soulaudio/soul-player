@@ -73,7 +73,7 @@ pub trait StorageContext: Send + Sync {
     /// Search tracks by query string (searches title, artist, album)
     async fn search_tracks(&self, query: &str) -> Result<Vec<Track>>;
 
-    /// Convenience alias for get_track_by_id
+    /// Convenience alias for `get_track_by_id`
     async fn get_track(&self, id: TrackId) -> Result<Option<Track>> {
         self.get_track_by_id(id).await
     }
@@ -127,20 +127,25 @@ pub trait StorageContext: Send + Sync {
     async fn create_playlist(&self, playlist: CreatePlaylist) -> Result<Playlist>;
 
     /// Add track to playlist
-    async fn add_track_to_playlist(&self, playlist_id: PlaylistId, track_id: TrackId) -> Result<()>;
+    async fn add_track_to_playlist(&self, playlist_id: PlaylistId, track_id: TrackId)
+        -> Result<()>;
 
     /// Remove track from playlist
-    async fn remove_track_from_playlist(&self, playlist_id: PlaylistId, track_id: TrackId) -> Result<()>;
+    async fn remove_track_from_playlist(
+        &self,
+        playlist_id: PlaylistId,
+        track_id: TrackId,
+    ) -> Result<()>;
 
     /// Delete playlist
     async fn delete_playlist(&self, id: PlaylistId) -> Result<()>;
 
-    /// Convenience alias for get_playlist_by_id
+    /// Convenience alias for `get_playlist_by_id`
     async fn get_playlist(&self, id: PlaylistId) -> Result<Option<Playlist>> {
         self.get_playlist_by_id(id).await
     }
 
-    /// Convenience alias for get_playlist_with_tracks
+    /// Convenience alias for `get_playlist_with_tracks`
     async fn get_playlist_tracks(&self, id: PlaylistId) -> Result<Option<Playlist>> {
         self.get_playlist_with_tracks(id).await
     }

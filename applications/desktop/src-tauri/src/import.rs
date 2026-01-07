@@ -15,6 +15,7 @@ type SqlitePool = sqlx::SqlitePool;
 /// Import manager state
 pub struct ImportManager {
     pool: SqlitePool,
+    user_id: String,
     config: RwLock<ImportConfig>,
     current_import: Arc<Mutex<Option<ImportState>>>,
 }
@@ -44,7 +45,10 @@ pub struct ImportProgressUpdate {
 
 impl From<ImportProgress> for ImportProgressUpdate {
     fn from(progress: ImportProgress) -> Self {
-        let current_file = progress.current_file.as_ref().map(|p| p.display().to_string());
+        let current_file = progress
+            .current_file
+            .as_ref()
+            .map(|p| p.display().to_string());
         let percentage = progress.percentage();
 
         Self {
@@ -91,12 +95,67 @@ impl From<ImportSummary> for ImportSummaryResponse {
 }
 
 impl ImportManager {
-    pub fn new(pool: SqlitePool, config: ImportConfig) -> Self {
-        Self {
+    pub async fn new(
+        pool: SqlitePool,
+        user_id: String,
+        default_library_path: PathBuf,
+    ) -> Result<Self, String> {
+        eprintln!("[ImportManager] Initializing for user_id: {}", user_id);
+
+        // Load config from database (or defaults for new users)
+        use soul_importer::FileManagementStrategy;
+
+        let strategy_str: String = soul_storage::settings::get_import_strategy(&pool, &user_id)
+            .await
+            .map_err(|e| format!("Failed to load import strategy: {}", e))?;
+
+        let file_strategy = match strategy_str.as_str() {
+            "move" => FileManagementStrategy::Move,
+            "reference" => FileManagementStrategy::Reference,
+            _ => FileManagementStrategy::Copy,
+        };
+
+        let library_path: PathBuf =
+            soul_storage::settings::get_import_library_path(&pool, &user_id)
+                .await
+                .map_err(|e| format!("Failed to load library path: {}", e))?
+                .map(PathBuf::from)
+                .unwrap_or(default_library_path);
+
+        let confidence_threshold: u8 =
+            soul_storage::settings::get_import_confidence_threshold(&pool, &user_id)
+                .await
+                .map_err(|e| format!("Failed to load confidence threshold: {}", e))?;
+
+        let file_naming_pattern: String =
+            soul_storage::settings::get_import_file_naming_pattern(&pool, &user_id)
+                .await
+                .map_err(|e| format!("Failed to load file naming pattern: {}", e))?;
+
+        let skip_duplicates: bool =
+            soul_storage::settings::get_import_skip_duplicates(&pool, &user_id)
+                .await
+                .map_err(|e| format!("Failed to load skip duplicates: {}", e))?;
+
+        let config = ImportConfig {
+            library_path: library_path.clone(),
+            file_strategy,
+            confidence_threshold,
+            file_naming_pattern,
+            skip_duplicates,
+        };
+
+        eprintln!(
+            "[ImportManager] Loaded config: strategy={:?}, library_path={:?}",
+            config.file_strategy, config.library_path
+        );
+
+        Ok(Self {
             pool,
+            user_id,
             config: RwLock::new(config),
             current_import: Arc::new(Mutex::new(None)),
-        }
+        })
     }
 
     pub async fn is_importing(&self) -> bool {
@@ -113,20 +172,114 @@ impl ImportManager {
     }
 
     pub async fn update_config(&self, config: ImportConfig) {
+        use soul_importer::FileManagementStrategy;
+
+        eprintln!(
+            "[ImportManager] Updating config: strategy={:?}",
+            config.file_strategy
+        );
+
+        // Persist to database FIRST - save individual settings
+        let strategy_str = match config.file_strategy {
+            FileManagementStrategy::Move => "move",
+            FileManagementStrategy::Copy => "copy",
+            FileManagementStrategy::Reference => "reference",
+        };
+
+        // Save all settings
+        if let Err(e) = soul_storage::settings::set_setting(
+            &self.pool,
+            &self.user_id,
+            soul_storage::settings::SETTING_IMPORT_STRATEGY,
+            &serde_json::json!(strategy_str),
+        )
+        .await
+        {
+            eprintln!("[ImportManager] ERROR: Failed to persist strategy: {}", e);
+            return;
+        }
+
+        if let Err(e) = soul_storage::settings::set_setting(
+            &self.pool,
+            &self.user_id,
+            soul_storage::settings::SETTING_IMPORT_LIBRARY_PATH,
+            &serde_json::json!(config.library_path.display().to_string()),
+        )
+        .await
+        {
+            eprintln!(
+                "[ImportManager] ERROR: Failed to persist library path: {}",
+                e
+            );
+            return;
+        }
+
+        if let Err(e) = soul_storage::settings::set_setting(
+            &self.pool,
+            &self.user_id,
+            soul_storage::settings::SETTING_IMPORT_CONFIDENCE_THRESHOLD,
+            &serde_json::json!(config.confidence_threshold),
+        )
+        .await
+        {
+            eprintln!(
+                "[ImportManager] ERROR: Failed to persist confidence threshold: {}",
+                e
+            );
+            return;
+        }
+
+        if let Err(e) = soul_storage::settings::set_setting(
+            &self.pool,
+            &self.user_id,
+            soul_storage::settings::SETTING_IMPORT_FILE_NAMING_PATTERN,
+            &serde_json::json!(config.file_naming_pattern.clone()),
+        )
+        .await
+        {
+            eprintln!(
+                "[ImportManager] ERROR: Failed to persist file naming pattern: {}",
+                e
+            );
+            return;
+        }
+
+        if let Err(e) = soul_storage::settings::set_setting(
+            &self.pool,
+            &self.user_id,
+            soul_storage::settings::SETTING_IMPORT_SKIP_DUPLICATES,
+            &serde_json::json!(config.skip_duplicates),
+        )
+        .await
+        {
+            eprintln!(
+                "[ImportManager] ERROR: Failed to persist skip duplicates: {}",
+                e
+            );
+            return;
+        }
+
+        eprintln!("[ImportManager] ✓ Config persisted to database");
+
+        // Update in-memory cache
         *self.config.write().await = config;
+
+        eprintln!("[ImportManager] ✓ Config updated in memory");
     }
 
-    pub async fn import_files(
-        &self,
-        app: AppHandle,
-        files: Vec<PathBuf>,
-    ) -> Result<(), String> {
-        eprintln!("[ImportManager::import_files] Starting import of {} files", files.len());
+    pub async fn import_files(&self, app: AppHandle, files: Vec<PathBuf>) -> Result<(), String> {
+        eprintln!(
+            "[ImportManager::import_files] Starting import of {} files",
+            files.len()
+        );
 
         // Check if already importing
         if self.is_importing().await {
             eprintln!("[ImportManager::import_files] Import already in progress, queueing not supported yet");
-            return Err("Import already in progress. Please wait for current import to complete.".to_string());
+            return Err(
+                "Import already in progress. Please wait for current import to complete."
+                    .to_string(),
+            );
         }
 
         // Set initial state
@@ -141,23 +294,27 @@ impl ImportManager {
         eprintln!("[ImportManager::import_files] Import state set");
 
         let config = self.get_config().await;
-        eprintln!("[ImportManager::import_files] Library path: {:?}", config.library_path);
+        eprintln!(
+            "[ImportManager::import_files] Using strategy: {:?}",
+            config.file_strategy
+        );
+        eprintln!(
+            "[ImportManager::import_files] Library path: {:?}",
+            config.library_path
+        );
 
         let importer = MusicImporter::new(self.pool.clone(), config);
 
         eprintln!("[ImportManager::import_files] Creating importer and starting import");
-        let (mut progress_rx, handle) = importer
-            .import_files(&files)
-            .await
-            .map_err(|e| {
-                eprintln!("[ImportManager::import_files] Importer error: {}", e);
-                // Clear state on error
-                let current_import = self.current_import.clone();
-                tokio::spawn(async move {
-                    *current_import.lock().await = None;
-                });
-                e.to_string()
-            })?;
+        let (mut progress_rx, handle) = importer.import_files(&files).await.map_err(|e| {
+            eprintln!("[ImportManager::import_files] Importer error: {}", e);
+            // Clear state on error
+            let current_import = self.current_import.clone();
+            tokio::spawn(async move {
+                *current_import.lock().await = None;
+            });
+            e.to_string()
+        })?;
 
         eprintln!("[ImportManager::import_files] Import started, spawning progress listener");
 
@@ -167,8 +324,10 @@ impl ImportManager {
             eprintln!("[ImportManager::progress_listener] Starting progress listener");
             while let Some(progress) = progress_rx.recv().await {
                 let update = ImportProgressUpdate::from(progress);
-                eprintln!("[ImportManager::progress_listener] Progress: {}/{} files",
-                         update.processed_files, update.total_files);
+                eprintln!(
+                    "[ImportManager::progress_listener] Progress: {}/{} files",
+                    update.processed_files, update.total_files
+                );
                 // Emit progress to frontend
                 let _ = app_clone.emit("import-progress", update);
             }
@@ -205,23 +364,23 @@ impl ImportManager {
         Ok(())
     }
 
-    pub async fn import_directory(
-        &self,
-        app: AppHandle,
-        directory: PathBuf,
-    ) -> Result<(), String> {
-        eprintln!("[ImportManager::import_directory] Scanning directory: {:?}", directory);
+    pub async fn import_directory(&self, app: AppHandle, directory: PathBuf) -> Result<(), String> {
+        eprintln!(
+            "[ImportManager::import_directory] Scanning directory: {:?}",
+            directory
+        );
 
         // Scan directory first
         let scanner = soul_importer::scanner::FileScanner::new();
-        let files = scanner
-            .scan_directory(&directory)
-            .map_err(|e| {
-                eprintln!("[ImportManager::import_directory] Scan error: {}", e);
-                e.to_string()
-            })?;
+        let files = scanner.scan_directory(&directory).map_err(|e| {
+            eprintln!("[ImportManager::import_directory] Scan error: {}", e);
+            e.to_string()
+        })?;
 
-        eprintln!("[ImportManager::import_directory] Found {} files", files.len());
+        eprintln!(
+            "[ImportManager::import_directory] Found {} files",
+            files.len()
+        );
 
         self.import_files(app, files).await
     }
@@ -269,7 +428,9 @@ pub async fn import_directory(
 ) -> Result<(), String> {
     eprintln!("[import_directory] Received directory: {}", directory);
 
-    let result = manager.import_directory(app, PathBuf::from(directory)).await;
+    let result = manager
+        .import_directory(app, PathBuf::from(directory))
+        .await;
 
     match &result {
         Ok(_) => eprintln!("[import_directory] Import started successfully"),
@@ -339,11 +500,7 @@ pub async fn open_file_dialog(
     // Show dialog and get result
     if multiple {
         let files = dialog.pick_files();
-        Ok(files.map(|paths| {
-            paths.into_iter()
-                .map(|p| p.display().to_string())
-                .collect()
-        }))
+        Ok(files.map(|paths| paths.into_iter().map(|p| p.display().to_string()).collect()))
     } else {
         let file = dialog.pick_file();
         Ok(file.map(|p| vec![p.display().to_string()]))

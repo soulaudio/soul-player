@@ -1,4 +1,7 @@
-use soul_storage::{create_pool, run_migrations, shortcuts::{self, ShortcutAction}};
+use soul_storage::{
+    create_pool, run_migrations,
+    shortcuts::{self, ShortcutAction},
+};
 
 #[tokio::test]
 async fn test_get_default_shortcuts() {
@@ -14,9 +17,13 @@ async fn test_get_default_shortcuts() {
     let shortcuts = shortcuts::get_shortcuts(&pool, "1").await.unwrap();
 
     assert!(!shortcuts.is_empty());
-    assert!(shortcuts.iter().any(|s| s.action == ShortcutAction::PlayPause));
+    assert!(shortcuts
+        .iter()
+        .any(|s| s.action == ShortcutAction::PlayPause));
     assert!(shortcuts.iter().any(|s| s.action == ShortcutAction::Next));
-    assert!(shortcuts.iter().any(|s| s.action == ShortcutAction::Previous));
+    assert!(shortcuts
+        .iter()
+        .any(|s| s.action == ShortcutAction::Previous));
 
     // All defaults should be enabled
     assert!(shortcuts.iter().all(|s| s.enabled));
@@ -152,10 +159,7 @@ async fn test_shortcut_action_serialization() {
         ShortcutAction::from_str("play_pause"),
         Some(ShortcutAction::PlayPause)
     );
-    assert_eq!(
-        ShortcutAction::from_str("next"),
-        Some(ShortcutAction::Next)
-    );
+    assert_eq!(ShortcutAction::from_str("next"), Some(ShortcutAction::Next));
     assert_eq!(ShortcutAction::from_str("invalid"), None);
 }
 
@@ -238,9 +242,14 @@ async fn test_all_shortcut_actions() {
     shortcuts::set_shortcut(&pool, "1", ShortcutAction::Mute, "Key6".to_string())
         .await
         .unwrap();
-    shortcuts::set_shortcut(&pool, "1", ShortcutAction::ToggleShuffle, "Key7".to_string())
-        .await
-        .unwrap();
+    shortcuts::set_shortcut(
+        &pool,
+        "1",
+        ShortcutAction::ToggleShuffle,
+        "Key7".to_string(),
+    )
+    .await
+    .unwrap();
     shortcuts::set_shortcut(&pool, "1", ShortcutAction::ToggleRepeat, "Key8".to_string())
         .await
         .unwrap();

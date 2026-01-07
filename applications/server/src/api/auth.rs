@@ -91,4 +91,3 @@ pub async fn refresh(
         token_type: "Bearer".to_string(),
     }))
 }
-

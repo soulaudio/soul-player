@@ -42,7 +42,8 @@
       "Bash(yarn type-check:*)",
       "Bash(npm run lint)",
       "Bash(corepack enable:*)",
-      "Bash(yarn install)"
+      "Bash(yarn install)",
+      "Bash(cmd.exe /c \"cd applications\\\\\\\\marketing && ..\\\\\\\\..\\\\\\\\node_modules\\\\\\\\.bin\\\\\\\\next.cmd lint\":*)"
     ]
   }
 }

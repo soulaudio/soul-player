@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 use soul_core::{
     storage::StorageContext,
-    types::{Playlist, PlaylistId, TrackId, UserId, CreatePlaylist},
+    types::{CreatePlaylist, Playlist, PlaylistId, TrackId, UserId},
 };
 
 #[derive(Debug, Deserialize)]
@@ -37,10 +37,7 @@ pub async fn list_playlists(
     State(app_state): State<AppState>,
     _auth: AuthenticatedUser,
 ) -> Result<Json<Vec<Playlist>>> {
-    let playlists = app_state
-        .db
-        .get_user_playlists()
-        .await?;
+    let playlists = app_state.db.get_user_playlists().await?;
     Ok(Json(playlists))
 }
 
@@ -57,10 +54,7 @@ pub async fn create_playlist(
         owner_id: auth.user_id().clone(),
         is_favorite: false,
     };
-    let playlist = app_state
-        .db
-        .create_playlist(create_playlist)
-        .await?;
+    let playlist = app_state.db.create_playlist(create_playlist).await?;
     Ok(Json(playlist))
 }
 
@@ -174,7 +168,9 @@ pub async fn share_playlist(
 
     // Validate permission (just check it's either "read" or "write")
     if req.permission != "read" && req.permission != "write" {
-        return Err(ServerError::BadRequest("Invalid permission. Must be 'read' or 'write'".to_string()));
+        return Err(ServerError::BadRequest(
+            "Invalid permission. Must be 'read' or 'write'".to_string(),
+        ));
     }
 
     // Call soul_storage function directly (bypasses the trait)

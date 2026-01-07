@@ -86,8 +86,8 @@ impl AudioSource for DummyAudioSource {
         let to_read = remaining.min(buffer.len());
 
         // Fill with silence
-        for i in 0..to_read {
-            buffer[i] = 0.0;
+        for sample in buffer.iter_mut().take(to_read) {
+            *sample = 0.0;
         }
 
         // Update position

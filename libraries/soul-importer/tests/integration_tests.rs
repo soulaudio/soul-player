@@ -12,7 +12,11 @@ mod test_helpers;
 use test_helpers::setup_test_db;
 
 /// Helper to create a fake audio file with metadata-like structure
-fn create_test_audio_file(path: &std::path::Path, title: &str, artist: &str) -> std::io::Result<()> {
+fn create_test_audio_file(
+    path: &std::path::Path,
+    title: &str,
+    artist: &str,
+) -> std::io::Result<()> {
     let mut file = fs::File::create(path)?;
     // Write some dummy content (not a real audio file, but good enough for testing import logic)
     writeln!(file, "FAKE AUDIO FILE")?;
@@ -61,24 +65,9 @@ async fn test_import_directory_with_multiple_files() {
     let library_dir = TempDir::new().unwrap();
 
     // Create multiple fake audio files
-    create_test_audio_file(
-        &temp_dir.path().join("song1.mp3"),
-        "Song 1",
-        "Artist A",
-    )
-    .unwrap();
-    create_test_audio_file(
-        &temp_dir.path().join("song2.flac"),
-        "Song 2",
-        "Artist B",
-    )
-    .unwrap();
-    create_test_audio_file(
-        &temp_dir.path().join("song3.ogg"),
-        "Song 3",
-        "Artist A",
-    )
-    .unwrap();
+    create_test_audio_file(&temp_dir.path().join("song1.mp3"), "Song 1", "Artist A").unwrap();
+    create_test_audio_file(&temp_dir.path().join("song2.flac"), "Song 2", "Artist B").unwrap();
+    create_test_audio_file(&temp_dir.path().join("song3.ogg"), "Song 3", "Artist A").unwrap();
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),

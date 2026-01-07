@@ -146,10 +146,7 @@ fn test_partial_buffer_fill_near_end() {
     let samples_read = source.read_samples(&mut large_buffer).unwrap();
 
     // Should return partial read
-    assert!(
-        samples_read > 0,
-        "Should read some samples"
-    );
+    assert!(samples_read > 0, "Should read some samples");
     assert!(
         samples_read < large_buffer.len(),
         "Should not fill entire buffer (file too short)"
@@ -251,7 +248,11 @@ fn test_multiple_seeks_maintain_accuracy() {
 
         // Should be able to read after each seek
         let samples_read = source.read_samples(&mut buffer).unwrap();
-        assert!(samples_read > 0, "Should read after seeking to {}s", target_pos);
+        assert!(
+            samples_read > 0,
+            "Should read after seeking to {}s",
+            target_pos
+        );
     }
 }
 
@@ -340,9 +341,7 @@ fn test_consistent_playback_speed() {
     }
 
     // Calculate time deltas
-    let deltas: Vec<f64> = positions.windows(2)
-        .map(|w| w[1] - w[0])
-        .collect();
+    let deltas: Vec<f64> = positions.windows(2).map(|w| w[1] - w[0]).collect();
 
     // All deltas should be approximately equal (consistent advancement)
     let avg_delta = deltas.iter().sum::<f64>() / deltas.len() as f64;
@@ -464,5 +463,8 @@ fn test_decoder_state_after_error_recovery() {
     let result = source.read_samples(&mut buffer);
 
     // Should either work or fail gracefully (not panic/hang)
-    assert!(result.is_ok() || result.is_err(), "Should handle error recovery");
+    assert!(
+        result.is_ok() || result.is_err(),
+        "Should handle error recovery"
+    );
 }

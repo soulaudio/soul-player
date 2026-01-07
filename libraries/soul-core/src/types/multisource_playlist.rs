@@ -1,7 +1,7 @@
 //! Multi-source playlist types
 
-use serde::{Deserialize, Serialize};
 use super::ids::{PlaylistId, UserId};
+use serde::{Deserialize, Serialize};
 
 /// Playlist with multi-user support
 #[derive(Debug, Clone, Serialize, Deserialize)]

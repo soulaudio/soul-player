@@ -156,17 +156,24 @@ pub async fn set_active(pool: &SqlitePool, id: SourceId) -> Result<()> {
         .await?;
 
     // Activate the specified server
-    sqlx::query!("UPDATE sources SET is_active = 1 WHERE id = ? AND source_type = 'server'", id)
-        .execute(pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE sources SET is_active = 1 WHERE id = ? AND source_type = 'server'",
+        id
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
 
 pub async fn update_status(pool: &SqlitePool, id: SourceId, is_online: bool) -> Result<()> {
-    sqlx::query!("UPDATE sources SET is_online = ? WHERE id = ?", is_online, id)
-        .execute(pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE sources SET is_online = ? WHERE id = ?",
+        is_online,
+        id
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

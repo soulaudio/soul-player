@@ -200,9 +200,12 @@ pub async fn add_track(
     .await?;
 
     // Update playlist updated_at
-    sqlx::query!("UPDATE playlists SET updated_at = datetime('now') WHERE id = ?", playlist_id)
-        .execute(pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE playlists SET updated_at = datetime('now') WHERE id = ?",
+        playlist_id
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
@@ -223,9 +226,13 @@ pub async fn remove_track(
     let mut tx = pool.begin().await?;
 
     // Delete the track
-    sqlx::query!("DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?", playlist_id, track_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?",
+        playlist_id,
+        track_id
+    )
+    .execute(&mut *tx)
+    .await?;
 
     // Reorder positions to fill gap
     sqlx::query!(
@@ -245,9 +252,12 @@ pub async fn remove_track(
     .await?;
 
     // Update playlist updated_at
-    sqlx::query!("UPDATE playlists SET updated_at = datetime('now') WHERE id = ?", playlist_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "UPDATE playlists SET updated_at = datetime('now') WHERE id = ?",
+        playlist_id
+    )
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 
@@ -288,10 +298,13 @@ pub async fn reorder_tracks(
     let mut tx = pool.begin().await?;
 
     // Get current position
-    let current_pos =
-        sqlx::query!("SELECT position FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?", playlist_id, track_id)
-            .fetch_optional(&mut *tx)
-            .await?;
+    let current_pos = sqlx::query!(
+        "SELECT position FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?",
+        playlist_id,
+        track_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
 
     let Some(current) = current_pos else {
         return Err(soul_core::SoulError::Storage(
@@ -342,14 +355,22 @@ pub async fn reorder_tracks(
     }
 
     // Update track position
-    sqlx::query!("UPDATE playlist_tracks SET position = ? WHERE playlist_id = ? AND track_id = ?", new_position_i64, playlist_id, track_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "UPDATE playlist_tracks SET position = ? WHERE playlist_id = ? AND track_id = ?",
+        new_position_i64,
+        playlist_id,
+        track_id
+    )
+    .execute(&mut *tx)
+    .await?;
 
     // Update playlist updated_at
-    sqlx::query!("UPDATE playlists SET updated_at = datetime('now') WHERE id = ?", playlist_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "UPDATE playlists SET updated_at = datetime('now') WHERE id = ?",
+        playlist_id
+    )
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 
@@ -404,9 +425,13 @@ pub async fn unshare_playlist(
         None => return Err(soul_core::SoulError::PlaylistNotFound(playlist_id.clone())),
     }
 
-    sqlx::query!("DELETE FROM playlist_shares WHERE playlist_id = ? AND shared_with_user_id = ?", playlist_id, shared_with_user_id)
-        .execute(pool)
-        .await?;
+    sqlx::query!(
+        "DELETE FROM playlist_shares WHERE playlist_id = ? AND shared_with_user_id = ?",
+        playlist_id,
+        shared_with_user_id
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
@@ -441,7 +466,5 @@ async fn check_write_permission(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row
-        .map(|r| r.has_permission == Some(1))
-        .unwrap_or(false))
+    Ok(row.map(|r| r.has_permission == Some(1)).unwrap_or(false))
 }

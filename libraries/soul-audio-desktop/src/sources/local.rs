@@ -75,7 +75,12 @@ impl LocalAudioSource {
 
         // Probe the file to detect format
         let probed = symphonia::default::get_probe()
-            .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+            .format(
+                &hint,
+                mss,
+                &FormatOptions::default(),
+                &MetadataOptions::default(),
+            )
             .map_err(|e| PlaybackError::AudioSource(format!("Failed to probe file: {}", e)))?;
 
         let format_reader = probed.format;
@@ -88,7 +93,10 @@ impl LocalAudioSource {
         let sample_rate = track.codec_params.sample_rate.unwrap_or(44100);
         let channels = track.codec_params.channels.map(|c| c.count()).unwrap_or(2) as u16;
         let track_id = track.id;
-        let time_base = track.codec_params.time_base.unwrap_or(TimeBase::new(1, sample_rate));
+        let time_base = track
+            .codec_params
+            .time_base
+            .unwrap_or(TimeBase::new(1, sample_rate));
 
         // Calculate total duration if available
         let total_duration = track
@@ -175,7 +183,10 @@ impl LocalAudioSource {
     }
 
     /// Convert Symphonia AudioBufferRef to interleaved f32 samples
-    fn convert_to_f32_interleaved(decoded: AudioBufferRef, target_channels: u16) -> Result<Vec<f32>> {
+    fn convert_to_f32_interleaved(
+        decoded: AudioBufferRef,
+        target_channels: u16,
+    ) -> Result<Vec<f32>> {
         let channels = decoded.spec().channels.count();
         let frames = decoded.frames();
 
@@ -278,9 +289,11 @@ impl LocalAudioSource {
                 for frame_idx in 0..frames {
                     output.push((buf.chan(0)[frame_idx].inner() as f32 / 8388607.0) * 2.0 - 1.0);
                     if channels > 1 {
-                        output.push((buf.chan(1)[frame_idx].inner() as f32 / 8388607.0) * 2.0 - 1.0);
+                        output
+                            .push((buf.chan(1)[frame_idx].inner() as f32 / 8388607.0) * 2.0 - 1.0);
                     } else {
-                        output.push((buf.chan(0)[frame_idx].inner() as f32 / 8388607.0) * 2.0 - 1.0);
+                        output
+                            .push((buf.chan(0)[frame_idx].inner() as f32 / 8388607.0) * 2.0 - 1.0);
                     }
                 }
             }
@@ -355,7 +368,10 @@ impl AudioSource for LocalAudioSource {
         self.format_reader
             .seek(
                 symphonia::core::formats::SeekMode::Accurate,
-                symphonia::core::formats::SeekTo::TimeStamp { ts: seek_ts as u64, track_id: self.track_id },
+                symphonia::core::formats::SeekTo::TimeStamp {
+                    ts: seek_ts as u64,
+                    track_id: self.track_id,
+                },
             )
             .map_err(|e| PlaybackError::AudioSource(format!("Seek failed: {}", e)))?;
 
@@ -364,7 +380,8 @@ impl AudioSource for LocalAudioSource {
 
         // Clear buffer and reset position tracking
         self.buffer.clear();
-        self.samples_read = (position.as_secs_f64() * self.sample_rate as f64 * self.channels as f64) as usize;
+        self.samples_read =
+            (position.as_secs_f64() * self.sample_rate as f64 * self.channels as f64) as usize;
         self.samples_decoded = self.samples_read;
         self.is_eof = false;
 

@@ -1,6 +1,6 @@
+use soul_core::types::CreateArtist;
 use soul_importer::fuzzy::FuzzyMatcher;
 use soul_importer::MatchType;
-use soul_core::types::CreateArtist;
 
 mod test_helpers;
 use test_helpers::setup_test_db;
@@ -96,10 +96,7 @@ async fn test_artist_creates_new_when_no_match() {
     let matcher = FuzzyMatcher::new();
 
     // Find non-existent artist
-    let result = matcher
-        .find_or_create_artist(&pool, "Queen")
-        .await
-        .unwrap();
+    let result = matcher.find_or_create_artist(&pool, "Queen").await.unwrap();
 
     assert_eq!(result.confidence, 100);
     assert_eq!(result.match_type, MatchType::Created);
@@ -282,10 +279,7 @@ async fn test_genre_various_canonicalizations() {
     ];
 
     for (input, expected_canonical) in test_cases {
-        let result = matcher
-            .find_or_create_genre(&pool, input)
-            .await
-            .unwrap();
+        let result = matcher.find_or_create_genre(&pool, input).await.unwrap();
 
         assert_eq!(
             result.entity.canonical_name, expected_canonical,

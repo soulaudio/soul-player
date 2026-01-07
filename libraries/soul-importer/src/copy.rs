@@ -52,10 +52,7 @@ pub fn generate_filename(source_path: &Path, metadata: &ExtractedMetadata) -> Re
         .ok_or_else(|| ImportError::InvalidPath("File has no extension".to_string()))?;
 
     // Get artist (prefer album_artist, fall back to artist)
-    let artist = metadata
-        .album_artist
-        .as_ref()
-        .or(metadata.artist.as_ref());
+    let artist = metadata.album_artist.as_ref().or(metadata.artist.as_ref());
 
     // Get title
     let title = metadata.title.as_ref();
@@ -112,10 +109,7 @@ fn resolve_filename_conflict(library_path: &Path, original_filename: &str) -> Re
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or_else(|| ImportError::InvalidPath("Invalid filename".to_string()))?;
-    let extension = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or("");
+    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
     // Try appending -1, -2, -3, etc. until we find an available name
     for counter in 1..1000 {
@@ -175,10 +169,7 @@ mod tests {
     fn test_sanitize_filename_part() {
         assert_eq!(sanitize_filename_part("Valid Name"), "Valid Name");
         assert_eq!(sanitize_filename_part("Artist/Album"), "Artist_Album");
-        assert_eq!(
-            sanitize_filename_part("Song: The Remix"),
-            "Song_ The Remix"
-        );
+        assert_eq!(sanitize_filename_part("Song: The Remix"), "Song_ The Remix");
         assert_eq!(sanitize_filename_part("A<B>C"), "A_B_C");
         assert_eq!(sanitize_filename_part("  Trimmed  "), "Trimmed");
     }

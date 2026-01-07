@@ -262,13 +262,13 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
           name: file.name,
           size: file.size,
           type: file.type,
-          // @ts-ignore
+          // @ts-expect-error - Tauri adds path property to File objects
           path: file.path,
-          // @ts-ignore
+          // @ts-expect-error - Browser adds webkitRelativePath for directory uploads
           webkitRelativePath: file.webkitRelativePath,
         });
 
-        // @ts-ignore - Tauri adds 'path' property to File objects
+        // @ts-expect-error - Tauri adds 'path' property to File objects
         const path = file.path;
 
         if (!path) {

@@ -119,7 +119,10 @@ fn test_e2e_play_queue_creates_queue() {
     ];
 
     // Play queue
-    assert!(manager.play_queue(tracks.clone()).is_ok(), "Should play queue");
+    assert!(
+        manager.play_queue(tracks.clone()).is_ok(),
+        "Should play queue"
+    );
 
     std::thread::sleep(Duration::from_millis(100));
     manager.drain_events();
@@ -443,7 +446,10 @@ fn test_e2e_queue_sidebar_updates_on_skip() {
     let updated_queue = manager.get_queue().unwrap();
 
     // Depending on implementation, queue may shrink after skip
-    assert!(updated_queue.len() <= 3, "Queue should be updated after skip");
+    assert!(
+        updated_queue.len() <= 3,
+        "Queue should be updated after skip"
+    );
 }
 
 #[test]
@@ -608,9 +614,7 @@ fn test_e2e_large_queue_performance() {
 
     // Create large queue (simulating large library)
     let tracks: Vec<_> = (1..=100)
-        .map(|i| {
-            create_test_track(&i.to_string(), &format!("Track {}", i), "Various Artists")
-        })
+        .map(|i| create_test_track(&i.to_string(), &format!("Track {}", i), "Various Artists"))
         .collect();
 
     let start = std::time::Instant::now();

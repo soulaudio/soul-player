@@ -40,6 +40,7 @@ pub struct PlaybackManager {
     volume: Volume,
     shuffle: ShuffleMode,
     repeat: RepeatMode,
+    #[allow(dead_code)]
     gapless_enabled: bool,
 
     // Audio processing
@@ -111,6 +112,7 @@ impl PlaybackManager {
     }
 
     /// Skip to next track
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<()> {
         // Save current track to history (if any)
         if let Some(track) = self.current_track.take() {

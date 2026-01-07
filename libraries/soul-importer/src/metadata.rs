@@ -72,39 +72,42 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     let channels = properties.channels().map(|c| c as u8);
 
     // Extract tag metadata
-    let (title, artist, album, album_artist, track_number, disc_number, year, genres) = if let Some(tag) = tag {
-        let title = tag.title().map(|s| s.to_string());
-        let artist = tag.artist().map(|s| s.to_string());
-        let album = tag.album().map(|s| s.to_string());
-        let album_artist = tag.get_string(&lofty::ItemKey::AlbumArtist).map(|s| s.to_string());
-        let track_number = tag.track().map(|t| t as u32);
-        let disc_number = tag.disk().map(|d| d as u32);
-        let year = tag.year().map(|y| y as i32);
+    let (title, artist, album, album_artist, track_number, disc_number, year, genres) =
+        if let Some(tag) = tag {
+            let title = tag.title().map(|s| s.to_string());
+            let artist = tag.artist().map(|s| s.to_string());
+            let album = tag.album().map(|s| s.to_string());
+            let album_artist = tag
+                .get_string(&lofty::ItemKey::AlbumArtist)
+                .map(|s| s.to_string());
+            let track_number = tag.track().map(|t| t as u32);
+            let disc_number = tag.disk().map(|d| d as u32);
+            let year = tag.year().map(|y| y as i32);
 
-        // Extract genres (can be multiple, separated by various delimiters)
-        let genres: Vec<String> = tag
-            .genre()
-            .map(|g: std::borrow::Cow<'_, str>| {
-                g.split(&[',', ';', '/'][..])
-                    .map(|s: &str| s.trim().to_string())
-                    .filter(|s: &String| !s.is_empty())
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default();
+            // Extract genres (can be multiple, separated by various delimiters)
+            let genres: Vec<String> = tag
+                .genre()
+                .map(|g: std::borrow::Cow<'_, str>| {
+                    g.split(&[',', ';', '/'][..])
+                        .map(|s: &str| s.trim().to_string())
+                        .filter(|s: &String| !s.is_empty())
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
 
-        (
-            title,
-            artist,
-            album,
-            album_artist,
-            track_number,
-            disc_number,
-            year,
-            genres,
-        )
-    } else {
-        (None, None, None, None, None, None, None, Vec::new())
-    };
+            (
+                title,
+                artist,
+                album,
+                album_artist,
+                track_number,
+                disc_number,
+                year,
+                genres,
+            )
+        } else {
+            (None, None, None, None, None, None, None, Vec::new())
+        };
 
     // Fallback: Use filename as title if no title in tags
     let title: Option<String> = title.or_else(|| {

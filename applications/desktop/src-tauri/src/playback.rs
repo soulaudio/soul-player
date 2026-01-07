@@ -3,9 +3,9 @@
 //! This module wraps the DesktopPlayback system and provides
 //! a clean interface for Tauri commands and event emission.
 
+use serde::Serialize;
 use soul_audio_desktop::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
 use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode};
-use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;

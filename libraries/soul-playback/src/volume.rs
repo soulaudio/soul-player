@@ -117,6 +117,7 @@ impl Volume {
     /// Convert linear gain to dB
     ///
     /// Useful for debugging and display
+    #[allow(dead_code)]
     pub fn to_db(&self) -> f32 {
         if self.level == 0 || self.muted {
             -60.0
@@ -212,7 +213,7 @@ mod tests {
 
     #[test]
     fn apply_to_buffer() {
-        let mut vol = Volume::new(100); // Unity gain
+        let vol = Volume::new(100); // Unity gain
         let mut buffer = vec![0.5, 0.8, -0.3, -0.9];
 
         vol.apply(&mut buffer);
@@ -236,7 +237,7 @@ mod tests {
 
     #[test]
     fn apply_reduced_volume() {
-        let mut vol = Volume::new(50); // -30 dB
+        let vol = Volume::new(50); // -30 dB
         let mut buffer = vec![1.0];
 
         vol.apply(&mut buffer);

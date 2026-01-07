@@ -3,9 +3,7 @@
 //! Tests for queue creation, navigation, and boundary logic.
 //! Focus on real-world scenarios: playing from library, next/previous buttons.
 
-use soul_playback::{
-    PlaybackManager, QueueTrack, RepeatMode, ShuffleMode, TrackSource,
-};
+use soul_playback::{PlaybackManager, QueueTrack, RepeatMode, ShuffleMode, TrackSource};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -43,7 +41,8 @@ fn test_play_from_library_creates_queue_from_index() {
     let start_index = 2;
 
     // Create queue: [3, 4, 5, 1, 2]
-    let queue: Vec<QueueTrack> = library.iter()
+    let queue: Vec<QueueTrack> = library
+        .iter()
         .skip(start_index)
         .chain(library.iter().take(start_index))
         .cloned()
@@ -74,7 +73,8 @@ fn test_play_last_track_wraps_queue() {
     // User clicks last track (index 2)
     let start_index = 2;
 
-    let queue: Vec<QueueTrack> = library.iter()
+    let queue: Vec<QueueTrack> = library
+        .iter()
         .skip(start_index)
         .chain(library.iter().take(start_index))
         .cloned()
@@ -132,7 +132,10 @@ fn test_has_previous_with_empty_history() {
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist A", 180));
 
     // No history yet
-    assert!(!manager.has_previous(), "Should not have previous with empty history");
+    assert!(
+        !manager.has_previous(),
+        "Should not have previous with empty history"
+    );
 }
 
 // Note: has_previous() is true when there's actual playback history.
@@ -147,7 +150,10 @@ fn test_has_previous_with_repeat_one() {
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist A", 180));
 
     // Repeat One always has previous (same track)
-    assert!(manager.has_previous(), "Should have previous with repeat one");
+    assert!(
+        manager.has_previous(),
+        "Should have previous with repeat one"
+    );
 }
 
 // ===== Queue Navigation Boundary Tests =====
@@ -307,17 +313,11 @@ fn test_shuffle_affects_next_track_order() {
 
     manager.add_playlist_to_queue(tracks);
 
-    let original_order: Vec<String> = manager.get_queue()
-        .iter()
-        .map(|t| t.id.clone())
-        .collect();
+    let original_order: Vec<String> = manager.get_queue().iter().map(|t| t.id.clone()).collect();
 
     manager.set_shuffle(ShuffleMode::Random);
 
-    let shuffled_order: Vec<String> = manager.get_queue()
-        .iter()
-        .map(|t| t.id.clone())
-        .collect();
+    let shuffled_order: Vec<String> = manager.get_queue().iter().map(|t| t.id.clone()).collect();
 
     // Order should be different (very unlikely to be same)
     assert_ne!(original_order, shuffled_order);

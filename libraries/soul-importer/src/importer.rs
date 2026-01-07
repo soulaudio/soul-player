@@ -18,10 +18,7 @@ pub struct MusicImporter {
 impl MusicImporter {
     /// Create a new music importer
     pub fn new(pool: SqlitePool, config: ImportConfig) -> Self {
-        Self {
-            pool,
-            config,
-        }
+        Self { pool, config }
     }
 
     /// Import files from a directory
@@ -30,7 +27,10 @@ impl MusicImporter {
     pub async fn import_directory(
         &self,
         directory: &Path,
-    ) -> Result<(mpsc::Receiver<ImportProgress>, tokio::task::JoinHandle<Result<ImportSummary>>)> {
+    ) -> Result<(
+        mpsc::Receiver<ImportProgress>,
+        tokio::task::JoinHandle<Result<ImportSummary>>,
+    )> {
         let scanner = FileScanner::new();
         let files = scanner.scan_directory(directory)?;
         self.import_files(&files).await
@@ -42,7 +42,10 @@ impl MusicImporter {
     pub async fn import_files(
         &self,
         files: &[PathBuf],
-    ) -> Result<(mpsc::Receiver<ImportProgress>, tokio::task::JoinHandle<Result<ImportSummary>>)> {
+    ) -> Result<(
+        mpsc::Receiver<ImportProgress>,
+        tokio::task::JoinHandle<Result<ImportSummary>>,
+    )> {
         let (tx, rx) = mpsc::channel(100);
 
         let files = files.to_vec();
@@ -148,22 +151,35 @@ impl MusicImporter {
         }
 
         // Handle file according to strategy (move/copy/reference)
+        eprintln!("[Importer] Processing: {:?}", file_path);
+        eprintln!("[Importer] Strategy: {:?}", config.file_strategy);
+        eprintln!("[Importer] Library path: {:?}", config.library_path);
+
         let library_path = match config.file_strategy {
             FileManagementStrategy::Move => {
+                eprintln!("[Importer] MOVE: {} -> library", file_path.display());
                 copy::move_to_library(file_path, &config.library_path, &metadata)?
             }
             FileManagementStrategy::Copy => {
+                eprintln!("[Importer] COPY: {} -> library", file_path.display());
                 copy::copy_to_library(file_path, &config.library_path, &metadata)?
             }
             FileManagementStrategy::Reference => {
+                eprintln!("[Importer] REFERENCE: Keeping at {}", file_path.display());
                 // Keep file in original location - just reference it
                 file_path.to_path_buf()
             }
         };
 
+        eprintln!("[Importer] Result path: {:?}", library_path);
+
         // Fuzzy match artist
         let artist_match = if let Some(ref artist_name) = metadata.artist {
-            Some(fuzzy_matcher.find_or_create_artist(pool, artist_name).await?)
+            Some(
+                fuzzy_matcher
+                    .find_or_create_artist(pool, artist_name)
+                    .await?,
+            )
         } else {
             None
         };
@@ -171,7 +187,11 @@ impl MusicImporter {
         // Fuzzy match album
         let album_match = if let Some(ref album_title) = metadata.album {
             let artist_id = artist_match.as_ref().map(|m| m.entity.id);
-            Some(fuzzy_matcher.find_or_create_album(pool, album_title, artist_id).await?)
+            Some(
+                fuzzy_matcher
+                    .find_or_create_album(pool, album_title, artist_id)
+                    .await?,
+            )
         } else {
             None
         };
@@ -240,8 +260,12 @@ impl MusicImporter {
 
         // Insert track-genre relationships
         for genre_match in &genre_matches {
-            soul_storage::genres::add_to_track(pool, created_track.id.clone(), genre_match.entity.id)
-                .await?;
+            soul_storage::genres::add_to_track(
+                pool,
+                created_track.id.clone(),
+                genre_match.entity.id,
+            )
+            .await?;
         }
 
         Ok(ImportResult {
@@ -256,4 +280,3 @@ impl MusicImporter {
         })
     }
 }
-

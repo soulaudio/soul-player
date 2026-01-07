@@ -231,11 +231,17 @@ impl DesktopPlayback {
                 // If state is Loading, we need to load the audio source
                 if state == soul_playback::PlaybackState::Loading {
                     if let Some(track) = mgr.get_current_track().cloned() {
-                        eprintln!("[PlaybackCommand::Play] Loading track: {} from {}", track.title, track.path.display());
+                        eprintln!(
+                            "[PlaybackCommand::Play] Loading track: {} from {}",
+                            track.title,
+                            track.path.display()
+                        );
                         // Create audio source from file path
                         match crate::sources::local::LocalAudioSource::new(&track.path) {
                             Ok(source) => {
-                                eprintln!("[PlaybackCommand::Play] Audio source loaded successfully");
+                                eprintln!(
+                                    "[PlaybackCommand::Play] Audio source loaded successfully"
+                                );
                                 mgr.set_audio_source(Box::new(source));
                                 event_tx
                                     .send(PlaybackEvent::StateChanged(mgr.get_state()))
@@ -259,7 +265,10 @@ impl DesktopPlayback {
                         eprintln!("[PlaybackCommand::Play] No current track to load");
                     }
                 } else {
-                    eprintln!("[PlaybackCommand::Play] State is {:?}, not loading audio", state);
+                    eprintln!(
+                        "[PlaybackCommand::Play] State is {:?}, not loading audio",
+                        state
+                    );
                     event_tx
                         .send(PlaybackEvent::StateChanged(mgr.get_state()))
                         .ok();
