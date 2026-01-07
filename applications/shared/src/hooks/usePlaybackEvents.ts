@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { usePlayerStore } from '../stores/player';
+import { shouldIgnorePositionUpdates } from './useSeekBar';
 import type { Track } from '../types';
 
 /**
@@ -23,6 +24,13 @@ export function usePlaybackEvents() {
 
     // Listen for position updates (in seconds)
     const unlistenPositionUpdated = listen<number>('playback:position-updated', (event) => {
+      // Ignore position updates if we're currently seeking
+      // This prevents the seek bar from jumping back due to race conditions
+      if (shouldIgnorePositionUpdates()) {
+        console.log('[usePlaybackEvents] Ignoring position update during seek');
+        return;
+      }
+
       const positionInSeconds = event.payload;
       const { duration } = usePlayerStore.getState();
 

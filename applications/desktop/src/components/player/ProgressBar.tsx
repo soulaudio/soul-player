@@ -1,3 +1,4 @@
+import React from 'react';
 import { usePlayerStore } from '@soul-player/shared/stores/player';
 import { formatDuration } from '@soul-player/shared/lib/utils';
 import { useSeekBar } from '@soul-player/shared/hooks/useSeekBar';
@@ -5,6 +6,7 @@ import { useSeekBar } from '@soul-player/shared/hooks/useSeekBar';
 export function ProgressBar() {
   const { progress, duration } = usePlayerStore();
   const { isDragging, seekPosition, handleSeekStart, handleSeekChange, handleSeekEnd } = useSeekBar();
+  const cleanupRef = React.useRef<(() => void) | null>(null);
 
   // Use seek position while dragging, otherwise use store progress
   const displayProgress = isDragging && seekPosition !== null
@@ -16,48 +18,67 @@ export function ProgressBar() {
     ? seekPosition
     : (progress / 100) * duration;
 
-  /**
-   * Handle click on progress bar to seek
-   */
-  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const width = rect.width;
-    const percentage = (clickX / width) * 100;
-    const newPosition = (percentage / 100) * duration;
-
-    // Trigger immediate seek
-    handleSeekStart(newPosition);
-    handleSeekEnd();
-  };
+  // Cleanup any pending listeners on unmount
+  React.useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
+  }, []);
 
   /**
-   * Handle mouse down to start dragging
+   * Handle mouse down to start seeking (handles both click and drag)
    */
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.preventDefault();
+    // Clean up any previous listeners first
+    if (cleanupRef.current) {
+      console.log('[ProgressBar] Cleaning up previous listeners');
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+
+    // Don't prevent default - we need mouseup to fire properly
+    e.stopPropagation(); // Prevent click event from also firing
+
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const width = rect.width;
     const percentage = (clickX / width) * 100;
     const newPosition = (percentage / 100) * duration;
 
+    console.log('[ProgressBar] Mouse down at position:', newPosition);
     handleSeekStart(newPosition);
+
+    // Track the current seek position (will be updated by drag)
+    let currentSeekPosition = newPosition;
 
     // Add global mouse move and mouse up listeners
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const moveX = moveEvent.clientX - rect.left;
       const movePercentage = Math.max(0, Math.min(100, (moveX / width) * 100));
       const movePosition = (movePercentage / 100) * duration;
+      currentSeekPosition = movePosition; // Track the latest position
       handleSeekChange(movePosition);
     };
 
     const handleMouseUp = () => {
-      handleSeekEnd();
+      console.log('[ProgressBar] Mouse up - calling handleSeekEnd with position:', currentSeekPosition);
+      // Pass the final position directly to handleSeekEnd to avoid React state timing issues
+      handleSeekEnd(currentSeekPosition);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      cleanupRef.current = null;
+      console.log('[ProgressBar] Event listeners removed');
+    };
+
+    // Store cleanup function
+    cleanupRef.current = () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
 
+    console.log('[ProgressBar] Adding event listeners to document');
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   };
@@ -72,7 +93,6 @@ export function ProgressBar() {
       {/* Progress bar */}
       <div
         className="relative flex-1 h-2 bg-muted rounded-full cursor-pointer group"
-        onClick={handleProgressClick}
         onMouseDown={handleMouseDown}
       >
         {/* Filled progress */}

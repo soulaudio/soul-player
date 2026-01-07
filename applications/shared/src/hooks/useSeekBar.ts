@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef } from 'react';
 import { playerCommands } from '../lib/tauri';
+import { usePlayerStore } from '../stores/player';
 
 interface UseSeekBarReturn {
   isDragging: boolean;
   seekPosition: number | null;
   handleSeekStart: (position: number) => void;
   handleSeekChange: (position: number) => void;
-  handleSeekEnd: () => void;
+  handleSeekEnd: (finalPosition?: number) => void;
 }
 
 /**
@@ -25,6 +26,7 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
    * Called when user starts dragging the seek bar
    */
   const handleSeekStart = useCallback((position: number) => {
+    console.log('[useSeekBar] handleSeekStart:', position);
     setIsDragging(true);
     setSeekPosition(position);
   }, []);
@@ -51,23 +53,53 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
   /**
    * Called when user releases the seek bar
    * Sends final position to backend
+   * @param finalPosition - Optional position to seek to (if not provided, uses seekPosition state)
    */
-  const handleSeekEnd = useCallback(() => {
+  const handleSeekEnd = useCallback((finalPosition?: number) => {
     // Clear any pending debounce timer
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
 
+    // Use provided position or fall back to state
+    const targetPosition = finalPosition ?? seekPosition;
+
+    console.log('[useSeekBar] handleSeekEnd called with:', { finalPosition, seekPosition, targetPosition });
+
     // Send final position to backend
-    if (seekPosition !== null) {
-      playerCommands.seek(seekPosition)
+    if (targetPosition !== null) {
+      const { duration } = usePlayerStore.getState();
+
+      console.log('[useSeekBar] Seeking to position:', targetPosition);
+
+      // Set flag to ignore position updates from backend for 500ms
+      // This prevents the seek bar from jumping back due to race conditions
+      setIgnorePositionUpdates(true);
+
+      // Immediately update the store with the target position
+      const progressPercentage = duration > 0
+        ? Math.min(100, (targetPosition / duration) * 100)
+        : 0;
+      usePlayerStore.getState().setProgress(progressPercentage);
+
+      // Send seek command to backend
+      playerCommands.seek(targetPosition)
         .then(() => {
-          console.log('[useSeekBar] Seeked to position:', seekPosition);
+          console.log('[useSeekBar] Seek command succeeded');
         })
         .catch((error) => {
           console.error('[useSeekBar] Seek failed:', error);
         });
+
+      // Re-enable position updates after 500ms
+      // This gives the backend time to process the seek
+      setTimeout(() => {
+        setIgnorePositionUpdates(false);
+        console.log('[useSeekBar] Re-enabled position updates');
+      }, 500);
+    } else {
+      console.warn('[useSeekBar] handleSeekEnd called but no position available');
     }
 
     // Reset dragging state
@@ -82,4 +114,26 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
     handleSeekChange,
     handleSeekEnd,
   };
+}
+
+/**
+ * Global ref to track if position updates should be ignored
+ * Used to prevent seek bar jumping during seek operations
+ */
+let globalIgnorePositionUpdates = false;
+
+/**
+ * Set whether position updates from backend should be ignored
+ * @internal Used by useSeekBar
+ */
+export function setIgnorePositionUpdates(ignore: boolean): void {
+  globalIgnorePositionUpdates = ignore;
+}
+
+/**
+ * Check if position updates should be ignored
+ * Used by usePlaybackEvents to prevent race conditions during seek
+ */
+export function shouldIgnorePositionUpdates(): boolean {
+  return globalIgnorePositionUpdates;
 }

@@ -10,7 +10,8 @@ Local-first, cross-platform music player. Desktop, mobile (iOS/Android), server,
 
 ```bash
 # From repository root
-yarn                # Install all dependencies
+corepack enable     # Enable Yarn 4.x via Corepack (first time only)
+yarn install        # Install all dependencies
 yarn dev:desktop    # Run desktop app
 ```
 

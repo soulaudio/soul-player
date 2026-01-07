@@ -1,5 +1,5 @@
 import { MoreVertical, Trash } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 interface TrackMenuProps {
   trackId: number;
@@ -8,48 +8,41 @@ interface TrackMenuProps {
 }
 
 export function TrackMenu({ trackId, trackTitle, onDelete }: TrackMenuProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
-
   const handleDelete = () => {
-    setIsOpen(false);
     onDelete(trackId);
   };
 
   return (
-    <div className="relative" ref={menuRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-8 h-8 flex items-center justify-center rounded hover:bg-accent/50 transition-colors opacity-0 group-hover:opacity-100"
-        aria-label="Track options"
-      >
-        <MoreVertical className="w-4 h-4" />
-      </button>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          className="w-8 h-8 flex items-center justify-center rounded hover:bg-accent/50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+          aria-label="Track options"
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
+      </DropdownMenu.Trigger>
 
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-1 bg-background border rounded-lg shadow-lg py-1 z-10 min-w-[180px]">
-          <button
-            onClick={handleDelete}
-            className="w-full px-4 py-2 text-left flex items-center gap-2 hover:bg-accent transition-colors text-red-600"
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="min-w-[180px] bg-background border rounded-lg shadow-lg py-1 z-50
+            data-[state=open]:animate-fade-in data-[state=open]:animate-zoom-in
+            data-[side=bottom]:animate-slide-in-from-top
+            data-[side=top]:animate-slide-in-from-bottom
+            data-[side=left]:animate-slide-in-from-right
+            data-[side=right]:animate-slide-in-from-left"
+          sideOffset={5}
+          align="end"
+        >
+          <DropdownMenu.Item
+            className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-red-600"
+            onSelect={handleDelete}
           >
             <Trash className="w-4 h-4" />
             <span>Remove from Library</span>
-          </button>
-        </div>
-      )}
-    </div>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

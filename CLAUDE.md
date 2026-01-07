@@ -66,7 +66,9 @@ libraries/
 
 ```bash
 # First-time setup
-./scripts/setup-sqlx.sh
+corepack enable                  # Enable Yarn 4.x (first time only)
+yarn install                     # Install all dependencies
+./scripts/setup-sqlx.sh          # Setup SQLx offline mode
 
 # Build & Test
 cargo build --all
@@ -75,7 +77,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all
 
 # Desktop app
-cd applications/desktop && npm run tauri dev
+yarn dev:desktop
 
 # Server
 cargo run -p soul-server
