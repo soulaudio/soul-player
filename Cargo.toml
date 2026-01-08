@@ -27,7 +27,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.1-test"
 edition = "2021"
 authors = ["Soul Player Contributors"]
 license = "AGPL-3.0"

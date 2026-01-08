@@ -5393,7 +5393,7 @@ dependencies = [
 
 [[package]]
 name = "soul-audio"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "cpal",
  "proptest",
@@ -5405,7 +5405,7 @@ dependencies = [
 
 [[package]]
 name = "soul-audio-desktop"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -5423,15 +5423,15 @@ dependencies = [
 
 [[package]]
 name = "soul-audio-embedded"
-version = "0.1.0"
+version = "0.0.1-test"
 
 [[package]]
 name = "soul-audio-mobile"
-version = "0.1.0"
+version = "0.0.1-test"
 
 [[package]]
 name = "soul-core"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5444,7 +5444,7 @@ dependencies = [
 
 [[package]]
 name = "soul-discovery"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "reqwest 0.11.27",
  "serde",
@@ -5454,7 +5454,7 @@ dependencies = [
 
 [[package]]
 name = "soul-importer"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5481,7 +5481,7 @@ dependencies = [
 
 [[package]]
 name = "soul-metadata"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "lofty",
  "num_cpus",
@@ -5495,7 +5495,7 @@ dependencies = [
 
 [[package]]
 name = "soul-playback"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "proptest",
  "rand 0.8.5",
@@ -5506,7 +5506,7 @@ dependencies = [
 
 [[package]]
 name = "soul-player-desktop"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "chrono",
  "dotenvy",
@@ -5519,6 +5519,7 @@ dependencies = [
  "soul-importer",
  "soul-playback",
  "soul-storage",
+ "soul-sync",
  "sqlx",
  "tauri",
  "tauri-build",
@@ -5534,7 +5535,7 @@ dependencies = [
 
 [[package]]
 name = "soul-server"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "anyhow",
  "axum",
@@ -5570,7 +5571,7 @@ dependencies = [
 
 [[package]]
 name = "soul-storage"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5587,12 +5588,20 @@ dependencies = [
 
 [[package]]
 name = "soul-sync"
-version = "0.1.0"
+version = "0.0.1-test"
 dependencies = [
+ "chrono",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
  "soul-core",
+ "soul-importer",
+ "soul-storage",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

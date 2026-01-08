@@ -1,0 +1,128 @@
+name: Auto-Release on Version Bump
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Cargo.toml'  # Only run when workspace Cargo.toml changes
+
+permissions:
+  contents: write  # Required to create and push tags
+
+jobs:
+  detect-version-bump:
+    name: Detect Version Change
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to find latest tag
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract current version from Cargo.toml
+        id: current
+        run: |
+          VERSION=$(grep -A 5 '^\[workspace.package\]' Cargo.toml | grep '^version' | head -1 | sed 's/.*"\(.*\)"/\1/')
+
+          if [ -z "$VERSION" ]; then
+            echo "Error: Failed to extract version from Cargo.toml"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✓ Current version in Cargo.toml: $VERSION"
+
+      - name: Get latest release tag
+        id: latest
+        run: |
+          # Get latest tag matching v*.*.* pattern
+          LATEST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | head -n 1)
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous release tags found"
+            echo "version=0.0.0" >> $GITHUB_OUTPUT
+            echo "✓ This will be the first release"
+          else
+            # Strip 'v' prefix
+            LATEST_VERSION="${LATEST_TAG#v}"
+            echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+            echo "✓ Latest release tag: $LATEST_TAG ($LATEST_VERSION)"
+          fi
+
+      - name: Compare versions
+        id: compare
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          LATEST="${{ steps.latest.outputs.version }}"
+
+          echo "Comparing versions: $CURRENT vs $LATEST"
+
+          if [ "$CURRENT" = "$LATEST" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "✓ Versions match - no release needed"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✓ Version bumped: $LATEST → $CURRENT"
+          fi
+
+      - name: Check if tag already exists
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          TAG="v${{ steps.current.outputs.version }}"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Error: Tag $TAG already exists!"
+            echo "This usually means:"
+            echo "  1. A release was already created for this version"
+            echo "  2. The tag was manually created"
+            echo ""
+            echo "To fix: Bump version to a newer one or delete the existing tag:"
+            echo "  git tag -d $TAG && git push origin :refs/tags/$TAG"
+            exit 1
+          fi
+
+          echo "✓ Tag $TAG does not exist - safe to create"
+
+      - name: Create and push release tag
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          VERSION="${{ steps.current.outputs.version }}"
+          TAG="v$VERSION"
+
+          echo "Creating release tag: $TAG"
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create annotated tag
+          git tag -a "$TAG" -m "Release v$VERSION"
+
+          # Push tag (this will trigger release-desktop.yml)
+          git push origin "$TAG"
+
+          echo "✓ Tag $TAG created and pushed"
+          echo ""
+          echo "The release workflow will now start automatically."
+          echo "Monitor progress: https://github.com/${{ github.repository }}/actions"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Auto-Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Current Version:** ${{ steps.current.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Previous Version:** ${{ steps.latest.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version Changed:** ${{ steps.compare.outputs.changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.compare.outputs.changed }}" = "true" ]; then
+            echo "✅ **Release tag created:** \`v${{ steps.current.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The [release workflow](https://github.com/${{ github.repository }}/actions/workflows/release-desktop.yml) will now build and publish the release automatically." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ **No release needed** - version has not changed" >> $GITHUB_STEP_SUMMARY
+          fi

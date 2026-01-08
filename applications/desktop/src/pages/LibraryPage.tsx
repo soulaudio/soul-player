@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { TrackList, type Track, type QueueTrack } from '@soul-player/shared';
+import { useSyncStore } from '@soul-player/shared/stores/sync';
 import { AlbumGrid, Album } from '../components/AlbumGrid';
 import { TrackMenu } from '../components/TrackMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -35,6 +36,7 @@ export function LibraryPage() {
   const [confirmDelete, setConfirmDelete] = useState<DesktopTrack | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { setSyncRequired } = useSyncStore();
 
   useEffect(() => {
     loadLibrary();
@@ -78,8 +80,12 @@ export function LibraryPage() {
         const msg = `${tracksWithoutPaths} out of ${tracksData.length} tracks are missing file paths and cannot be played.`;
         console.warn('[LibraryPage]', msg);
         if (!healthWarning) {
-          setHealthWarning(msg + ' Try re-importing your library.');
+          setHealthWarning(msg + ' Sync required to fix - click the alert icon.');
         }
+
+        // Automatically mark sync as required when database issues are detected
+        console.log('[LibraryPage] Triggering automatic sync due to missing file paths');
+        setSyncRequired(true);
       }
     } catch (err) {
       console.error('Failed to load library:', err);

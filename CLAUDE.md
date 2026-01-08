@@ -100,6 +100,38 @@ fn process(&mut self, buffer: &mut [f32]) {
 - Libraries: `thiserror` + `Result`, no `.unwrap()` in public APIs
 - Applications: `.expect()` with clear messages is fine
 
+### 7. Always Localize UI Strings
+ALL user-facing strings MUST use localization - NEVER hardcode text:
+- Desktop: Use i18n framework (e.g., `react-i18next`, `fluent`)
+- Mobile: Platform localization APIs
+- Firmware (ESP32-S3): Minimal string tables for display text
+- Applies to: buttons, labels, messages, tooltips, errors
+
+```typescript
+// ✅ CORRECT (React)
+<button>{t('playback.play')}</button>
+<div className="error">{t('errors.file_not_found', { filename })}</div>
+
+// ❌ WRONG
+<button>Play</button>
+<div className="error">File not found: {filename}</div>
+```
+
+```rust
+// ✅ CORRECT (Firmware/Embedded)
+const STRINGS: &[&str] = &[
+    "Play",      // en
+    "Jouer",     // fr
+    "Abspielen", // de
+];
+display.text(STRINGS[locale_index]);
+
+// ❌ WRONG
+display.text("Play");
+```
+
+**Why**: Enables internationalization from day 1, easier to maintain, professional UX.
+
 ---
 
 ## Essential Commands
@@ -168,9 +200,10 @@ DATABASE_URL="sqlite:test.db" cargo check
 4. **Tests**: Skip if just testing a getter/setter
 5. **Allocations**: Never in audio `process()` methods
 6. **Dependencies**: Libraries can't depend on applications
+7. **UI Strings**: Always use localization, never hardcode text
 
 ---
 
-**Last Updated**: 2026-01-07
+**Last Updated**: 2026-01-08
 **Rust Edition**: 2021
 **Platforms**: Windows, macOS, Linux, ESP32-S3

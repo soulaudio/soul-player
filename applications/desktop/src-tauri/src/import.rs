@@ -519,15 +519,43 @@ pub async fn update_import_config(
 
 /// Get all configured sources
 #[tauri::command]
-pub async fn get_all_sources() -> Result<Vec<SourceInfo>, String> {
-    // TODO: Integrate with soul-storage sources module
-    Ok(vec![SourceInfo {
-        id: 1,
-        name: "Local Files".to_string(),
-        source_type: "local".to_string(),
-        is_active: true,
-        is_online: true,
-    }])
+pub async fn get_all_sources(pool: tauri::State<'_, SqlitePool>) -> Result<Vec<SourceInfo>, String> {
+    let sources = soul_storage::sources::get_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(sources.into_iter().map(|s| {
+        let source_type_str = match s.source_type {
+            soul_core::types::SourceType::Local => "local".to_string(),
+            soul_core::types::SourceType::Server => "server".to_string(),
+        };
+        SourceInfo {
+            id: s.id,
+            name: s.name,
+            source_type: source_type_str,
+            is_active: s.is_active,
+            is_online: s.is_online,
+        }
+    }).collect())
+}
+
+/// Set a source as active and trigger a sync
+#[tauri::command]
+pub async fn set_active_source(
+    app: AppHandle,
+    id: i64,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<(), String> {
+    // Set the source as active
+    soul_storage::sources::set_active(&pool, id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Emit event to trigger sync
+    app.emit("sync-required", soul_sync::SyncTrigger::SourceActivation)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 /// Open file dialog for selecting audio files

@@ -408,6 +408,8 @@ pub async fn create(pool: &SqlitePool, track: CreateTrack) -> Result<Track> {
 
     // Create track_sources entry
     if let Some(local_file_path) = track.local_file_path {
+        eprintln!("[tracks::create] Creating track_sources entry: track_id={}, source_id={}, path={}",
+            track_id, track.origin_source_id, local_file_path);
         sqlx::query!(
             r#"
             INSERT INTO track_sources (track_id, source_id, status, local_file_path)
@@ -419,12 +421,13 @@ pub async fn create(pool: &SqlitePool, track: CreateTrack) -> Result<Track> {
         )
         .execute(&mut *tx)
         .await?;
+        eprintln!("[tracks::create] ✓ track_sources entry created");
+    } else {
+        eprintln!("[tracks::create] ⚠ WARNING: No local_file_path provided, skipping track_sources entry");
     }
 
-    // Initialize track stats
-    sqlx::query!("INSERT INTO track_stats (track_id) VALUES (?)", track_id)
-        .execute(&mut *tx)
-        .await?;
+    // Note: track_stats is now per-user and created on-demand when a user plays/rates a track
+    // No automatic initialization needed here
 
     tx.commit().await?;
 
@@ -589,16 +592,17 @@ pub async fn record_play(
     .execute(&mut *tx)
     .await?;
 
-    // Update track stats
+    // Update track stats (per-user)
     if completed {
         sqlx::query!(
             r#"
-            INSERT INTO track_stats (track_id, play_count, last_played_at)
-            VALUES (?, 1, datetime('now'))
-            ON CONFLICT(track_id) DO UPDATE SET
+            INSERT INTO track_stats (user_id, track_id, play_count, last_played_at)
+            VALUES (?, ?, 1, datetime('now'))
+            ON CONFLICT(user_id, track_id) DO UPDATE SET
                 play_count = play_count + 1,
                 last_played_at = datetime('now')
             "#,
+            user_id,
             track_id_int
         )
         .execute(&mut *tx)
@@ -606,11 +610,12 @@ pub async fn record_play(
     } else {
         sqlx::query!(
             r#"
-            INSERT INTO track_stats (track_id, skip_count)
-            VALUES (?, 1)
-            ON CONFLICT(track_id) DO UPDATE SET
+            INSERT INTO track_stats (user_id, track_id, skip_count)
+            VALUES (?, ?, 1)
+            ON CONFLICT(user_id, track_id) DO UPDATE SET
                 skip_count = skip_count + 1
             "#,
+            user_id,
             track_id_int
         )
         .execute(&mut *tx)

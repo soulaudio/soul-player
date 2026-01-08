@@ -43,7 +43,8 @@
       "Bash(npm run lint)",
       "Bash(corepack enable:*)",
       "Bash(yarn install)",
-      "Bash(cmd.exe /c \"cd applications\\\\\\\\marketing && ..\\\\\\\\..\\\\\\\\node_modules\\\\\\\\.bin\\\\\\\\next.cmd lint\":*)"
+      "Bash(cmd.exe /c \"cd applications\\\\\\\\marketing && ..\\\\\\\\..\\\\\\\\node_modules\\\\\\\\.bin\\\\\\\\next.cmd lint\":*)",
+      "Bash(DATABASE_URL=\"sqlite:libraries/soul-storage/test.db\" cargo build:*)"
     ]
   }
 }

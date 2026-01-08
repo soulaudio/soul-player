@@ -1,0 +1,21 @@
+[package]
+name = "soul-artwork"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+soul-core = { workspace = true }
+lofty = { workspace = true }
+thiserror = { workspace = true }
+lru = { workspace = true }
+base64 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

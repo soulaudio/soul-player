@@ -8,11 +8,12 @@
 # This script updates version numbers in:
 # - Workspace Cargo.toml
 # - All crate Cargo.toml files
-# - Tauri package.json
+# - All package.json files (root + applications)
 # - Tauri tauri.conf.json
 #
 
-set -euo pipefail
+set -uo pipefail
+# Note: Not using -e (errexit) to allow counting failures and continue
 
 # Colors for output
 RED='\033[0;31m'
@@ -189,10 +190,13 @@ main() {
     echo ""
 
     # Confirm with user
-    read -p "Continue with version bump? [y/N] " -n 1 -r
-    echo ""
+    echo -n "Continue with version bump? [y/N] "
+    read -n 1 -r
+    echo ""  # New line after single character input
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_warning "Version bump cancelled"
+        echo ""
+        read -p "Press Enter to exit..."
         exit 0
     fi
 
@@ -212,38 +216,57 @@ main() {
 
     # Update all library Cargo.toml files
     if [ -d "$PROJECT_ROOT/libraries" ]; then
-        while IFS= read -r file; do
-            if update_cargo_toml "$file" "$new_version"; then
-                ((files_updated++))
-            else
-                ((files_failed++))
-            fi
-        done < <(find "$PROJECT_ROOT/libraries" -name "Cargo.toml" -type f)
-    fi
-
-    # Update all application Cargo.toml files
-    if [ -d "$PROJECT_ROOT/applications" ]; then
-        while IFS= read -r file; do
-            # Skip package.json and tauri config (handled separately)
-            if [[ "$file" == *"/Cargo.toml" ]]; then
+        for file in "$PROJECT_ROOT/libraries"/*/Cargo.toml; do
+            if [ -f "$file" ]; then
                 if update_cargo_toml "$file" "$new_version"; then
                     ((files_updated++))
                 else
                     ((files_failed++))
                 fi
             fi
-        done < <(find "$PROJECT_ROOT/applications" -name "Cargo.toml" -type f)
+        done
     fi
 
-    # Update Tauri package.json
-    local tauri_package_json="$PROJECT_ROOT/applications/desktop/package.json"
-    if [ -f "$tauri_package_json" ]; then
-        if update_package_json "$tauri_package_json" "$new_version"; then
+    # Update all application Cargo.toml files (in src-tauri directories)
+    if [ -d "$PROJECT_ROOT/applications" ]; then
+        for app_dir in "$PROJECT_ROOT/applications"/*; do
+            if [ -d "$app_dir/src-tauri" ] && [ -f "$app_dir/src-tauri/Cargo.toml" ]; then
+                if update_cargo_toml "$app_dir/src-tauri/Cargo.toml" "$new_version"; then
+                    ((files_updated++))
+                else
+                    ((files_failed++))
+                fi
+            fi
+        done
+    fi
+
+    # Update all package.json files (root + all applications)
+    echo ""
+    print_info "Updating package.json files..."
+
+    # Root package.json
+    if [ -f "$PROJECT_ROOT/package.json" ]; then
+        if update_package_json "$PROJECT_ROOT/package.json" "$new_version"; then
             ((files_updated++))
         else
             ((files_failed++))
         fi
     fi
+
+    # All application package.json files (one level deep)
+    if [ -d "$PROJECT_ROOT/applications" ]; then
+        for file in "$PROJECT_ROOT/applications"/*/package.json; do
+            if [ -f "$file" ]; then
+                if update_package_json "$file" "$new_version"; then
+                    ((files_updated++))
+                else
+                    ((files_failed++))
+                fi
+            fi
+        done
+    fi
+
+    echo ""
 
     # Update Tauri config
     local tauri_conf="$PROJECT_ROOT/applications/desktop/src-tauri/tauri.conf.json"
@@ -270,25 +293,47 @@ main() {
     echo ""
     print_info "Next steps:"
     echo "  1. Review changes: git diff"
-    echo "  2. Run tests: cargo test --all"
-    echo "  3. Commit changes: git commit -am 'chore: bump version to v$new_version'"
-    echo "  4. Create tag: git tag -a v$new_version -m 'Release v$new_version'"
-    echo "  5. Push: git push origin main && git push origin v$new_version"
+    echo "  2. Commit changes: git add -A && git commit -m 'chore: bump version to v$new_version'"
+    echo "  3. Push to main: git push origin main"
+    echo ""
+    print_success "Automation will then:"
+    echo "  • Detect the version bump in Cargo.toml"
+    echo "  • Create and push the tag v$new_version"
+    echo "  • Trigger the release workflow"
+    echo "  • Build installers for Windows, macOS, Linux"
+    echo "  • Run installation tests"
+    echo "  • Publish the release to GitHub"
+    echo ""
+    print_info "Monitor release progress at:"
+    echo "  https://github.com/soulaudio/soul-player/actions"
     echo ""
 
     # Optionally show git diff
-    read -p "Show git diff? [y/N] " -n 1 -r
-    echo ""
+    echo -n "Show git diff? [y/N] "
+    read -n 1 -r
+    echo ""  # New line after single character input
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo ""
         git diff
+        echo ""
     fi
+
+    echo ""
+    print_success "Script complete!"
+    echo ""
+    echo "=== Summary of changes ==="
+    echo ""
+    git status --short | grep -E "\.json$|Cargo\.toml$" || echo "No files changed"
+    echo ""
+    read -p "Press Enter to exit..."
 }
 
 # Check if running from project root or scripts directory
 if [ ! -f "$PROJECT_ROOT/Cargo.toml" ]; then
     print_error "Could not find project root (Cargo.toml not found)"
     print_info "Please run this script from the project root or scripts directory"
+    echo ""
+    read -p "Press Enter to exit..."
     exit 1
 fi
 

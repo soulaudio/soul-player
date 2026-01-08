@@ -7,6 +7,7 @@ mod import;
 mod playback;
 mod shortcuts;
 mod splash;
+mod sync;
 // mod tray; // Temporarily disabled - Tauri 2.0 API change
 mod updater;
 mod window_state_manager;
@@ -729,6 +730,25 @@ fn main() {
                 .expect("Failed to initialize import manager");
                 app_handle.manage(import_manager);
 
+                emit_init_progress(&app_handle, "Initializing sync system...", 65).await;
+
+                // Initialize sync manager
+                let sync_state = std::sync::Arc::new(tokio::sync::Mutex::new(sync::SyncState::new(pool.clone())));
+                app_handle.manage(sync_state.clone());
+
+                // Check if auto-sync is needed (schema changes)
+                {
+                    let sync_guard = sync_state.lock().await;
+                    if let Ok(Some(trigger)) = sync_guard.manager.should_auto_sync().await {
+                        drop(sync_guard);
+                        let app_clone = app_handle.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                            let _ = app_clone.emit("sync-required", trigger);
+                        });
+                    }
+                }
+
                 emit_init_progress(&app_handle, "Setting up system tray...", 70).await;
 
                 // Setup system tray (temporarily disabled - Tauri 2.0 API change)
@@ -823,9 +843,15 @@ fn main() {
             import::get_import_config,
             import::update_import_config,
             import::get_all_sources,
+            import::set_active_source,
             import::open_file_dialog,
             import::open_folder_dialog,
             import::is_directory,
+            // Sync/doctor
+            sync::start_sync,
+            sync::get_sync_status,
+            sync::cancel_sync,
+            sync::get_sync_errors,
             // Settings
             get_user_settings,
             set_user_setting,
