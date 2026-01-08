@@ -5,7 +5,7 @@
 
 import { usePlayerStore } from '@soul-player/shared/stores/player'
 import { DemoPlaybackManager } from './playback-manager'
-import { PlaybackState, RepeatMode as DemoRepeatMode, ShuffleMode as DemoShuffleMode } from './types'
+import { PlaybackState, RepeatMode as DemoRepeatMode, ShuffleMode as DemoShuffleMode, type QueueTrack } from './types'
 import type { Track } from '@soul-player/shared/types'
 
 // Global manager instance
@@ -21,7 +21,6 @@ export function getManager(): DemoPlaybackManager {
 
 function setupBridge() {
   const manager = managerInstance!
-  const store = usePlayerStore.getState()
 
   console.log('[Bridge] Setting up event bridge')
 
@@ -31,7 +30,7 @@ function setupBridge() {
     usePlayerStore.setState({ isPlaying: state === PlaybackState.Playing })
   })
 
-  manager.on('trackChange', (track: any) => {
+  manager.on('trackChange', (track: QueueTrack | null) => {
     if (track) {
       const sharedTrack: Track = {
         id: parseInt(track.id) || 0,

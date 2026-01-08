@@ -81,6 +81,7 @@ export const playerCommands = {
 }
 
 // For compatibility with desktop patterns
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function invoke(command: string, args?: any): Promise<any> {
   switch (command) {
     case 'play_track':

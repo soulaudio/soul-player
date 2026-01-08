@@ -1,6 +1,6 @@
 'use client'
 
-import { Smartphone, Radio, Music, MessageSquare, FileText, Disc, Search, FileAudio, Fingerprint, Users, Sparkles, Headphones } from 'lucide-react'
+import { Smartphone, Music, MessageSquare, FileText, Disc, Search, FileAudio, Fingerprint, Users, Sparkles, Headphones } from 'lucide-react'
 import Link from 'next/link'
 import { FadeIn } from './animations/FadeIn'
 import { PhoneMockup } from './PhoneMockup'

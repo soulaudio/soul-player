@@ -13,6 +13,7 @@ import {
   defaultPlaybackConfig
 } from './types'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type EventCallback = (...args: any[]) => void
 
 export class DemoPlaybackManager {
@@ -471,6 +472,7 @@ export class DemoPlaybackManager {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private emit(event: string, ...args: any[]): void {
     this.eventListeners.get(event)?.forEach(cb => cb(...args))
   }

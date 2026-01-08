@@ -30,9 +30,12 @@ export function MockSettingsProvider({ children }: { children: ReactNode }) {
 
 // Mock Theme Context
 interface ThemeContextValue {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   currentTheme: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   availableThemes: any[]
   setTheme: (themeId: string) => boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   importTheme: (themeJson: string) => any
   exportTheme: (themeId: string) => string | null
   deleteTheme: (themeId: string) => boolean

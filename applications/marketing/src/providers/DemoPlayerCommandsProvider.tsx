@@ -88,7 +88,7 @@ export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }
 
       async getQueue() {
         // Demo: Return current queue from manager
-        return manager.getQueue().map((track, index) => ({
+        return manager.getQueue().map((track) => ({
           trackId: track.id,
           title: track.title,
           artist: track.artist,
