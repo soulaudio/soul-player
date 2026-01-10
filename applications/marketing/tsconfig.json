@@ -32,6 +32,9 @@
       "@/providers/*": [
         "./src/providers/*"
       ],
+      "@/utils/*": [
+        "./src/utils/*"
+      ],
       "@soul-player/shared": [
         "../shared/src"
       ]

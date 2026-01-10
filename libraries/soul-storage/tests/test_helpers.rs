@@ -48,23 +48,43 @@ pub async fn setup_test_db() -> SqlitePool {
 
 /// Test fixture: Create a test user
 pub async fn create_test_user(pool: &SqlitePool, username: &str) -> UserId {
-    let result = sqlx::query("INSERT INTO users (name) VALUES (?)")
+    let user_id = UserId::generate();
+    let created_at = chrono::Utc::now().timestamp();
+
+    sqlx::query("INSERT INTO users (id, name, created_at) VALUES (?, ?, ?)")
+        .bind(user_id.as_str())
         .bind(username)
+        .bind(created_at)
         .execute(pool)
         .await
         .expect("Failed to create test user");
 
-    result.last_insert_rowid()
+    user_id
 }
 
 /// Test fixture: Create a test source
 pub async fn create_test_source(pool: &SqlitePool, name: &str, source_type: &str) -> SourceId {
-    let result = sqlx::query("INSERT INTO sources (name, source_type, is_online) VALUES (?, ?, 1)")
+    let result = if source_type == "server" {
+        sqlx::query(
+            "INSERT INTO sources (name, source_type, server_url, is_online) VALUES (?, ?, ?, 1)",
+        )
         .bind(name)
         .bind(source_type)
+        .bind(format!(
+            "http://test-server-{}.local",
+            name.replace(' ', "-")
+        ))
         .execute(pool)
         .await
-        .expect("Failed to create test source");
+        .expect("Failed to create test source")
+    } else {
+        sqlx::query("INSERT INTO sources (name, source_type, is_online) VALUES (?, ?, 1)")
+            .bind(name)
+            .bind(source_type)
+            .execute(pool)
+            .await
+            .expect("Failed to create test source")
+    };
 
     result.last_insert_rowid()
 }
@@ -111,36 +131,20 @@ pub async fn create_test_track(
     album_id: Option<AlbumId>,
     origin_source_id: SourceId,
     local_file_path: Option<&str>,
-) -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    // Generate unique track ID using timestamp + random component
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_micros();
-    let track_id = format!("track-{}-{}", timestamp, rand::random::<u32>());
-
-    let file_path = local_file_path.unwrap_or("/test/path/song.mp3");
-    let added_at = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-
-    sqlx::query(
-        "INSERT INTO tracks (id, title, artist_id, album_id, origin_source_id, file_format, file_path, added_at)
-         VALUES (?, ?, ?, ?, ?, 'mp3', ?, ?)"
+) -> TrackId {
+    let result = sqlx::query(
+        "INSERT INTO tracks (title, artist_id, album_id, origin_source_id, file_format, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'mp3', datetime('now'), datetime('now'))"
     )
-    .bind(&track_id)
     .bind(title)
     .bind(artist_id)
     .bind(album_id)
     .bind(origin_source_id)
-    .bind(file_path)
-    .bind(added_at)
     .execute(pool)
     .await
     .expect("Failed to create test track");
+
+    let track_id = result.last_insert_rowid();
 
     // Create track availability
     if let Some(path) = local_file_path {
@@ -148,35 +152,44 @@ pub async fn create_test_track(
             "INSERT INTO track_sources (track_id, source_id, status, local_file_path)
              VALUES (?, ?, 'local_file', ?)",
         )
-        .bind(&track_id)
+        .bind(track_id)
         .bind(origin_source_id)
         .bind(path)
         .execute(pool)
         .await
         .expect("Failed to create track availability");
+    } else {
+        // For tracks without local_file_path (e.g., server tracks), still create track_sources entry
+        sqlx::query(
+            "INSERT INTO track_sources (track_id, source_id, status)
+             VALUES (?, ?, 'stream_only')",
+        )
+        .bind(track_id)
+        .bind(origin_source_id)
+        .execute(pool)
+        .await
+        .expect("Failed to create track availability");
     }
 
-    // Initialize stats
-    sqlx::query(
-        "INSERT INTO track_stats (track_id, play_count, skip_count)
-         VALUES (?, 0, 0)",
-    )
-    .bind(&track_id)
-    .execute(pool)
-    .await
-    .expect("Failed to create track stats");
+    // Note: track_stats is now per-user and created on-demand when a user plays/rates a track
+    // No automatic initialization needed here
 
-    track_id
+    TrackId::new(track_id.to_string())
 }
 
 /// Test fixture: Create a complete playlist
 pub async fn create_test_playlist(pool: &SqlitePool, name: &str, owner_id: UserId) -> PlaylistId {
-    let result = sqlx::query("INSERT INTO playlists (name, owner_id) VALUES (?, ?)")
+    let playlist_id = PlaylistId::generate();
+    let created_at = chrono::Utc::now().timestamp();
+
+    sqlx::query("INSERT INTO playlists (id, name, owner_id, created_at) VALUES (?, ?, ?, ?)")
+        .bind(playlist_id.as_str())
         .bind(name)
-        .bind(owner_id)
+        .bind(owner_id.as_str())
+        .bind(created_at)
         .execute(pool)
         .await
         .expect("Failed to create test playlist");
 
-    result.last_insert_rowid()
+    playlist_id
 }

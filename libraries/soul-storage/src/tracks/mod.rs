@@ -408,8 +408,10 @@ pub async fn create(pool: &SqlitePool, track: CreateTrack) -> Result<Track> {
 
     // Create track_sources entry
     if let Some(local_file_path) = track.local_file_path {
-        eprintln!("[tracks::create] Creating track_sources entry: track_id={}, source_id={}, path={}",
-            track_id, track.origin_source_id, local_file_path);
+        eprintln!(
+            "[tracks::create] Creating track_sources entry: track_id={}, source_id={}, path={}",
+            track_id, track.origin_source_id, local_file_path
+        );
         sqlx::query!(
             r#"
             INSERT INTO track_sources (track_id, source_id, status, local_file_path)
@@ -423,7 +425,9 @@ pub async fn create(pool: &SqlitePool, track: CreateTrack) -> Result<Track> {
         .await?;
         eprintln!("[tracks::create] ✓ track_sources entry created");
     } else {
-        eprintln!("[tracks::create] ⚠ WARNING: No local_file_path provided, skipping track_sources entry");
+        eprintln!(
+            "[tracks::create] ⚠ WARNING: No local_file_path provided, skipping track_sources entry"
+        );
     }
 
     // Note: track_stats is now per-user and created on-demand when a user plays/rates a track
@@ -462,12 +466,44 @@ pub async fn update(pool: &SqlitePool, id: TrackId, track: UpdateTrack) -> Resul
         query_parts.push("album_id = ?");
         has_updates = true;
     }
+    if track.album_artist_id.is_some() {
+        query_parts.push("album_artist_id = ?");
+        has_updates = true;
+    }
     if track.track_number.is_some() {
         query_parts.push("track_number = ?");
         has_updates = true;
     }
+    if track.disc_number.is_some() {
+        query_parts.push("disc_number = ?");
+        has_updates = true;
+    }
     if track.year.is_some() {
         query_parts.push("year = ?");
+        has_updates = true;
+    }
+    if track.duration_seconds.is_some() {
+        query_parts.push("duration_seconds = ?");
+        has_updates = true;
+    }
+    if track.bitrate.is_some() {
+        query_parts.push("bitrate = ?");
+        has_updates = true;
+    }
+    if track.sample_rate.is_some() {
+        query_parts.push("sample_rate = ?");
+        has_updates = true;
+    }
+    if track.channels.is_some() {
+        query_parts.push("channels = ?");
+        has_updates = true;
+    }
+    if track.musicbrainz_recording_id.is_some() {
+        query_parts.push("musicbrainz_recording_id = ?");
+        has_updates = true;
+    }
+    if track.fingerprint.is_some() {
+        query_parts.push("fingerprint = ?");
         has_updates = true;
     }
     if track.metadata_source.is_some() {
@@ -496,11 +532,35 @@ pub async fn update(pool: &SqlitePool, id: TrackId, track: UpdateTrack) -> Resul
     if let Some(album_id) = track.album_id {
         query = query.bind(album_id);
     }
+    if let Some(album_artist_id) = track.album_artist_id {
+        query = query.bind(album_artist_id);
+    }
     if let Some(track_number) = track.track_number {
         query = query.bind(track_number);
     }
+    if let Some(disc_number) = track.disc_number {
+        query = query.bind(disc_number);
+    }
     if let Some(year) = track.year {
         query = query.bind(year);
+    }
+    if let Some(duration_seconds) = track.duration_seconds {
+        query = query.bind(duration_seconds);
+    }
+    if let Some(bitrate) = track.bitrate {
+        query = query.bind(bitrate);
+    }
+    if let Some(sample_rate) = track.sample_rate {
+        query = query.bind(sample_rate);
+    }
+    if let Some(channels) = track.channels {
+        query = query.bind(channels);
+    }
+    if let Some(musicbrainz_recording_id) = &track.musicbrainz_recording_id {
+        query = query.bind(musicbrainz_recording_id);
+    }
+    if let Some(fingerprint) = &track.fingerprint {
+        query = query.bind(fingerprint);
     }
     if let Some(metadata_source) = &track.metadata_source {
         let metadata_str = format_metadata_source(metadata_source);

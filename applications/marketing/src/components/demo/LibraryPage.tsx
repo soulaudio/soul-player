@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { TrackList, usePlayerCommands, type Track, type QueueTrack } from '@soul-player/shared'
+import { TrackList, usePlayerCommands, removeConsecutiveDuplicates, type Track, type QueueTrack } from '@soul-player/shared'
 import { getDemoStorage } from '@/lib/demo/storage'
 import { DemoTrack, DemoAlbum } from '@/lib/demo/types'
 
@@ -24,8 +24,9 @@ export function LibraryPage() {
   }, [storage])
 
   // Convert DemoTrack to Track format for shared component
+  // NOTE: Demo tracks have string IDs, but shared Track interface requires number IDs
   const tracks: Track[] = demoTracks.map((t) => ({
-    id: t.id,
+    id: Number(t.id), // Convert string ID to number for shared interface
     title: t.title,
     artist: t.artist,
     album: t.album || undefined,
@@ -35,12 +36,24 @@ export function LibraryPage() {
 
   // Build queue callback - platform-specific logic
   const buildQueue = useCallback((allTracks: Track[], clickedTrack: Track, clickedIndex: number): QueueTrack[] => {
+    console.log('[LibraryPage] buildQueue called:', {
+      totalTracks: allTracks.length,
+      clickedTrack: clickedTrack.title,
+      clickedIndex
+    });
+
     // Find corresponding demo tracks for file paths
     const queue = [
       ...allTracks.slice(clickedIndex),
       ...allTracks.slice(0, clickedIndex),
     ].map((t) => {
-      const demoTrack = demoTracks.find((dt) => dt.id === String(t.id))
+      // Convert Track.id (number) to string for lookup in demo storage
+      const demoTrack = demoTracks.find((dt) => dt.id === String(t.id));
+
+      if (!demoTrack) {
+        console.error('[LibraryPage] Demo track not found for ID:', t.id, 'title:', t.title);
+      }
+
       return {
         trackId: String(t.id),
         title: t.title,
@@ -49,10 +62,19 @@ export function LibraryPage() {
         filePath: demoTrack?.path || '',
         durationSeconds: t.duration || null,
         trackNumber: t.trackNumber || null,
-      }
-    })
+        coverArtPath: demoTrack?.coverUrl || null,
+      };
+    });
 
-    return queue
+    // Filter out tracks with empty filePath (failed lookups)
+    const validQueue = queue.filter(t => t.filePath !== '');
+
+    if (validQueue.length !== queue.length) {
+      console.warn('[LibraryPage] Filtered out', queue.length - validQueue.length, 'tracks with missing paths');
+    }
+
+    // Remove consecutive duplicates (prevents same track playing twice in a row)
+    return removeConsecutiveDuplicates(validQueue, 'trackId');
   }, [demoTracks])
 
   const handleAlbumClick = async (album: DemoAlbum) => {
@@ -67,7 +89,13 @@ export function LibraryPage() {
 
       // Build queue from album tracks
       const queue: QueueTrack[] = albumTracks.map((t) => {
-        const demoTrack = demoTracks.find((dt) => dt.id === String(t.id))
+        // Convert Track.id (number) to string for lookup in demo storage
+        const demoTrack = demoTracks.find((dt) => dt.id === String(t.id));
+
+        if (!demoTrack) {
+          console.error('[LibraryPage] Demo track not found for album track ID:', t.id);
+        }
+
         return {
           trackId: String(t.id),
           title: t.title,
@@ -76,13 +104,17 @@ export function LibraryPage() {
           filePath: demoTrack?.path || '',
           durationSeconds: t.duration || null,
           trackNumber: null,
-        }
-      })
+          coverArtPath: demoTrack?.coverUrl || null,
+        };
+      });
 
-      console.log('[LibraryPage] Playing album with', queue.length, 'tracks')
+      // Remove consecutive duplicates (prevents same track playing twice in a row)
+      const deduplicatedQueue = removeConsecutiveDuplicates(queue, 'trackId')
+
+      console.log('[LibraryPage] Playing album with', deduplicatedQueue.length, 'tracks')
 
       // Play the album from the first track
-      await commands.playQueue(queue, 0)
+      await commands.playQueue(deduplicatedQueue, 0)
     } catch (error) {
       console.error('[LibraryPage] Failed to play album:', error)
     }

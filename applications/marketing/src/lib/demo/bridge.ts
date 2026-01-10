@@ -1,21 +1,34 @@
 /**
- * Bridge between DemoPlaybackManager and shared Zustand store
- * Makes demo work exactly like desktop
+ * Bridge between WASM PlaybackManager and shared Zustand store
+ * Makes demo work exactly like desktop using shared Rust logic
  */
 
 import { usePlayerStore } from '@soul-player/shared/stores/player'
-import { DemoPlaybackManager } from './playback-manager'
+import { WasmPlaybackAdapter } from './wasm-playback-adapter'
 import { PlaybackState, RepeatMode as DemoRepeatMode, ShuffleMode as DemoShuffleMode, type QueueTrack } from './types'
 import type { Track } from '@soul-player/shared/types'
+import { getDemoStorage } from './storage'
 
 // Global manager instance
-let managerInstance: DemoPlaybackManager | null = null
+let managerInstance: WasmPlaybackAdapter | null = null
+let initPromise: Promise<void> | null = null
 
-export function getManager(): DemoPlaybackManager {
+export async function getManager(): Promise<WasmPlaybackAdapter> {
   if (!managerInstance) {
-    managerInstance = new DemoPlaybackManager()
-    setupBridge()
+    managerInstance = new WasmPlaybackAdapter()
+    initPromise = managerInstance.initialize().then(() => {
+      setupBridge()
+    })
   }
+
+  if (initPromise) {
+    await initPromise
+  }
+
+  return managerInstance
+}
+
+export function getManagerSync(): WasmPlaybackAdapter | null {
   return managerInstance
 }
 
@@ -32,18 +45,37 @@ function setupBridge() {
 
   manager.on('trackChange', (track: QueueTrack | null) => {
     if (track) {
+      // Convert demo QueueTrack to shared Track format
+      // track.id is string from WASM, convert to number for shared interface
+      const trackId = Number(track.id);
+
+      // Look up cover URL from demo storage (WASM doesn't store it)
+      const storage = getDemoStorage();
+      const demoTrack = storage.getTrackById(track.id);
+      const coverUrl = demoTrack?.coverUrl || undefined;
+
+      console.log('[Bridge] Track changed:', {
+        id: track.id,
+        convertedId: trackId,
+        title: track.title,
+        coverUrl: coverUrl
+      });
+
       const sharedTrack: Track = {
-        id: parseInt(track.id) || 0,
+        id: trackId,
         title: track.title,
         artist: track.artist,
         album: track.album || '',
-        duration: Math.floor(track.duration),
+        duration: Math.floor(track.duration_secs),  // Use correct field name
         filePath: track.path,
+        coverArtPath: coverUrl,  // Look up from storage
         addedAt: new Date().toISOString(),
-      }
-      usePlayerStore.setState({ currentTrack: sharedTrack, duration: track.duration })
+      };
+
+      usePlayerStore.setState({ currentTrack: sharedTrack, duration: track.duration_secs });
     } else {
-      usePlayerStore.setState({ currentTrack: null, duration: 0 })
+      console.log('[Bridge] Track cleared');
+      usePlayerStore.setState({ currentTrack: null, duration: 0 });
     }
   })
 
@@ -75,7 +107,9 @@ function setupBridge() {
   })
 }
 
-// Initialize bridge on first import
+// Initialize bridge on first import (async)
 if (typeof window !== 'undefined') {
-  getManager()
+  getManager().catch(err => {
+    console.error('[Bridge] Failed to initialize WASM playback manager:', err)
+  })
 }

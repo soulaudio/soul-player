@@ -39,4 +39,35 @@ From applications/desktop/:
 
 - Rust 1.75+
 - Node 20+
-- Platform-specific deps (see main README.md)
+
+### Windows
+
+LLVM is required for ASIO audio support (low-latency professional audio):
+
+```powershell
+# Install LLVM (one-time setup)
+choco install llvm -y
+
+# Set environment variable (add to your PowerShell profile for persistence)
+$env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+
+# Or set permanently:
+[Environment]::SetEnvironmentVariable("LIBCLANG_PATH", "C:\Program Files\LLVM\bin", "User")
+```
+
+Alternatively, run the setup script:
+```powershell
+.\scripts\setup-windows-env.ps1
+```
+
+### Linux
+
+```bash
+sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+```
+
+### macOS
+
+```bash
+brew install pkg-config
+```

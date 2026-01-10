@@ -29,7 +29,10 @@ impl SyncManager {
         let recorded_migration = self.state.get_last_known_migration().await?;
 
         if !recorded_migration.is_empty() && last_migration != recorded_migration {
-            info!("Schema change detected: {} -> {}", recorded_migration, last_migration);
+            info!(
+                "Schema change detected: {} -> {}",
+                recorded_migration, last_migration
+            );
             return Ok(Some(SyncTrigger::SchemaMigration));
         }
 
@@ -55,9 +58,8 @@ impl SyncManager {
         let pool = self.pool.clone();
         let session_id = Uuid::new_v4().to_string();
 
-        let handle = tokio::spawn(async move {
-            Self::sync_impl(pool, session_id, trigger, tx).await
-        });
+        let handle =
+            tokio::spawn(async move { Self::sync_impl(pool, session_id, trigger, tx).await });
 
         Ok((rx, handle))
     }
@@ -88,18 +90,20 @@ impl SyncManager {
 
         // Phase 2: Metadata Extraction
         debug!("Phase 2: Extracting metadata");
-        let updated_tracks = match metadata::extract_all(&pool, &state, &files, &progress_tx, &session_id).await {
-            Ok(count) => count,
-            Err(e) => {
-                error!("Metadata extraction phase failed: {}", e);
-                state.mark_error(&e.to_string()).await?;
-                return Err(e);
-            }
-        };
+        let updated_tracks =
+            match metadata::extract_all(&pool, &state, &files, &progress_tx, &session_id).await {
+                Ok(count) => count,
+                Err(e) => {
+                    error!("Metadata extraction phase failed: {}", e);
+                    state.mark_error(&e.to_string()).await?;
+                    return Err(e);
+                }
+            };
 
         // Phase 3: Validation & Repair
         debug!("Phase 3: Validating library");
-        if let Err(e) = validator::validate_library(&pool, &state, &progress_tx, &session_id).await {
+        if let Err(e) = validator::validate_library(&pool, &state, &progress_tx, &session_id).await
+        {
             error!("Validation phase failed: {}", e);
             state.mark_error(&e.to_string()).await?;
             return Err(e);
@@ -107,14 +111,15 @@ impl SyncManager {
 
         // Phase 4: Cleanup Orphans
         debug!("Phase 4: Cleaning up orphans");
-        let orphans_cleaned = match cleaner::cleanup_orphans(&pool, &state, &progress_tx, &session_id).await {
-            Ok(count) => count,
-            Err(e) => {
-                error!("Cleanup phase failed: {}", e);
-                state.mark_error(&e.to_string()).await?;
-                return Err(e);
-            }
-        };
+        let orphans_cleaned =
+            match cleaner::cleanup_orphans(&pool, &state, &progress_tx, &session_id).await {
+                Ok(count) => count,
+                Err(e) => {
+                    error!("Cleanup phase failed: {}", e);
+                    state.mark_error(&e.to_string()).await?;
+                    return Err(e);
+                }
+            };
 
         // Update last known migration version
         let last_migration = Self::get_last_applied_migration(&pool).await?;

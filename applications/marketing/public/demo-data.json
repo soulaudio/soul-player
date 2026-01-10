@@ -7,7 +7,8 @@
       "album": "Demo Collection",
       "duration": 42,
       "trackNumber": 1,
-      "path": "/demo-audio/dark.flac"
+      "path": "/demo-audio/dark.flac",
+      "coverUrl": "/demo-artwork/dark.jpg"
     },
     {
       "id": "2",
@@ -16,7 +17,318 @@
       "album": "Demo Collection",
       "duration": 35,
       "trackNumber": 2,
-      "path": "/demo-audio/eyes.flac"
+      "path": "/demo-audio/eyes.flac",
+      "coverUrl": "/demo-artwork/dark.jpg"
+    },
+    {
+      "id": "3",
+      "title": "BOY IN THE MIRROR",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 127,
+      "trackNumber": 1,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 01 BOY IN THE MIRROR.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "4",
+      "title": "Before you realize",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 238,
+      "trackNumber": 2,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 02 Before you realize.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "5",
+      "title": "Dark chocolate",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 124,
+      "trackNumber": 3,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 03 Dark chocolate.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "6",
+      "title": "Urges",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 237,
+      "trackNumber": 4,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 04 Urges.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "7",
+      "title": "Lie is not a lie",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 468,
+      "trackNumber": 5,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 05 Lie is not a lie.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "8",
+      "title": "Monochrome",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 607,
+      "trackNumber": 6,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 06 Monochrome.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "9",
+      "title": "ENCLOSED ROOM",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 208,
+      "trackNumber": 7,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 07 ENCLOSED ROOM.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "10",
+      "title": "Suffocating",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 350,
+      "trackNumber": 8,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 08 Suffocating.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "11",
+      "title": "Surface",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 228,
+      "trackNumber": 9,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 09 Surface.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "12",
+      "title": "Temporary",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 155,
+      "trackNumber": 10,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 10 Temporary.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "13",
+      "title": "Unlovable",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 121,
+      "trackNumber": 11,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 11 Unlovable.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "14",
+      "title": "Defect",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 164,
+      "trackNumber": 12,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 12 Defect.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "15",
+      "title": "CURTAINS UP",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 115,
+      "trackNumber": 13,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 13 CURTAINS UP.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "16",
+      "title": "Expectations",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 195,
+      "trackNumber": 14,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 14 Expectations.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "17",
+      "title": "Impostor",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 152,
+      "trackNumber": 15,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 15 Impostor.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "18",
+      "title": "Fraud",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 157,
+      "trackNumber": 16,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 16 Fraud.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "19",
+      "title": "Guilt",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 213,
+      "trackNumber": 17,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 17 Guilt.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "20",
+      "title": "PRESSURES",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 200,
+      "trackNumber": 18,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 18 PRESSURES.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "21",
+      "title": "Mr. Perfect Main Theme",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 133,
+      "trackNumber": 19,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 19 Mr. Perfect Main Theme.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "22",
+      "title": "Obsessions",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 389,
+      "trackNumber": 20,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 20 Obsessions.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "23",
+      "title": "Isolation",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 218,
+      "trackNumber": 21,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 21 Isolation.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "24",
+      "title": "Who am I lying to?",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 156,
+      "trackNumber": 22,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 22 Who am I lying to-.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "25",
+      "title": "You and I",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 237,
+      "trackNumber": 23,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 23 You and I.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "26",
+      "title": "Drain",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 211,
+      "trackNumber": 24,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 24 Drain.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "27",
+      "title": "Wish you weren't like this",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 304,
+      "trackNumber": 25,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 25 Wish you weren't like this.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "28",
+      "title": "LIGHT",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 168,
+      "trackNumber": 26,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 26 LIGHT.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "29",
+      "title": "Meditations",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 179,
+      "trackNumber": 27,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 27 Meditations.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "30",
+      "title": "I forgive you",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 153,
+      "trackNumber": 28,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 28 I forgive you.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "31",
+      "title": "Maybe it doesn't matter",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 182,
+      "trackNumber": 29,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 29 Maybe it doesn't matter.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "32",
+      "title": "What's next",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 82,
+      "trackNumber": 30,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 30 What's next.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
+    },
+    {
+      "id": "33",
+      "title": "Father, I sober",
+      "artist": "Sebastián Stupák",
+      "album": "pressures, father I sober",
+      "duration": 228,
+      "trackNumber": 31,
+      "path": "/demo-audio/Sebastián Stupák - pressures, father I sober - 31 Father, I sober.mp3",
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
     }
   ],
   "albums": [
@@ -25,7 +337,16 @@
       "title": "Demo Collection",
       "artist": "Sebastián Stupák",
       "year": 2024,
-      "trackIds": ["1", "2"]
+      "trackIds": ["1", "2"],
+      "coverUrl": "/demo-artwork/dark.jpg"
+    },
+    {
+      "id": "2",
+      "title": "pressures, father I sober",
+      "artist": "Sebastián Stupák",
+      "year": 2024,
+      "trackIds": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"],
+      "coverUrl": "/demo-artwork/pressures-father-i-sober.jpg"
     }
   ]
 }

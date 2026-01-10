@@ -53,7 +53,9 @@ pub async fn scan_all_sources(
     debug!("Scan complete: found {} total files", all_files.len());
 
     // Update phase with total count
-    state.update_phase(SyncPhase::Scanning, all_files.len()).await?;
+    state
+        .update_phase(SyncPhase::Scanning, all_files.len())
+        .await?;
 
     // Emit progress
     let progress = state.get_progress().await?;
@@ -64,11 +66,9 @@ pub async fn scan_all_sources(
 
 /// Helper to get active sources
 async fn get_active_sources(pool: &SqlitePool) -> Result<Vec<SourceInfo>> {
-    let rows = sqlx::query!(
-        "SELECT id, name, source_type FROM sources WHERE is_active = 1"
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = sqlx::query!("SELECT id, name, source_type FROM sources WHERE is_active = 1")
+        .fetch_all(pool)
+        .await?;
 
     Ok(rows
         .into_iter()

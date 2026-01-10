@@ -251,6 +251,21 @@ impl ParametricEq {
         self.needs_update = true;
     }
 
+    /// Set all three bands at once (convenience method)
+    ///
+    /// # Arguments
+    /// * `bands` - Vector of 3 EQ bands (low, mid, high)
+    ///
+    /// # Panics
+    /// Panics if the vector doesn't contain exactly 3 bands
+    pub fn set_bands(&mut self, bands: Vec<EqBand>) {
+        assert_eq!(bands.len(), 3, "ParametricEq requires exactly 3 bands");
+        self.low_band = bands[0];
+        self.mid_band = bands[1];
+        self.high_band = bands[2];
+        self.needs_update = true;
+    }
+
     /// Get low band parameters
     pub fn low_band(&self) -> EqBand {
         self.low_band

@@ -11,14 +11,22 @@ import {
   type PlaybackEventsInterface,
   type PlaybackCapabilities,
 } from '@soul-player/shared';
-import { getManager } from '@/lib/demo/bridge';
+import { getManager, getManagerSync } from '@/lib/demo/bridge';
 import { PlaybackState } from '@/lib/demo/types';
 
 export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerContextValue>(() => {
-    // Ensure bridge is initialized
-    const manager = getManager();
-    console.log('[DemoPlayerCommandsProvider] Manager initialized:', manager);
+    // Ensure bridge initialization is started (async)
+    getManager().catch(console.error);
+
+    // Helper to get manager, throws if not initialized yet
+    const getManagerOrThrow = () => {
+      const manager = getManagerSync();
+      if (!manager) {
+        throw new Error('WASM playback manager not initialized yet');
+      }
+      return manager;
+    };
 
     // Commands implementation using demo playback manager
     const commands: PlayerCommandsInterface = {
@@ -28,45 +36,45 @@ export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }
         if (!track) throw new Error(`Track ${trackId} not found`);
 
         const queueTrack = storage.toQueueTrack(track);
-        manager.clearQueue();
-        manager.addToQueueNext(queueTrack);
-        await manager.play();
+        getManagerOrThrow().clearQueue();
+        getManagerOrThrow().addToQueueNext(queueTrack);
+        await getManagerOrThrow().play();
       },
 
       async pausePlayback() {
-        manager.pause();
+        getManagerOrThrow().pause();
       },
 
       async resumePlayback() {
-        await manager.play();
+        await getManagerOrThrow().play();
       },
 
       async stopPlayback() {
-        manager.stop();
+        getManagerOrThrow().stop();
       },
 
       async skipNext() {
-        await manager.next();
+        await getManagerOrThrow().next();
       },
 
       async skipPrevious() {
-        await manager.previous();
+        await getManagerOrThrow().previous();
       },
 
       async seek(position: number) {
-        manager.seek(position);
+        getManagerOrThrow().seek(position);
       },
 
       async setVolume(volume: number) {
         // Demo manager expects 0-100, shared interface uses 0-1
         const volumePercent = Math.max(0, Math.min(100, Math.round(volume * 100)));
         console.log('[DemoPlayerCommandsProvider] Setting volume:', { volume, volumePercent });
-        manager.setVolume(volumePercent);
+        getManagerOrThrow().setVolume(volumePercent);
       },
 
       async setShuffle(enabled: boolean) {
         const ShuffleMode = (await import('@/lib/demo/types')).ShuffleMode;
-        manager.setShuffle(enabled ? ShuffleMode.Random : ShuffleMode.Off);
+        getManagerOrThrow().setShuffle(enabled ? ShuffleMode.Random : ShuffleMode.Off);
       },
 
       async setRepeatMode(mode: 'off' | 'all' | 'one') {
@@ -76,40 +84,69 @@ export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }
           all: RepeatMode.All,
           one: RepeatMode.One,
         };
-        manager.setRepeat(modeMap[mode]);
+        getManagerOrThrow().setRepeat(modeMap[mode]);
       },
 
       async getPlaybackCapabilities(): Promise<PlaybackCapabilities> {
         return {
-          hasNext: manager.hasNext(),
-          hasPrevious: manager.hasPrevious(),
+          hasNext: getManagerOrThrow().hasNext(),
+          hasPrevious: getManagerOrThrow().hasPrevious(),
         };
       },
 
       async getQueue() {
-        // Demo: Return current queue from manager
-        return manager.getQueue().map((track) => ({
-          trackId: track.id,
-          title: track.title,
-          artist: track.artist,
-          album: track.album || null,
-          filePath: track.path,
-          durationSeconds: track.duration || null,
-          trackNumber: null,
-        }));
+        // Demo: Return current queue from manager with cover art
+        // Note: coverUrl is not stored in WASM, so we look it up from demo storage
+        const storage = (await import('@/lib/demo/storage')).getDemoStorage();
+
+        return getManagerOrThrow().getQueue().map((track) => {
+          // Look up demo track to get coverUrl
+          const demoTrack = storage.getTrackById(track.id);
+
+          return {
+            trackId: track.id,
+            title: track.title,
+            artist: track.artist,
+            album: track.album || null,
+            filePath: track.path,
+            durationSeconds: track.duration_secs || null,  // Use correct field name
+            trackNumber: track.track_number || null,  // Use correct field name
+            coverArtPath: demoTrack?.coverUrl || null,  // Look up from storage
+          };
+        });
       },
 
       async playQueue(queue, startIndex = 0) {
+        console.log('[DemoPlayerCommandsProvider] playQueue called:', {
+          queueLength: queue.length,
+          startIndex,
+          firstTrack: queue[0]?.title
+        });
+
         // Convert QueueTrack[] to demo QueueTrack format
-        const demoQueue = queue.map(track => ({
-          id: track.trackId,
-          title: track.title,
-          artist: track.artist,
-          album: track.album || undefined,
-          path: track.filePath,
-          duration: track.durationSeconds || 0,
-          source: { type: 'single' as const },
-        }));
+        const storage = (await import('@/lib/demo/storage')).getDemoStorage();
+        const demoQueue = queue.map(track => {
+          const demoTrack = storage.getTrackById(track.trackId);
+          if (!demoTrack) {
+            console.error('[DemoPlayerCommandsProvider] Demo track not found:', track.trackId);
+          }
+          return {
+            id: track.trackId,
+            title: track.title,
+            artist: track.artist,
+            album: track.album || undefined,
+            path: track.filePath,
+            duration_secs: track.durationSeconds || 0,  // WASM expects duration_secs (underscore)
+            track_number: track.trackNumber || undefined,
+            coverUrl: demoTrack?.coverUrl,
+          };
+        });
+
+        console.log('[DemoPlayerCommandsProvider] Converted to demo queue:', {
+          length: demoQueue.length,
+          firstPath: demoQueue[0]?.path,
+          allHavePaths: demoQueue.every(t => t.path)
+        });
 
         // Load the queue starting from the specified index
         const reorderedQueue = [
@@ -117,11 +154,24 @@ export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }
           ...demoQueue.slice(0, startIndex),
         ];
 
+        console.log('[DemoPlayerCommandsProvider] Loading playlist to WASM, starting track:', reorderedQueue[0]?.title);
+
         // IMPORTANT: Stop current playback first (Spotify behavior)
         // This ensures clicking play starts fresh, doesn't append
-        manager.stop();
-        manager.loadPlaylist(reorderedQueue);
-        await manager.play();
+        try {
+          getManagerOrThrow().stop();
+          getManagerOrThrow().loadPlaylist(reorderedQueue);
+          await getManagerOrThrow().play();
+          console.log('[DemoPlayerCommandsProvider] Playback started successfully');
+        } catch (error) {
+          console.error('[DemoPlayerCommandsProvider] Failed to start playback:', error);
+          throw error;
+        }
+      },
+
+      async skipToQueueIndex(index: number) {
+        // Use the manager's built-in method that maintains history
+        await getManagerOrThrow().skipToQueueIndex(index);
       },
 
       async getAllSources() {
@@ -144,27 +194,27 @@ export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }
         const handler = (state: PlaybackState) => {
           callback(state === PlaybackState.Playing);
         };
-        return manager.on('stateChange', handler);
+        return getManagerOrThrow().on('stateChange', handler);
       },
 
       onTrackChange(callback) {
-        return manager.on('trackChange', callback);
+        return getManagerOrThrow().on('trackChange', callback);
       },
 
       onPositionUpdate(callback) {
-        return manager.on('positionUpdate', callback);
+        return getManagerOrThrow().on('positionUpdate', callback);
       },
 
       onVolumeChange(callback) {
-        return manager.on('volumeChange', callback);
+        return getManagerOrThrow().on('volumeChange', callback);
       },
 
       onQueueUpdate(callback) {
-        return manager.on('queueChange', callback);
+        return getManagerOrThrow().on('queueChange', callback);
       },
 
       onError(callback) {
-        return manager.on('error', callback);
+        return getManagerOrThrow().on('error', callback);
       },
     };
 

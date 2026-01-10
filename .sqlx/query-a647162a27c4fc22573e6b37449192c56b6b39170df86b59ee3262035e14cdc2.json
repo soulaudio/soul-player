@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE sync_state SET\n                processed_items = ?,\n                successful_items = ?,\n                failed_items = ?,\n                current_item = ?,\n                last_updated_at = datetime('now')\n            WHERE id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "a647162a27c4fc22573e6b37449192c56b6b39170df86b59ee3262035e14cdc2"
+}

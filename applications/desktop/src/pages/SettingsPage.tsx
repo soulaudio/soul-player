@@ -3,7 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ThemePicker } from '@soul-player/shared/theme';
 import { useSettings } from '../contexts/SettingsContext';
-import { Kbd } from '../components/Kbd';
+import { Kbd } from '@soul-player/shared';
+import { AudioSettingsPage } from '@soul-player/shared/settings';
+
+type SettingsTab = 'general' | 'audio' | 'shortcuts' | 'about';
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -11,6 +14,7 @@ export function SettingsPage() {
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [silentUpdate, setSilentUpdate] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
 
   // Load settings from backend
   useEffect(() => {
@@ -100,13 +104,54 @@ export function SettingsPage() {
     }
   };
 
-  return (
-    <div className="max-w-4xl">
-      <h1 className="text-3xl font-bold mb-6">{t('settings.title')}</h1>
+  const tabs: { id: SettingsTab; label: string }[] = [
+    { id: 'general', label: t('settings.general') },
+    { id: 'audio', label: t('settings.audio') },
+    { id: 'shortcuts', label: t('settings.shortcuts') },
+    { id: 'about', label: t('settings.about') },
+  ];
 
-      {/* Appearance Section */}
-      <section className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">{t('settings.appearance')}</h2>
+  return (
+    <div className="h-full flex flex-col">
+      {/* Tabs Navigation */}
+      <div className="border-b border-border px-6">
+        <div className="flex space-x-8">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                py-4 px-2 border-b-2 transition-colors font-medium text-sm
+                ${
+                  activeTab === tab.id
+                    ? 'border-primary text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }
+              `}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="flex-1 overflow-y-auto p-8">
+        {activeTab === 'general' && <GeneralSettings />}
+        {activeTab === 'audio' && <AudioSettingsPage />}
+        {activeTab === 'shortcuts' && <ShortcutsSettings />}
+        {activeTab === 'about' && <AboutSettings />}
+      </div>
+    </div>
+  );
+
+  // General Settings Tab Content
+  function GeneralSettings() {
+    return (
+      <div className="max-w-4xl space-y-8">
+        {/* Appearance Section */}
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">{t('settings.appearance')}</h2>
 
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2">{t('settings.theme')}</label>
@@ -147,46 +192,50 @@ export function SettingsPage() {
         </div>
       </section>
 
-      {/* Updates Section */}
-      <section className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">{t('settings.updates')}</h2>
+        {/* Updates Section */}
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">{t('settings.updates')}</h2>
+          <div className="space-y-4">
+            <label className="flex items-center space-x-3">
+              <input
+                type="checkbox"
+                checked={autoUpdate}
+                onChange={(e) => handleAutoUpdateChange(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm">{t('settings.autoUpdate')}</span>
+            </label>
 
-        <div className="space-y-4">
-          <label className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              checked={autoUpdate}
-              onChange={(e) => handleAutoUpdateChange(e.target.checked)}
-              className="w-4 h-4"
-            />
-            <span className="text-sm">{t('settings.autoUpdate')}</span>
-          </label>
+            <label className="flex items-center space-x-3">
+              <input
+                type="checkbox"
+                checked={silentUpdate}
+                onChange={(e) => handleSilentUpdateChange(e.target.checked)}
+                disabled={!autoUpdate}
+                className="w-4 h-4"
+              />
+              <span className="text-sm">{t('settings.silentUpdate')}</span>
+            </label>
 
-          <label className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              checked={silentUpdate}
-              onChange={(e) => handleSilentUpdateChange(e.target.checked)}
-              disabled={!autoUpdate}
-              className="w-4 h-4"
-            />
-            <span className="text-sm">{t('settings.silentUpdate')}</span>
-          </label>
+            <button
+              onClick={checkForUpdates}
+              disabled={checking}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            >
+              {checking ? 'Checking...' : t('settings.checkNow')}
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
-          <button
-            onClick={checkForUpdates}
-            disabled={checking}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
-          >
-            {checking ? 'Checking...' : t('settings.checkNow')}
-          </button>
-        </div>
-      </section>
-
-      {/* Shortcuts Section */}
-      <section className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">{t('settings.shortcuts')}</h2>
-        <p className="text-sm text-muted-foreground mb-4">
+  // Shortcuts Settings Tab Content
+  function ShortcutsSettings() {
+    return (
+      <div className="max-w-4xl">
+        <h2 className="text-3xl font-bold mb-6">{t('settings.shortcuts')}</h2>
+        <p className="text-sm text-muted-foreground mb-6">
           Configure global keyboard shortcuts for playback control.
         </p>
         <button
@@ -195,28 +244,27 @@ export function SettingsPage() {
         >
           Configure Shortcuts
         </button>
-      </section>
+      </div>
+    );
+  }
 
-      {/* Audio Settings Section */}
-      <section className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">{t('settings.audio')}</h2>
-        <p className="text-muted-foreground">
-          Audio configuration coming soon...
-        </p>
-      </section>
-
-      {/* About Section */}
-      <section>
-        <h2 className="text-2xl font-semibold mb-4">{t('settings.about')}</h2>
-        <div className="bg-muted/40 rounded-lg p-4 space-y-2">
-          <p className="text-sm">
-            <span className="font-medium">Soul Player</span> - Local-first music player
+  // About Settings Tab Content
+  function AboutSettings() {
+    return (
+      <div className="max-w-4xl">
+        <h2 className="text-3xl font-bold mb-6">{t('settings.about')}</h2>
+        <div className="bg-muted/40 rounded-lg p-6 space-y-3">
+          <p className="text-lg">
+            <span className="font-semibold">Soul Player</span> - Local-first music player
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {t('settings.version')} 0.1.0
           </p>
+          <p className="text-sm text-muted-foreground">
+            High-quality audio playback with professional audio processing pipeline
+          </p>
         </div>
-      </section>
-    </div>
-  );
+      </div>
+    );
+  }
 }

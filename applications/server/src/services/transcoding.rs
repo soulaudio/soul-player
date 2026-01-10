@@ -47,9 +47,9 @@ impl TranscodingService {
             }
             AudioFormat::Flac => {
                 let compression = match quality {
-                    Quality::Original => "0", // No compression (fastest)
-                    Quality::High => "5",     // Moderate compression
-                    Quality::Medium | Quality::Low => "8",   // High compression
+                    Quality::Original => "0",              // No compression (fastest)
+                    Quality::High => "5",                  // Moderate compression
+                    Quality::Medium | Quality::Low => "8", // High compression
                 };
                 cmd.arg("-compression_level")
                     .arg(compression)

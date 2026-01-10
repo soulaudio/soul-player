@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT track_id, local_file_path FROM track_sources\n         WHERE local_file_path IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "track_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "local_file_path",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "87aa1fe4c4e7c31529140c0de777de9d5183d8cf44921897cb6e99edb8da58c6"
+}

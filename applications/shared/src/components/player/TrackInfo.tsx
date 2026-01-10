@@ -1,4 +1,5 @@
 import { usePlayerStore } from '../../stores/player';
+import { ArtworkImage } from '../ArtworkImage';
 import { Music } from 'lucide-react';
 
 export function TrackInfo() {
@@ -20,9 +21,15 @@ export function TrackInfo() {
 
   return (
     <div className="flex items-center gap-3 min-w-0">
-      {/* Album art placeholder */}
-      <div className="flex-shrink-0 w-14 h-14 bg-gradient-player rounded flex items-center justify-center">
-        <Music className="w-6 h-6 text-primary-foreground" />
+      {/* Album art */}
+      <div className="flex-shrink-0 w-14 h-14 bg-gradient-player rounded overflow-hidden">
+        <ArtworkImage
+          trackId={currentTrack.id}
+          coverArtPath={currentTrack.coverArtPath}
+          alt={currentTrack.album || 'Album art'}
+          className="w-full h-full object-cover"
+          fallbackClassName="w-full h-full flex items-center justify-center"
+        />
       </div>
 
       {/* Track info */}

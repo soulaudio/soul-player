@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM track_sources\n         WHERE track_id NOT IN (SELECT id FROM tracks)\n         OR source_id NOT IN (SELECT id FROM sources)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "6679dbe6f3c00b67074502e80ea6293d79949b030c0c5ebef79d1ae1748e4fbf"
+}

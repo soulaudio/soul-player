@@ -11,6 +11,10 @@ pub enum AudioError {
     #[error("Audio device not found")]
     DeviceNotFound,
 
+    /// Device error
+    #[error("Device error: {0}")]
+    DeviceError(String),
+
     /// Failed to build output stream
     #[error("Failed to build output stream: {0}")]
     StreamBuildError(String),

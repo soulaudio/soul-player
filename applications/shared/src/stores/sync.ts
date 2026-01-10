@@ -46,7 +46,7 @@ interface SyncState {
   setError: (error: string | null) => void;
 }
 
-export const useSyncStore = create<SyncState>((set, get) => ({
+export const useSyncStore = create<SyncState>((set) => ({
   progress: null,
   summary: null,
   error: null,

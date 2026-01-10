@@ -6,21 +6,52 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["effects"]
+effects = ["soul-playback/effects"]  # DSP effects (EQ, compressor, limiter)
+asio = ["cpal/asio"]  # Windows ASIO support (low-latency, exclusive mode)
+jack = ["cpal/jack"]  # JACK audio connection kit (Linux/macOS pro audio)
+r8brain = ["dep:r8brain-rs"]  # High-quality r8brain resampling (requires cmake)
+docker-tests = []  # Enable Docker-based E2E tests (requires Docker Desktop)
+
 [dependencies]
 soul-core.workspace = true
 soul-audio.workspace = true
 soul-playback.workspace = true
-cpal.workspace = true
 thiserror.workspace = true
-symphonia.workspace = true  # For streaming audio decoding
-rubato = "0.15"  # Sample rate conversion
+serde = { workspace = true }
+
+# Audio I/O
+cpal = { workspace = true }
+
+# Decoding
+symphonia = { workspace = true }
+
+# Resampling
+rubato = { workspace = true }
+r8brain-rs = { workspace = true, optional = true }
+
+# DSP & Effects
+dasp = { workspace = true }
+fundsp = { workspace = true }
+biquad = { workspace = true }
+
+# Loudness Analysis
+ebur128 = { workspace = true }
+
+# Concurrency
 crossbeam-channel = "0.5"  # Thread-safe channels for audio thread communication
-reqwest = { workspace = true, features = ["stream"] }  # For streaming from server
 tokio = { workspace = true, features = ["sync"] }  # For async streaming
+
+# Networking (for streaming from server)
+reqwest = { workspace = true, features = ["stream"] }
 
 [dev-dependencies]
 tempfile = "3.24"
 rand = "0.8"
+testcontainers = { workspace = true }
+tokio-test = "0.4"
+hound = "3.5"  # WAV file creation for tests
 
 [lints.rust]
 # Override workspace forbid to allow unsafe Send/Sync impls for CPAL Stream

@@ -40,9 +40,7 @@ impl ArtworkExtractor {
     /// * `path` - Path to the audio file
     pub fn extract(&self, path: &Path) -> Result<Option<ArtworkData>> {
         // Canonicalize path for consistent cache keys
-        let canonical_path = path
-            .canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
+        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Check cache first
         {
@@ -100,9 +98,8 @@ impl ArtworkExtractor {
             .primary_tag()
             .or_else(|| tagged_file.first_tag());
 
-        let tag = match tag {
-            Some(t) => t,
-            None => return Ok(None),
+        let Some(tag) = tag else {
+            return Ok(None);
         };
 
         // Extract pictures from tag
@@ -117,9 +114,8 @@ impl ArtworkExtractor {
             .find(|p| matches!(p.pic_type(), PictureType::CoverFront))
             .or_else(|| pictures.first());
 
-        let picture = match picture {
-            Some(p) => p,
-            None => return Ok(None),
+        let Some(picture) = picture else {
+            return Ok(None);
         };
 
         // Check size limit
@@ -151,7 +147,7 @@ mod tests {
     #[test]
     fn extractor_creation() {
         let extractor = ArtworkExtractor::new(10);
-        assert!(extractor.cache.lock().unwrap().len() == 0);
+        assert!(extractor.cache.lock().unwrap().is_empty());
     }
 
     #[test]
@@ -165,6 +161,6 @@ mod tests {
     fn clear_cache_works() {
         let extractor = ArtworkExtractor::new(10);
         extractor.clear_cache();
-        assert!(extractor.cache.lock().unwrap().len() == 0);
+        assert!(extractor.cache.lock().unwrap().is_empty());
     }
 }

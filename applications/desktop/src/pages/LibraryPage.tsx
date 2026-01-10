@@ -97,11 +97,17 @@ export function LibraryPage() {
 
   // Build queue callback - platform-specific logic
   const buildQueue = useCallback((_allTracks: Track[], clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
+    console.log('[LibraryPage] buildQueue called:', {
+      clickedTrack: clickedTrack.title,
+      totalTracks: tracks.length,
+    });
+
     // Get desktop tracks to access file_path
     const desktopTracks = tracks;
 
     // Filter out tracks without file paths
     const validTracks = desktopTracks.filter((t) => t.file_path);
+    console.log('[LibraryPage] Valid tracks with file_path:', validTracks.length);
 
     // Find the valid index of the clicked track in desktopTracks
     const validClickedIndex = validTracks.findIndex(t => t.id === clickedTrack.id);
@@ -124,6 +130,7 @@ export function LibraryPage() {
       trackNumber: t.trackNumber || null,
     }));
 
+    console.log('[LibraryPage] Built queue with', queue.length, 'tracks');
     return queue;
   }, [tracks]);
 

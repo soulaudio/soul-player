@@ -122,7 +122,7 @@ pub async fn get_with_tracks(
     let tracks = track_rows
         .into_iter()
         .map(|row| PlaylistTrack {
-            track_id: row.track_id,
+            track_id: TrackId::new(row.track_id.to_string()),
             position: row.position as i32,
             added_at: row.added_at,
             title: Some(row.title),
@@ -175,15 +175,21 @@ pub async fn add_track(
         return Err(soul_core::SoulError::PermissionDenied);
     }
 
-    // Get next position
+    // Get next position (0-based)
     let next_position_row = sqlx::query!(
-        "SELECT COALESCE(MAX(position), 0) + 1 as next_pos FROM playlist_tracks WHERE playlist_id = ?",
+        "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM playlist_tracks WHERE playlist_id = ?",
         playlist_id
     )
     .fetch_one(pool)
     .await?;
 
     let next_position = next_position_row.next_pos;
+
+    // Convert TrackId (String) to i64 for database
+    let track_id_i64: i64 = track_id
+        .as_str()
+        .parse()
+        .map_err(|_| soul_core::SoulError::InvalidInput("Invalid track ID".to_string()))?;
 
     // Insert track
     sqlx::query!(
@@ -193,7 +199,7 @@ pub async fn add_track(
         ON CONFLICT(playlist_id, track_id) DO NOTHING
         "#,
         playlist_id,
-        track_id,
+        track_id_i64,
         next_position
     )
     .execute(pool)
@@ -201,7 +207,7 @@ pub async fn add_track(
 
     // Update playlist updated_at
     sqlx::query!(
-        "UPDATE playlists SET updated_at = datetime('now') WHERE id = ?",
+        "UPDATE playlists SET updated_at = strftime('%s', 'now') WHERE id = ?",
         playlist_id
     )
     .execute(pool)
@@ -253,7 +259,7 @@ pub async fn remove_track(
 
     // Update playlist updated_at
     sqlx::query!(
-        "UPDATE playlists SET updated_at = datetime('now') WHERE id = ?",
+        "UPDATE playlists SET updated_at = strftime('%s', 'now') WHERE id = ?",
         playlist_id
     )
     .execute(&mut *tx)
@@ -366,7 +372,7 @@ pub async fn reorder_tracks(
 
     // Update playlist updated_at
     sqlx::query!(
-        "UPDATE playlists SET updated_at = datetime('now') WHERE id = ?",
+        "UPDATE playlists SET updated_at = strftime('%s', 'now') WHERE id = ?",
         playlist_id
     )
     .execute(&mut *tx)
@@ -394,15 +400,19 @@ pub async fn share_playlist(
     }
 
     // Insert share
+    let now = chrono::Utc::now().timestamp();
     sqlx::query!(
         r#"
-        INSERT INTO playlist_shares (playlist_id, shared_with_user_id, permission)
-        VALUES (?, ?, ?)
-        ON CONFLICT(playlist_id, shared_with_user_id) DO UPDATE SET permission = excluded.permission
+        INSERT INTO playlist_shares (playlist_id, shared_with_user_id, permission, shared_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(playlist_id, shared_with_user_id) DO UPDATE SET
+            permission = excluded.permission,
+            shared_at = excluded.shared_at
         "#,
         playlist_id,
         shared_with_user_id,
-        permission
+        permission,
+        now
     )
     .execute(pool)
     .await?;

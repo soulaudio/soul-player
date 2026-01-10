@@ -1,7 +1,7 @@
-//! Integration tests for DesktopPlayback
+//! Integration tests for `DesktopPlayback`
 //!
 //! These tests verify the complete playback flow including command processing,
-//! event emission, and integration with PlaybackManager.
+//! event emission, and integration with `PlaybackManager`.
 
 use soul_audio_desktop::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
 use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode, TrackSource};
@@ -73,16 +73,9 @@ fn test_event_reception_after_commands() {
 
     // Should receive state changed event (or no event if queue is empty)
     // This tests that event channel is working
-    if let Some(event) = event {
-        match event {
-            PlaybackEvent::StateChanged(_) => {
-                // Expected
-            }
-            PlaybackEvent::Error(_) => {
-                // Also acceptable (no audio source set)
-            }
-            _ => {}
-        }
+    // We accept either StateChanged or Error (if no audio source set)
+    if let Some(PlaybackEvent::StateChanged(_) | PlaybackEvent::Error(_)) = event {
+        // Expected event received
     }
 }
 
@@ -148,7 +141,7 @@ fn test_shuffle_mode_commands() {
     // Test all shuffle modes
     for mode in [ShuffleMode::Off, ShuffleMode::Random, ShuffleMode::Smart] {
         playback
-            .send_command(PlaybackCommand::SetShuffle(mode.clone()))
+            .send_command(PlaybackCommand::SetShuffle(mode))
             .unwrap();
         std::thread::sleep(Duration::from_millis(20));
     }
@@ -443,11 +436,12 @@ fn test_no_events_without_commands() {
 
 #[test]
 fn test_playback_manager_survives_stress() {
+    use rand::Rng;
+
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
 
     // Stress test with mixed commands
-    use rand::Rng;
     let mut rng = rand::thread_rng();
 
     for _ in 0..200 {

@@ -259,6 +259,13 @@ jobs:
         run: |
           brew install pkg-config
 
+      # Install LLVM for ASIO support (bindgen requires libclang)
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
       # Install cross-compilation tools for ARM64 on Linux
       - name: Install cross-compilation tools
         if: matrix.target == 'aarch64-unknown-linux-gnu'

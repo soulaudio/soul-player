@@ -2,11 +2,14 @@ use sqlx::SqlitePool;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::artwork::ArtworkManager;
+
 /// Shared application state
 pub struct AppState {
     pub pool: Arc<SqlitePool>,
     pub user_id: String,
     pub library_path: PathBuf,
+    pub artwork_manager: Arc<ArtworkManager>,
 }
 
 impl AppState {
@@ -126,10 +129,14 @@ impl AppState {
 
         eprintln!("Library path: {}", library_path.display());
 
+        // Create artwork manager with cache for 100 images (~50-100MB)
+        let artwork_manager = ArtworkManager::new(pool.clone(), 100);
+
         Ok(Self {
             pool: Arc::new(pool),
             user_id: user_id.to_string(),
             library_path,
+            artwork_manager: Arc::new(artwork_manager),
         })
     }
 

@@ -1,0 +1,9 @@
+# robots.txt for Soul Player
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://player.soulaudio.co/sitemap.xml
+
+# Crawl-delay (optional, for polite crawling)
+Crawl-delay: 1

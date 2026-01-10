@@ -2,7 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app_state;
+mod artwork;
+mod audio_settings;
 mod deep_link;
+mod dsp_commands;
 mod import;
 mod playback;
 mod shortcuts;
@@ -28,6 +31,7 @@ struct FrontendTrack {
     title: String,
     artist_name: Option<String>,
     album_title: Option<String>,
+    album_id: Option<i64>,
     duration_seconds: Option<f64>,
     file_path: Option<String>,
     track_number: Option<i32>,
@@ -54,6 +58,7 @@ impl From<soul_core::types::Track> for FrontendTrack {
             title: track.title,
             artist_name: track.artist_name,
             album_title: track.album_title,
+            album_id: track.album_id,
             duration_seconds: track.duration_seconds,
             file_path,
             track_number: track.track_number,
@@ -105,6 +110,7 @@ struct TrackData {
     file_path: String,
     duration_seconds: Option<f64>,
     track_number: Option<u32>,
+    cover_art_path: Option<String>,
 }
 
 impl TrackData {
@@ -184,22 +190,26 @@ async fn play_queue(
         );
     }
 
-    // Clear existing queue
-    playback.clear_queue()?;
+    // Convert to QueueTrack format
+    let tracks: Vec<soul_playback::QueueTrack> = queue
+        .iter()
+        .map(|track_data| track_data.to_queue_track())
+        .collect();
 
-    // Add all tracks to queue in order (they're already ordered correctly from frontend)
-    for (i, track_data) in queue.iter().enumerate() {
-        let track = track_data.to_queue_track();
-        eprintln!(
-            "[play_queue] Adding track {}: {} -> {}",
-            i,
-            track.title,
-            track.path.display()
-        );
-        playback.add_to_queue(track)?;
-    }
+    eprintln!("[play_queue] Loading {} tracks as playlist (source queue)", tracks.len());
 
-    // Start playback (will play the first track in queue, which is at start_index)
+    // Stop current playback
+    eprintln!("[play_queue] Calling stop()...");
+    playback.stop()?;
+    eprintln!("[play_queue] stop() completed");
+
+    // Load playlist as source queue (Spotify-style context)
+    // This replaces the source queue tier, keeping explicit queue separate
+    eprintln!("[play_queue] Calling load_playlist()...");
+    playback.load_playlist(tracks)?;
+    eprintln!("[play_queue] load_playlist() completed");
+
+    // Start playback (will play first track in source queue)
     eprintln!("[play_queue] Starting playback...");
     playback.play()?;
     eprintln!("[play_queue] Playback started");
@@ -297,9 +307,18 @@ async fn get_queue(playback: State<'_, PlaybackManager>) -> Result<Vec<TrackData
             file_path: track.path.to_string_lossy().to_string(),
             duration_seconds: Some(track.duration.as_secs_f64()),
             track_number: track.track_number,
+            cover_art_path: Some(format!("artwork://track/{}", track.id)),
         })
         .collect();
     Ok(queue_data)
+}
+
+#[tauri::command]
+async fn skip_to_queue_index(
+    index: usize,
+    playback: State<'_, PlaybackManager>,
+) -> Result<(), String> {
+    playback.skip_to_queue_index(index)
 }
 
 #[tauri::command]
@@ -626,12 +645,156 @@ async fn get_user_setting(
         .map_err(|e| e.to_string())
 }
 
+/// Get artwork as data URL for a track
+#[tauri::command]
+async fn get_track_artwork(
+    track_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let track_id_parsed = soul_core::types::TrackId::new(track_id);
+
+    match state.artwork_manager.get_track_artwork_with_mime(track_id_parsed).await {
+        Ok(Some((data, mime_type))) => {
+            // Convert to base64 data URL
+            let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+            Ok(Some(data_url))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            eprintln!("[get_track_artwork] Error: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Get artwork as data URL for an album
+#[tauri::command]
+async fn get_album_artwork(
+    album_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    match state.artwork_manager.get_album_artwork_with_mime(album_id).await {
+        Ok(Some((data, mime_type))) => {
+            // Convert to base64 data URL
+            let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+            Ok(Some(data_url))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            eprintln!("[get_album_artwork] Error: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Debug command to test artwork extraction for a specific track
+#[tauri::command]
+async fn test_artwork_extraction(
+    track_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    eprintln!("[test_artwork_extraction] Testing artwork for track {}", track_id);
+
+    let track_id_str = soul_core::types::TrackId::new(track_id.to_string());
+
+    // Get track info
+    let track = soul_storage::tracks::get_by_id(&state.pool, track_id_str.clone())
+        .await
+        .map_err(|e| format!("Failed to get track: {}", e))?;
+
+    let Some(track) = track else {
+        return Err(format!("Track {} not found", track_id));
+    };
+
+    eprintln!("[test_artwork_extraction] Track title: {}", track.title);
+    eprintln!("[test_artwork_extraction] Availability count: {}", track.availability.len());
+
+    // Find file path
+    let file_path = track.availability.iter().find_map(|avail| {
+        eprintln!("[test_artwork_extraction] Checking availability: status={:?}, path={:?}",
+            avail.status, avail.local_file_path);
+        if matches!(
+            avail.status,
+            soul_core::types::AvailabilityStatus::LocalFile
+                | soul_core::types::AvailabilityStatus::Cached
+        ) {
+            avail.local_file_path.clone()
+        } else {
+            None
+        }
+    });
+
+    let Some(file_path) = file_path else {
+        return Err(format!("No local file path found for track {}", track_id));
+    };
+
+    eprintln!("[test_artwork_extraction] File path: {}", file_path);
+
+    // Check if file exists
+    let path = std::path::Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File does not exist: {}", file_path));
+    }
+
+    eprintln!("[test_artwork_extraction] File exists, extracting artwork...");
+
+    // Try to extract artwork
+    match state.artwork_manager.get_track_artwork_with_mime(track_id_str).await {
+        Ok(Some((data, mime_type))) => {
+            let msg = format!(
+                "SUCCESS: Found artwork for '{}'\nFile: {}\nSize: {} bytes\nType: {}",
+                track.title, file_path, data.len(), mime_type
+            );
+            eprintln!("[test_artwork_extraction] {}", msg);
+            Ok(msg)
+        }
+        Ok(None) => {
+            let msg = format!(
+                "No artwork found in file: {}\nThe file may not have embedded artwork.",
+                file_path
+            );
+            eprintln!("[test_artwork_extraction] {}", msg);
+            Err(msg)
+        }
+        Err(e) => {
+            let msg = format!("Failed to extract artwork: {}", e);
+            eprintln!("[test_artwork_extraction] ERROR: {}", msg);
+            Err(msg)
+        }
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
+        .register_asynchronous_uri_scheme_protocol("artwork", |app, request, responder| {
+            let uri = request.uri().to_string();
+            eprintln!("[artwork protocol] Request: {}", uri);
+
+            // Get the artwork manager from app state
+            let app_handle = app.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                let manager = &state.artwork_manager;
+
+                match artwork::handle_artwork_request(manager, &uri).await {
+                    Ok(response) => responder.respond(response),
+                    Err(e) => {
+                        eprintln!("[artwork protocol] Error: {}", e);
+                        let error_response = tauri::http::Response::builder()
+                            .status(500)
+                            .body(format!("Error: {}", e).into_bytes())
+                            .unwrap();
+                        responder.respond(error_response)
+                    }
+                }
+            });
+        })
         .setup(|app| {
             let app_handle = app.handle().clone();
 
@@ -713,6 +876,15 @@ fn main() {
                 // Initialize playback manager
                 let playback_manager = PlaybackManager::new(app_handle.clone())
                     .expect("Failed to initialize playback");
+
+                // Restore saved audio device (if any)
+                {
+                    let app_state_for_init = app_handle.state::<AppState>();
+                    if let Err(e) = audio_settings::initialize_audio_device(&playback_manager, &app_state_for_init).await {
+                        eprintln!("[main] Warning: Failed to restore audio device: {}", e);
+                    }
+                }
+
                 app_handle.manage(playback_manager);
 
                 emit_init_progress(&app_handle, "Configuring import system...", 60).await;
@@ -733,7 +905,9 @@ fn main() {
                 emit_init_progress(&app_handle, "Initializing sync system...", 65).await;
 
                 // Initialize sync manager
-                let sync_state = std::sync::Arc::new(tokio::sync::Mutex::new(sync::SyncState::new(pool.clone())));
+                let sync_state = std::sync::Arc::new(tokio::sync::Mutex::new(
+                    sync::SyncState::new(pool.clone()),
+                ));
                 app_handle.manage(sync_state.clone());
 
                 // Check if auto-sync is needed (schema changes)
@@ -824,7 +998,28 @@ fn main() {
             set_repeat,
             clear_queue,
             get_queue,
+            skip_to_queue_index,
             get_playback_capabilities,
+            // Audio settings
+            audio_settings::get_audio_backends,
+            audio_settings::get_audio_devices,
+            audio_settings::get_current_audio_device,
+            audio_settings::set_audio_device,
+            // DSP effects chain
+            dsp_commands::get_available_effects,
+            dsp_commands::get_dsp_chain,
+            dsp_commands::add_effect_to_chain,
+            dsp_commands::remove_effect_from_chain,
+            dsp_commands::toggle_effect,
+            dsp_commands::update_effect_parameters,
+            dsp_commands::clear_dsp_chain,
+            dsp_commands::get_eq_presets,
+            dsp_commands::get_compressor_presets,
+            dsp_commands::get_limiter_presets,
+            dsp_commands::get_dsp_chain_presets,
+            dsp_commands::save_dsp_chain_preset,
+            dsp_commands::delete_dsp_chain_preset,
+            dsp_commands::load_dsp_chain_preset,
             // Library management (TODO)
             get_all_tracks,
             get_track_by_id,
@@ -856,6 +1051,11 @@ fn main() {
             get_user_settings,
             set_user_setting,
             get_user_setting,
+            // Artwork
+            get_track_artwork,
+            get_album_artwork,
+            // Debug/Testing
+            test_artwork_extraction,
             // Global shortcuts
             shortcuts::get_global_shortcuts,
             shortcuts::set_global_shortcut,

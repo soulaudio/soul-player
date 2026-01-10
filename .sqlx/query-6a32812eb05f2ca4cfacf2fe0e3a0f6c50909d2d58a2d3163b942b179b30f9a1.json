@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT source_id, status, local_file_path, server_path, local_file_size\n        FROM track_sources\n        WHERE track_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "source_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "status",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "local_file_path",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_path",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "local_file_size",
+        "ordinal": 4,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "6a32812eb05f2ca4cfacf2fe0e3a0f6c50909d2d58a2d3163b942b179b30f9a1"
+}

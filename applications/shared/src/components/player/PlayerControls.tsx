@@ -15,12 +15,13 @@ export function PlayerControls() {
     loadCapabilities();
 
     // Listen for queue and track changes
+    // IMPORTANT: Defer capability check to avoid Rust borrow conflicts
     const unsubQueue = events.onQueueUpdate(() => {
-      loadCapabilities();
+      setTimeout(() => loadCapabilities(), 0);  // Defer to next tick
     });
 
     const unsubTrack = events.onTrackChange(() => {
-      loadCapabilities();
+      setTimeout(() => loadCapabilities(), 0);  // Defer to next tick
     });
 
     return () => {
@@ -40,9 +41,11 @@ export function PlayerControls() {
   };
 
   const handlePrevious = async () => {
+    console.log('[PlayerControls] Previous clicked, hasPrevious:', hasPrevious);
     if (!hasPrevious) return;
     try {
       await commands.skipPrevious();
+      console.log('[PlayerControls] Previous command succeeded');
     } catch (error) {
       console.error('[PlayerControls] Skip previous failed:', error);
     }
@@ -61,9 +64,11 @@ export function PlayerControls() {
   };
 
   const handleNext = async () => {
+    console.log('[PlayerControls] Next clicked, hasNext:', hasNext);
     if (!hasNext) return;
     try {
       await commands.skipNext();
+      console.log('[PlayerControls] Next command succeeded');
     } catch (error) {
       console.error('[PlayerControls] Skip next failed:', error);
     }

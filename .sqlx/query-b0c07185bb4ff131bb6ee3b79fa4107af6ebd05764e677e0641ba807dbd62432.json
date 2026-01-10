@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT value FROM user_settings\n         WHERE user_id = '1' AND key = 'import.library_path'",
+  "describe": {
+    "columns": [
+      {
+        "name": "value",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b0c07185bb4ff131bb6ee3b79fa4107af6ebd05764e677e0641ba807dbd62432"
+}

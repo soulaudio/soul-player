@@ -38,11 +38,15 @@
 
 #![deny(unsafe_code)]
 
+pub mod backend;
+pub mod device;
 mod error;
 mod output;
 pub mod playback;
 pub mod sources;
 
+pub use backend::{AudioBackend, BackendError, BackendInfo};
+pub use device::{AudioDeviceInfo, DeviceError};
 pub use error::{AudioError, AudioOutputError, Result};
 pub use output::CpalOutput;
 pub use playback::{DesktopPlayback, PlaybackCommand, PlaybackEvent};

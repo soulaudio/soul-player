@@ -15,6 +15,7 @@ use crate::{
 #[cfg(feature = "effects")]
 use soul_audio::effects::EffectChain;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 /// Central playback management
@@ -51,6 +52,9 @@ pub struct PlaybackManager {
 
     // Sample rate (for effects processing)
     sample_rate: u32,
+
+    // Output channels (1 = mono, 2 = stereo)
+    output_channels: u16,
 }
 
 impl PlaybackManager {
@@ -69,7 +73,8 @@ impl PlaybackManager {
             effect_chain: EffectChain::new(),
             audio_source: None,
             next_source: None,
-            sample_rate: 44100, // Default, will be updated by platform
+            sample_rate: 44100,    // Default, will be updated by platform
+            output_channels: 2,     // Default stereo, will be updated by platform
         }
     }
 
@@ -125,7 +130,7 @@ impl PlaybackManager {
     /// Go to previous track
     ///
     /// If >3 seconds into current track, restarts current track.
-    /// Otherwise, pops from history.
+    /// Otherwise, uses index-based navigation to go back without reordering the queue.
     pub fn previous(&mut self) -> Result<()> {
         // Check position in current track
         if let Some(ref source) = self.audio_source {
@@ -140,9 +145,15 @@ impl PlaybackManager {
 
         // Go to previous track from history
         if let Some(prev_track) = self.history.pop() {
-            // Put current track back in queue (at front)
-            if let Some(current) = self.current_track.take() {
-                self.queue.add_next(current);
+            // IMPORTANT: Don't add current track back to queue!
+            // The queue uses index-based navigation, so the track is still there.
+            // We just need to decrement the source_index to "un-consume" it.
+            if self.current_track.is_some() {
+                // Decrement source index to restore queue position
+                // This keeps the queue order intact
+                if self.queue.can_go_back() {
+                    self.queue.go_back();
+                }
             }
 
             // Load previous track
@@ -193,12 +204,14 @@ impl PlaybackManager {
             return Ok(track);
         }
 
-        // Queue empty - check repeat mode
+        // Queue reached end - check repeat mode
         match self.repeat {
             RepeatMode::All => {
-                // TODO: Reload source queue if it was cleared
-                // For now, just error
-                Err(PlaybackError::QueueEmpty)
+                // Reload source queue from original and try again
+                self.queue.reload_source(self.shuffle);
+
+                // Try to get the first track from reloaded queue
+                self.queue.pop_next().ok_or(PlaybackError::QueueEmpty)
             }
             RepeatMode::Off | RepeatMode::One => Err(PlaybackError::QueueEmpty),
         }
@@ -274,6 +287,9 @@ impl PlaybackManager {
     }
 
     /// Load playlist/album to source queue
+    ///
+    /// Replaces the entire queue and clears history for a fresh start.
+    /// This ensures clicking a track in the playlist starts from scratch.
     pub fn add_playlist_to_queue(&mut self, mut tracks: Vec<QueueTrack>) {
         // Apply shuffle if enabled
         if self.shuffle != ShuffleMode::Off {
@@ -281,6 +297,13 @@ impl PlaybackManager {
         }
 
         self.queue.set_source(tracks);
+
+        // Remove consecutive duplicates to prevent same track playing twice
+        self.queue.remove_consecutive_duplicates();
+
+        // IMPORTANT: Clear history when loading a new playlist
+        // This ensures navigation starts fresh without old history interfering
+        self.history.clear();
     }
 
     /// Append tracks to source queue
@@ -291,6 +314,9 @@ impl PlaybackManager {
         }
 
         self.queue.append_to_source(tracks);
+
+        // Remove consecutive duplicates to prevent same track playing twice
+        self.queue.remove_consecutive_duplicates();
     }
 
     /// Remove track from queue by index
@@ -322,6 +348,35 @@ impl PlaybackManager {
         self.queue.len()
     }
 
+    /// Skip to track at index in queue
+    ///
+    /// Skips to the track at the specified index, adding all skipped tracks to history
+    /// so they can be navigated back to using the previous button.
+    pub fn skip_to_queue_index(&mut self, index: usize) -> Result<()> {
+        if index >= self.queue.len() {
+            return Err(PlaybackError::QueueEmpty);
+        }
+
+        // Save current track to history (if any)
+        if let Some(track) = self.current_track.take() {
+            self.history.push(track);
+        }
+
+        // Skip to target index and get all skipped tracks
+        let skipped_tracks = self
+            .queue
+            .skip_to_index(index)
+            .ok_or(PlaybackError::QueueEmpty)?;
+
+        // Add all skipped tracks to history (in order)
+        for track in skipped_tracks {
+            self.history.push(track);
+        }
+
+        // Play the next track (now at index 0)
+        self.play_next_in_queue()
+    }
+
     // ===== Shuffle & Repeat =====
 
     /// Set shuffle mode
@@ -348,6 +403,9 @@ impl PlaybackManager {
                 let source = self.queue.source_mut();
                 shuffle_queue(source, mode);
                 self.queue.set_shuffled(true);
+
+                // Remove consecutive duplicates after shuffling
+                self.queue.remove_consecutive_duplicates();
             }
         }
     }
@@ -420,11 +478,25 @@ impl PlaybackManager {
     /// Returns number of samples written to output buffer.
     ///
     /// # Arguments
-    /// * `output` - Output buffer (interleaved stereo f32)
+    /// * `output` - Output buffer (interleaved, channel count matches output_channels)
     ///
     /// # Returns
     /// Number of samples written (0 = no audio available)
     pub fn process_audio(&mut self, output: &mut [f32]) -> Result<usize> {
+        // Debug logging (first few calls only)
+        static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
+        let count = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+        if count < 3 {
+            eprintln!("[process_audio] Call #{}", count + 1);
+            eprintln!("  - Output buffer size: {} samples", output.len());
+            eprintln!("  - Output channels: {}", self.output_channels);
+            eprintln!(
+                "  - Expected frames: {}",
+                output.len() / self.output_channels as usize
+            );
+            eprintln!("  - Sample rate: {} Hz", self.sample_rate);
+        }
+
         if self.state != PlaybackState::Playing {
             // Not playing - output silence
             output.fill(0.0);
@@ -437,23 +509,97 @@ impl PlaybackManager {
             return Ok(output.len());
         };
 
-        // Read samples from source
-        let samples_read = source.read_samples(output)?;
+        // Audio source always outputs stereo (2 channels)
+        // If device is mono, we need to convert
+        if self.output_channels == 1 {
+            // Mono output - read stereo, convert to mono
+            let stereo_samples = output.len() * 2; // Need 2x samples for stereo
+            let mut stereo_buffer = vec![0.0f32; stereo_samples];
 
-        if samples_read == 0 {
-            // Track finished
-            self.handle_track_finished()?;
-            return Ok(0);
+            let samples_read = source.read_samples(&mut stereo_buffer)?;
+
+            if samples_read == 0 {
+                // Track finished
+                self.handle_track_finished()?;
+                return Ok(0);
+            }
+
+            // Convert stereo to mono by averaging L and R channels
+            let frames = samples_read / 2;
+            for i in 0..frames {
+                let left = stereo_buffer[i * 2];
+                let right = stereo_buffer[i * 2 + 1];
+                output[i] = (left + right) * 0.5; // Average and write to mono output
+            }
+
+            // Apply effects (if feature enabled)
+            #[cfg(feature = "effects")]
+            self.effect_chain.process(&mut output[..frames], self.sample_rate);
+
+            // Apply volume
+            self.volume.apply(&mut output[..frames]);
+
+            Ok(frames)
+        } else if self.output_channels == 2 {
+            // Stereo output - direct passthrough
+            let samples_read = source.read_samples(output)?;
+
+            if samples_read == 0 {
+                // Track finished
+                self.handle_track_finished()?;
+                return Ok(0);
+            }
+
+            // Apply effects (if feature enabled)
+            #[cfg(feature = "effects")]
+            self.effect_chain.process(&mut output[..samples_read], self.sample_rate);
+
+            // Apply volume
+            self.volume.apply(&mut output[..samples_read]);
+
+            Ok(samples_read)
+        } else {
+            // Multi-channel output (e.g., ASIO with 6 channels)
+            // Read stereo, then upmix to fill all output channels
+            let frames = output.len() / self.output_channels as usize;
+            let stereo_samples = frames * 2;
+            let mut stereo_buffer = vec![0.0f32; stereo_samples];
+
+            let samples_read = source.read_samples(&mut stereo_buffer)?;
+
+            if samples_read == 0 {
+                // Track finished
+                self.handle_track_finished()?;
+                return Ok(0);
+            }
+
+            let frames_read = samples_read / 2;
+
+            // Apply effects to stereo buffer (if feature enabled)
+            #[cfg(feature = "effects")]
+            self.effect_chain.process(&mut stereo_buffer[..samples_read], self.sample_rate);
+
+            // Apply volume to stereo buffer
+            self.volume.apply(&mut stereo_buffer[..samples_read]);
+
+            // Upmix stereo to multi-channel: put L/R in first two channels, silence in rest
+            for frame in 0..frames_read {
+                let left = stereo_buffer[frame * 2];
+                let right = stereo_buffer[frame * 2 + 1];
+                let out_offset = frame * self.output_channels as usize;
+
+                // First two channels get stereo audio
+                output[out_offset] = left;
+                output[out_offset + 1] = right;
+
+                // Remaining channels get silence
+                for ch in 2..self.output_channels as usize {
+                    output[out_offset + ch] = 0.0;
+                }
+            }
+
+            Ok(frames_read * self.output_channels as usize)
         }
-
-        // Apply effects (if feature enabled)
-        #[cfg(feature = "effects")]
-        self.effect_chain.process(output, self.sample_rate);
-
-        // Apply volume
-        self.volume.apply(output);
-
-        Ok(samples_read)
     }
 
     /// Handle track finished
@@ -465,6 +611,16 @@ impl PlaybackManager {
     /// Set sample rate (called by platform)
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         self.sample_rate = sample_rate;
+    }
+
+    /// Get sample rate
+    pub fn get_sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    /// Set output channels (called by platform)
+    pub fn set_output_channels(&mut self, channels: u16) {
+        self.output_channels = channels;
     }
 
     /// Get effect chain (for adding/configuring effects)

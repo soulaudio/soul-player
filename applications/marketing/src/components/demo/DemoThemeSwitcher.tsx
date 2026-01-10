@@ -1,22 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { themeManager, builtInThemes } from '@soul-player/shared'
+import { useTheme, builtInThemes } from '@soul-player/shared'
 
 export function DemoThemeSwitcher() {
-  const [currentTheme, setCurrentTheme] = useState('dark')
+  const { currentTheme, setTheme } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
 
+  // Apply theme to demo container when it changes
   useEffect(() => {
-    // Use the shared theme manager to apply the theme
-    themeManager.setCurrentTheme(currentTheme)
-
-    // Apply theme to demo container
     const demoContainer = document.querySelector('[data-demo-container]')
     if (demoContainer) {
-      demoContainer.setAttribute('data-theme', currentTheme)
+      demoContainer.setAttribute('data-theme', currentTheme.id)
     }
-  }, [currentTheme])
+  }, [currentTheme.id])
 
   return (
     <div className="flex items-center gap-2">
@@ -25,9 +22,9 @@ export function DemoThemeSwitcher() {
         {builtInThemes.map((theme) => (
           <button
             key={theme.id}
-            onClick={() => setCurrentTheme(theme.id)}
+            onClick={() => setTheme(theme.id)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
-              currentTheme === theme.id
+              currentTheme.id === theme.id
                 ? 'bg-primary/20 text-primary-foreground border-primary/30'
                 : 'bg-muted/50 text-muted-foreground hover:bg-muted/80 hover:text-foreground border-border'
             }`}
@@ -47,7 +44,7 @@ export function DemoThemeSwitcher() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
           </svg>
-          <span>{builtInThemes.find(t => t.id === currentTheme)?.name}</span>
+          <span>{currentTheme.name}</span>
         </button>
 
         {isOpen && (
@@ -64,17 +61,17 @@ export function DemoThemeSwitcher() {
                 <button
                   key={theme.id}
                   onClick={() => {
-                    setCurrentTheme(theme.id)
+                    setTheme(theme.id)
                     setIsOpen(false)
                   }}
                   className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                    currentTheme === theme.id
+                    currentTheme.id === theme.id
                       ? 'bg-primary/20 text-primary-foreground'
                       : 'text-muted-foreground hover:bg-muted/80'
                   }`}
                 >
                   {theme.name}
-                  {currentTheme === theme.id && (
+                  {currentTheme.id === theme.id && (
                     <span className="ml-2 text-primary">✓</span>
                   )}
                 </button>

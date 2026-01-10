@@ -160,6 +160,23 @@ sqlx migrate run --source libraries/soul-storage/migrations
 cd libraries/soul-storage && cargo sqlx prepare -- --lib
 ```
 
+### WASM Development (Marketing Demo)
+WASM modules build **automatically** via npm lifecycle hooks:
+```bash
+cd applications/marketing
+yarn dev              # Auto-builds WASM before starting
+yarn build            # Auto-builds WASM before production build
+yarn build:wasm       # Manual WASM build only
+yarn dev:wasm-watch   # Optional: Watch Rust files and auto-rebuild
+```
+
+**Requirements**: `wasm-pack` must be installed
+```bash
+cargo install wasm-pack
+```
+
+**Note**: All WASM builds are cross-platform (Windows/macOS/Linux). See [applications/marketing/WASM_BUILD_INTEGRATION.md](./applications/marketing/WASM_BUILD_INTEGRATION.md) for details.
+
 ---
 
 ## Quick Reference

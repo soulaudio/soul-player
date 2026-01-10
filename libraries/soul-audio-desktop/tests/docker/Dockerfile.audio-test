@@ -1,0 +1,52 @@
+# Docker image for testing audio device switching
+# Sets up virtual audio devices using PulseAudio and ALSA dummy
+FROM rust:1.75-slim-bookworm
+
+# Install audio system dependencies and utilities
+RUN apt-get update && apt-get install -y \
+    pulseaudio \
+    pulseaudio-utils \
+    alsa-utils \
+    libasound2-dev \
+    pkg-config \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure PulseAudio to run in system mode with dummy devices
+RUN mkdir -p /etc/pulse
+
+# Create PulseAudio configuration with virtual sinks
+RUN echo "load-module module-null-sink sink_name=virtual_output_1 sink_properties=device.description=Virtual_Output_1" > /etc/pulse/default.pa && \
+    echo "load-module module-null-sink sink_name=virtual_output_2 sink_properties=device.description=Virtual_Output_2" >> /etc/pulse/default.pa && \
+    echo "load-module module-null-sink sink_name=virtual_output_3 sink_properties=device.description=Virtual_Output_3" >> /etc/pulse/default.pa && \
+    echo "load-module module-native-protocol-unix" >> /etc/pulse/default.pa
+
+# Configure ALSA to use PulseAudio
+RUN echo "pcm.!default { type pulse }" > /etc/asound.conf && \
+    echo "ctl.!default { type pulse }" >> /etc/asound.conf
+
+# Create a startup script to initialize audio
+# Run PulseAudio without --system flag to avoid permission issues in containers
+RUN echo "#!/bin/bash" > /usr/local/bin/start-audio.sh && \
+    echo "set -e" >> /usr/local/bin/start-audio.sh && \
+    echo "# Start PulseAudio in user mode (not system mode) for container compatibility" >> /usr/local/bin/start-audio.sh && \
+    echo "pulseaudio -D --exit-idle-time=-1 --disallow-exit" >> /usr/local/bin/start-audio.sh && \
+    echo "sleep 2" >> /usr/local/bin/start-audio.sh && \
+    echo 'pactl list sinks short || echo "PulseAudio sinks not ready"' >> /usr/local/bin/start-audio.sh && \
+    echo 'echo "PulseAudio started successfully"' >> /usr/local/bin/start-audio.sh && \
+    echo "# Keep container running" >> /usr/local/bin/start-audio.sh && \
+    echo "tail -f /dev/null" >> /usr/local/bin/start-audio.sh && \
+    chmod +x /usr/local/bin/start-audio.sh
+
+# Set working directory
+WORKDIR /workspace
+
+# Environment variables for audio - point to the unix socket
+ENV PULSE_SERVER=unix:/run/user/0/pulse/native
+# Allow root to access PulseAudio
+ENV XDG_RUNTIME_DIR=/run/user/0
+# Create runtime directory
+RUN mkdir -p /run/user/0
+
+# Default command: start audio and keep container running
+CMD ["/usr/local/bin/start-audio.sh"]

@@ -41,6 +41,8 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     // Listen for track changes
     const unlistenTrackChanged = listen<any>('playback:track-changed', (event) => {
       const track = event.payload;
+      console.log('[TauriPlayerCommandsProvider] Track changed:', track);
+      console.log('[TauriPlayerCommandsProvider] coverArtPath:', track?.coverArtPath);
       usePlayerStore.setState({
         currentTrack: track,
         duration: track?.duration || 0,
@@ -133,8 +135,29 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         await invoke('play_queue', { queue, startIndex });
       },
 
+      async skipToQueueIndex(index: number) {
+        await invoke('skip_to_queue_index', { index });
+      },
+
       async getAllSources() {
         return await invoke('get_all_sources');
+      },
+
+      // Audio device management (Desktop only)
+      async getCurrentAudioDevice() {
+        return await invoke('get_current_audio_device');
+      },
+
+      async getAudioBackends() {
+        return await invoke('get_audio_backends');
+      },
+
+      async getAudioDevices(backend: string) {
+        return await invoke('get_audio_devices', { backendStr: backend });
+      },
+
+      async setAudioDevice(backend: string, deviceName: string) {
+        await invoke('set_audio_device', { backendStr: backend, deviceName });
       },
     };
 

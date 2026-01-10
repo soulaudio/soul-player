@@ -13,12 +13,14 @@ use tauri::{AppHandle, Emitter};
 
 /// Track info for frontend events (with duration in seconds)
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct FrontendTrackEvent {
     id: String,
     title: String,
     artist: String,
     album: Option<String>,
     duration: f64, // seconds
+    cover_art_path: Option<String>,
 }
 
 impl From<&QueueTrack> for FrontendTrackEvent {
@@ -29,6 +31,7 @@ impl From<&QueueTrack> for FrontendTrackEvent {
             artist: track.artist.clone(),
             album: track.album.clone(),
             duration: track.duration.as_secs_f64(),
+            cover_art_path: Some(format!("artwork://track/{}", track.id)),
         }
     }
 }
@@ -39,6 +42,8 @@ impl From<&QueueTrack> for FrontendTrackEvent {
 pub struct PlaybackManager {
     playback: Arc<Mutex<DesktopPlayback>>,
     app_handle: AppHandle,
+    #[cfg(feature = "effects")]
+    effect_slots: Arc<Mutex<[Option<crate::dsp_commands::EffectSlotState>; 4]>>,
 }
 
 impl PlaybackManager {
@@ -70,6 +75,8 @@ impl PlaybackManager {
         Ok(Self {
             playback,
             app_handle,
+            #[cfg(feature = "effects")]
+            effect_slots: Arc::new(Mutex::new([None, None, None, None])),
         })
     }
 
@@ -95,6 +102,12 @@ impl PlaybackManager {
                     PlaybackEvent::TrackChanged(track) => {
                         // Convert QueueTrack to FrontendTrackEvent with duration in seconds
                         let frontend_track = track.as_ref().map(FrontendTrackEvent::from);
+                        if let Some(ref t) = frontend_track {
+                            eprintln!("[playback] Track changed: id={}, title={}, coverArtPath={:?}",
+                                t.id, t.title, t.cover_art_path);
+                        } else {
+                            eprintln!("[playback] Track changed: None");
+                        }
                         app_handle.emit("playback:track-changed", frontend_track)
                     }
                     PlaybackEvent::PositionUpdated(position) => {
@@ -280,5 +293,129 @@ impl PlaybackManager {
         playback
             .send_command(PlaybackCommand::ClearQueue)
             .map_err(|e| e.to_string())
+    }
+
+    /// Skip to track at queue index
+    pub fn skip_to_queue_index(&self, index: usize) -> Result<(), String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback
+            .send_command(PlaybackCommand::SkipToQueueIndex(index))
+            .map_err(|e| e.to_string())
+    }
+
+    /// Load playlist/album as source queue (replaces playback context)
+    pub fn load_playlist(&self, tracks: Vec<QueueTrack>) -> Result<(), String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback
+            .send_command(PlaybackCommand::LoadPlaylist(tracks))
+            .map_err(|e| e.to_string())
+    }
+
+    /// Switch audio output device
+    ///
+    /// # Arguments
+    /// * `backend` - Audio backend to use
+    /// * `device_name` - Device name to switch to (None for default device)
+    ///
+    /// # Returns
+    /// * `Ok(())` - Device switched successfully
+    /// * `Err(_)` - Failed to switch device
+    pub fn switch_device(
+        &self,
+        backend: soul_audio_desktop::AudioBackend,
+        device_name: Option<String>,
+    ) -> Result<(), String> {
+        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback
+            .switch_device(backend, device_name)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get current audio backend
+    pub fn get_current_backend(&self) -> soul_audio_desktop::AudioBackend {
+        let playback = self.playback.lock().unwrap();
+        playback.get_current_backend()
+    }
+
+    /// Get current device name
+    pub fn get_current_device(&self) -> String {
+        let playback = self.playback.lock().unwrap();
+        playback.get_current_device()
+    }
+
+    // ===== DSP Effect Chain =====
+
+    /// Get effect slots state
+    #[cfg(feature = "effects")]
+    pub fn get_effect_slots(&self) -> Result<[Option<crate::dsp_commands::EffectSlotState>; 4], String> {
+        let slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
+        Ok(slots.clone())
+    }
+
+    /// Set effect in a slot and rebuild the effect chain
+    #[cfg(feature = "effects")]
+    pub fn set_effect_slot(&self, slot_index: usize, effect: Option<crate::dsp_commands::EffectSlotState>) -> Result<(), String> {
+        if slot_index >= 4 {
+            return Err("Slot index must be 0-3".to_string());
+        }
+
+        // Update slot
+        {
+            let mut slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
+            slots[slot_index] = effect;
+        }
+
+        // Rebuild effect chain
+        self.rebuild_effect_chain()
+    }
+
+    /// Rebuild the entire effect chain from current slot state
+    #[cfg(feature = "effects")]
+    fn rebuild_effect_chain(&self) -> Result<(), String> {
+        use soul_audio::effects::{ParametricEq, Compressor, Limiter};
+        use crate::dsp_commands::{EffectType, EffectSlotState};
+
+        let slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
+
+        self.with_effect_chain(|chain| {
+            // Clear existing effects
+            chain.clear();
+
+            // Add effects from slots
+            for slot in slots.iter() {
+                if let Some(slot_state) = slot {
+                    let effect: Box<dyn soul_audio::effects::AudioEffect> = match &slot_state.effect {
+                        EffectType::Eq { bands } => {
+                            let eq_bands: Vec<_> = bands.iter().map(|b| b.clone().into()).collect();
+                            let mut eq = ParametricEq::new(eq_bands);
+                            eq.set_enabled(slot_state.enabled);
+                            Box::new(eq)
+                        }
+                        EffectType::Compressor { settings } => {
+                            let mut comp = Compressor::new(settings.clone().into());
+                            comp.set_enabled(slot_state.enabled);
+                            Box::new(comp)
+                        }
+                        EffectType::Limiter { settings } => {
+                            let mut lim = Limiter::new(settings.clone().into());
+                            lim.set_enabled(slot_state.enabled);
+                            Box::new(lim)
+                        }
+                    };
+                    chain.add_effect(effect);
+                }
+            }
+        })
+    }
+
+    /// Access the effect chain for configuration
+    #[cfg(feature = "effects")]
+    pub fn with_effect_chain<F, R>(&self, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&mut soul_audio::effects::EffectChain) -> R,
+    {
+        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
+        let effect_chain = playback.effect_chain_mut();
+        Ok(f(effect_chain))
     }
 }

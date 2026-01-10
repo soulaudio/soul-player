@@ -29,7 +29,7 @@ fn test_play_from_library_creates_queue_from_index() {
     let mut manager = PlaybackManager::default();
 
     // Simulate library with 5 tracks
-    let library = vec![
+    let library = [
         create_track("1", "Track 1", "Artist A", 180),
         create_track("2", "Track 2", "Artist B", 180),
         create_track("3", "Track 3", "Artist C", 180),
@@ -64,7 +64,7 @@ fn test_play_from_library_creates_queue_from_index() {
 fn test_play_last_track_wraps_queue() {
     let mut manager = PlaybackManager::default();
 
-    let library = vec![
+    let library = [
         create_track("1", "Track 1", "Artist A", 180),
         create_track("2", "Track 2", "Artist B", 180),
         create_track("3", "Track 3", "Artist C", 180),
@@ -202,7 +202,7 @@ fn test_previous_at_history_start() {
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist A", 180));
 
     // No history, can't go back
-    let result = manager.previous();
+    let _result = manager.previous();
 
     // Should fail or do nothing (depending on implementation)
     assert!(!manager.has_previous(), "Should not have previous at start");
@@ -415,4 +415,146 @@ fn test_explicit_queue_priority_affects_has_next() {
     // Next should be explicit track
     let queue = manager.get_queue();
     assert_eq!(queue[0].id, "e1");
+}
+
+// ===== Skip to Queue Index Tests =====
+
+#[test]
+fn test_skip_to_index_preserves_queue_and_history() {
+    let mut manager = PlaybackManager::default();
+
+    // Create a queue with 10 tracks
+    let tracks: Vec<QueueTrack> = (0..10)
+        .map(|i| create_track(&i.to_string(), &format!("Track {}", i), "Artist", 180))
+        .collect();
+
+    manager.add_playlist_to_queue(tracks);
+
+    // Start playback at track 0
+    manager.next().ok();
+
+    // Verify we're at track 0 - remaining queue should be [1,2,3,4,5,6,7,8,9]
+    let queue = manager.get_queue();
+    assert_eq!(queue.len(), 9, "Queue should have 9 remaining tracks");
+    assert_eq!(queue[0].id, "1");
+
+    // User clicks track 5 (which is at index 4 in the remaining queue [1,2,3,4,5,6,7,8,9])
+    manager.skip_to_queue_index(4).ok();
+
+    // Should now be playing track 5
+    // Queue should still have tracks 6,7,8,9
+    let queue = manager.get_queue();
+    assert_eq!(queue.len(), 4, "Queue should have 4 tracks remaining");
+    assert_eq!(queue[0].id, "6");
+
+    // Verify history was preserved - should have [0, 1, 2, 3, 4]
+    assert!(
+        manager.has_previous(),
+        "Should have previous tracks in history"
+    );
+
+    // Now press previous - should go to track 4
+    manager.previous().ok();
+
+    // Press previous again - should go to track 3
+    manager.previous().ok();
+
+    // Press previous again - should go to track 2
+    manager.previous().ok();
+
+    // Press previous again - should go to track 1
+    manager.previous().ok();
+
+    // Press previous again - should go to track 0
+    manager.previous().ok();
+
+    // At this point, we've exhausted the history
+    // has_previous() will return false (no more history to navigate)
+    assert!(
+        !manager.has_previous(),
+        "Should not have previous at start of history"
+    );
+}
+
+#[test]
+fn test_skip_to_index_in_explicit_queue() {
+    let mut manager = PlaybackManager::default();
+
+    // Add multiple tracks to explicit queue using add_to_queue_next
+    for i in 0..5 {
+        manager.add_to_queue_next(create_track(
+            &i.to_string(),
+            &format!("Track {}", i),
+            "Artist",
+            180,
+        ));
+    }
+
+    // Queue should be [0, 1, 2, 3, 4]
+    assert_eq!(manager.queue_len(), 5);
+
+    // Skip to track at index 3
+    manager.skip_to_queue_index(3).ok();
+
+    // Should be playing track 3, with track 4 remaining in queue
+    let queue = manager.get_queue();
+    assert_eq!(queue.len(), 1, "Should have 1 track remaining");
+    assert_eq!(queue[0].id, "4");
+
+    // Should have previous tracks [0, 1, 2] in history
+    assert!(manager.has_previous(), "Should have history");
+}
+
+#[test]
+fn test_skip_to_last_track_in_queue() {
+    let mut manager = PlaybackManager::default();
+
+    let tracks: Vec<QueueTrack> = (0..5)
+        .map(|i| create_track(&i.to_string(), &format!("Track {}", i), "Artist", 180))
+        .collect();
+
+    manager.add_playlist_to_queue(tracks);
+
+    // Skip to last track (index 4)
+    manager.skip_to_queue_index(4).ok();
+
+    // Remaining queue should be empty (last track is now playing)
+    let queue = manager.get_queue();
+    assert_eq!(queue.len(), 0, "Remaining queue should be empty");
+
+    // Should have all previous tracks [0, 1, 2, 3] in history
+    assert!(manager.has_previous(), "Should have history");
+
+    // Note: has_next() checks if source queue array is empty, not if we've reached end
+    // Since we use index-based navigation, source array is never emptied
+    // This means has_next() may return true even at the end
+    // The UI should use get_queue().len() to determine if there are more tracks
+}
+
+#[test]
+fn test_skip_forward_then_backward_navigation() {
+    let mut manager = PlaybackManager::default();
+
+    let tracks: Vec<QueueTrack> = (0..10)
+        .map(|i| create_track(&i.to_string(), &format!("Track {}", i), "Artist", 180))
+        .collect();
+
+    manager.add_playlist_to_queue(tracks);
+
+    // Start at beginning
+    manager.next().ok();
+
+    // Jump forward to track 7 (index 6 in remaining queue)
+    manager.skip_to_queue_index(6).ok();
+
+    // Navigate backwards through history
+    // Should be able to go back through: 6, 5, 4, 3, 2, 1, 0
+    for expected_id in (0..7).rev() {
+        assert!(
+            manager.has_previous(),
+            "Should have previous at track {}",
+            expected_id
+        );
+        manager.previous().ok();
+    }
 }

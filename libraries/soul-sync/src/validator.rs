@@ -96,7 +96,10 @@ async fn validate_references(
     .await?;
 
     if orphaned_stats.count > 0 {
-        warn!("Found {} orphaned track_stats records", orphaned_stats.count);
+        warn!(
+            "Found {} orphaned track_stats records",
+            orphaned_stats.count
+        );
 
         state
             .log_error(
@@ -104,7 +107,10 @@ async fn validate_references(
                 SyncPhase::Validation,
                 None,
                 "orphaned_stats",
-                &format!("Found {} orphaned track_stats records", orphaned_stats.count),
+                &format!(
+                    "Found {} orphaned track_stats records",
+                    orphaned_stats.count
+                ),
             )
             .await?;
 

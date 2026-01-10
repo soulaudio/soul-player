@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 94b57156242df6a7d48b14cb5fd4ee30efc74117c3046b25808fe57f856b890f # shrinks to tracks = [QueueTrack { id: "4", path: "/music/test.mp3", title: "a", artist: "a", album: None, duration: 1s, track_number: Some(1), source: Single }, QueueTrack { id: "4", path: "/music/test.mp3", title: "a", artist: "a", album: None, duration: 1s, track_number: Some(1), source: Single }]
+cc 0bebd62521626555113645e29289c382c6352ec37c98aa2b78604648745ce8a1 # shrinks to tracks = [QueueTrack { id: "93", path: "/music/test.mp3", title: " ", artist: " ", album: None, duration: 1s, track_number: Some(1), source: Single }, QueueTrack { id: "93", path: "/music/test.mp3", title: "A", artist: "a", album: None, duration: 1s, track_number: Some(1), source: Single }], operations = [0]

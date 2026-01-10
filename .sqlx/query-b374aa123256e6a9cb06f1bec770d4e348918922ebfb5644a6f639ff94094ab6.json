@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO tracks (\n            title, artist_id, album_id, album_artist_id, track_number, disc_number, year,\n            duration_seconds, bitrate, sample_rate, channels, file_format, file_hash,\n            origin_source_id, musicbrainz_recording_id, fingerprint\n        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 16
+    },
+    "nullable": []
+  },
+  "hash": "b374aa123256e6a9cb06f1bec770d4e348918922ebfb5644a6f639ff94094ab6"
+}

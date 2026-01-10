@@ -37,3 +37,5 @@ next-env.d.ts
 # IDE
 .vscode
 .idea
+# Generated WASM files (built on demand)
+src/wasm/soul-playback/

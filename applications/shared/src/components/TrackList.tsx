@@ -5,6 +5,7 @@ import { Play, Pause, Music } from 'lucide-react';
 import { usePlayerStore } from '../stores/player';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import type { QueueTrack } from '../contexts/PlayerCommandsContext';
+import { Tooltip } from './ui/Tooltip';
 
 export interface Track {
   id: number | string;
@@ -72,11 +73,21 @@ export function TrackList({ tracks, buildQueue, onTrackAction, renderMenu }: Tra
     <div className="border rounded-lg overflow-hidden">
       <div className="bg-muted/50">
         <div className="grid grid-cols-[40px_minmax(200px,1fr)_minmax(150px,200px)_minmax(150px,200px)_80px_40px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground">
-          <div>#</div>
-          <div>Title</div>
-          <div>Artist</div>
-          <div>Album</div>
-          <div className="text-right">Duration</div>
+          <Tooltip content="Track number" position="top" delay={700}>
+            <div>#</div>
+          </Tooltip>
+          <Tooltip content="Track title" position="top" delay={700}>
+            <div>Title</div>
+          </Tooltip>
+          <Tooltip content="Artist name" position="top" delay={700}>
+            <div>Artist</div>
+          </Tooltip>
+          <Tooltip content="Album title" position="top" delay={700}>
+            <div>Album</div>
+          </Tooltip>
+          <Tooltip content="Track duration" position="top" delay={700}>
+            <div className="text-right">Duration</div>
+          </Tooltip>
           <div></div>
         </div>
       </div>
@@ -110,9 +121,9 @@ export function TrackList({ tracks, buildQueue, onTrackAction, renderMenu }: Tra
                     )}
                   </button>
                 ) : (
-                  <span className="text-muted-foreground text-sm">
+                  <div className="w-8 h-8 flex items-center justify-center text-muted-foreground text-sm">
                     {track.trackNumber || index + 1}
-                  </span>
+                  </div>
                 )}
               </div>
               <div className="flex flex-col justify-center min-w-0">

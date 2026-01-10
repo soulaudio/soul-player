@@ -1,16 +1,17 @@
-//! Integration tests for LocalAudioSource and StreamingAudioSource
+//! Integration tests for `LocalAudioSource` and `StreamingAudioSource`
 //!
 //! These tests verify real behavior with actual audio data.
 
-use soul_audio::SymphoniaDecoder;
 use soul_audio_desktop::{LocalAudioSource, StreamingAudioSource};
-use soul_core::AudioDecoder;
 use soul_playback::AudioSource;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
+
+/// Helper function to assert a type implements `AudioSource` trait
+fn assert_is_audio_source<T: AudioSource>(_: &T) {}
 
 /// Generate a simple sine wave WAV file for testing
 fn generate_test_wav(path: &PathBuf, duration_secs: f64, frequency: f64) -> std::io::Result<()> {
@@ -65,7 +66,7 @@ fn test_local_source_loads_and_plays_entire_file() {
     generate_test_wav(&wav_path, 1.0, 440.0).unwrap();
 
     // Load with LocalAudioSource
-    let mut source = LocalAudioSource::new(&wav_path).expect("Failed to load test file");
+    let mut source = LocalAudioSource::new(&wav_path, 44100).expect("Failed to load test file");
 
     // Verify duration is approximately 1 second
     let duration = source.duration();
@@ -98,7 +99,7 @@ fn test_local_source_reads_entire_file() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 0.5, 440.0).unwrap(); // 0.5 second file
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let duration = source.duration();
 
     // Read entire file
@@ -136,7 +137,7 @@ fn test_local_source_seeking() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 2.0, 440.0).unwrap(); // 2 second file
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
     // Read some samples to advance position
     let mut buffer = vec![0.0f32; 8192];
@@ -173,7 +174,7 @@ fn test_local_source_seek_beyond_duration_fails() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 1.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let duration = source.duration();
 
     // Seek beyond duration should fail
@@ -187,7 +188,7 @@ fn test_local_source_position_tracking_accuracy() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 1.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let buffer_size = 4410; // Exactly 0.05 seconds worth of stereo samples at 44.1kHz
     let mut buffer = vec![0.0f32; buffer_size];
 
@@ -223,7 +224,7 @@ fn test_local_source_handles_multiple_formats() {
         let wav_path = temp_dir.path().join(format!("test_{}s.wav", duration));
         generate_test_wav(&wav_path, duration, freq).unwrap();
 
-        let mut source = LocalAudioSource::new(&wav_path).unwrap();
+        let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
         let actual_duration = source.duration();
 
         assert!(
@@ -249,7 +250,7 @@ fn test_local_source_partial_buffer_fill_at_end() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 0.1, 440.0).unwrap(); // Very short file
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut large_buffer = vec![0.0f32; 44100 * 2]; // 1 second buffer for 0.1 second file
 
     // Request more samples than available
@@ -272,7 +273,7 @@ fn test_local_source_reset_functionality() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 1.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut buffer = vec![0.0f32; 8192];
 
     // Read to advance position
@@ -374,7 +375,7 @@ fn test_streaming_source_buffer_underrun_handling() {
 
 #[test]
 fn test_streaming_source_position_updates() {
-    let mut source = StreamingAudioSource::new(
+    let source = StreamingAudioSource::new(
         "http://localhost:8080/stream".to_string(),
         44100,
         2,
@@ -420,7 +421,7 @@ fn test_both_sources_implement_audio_source_trait() {
     generate_test_wav(&wav_path, 1.0, 440.0).unwrap();
 
     // Create both types
-    let local = LocalAudioSource::new(&wav_path).unwrap();
+    let local = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let streaming = StreamingAudioSource::new(
         "http://localhost:8080/stream".to_string(),
         44100,
@@ -430,7 +431,6 @@ fn test_both_sources_implement_audio_source_trait() {
     .unwrap();
 
     // Both should implement AudioSource
-    fn assert_is_audio_source<T: AudioSource>(_: &T) {}
     assert_is_audio_source(&local);
     assert_is_audio_source(&streaming);
 }
@@ -445,7 +445,7 @@ fn test_local_source_consistent_sample_count() {
     let mut counts = Vec::new();
 
     for _ in 0..3 {
-        let mut source = LocalAudioSource::new(&wav_path).unwrap();
+        let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
         let mut buffer = vec![0.0f32; 2048];
         let mut total = 0;
 
@@ -470,7 +470,7 @@ fn test_local_source_consistent_sample_count() {
 
 #[test]
 fn test_local_source_nonexistent_file_fails() {
-    let result = LocalAudioSource::new("/nonexistent/path/file.wav");
+    let result = LocalAudioSource::new("/nonexistent/path/file.wav", 44100);
     assert!(result.is_err(), "Should fail to load nonexistent file");
 }
 
@@ -483,6 +483,6 @@ fn test_local_source_invalid_file_fails() {
     let mut file = File::create(&invalid_path).unwrap();
     file.write_all(b"This is not a valid audio file").unwrap();
 
-    let result = LocalAudioSource::new(&invalid_path);
+    let result = LocalAudioSource::new(&invalid_path, 44100);
     assert!(result.is_err(), "Should fail to load invalid audio file");
 }

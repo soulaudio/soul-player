@@ -1,0 +1,18 @@
+# Cargo Configuration for Soul Player
+# See: https://doc.rust-lang.org/cargo/reference/config.html
+
+[build]
+# Default target directory (can be overridden by CARGO_TARGET_DIR env var)
+target-dir = "target"
+
+# Incremental compilation (faster rebuilds)
+incremental = true
+
+[term]
+# Colorize output
+color = 'auto'
+verbose = false
+
+# Platform-specific settings can be added here if needed
+# Example: [target.x86_64-pc-windows-msvc]
+#          rustflags = ["-C", "target-cpu=native"]

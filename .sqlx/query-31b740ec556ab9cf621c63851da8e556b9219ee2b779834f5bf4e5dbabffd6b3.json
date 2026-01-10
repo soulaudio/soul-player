@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE sync_state SET last_migration_version = ? WHERE id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "31b740ec556ab9cf621c63851da8e556b9219ee2b779834f5bf4e5dbabffd6b3"
+}

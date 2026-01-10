@@ -97,8 +97,8 @@ export class DemoStorage {
       title: track.title,
       artist: track.artist,
       album: track.album,
-      duration: track.duration,
-      trackNumber: track.trackNumber,
+      duration_secs: track.duration,  // WASM expects duration_secs
+      track_number: track.trackNumber,
       source,
       coverUrl: track.coverUrl
     }

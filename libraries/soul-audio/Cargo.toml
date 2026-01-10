@@ -12,14 +12,22 @@ soul-core.workspace = true
 symphonia = { workspace = true, features = ["mp3", "isomp4", "flac", "vorbis", "wav", "aac", "ogg"] }
 cpal = { workspace = true, optional = true }
 thiserror.workspace = true
+rand = { version = "0.8", optional = true }
+
+# Resampling
+rubato.workspace = true
+r8brain-rs = { workspace = true, optional = true }
 
 [features]
 default = []
 desktop = ["cpal"]
+test-utils = ["rand"]
+r8brain = ["dep:r8brain-rs"] # Optional high-quality resampler (requires CMake)
 
 [dev-dependencies]
 proptest.workspace = true
 tempfile = "3.24"
+rand = "0.8"
 
 [lints]
 workspace = true

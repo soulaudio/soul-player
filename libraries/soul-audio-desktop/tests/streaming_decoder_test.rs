@@ -62,7 +62,7 @@ fn test_streaming_decoder_loads_incrementally() {
     generate_test_wav(&wav_path, 10.0, 440.0).unwrap();
 
     // Create source - should not load entire file immediately
-    let mut source = LocalAudioSource::new(&wav_path).expect("Failed to create source");
+    let mut source = LocalAudioSource::new(&wav_path, 44100).expect("Failed to create source");
 
     // Request small amount of data
     let mut buffer = vec![0.0f32; 1024];
@@ -85,7 +85,7 @@ fn test_ring_buffer_refills_on_demand() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 5.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
     // Read multiple times - ring buffer should refill each time
     for iteration in 0..10 {
@@ -111,7 +111,7 @@ fn test_decoder_handles_eof_gracefully() {
     let wav_path = temp_dir.path().join("short.wav");
     generate_test_wav(&wav_path, 0.5, 440.0).unwrap(); // Very short file
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut buffer = vec![0.0f32; 4096];
 
     // Read entire file
@@ -139,7 +139,7 @@ fn test_partial_buffer_fill_near_end() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 0.1, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut large_buffer = vec![0.0f32; 88200]; // 1 second worth for 0.1 second file
 
     // Request more than available
@@ -161,7 +161,7 @@ fn test_seek_clears_ring_buffer() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 3.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
     // Read some data (fills ring buffer)
     let mut buffer = vec![0.0f32; 8192];
@@ -192,7 +192,7 @@ fn test_seek_to_beginning_resets_decoder() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 2.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
     // Read halfway through
     let mut buffer = vec![0.0f32; 44100]; // ~0.5 seconds
@@ -229,7 +229,7 @@ fn test_multiple_seeks_maintain_accuracy() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 5.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut buffer = vec![0.0f32; 1024];
 
     // Perform multiple seeks
@@ -262,7 +262,7 @@ fn test_seek_past_end_fails() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 2.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let duration = source.duration();
 
     // Seek beyond duration
@@ -284,7 +284,7 @@ fn test_fast_startup_time() {
     let start = std::time::Instant::now();
 
     // Create source - should be fast (not loading entire file)
-    let source = LocalAudioSource::new(&wav_path);
+    let source = LocalAudioSource::new(&wav_path, 44100);
 
     let creation_time = start.elapsed();
 
@@ -304,7 +304,7 @@ fn test_memory_bounded_buffer() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 10.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
     // Read through file in chunks
     let mut buffer = vec![0.0f32; 2048];
@@ -327,7 +327,7 @@ fn test_consistent_playback_speed() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 2.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
     // Read at regular intervals, measure position advancement
     let buffer_size = 4410; // 0.05 seconds worth at 44.1kHz stereo
@@ -364,7 +364,7 @@ fn test_tiny_buffer_reads() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 1.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
     // Read with very small buffer (edge case)
     let mut buffer = vec![0.0f32; 2];
@@ -380,7 +380,7 @@ fn test_exact_duration_playback() {
     let expected_duration = 1.0;
     generate_test_wav(&wav_path, expected_duration, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let reported_duration = source.duration();
 
     // Read entire file
@@ -418,7 +418,7 @@ fn test_interleaved_seek_and_read() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 5.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut buffer = vec![0.0f32; 1024];
 
     // Interleave seeks and reads
@@ -439,7 +439,7 @@ fn test_zero_size_buffer_read() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 1.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut buffer = vec![];
 
     // Read with zero-size buffer
@@ -453,7 +453,7 @@ fn test_decoder_state_after_error_recovery() {
     let wav_path = temp_dir.path().join("test.wav");
     generate_test_wav(&wav_path, 2.0, 440.0).unwrap();
 
-    let mut source = LocalAudioSource::new(&wav_path).unwrap();
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
     // Try invalid seek (past end)
     let _ = source.seek(Duration::from_secs(100));

@@ -1,6 +1,10 @@
 /**
  * Type definitions for demo playback
- * Mirrors the Rust types from soul-playback
+ * Mirrors the Rust WASM types from soul-playback
+ *
+ * IMPORTANT: Field names must match Rust serde expectations:
+ * - duration_secs (with underscore, not camelCase)
+ * - track_number (with underscore, not camelCase)
  */
 
 export interface QueueTrack {
@@ -9,10 +13,10 @@ export interface QueueTrack {
   title: string
   artist: string
   album?: string
-  duration: number // seconds (not Duration)
-  trackNumber?: number
-  source: TrackSource
-  coverUrl?: string
+  duration_secs: number // seconds - MUST be duration_secs for WASM deserialization
+  track_number?: number // MUST be track_number for WASM deserialization
+  source?: TrackSource // Optional for compatibility
+  coverUrl?: string // Demo-specific field, not in WASM
 }
 
 export type TrackSource =

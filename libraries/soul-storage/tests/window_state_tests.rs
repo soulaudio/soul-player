@@ -179,9 +179,9 @@ async fn test_multi_user_window_states() {
     let loaded2 = window_state::get_window_state(&pool, "2").await.unwrap();
 
     assert_eq!(loaded1.width, 1200);
-    assert_eq!(loaded1.maximized, false);
+    assert!(!loaded1.maximized);
     assert_eq!(loaded2.width, 1600);
-    assert_eq!(loaded2.maximized, true);
+    assert!(loaded2.maximized);
 }
 
 #[tokio::test]

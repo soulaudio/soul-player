@@ -16,8 +16,8 @@ soul-storage.workspace = true
 soul-importer.workspace = true
 soul-sync.workspace = true
 soul-audio.workspace = true
-soul-audio-desktop.workspace = true
 soul-playback.workspace = true
+soul-artwork.workspace = true
 sqlx = { workspace = true }
 tauri.workspace = true
 tauri-plugin-shell.workspace = true
@@ -32,13 +32,24 @@ url.workspace = true
 chrono.workspace = true
 dotenvy = "0.15"
 rfd = "0.15"
+base64 = "0.22"
+
+[target.'cfg(windows)'.dependencies]
+soul-audio-desktop = { workspace = true, features = ["effects", "asio"] }
+
+[target.'cfg(not(windows))'.dependencies]
+soul-audio-desktop = { workspace = true, features = ["effects"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+hound = "3.5"  # WAV file creation for tests
 
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+effects = ["soul-audio-desktop/effects"]
+asio = ["soul-audio-desktop/asio"]
+jack = ["soul-audio-desktop/jack"]
 
 [lints]
 workspace = true

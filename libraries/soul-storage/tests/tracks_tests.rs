@@ -35,6 +35,7 @@ async fn test_create_and_get_track() {
             sample_rate: Some(44100),
             channels: Some(2),
             file_format: "mp3".to_string(),
+            file_hash: None,
             origin_source_id: 1, // Default local source
             local_file_path: Some("/music/test.mp3".to_string()),
             musicbrainz_recording_id: None,
@@ -54,7 +55,7 @@ async fn test_create_and_get_track() {
     assert_eq!(track.album_title, Some("Test Album".to_string()));
 
     // Retrieve by ID
-    let retrieved = soul_storage::tracks::get_by_id(pool, track.id)
+    let retrieved = soul_storage::tracks::get_by_id(pool, track.id.clone())
         .await
         .unwrap()
         .unwrap();
@@ -142,7 +143,7 @@ async fn test_track_with_multiple_sources() {
 
     let stream = availability
         .iter()
-        .find(|a| a.status == AvailabilityStatus::StreamOnly)
+        .find(|a| a.status == AvailabilityStatus::StreamOnly && a.source_id == server2_id)
         .unwrap();
     assert_eq!(stream.server_path, Some("/api/tracks/stream".to_string()));
 }
@@ -220,6 +221,7 @@ async fn test_get_tracks_by_album() {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            file_hash: None,
             origin_source_id: 1,
             local_file_path: Some("/music/d1t1.mp3".to_string()),
             musicbrainz_recording_id: None,
@@ -244,6 +246,7 @@ async fn test_get_tracks_by_album() {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            file_hash: None,
             origin_source_id: 1,
             local_file_path: Some("/music/d1t2.mp3".to_string()),
             musicbrainz_recording_id: None,
@@ -339,6 +342,7 @@ async fn test_update_track_partial() {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            file_hash: None,
             origin_source_id: 1,
             local_file_path: Some("/music/test.mp3".to_string()),
             musicbrainz_recording_id: None,
@@ -376,18 +380,18 @@ async fn test_delete_track() {
         create_test_track(pool, "To Delete", None, None, 1, Some("/music/delete.mp3")).await;
 
     // Verify exists
-    assert!(soul_storage::tracks::get_by_id(pool, track_id)
+    assert!(soul_storage::tracks::get_by_id(pool, track_id.clone())
         .await
         .unwrap()
         .is_some());
 
     // Delete
-    soul_storage::tracks::delete(pool, track_id)
+    soul_storage::tracks::delete(pool, track_id.clone())
         .await
         .expect("Failed to delete track");
 
     // Verify deleted
-    assert!(soul_storage::tracks::get_by_id(pool, track_id)
+    assert!(soul_storage::tracks::get_by_id(pool, track_id.clone())
         .await
         .unwrap()
         .is_none());
@@ -412,29 +416,31 @@ async fn test_record_play() {
         create_test_track(pool, "Test Song", None, None, 1, Some("/music/test.mp3")).await;
 
     // Record a completed play
-    soul_storage::tracks::record_play(pool, user_id, track_id, Some(180.0), true)
+    soul_storage::tracks::record_play(pool, user_id.clone(), track_id.clone(), Some(180.0), true)
         .await
         .expect("Failed to record play");
 
     // Check play count
-    let play_count = soul_storage::tracks::get_play_count(pool, track_id)
+    let play_count = soul_storage::tracks::get_play_count(pool, track_id.clone())
         .await
         .unwrap();
 
     assert_eq!(play_count, 1);
 
     // Record a skip (not completed)
-    soul_storage::tracks::record_play(pool, user_id, track_id, Some(30.0), false)
+    soul_storage::tracks::record_play(pool, user_id.clone(), track_id.clone(), Some(30.0), false)
         .await
         .unwrap();
 
-    // Verify stats
-    let stats: (i32, i32) =
-        sqlx::query_as("SELECT play_count, skip_count FROM track_stats WHERE track_id = ?")
-            .bind(track_id)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    // Verify stats (per-user)
+    let stats: (i32, i32) = sqlx::query_as(
+        "SELECT play_count, skip_count FROM track_stats WHERE track_id = ? AND user_id = ?",
+    )
+    .bind(track_id)
+    .bind(user_id.as_str())
+    .fetch_one(pool)
+    .await
+    .unwrap();
 
     assert_eq!(stats.0, 1); // play_count
     assert_eq!(stats.1, 1); // skip_count
@@ -452,17 +458,17 @@ async fn test_get_recently_played() {
     let track3 = create_test_track(pool, "Track 3", None, None, 1, Some("/music/3.mp3")).await;
 
     // Play tracks in order
-    soul_storage::tracks::record_play(pool, user_id, track1, None, true)
+    soul_storage::tracks::record_play(pool, user_id.clone(), track1, None, true)
         .await
         .unwrap();
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    soul_storage::tracks::record_play(pool, user_id, track2, None, true)
+    soul_storage::tracks::record_play(pool, user_id.clone(), track2.clone(), None, true)
         .await
         .unwrap();
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    soul_storage::tracks::record_play(pool, user_id, track3, None, true)
+    soul_storage::tracks::record_play(pool, user_id.clone(), track3.clone(), None, true)
         .await
         .unwrap();
 
@@ -488,7 +494,7 @@ async fn test_track_deletion_cascades_to_availability() {
     // Verify track_sources entry exists
     let count_before: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM track_sources WHERE track_id = ?")
-            .bind(track_id)
+            .bind(track_id.clone())
             .fetch_one(pool)
             .await
             .unwrap();
@@ -496,7 +502,9 @@ async fn test_track_deletion_cascades_to_availability() {
     assert!(count_before > 0);
 
     // Delete track
-    soul_storage::tracks::delete(pool, track_id).await.unwrap();
+    soul_storage::tracks::delete(pool, track_id.clone())
+        .await
+        .unwrap();
 
     // Verify track_sources entry deleted
     let count_after: i64 =
@@ -510,20 +518,21 @@ async fn test_track_deletion_cascades_to_availability() {
 }
 
 #[tokio::test]
-async fn test_create_track_initializes_stats() {
+async fn test_create_track_does_not_initialize_stats() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
     let track_id = create_test_track(pool, "Test", None, None, 1, Some("/music/test.mp3")).await;
 
-    // Verify stats row created
-    let stats: (i32, i32) =
-        sqlx::query_as("SELECT play_count, skip_count FROM track_stats WHERE track_id = ?")
-            .bind(track_id)
-            .fetch_one(pool)
-            .await
-            .expect("Stats should be initialized");
+    // Verify stats row NOT created (stats are per-user and created on-demand)
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM track_stats WHERE track_id = ?")
+        .bind(track_id)
+        .fetch_one(pool)
+        .await
+        .expect("Query should succeed");
 
-    assert_eq!(stats.0, 0);
-    assert_eq!(stats.1, 0);
+    assert_eq!(
+        count, 0,
+        "track_stats should not be initialized automatically"
+    );
 }

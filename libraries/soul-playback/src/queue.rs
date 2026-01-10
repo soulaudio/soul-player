@@ -29,6 +29,9 @@ pub struct Queue {
     /// Tracks from source (playlist/album)
     source: Vec<QueueTrack>,
 
+    /// Current position in source queue (for non-destructive navigation)
+    source_index: usize,
+
     /// Original order before shuffle (for restoring)
     original_source: Vec<QueueTrack>,
 
@@ -42,6 +45,7 @@ impl Queue {
         Self {
             explicit: Vec::new(),
             source: Vec::new(),
+            source_index: 0,
             original_source: Vec::new(),
             is_shuffled: false,
         }
@@ -63,8 +67,9 @@ impl Queue {
     ///
     /// Replaces current source queue
     pub fn set_source(&mut self, tracks: Vec<QueueTrack>) {
-        self.source = tracks.clone();
+        self.source.clone_from(&tracks);
         self.original_source = tracks;
+        self.source_index = 0;
         self.is_shuffled = false;
     }
 
@@ -137,6 +142,7 @@ impl Queue {
     pub fn clear(&mut self) {
         self.explicit.clear();
         self.source.clear();
+        self.source_index = 0;
         self.original_source.clear();
         self.is_shuffled = false;
     }
@@ -151,18 +157,26 @@ impl Queue {
     #[allow(dead_code)]
     pub fn clear_source(&mut self) {
         self.source.clear();
+        self.source_index = 0;
         self.original_source.clear();
         self.is_shuffled = false;
     }
 
     /// Get next track to play
     ///
-    /// Prioritizes explicit queue, then source queue
+    /// Prioritizes explicit queue, then source queue.
+    /// Uses index-based navigation for source queue (non-destructive).
     pub fn pop_next(&mut self) -> Option<QueueTrack> {
+        // Explicit queue still uses remove (destructive by design)
         if !self.explicit.is_empty() {
-            Some(self.explicit.remove(0))
-        } else if !self.source.is_empty() {
-            Some(self.source.remove(0))
+            return Some(self.explicit.remove(0));
+        }
+
+        // Source queue uses index navigation (non-destructive)
+        if self.source_index < self.source.len() {
+            let track = self.source[self.source_index].clone();
+            self.source_index += 1;
+            Some(track)
         } else {
             None
         }
@@ -171,18 +185,29 @@ impl Queue {
     /// Peek at next track without removing
     #[allow(dead_code)]
     pub fn peek_next(&self) -> Option<&QueueTrack> {
-        if !self.explicit.is_empty() {
-            self.explicit.first()
-        } else {
+        if self.explicit.is_empty() {
             self.source.first()
+        } else {
+            self.explicit.first()
         }
     }
 
-    /// Get all tracks in queue order
+    /// Get all tracks in queue order from current position
     ///
-    /// Returns explicit queue followed by source queue
+    /// Returns explicit queue followed by remaining source queue tracks.
+    /// Source queue starts from current position (source_index), not from beginning.
     pub fn get_all(&self) -> Vec<&QueueTrack> {
-        self.explicit.iter().chain(self.source.iter()).collect()
+        // Explicit queue always shown fully
+        let explicit_iter = self.explicit.iter();
+
+        // Source queue shows only tracks from current position onward
+        let remaining_source = if self.source_index < self.source.len() {
+            &self.source[self.source_index..]
+        } else {
+            &self.source[0..0] // Empty slice if we've played through all
+        };
+
+        explicit_iter.chain(remaining_source.iter()).collect()
     }
 
     /// Get track at index
@@ -228,7 +253,55 @@ impl Queue {
     pub fn restore_original_order(&mut self) {
         if self.is_shuffled {
             self.source = self.original_source.clone();
+            self.source_index = 0;
             self.is_shuffled = false;
+        }
+    }
+
+    /// Reload source queue from original (for Repeat All mode)
+    ///
+    /// Resets playback position to beginning while preserving shuffle state
+    pub fn reload_source(&mut self, shuffle_mode: crate::types::ShuffleMode) {
+        self.source = self.original_source.clone();
+
+        // Re-shuffle if shuffle is enabled
+        if shuffle_mode != crate::types::ShuffleMode::Off {
+            crate::shuffle::shuffle_queue(&mut self.source, shuffle_mode);
+        }
+
+        self.source_index = 0;
+    }
+
+    /// Check if source queue has more tracks
+    pub fn has_next_in_source(&self) -> bool {
+        self.source_index < self.source.len()
+    }
+
+    /// Get current position in source queue
+    pub fn get_source_position(&self) -> usize {
+        self.source_index
+    }
+
+    /// Get total source queue size
+    pub fn get_source_total(&self) -> usize {
+        self.source.len()
+    }
+
+    /// Remove consecutive duplicate tracks from source queue
+    ///
+    /// Prevents the same track from playing twice in a row (UX improvement)
+    pub fn remove_consecutive_duplicates(&mut self) {
+        if self.source.len() <= 1 {
+            return;
+        }
+
+        let mut i = 0;
+        while i < self.source.len() - 1 {
+            if self.source[i].id == self.source[i + 1].id {
+                self.source.remove(i + 1);
+            } else {
+                i += 1;
+            }
         }
     }
 
@@ -237,6 +310,85 @@ impl Queue {
         if !self.is_shuffled {
             self.original_source = self.source.clone();
         }
+    }
+
+    /// Skip to track at index in queue
+    ///
+    /// Returns all tracks that were skipped over (for adding to history).
+    /// Handles both explicit and source queue navigation properly:
+    /// - If target is in explicit queue: removes tracks before it
+    /// - If target is in source queue: clears explicit queue and updates source_index
+    ///
+    /// This preserves the source queue structure so tracks can be navigated back to
+    /// using the previous button.
+    pub fn skip_to_index(&mut self, index: usize) -> Option<Vec<QueueTrack>> {
+        let explicit_len = self.explicit.len();
+
+        if index >= self.len() {
+            return None;
+        }
+
+        let mut skipped = Vec::new();
+
+        if index < explicit_len {
+            // Target is in explicit queue
+            // Remove all explicit tracks before the target
+            for _ in 0..index {
+                if let Some(track) = self.explicit.first() {
+                    skipped.push(track.clone());
+                    self.explicit.remove(0);
+                }
+            }
+        } else {
+            // Target is in source queue
+            // First, add all explicit tracks to skipped list
+            skipped.extend(self.explicit.drain(..));
+
+            // Calculate target position in source queue
+            let target_in_source = index - explicit_len;
+
+            // Add source tracks from current position up to (but not including) target
+            let start = self.source_index;
+            let end = self.source_index + target_in_source;
+
+            if end <= self.source.len() {
+                // Collect skipped tracks from source queue
+                for i in start..end {
+                    skipped.push(self.source[i].clone());
+                }
+
+                // Update source_index to point to target
+                self.source_index = end;
+            } else {
+                // Index out of bounds for source queue
+                return None;
+            }
+        }
+
+        Some(skipped)
+    }
+
+    /// Check if we can go back in source queue (for previous button)
+    pub fn can_go_back(&self) -> bool {
+        self.source_index > 0
+    }
+
+    /// Go back one track in source queue (for previous button)
+    ///
+    /// Returns the track at the previous position without modifying the queue structure.
+    /// This allows true index-based navigation without reordering.
+    pub fn go_back(&mut self) -> Option<QueueTrack> {
+        if self.source_index > 0 {
+            self.source_index -= 1;
+            Some(self.source[self.source_index].clone())
+        } else {
+            None
+        }
+    }
+
+    /// Get current source index position
+    pub fn current_source_index(&self) -> usize {
+        self.source_index
     }
 }
 

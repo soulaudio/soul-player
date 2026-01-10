@@ -61,22 +61,119 @@ A local-first, cross-platform music player with server streaming capabilities an
   - Album art extraction
   - Metadata enrichment (Phase 4)
 
-#### 1.4: Audio Playback (2-3 weeks)
-- [ ] **Audio Engine** (`soul-audio`)
+#### 1.4: Audio Playback ✅ COMPLETE
+- [x] **Audio Engine** (`soul-audio`)
   - Symphonia decoder (MP3, FLAC, OGG, WAV, AAC, OPUS)
   - CPAL output for desktop (`soul-audio-desktop`)
   - Effect chain architecture (trait-based)
   - 3-band parametric EQ
-  - Compressor
-  - Volume control and normalization
+  - Dynamic range compressor
+  - Brick-wall limiter
+  - Volume control
 
-- [ ] **Playback Integration**
+- [x] **DSP Effect Chain**
+  - Add/remove/reorder effects in realtime
+  - Per-effect enable/disable toggle
+  - Parameter adjustment UI with sliders
+  - Effect presets (EQ, Compressor, Limiter)
+  - Chain presets with database persistence
+  - Built-in presets (Rock, Jazz, Classical, etc.)
+
+- [x] **Testing & Validation**
+  - 15 E2E tests for DSP verification
+  - FFT-based frequency analysis
+  - THD (Total Harmonic Distortion) measurement
+  - Compression ratio verification
+  - Test signal generation utilities
+
+- [x] **Playback Integration**
   - Wire Tauri commands to audio engine
   - Play, pause, stop, seek
   - Queue management
-  - Gapless playback (optional)
 
-#### 1.5: Desktop UI (1-2 weeks)
+#### 1.5: Advanced Audio Processing (6-9 weeks)
+
+##### 1.5.1: High-Quality Resampling / Upsampling (1-2 weeks)
+- [ ] **Resampling Engine**
+  - r8brain algorithm (high-quality SRC)
+  - Rubato fallback (portable)
+  - Quality levels: Fast, Balanced, High, Maximum
+  - Arbitrary sample rate conversion (44.1→96/192kHz)
+
+- [ ] **Upsampling Pipeline**
+  - Apply DSP at native rate → upsample → output
+  - DSD conversion (PCM → DSD64/DSD128/DSD256)
+  - Auto DAC capability detection
+  - Manual target rate override
+
+- [ ] **UI Integration**
+  - Upsampling quality selector
+  - Target sample rate dropdown
+  - Real-time rate indicator
+
+##### 1.5.2: Volume Leveling & Loudness Normalization (1-2 weeks)
+- [ ] **ReplayGain Support**
+  - Read ReplayGain tags (track/album gain)
+  - Apply gain with clipping prevention
+  - Mode: Track gain / Album gain / Disabled
+  - Pre-amp adjustment
+
+- [ ] **EBU R128 Loudness**
+  - Real-time loudness analysis (`ebur128` crate)
+  - Target LUFS: -23 (broadcast) or -18 (streaming)
+  - True peak limiting
+  - Background library analysis
+
+- [ ] **Database & UI**
+  - Store loudness metadata per track
+  - Volume leveling settings page
+  - Target loudness slider
+
+##### 1.5.3: Advanced DSP Effects (2-3 weeks)
+- [ ] **Crossfeed (Headphone Spatialization)**
+  - Bauer stereophonic-to-binaural DSP
+  - Adjustable crossfeed amount
+  - Presets: Subtle, Moderate, Strong
+
+- [ ] **Convolution (Impulse Response)**
+  - Load custom IR files (WAV format)
+  - Room correction
+  - Virtual speaker emulation
+  - Reverb effects
+
+- [ ] **Graphic EQ**
+  - 10-band or 31-band option
+  - ISO standard frequencies
+  - Visual frequency response curve
+
+- [ ] **Stereo Enhancement**
+  - Width control (0-200%)
+  - M/S processing
+  - Pseudo-surround
+
+##### 1.5.4: Gapless Playback & Crossfade (1 week)
+- [ ] **Gapless Playback**
+  - Pre-decode next track
+  - Eliminate silence between tracks
+  - Handle sample rate changes
+
+- [ ] **Crossfade**
+  - Configurable duration (0-10s)
+  - Fade curves: Linear, Logarithmic, S-curve
+  - Skip crossfade for live albums
+
+##### 1.5.5: Buffer & Latency Optimization (1 week)
+- [ ] **Adaptive Buffering**
+  - Auto-adjust based on performance
+  - Monitor underruns
+  - Low-latency mode
+
+- [ ] **Exclusive Mode Support**
+  - ASIO (Windows) - enable existing feature
+  - JACK (Linux/macOS) - enable existing feature
+  - Bit-perfect output
+
+#### 1.6: Desktop UI (1-2 weeks)
 - [ ] **Complete Desktop UI**
   - Library view (tracks, albums, artists, genres)
   - Playback controls and progress bar
@@ -95,9 +192,16 @@ A local-first, cross-platform music player with server streaming capabilities an
 
 ### Success Criteria
 - Scan local music folders with smart deduplication
-- Play all supported formats
+- Play all supported formats (MP3, FLAC, OGG, WAV, AAC, OPUS)
 - Create and manage playlists
-- Apply EQ and compression effects
+- ✅ Apply professional-grade DSP effects:
+  - ✅ 3-band parametric EQ
+  - ✅ Dynamic range compressor
+  - ✅ Brick-wall limiter
+  - ✅ Effect chain with presets
+- High-quality upsampling/resampling (Phase 1.5)
+- Volume leveling across tracks (Phase 1.5)
+- Gapless playback and crossfade (Phase 1.5)
 - Portable data folder (copy-paste to share)
 - Beautiful, responsive UI
 - 10,000+ track library performs well

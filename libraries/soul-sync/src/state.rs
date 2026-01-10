@@ -13,11 +13,9 @@ impl StateManager {
 
     /// Check if sync is currently running
     pub async fn is_syncing(&self) -> Result<bool> {
-        let row = sqlx::query!(
-            "SELECT status FROM sync_state WHERE id = 1"
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let row = sqlx::query!("SELECT status FROM sync_state WHERE id = 1")
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(row.status != "idle")
     }
@@ -219,11 +217,9 @@ impl StateManager {
 
     /// Get the last known migration version
     pub async fn get_last_known_migration(&self) -> Result<String> {
-        let row = sqlx::query!(
-            "SELECT last_migration_version FROM sync_state WHERE id = 1"
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let row = sqlx::query!("SELECT last_migration_version FROM sync_state WHERE id = 1")
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(row.last_migration_version.unwrap_or_default())
     }

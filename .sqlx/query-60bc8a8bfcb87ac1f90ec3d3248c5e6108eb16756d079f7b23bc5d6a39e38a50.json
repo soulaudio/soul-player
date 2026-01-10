@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM genres\n         WHERE id NOT IN (SELECT DISTINCT genre_id FROM track_genres)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "60bc8a8bfcb87ac1f90ec3d3248c5e6108eb16756d079f7b23bc5d6a39e38a50"
+}

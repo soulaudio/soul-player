@@ -8,11 +8,22 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  turbopack: {},
-  webpack: (config) => {
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
+
+  // Turbopack configuration (Next.js 16 default)
+  turbopack: {
+    // Replace Node.js modules with empty module for browser builds
+    resolveAlias: {
+      fs: { browser: './empty.ts' },
+    },
+  },
+
+  // Webpack configuration (fallback if using --webpack flag)
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+      }
     }
     return config
   }

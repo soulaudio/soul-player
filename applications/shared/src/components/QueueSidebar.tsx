@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { usePlayerStore } from '../stores/player';
 import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext';
+import { ArtworkImage } from './ArtworkImage';
 import { X, Music } from 'lucide-react';
 
 interface QueueSidebarProps {
@@ -31,9 +32,21 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   const loadQueue = async () => {
     try {
       const queueData = await commands.getQueue();
+      console.log('[QueueSidebar] Loaded queue:', queueData);
+      if (queueData.length > 0) {
+        console.log('[QueueSidebar] First track coverArtPath:', queueData[0].coverArtPath);
+      }
       setQueue(queueData);
     } catch (error) {
       console.error('[QueueSidebar] Failed to load queue:', error);
+    }
+  };
+
+  const handleQueueItemClick = async (index: number) => {
+    try {
+      await commands.skipToQueueIndex(index);
+    } catch (error) {
+      console.error('[QueueSidebar] Failed to skip to queue index:', error);
     }
   };
 
@@ -80,11 +93,19 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                 </div>
                 <div className="px-4 py-3 bg-primary/5">
                   <div className="flex items-start gap-3">
-                    {/* Playing indicator */}
-                    <div className="flex-shrink-0 pt-1">
-                      <div className="w-4 h-4 flex items-center justify-center">
-                        <div className="w-3 h-3 bg-primary rounded-sm animate-pulse"></div>
+                    {/* Album art with playing indicator */}
+                    <div className="flex-shrink-0 relative">
+                      <div className="w-12 h-12 bg-muted rounded overflow-hidden">
+                        <ArtworkImage
+                          trackId={currentTrack.id}
+                          coverArtPath={currentTrack.coverArtPath}
+                          alt={currentTrack.album || 'Album art'}
+                          className="w-full h-full object-cover"
+                          fallbackClassName="w-full h-full flex items-center justify-center"
+                        />
                       </div>
+                      {/* Playing indicator overlay */}
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-primary rounded-sm animate-pulse"></div>
                     </div>
 
                     {/* Track info */}
@@ -120,11 +141,20 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                     <div
                       key={`${track.trackId}-${index}`}
                       className="px-4 py-3 hover:bg-accent transition-colors cursor-pointer"
+                      onClick={() => handleQueueItemClick(index)}
                     >
                       <div className="flex items-start gap-3">
-                        {/* Track number */}
-                        <div className="text-xs text-muted-foreground font-mono w-6 flex-shrink-0 pt-1">
-                          {index + 1}
+                        {/* Album art thumbnail */}
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 bg-muted rounded overflow-hidden">
+                            <ArtworkImage
+                              trackId={track.trackId}
+                              coverArtPath={track.coverArtPath}
+                              alt={track.album || 'Album art'}
+                              className="w-full h-full object-cover"
+                              fallbackClassName="w-full h-full flex items-center justify-center"
+                            />
+                          </div>
                         </div>
 
                         {/* Track info */}

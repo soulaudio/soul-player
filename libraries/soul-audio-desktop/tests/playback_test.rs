@@ -39,12 +39,9 @@ fn test_create_output() {
 
 #[test]
 fn test_play_sine_wave() {
-    let mut output = match CpalOutput::new() {
-        Ok(o) => o,
-        Err(_) => {
-            println!("No audio device - skipping test");
-            return;
-        }
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
     };
 
     // Generate a 440 Hz sine wave (A4 note) for 0.1 seconds
@@ -64,12 +61,9 @@ fn test_play_sine_wave() {
 
 #[test]
 fn test_playback_controls() {
-    let mut output = match CpalOutput::new() {
-        Ok(o) => o,
-        Err(_) => {
-            println!("No audio device - skipping test");
-            return;
-        }
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
     };
 
     // Generate test audio
@@ -95,12 +89,9 @@ fn test_playback_controls() {
 
 #[test]
 fn test_volume_control() {
-    let mut output = match CpalOutput::new() {
-        Ok(o) => o,
-        Err(_) => {
-            println!("No audio device - skipping test");
-            return;
-        }
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
     };
 
     // Test initial volume
@@ -123,12 +114,9 @@ fn test_volume_control() {
 
 #[test]
 fn test_play_with_volume_change() {
-    let mut output = match CpalOutput::new() {
-        Ok(o) => o,
-        Err(_) => {
-            println!("No audio device - skipping test");
-            return;
-        }
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
     };
 
     // Generate test audio
@@ -153,12 +141,9 @@ fn test_play_with_volume_change() {
 
 #[test]
 fn test_sample_rate_conversion() {
-    let mut output = match CpalOutput::new() {
-        Ok(o) => o,
-        Err(_) => {
-            println!("No audio device - skipping test");
-            return;
-        }
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
     };
 
     // Generate audio at 48kHz (different from CD quality 44.1kHz)
@@ -175,12 +160,9 @@ fn test_sample_rate_conversion() {
 
 #[test]
 fn test_multiple_plays() {
-    let mut output = match CpalOutput::new() {
-        Ok(o) => o,
-        Err(_) => {
-            println!("No audio device - skipping test");
-            return;
-        }
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
     };
 
     // Play multiple buffers in sequence
@@ -199,12 +181,9 @@ fn test_multiple_plays() {
 
 #[test]
 fn test_play_silence() {
-    let mut output = match CpalOutput::new() {
-        Ok(o) => o,
-        Err(_) => {
-            println!("No audio device - skipping test");
-            return;
-        }
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
     };
 
     // Create a buffer of silence
@@ -218,12 +197,9 @@ fn test_play_silence() {
 
 #[test]
 fn test_empty_buffer() {
-    let mut output = match CpalOutput::new() {
-        Ok(o) => o,
-        Err(_) => {
-            println!("No audio device - skipping test");
-            return;
-        }
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
     };
 
     // Create an empty buffer

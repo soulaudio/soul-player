@@ -45,12 +45,23 @@ async-trait = "0.1"
 
 # Audio - Decoder
 symphonia = { version = "0.5", features = ["all"] }
-rubato = "0.15" # Sample rate conversion
+
+# Audio - Resampling
+rubato = "0.15" # Fast resampling (currently in use)
+r8brain-rs = "0.3" # High-quality audiophile resampling
 
 # Audio - Platform outputs
-cpal = "0.15"  # Desktop
+cpal = { version = "0.15", default-features = true } # Desktop audio I/O
 # iOS/Android use native bridges (Swift/Kotlin)
 # ESP32 uses awedio_esp32
+
+# Audio - DSP & Effects
+dasp = "0.11" # Digital Audio Signal Processing primitives
+fundsp = "0.18" # Advanced DSP graph synthesis
+biquad = "0.4" # Filters (EQ, highpass, lowpass)
+
+# Audio - Analysis
+ebur128 = "0.1" # EBU R128 loudness measurement & ReplayGain
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
@@ -75,9 +86,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.6", features = ["v4", "serde"] }
 config = "0.14"
+base64 = "0.22"
+lru = "0.12"
 
 # Desktop/Mobile (Tauri)
-tauri = { version = "2.0.0", features = [] }
+tauri = { version = "2.0.0", features = ["protocol-asset"] }
 tauri-plugin-shell = "2.0.0"
 tauri-plugin-updater = "2.0"
 tauri-plugin-global-shortcut = "2.0"
@@ -88,7 +101,7 @@ url = "2.5"
 # Testing
 proptest = "1.4"
 criterion = "0.5"
-testcontainers = "0.15"
+testcontainers = "0.23"
 mockall = "0.12"
 tempfile = "3.24"
 
@@ -111,6 +124,7 @@ soul-metadata = { path = "libraries/soul-metadata" }
 soul-importer = { path = "libraries/soul-importer" }
 soul-discovery = { path = "libraries/soul-discovery" }
 soul-sync = { path = "libraries/soul-sync" }
+soul-artwork = { path = "libraries/soul-artwork" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -184,8 +198,7 @@ needless_pass_by_value = "allow"
 redundant_closure = "allow"
 # Allow functions with many parameters (common in apps)
 too_many_arguments = "allow"
-# Allow matching over () - sometimes more explicit
-match_unit = "allow"
+# Allow ignored unit patterns
 ignored_unit_patterns = "allow"
 # Allow items after statements
 items_after_statements = "allow"

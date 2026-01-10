@@ -26,9 +26,9 @@ pub enum SyncPhase {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncTrigger {
-    Manual,              // User clicked sync button
-    SchemaMigration,     // New migrations detected
-    SourceActivation,    // Source became active
+    Manual,           // User clicked sync button
+    SchemaMigration,  // New migrations detected
+    SourceActivation, // Source became active
 }
 
 /// Progress information for an ongoing sync operation

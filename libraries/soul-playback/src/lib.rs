@@ -125,8 +125,16 @@ mod source;
 pub mod types;
 mod volume;
 
+// WASM bindings (conditional compilation)
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
 // Public exports
 pub use error::{PlaybackError, Result};
 pub use manager::PlaybackManager;
 pub use source::AudioSource;
 pub use types::{PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMode, TrackSource};
+
+// WASM exports
+#[cfg(feature = "wasm")]
+pub use wasm::{WasmPlaybackManager, WasmQueueTrack};

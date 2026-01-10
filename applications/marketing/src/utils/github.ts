@@ -72,13 +72,25 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo | null> {
       throw new Error(`GitHub API error: ${response.status} ${response.statusText}`)
     }
 
-    const data = await response.json()
+    interface GitHubAsset {
+      name: string
+      browser_download_url: string
+      size: number
+    }
+
+    interface GitHubRelease {
+      tag_name: string
+      published_at: string
+      assets: GitHubAsset[]
+    }
+
+    const data: GitHubRelease = await response.json()
 
     const releaseInfo: ReleaseInfo = {
       version: data.tag_name.replace(/^v/, ''), // Strip leading 'v'
       tagName: data.tag_name,
       publishedAt: data.published_at,
-      assets: data.assets.map((asset: any) => ({
+      assets: data.assets.map((asset) => ({
         name: asset.name,
         downloadUrl: asset.browser_download_url,
         size: asset.size,

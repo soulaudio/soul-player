@@ -126,7 +126,6 @@ impl StreamingAudioSource {
         sender: &Sender<Vec<f32>>,
         stop_signal: &Arc<AtomicBool>,
     ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
-
         // Create HTTP client
         let client = reqwest::Client::new();
 

@@ -51,6 +51,11 @@
 mod decoder;
 pub mod effects;
 mod error;
+pub mod resampling;
+
+// Test utilities available in dev/test builds
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
 
 pub use decoder::SymphoniaDecoder;
 pub use error::{AudioError, Result};

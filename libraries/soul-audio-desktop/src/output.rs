@@ -411,12 +411,8 @@ mod tests {
             Ok(output) => {
                 assert_eq!(output.volume(), 1.0);
             }
-            Err(AudioOutputError::DeviceNotFound) => {
+            Err(AudioOutputError::DeviceNotFound | AudioOutputError::StreamBuildError(_)) => {
                 // Expected in headless environments
-            }
-            Err(AudioOutputError::StreamBuildError(_)) => {
-                // Also expected in environments without working audio devices
-                // (e.g., "device unplugged" in WSL)
             }
             Err(e) => panic!("Unexpected error: {}", e),
         }
@@ -424,9 +420,8 @@ mod tests {
 
     #[test]
     fn volume_control() {
-        let mut output = match CpalOutput::new() {
-            Ok(o) => o,
-            Err(_) => return, // Skip test if no device
+        let Ok(mut output) = CpalOutput::new() else {
+            return; // Skip test if no device
         };
 
         assert!(output.set_volume(0.5).is_ok());
@@ -445,9 +440,8 @@ mod tests {
 
     #[test]
     fn playback_silence() {
-        let mut output = match CpalOutput::new() {
-            Ok(o) => o,
-            Err(_) => return, // Skip test if no device
+        let Ok(mut output) = CpalOutput::new() else {
+            return; // Skip test if no device
         };
 
         // Create a silent buffer

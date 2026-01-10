@@ -1,0 +1,14 @@
+# Next.js generated files
+.next
+next-env.d.ts
+out
+
+# Build output
+dist
+build
+
+# Dependencies
+node_modules
+
+# Cache
+.eslintcache

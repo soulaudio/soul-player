@@ -1,6 +1,6 @@
 //! Multi-source playlist types
 
-use super::ids::{PlaylistId, UserId};
+use super::ids::{PlaylistId, TrackId, UserId};
 use serde::{Deserialize, Serialize};
 
 /// Playlist with multi-user support
@@ -32,7 +32,7 @@ pub struct CreatePlaylist {
 /// Track in a playlist with denormalized data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlaylistTrack {
-    pub track_id: i64,
+    pub track_id: TrackId,
     pub position: i32,
     pub added_at: String,
 

@@ -1,9 +1,9 @@
 //! Queue navigation integration tests
 //!
-//! Tests for has_next(), has_previous(), and queue retrieval functionality.
+//! Tests for `has_next()`, `has_previous()`, and queue retrieval functionality.
 //! Focuses on real-world usage scenarios from UI perspective.
 
-use soul_audio_desktop::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
+use soul_audio_desktop::{DesktopPlayback, PlaybackCommand};
 use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, TrackSource};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -500,7 +500,7 @@ fn test_queue_query_during_modifications() {
 
     // Final query should succeed
     let queue = playback.get_queue();
-    assert!(queue.len() > 0, "Queue should have tracks");
+    assert!(!queue.is_empty(), "Queue should have tracks");
 }
 
 #[test]
@@ -529,7 +529,7 @@ fn test_large_queue_navigation_performance() {
     // Query should be fast even with large queue
     let queue = playback.get_queue();
     let has_next = playback.has_next();
-    let has_previous = playback.has_previous();
+    let _has_previous = playback.has_previous();
 
     let elapsed = start.elapsed();
 

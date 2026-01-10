@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO sync_errors (sync_session_id, phase, item_path, error_type, error_message)\n             VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "14ec73c5cf28625e338895b21cd0edc0e5310f23fa6ca1412ffd3e7d590ae21c"
+}

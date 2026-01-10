@@ -17,9 +17,19 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 rand = "0.8"
 
+# WASM support
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", features = ["console"], optional = true }
+getrandom = { version = "0.2", features = ["js"], optional = true }
+uuid = { version = "1.19", default-features = false, features = ["js"], optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+
 [features]
 default = ["effects"]
 effects = ["soul-audio"]
+wasm = ["wasm-bindgen", "serde-wasm-bindgen", "js-sys", "web-sys", "getrandom", "uuid", "console_error_panic_hook"]
 
 [dev-dependencies]
 proptest = "1.4"
@@ -27,3 +37,7 @@ proptest = "1.4"
 [lib]
 name = "soul_playback"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]

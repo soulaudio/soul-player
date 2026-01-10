@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO window_state (user_id, x, y, width, height, maximized, last_route, updated_at)\n         VALUES (?, ?, ?, ?, ?, ?, ?, ?)\n         ON CONFLICT(user_id) DO UPDATE SET\n            x = ?, y = ?, width = ?, height = ?, maximized = ?, last_route = ?, updated_at = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 15
+    },
+    "nullable": []
+  },
+  "hash": "245f655afc6b6610a23822dafa8eab7283eb1475607b93ef7fa31b633429054f"
+}

@@ -9,7 +9,7 @@ import { RepeatMode, ShuffleMode } from './types'
 
 export const playerCommands = {
   async playTrack(trackId: string) {
-    const manager = getManager()
+    const manager = await getManager()
     const storage = getDemoStorage()
 
     const track = storage.getTrackById(trackId)
@@ -24,7 +24,7 @@ export const playerCommands = {
   },
 
   async playTracks(trackIds: string[], startIndex: number = 0) {
-    const manager = getManager()
+    const manager = await getManager()
     const storage = getDemoStorage()
 
     const tracks = trackIds
@@ -43,27 +43,27 @@ export const playerCommands = {
   },
 
   async pausePlayback() {
-    getManager().pause()
+    (await getManager()).pause()
   },
 
   async resumePlayback() {
-    await getManager().play()
+    await (await getManager()).play()
   },
 
   async skipNext() {
-    await getManager().next()
+    await (await getManager()).next()
   },
 
   async skipPrevious() {
-    await getManager().previous()
+    await (await getManager()).previous()
   },
 
   async seekTo(position: number) {
-    getManager().seek(position)
+    (await getManager()).seek(position)
   },
 
   async setVolume(volume: number) {
-    getManager().setVolume(Math.round(volume * 100)) // 0-1 to 0-100
+    (await getManager()).setVolume(Math.round(volume * 100)) // 0-1 to 0-100
   },
 
   async setRepeatMode(mode: 'off' | 'all' | 'one') {
@@ -71,12 +71,13 @@ export const playerCommands = {
       off: RepeatMode.Off,
       all: RepeatMode.All,
       one: RepeatMode.One,
-    }
-    getManager().setRepeat(modeMap[mode])
+    };
+    const manager = await getManager();
+    manager.setRepeat(modeMap[mode]);
   },
 
   async setShuffle(enabled: boolean) {
-    getManager().setShuffle(enabled ? ShuffleMode.Random : ShuffleMode.Off)
+    (await getManager()).setShuffle(enabled ? ShuffleMode.Random : ShuffleMode.Off)
   },
 }
 
@@ -102,11 +103,13 @@ export async function invoke(command: string, args?: any): Promise<any> {
       return playerCommands.setRepeatMode(args.mode)
     case 'set_shuffle':
       return playerCommands.setShuffle(args.enabled)
-    case 'get_playback_capabilities':
+    case 'get_playback_capabilities': {
+      const manager = await getManager()
       return {
-        hasNext: getManager().hasNext(),
-        hasPrevious: getManager().hasPrevious(),
+        hasNext: manager.hasNext(),
+        hasPrevious: manager.hasPrevious(),
       }
+    }
     default:
       console.warn(`[Demo] Unhandled command: ${command}`)
       return null

@@ -3,6 +3,7 @@ import { PlayerControls } from './PlayerControls';
 import { ProgressBar } from './ProgressBar';
 import { VolumeControl } from './VolumeControl';
 import { ShuffleRepeatControls } from './ShuffleRepeatControls';
+import { DeviceSelector } from './DeviceSelector';
 
 /**
  * Main player footer component with playback controls and progress bar.
@@ -26,9 +27,10 @@ export function PlayerFooter() {
             <PlayerControls />
           </div>
 
-          {/* Right: Shuffle, Repeat, and Volume controls */}
+          {/* Right: Shuffle, Repeat, Device, and Volume controls */}
           <div className="flex items-center justify-end gap-2">
             <ShuffleRepeatControls />
+            <DeviceSelector />
             <VolumeControl />
           </div>
         </div>

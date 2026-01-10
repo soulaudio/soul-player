@@ -1,14 +1,17 @@
 import type { AppProps } from 'next/app'
 import '@/styles/globals.css'
-import { useEffect } from 'react'
-import { themeManager } from '@soul-player/shared'
+import dynamic from 'next/dynamic'
+
+// ThemeProvider reads from localStorage, so it must be client-only to avoid hydration mismatch
+const ThemeProvider = dynamic(
+  () => import('@soul-player/shared').then((mod) => mod.ThemeProvider),
+  { ssr: false }
+)
 
 export default function App({ Component, pageProps }: AppProps) {
-  useEffect(() => {
-    // Initialize theme manager - it will load saved theme from localStorage
-    // or apply the default theme
-    themeManager.setCurrentTheme(themeManager.getCurrentTheme().id)
-  }, [])
-
-  return <Component {...pageProps} />
+  return (
+    <ThemeProvider>
+      <Component {...pageProps} />
+    </ThemeProvider>
+  )
 }

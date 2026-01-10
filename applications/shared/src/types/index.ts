@@ -6,6 +6,7 @@ export interface Track {
   title: string;
   artist: string;
   album: string;
+  albumId?: number;
   albumArtist?: string;
   duration: number; // seconds
   filePath: string;

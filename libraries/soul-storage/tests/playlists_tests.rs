@@ -24,7 +24,7 @@ async fn test_create_and_get_playlist() {
         CreatePlaylist {
             name: "My Favorites".to_string(),
             description: Some("Best songs ever".to_string()),
-            owner_id: user_id,
+            owner_id: user_id.clone(),
             is_favorite: false,
         },
     )
@@ -37,7 +37,7 @@ async fn test_create_and_get_playlist() {
     assert!(!playlist.is_favorite);
 
     // Retrieve by ID
-    let retrieved = soul_storage::playlists::get_by_id(pool, playlist.id, user_id)
+    let retrieved = soul_storage::playlists::get_by_id(pool, playlist.id.clone(), user_id)
         .await
         .unwrap()
         .unwrap();
@@ -55,14 +55,14 @@ async fn test_get_user_playlists() {
     let user2 = create_test_user(pool, "user2").await;
 
     // User 1 creates playlists
-    create_test_playlist(pool, "User 1 Playlist A", user1).await;
-    create_test_playlist(pool, "User 1 Playlist B", user1).await;
+    create_test_playlist(pool, "User 1 Playlist A", user1.clone()).await;
+    create_test_playlist(pool, "User 1 Playlist B", user1.clone()).await;
 
     // User 2 creates playlist
     create_test_playlist(pool, "User 2 Playlist", user2).await;
 
     // Get user 1's playlists
-    let user1_playlists = soul_storage::playlists::get_user_playlists(pool, user1)
+    let user1_playlists = soul_storage::playlists::get_user_playlists(pool, user1.clone())
         .await
         .unwrap();
 
@@ -79,17 +79,17 @@ async fn test_add_tracks_to_playlist() {
     let pool = test_db.pool();
 
     let user_id = create_test_user(pool, "testuser").await;
-    let playlist_id = create_test_playlist(pool, "Test Playlist", user_id).await;
+    let playlist_id = create_test_playlist(pool, "Test Playlist", user_id.clone()).await;
 
     let track1 = create_test_track(pool, "Track 1", None, None, 1, Some("/music/1.mp3")).await;
     let track2 = create_test_track(pool, "Track 2", None, None, 1, Some("/music/2.mp3")).await;
 
     // Add tracks
-    soul_storage::playlists::add_track(pool, playlist_id, track1, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track1.clone(), user_id.clone())
         .await
         .expect("Failed to add track");
 
-    soul_storage::playlists::add_track(pool, playlist_id, track2, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track2.clone(), user_id.clone())
         .await
         .expect("Failed to add track");
 
@@ -115,25 +115,25 @@ async fn test_remove_track_from_playlist_reorders() {
     let pool = test_db.pool();
 
     let user_id = create_test_user(pool, "testuser").await;
-    let playlist_id = create_test_playlist(pool, "Test", user_id).await;
+    let playlist_id = create_test_playlist(pool, "Test", user_id.clone()).await;
 
     let track1 = create_test_track(pool, "Track 1", None, None, 1, Some("/1.mp3")).await;
     let track2 = create_test_track(pool, "Track 2", None, None, 1, Some("/2.mp3")).await;
     let track3 = create_test_track(pool, "Track 3", None, None, 1, Some("/3.mp3")).await;
 
     // Add three tracks
-    soul_storage::playlists::add_track(pool, playlist_id, track1, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track1.clone(), user_id.clone())
         .await
         .unwrap();
-    soul_storage::playlists::add_track(pool, playlist_id, track2, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track2.clone(), user_id.clone())
         .await
         .unwrap();
-    soul_storage::playlists::add_track(pool, playlist_id, track3, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track3.clone(), user_id.clone())
         .await
         .unwrap();
 
     // Remove middle track
-    soul_storage::playlists::remove_track(pool, playlist_id, track2, user_id)
+    soul_storage::playlists::remove_track(pool, playlist_id.clone(), track2, user_id.clone())
         .await
         .expect("Failed to remove track");
 
@@ -159,26 +159,32 @@ async fn test_reorder_tracks_in_playlist() {
     let pool = test_db.pool();
 
     let user_id = create_test_user(pool, "testuser").await;
-    let playlist_id = create_test_playlist(pool, "Test", user_id).await;
+    let playlist_id = create_test_playlist(pool, "Test", user_id.clone()).await;
 
     let track1 = create_test_track(pool, "Track 1", None, None, 1, Some("/1.mp3")).await;
     let track2 = create_test_track(pool, "Track 2", None, None, 1, Some("/2.mp3")).await;
     let track3 = create_test_track(pool, "Track 3", None, None, 1, Some("/3.mp3")).await;
 
-    soul_storage::playlists::add_track(pool, playlist_id, track1, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track1.clone(), user_id.clone())
         .await
         .unwrap();
-    soul_storage::playlists::add_track(pool, playlist_id, track2, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track2.clone(), user_id.clone())
         .await
         .unwrap();
-    soul_storage::playlists::add_track(pool, playlist_id, track3, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track3.clone(), user_id.clone())
         .await
         .unwrap();
 
     // Move track 3 to position 0 (first)
-    soul_storage::playlists::reorder_tracks(pool, playlist_id, track3, 0, user_id)
-        .await
-        .expect("Failed to reorder");
+    soul_storage::playlists::reorder_tracks(
+        pool,
+        playlist_id.clone(),
+        track3.clone(),
+        0,
+        user_id.clone(),
+    )
+    .await
+    .expect("Failed to reorder");
 
     // Get playlist tracks
     let playlist = soul_storage::playlists::get_with_tracks(pool, playlist_id, user_id)
@@ -200,21 +206,26 @@ async fn test_delete_playlist() {
     let pool = test_db.pool();
 
     let user_id = create_test_user(pool, "testuser").await;
-    let playlist_id = create_test_playlist(pool, "To Delete", user_id).await;
+    let playlist_id = create_test_playlist(pool, "To Delete", user_id.clone()).await;
 
     // Add a track
     let track_id = create_test_track(pool, "Track", None, None, 1, Some("/music/track.mp3")).await;
-    soul_storage::playlists::add_track(pool, playlist_id, track_id, user_id)
-        .await
-        .unwrap();
+    soul_storage::playlists::add_track(
+        pool,
+        playlist_id.clone(),
+        track_id.clone(),
+        user_id.clone(),
+    )
+    .await
+    .unwrap();
 
     // Delete playlist
-    soul_storage::playlists::delete(pool, playlist_id, user_id)
+    soul_storage::playlists::delete(pool, playlist_id.clone(), user_id.clone())
         .await
         .expect("Failed to delete playlist");
 
     // Playlist should be gone
-    let result = soul_storage::playlists::get_by_id(pool, playlist_id, user_id)
+    let result = soul_storage::playlists::get_by_id(pool, playlist_id.clone(), user_id)
         .await
         .unwrap();
     assert!(result.is_none());
@@ -244,15 +255,21 @@ async fn test_share_playlist_with_read_permission() {
     let owner = create_test_user(pool, "owner").await;
     let shared_user = create_test_user(pool, "shared").await;
 
-    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner).await;
+    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner.clone()).await;
 
     // Share with read permission
-    soul_storage::playlists::share_playlist(pool, playlist_id, shared_user, "read", owner)
-        .await
-        .expect("Failed to share playlist");
+    soul_storage::playlists::share_playlist(
+        pool,
+        playlist_id.clone(),
+        shared_user.clone(),
+        "read",
+        owner.clone(),
+    )
+    .await
+    .expect("Failed to share playlist");
 
     // Shared user should see it in their playlists
-    let playlists = soul_storage::playlists::get_user_playlists(pool, shared_user)
+    let playlists = soul_storage::playlists::get_user_playlists(pool, shared_user.clone())
         .await
         .unwrap();
 
@@ -276,13 +293,19 @@ async fn test_shared_user_with_read_permission_cannot_modify() {
     let owner = create_test_user(pool, "owner").await;
     let shared_user = create_test_user(pool, "shared").await;
 
-    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner).await;
+    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner.clone()).await;
     let track_id = create_test_track(pool, "Track", None, None, 1, Some("/music/track.mp3")).await;
 
     // Share with read-only permission
-    soul_storage::playlists::share_playlist(pool, playlist_id, shared_user, "read", owner)
-        .await
-        .unwrap();
+    soul_storage::playlists::share_playlist(
+        pool,
+        playlist_id.clone(),
+        shared_user.clone(),
+        "read",
+        owner,
+    )
+    .await
+    .unwrap();
 
     // Shared user tries to add track (should fail)
     let result = soul_storage::playlists::add_track(pool, playlist_id, track_id, shared_user).await;
@@ -301,16 +324,22 @@ async fn test_shared_user_with_write_permission_can_modify() {
     let owner = create_test_user(pool, "owner").await;
     let shared_user = create_test_user(pool, "shared").await;
 
-    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner).await;
+    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner.clone()).await;
     let track_id = create_test_track(pool, "Track", None, None, 1, Some("/music/track.mp3")).await;
 
     // Share with write permission
-    soul_storage::playlists::share_playlist(pool, playlist_id, shared_user, "write", owner)
-        .await
-        .unwrap();
+    soul_storage::playlists::share_playlist(
+        pool,
+        playlist_id.clone(),
+        shared_user.clone(),
+        "write",
+        owner.clone(),
+    )
+    .await
+    .unwrap();
 
     // Shared user can add track
-    soul_storage::playlists::add_track(pool, playlist_id, track_id, shared_user)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track_id, shared_user)
         .await
         .expect("Write user should be able to add tracks");
 
@@ -331,15 +360,21 @@ async fn test_only_owner_can_delete_playlist() {
     let owner = create_test_user(pool, "owner").await;
     let shared_user = create_test_user(pool, "shared").await;
 
-    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner).await;
+    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner.clone()).await;
 
     // Share with write permission
-    soul_storage::playlists::share_playlist(pool, playlist_id, shared_user, "write", owner)
-        .await
-        .unwrap();
+    soul_storage::playlists::share_playlist(
+        pool,
+        playlist_id.clone(),
+        shared_user.clone(),
+        "write",
+        owner.clone(),
+    )
+    .await
+    .unwrap();
 
     // Shared user tries to delete (should fail even with write permission)
-    let result = soul_storage::playlists::delete(pool, playlist_id, shared_user).await;
+    let result = soul_storage::playlists::delete(pool, playlist_id.clone(), shared_user).await;
 
     assert!(
         result.is_err(),
@@ -360,22 +395,28 @@ async fn test_unshare_playlist() {
     let owner = create_test_user(pool, "owner").await;
     let shared_user = create_test_user(pool, "shared").await;
 
-    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner).await;
+    let playlist_id = create_test_playlist(pool, "Shared Playlist", owner.clone()).await;
 
     // Share
-    soul_storage::playlists::share_playlist(pool, playlist_id, shared_user, "read", owner)
-        .await
-        .unwrap();
+    soul_storage::playlists::share_playlist(
+        pool,
+        playlist_id.clone(),
+        shared_user.clone(),
+        "read",
+        owner.clone(),
+    )
+    .await
+    .unwrap();
 
     // Verify shared user can see it
-    let playlists_before = soul_storage::playlists::get_user_playlists(pool, shared_user)
+    let playlists_before = soul_storage::playlists::get_user_playlists(pool, shared_user.clone())
         .await
         .unwrap();
 
     assert_eq!(playlists_before.len(), 1);
 
     // Unshare
-    soul_storage::playlists::unshare_playlist(pool, playlist_id, shared_user, owner)
+    soul_storage::playlists::unshare_playlist(pool, playlist_id, shared_user.clone(), owner)
         .await
         .expect("Failed to unshare");
 
@@ -400,7 +441,7 @@ async fn test_favorite_playlists_sorted_first() {
         CreatePlaylist {
             name: "Regular Playlist".to_string(),
             description: None,
-            owner_id: user_id,
+            owner_id: user_id.clone(),
             is_favorite: false,
         },
     )
@@ -413,7 +454,7 @@ async fn test_favorite_playlists_sorted_first() {
         CreatePlaylist {
             name: "Favorite Playlist".to_string(),
             description: None,
-            owner_id: user_id,
+            owner_id: user_id.clone(),
             is_favorite: true,
         },
     )
@@ -436,21 +477,22 @@ async fn test_playlist_updated_at_changes_on_modifications() {
     let pool = test_db.pool();
 
     let user_id = create_test_user(pool, "testuser").await;
-    let playlist_id = create_test_playlist(pool, "Test", user_id).await;
+    let playlist_id = create_test_playlist(pool, "Test", user_id.clone()).await;
 
-    let playlist_before = soul_storage::playlists::get_by_id(pool, playlist_id, user_id)
-        .await
-        .unwrap()
-        .unwrap();
+    let playlist_before =
+        soul_storage::playlists::get_by_id(pool, playlist_id.clone(), user_id.clone())
+            .await
+            .unwrap()
+            .unwrap();
 
     let updated_at_before = playlist_before.updated_at;
 
-    // Wait a bit
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // Wait at least 1 second for Unix timestamp to change
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     // Add a track
     let track_id = create_test_track(pool, "Track", None, None, 1, Some("/music/track.mp3")).await;
-    soul_storage::playlists::add_track(pool, playlist_id, track_id, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track_id, user_id.clone())
         .await
         .unwrap();
 
@@ -469,16 +511,21 @@ async fn test_cannot_add_duplicate_track_to_playlist() {
     let pool = test_db.pool();
 
     let user_id = create_test_user(pool, "testuser").await;
-    let playlist_id = create_test_playlist(pool, "Test", user_id).await;
+    let playlist_id = create_test_playlist(pool, "Test", user_id.clone()).await;
     let track_id = create_test_track(pool, "Track", None, None, 1, Some("/music/track.mp3")).await;
 
     // Add track once
-    soul_storage::playlists::add_track(pool, playlist_id, track_id, user_id)
-        .await
-        .unwrap();
+    soul_storage::playlists::add_track(
+        pool,
+        playlist_id.clone(),
+        track_id.clone(),
+        user_id.clone(),
+    )
+    .await
+    .unwrap();
 
     // Try to add same track again - ON CONFLICT DO NOTHING should silently ignore
-    soul_storage::playlists::add_track(pool, playlist_id, track_id, user_id)
+    soul_storage::playlists::add_track(pool, playlist_id.clone(), track_id, user_id.clone())
         .await
         .expect("Should succeed but do nothing");
 

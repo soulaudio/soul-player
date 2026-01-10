@@ -33,7 +33,10 @@ pub async fn cleanup_orphans(
     // Clean orphaned genres (genres with no tracks)
     total_cleaned += cleanup_orphaned_genres(pool).await?;
 
-    info!("Cleanup complete: removed {} orphaned records", total_cleaned);
+    info!(
+        "Cleanup complete: removed {} orphaned records",
+        total_cleaned
+    );
 
     let progress = state.get_progress().await?;
     let _ = progress_tx.send(progress).await;

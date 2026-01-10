@@ -19,6 +19,10 @@
     "core:path:allow-resolve-directory",
     "core:path:allow-resolve",
     "core:app:default",
-    "core:app:allow-version"
+    "core:app:allow-version",
+    "core:webview:default",
+    "core:webview:allow-webview-position",
+    "core:webview:allow-webview-size",
+    "core:webview:allow-internal-toggle-devtools"
   ]
 }

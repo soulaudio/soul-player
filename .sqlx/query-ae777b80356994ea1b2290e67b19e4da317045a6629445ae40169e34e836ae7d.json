@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT DISTINCT\n            p.id, p.name, p.description, p.owner_id, p.is_public, p.is_favorite,\n            p.created_at, p.updated_at\n        FROM playlists p\n        LEFT JOIN playlist_shares ps ON p.id = ps.playlist_id\n        WHERE p.owner_id = ? OR ps.shared_with_user_id = ?\n        ORDER BY p.is_favorite DESC, p.updated_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "owner_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_public",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_favorite",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ae777b80356994ea1b2290e67b19e4da317045a6629445ae40169e34e836ae7d"
+}

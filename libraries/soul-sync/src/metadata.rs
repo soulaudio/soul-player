@@ -13,8 +13,13 @@ pub async fn extract_all(
     progress_tx: &mpsc::Sender<SyncProgress>,
     session_id: &str,
 ) -> Result<usize> {
-    debug!("Starting metadata extraction phase for {} files", files.len());
-    state.update_phase(SyncPhase::MetadataExtraction, files.len()).await?;
+    debug!(
+        "Starting metadata extraction phase for {} files",
+        files.len()
+    );
+    state
+        .update_phase(SyncPhase::MetadataExtraction, files.len())
+        .await?;
 
     let mut updated = 0;
     let mut processed = 0;

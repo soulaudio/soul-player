@@ -8,7 +8,6 @@ use soul_playback::{
     ShuffleMode, TrackSource,
 };
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 // ===== Test Helpers =====
@@ -52,8 +51,8 @@ impl AudioSource for MockAudioSource {
         }
 
         // Fill with test pattern (alternating values)
-        for i in 0..to_read {
-            buffer[i] = ((i % 2) as f32 - 0.5) * 0.5;
+        for (i, sample) in buffer.iter_mut().enumerate().take(to_read) {
+            *sample = ((i % 2) as f32 - 0.5) * 0.5;
         }
 
         // Update position
@@ -248,7 +247,7 @@ fn test_repeat_one_loops_track() {
     let source = Box::new(MockAudioSource::new(Duration::from_secs(180), 44100));
     manager.set_audio_source(source);
 
-    let track_id = manager.get_current_track().map(|t| t.id.clone());
+    let _track_id = manager.get_current_track().map(|t| t.id.clone());
 
     // Call next (should restart same track)
     manager.next().ok();
@@ -357,9 +356,8 @@ fn test_auto_advance_on_track_end() {
     for _ in 0..100 {
         // Max iterations to prevent infinite loop
         match manager.process_audio(&mut buffer) {
-            Ok(0) => break, // Track finished
+            Ok(0) | Err(_) => break, // Track finished or error
             Ok(n) => total_samples += n,
-            Err(_) => break,
         }
     }
 

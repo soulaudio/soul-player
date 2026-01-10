@@ -19,6 +19,7 @@ export interface QueueTrack {
   filePath: string;
   durationSeconds: number | null;
   trackNumber: number | null;
+  coverArtPath?: string;
 }
 
 export interface Source {
@@ -54,9 +55,16 @@ export interface PlayerCommandsInterface {
   // Queue management
   getQueue: () => Promise<QueueTrack[]>;
   playQueue: (queue: QueueTrack[], startIndex?: number) => Promise<void>;
+  skipToQueueIndex: (index: number) => Promise<void>;
 
   // Sources management
   getAllSources: () => Promise<Source[]>;
+
+  // Audio device management (Desktop only - optional)
+  getCurrentAudioDevice?: () => Promise<any>;
+  getAudioBackends?: () => Promise<any[]>;
+  getAudioDevices?: (backend: string) => Promise<any[]>;
+  setAudioDevice?: (backend: string, deviceName: string) => Promise<void>;
 }
 
 export interface PlaybackEventsInterface {

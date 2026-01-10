@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT play_count FROM track_stats WHERE track_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "play_count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6e700298f00065edcdf4fe655911f9a20bf8d6809b9d5bd59943413e395c132a"
+}
