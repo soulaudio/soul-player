@@ -314,6 +314,27 @@ pub async fn count(pool: &SqlitePool, user_id: &str, device_id: &str) -> Result<
     Ok(row.count as i64)
 }
 
+/// Set the enabled status of a library source
+pub async fn set_enabled(pool: &SqlitePool, id: i64, enabled: bool) -> Result<bool> {
+    let now = chrono::Utc::now().timestamp();
+    let enabled_int = if enabled { 1 } else { 0 };
+
+    let result = sqlx::query!(
+        r#"
+        UPDATE library_sources
+        SET enabled = ?, updated_at = ?
+        WHERE id = ?
+        "#,
+        enabled_int,
+        now,
+        id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

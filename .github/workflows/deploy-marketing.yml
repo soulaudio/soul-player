@@ -34,6 +34,19 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
       - name: Enable Corepack
         run: corepack enable
 
