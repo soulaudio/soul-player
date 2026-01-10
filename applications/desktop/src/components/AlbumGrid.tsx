@@ -1,6 +1,7 @@
 import { Play, Music2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArtworkImage } from '@soul-player/shared';
 
 export interface Album {
   id: number;
@@ -49,20 +50,12 @@ export function AlbumGrid({ albums, onPlay }: AlbumGridProps) {
           onClick={() => handleAlbumClick(album)}
         >
           <div className="relative aspect-square mb-3 bg-muted rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow">
-            <img
-              src={`artwork://album/${album.id}`}
+            <ArtworkImage
+              albumId={album.id}
               alt={album.title}
               className="w-full h-full object-cover"
-              onError={(e) => {
-                // Fallback to placeholder if artwork fails to load
-                e.currentTarget.style.display = 'none';
-                const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
-                if (placeholder) placeholder.style.display = 'flex';
-              }}
+              fallbackClassName="w-full h-full flex items-center justify-center"
             />
-            <div className="w-full h-full flex items-center justify-center" style={{ display: 'none' }}>
-              <Music2 className="w-12 h-12 text-muted-foreground/50" />
-            </div>
             {hoveredAlbumId === album.id && (
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity">
                 <button

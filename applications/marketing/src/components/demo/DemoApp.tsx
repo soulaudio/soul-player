@@ -5,7 +5,9 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { MainLayout } from '@soul-player/shared'
 import { DemoPlayerCommandsProvider } from '@/providers/DemoPlayerCommandsProvider'
 import { MockSettingsProvider } from './MockContexts'
+import { HomePage } from './HomePage'
 import { LibraryPage } from './LibraryPage'
+import { NowPlayingPage } from './NowPlayingPage'
 import { SettingsPage } from './SettingsPage'
 import { initializeDemoStorage } from '@/lib/demo/storage'
 
@@ -75,13 +77,11 @@ export function DemoApp() {
           <MockSettingsProvider>
             <MainLayout showKeyboardShortcuts={false}>
               <Routes>
-                <Route path="/" element={<LibraryPage />} />
+                <Route path="/" element={<HomePage />} />
+                <Route path="/library" element={<LibraryPage />} />
+                <Route path="/now-playing" element={<NowPlayingPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/search" element={<div className="text-center py-20 text-muted-foreground">Search Page (Demo)</div>} />
-                <Route path="/playlists" element={<div className="text-center py-20 text-muted-foreground">Playlists Page (Demo)</div>} />
-                <Route path="/artists" element={<div className="text-center py-20 text-muted-foreground">Artists Page (Demo)</div>} />
-                <Route path="/albums" element={<div className="text-center py-20 text-muted-foreground">Albums Page (Demo)</div>} />
-                <Route path="/genres" element={<div className="text-center py-20 text-muted-foreground">Genres Page (Demo)</div>} />
               </Routes>
             </MainLayout>
           </MockSettingsProvider>

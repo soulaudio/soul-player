@@ -2,10 +2,12 @@
  * Volume control with slider and mute button
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { usePlayerStore } from '../../stores/player';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
 import { Volume2, VolumeX } from 'lucide-react';
+
+const SCROLL_VOLUME_STEP = 0.05;
 
 export function VolumeControl() {
   const { volume } = usePlayerStore();
@@ -13,6 +15,7 @@ export function VolumeControl() {
   const [isMuted, setIsMuted] = useState(false);
   const [volumeBeforeMute, setVolumeBeforeMute] = useState(volume);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sliderContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (volume > 0 && !isMuted) {
@@ -20,12 +23,12 @@ export function VolumeControl() {
     }
   }, [volume, isMuted]);
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(e.target.value);
+  const applyVolumeChange = useCallback((newVolume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, newVolume));
 
-    usePlayerStore.getState().setVolume(newVolume);
+    usePlayerStore.getState().setVolume(clampedVolume);
 
-    if (newVolume > 0 && isMuted) {
+    if (clampedVolume > 0 && isMuted) {
       setIsMuted(false);
     }
 
@@ -34,11 +37,30 @@ export function VolumeControl() {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      commands.setVolume(newVolume)
+      commands.setVolume(clampedVolume)
         .catch((error) => {
           console.error('[VolumeControl] Set volume failed:', error);
         });
     }, 150);
+  }, [commands, isMuted]);
+
+  useEffect(() => {
+    const container = sliderContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const currentVolume = usePlayerStore.getState().volume;
+      const delta = e.deltaY < 0 ? SCROLL_VOLUME_STEP : -SCROLL_VOLUME_STEP;
+      applyVolumeChange(currentVolume + delta);
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [applyVolumeChange]);
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    applyVolumeChange(parseFloat(e.target.value));
   };
 
   const handleMuteToggle = async () => {
@@ -74,7 +96,7 @@ export function VolumeControl() {
         )}
       </button>
 
-      <div className="relative w-24 h-2 group">
+      <div ref={sliderContainerRef} className="relative w-24 h-2 group">
         <input
           type="range"
           min="0"
@@ -89,7 +111,7 @@ export function VolumeControl() {
         <div className="absolute inset-0 bg-muted rounded-full" />
 
         <div
-          className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-100"
+          className="absolute inset-y-0 left-0 bg-primary rounded-full"
           style={{ width: `${displayVolume * 100}%` }}
         />
 

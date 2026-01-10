@@ -1,11 +1,25 @@
 version: '3.9'
 
+# Soul Player - Production Docker Compose
+# ========================================
+# Single container serving both API and Web UI on port 8080
+#
+# Usage:
+#   docker compose up -d
+#
+# Access:
+#   - Web UI: http://localhost:8080
+#   - API:    http://localhost:8080/api
+#
+# For API-only (no web UI), use:
+#   docker build -f applications/server/Dockerfile.server-only -t soul-server:api .
+
 services:
-  server:
+  soul-player:
     build:
       context: .
       dockerfile: applications/server/Dockerfile
-    container_name: soul-server
+    container_name: soul-player
     ports:
       - "8080:8080"
     environment:
@@ -28,20 +42,14 @@ services:
       SOUL_TRANSCODING_FFMPEG_PATH: /usr/bin/ffmpeg
 
       # Logging
-      RUST_LOG: soul_server=debug,tower_http=debug
+      RUST_LOG: soul_server=info,tower_http=info
     volumes:
       # Persist database and music files
       - soul-data:/app/data
-      # Mount local music directory for development (optional)
+      # Mount local music directory (optional)
       # Uncomment and adjust path as needed:
       # - /path/to/your/music:/app/music:ro
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
 volumes:
   soul-data:

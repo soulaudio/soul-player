@@ -18,6 +18,8 @@ soul-sync.workspace = true
 soul-audio.workspace = true
 soul-playback.workspace = true
 soul-artwork.workspace = true
+soul-loudness.workspace = true
+symphonia = { workspace = true }
 sqlx = { workspace = true }
 tauri.workspace = true
 tauri-plugin-shell.workspace = true

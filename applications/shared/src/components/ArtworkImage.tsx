@@ -22,16 +22,32 @@ export function ArtworkImage({ trackId, albumId, coverArtPath, alt, className, f
     let cancelled = false;
 
     async function loadArtwork() {
-      // If coverArtPath is provided directly (browser/demo environment), use it
+      // Parse artwork:// protocol URLs to extract IDs for Tauri invoke
+      // Format: artwork://track/123 or artwork://album/123
+      let effectiveTrackId = trackId;
+      let effectiveAlbumId = albumId;
+
       if (coverArtPath) {
-        setArtworkUrl(coverArtPath);
-        setLoading(false);
-        setError(false);
-        return;
+        const artworkMatch = coverArtPath.match(/^artwork:\/\/(track|album)\/(\d+)$/);
+        if (artworkMatch) {
+          const [, type, id] = artworkMatch;
+          if (type === 'track') {
+            effectiveTrackId = id;
+          } else if (type === 'album') {
+            effectiveAlbumId = parseInt(id, 10);
+          }
+          // Fall through to invoke path below
+        } else {
+          // Direct URL (data:, https:, etc.) - use as-is
+          setArtworkUrl(coverArtPath);
+          setLoading(false);
+          setError(false);
+          return;
+        }
       }
 
       // Determine cache key and fetch function based on what's provided
-      const cacheKey = trackId ? `track:${trackId}` : albumId ? `album:${albumId}` : null;
+      const cacheKey = effectiveTrackId ? `track:${effectiveTrackId}` : effectiveAlbumId ? `album:${effectiveAlbumId}` : null;
 
       if (!cacheKey) {
         setLoading(false);
@@ -53,12 +69,12 @@ export function ArtworkImage({ trackId, albumId, coverArtPath, alt, className, f
           const { invoke } = await import('@tauri-apps/api/core');
 
           let dataUrl: string | null;
-          if (trackId) {
+          if (effectiveTrackId) {
             dataUrl = await invoke<string | null>('get_track_artwork', {
-              trackId: trackId.toString()
+              trackId: effectiveTrackId.toString()
             });
-          } else if (albumId) {
-            dataUrl = await invoke<string | null>('get_album_artwork', { albumId });
+          } else if (effectiveAlbumId) {
+            dataUrl = await invoke<string | null>('get_album_artwork', { albumId: effectiveAlbumId });
           } else {
             dataUrl = null;
           }

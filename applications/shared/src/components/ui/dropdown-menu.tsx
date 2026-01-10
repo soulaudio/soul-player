@@ -73,37 +73,38 @@ export function DropdownMenuContent({ children, align = 'center', className }: D
   const [position, setPosition] = React.useState({ top: 0, left: 0 });
 
   // Calculate position based on trigger element
+  const updatePosition = React.useCallback(() => {
+    if (!context?.triggerRef.current) return;
+
+    const triggerRect = context.triggerRef.current.getBoundingClientRect();
+    const menuWidth = ref.current?.offsetWidth || 320;
+    const menuHeight = ref.current?.offsetHeight || 300;
+    const padding = 8;
+
+    // Position above the trigger
+    let top = triggerRect.top - menuHeight - padding;
+    let left = triggerRect.right - menuWidth; // align end
+
+    if (align === 'start') {
+      left = triggerRect.left;
+    } else if (align === 'center') {
+      left = triggerRect.left + triggerRect.width / 2 - menuWidth / 2;
+    }
+
+    // Keep within viewport
+    left = Math.max(padding, Math.min(left, window.innerWidth - menuWidth - padding));
+
+    // If not enough space above, position below
+    if (top < padding) {
+      top = triggerRect.bottom + padding;
+    }
+
+    setPosition({ top, left });
+  }, [context?.triggerRef, align]);
+
+  // Initial position and window event listeners
   React.useEffect(() => {
-    if (!context?.open || !context.triggerRef.current) return;
-
-    const updatePosition = () => {
-      const triggerRect = context.triggerRef.current?.getBoundingClientRect();
-      if (!triggerRect) return;
-
-      const menuWidth = 320; // w-[320px] from DeviceSelector
-      const menuHeight = ref.current?.offsetHeight || 300;
-      const padding = 8;
-
-      // Position above the trigger
-      let top = triggerRect.top - menuHeight - padding;
-      let left = triggerRect.right - menuWidth; // align end
-
-      if (align === 'start') {
-        left = triggerRect.left;
-      } else if (align === 'center') {
-        left = triggerRect.left + triggerRect.width / 2 - menuWidth / 2;
-      }
-
-      // Keep within viewport
-      left = Math.max(padding, Math.min(left, window.innerWidth - menuWidth - padding));
-
-      // If not enough space above, position below
-      if (top < padding) {
-        top = triggerRect.bottom + padding;
-      }
-
-      setPosition({ top, left });
-    };
+    if (!context?.open) return;
 
     updatePosition();
     window.addEventListener('resize', updatePosition);
@@ -113,7 +114,22 @@ export function DropdownMenuContent({ children, align = 'center', className }: D
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [context?.open, context?.triggerRef, align]);
+  }, [context?.open, updatePosition]);
+
+  // Watch for content size changes (e.g., when async content loads)
+  React.useEffect(() => {
+    if (!context?.open || !ref.current) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      updatePosition();
+    });
+
+    resizeObserver.observe(ref.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [context?.open, updatePosition]);
 
   React.useEffect(() => {
     if (!context?.open) return;

@@ -3,9 +3,29 @@
 @tailwind utilities;
 
 @layer base {
-  /* Default theme variables set by ThemeManager from @soul-player/shared */
+  /* Default dark theme variables - overridden by ThemeProvider when loaded */
   :root {
     --radius: 0.5rem;
+    /* Dark theme fallback for SSR/static export */
+    --background: 250 15% 6%;
+    --foreground: 0 0% 98%;
+    --card: 250 15% 8%;
+    --card-foreground: 0 0% 98%;
+    --popover: 250 15% 8%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 263 70% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 250 15% 15%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 250 15% 15%;
+    --muted-foreground: 250 5% 64%;
+    --accent: 250 15% 15%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 250 15% 20%;
+    --input: 250 15% 20%;
+    --ring: 263 70% 50%;
   }
 }
 

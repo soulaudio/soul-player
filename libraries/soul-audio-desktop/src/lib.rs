@@ -46,8 +46,13 @@ pub mod playback;
 pub mod sources;
 
 pub use backend::{AudioBackend, BackendError, BackendInfo};
-pub use device::{AudioDeviceInfo, DeviceError};
+pub use device::{
+    AudioDeviceInfo, DeviceCapabilities, DeviceError, SupportedBitDepth,
+    detect_device_capabilities, get_default_device_with_capabilities,
+    get_device_capabilities, list_devices_with_capabilities,
+    STANDARD_SAMPLE_RATES, DSD_RATES,
+};
 pub use error::{AudioError, AudioOutputError, Result};
-pub use output::CpalOutput;
+pub use output::{CpalOutput, ResamplingQuality};
 pub use playback::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
 pub use sources::{LocalAudioSource, StreamingAudioSource};

@@ -11,34 +11,71 @@
             box-sizing: border-box;
         }
 
+        /* Light theme (default) */
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 222.2 84% 4.9%;
+            --primary: 222.2 47.4% 11.2%;
+            --muted-foreground: 215.4 16.3% 46.9%;
+        }
+
+        /* Dark theme */
+        [data-theme='dark'] {
+            --background: 222.2 84% 4.9%;
+            --foreground: 210 40% 98%;
+            --primary: 210 40% 98%;
+            --muted-foreground: 215 20.2% 65.1%;
+        }
+
+        /* Ocean theme */
+        [data-theme='ocean'] {
+            --background: 210 100% 97%;
+            --foreground: 210 60% 15%;
+            --primary: 200 90% 50%;
+            --muted-foreground: 200 25% 45%;
+        }
+
         body {
             width: 100vw;
             height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: hsl(var(--background));
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             overflow: hidden;
         }
 
         #splash {
             text-align: center;
-            color: white;
+            color: hsl(var(--foreground));
         }
 
         #logo {
-            width: 120px;
-            height: 120px;
+            width: 180px;
+            height: auto;
             margin-bottom: 32px;
             opacity: 0;
             animation: fadeIn 0.6s ease-in forwards;
+            transition: filter 0.3s ease;
+        }
+
+        /* Invert logo for light backgrounds */
+        :root #logo,
+        [data-theme='light'] #logo,
+        [data-theme='ocean'] #logo {
+            filter: brightness(0) saturate(100%);
+        }
+
+        /* Keep logo white for dark theme */
+        [data-theme='dark'] #logo {
+            filter: none;
         }
 
         #progress-container {
             width: 320px;
             height: 8px;
-            background: rgba(255, 255, 255, 0.2);
+            background: hsl(var(--foreground) / 0.15);
             border-radius: 4px;
             overflow: hidden;
             margin: 0 auto 20px;
@@ -47,17 +84,35 @@
         #progress-fill {
             width: 0%;
             height: 100%;
-            background: white;
+            background: hsl(var(--primary));
             border-radius: 4px;
             transition: width 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
         }
 
-        #status {
+        #status-container {
             font-size: 15px;
             font-weight: 500;
-            opacity: 0.95;
             min-height: 24px;
             letter-spacing: 0.3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        #status-prefix {
+            color: hsl(var(--muted-foreground));
+        }
+
+        #rotating-text {
+            display: inline-block;
+            color: hsl(var(--foreground));
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #rotating-text.animating {
+            opacity: 0;
+            transform: translateY(4px);
         }
 
         @keyframes fadeIn {
@@ -69,25 +124,59 @@
 </head>
 <body>
     <div id="splash">
-        <svg id="logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Soul Player Logo: Music note with circular border -->
-            <circle cx="50" cy="50" r="46" stroke="white" stroke-width="4"/>
-            <path d="M 65 28 L 65 56 C 65 62 60 67 54 67 C 48 67 43 62 43 56 C 43 50 48 45 54 45 C 58 45 62 47 64 50 L 64 28 Z" fill="white"/>
-            <circle cx="65" cy="28" r="8" fill="white"/>
-        </svg>
+        <img id="logo" src="soul-audio-logo.svg" alt="Soul Player" />
         <div id="progress-container">
             <div id="progress-fill"></div>
         </div>
-        <p id="status">Loading...</p>
+        <div id="status-container">
+            <span id="status-prefix">Preparing to</span>
+            <span id="rotating-text">enjoy</span>
+            <span id="status-suffix">your music...</span>
+        </div>
     </div>
 
     <script>
+        // Theme detection from localStorage
+        (function() {
+            try {
+                const stored = localStorage.getItem('soul-player-current-theme');
+                if (stored) {
+                    const themeId = JSON.parse(stored);
+                    if (themeId && ['dark', 'ocean', 'light'].includes(themeId)) {
+                        document.documentElement.setAttribute('data-theme', themeId);
+                    }
+                }
+            } catch (e) {
+                // Fallback to light theme
+            }
+        })();
+
+        // Rotating text animation
+        const ROTATING_WORDS = ['enjoy', 'discover', 'organize', 'experience', 'curate'];
+        let currentIndex = 0;
+        const rotatingText = document.getElementById('rotating-text');
+
+        setInterval(() => {
+            rotatingText.classList.add('animating');
+            setTimeout(() => {
+                currentIndex = (currentIndex + 1) % ROTATING_WORDS.length;
+                rotatingText.textContent = ROTATING_WORDS[currentIndex];
+                rotatingText.classList.remove('animating');
+            }, 300);
+        }, 3000);
+
         // Listen for initialization progress events
         if (window.__TAURI__) {
             window.__TAURI__.event.listen('init-progress', (event) => {
                 const { step, progress } = event.payload;
-                document.getElementById('status').textContent = step;
+                // Update progress bar
                 document.getElementById('progress-fill').style.width = progress + '%';
+
+                // Optionally update status text if backend provides specific messages
+                if (step && step !== 'Loading...') {
+                    const statusContainer = document.getElementById('status-container');
+                    statusContainer.innerHTML = '<span style="color: hsl(var(--muted-foreground))">' + step + '</span>';
+                }
             });
         }
     </script>

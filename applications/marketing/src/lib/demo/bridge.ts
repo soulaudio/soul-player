@@ -66,13 +66,13 @@ function setupBridge() {
         title: track.title,
         artist: track.artist,
         album: track.album || '',
-        duration: Math.floor(track.duration_secs),  // Use correct field name
+        duration: Math.floor(track.duration_secs || 0),  // Use correct field name, fallback to 0
         filePath: track.path,
         coverArtPath: coverUrl,  // Look up from storage
         addedAt: new Date().toISOString(),
       };
 
-      usePlayerStore.setState({ currentTrack: sharedTrack, duration: track.duration_secs });
+      usePlayerStore.setState({ currentTrack: sharedTrack, duration: track.duration_secs || 0 });
     } else {
       console.log('[Bridge] Track cleared');
       usePlayerStore.setState({ currentTrack: null, duration: 0 });
@@ -104,6 +104,27 @@ function setupBridge() {
       [DemoRepeatMode.One]: 'one',
     }
     usePlayerStore.setState({ repeatMode: modeMap[mode] })
+  })
+
+  // Sync queue to store when it changes
+  manager.on('queueChange', () => {
+    const storage = getDemoStorage()
+    const wasmQueue = manager.getQueue()
+    const tracks: Track[] = wasmQueue.map((queueTrack: QueueTrack) => {
+      const demoTrack = storage.getTrackById(queueTrack.id)
+      return {
+        id: Number(queueTrack.id),
+        title: queueTrack.title,
+        artist: queueTrack.artist,
+        album: queueTrack.album || '',
+        duration: Math.floor(queueTrack.duration_secs || 0),
+        filePath: queueTrack.path,
+        coverArtPath: demoTrack?.coverUrl,
+        addedAt: new Date().toISOString(),
+      }
+    })
+    console.log('[Bridge] Queue change, syncing', tracks.length, 'tracks to store')
+    usePlayerStore.setState({ queue: tracks })
   })
 }
 

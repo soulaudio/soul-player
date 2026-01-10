@@ -10,6 +10,22 @@
  */
 
 import init, { WasmPlaybackManager, WasmQueueTrack } from '../../wasm/soul-playback/soul_playback'
+
+// Type for track objects coming from WASM (serde_wasm_bindgen uses snake_case)
+interface WasmTrackData {
+  id: string
+  path: string
+  title: string
+  artist: string | undefined
+  album: string | undefined
+  album_artist?: string
+  duration_secs: number | undefined
+  track_number: number | undefined
+  disc_number?: number
+  genre?: string
+  year?: number
+  artwork_path?: string
+}
 import { WebAudioPlayer } from './audio-player'
 import {
   PlaybackState,
@@ -76,7 +92,7 @@ export class WasmPlaybackAdapter {
         this.emit('stateChange', this.mapWasmState(state))
       })
 
-      this.wasmManager.onTrackChange((track: any) => {
+      this.wasmManager.onTrackChange((track: WasmTrackData | null) => {
         console.log('[WasmPlaybackAdapter] *** onTrackChange callback invoked ***', track ? 'with track' : 'null track')
         console.log('[WasmPlaybackAdapter] Track change:', track)
         if (track) {
@@ -294,7 +310,7 @@ export class WasmPlaybackAdapter {
   getQueue(): QueueTrack[] {
     this.ensureInitialized()
     const wasmQueue = this.wasmManager!.getQueue()
-    return wasmQueue.map((t: any) => this.mapWasmTrack(t))
+    return wasmQueue.map((t: WasmTrackData) => this.mapWasmTrack(t))
   }
 
   queueLength(): number {
@@ -425,7 +441,7 @@ export class WasmPlaybackAdapter {
   getHistory(): QueueTrack[] {
     this.ensureInitialized()
     const wasmHistory = this.wasmManager!.getHistory()
-    return wasmHistory.map((t: any) => this.mapWasmTrack(t))
+    return wasmHistory.map((t: WasmTrackData) => this.mapWasmTrack(t))
   }
 
   // ===== Event Emitter =====
@@ -491,15 +507,16 @@ export class WasmPlaybackAdapter {
     return wasmTrack
   }
 
-  private mapWasmTrack(wasmTrack: any): QueueTrack {
+  private mapWasmTrack(wasmTrack: WasmTrackData): QueueTrack {
+    // Note: serde_wasm_bindgen serializes with snake_case field names
     return {
       id: wasmTrack.id,
       path: wasmTrack.path,
       title: wasmTrack.title,
-      artist: wasmTrack.artist,
-      album: wasmTrack.album || null,
-      duration_secs: wasmTrack.durationSecs,  // Map to correct field name
-      track_number: wasmTrack.trackNumber || null,  // Map to correct field name
+      artist: wasmTrack.artist || '',
+      album: wasmTrack.album,
+      duration_secs: wasmTrack.duration_secs || 0,  // serde uses snake_case
+      track_number: wasmTrack.track_number,  // serde uses snake_case
       source: { type: 'single' }
     }
   }

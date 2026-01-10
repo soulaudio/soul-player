@@ -2,43 +2,61 @@ import type { Theme } from '../types';
 
 /**
  * Ocean theme for Soul Player
- * Cool blue/teal palette inspired by ocean depths
+ * Deep sea palette transitioning from surface azure to abyss depths
+ * Calm and immersive, inspired by ocean layers at different depths
  */
 export const oceanTheme: Theme = {
   id: 'ocean',
   name: 'Ocean',
   version: '1.0.0',
   author: 'Soul Player Team',
-  description: 'Cool and calming ocean-inspired theme with blue and teal accents',
+  description: 'Deep sea theme with azure surfaces and mysterious depths',
   isBuiltIn: true,
 
   colors: {
-    background: '210 100% 97%',
-    foreground: '210 60% 15%',
-    card: '200 50% 98%',
-    'card-foreground': '210 60% 15%',
-    popover: '200 50% 98%',
-    'popover-foreground': '210 60% 15%',
-    primary: '200 90% 50%',
-    'primary-foreground': '210 100% 98%',
-    secondary: '180 85% 55%',
-    'secondary-foreground': '210 100% 98%',
-    muted: '200 40% 92%',
-    'muted-foreground': '200 25% 45%',
-    accent: '180 85% 55%',
-    'accent-foreground': '210 100% 98%',
-    destructive: '0 84.2% 60.2%',
-    'destructive-foreground': '210 100% 98%',
-    border: '200 30% 85%',
-    input: '200 30% 85%',
-    ring: '200 90% 50%',
+    // Base: Deep ocean floor
+    background: '210 45% 8%',
+    foreground: '195 30% 88%',
+
+    // Cards: Mid-depth layer
+    card: '208 40% 12%',
+    'card-foreground': '195 30% 88%',
+
+    // Popovers: Similar to cards
+    popover: '208 40% 12%',
+    'popover-foreground': '195 30% 88%',
+
+    // Primary: Bioluminescent cyan (life in the deep)
+    primary: '185 70% 50%',
+    'primary-foreground': '210 45% 8%',
+
+    // Secondary: Twilight zone blue
+    secondary: '215 35% 22%',
+    'secondary-foreground': '195 30% 88%',
+
+    // Muted: Abyssal shadow
+    muted: '210 30% 14%',
+    'muted-foreground': '200 20% 50%',
+
+    // Accent: Coral reef warmth (underwater life)
+    accent: '15 60% 55%',
+    'accent-foreground': '195 30% 92%',
+
+    // Destructive: Deep sea warning red
+    destructive: '355 55% 45%',
+    'destructive-foreground': '195 30% 92%',
+
+    // UI elements
+    border: '210 30% 18%',
+    input: '210 30% 18%',
+    ring: '185 70% 50%',
   },
 
   gradients: {
-    hero: 'linear-gradient(135deg, hsl(200 90% 50%) 0%, hsl(180 85% 55%) 100%)',
-    player: 'linear-gradient(to bottom, hsl(210 100% 97%) 0%, hsl(200 80% 92%) 100%)',
-    sidebar: 'linear-gradient(to right, hsl(200 40% 92%) 0%, hsl(210 100% 97%) 100%)',
-    waveform: 'linear-gradient(90deg, hsl(200 90% 50%) 0%, hsl(180 85% 55%) 50%, hsl(200 90% 50%) 100%)',
+    hero: 'linear-gradient(135deg, hsl(210 45% 8%) 0%, hsl(208 40% 16%) 100%)',
+    player: 'linear-gradient(to bottom, hsl(210 45% 8%) 0%, hsl(210 30% 12%) 100%)',
+    sidebar: 'linear-gradient(to right, hsl(210 30% 14%) 0%, hsl(210 45% 8%) 100%)',
+    waveform: 'linear-gradient(90deg, hsl(185 70% 50%) 0%, hsl(15 60% 55%) 50%, hsl(185 70% 50%) 100%)',
   },
 
   typography: {

@@ -9,8 +9,6 @@ Welcome to the Soul Player documentation! This directory contains comprehensive 
 - [Getting Started](#getting-started)
 - [Architecture](#architecture)
 - [Development](#development)
-- [Testing](#testing)
-- [Deployment & Release](#deployment--release)
 - [Future Plans](#future-plans)
 
 ---
@@ -20,7 +18,7 @@ Welcome to the Soul Player documentation! This directory contains comprehensive 
 ### Quick Setup Guides
 
 - **[SQLx Setup](./SQLX_SETUP.md)** - Configure SQLx for database development and compilation
-- **[Linux Build Setup](./LINUX_BUILD_SETUP.md)** - Build Soul Player on Linux systems
+- **[SQLx Troubleshooting](./SQLX_TROUBLESHOOTING.md)** - Common SQLx issues and solutions
 
 ### Core Documentation
 
@@ -40,37 +38,31 @@ Welcome to the Soul Player documentation! This directory contains comprehensive 
 ### Platform-Specific
 
 - **[ESP32 Manual Testing](./ESP32_MANUAL_TESTING.md)** - Embedded platform testing procedures
-- **[Playback Tauri Integration](./PLAYBACK_TAURI_INTEGRATION.md)** - Desktop app audio integration
+
+### Architecture Subdirectory
+
+- **[Audio Abstraction](./architecture/AUDIO_ABSTRACTION.md)** - Audio DI pattern and platform abstraction
+- **[Frontend Architecture](./architecture/FRONTEND_ARCHITECTURE.md)** - React architecture and component design
+- **[Multi-Source Architecture](./architecture/MULTI_SOURCE_ARCHITECTURE.md)** - Multiple music sources support
+- **[Sync Strategy](./architecture/SYNC_STRATEGY.md)** - Server synchronization protocol
+- **[Offline Mode](./architecture/OFFLINE_MODE.md)** - Offline-first design patterns
+- **[Architecture Decisions](./architecture/ARCHITECTURE_DECISIONS.md)** - Key architectural decisions and rationale
 
 ---
 
 ## Development
 
-### Implementation Guides
-
-- **[Audio Engine Tests](./AUDIO_ENGINE_TESTS.md)** - Audio processing test coverage
-- **[Playback Implementation Complete](./PLAYBACK_IMPLEMENTATION_COMPLETE.md)** - Playback feature status
-- **[Playback Testing](./PLAYBACK_TESTING.md)** - Playback system test suite
-
 ### Testing
 
 - **[Testing Guide](./TESTING.md)** - Testing strategy, patterns, and best practices
-- **[Testing Report](./TESTING_REPORT.md)** - Test coverage and quality metrics
 
----
+### Deployment
 
-## Deployment & Release
+- **[CI/CD](./deployment/CI_CD.md)** - Continuous integration and deployment
 
-### Release Management
+### Mobile
 
-- **[Release Strategy](./RELEASE_STRATEGY.md)** - Versioning, release cadence, and process
-- **[Release Workflow Discussion](./RELEASE_WORKFLOW_DISCUSSION.md)** - CI/CD pipeline design
-- **[Release Quickstart](./RELEASE_QUICKSTART.md)** - Step-by-step release checklist
-- **[Release Testing Matrix](./RELEASE_TESTING_MATRIX.md)** - Cross-platform testing requirements
-
-### Packaging
-
-- **[Linux Packaging](./LINUX_PACKAGING.md)** - Debian/RPM packaging and distribution
+- **[Mobile Setup](./development/MOBILE_SETUP.md)** - Mobile development environment setup
 
 ---
 
@@ -78,13 +70,11 @@ Welcome to the Soul Player documentation! This directory contains comprehensive 
 
 ### Soul Services Platform
 
-- **[Soul Services Plan](./SOUL_SERVICES_PLAN.md)** ⭐ **NEW** - Comprehensive architecture and implementation plan for the separate Soul Services platform
+- **[Soul Services Plan](./SOUL_SERVICES_PLAN.md)** - Comprehensive architecture and implementation plan for the separate Soul Services platform
   - Subscription-based metadata enrichment, discovery, and lyrics service
   - OAuth 2.0 authentication and Stripe integration
   - MusicBrainz, AcoustID, Genius API integrations
   - Self-hosted option with BYOK (Bring Your Own Keys)
-  - PostgreSQL backend with multi-tenant architecture
-  - 12-week implementation roadmap
 
 ---
 
@@ -107,23 +97,15 @@ When adding new documentation:
 3. **Link Related Docs**: Cross-reference related documents
 4. **Keep It Current**: Update docs when implementation changes
 
-### Documentation Templates
-
-- Architecture documents should include: Overview, Design Decisions, Implementation Details, Trade-offs
-- Implementation guides should include: Prerequisites, Step-by-step Instructions, Verification Steps, Troubleshooting
-- Testing documents should include: Scope, Test Cases, Coverage Goals, Known Issues
-
 ---
 
 ## Quick Links
 
 - [Main README](../README.md) - Project overview and quick start
 - [CLAUDE.md](../CLAUDE.md) - Instructions for Claude Code when working with this codebase
-- [Cargo Workspace](../Cargo.toml) - Root workspace configuration
-- [Moon Configuration](../.moon/workspace.yml) - Task runner setup
+- [ROADMAP.md](../ROADMAP.md) - Development phases and progress
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - How to contribute
 
 ---
 
-**Last Updated**: 2026-01-06
-
-For questions or suggestions about documentation, please open an issue on GitHub.
+**Last Updated**: 2026-01-10

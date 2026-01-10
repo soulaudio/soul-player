@@ -7,13 +7,41 @@ interface DeviceSelectorProps {
   devices: AudioDevice[];
   currentDevice: string | null;
   onDeviceChange: (deviceName: string) => void;
+  loading?: boolean;
+}
+
+function DeviceSkeleton() {
+  return (
+    <div className="w-full p-3 rounded-lg border border-border animate-pulse">
+      <div className="flex items-center gap-3">
+        <div className="w-4 h-4 bg-muted rounded" />
+        <div className="flex-1 space-y-1.5">
+          <div className="h-4 bg-muted rounded w-40" />
+          <div className="h-3 bg-muted rounded w-32" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function DeviceSelector({
   devices,
   currentDevice,
   onDeviceChange,
+  loading = false,
 }: DeviceSelectorProps) {
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <label className="text-sm font-medium">Output Device</label>
+        <div className="space-y-2">
+          <DeviceSkeleton />
+          <DeviceSkeleton />
+          <DeviceSkeleton />
+        </div>
+      </div>
+    );
+  }
   // If no device selected, use default
   const activeDevice = currentDevice || devices.find(d => d.isDefault)?.name;
 
@@ -70,12 +98,6 @@ export function DeviceSelector({
         </div>
       )}
 
-      {/* Current device info */}
-      {activeDevice && (
-        <div className="mt-3 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
-          <strong>Active:</strong> {activeDevice}
-        </div>
-      )}
     </div>
   );
 }

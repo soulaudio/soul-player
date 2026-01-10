@@ -221,6 +221,209 @@ pub fn generate_dynamic_test_signal(
     samples
 }
 
+/// Generate a two-tone test signal for SMPTE IMD measurement
+///
+/// Standard SMPTE/DIN method: 60 Hz (4:1 ratio) + 7 kHz
+///
+/// # Arguments
+/// * `sample_rate` - Sample rate in Hz
+/// * `duration` - Duration in seconds
+/// * `amplitude` - Peak amplitude (0.0 to 1.0)
+pub fn generate_imd_smpte_signal(sample_rate: u32, duration: f32, amplitude: f32) -> Vec<f32> {
+    let num_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(num_samples * 2);
+
+    let lf_freq = 60.0; // Low frequency
+    let hf_freq = 7000.0; // High frequency
+    let lf_amp = amplitude * 0.8; // 4:1 ratio (80% LF)
+    let hf_amp = amplitude * 0.2; // (20% HF)
+
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        let lf = (2.0 * PI * lf_freq * t).sin() * lf_amp;
+        let hf = (2.0 * PI * hf_freq * t).sin() * hf_amp;
+        let sample = lf + hf;
+        samples.push(sample); // Left
+        samples.push(sample); // Right
+    }
+
+    samples
+}
+
+/// Generate a two-tone test signal for CCIF/ITU-R IMD measurement
+///
+/// Uses two high-frequency tones (default: 19 kHz + 20 kHz)
+///
+/// # Arguments
+/// * `freq1` - First frequency (typically 19000 Hz)
+/// * `freq2` - Second frequency (typically 20000 Hz)
+/// * `sample_rate` - Sample rate in Hz
+/// * `duration` - Duration in seconds
+/// * `amplitude` - Peak amplitude per tone (0.0 to 1.0, total will be 2x)
+pub fn generate_imd_ccif_signal(
+    freq1: f32,
+    freq2: f32,
+    sample_rate: u32,
+    duration: f32,
+    amplitude: f32,
+) -> Vec<f32> {
+    let num_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(num_samples * 2);
+
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        let tone1 = (2.0 * PI * freq1 * t).sin() * amplitude;
+        let tone2 = (2.0 * PI * freq2 * t).sin() * amplitude;
+        let sample = (tone1 + tone2) * 0.5; // Normalize to prevent clipping
+        samples.push(sample); // Left
+        samples.push(sample); // Right
+    }
+
+    samples
+}
+
+/// Generate a multi-tone test signal for comprehensive frequency response
+///
+/// Creates a signal with multiple sine waves at different frequencies.
+///
+/// # Arguments
+/// * `frequencies` - List of frequencies to include
+/// * `sample_rate` - Sample rate in Hz
+/// * `duration` - Duration in seconds
+/// * `amplitude` - Peak amplitude per tone
+pub fn generate_multitone_signal(
+    frequencies: &[f32],
+    sample_rate: u32,
+    duration: f32,
+    amplitude: f32,
+) -> Vec<f32> {
+    let num_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(num_samples * 2);
+    let per_tone_amp = amplitude / (frequencies.len() as f32).sqrt();
+
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        let sample: f32 = frequencies
+            .iter()
+            .map(|&freq| (2.0 * PI * freq * t).sin() * per_tone_amp)
+            .sum();
+        samples.push(sample); // Left
+        samples.push(sample); // Right
+    }
+
+    samples
+}
+
+/// Generate a signal with deliberate distortion for testing THD measurement
+///
+/// Creates a sine wave with controlled harmonic content.
+///
+/// # Arguments
+/// * `fundamental_freq` - Fundamental frequency in Hz
+/// * `sample_rate` - Sample rate in Hz
+/// * `duration` - Duration in seconds
+/// * `amplitude` - Peak amplitude
+/// * `thd_percent` - Desired THD percentage (approximation)
+pub fn generate_distorted_sine(
+    fundamental_freq: f32,
+    sample_rate: u32,
+    duration: f32,
+    amplitude: f32,
+    thd_percent: f32,
+) -> Vec<f32> {
+    let num_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(num_samples * 2);
+
+    // Calculate harmonic amplitudes to approximate desired THD
+    let harmonic_factor = thd_percent / 100.0;
+    let h2_amp = harmonic_factor * 0.6; // 2nd harmonic
+    let h3_amp = harmonic_factor * 0.3; // 3rd harmonic
+    let h4_amp = harmonic_factor * 0.1; // 4th harmonic
+
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        let phase = 2.0 * PI * fundamental_freq * t;
+
+        let fundamental = phase.sin();
+        let h2 = (2.0 * phase).sin() * h2_amp;
+        let h3 = (3.0 * phase).sin() * h3_amp;
+        let h4 = (4.0 * phase).sin() * h4_amp;
+
+        let sample = (fundamental + h2 + h3 + h4) * amplitude;
+        samples.push(sample); // Left
+        samples.push(sample); // Right
+    }
+
+    samples
+}
+
+/// Generate a signal that alternates between silence and signal
+///
+/// Useful for testing noise floor and dynamic range measurement.
+///
+/// # Arguments
+/// * `frequency` - Signal frequency during active periods
+/// * `sample_rate` - Sample rate in Hz
+/// * `duration` - Total duration in seconds
+/// * `amplitude` - Signal amplitude during active periods
+/// * `duty_cycle` - Fraction of time with signal (0.0 to 1.0)
+pub fn generate_gated_signal(
+    frequency: f32,
+    sample_rate: u32,
+    duration: f32,
+    amplitude: f32,
+    duty_cycle: f32,
+) -> Vec<f32> {
+    let num_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(num_samples * 2);
+
+    let gate_period = sample_rate as usize / 2; // 0.5 second gate period
+
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        let in_gate = (i % gate_period) as f32 / gate_period as f32;
+        let amplitude_now = if in_gate < duty_cycle { amplitude } else { 0.0 };
+
+        let sample = (2.0 * PI * frequency * t).sin() * amplitude_now;
+        samples.push(sample); // Left
+        samples.push(sample); // Right
+    }
+
+    samples
+}
+
+/// Generate a stereo signal with one channel active (for crosstalk testing)
+///
+/// # Arguments
+/// * `frequency` - Signal frequency
+/// * `sample_rate` - Sample rate in Hz
+/// * `duration` - Duration in seconds
+/// * `amplitude` - Peak amplitude
+/// * `active_channel` - Which channel has signal (0=left, 1=right)
+pub fn generate_crosstalk_test_signal(
+    frequency: f32,
+    sample_rate: u32,
+    duration: f32,
+    amplitude: f32,
+    active_channel: usize,
+) -> Vec<f32> {
+    let num_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(num_samples * 2);
+
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        let signal = (2.0 * PI * frequency * t).sin() * amplitude;
+
+        let left = if active_channel == 0 { signal } else { 0.0 };
+        let right = if active_channel == 1 { signal } else { 0.0 };
+
+        samples.push(left);
+        samples.push(right);
+    }
+
+    samples
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

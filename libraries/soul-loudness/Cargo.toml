@@ -1,0 +1,26 @@
+[package]
+name = "soul-loudness"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Loudness analysis and normalization for Soul Player (EBU R128, ReplayGain)"
+
+[dependencies]
+soul-core.workspace = true
+thiserror.workspace = true
+ebur128.workspace = true
+lofty.workspace = true
+tracing.workspace = true
+
+# For true peak detection (4x oversampling)
+rubato.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

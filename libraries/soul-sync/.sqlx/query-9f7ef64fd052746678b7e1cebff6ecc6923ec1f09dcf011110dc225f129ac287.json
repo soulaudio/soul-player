@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            id,\n            replaygain_track_gain,\n            replaygain_track_peak,\n            replaygain_album_gain,\n            replaygain_album_peak,\n            lufs_integrated,\n            lufs_range,\n            true_peak_dbfs,\n            loudness_analyzed_at,\n            loudness_version\n        FROM tracks\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "replaygain_track_gain",
+        "ordinal": 1,
+        "type_info": "Float"
+      },
+      {
+        "name": "replaygain_track_peak",
+        "ordinal": 2,
+        "type_info": "Float"
+      },
+      {
+        "name": "replaygain_album_gain",
+        "ordinal": 3,
+        "type_info": "Float"
+      },
+      {
+        "name": "replaygain_album_peak",
+        "ordinal": 4,
+        "type_info": "Float"
+      },
+      {
+        "name": "lufs_integrated",
+        "ordinal": 5,
+        "type_info": "Float"
+      },
+      {
+        "name": "lufs_range",
+        "ordinal": 6,
+        "type_info": "Float"
+      },
+      {
+        "name": "true_peak_dbfs",
+        "ordinal": 7,
+        "type_info": "Float"
+      },
+      {
+        "name": "loudness_analyzed_at",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "loudness_version",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "9f7ef64fd052746678b7e1cebff6ecc6923ec1f09dcf011110dc225f129ac287"
+}

@@ -28,6 +28,7 @@ mod types;
 pub mod copy;
 pub mod fuzzy;
 pub mod importer;
+pub mod library_scanner;
 pub mod metadata;
 pub mod scanner;
 

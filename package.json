@@ -6,19 +6,24 @@
     "applications/shared",
     "applications/desktop",
     "applications/mobile",
-    "applications/marketing"
+    "applications/marketing",
+    "applications/web"
   ],
   "scripts": {
     "dev:desktop": "yarn workspace soul-player-desktop tauri:dev",
     "dev:mobile": "yarn workspace soul-player-mobile tauri:dev",
     "dev:marketing": "yarn workspace @soul-player/marketing dev",
+    "dev:web": "yarn workspace @soul-player/web dev",
     "dev:server": "docker compose up --build",
     "dev:server:down": "docker compose down",
     "dev:server:logs": "docker compose logs -f server",
     "dev:server:clean": "docker compose down -v",
+    "dev:all": "docker compose -f docker-compose.dev.yml up",
+    "dev:all:down": "docker compose -f docker-compose.dev.yml down",
     "build:desktop": "yarn workspace soul-player-desktop tauri:build",
     "build:mobile": "yarn workspace soul-player-mobile tauri:build",
     "build:marketing": "yarn workspace @soul-player/marketing build",
+    "build:web": "yarn workspace @soul-player/web build",
     "test": "yarn workspaces foreach run test",
     "lint": "yarn workspaces foreach run lint",
     "type-check": "yarn workspaces foreach run type-check"

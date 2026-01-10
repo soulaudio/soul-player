@@ -7,6 +7,7 @@ mod audio_settings;
 mod deep_link;
 mod dsp_commands;
 mod import;
+mod loudness;
 mod playback;
 mod shortcuts;
 mod splash;
@@ -200,19 +201,23 @@ async fn play_queue(
 
     // Stop current playback
     eprintln!("[play_queue] Calling stop()...");
-    playback.stop()?;
-    eprintln!("[play_queue] stop() completed");
+    let stop_result = playback.stop();
+    eprintln!("[play_queue] stop() returned: {:?}", stop_result);
+    stop_result?;
 
     // Load playlist as source queue (Spotify-style context)
     // This replaces the source queue tier, keeping explicit queue separate
-    eprintln!("[play_queue] Calling load_playlist()...");
-    playback.load_playlist(tracks)?;
-    eprintln!("[play_queue] load_playlist() completed");
+    eprintln!("[play_queue] Calling load_playlist() with {} tracks...", tracks.len());
+    let load_result = playback.load_playlist(tracks);
+    eprintln!("[play_queue] load_playlist() returned: {:?}", load_result);
+    load_result?;
 
     // Start playback (will play first track in source queue)
-    eprintln!("[play_queue] Starting playback...");
-    playback.play()?;
-    eprintln!("[play_queue] Playback started");
+    eprintln!("[play_queue] Calling play()...");
+    let play_result = playback.play();
+    eprintln!("[play_queue] play() returned: {:?}", play_result);
+    play_result?;
+    eprintln!("[play_queue] All commands sent successfully");
 
     Ok(())
 }
@@ -329,6 +334,22 @@ async fn get_playback_capabilities(
         "hasNext": playback.has_next(),
         "hasPrevious": playback.has_previous(),
     }))
+}
+
+/// Get current playback state (for syncing UI with audio layer)
+#[tauri::command]
+async fn get_playback_state(
+    playback: State<'_, PlaybackManager>,
+) -> Result<String, String> {
+    let state = playback.get_state();
+    // Return state as string matching what's emitted in events
+    let state_str = match state {
+        soul_playback::PlaybackState::Playing => "Playing",
+        soul_playback::PlaybackState::Paused => "Paused",
+        soul_playback::PlaybackState::Stopped => "Stopped",
+        soul_playback::PlaybackState::Loading => "Loading",
+    };
+    Ok(state_str.to_string())
 }
 
 #[tauri::command]
@@ -887,6 +908,14 @@ fn main() {
 
                 app_handle.manage(playback_manager);
 
+                emit_init_progress(&app_handle, "Initializing loudness analyzer...", 55).await;
+
+                // Initialize loudness analysis worker
+                let analysis_worker = std::sync::Arc::new(tokio::sync::Mutex::new(
+                    loudness::AnalysisWorker::new(),
+                ));
+                app_handle.manage(analysis_worker);
+
                 emit_init_progress(&app_handle, "Configuring import system...", 60).await;
 
                 // Initialize import manager
@@ -1000,11 +1029,16 @@ fn main() {
             get_queue,
             skip_to_queue_index,
             get_playback_capabilities,
+            get_playback_state,
             // Audio settings
             audio_settings::get_audio_backends,
             audio_settings::get_audio_devices,
+            audio_settings::get_audio_devices_with_capabilities,
             audio_settings::get_current_audio_device,
+            audio_settings::get_device_capabilities,
             audio_settings::set_audio_device,
+            audio_settings::refresh_sample_rate,
+            audio_settings::is_r8brain_available,
             // DSP effects chain
             dsp_commands::get_available_effects,
             dsp_commands::get_dsp_chain,
@@ -1016,6 +1050,9 @@ fn main() {
             dsp_commands::get_eq_presets,
             dsp_commands::get_compressor_presets,
             dsp_commands::get_limiter_presets,
+            dsp_commands::get_crossfeed_presets,
+            dsp_commands::get_stereo_presets,
+            dsp_commands::get_graphic_eq_presets,
             dsp_commands::get_dsp_chain_presets,
             dsp_commands::save_dsp_chain_preset,
             dsp_commands::delete_dsp_chain_preset,
@@ -1066,6 +1103,17 @@ fn main() {
             // Updater
             updater::check_for_updates,
             updater::install_update,
+            // Loudness analysis
+            loudness::get_track_loudness,
+            loudness::analyze_track,
+            loudness::queue_track_analysis,
+            loudness::queue_all_unanalyzed,
+            loudness::get_analysis_queue_stats,
+            loudness::start_analysis_worker,
+            loudness::stop_analysis_worker,
+            loudness::get_analysis_worker_status,
+            loudness::set_volume_leveling_mode,
+            loudness::clear_completed_analysis,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -155,12 +155,12 @@ async fn test_add_genre_to_track() {
     .unwrap();
 
     // Add genre to track
-    soul_storage::genres::add_to_track(&pool, &track_id, genre.id)
+    soul_storage::genres::add_to_track(&pool, track_id.clone(), genre.id)
         .await
         .unwrap();
 
     // Get genres for track
-    let track_genres = soul_storage::genres::get_by_track(&pool, &track_id)
+    let track_genres = soul_storage::genres::get_by_track(&pool, track_id)
         .await
         .unwrap();
 
@@ -206,15 +206,15 @@ async fn test_add_multiple_genres_to_track() {
     .unwrap();
 
     // Add both genres
-    soul_storage::genres::add_to_track(&pool, &track_id, rock.id)
+    soul_storage::genres::add_to_track(&pool, track_id.clone(), rock.id)
         .await
         .unwrap();
-    soul_storage::genres::add_to_track(&pool, &track_id, alternative.id)
+    soul_storage::genres::add_to_track(&pool, track_id.clone(), alternative.id)
         .await
         .unwrap();
 
     // Get genres for track
-    let track_genres = soul_storage::genres::get_by_track(&pool, &track_id)
+    let track_genres = soul_storage::genres::get_by_track(&pool, track_id)
         .await
         .unwrap();
 
@@ -251,15 +251,15 @@ async fn test_add_duplicate_genre_to_track_is_idempotent() {
     .unwrap();
 
     // Add genre twice
-    soul_storage::genres::add_to_track(&pool, &track_id, genre.id)
+    soul_storage::genres::add_to_track(&pool, track_id.clone(), genre.id)
         .await
         .unwrap();
-    soul_storage::genres::add_to_track(&pool, &track_id, genre.id)
+    soul_storage::genres::add_to_track(&pool, track_id.clone(), genre.id)
         .await
         .unwrap();
 
     // Should only have one entry
-    let track_genres = soul_storage::genres::get_by_track(&pool, &track_id)
+    let track_genres = soul_storage::genres::get_by_track(&pool, track_id)
         .await
         .unwrap();
 
@@ -293,23 +293,23 @@ async fn test_remove_genre_from_track() {
     .unwrap();
 
     // Add genre
-    soul_storage::genres::add_to_track(&pool, &track_id, genre.id)
+    soul_storage::genres::add_to_track(&pool, track_id.clone(), genre.id)
         .await
         .unwrap();
 
     // Verify it's there
-    let genres = soul_storage::genres::get_by_track(&pool, &track_id)
+    let genres = soul_storage::genres::get_by_track(&pool, track_id.clone())
         .await
         .unwrap();
     assert_eq!(genres.len(), 1);
 
     // Remove genre
-    soul_storage::genres::remove_from_track(&pool, &track_id, genre.id)
+    soul_storage::genres::remove_from_track(&pool, track_id.clone(), genre.id)
         .await
         .unwrap();
 
     // Verify it's gone
-    let genres = soul_storage::genres::get_by_track(&pool, &track_id)
+    let genres = soul_storage::genres::get_by_track(&pool, track_id)
         .await
         .unwrap();
     assert_eq!(genres.len(), 0);
@@ -353,26 +353,26 @@ async fn test_clear_track_genres() {
     .unwrap();
 
     // Add both genres
-    soul_storage::genres::add_to_track(&pool, &track_id, rock.id)
+    soul_storage::genres::add_to_track(&pool, track_id.clone(), rock.id)
         .await
         .unwrap();
-    soul_storage::genres::add_to_track(&pool, &track_id, jazz.id)
+    soul_storage::genres::add_to_track(&pool, track_id.clone(), jazz.id)
         .await
         .unwrap();
 
     // Verify they're there
-    let genres = soul_storage::genres::get_by_track(&pool, &track_id)
+    let genres = soul_storage::genres::get_by_track(&pool, track_id.clone())
         .await
         .unwrap();
     assert_eq!(genres.len(), 2);
 
     // Clear all genres
-    soul_storage::genres::clear_track_genres(&pool, &track_id)
+    soul_storage::genres::clear_track_genres(&pool, track_id.clone())
         .await
         .unwrap();
 
     // Verify they're gone
-    let genres = soul_storage::genres::get_by_track(&pool, &track_id)
+    let genres = soul_storage::genres::get_by_track(&pool, track_id)
         .await
         .unwrap();
     assert_eq!(genres.len(), 0);

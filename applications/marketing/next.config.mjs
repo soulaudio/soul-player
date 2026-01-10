@@ -1,8 +1,11 @@
+import createMDX from '@next/mdx'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
   reactStrictMode: true,
   transpilePackages: ['@soul-player/shared'],
+  pageExtensions: ['js', 'jsx', 'md', 'mdx', 'ts', 'tsx'],
   // Configure base path for GitHub Pages if deploying to repo subdirectory
   // basePath: process.env.NODE_ENV === 'production' ? '/soul-player' : '',
   images: {
@@ -29,4 +32,8 @@ const nextConfig = {
   }
 }
 
-export default nextConfig
+const withMDX = createMDX({
+  extension: /\.mdx?$/,
+})
+
+export default withMDX(nextConfig)

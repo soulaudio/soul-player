@@ -163,13 +163,26 @@ pub fn get_backend_info() -> Vec<BackendInfo> {
         .into_iter()
         .map(|backend| {
             let available = backend.is_available();
+
+            // Count devices for the default backend only during backend enumeration.
+            // ASIO and JACK device enumeration can be problematic (some drivers crash
+            // when enumerated multiple times or concurrently), so we defer device
+            // counting for those backends to when devices are explicitly requested.
             let device_count = if available {
-                backend
-                    .to_cpal_host()
-                    .ok()
-                    .and_then(|host| host.devices().ok())
-                    .map(|devices| devices.count())
-                    .unwrap_or(0)
+                match backend {
+                    AudioBackend::Default => backend
+                        .to_cpal_host()
+                        .ok()
+                        .and_then(|host| host.output_devices().ok())
+                        .map(|devices| devices.count())
+                        .unwrap_or(0),
+                    // For ASIO/JACK, just indicate availability without counting
+                    // to avoid driver crashes from repeated enumeration
+                    #[cfg(all(target_os = "windows", feature = "asio"))]
+                    AudioBackend::Asio => 1, // Indicate at least one device exists
+                    #[cfg(feature = "jack")]
+                    AudioBackend::Jack => 1, // Indicate at least one device exists
+                }
             } else {
                 0
             };

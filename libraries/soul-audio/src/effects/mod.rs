@@ -1,16 +1,31 @@
-mod chain;
-mod compressor;
 ///! Audio effects processing
 ///!
 ///! This module provides a trait-based effect chain architecture for real-time audio processing.
 ///! All effects operate on f32 samples in [-1.0, 1.0] range.
+///!
+///! Available effects:
+///! - **ParametricEq**: 3-band parametric equalizer
+///! - **GraphicEq**: 10-band or 31-band graphic equalizer
+///! - **Compressor**: Dynamic range compressor
+///! - **Limiter**: Brick-wall limiter
+///! - **Crossfeed**: Bauer stereophonic-to-binaural DSP for headphones
+///! - **StereoEnhancer**: Width control, mid/side processing, balance
+
+mod chain;
+mod compressor;
+mod crossfeed;
 mod eq;
+mod graphic_eq;
 mod limiter;
+mod stereo;
 
 pub use chain::{AudioEffect, EffectChain};
 pub use compressor::{Compressor, CompressorSettings};
+pub use crossfeed::{Crossfeed, CrossfeedPreset, CrossfeedSettings};
 pub use eq::{EqBand, ParametricEq};
+pub use graphic_eq::{GraphicEq, GraphicEqBands, GraphicEqPreset, ISO_10_BAND_FREQUENCIES, ISO_31_BAND_FREQUENCIES};
 pub use limiter::{Limiter, LimiterSettings};
+pub use stereo::{StereoEnhancer, StereoSettings, mono_compatibility};
 
 #[cfg(test)]
 mod tests {

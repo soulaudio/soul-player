@@ -1,6 +1,9 @@
 /// Soul Server - Multi-user music streaming server
 use axum::{
+    body::Body,
+    http::{Request, StatusCode},
     middleware as axum_middleware,
+    response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Router,
 };
@@ -14,9 +17,11 @@ use soul_server::{
     state::AppState,
 };
 use soul_storage::LocalStorageContext;
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use tower::ServiceExt;
 use tower_http::{
     cors::CorsLayer,
+    services::ServeDir,
     trace::{DefaultMakeSpan, TraceLayer},
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -163,6 +168,7 @@ async fn serve() -> anyhow::Result<()> {
 fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router {
     // Public routes (no auth required)
     let public_routes = Router::new()
+        .route("/health", get(api::health::health))
         .route("/auth/login", post(api::auth::login))
         .route("/auth/refresh", post(api::auth::refresh));
 
@@ -194,6 +200,22 @@ fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router 
         )
         // Streaming
         .route("/stream/:track_id", get(api::stream::stream_track))
+        // Devices
+        .route("/devices", post(api::devices::register_device))
+        .route("/devices", get(api::devices::list_devices))
+        .route("/devices/:id", delete(api::devices::unregister_device))
+        .route("/devices/:id/activate", put(api::devices::activate_device))
+        .route("/devices/:id/heartbeat", post(api::devices::heartbeat))
+        // Playback state
+        .route("/playback", get(api::playback::get_playback))
+        .route("/playback", put(api::playback::update_playback))
+        .route("/playback/play", post(api::playback::play))
+        .route("/playback/pause", post(api::playback::pause))
+        .route("/playback/seek", post(api::playback::seek))
+        .route("/playback/volume", post(api::playback::set_volume))
+        .route("/playback/skip/next", post(api::playback::skip_next))
+        .route("/playback/skip/previous", post(api::playback::skip_previous))
+        .route("/playback/transfer", post(api::playback::transfer))
         // Admin
         .route("/admin/users", post(api::admin::create_user))
         .route("/admin/users", get(api::admin::list_users))
@@ -205,9 +227,52 @@ fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router 
             middleware::auth_middleware,
         ));
 
+    // Static file serving for web UI (SPA with fallback to index.html)
+    let web_dir = PathBuf::from(
+        std::env::var("SOUL_WEB_DIR").unwrap_or_else(|_| "/app/web".to_string()),
+    );
+
+    let spa_fallback = move |req: Request<Body>| {
+        let web_dir = web_dir.clone();
+        async move {
+            // Try to serve the file directly
+            let path = req.uri().path().trim_start_matches('/');
+            let file_path = web_dir.join(path);
+
+            if file_path.exists() && file_path.is_file() {
+                // Serve the actual file
+                match ServeDir::new(&web_dir)
+                    .oneshot(req)
+                    .await
+                {
+                    Ok(res) => res.into_response(),
+                    Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                }
+            } else {
+                // SPA fallback: serve index.html
+                let index_path = web_dir.join("index.html");
+                if index_path.exists() {
+                    match tokio::fs::read(&index_path).await {
+                        Ok(contents) => Response::builder()
+                            .status(StatusCode::OK)
+                            .header("content-type", "text/html; charset=utf-8")
+                            .body(Body::from(contents))
+                            .unwrap()
+                            .into_response(),
+                        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                    }
+                } else {
+                    // No web UI available, return 404
+                    StatusCode::NOT_FOUND.into_response()
+                }
+            }
+        }
+    };
+
     // Combine routes
     Router::new()
         .nest("/api", public_routes.merge(protected_routes))
+        .fallback(spa_fallback)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),

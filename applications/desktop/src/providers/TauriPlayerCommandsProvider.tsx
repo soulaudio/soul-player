@@ -1,7 +1,7 @@
 /**
  * Tauri implementation of PlayerCommands context
  * Bridges desktop Tauri invoke() calls to shared PlayerCommands interface
- * Also handles event-to-store updates
+ * Also handles event-to-store updates and keyboard shortcuts
  */
 
 import { ReactNode, useMemo, useEffect } from 'react';
@@ -16,15 +16,34 @@ import {
   type PlaybackCapabilities,
 } from '@soul-player/shared';
 import { shouldIgnorePositionUpdates } from '@soul-player/shared';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
+  // Initialize keyboard shortcuts (app-level, not OS-level global)
+  useKeyboardShortcuts();
+
   // Set up event listeners to update store (similar to old usePlaybackEvents hook)
   useEffect(() => {
     console.log('[TauriPlayerCommandsProvider] Setting up playback event listeners');
 
+    // Sync initial state from backend on mount
+    // This ensures the UI reflects the actual audio layer state
+    const syncInitialState = async () => {
+      try {
+        const state = await invoke<string>('get_playback_state');
+        const isPlaying = state === 'Playing';
+        console.log('[TauriPlayerCommandsProvider] Initial state sync:', state, '-> isPlaying:', isPlaying);
+        usePlayerStore.setState({ isPlaying });
+      } catch (error) {
+        console.error('[TauriPlayerCommandsProvider] Failed to sync initial state:', error);
+      }
+    };
+    syncInitialState();
+
     // Listen for playback state changes
     const unlistenStateChanged = listen<string>('playback:state-changed', (event) => {
       const isPlaying = event.payload === 'Playing';
+      console.log('[TauriPlayerCommandsProvider] State changed event:', event.payload, '-> isPlaying:', isPlaying);
       usePlayerStore.setState({ isPlaying });
     });
 
@@ -123,6 +142,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
       async getPlaybackCapabilities(): Promise<PlaybackCapabilities> {
         return await invoke<PlaybackCapabilities>('get_playback_capabilities');
+      },
+
+      async getPlaybackState(): Promise<string> {
+        return await invoke<string>('get_playback_state');
       },
 
       async getQueue() {

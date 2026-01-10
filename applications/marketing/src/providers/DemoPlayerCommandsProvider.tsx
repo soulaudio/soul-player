@@ -111,7 +111,7 @@ export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }
             filePath: track.path,
             durationSeconds: track.duration_secs || null,  // Use correct field name
             trackNumber: track.track_number || null,  // Use correct field name
-            coverArtPath: demoTrack?.coverUrl || null,  // Look up from storage
+            coverArtPath: demoTrack?.coverUrl || undefined,  // Look up from storage
           };
         });
       },

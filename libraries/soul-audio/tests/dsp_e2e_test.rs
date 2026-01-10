@@ -6,6 +6,10 @@
 //! - THD measurements
 //! - Peak/RMS analysis
 //! - Compression ratio verification
+//!
+//! Run these tests with: `cargo test -p soul-audio --features test-utils`
+
+#![cfg(feature = "test-utils")]
 
 use soul_audio::effects::*;
 use soul_audio::test_utils::analysis::*;

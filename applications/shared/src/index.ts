@@ -54,6 +54,14 @@ export {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from './components/ui/dropdown-menu';
+export {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogFooter,
+  ConfirmDialog,
+} from './components/ui/Dialog';
 
 // Layouts
 export { MainLayout } from './layouts/MainLayout';

@@ -7,13 +7,41 @@ interface BackendSelectorProps {
   backends: AudioBackend[];
   currentBackend: 'default' | 'asio' | 'jack';
   onBackendChange: (backend: 'default' | 'asio' | 'jack') => void;
+  loading?: boolean;
+}
+
+function BackendSkeleton() {
+  return (
+    <div className="w-full p-4 rounded-lg border-2 border-border animate-pulse">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 space-y-2">
+          <div className="h-5 bg-muted rounded w-32" />
+          <div className="h-4 bg-muted rounded w-48" />
+          <div className="h-3 bg-muted rounded w-24 mt-2" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function BackendSelector({
   backends,
   currentBackend,
   onBackendChange,
+  loading = false,
 }: BackendSelectorProps) {
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <label className="text-sm font-medium">Audio Backend</label>
+        <div className="space-y-2">
+          <BackendSkeleton />
+          <BackendSkeleton />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <label className="text-sm font-medium">Audio Backend</label>

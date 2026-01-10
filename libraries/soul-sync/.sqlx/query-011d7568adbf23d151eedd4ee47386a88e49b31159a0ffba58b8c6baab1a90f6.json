@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE scan_progress SET status = 'completed', completed_at = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "011d7568adbf23d151eedd4ee47386a88e49b31159a0ffba58b8c6baab1a90f6"
+}

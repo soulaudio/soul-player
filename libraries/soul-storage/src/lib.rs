@@ -45,9 +45,22 @@ pub mod tracks;
 pub mod users;
 
 // User preferences and state
+pub mod external_file_settings;
+pub mod managed_library_settings;
 pub mod settings;
 pub mod shortcuts;
 pub mod window_state;
+
+// Library management (watched folders, scanning)
+pub mod library_sources;
+pub mod scan_progress;
+
+// Multi-device sync
+pub mod devices;
+pub mod playback_state;
+
+// Audio analysis
+pub mod loudness;
 
 pub use context::LocalStorageContext;
 pub use error::StorageError;

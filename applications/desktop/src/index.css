@@ -97,6 +97,38 @@
     --gradient-sidebar: linear-gradient(to right, hsl(200 40% 92%) 0%, hsl(210 100% 97%) 100%);
     --gradient-waveform: linear-gradient(90deg, hsl(200 90% 50%) 0%, hsl(180 85% 55%) 50%, hsl(200 90% 50%) 100%);
   }
+
+  /* Earth theme - Deep evergreen with brown and amber accents */
+  [data-theme='earth'] {
+    --background: 150 50% 7%;
+    --foreground: 45 30% 92%;
+    --card: 150 40% 10%;
+    --card-foreground: 45 30% 92%;
+    --popover: 150 40% 10%;
+    --popover-foreground: 45 30% 92%;
+    --primary: 42 80% 55%;
+    --primary-foreground: 150 50% 7%;
+    --secondary: 30 35% 22%;
+    --secondary-foreground: 45 30% 92%;
+    --muted: 140 25% 14%;
+    --muted-foreground: 45 15% 60%;
+    --accent: 38 85% 50%;
+    --accent-foreground: 150 50% 7%;
+    --destructive: 15 60% 45%;
+    --destructive-foreground: 45 30% 92%;
+    --border: 140 20% 18%;
+    --input: 140 20% 18%;
+    --ring: 42 80% 55%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(150 50% 7%) 0%, hsl(30 35% 18%) 100%);
+    --gradient-player: linear-gradient(to bottom, hsl(150 50% 7%) 0%, hsl(140 25% 12%) 100%);
+    --gradient-sidebar: linear-gradient(to right, hsl(140 25% 14%) 0%, hsl(150 50% 7%) 100%);
+    --gradient-waveform: linear-gradient(90deg, hsl(42 80% 55%) 0%, hsl(30 35% 22%) 50%, hsl(42 80% 55%) 100%);
+
+    /* Typography - Georgia serif for earth theme */
+    --font-sans: Georgia, Cambria, 'Times New Roman', Times, serif;
+  }
 }
 
 @layer base {
@@ -105,5 +137,72 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Modern themed scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  /* WebKit/Blink scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--muted-foreground) / 0.7);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Auto-hide scrollbars until hover */
+  .scrollbar-auto-hide {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-auto-hide::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  .scrollbar-auto-hide:hover {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-auto-hide:hover::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+}
+
+/* Now playing equalizer animation */
+@keyframes equalize {
+  0%, 100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
   }
 }

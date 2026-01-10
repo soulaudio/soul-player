@@ -50,13 +50,7 @@ impl PlaybackManager {
     /// Create a new playback manager
     pub fn new(app_handle: AppHandle) -> Result<Self, String> {
         // Create playback config
-        let config = PlaybackConfig {
-            history_size: 50,
-            volume: 80, // 80%
-            shuffle: ShuffleMode::Off,
-            repeat: RepeatMode::Off,
-            gapless: true,
-        };
+        let config = PlaybackConfig::default();
 
         // Create desktop playback system
         let playback = DesktopPlayback::new(config).map_err(|e| e.to_string())?;
@@ -83,8 +77,10 @@ impl PlaybackManager {
     /// Event emission loop that runs in background thread
     ///
     /// Polls for playback events and emits them to the frontend via Tauri events.
+    /// Also polls for device sample rate changes periodically.
     fn event_emission_loop(playback: Arc<Mutex<DesktopPlayback>>, app_handle: AppHandle) {
         let mut last_position_emit = std::time::Instant::now();
+        let mut last_sample_rate_check = std::time::Instant::now();
 
         loop {
             // Poll for events
@@ -118,6 +114,13 @@ impl PlaybackManager {
                     }
                     PlaybackEvent::QueueUpdated => app_handle.emit("playback:queue-updated", ()),
                     PlaybackEvent::Error(error) => app_handle.emit("playback:error", error),
+                    PlaybackEvent::SampleRateChanged(from, to) => {
+                        eprintln!("[playback] Sample rate changed: {}Hz -> {}Hz", from, to);
+                        app_handle.emit("playback:sample-rate-changed", serde_json::json!({
+                            "from": from,
+                            "to": to
+                        }))
+                    }
                 };
             }
 
@@ -133,6 +136,27 @@ impl PlaybackManager {
                 }
 
                 last_position_emit = std::time::Instant::now();
+            }
+
+            // Check for device sample rate changes every 2 seconds
+            // This detects when the user changes the device's sample rate externally
+            // (e.g., via ASIO control panel or Windows sound settings)
+            if last_sample_rate_check.elapsed() >= Duration::from_secs(2) {
+                let mut pb = playback.lock().unwrap();
+                match pb.check_and_update_sample_rate() {
+                    Ok(true) => {
+                        eprintln!("[playback] Device sample rate changed, stream recreated");
+                    }
+                    Ok(false) => {
+                        // No change, nothing to do
+                    }
+                    Err(e) => {
+                        // Don't spam errors, just log once per failure
+                        eprintln!("[playback] Failed to check sample rate: {}", e);
+                    }
+                }
+                drop(pb);
+                last_sample_rate_check = std::time::Instant::now();
             }
 
             // Sleep briefly to avoid busy-waiting
@@ -271,6 +295,12 @@ impl PlaybackManager {
         playback.has_previous()
     }
 
+    /// Get current playback state
+    pub fn get_state(&self) -> soul_playback::PlaybackState {
+        let playback = self.playback.lock().unwrap();
+        playback.get_state()
+    }
+
     /// Add track to queue
     pub fn add_to_queue(&self, track: QueueTrack) -> Result<(), String> {
         let playback = self.playback.lock().map_err(|e| e.to_string())?;
@@ -325,10 +355,17 @@ impl PlaybackManager {
         backend: soul_audio_desktop::AudioBackend,
         device_name: Option<String>,
     ) -> Result<(), String> {
+        eprintln!("[PlaybackManager] switch_device called, acquiring lock...");
         let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
-        playback
+        eprintln!("[PlaybackManager] Lock acquired, calling DesktopPlayback::switch_device...");
+        let result = playback
             .switch_device(backend, device_name)
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string());
+        eprintln!("[PlaybackManager] DesktopPlayback::switch_device returned, releasing lock...");
+        // Explicitly drop the guard to release the lock
+        drop(playback);
+        eprintln!("[PlaybackManager] Lock released, returning result");
+        result
     }
 
     /// Get current audio backend
@@ -341,6 +378,26 @@ impl PlaybackManager {
     pub fn get_current_device(&self) -> String {
         let playback = self.playback.lock().unwrap();
         playback.get_current_device()
+    }
+
+    /// Get current sample rate
+    pub fn get_current_sample_rate(&self) -> u32 {
+        let playback = self.playback.lock().unwrap();
+        playback.get_current_sample_rate()
+    }
+
+    /// Manually trigger a sample rate check and update
+    ///
+    /// This is useful when the user knows they've changed device settings
+    /// and wants to immediately update without waiting for the next poll.
+    ///
+    /// # Returns
+    /// * `Ok(true)` - Sample rate changed and stream was recreated
+    /// * `Ok(false)` - Sample rate unchanged
+    /// * `Err(_)` - Failed to check or update
+    pub fn refresh_sample_rate(&self) -> Result<bool, String> {
+        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback.check_and_update_sample_rate().map_err(|e| e.to_string())
     }
 
     // ===== DSP Effect Chain =====
@@ -372,8 +429,8 @@ impl PlaybackManager {
     /// Rebuild the entire effect chain from current slot state
     #[cfg(feature = "effects")]
     fn rebuild_effect_chain(&self) -> Result<(), String> {
-        use soul_audio::effects::{ParametricEq, Compressor, Limiter};
-        use crate::dsp_commands::{EffectType, EffectSlotState};
+        use soul_audio::effects::{AudioEffect, ParametricEq, Compressor, Limiter};
+        use crate::dsp_commands::EffectType;
 
         let slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
 
@@ -386,18 +443,18 @@ impl PlaybackManager {
                 if let Some(slot_state) = slot {
                     let effect: Box<dyn soul_audio::effects::AudioEffect> = match &slot_state.effect {
                         EffectType::Eq { bands } => {
-                            let eq_bands: Vec<_> = bands.iter().map(|b| b.clone().into()).collect();
-                            let mut eq = ParametricEq::new(eq_bands);
+                            let mut eq = ParametricEq::new();
+                            eq.set_bands(bands.iter().map(|b| b.clone().into()).collect());
                             eq.set_enabled(slot_state.enabled);
                             Box::new(eq)
                         }
                         EffectType::Compressor { settings } => {
-                            let mut comp = Compressor::new(settings.clone().into());
+                            let mut comp = Compressor::with_settings(settings.clone().into());
                             comp.set_enabled(slot_state.enabled);
                             Box::new(comp)
                         }
                         EffectType::Limiter { settings } => {
-                            let mut lim = Limiter::new(settings.clone().into());
+                            let mut lim = Limiter::with_settings(settings.clone().into());
                             lim.set_enabled(slot_state.enabled);
                             Box::new(lim)
                         }
@@ -414,8 +471,45 @@ impl PlaybackManager {
     where
         F: FnOnce(&mut soul_audio::effects::EffectChain) -> R,
     {
-        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
-        let effect_chain = playback.effect_chain_mut();
-        Ok(f(effect_chain))
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        Ok(playback.with_effect_chain(f))
+    }
+
+    // ===== Volume Leveling =====
+
+    /// Set volume leveling mode (ReplayGain track/album, EBU R128, etc.)
+    pub fn set_volume_leveling_mode(&self, mode: soul_playback::NormalizationMode) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_volume_leveling_mode(mode);
+    }
+
+    /// Get current volume leveling mode
+    pub fn get_volume_leveling_mode(&self) -> soul_playback::NormalizationMode {
+        let playback = self.playback.lock().unwrap();
+        playback.get_volume_leveling_mode()
+    }
+
+    /// Set track gain for current track (called when loading track)
+    pub fn set_track_gain(&self, gain_db: f64, peak_dbfs: f64) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_track_gain(gain_db, peak_dbfs);
+    }
+
+    /// Set album gain for current track (called when loading track)
+    pub fn set_album_gain(&self, gain_db: f64, peak_dbfs: f64) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_album_gain(gain_db, peak_dbfs);
+    }
+
+    /// Clear gain values (for new track without loudness data)
+    pub fn clear_loudness_gains(&self) {
+        let playback = self.playback.lock().unwrap();
+        playback.clear_loudness_gains();
+    }
+
+    /// Set pre-amp gain for volume leveling
+    pub fn set_loudness_preamp(&self, preamp_db: f64) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_loudness_preamp(preamp_db);
     }
 }

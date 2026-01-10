@@ -13,6 +13,9 @@ pub enum ImportError {
     #[error("Storage error: {0}")]
     Storage(#[from] soul_core::SoulError),
 
+    #[error("Storage layer error: {0}")]
+    StorageLayer(#[from] soul_storage::StorageError),
+
     #[error("Metadata error: {0}")]
     Metadata(String),
 

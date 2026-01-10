@@ -8,6 +8,56 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
+/// Resampling quality preset
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ResamplingQuality {
+    /// Fast - Low CPU, good for older hardware
+    /// 64 taps, 0.90 cutoff, 60 dB stopband
+    Fast,
+    /// Balanced - Good quality with moderate CPU
+    /// 128 taps, 0.95 cutoff, 100 dB stopband
+    Balanced,
+    /// High - Excellent quality for critical listening (default)
+    /// 256 taps, 0.99 cutoff, 140 dB stopband
+    #[default]
+    High,
+    /// Maximum - Audiophile-grade, highest possible quality
+    /// 512 taps, 0.995 cutoff, 180 dB stopband
+    Maximum,
+}
+
+impl ResamplingQuality {
+    /// Get sinc filter length for this quality
+    pub fn sinc_len(&self) -> usize {
+        match self {
+            Self::Fast => 64,
+            Self::Balanced => 128,
+            Self::High => 256,
+            Self::Maximum => 512,
+        }
+    }
+
+    /// Get frequency cutoff for this quality (relative to Nyquist)
+    pub fn f_cutoff(&self) -> f32 {
+        match self {
+            Self::Fast => 0.90,
+            Self::Balanced => 0.95,
+            Self::High => 0.99,
+            Self::Maximum => 0.995,
+        }
+    }
+
+    /// Get oversampling factor for this quality
+    pub fn oversampling_factor(&self) -> usize {
+        match self {
+            Self::Fast => 128,
+            Self::Balanced => 256,
+            Self::High => 512,
+            Self::Maximum => 1024,
+        }
+    }
+}
+
 /// Commands sent to the audio thread
 enum AudioCommand {
     /// Play a new buffer
@@ -77,6 +127,8 @@ pub struct CpalOutput {
     state: Arc<AudioState>,
     /// Handle to the audio thread (optional, for joining on drop)
     _audio_thread: Option<JoinHandle<()>>,
+    /// Resampling quality preset
+    resampling_quality: ResamplingQuality,
 }
 
 impl CpalOutput {
@@ -95,7 +147,7 @@ impl CpalOutput {
             .default_output_config()
             .map_err(|e| AudioOutputError::StreamBuildError(e.to_string()))?;
 
-        let sample_rate = config.sample_rate().0;
+        let sample_rate = config.sample_rate();
         let config = config.config();
 
         Self::with_device_and_config(device, config, sample_rate)
@@ -121,7 +173,21 @@ impl CpalOutput {
             sample_rate,
             state,
             _audio_thread: Some(audio_thread),
+            resampling_quality: ResamplingQuality::default(),
         })
+    }
+
+    /// Set the resampling quality preset
+    ///
+    /// This affects the quality of sample rate conversion when playing audio
+    /// at a different sample rate than the output device.
+    pub fn set_resampling_quality(&mut self, quality: ResamplingQuality) {
+        self.resampling_quality = quality;
+    }
+
+    /// Get the current resampling quality preset
+    pub fn resampling_quality(&self) -> ResamplingQuality {
+        self.resampling_quality
     }
 
     /// Audio thread main loop
@@ -271,8 +337,12 @@ impl CpalOutput {
         }
     }
 
-    /// Resample audio buffer to target sample rate
-    fn resample_buffer(buffer: &AudioBuffer, target_rate: u32) -> Result<Vec<f32>> {
+    /// Resample audio buffer to target sample rate with configurable quality
+    fn resample_buffer(
+        buffer: &AudioBuffer,
+        target_rate: u32,
+        quality: ResamplingQuality,
+    ) -> Result<Vec<f32>> {
         use rubato::{
             Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType,
             WindowFunction,
@@ -281,12 +351,18 @@ impl CpalOutput {
         let source_rate = buffer.format.sample_rate.as_hz();
         let channels = buffer.format.channels as usize;
 
-        // Create resampler
+        // Use interpolation type based on quality
+        let interpolation = match quality {
+            ResamplingQuality::Fast => SincInterpolationType::Linear,
+            _ => SincInterpolationType::Cubic,
+        };
+
+        // Create resampler with quality-based parameters
         let params = SincInterpolationParameters {
-            sinc_len: 256,
-            f_cutoff: 0.95,
-            interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 256,
+            sinc_len: quality.sinc_len(),
+            f_cutoff: quality.f_cutoff(),
+            interpolation,
+            oversampling_factor: quality.oversampling_factor(),
             window: WindowFunction::BlackmanHarris2,
         };
 
@@ -331,7 +407,7 @@ impl AudioOutput for CpalOutput {
         let samples = if buffer.format.sample_rate.as_hz() == self.sample_rate {
             buffer.samples.clone()
         } else {
-            Self::resample_buffer(buffer, self.sample_rate)?
+            Self::resample_buffer(buffer, self.sample_rate, self.resampling_quality)?
         };
 
         // Send play command to audio thread

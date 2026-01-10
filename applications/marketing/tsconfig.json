@@ -20,6 +20,9 @@
       "@/components/*": [
         "./src/components/*"
       ],
+      "@/constants/*": [
+        "./src/constants/*"
+      ],
       "@/styles/*": [
         "./src/styles/*"
       ],
@@ -39,15 +42,23 @@
         "../shared/src"
       ]
     },
-    "target": "ES2017"
+    "target": "ES2017",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.mdx",
     ".next/types/**/*.ts",
-    "pages/**/*",
-    "src/**/*"
+    "app/**/*",
+    "src/**/*",
+    "mdx-components.tsx",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

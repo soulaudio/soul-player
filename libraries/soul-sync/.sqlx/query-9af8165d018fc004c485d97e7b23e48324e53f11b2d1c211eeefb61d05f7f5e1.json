@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT id, library_source_id, started_at, completed_at, total_files,\n               processed_files, new_files, updated_files, removed_files,\n               errors, status, error_message\n        FROM scan_progress\n        WHERE library_source_id = ?\n        ORDER BY started_at DESC, id DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "library_source_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "started_at",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "completed_at",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "total_files",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "processed_files",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "new_files",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "updated_files",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "removed_files",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "errors",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "status",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "error_message",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9af8165d018fc004c485d97e7b23e48324e53f11b2d1c211eeefb61d05f7f5e1"
+}

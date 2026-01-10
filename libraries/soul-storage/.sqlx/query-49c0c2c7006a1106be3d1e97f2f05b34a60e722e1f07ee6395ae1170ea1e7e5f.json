@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE scan_progress SET errors = errors + ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "49c0c2c7006a1106be3d1e97f2f05b34a60e722e1f07ee6395ae1170ea1e7e5f"
+}

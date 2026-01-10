@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO user_playback_state (user_id, updated_at)\n         VALUES (?, ?)\n         ON CONFLICT(user_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "8319c7306cdba2b55bd3ff4ad94df7d04546803d7d5b60d63f002078c7b368de"
+}

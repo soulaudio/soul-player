@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        DELETE FROM scan_progress\n        WHERE library_source_id = ?\n          AND id NOT IN (\n            SELECT id FROM scan_progress\n            WHERE library_source_id = ?\n            ORDER BY started_at DESC, id DESC\n            LIMIT ?\n          )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "2a627bbba87e48dec1d82392ef2819352ad1bc1b12c25485854f51c7716d7a87"
+}

@@ -5,7 +5,10 @@
 
 use crate::playback::PlaybackManager;
 use serde::{Deserialize, Serialize};
-use soul_audio::effects::{CompressorSettings, EqBand, LimiterSettings};
+use soul_audio::effects::{
+    CompressorSettings, CrossfeedPreset, CrossfeedSettings, EqBand, GraphicEqPreset,
+    LimiterSettings, StereoSettings,
+};
 use tauri::State;
 
 /// Effect type identifier
@@ -18,6 +21,12 @@ pub enum EffectType {
     Compressor { settings: CompressorData },
     #[serde(rename = "limiter")]
     Limiter { settings: LimiterData },
+    #[serde(rename = "crossfeed")]
+    Crossfeed { settings: CrossfeedData },
+    #[serde(rename = "stereo")]
+    Stereo { settings: StereoData },
+    #[serde(rename = "graphic_eq")]
+    GraphicEq { settings: GraphicEqData },
 }
 
 /// EQ band data for frontend
@@ -109,6 +118,115 @@ impl From<LimiterData> for LimiterSettings {
     }
 }
 
+/// Crossfeed settings for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrossfeedData {
+    pub preset: String,
+    pub level_db: f32,
+    pub cutoff_hz: f32,
+}
+
+impl From<CrossfeedSettings> for CrossfeedData {
+    fn from(settings: CrossfeedSettings) -> Self {
+        let preset = match settings.preset {
+            CrossfeedPreset::Natural => "natural",
+            CrossfeedPreset::Relaxed => "relaxed",
+            CrossfeedPreset::Meier => "meier",
+            CrossfeedPreset::Custom => "custom",
+        };
+        Self {
+            preset: preset.to_string(),
+            level_db: settings.level_db,
+            cutoff_hz: settings.cutoff_hz,
+        }
+    }
+}
+
+impl From<CrossfeedData> for CrossfeedSettings {
+    fn from(data: CrossfeedData) -> Self {
+        let preset = match data.preset.as_str() {
+            "natural" => CrossfeedPreset::Natural,
+            "relaxed" => CrossfeedPreset::Relaxed,
+            "meier" => CrossfeedPreset::Meier,
+            _ => CrossfeedPreset::Custom,
+        };
+        if preset == CrossfeedPreset::Custom {
+            CrossfeedSettings::custom(data.level_db, data.cutoff_hz)
+        } else {
+            CrossfeedSettings::from_preset(preset)
+        }
+    }
+}
+
+/// Stereo enhancer settings for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StereoData {
+    pub width: f32,
+    pub mid_gain_db: f32,
+    pub side_gain_db: f32,
+    pub balance: f32,
+}
+
+impl From<StereoSettings> for StereoData {
+    fn from(settings: StereoSettings) -> Self {
+        Self {
+            width: settings.width,
+            mid_gain_db: settings.mid_gain_db,
+            side_gain_db: settings.side_gain_db,
+            balance: settings.balance,
+        }
+    }
+}
+
+impl From<StereoData> for StereoSettings {
+    fn from(data: StereoData) -> Self {
+        StereoSettings {
+            width: data.width.clamp(0.0, 2.0),
+            mid_gain_db: data.mid_gain_db.clamp(-12.0, 12.0),
+            side_gain_db: data.side_gain_db.clamp(-12.0, 12.0),
+            balance: data.balance.clamp(-1.0, 1.0),
+        }
+    }
+}
+
+/// Graphic EQ settings for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphicEqData {
+    pub preset: String,
+    pub band_count: u8,
+    pub gains: Vec<f32>,
+}
+
+impl GraphicEqData {
+    pub fn from_preset(preset: GraphicEqPreset) -> Self {
+        let gains = preset.gains_10().to_vec();
+        Self {
+            preset: preset.name().to_string(),
+            band_count: 10,
+            gains,
+        }
+    }
+
+    pub fn flat_10() -> Self {
+        Self {
+            preset: "Flat".to_string(),
+            band_count: 10,
+            gains: vec![0.0; 10],
+        }
+    }
+
+    pub fn flat_31() -> Self {
+        Self {
+            preset: "Flat".to_string(),
+            band_count: 31,
+            gains: vec![0.0; 31],
+        }
+    }
+}
+
 /// Effect slot data for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -130,8 +248,11 @@ pub struct EffectSlotState {
 pub async fn get_available_effects() -> Result<Vec<String>, String> {
     Ok(vec![
         "eq".to_string(),
+        "graphic_eq".to_string(),
         "compressor".to_string(),
         "limiter".to_string(),
+        "crossfeed".to_string(),
+        "stereo".to_string(),
     ])
 }
 
@@ -427,6 +548,51 @@ pub async fn get_limiter_presets() -> Result<Vec<(String, LimiterData)>, String>
             "Brickwall".to_string(),
             LimiterSettings::brickwall().into(),
         ),
+    ])
+}
+
+/// Get crossfeed presets
+#[tauri::command]
+pub async fn get_crossfeed_presets() -> Result<Vec<(String, CrossfeedData)>, String> {
+    Ok(vec![
+        (
+            "Natural".to_string(),
+            CrossfeedSettings::from_preset(CrossfeedPreset::Natural).into(),
+        ),
+        (
+            "Relaxed".to_string(),
+            CrossfeedSettings::from_preset(CrossfeedPreset::Relaxed).into(),
+        ),
+        (
+            "Meier".to_string(),
+            CrossfeedSettings::from_preset(CrossfeedPreset::Meier).into(),
+        ),
+    ])
+}
+
+/// Get stereo enhancer presets
+#[tauri::command]
+pub async fn get_stereo_presets() -> Result<Vec<(String, StereoData)>, String> {
+    Ok(vec![
+        ("Normal".to_string(), StereoSettings::default().into()),
+        ("Mono".to_string(), StereoSettings::mono().into()),
+        ("Wide".to_string(), StereoSettings::wide().into()),
+        ("Extra Wide".to_string(), StereoSettings::extra_wide().into()),
+    ])
+}
+
+/// Get graphic EQ presets
+#[tauri::command]
+pub async fn get_graphic_eq_presets() -> Result<Vec<(String, GraphicEqData)>, String> {
+    Ok(vec![
+        ("Flat".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Flat)),
+        ("Bass Boost".to_string(), GraphicEqData::from_preset(GraphicEqPreset::BassBoost)),
+        ("Treble Boost".to_string(), GraphicEqData::from_preset(GraphicEqPreset::TrebleBoost)),
+        ("V-Shape".to_string(), GraphicEqData::from_preset(GraphicEqPreset::VShape)),
+        ("Vocal".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Vocal)),
+        ("Rock".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Rock)),
+        ("Electronic".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Electronic)),
+        ("Acoustic".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Acoustic)),
     ])
 }
 

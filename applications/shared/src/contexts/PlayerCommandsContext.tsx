@@ -52,6 +52,9 @@ export interface PlayerCommandsInterface {
   // Capabilities
   getPlaybackCapabilities: () => Promise<PlaybackCapabilities>;
 
+  // State query (for syncing UI with audio layer)
+  getPlaybackState?: () => Promise<string>;
+
   // Queue management
   getQueue: () => Promise<QueueTrack[]>;
   playQueue: (queue: QueueTrack[], startIndex?: number) => Promise<void>;

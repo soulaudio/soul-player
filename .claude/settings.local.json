@@ -97,7 +97,29 @@
       "WebFetch(domain:www.launchuicomponents.com)",
       "WebFetch(domain:pageui.shipixen.com)",
       "WebFetch(domain:www.landingfolio.com)",
-      "WebFetch(domain:www.radix-ui.com)"
+      "WebFetch(domain:www.radix-ui.com)",
+      "WebFetch(domain:deepwiki.com)",
+      "Bash(./node_modules/.bin/eslint:*)",
+      "Bash(dir:*)",
+      "Bash(DATABASE_URL=\"sqlite:D:/dev/soulaudio/soul-player/libraries/soul-storage/.tmp/dev.db\" cargo sqlx prepare:*)",
+      "Bash(DATABASE_URL=\"sqlite:D:/dev/soulaudio/soul-player/test.db\" cargo sqlx prepare:*)",
+      "Bash(DATABASE_URL=\"sqlite:test_temp.db\" cargo sqlx prepare:*)",
+      "Bash(DATABASE_URL=\"sqlite:/d/dev/soulaudio/soul-player/libraries/soul-storage/test_temp.db\" cargo sqlx:*)",
+      "Bash(DATABASE_URL=\"sqlite:libraries/soul-storage/test_temp.db\" cargo sqlx prepare:*)",
+      "WebFetch(domain:nextra.site)",
+      "Bash(SQLX_OFFLINE=false DATABASE_URL=\"sqlite:D:/dev/soulaudio/soul-player/libraries/soul-storage/.tmp/dev.db\" cargo sqlx:*)",
+      "Bash(DATABASE_URL=\"sqlite:libraries/soul-storage/test_migrations.db\" cargo sqlx prepare:*)",
+      "Bash(DATABASE_URL=\"sqlite:libraries/soul-storage/test_migrations.db\" cargo check:*)",
+      "Bash(DATABASE_URL=\"sqlite:test_migrations.db\" cargo sqlx prepare:*)",
+      "Bash(DATABASE_URL=\"sqlite:D:/dev/soulaudio/soul-player/libraries/soul-storage/test_migrations.db\" cargo sqlx prepare:*)",
+      "Bash(SQLX_OFFLINE=true cargo test:*)",
+      "Bash(yarn lint:*)",
+      "Bash(npx pagefind:*)",
+      "Bash(npx next build --experimental-build-mode compile)",
+      "Bash(tr:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(sqlite3:*)",
+      "Bash(DATABASE_URL=\"sqlite:test_migrations.db\" sqlx migrate run:*)"
     ]
   }
 }

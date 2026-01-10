@@ -199,6 +199,65 @@ Core tables: `users`, `tracks`, `albums`, `artists`, `playlists`, `playlist_trac
 - TailwindCSS (styling)
 - Lucide React (icons)
 
+### Keyboard Shortcuts System
+
+The desktop app supports customizable keyboard shortcuts with these characteristics:
+- **App-level only**: Shortcuts only work when the app window is focused (NOT OS-level global)
+- **Input-aware**: Shortcuts are disabled when typing in input fields, textareas, or contenteditable elements
+- **Customizable**: Users can configure shortcuts in Settings > Keyboard Shortcuts
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Database (soul-storage)                                        │
+│  └── global_shortcuts table (user_id, action, accelerator)      │
+├─────────────────────────────────────────────────────────────────┤
+│  Backend (Tauri)                                                │
+│  └── shortcuts.rs                                               │
+│      └── Tauri commands: get/set/reset_global_shortcuts         │
+│          (storage only, no OS-level registration)               │
+├─────────────────────────────────────────────────────────────────┤
+│  Frontend (React)                                               │
+│  ├── useKeyboardShortcuts.ts (hook)                             │
+│  │   ├── Loads shortcuts from database                          │
+│  │   ├── Listens for keydown events                             │
+│  │   ├── Checks if active element is editable (skips if so)     │
+│  │   └── Executes playback commands via Tauri invoke            │
+│  ├── TauriPlayerCommandsProvider.tsx                            │
+│  │   └── Initializes useKeyboardShortcuts hook                  │
+│  └── ShortcutsSettings.tsx                                      │
+│      └── UI for viewing/editing shortcuts                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Files:**
+- `libraries/soul-storage/src/shortcuts/mod.rs` - Data model & DB queries
+- `applications/desktop/src-tauri/src/shortcuts.rs` - Tauri commands (storage only)
+- `applications/desktop/src/hooks/useKeyboardShortcuts.ts` - Keyboard event handling
+- `applications/desktop/src/components/ShortcutsSettings.tsx` - Settings UI
+
+**Important:**
+- Do NOT use `tauri-plugin-global-shortcut` - we use app-level React shortcuts instead
+- Do NOT add playback shortcuts to MainLayout - they are handled by useKeyboardShortcuts
+- MainLayout only handles navigation shortcuts (Ctrl+K for search, etc.)
+
+**Default Shortcuts (Windows/Linux use Ctrl, macOS uses Cmd):**
+| Action       | Shortcut              |
+|--------------|----------------------|
+| Play/Pause   | Ctrl/Cmd + Space     |
+| Next Track   | Ctrl/Cmd + Right     |
+| Previous     | Ctrl/Cmd + Left      |
+| Volume Up    | Ctrl/Cmd + Up        |
+| Volume Down  | Ctrl/Cmd + Down      |
+| Mute         | Ctrl/Cmd + M         |
+
+**Adding a New Shortcut Action:**
+1. Add variant to `ShortcutAction` enum in `soul-storage/src/shortcuts/mod.rs`
+2. Update `as_str()` and `from_str()` methods
+3. Add to `default_shortcuts()` if it should have a default binding
+4. Add case to `executeAction()` in `useKeyboardShortcuts.ts`
+5. Add translation key in `i18n/*.json` files
+
 ### Before Committing
 ```bash
 cargo fmt --all --check
@@ -218,9 +277,10 @@ DATABASE_URL="sqlite:test.db" cargo check
 5. **Allocations**: Never in audio `process()` methods
 6. **Dependencies**: Libraries can't depend on applications
 7. **UI Strings**: Always use localization, never hardcode text
+8. **Keyboard shortcuts**: Add to app-level shortcuts in useKeyboardShortcuts.ts (NOT global/OS-level)
 
 ---
 
-**Last Updated**: 2026-01-08
+**Last Updated**: 2026-01-10
 **Rust Edition**: 2021
 **Platforms**: Windows, macOS, Linux, ESP32-S3

@@ -1,10 +1,17 @@
-// Audio Settings Page with Pipeline Visualization
+// Audio Settings Page with Pipeline-based Layout
+// Each stage shows description, current config, settings, and arrow to next stage
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  RotateCcw,
+} from 'lucide-react';
+import { ConfirmDialog } from '../ui/Dialog';
 import { PipelineVisualization } from './audio/PipelineVisualization';
+import { PipelineStage } from './audio/PipelineStage';
 import { BackendSelector } from './audio/BackendSelector';
 import { DeviceSelector } from './audio/DeviceSelector';
 import { DspConfig } from './audio/DspConfig';
@@ -35,11 +42,15 @@ export interface AudioSettings {
   device_name: string | null;
   dsp_enabled: boolean;
   dsp_slots: (string | null)[];
-  upsampling_quality: 'disabled' | 'fast' | 'balanced' | 'high' | 'maximum';
-  upsampling_target_rate: 'auto' | number;
+  resampling_quality: 'fast' | 'balanced' | 'high' | 'maximum';
+  resampling_target_rate: 'auto' | number;
+  resampling_backend: 'auto' | 'rubato' | 'r8brain';
   volume_leveling_mode: 'disabled' | 'replaygain_track' | 'replaygain_album' | 'ebu_r128';
   preload_enabled: boolean;
   buffer_size: 'auto' | number;
+  crossfade_enabled: boolean;
+  crossfade_duration_ms: number;
+  crossfade_curve: 'linear' | 'logarithmic' | 's_curve' | 'equal_power';
 }
 
 export function AudioSettingsPage() {
@@ -52,14 +63,21 @@ export function AudioSettingsPage() {
     device_name: null,
     dsp_enabled: false,
     dsp_slots: [null, null, null, null],
-    upsampling_quality: 'high',
-    upsampling_target_rate: 'auto',
+    resampling_quality: 'high',
+    resampling_target_rate: 'auto',
+    resampling_backend: 'auto',
     volume_leveling_mode: 'disabled',
     preload_enabled: true,
     buffer_size: 'auto',
+    crossfade_enabled: false,
+    crossfade_duration_ms: 3000,
+    crossfade_curve: 'equal_power',
   });
+  const [r8brainAvailable, setR8brainAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [dspEffectCount, setDspEffectCount] = useState(0);
+  const [showResetDialog, setShowResetDialog] = useState(false);
 
   useEffect(() => {
     loadAudioSettings();
@@ -96,7 +114,41 @@ export function AudioSettingsPage() {
       });
 
       if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+        try {
+          const parsed = JSON.parse(savedSettings);
+          // Migrate old property names to new ones
+          const migrated: AudioSettings = {
+            backend: parsed.backend ?? 'default',
+            device_name: parsed.device_name ?? null,
+            dsp_enabled: parsed.dsp_enabled ?? false,
+            dsp_slots: parsed.dsp_slots ?? [null, null, null, null],
+            // Handle migration from old upsampling_* to new resampling_*
+            resampling_quality: parsed.resampling_quality ?? parsed.upsampling_quality ?? 'high',
+            resampling_target_rate: parsed.resampling_target_rate ?? parsed.upsampling_target_rate ?? 'auto',
+            resampling_backend: parsed.resampling_backend ?? 'auto',
+            volume_leveling_mode: parsed.volume_leveling_mode ?? 'disabled',
+            preload_enabled: parsed.preload_enabled ?? true,
+            buffer_size: parsed.buffer_size ?? 'auto',
+            crossfade_enabled: parsed.crossfade_enabled ?? false,
+            crossfade_duration_ms: parsed.crossfade_duration_ms ?? 3000,
+            crossfade_curve: parsed.crossfade_curve ?? 'equal_power',
+          };
+          // Filter out 'disabled' which is no longer valid for resampling_quality
+          if (migrated.resampling_quality === 'disabled') {
+            migrated.resampling_quality = 'high';
+          }
+          setSettings(migrated);
+        } catch (e) {
+          console.error('Failed to parse audio settings:', e);
+        }
+      }
+
+      // Check if r8brain backend is available
+      try {
+        const r8brainStatus = await invoke<boolean>('is_r8brain_available');
+        setR8brainAvailable(r8brainStatus);
+      } catch {
+        setR8brainAvailable(false);
       }
     } catch (error) {
       console.error('Failed to load audio settings:', error);
@@ -146,16 +198,62 @@ export function AudioSettingsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading audio settings...</div>
-      </div>
-    );
-  }
+  const handleDspChainChange = () => {
+    // Reload DSP chain count
+    loadDspChainCount();
+  };
+
+  const loadDspChainCount = async () => {
+    try {
+      const chain = await invoke<{ effect: unknown }[]>('get_dsp_chain');
+      setDspEffectCount(chain.filter(slot => slot.effect !== null).length);
+      setSettings(prev => ({ ...prev, dsp_enabled: chain.some(slot => slot.effect !== null) }));
+    } catch {
+      // Silently ignore if DSP not available
+    }
+  };
+
+  useEffect(() => {
+    loadDspChainCount();
+  }, []);
+
+  const resetToDefaults = () => {
+    updateSettings({
+      backend: 'default',
+      device_name: null,
+      dsp_enabled: false,
+      dsp_slots: [null, null, null, null],
+      resampling_quality: 'high',
+      resampling_target_rate: 'auto',
+      resampling_backend: 'auto',
+      volume_leveling_mode: 'disabled',
+      preload_enabled: true,
+      buffer_size: 'auto',
+      crossfade_enabled: false,
+      crossfade_duration_ms: 3000,
+      crossfade_curve: 'equal_power',
+    });
+    setShowResetDialog(false);
+  };
+
+  // Get backend display name
+  const getBackendName = () => {
+    const backend = backends.find(b => b.backend === settings.backend);
+    return backend?.name || settings.backend;
+  };
+
+  // Get volume leveling mode display
+  const getVolumeLevelingDisplay = () => {
+    switch (settings.volume_leveling_mode) {
+      case 'replaygain_track': return 'RG Track';
+      case 'replaygain_album': return 'RG Album';
+      case 'ebu_r128': return 'EBU R128';
+      default: return 'Off';
+    }
+  };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Notification Toast */}
       {notification && (
         <div
@@ -178,127 +276,149 @@ export function AudioSettingsPage() {
       )}
 
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold mb-2">{t('settings.audio')}</h1>
-        <p className="text-muted-foreground">
-          Configure high-quality audio processing pipeline
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">{t('settings.audio')}</h1>
+          <p className="text-muted-foreground">
+            Configure your audio processing pipeline stage by stage
+          </p>
+        </div>
+
+        {/* Reset Button */}
+        <button
+          onClick={() => setShowResetDialog(true)}
+          className="flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+        >
+          <RotateCcw className="w-4 h-4" />
+          Reset All
+        </button>
       </div>
 
-      {/* Pipeline Visualization */}
-      <PipelineVisualization
-        dspEnabled={settings.dsp_enabled}
-        upsamplingEnabled={true}
-        volumeLevelingEnabled={settings.volume_leveling_mode !== 'disabled'}
+      {/* Reset Confirmation Dialog */}
+      <ConfirmDialog
+        open={showResetDialog}
+        onClose={() => setShowResetDialog(false)}
+        onConfirm={resetToDefaults}
+        title="Reset Audio Settings"
+        message="This will reset all audio settings to their default values. Your current configuration will be lost."
+        confirmText="Reset"
+        variant="destructive"
       />
 
-      {/* Audio Driver Section */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold mb-1">Audio Driver</h2>
-          <p className="text-sm text-muted-foreground">
-            Select audio backend and output device
-          </p>
-        </div>
+      {/* Pipeline Overview */}
+      <PipelineVisualization
+        backend={getBackendName()}
+        deviceName={settings.device_name}
+        dspEnabled={settings.dsp_enabled}
+        dspEffectCount={dspEffectCount}
+        upsamplingEnabled={true}
+        upsamplingRate={settings.resampling_quality.charAt(0).toUpperCase() + settings.resampling_quality.slice(1)}
+        volumeLevelingEnabled={settings.volume_leveling_mode !== 'disabled'}
+        volumeLevelingMode={getVolumeLevelingDisplay()}
+        loading={loading}
+      />
 
-        <div className="bg-card border border-border rounded-lg p-6 space-y-6">
-          <BackendSelector
-            backends={backends}
-            currentBackend={settings.backend}
-            onBackendChange={handleBackendChange}
-          />
-
-          <DeviceSelector
-            devices={devices}
-            currentDevice={settings.device_name}
-            onDeviceChange={handleDeviceChange}
-          />
-        </div>
-      </section>
-
-      {/* DSP Effects Section */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold mb-1">DSP Effects</h2>
-          <p className="text-sm text-muted-foreground">
-            Digital signal processing applied before volume control
-          </p>
-        </div>
-
-        <DspConfig />
-      </section>
-
-      {/* Upsampling Section */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold mb-1">Upsampling / Resampling</h2>
-          <p className="text-sm text-muted-foreground">
-            Automatic sample rate matching to prevent playback speed issues
-          </p>
-        </div>
-
-        <UpsamplingSettings
-          quality={settings.upsampling_quality}
-          targetRate={settings.upsampling_target_rate}
-          onQualityChange={(quality) => updateSettings({ upsampling_quality: quality })}
-          onTargetRateChange={(rate) => updateSettings({ upsampling_target_rate: rate })}
-        />
-      </section>
-
-      {/* Volume Leveling Section */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold mb-1">Volume Leveling</h2>
-          <p className="text-sm text-muted-foreground">
-            Automatic loudness normalization (ReplayGain / EBU R128)
-          </p>
-        </div>
-
-        <VolumeLevelingSettings
-          mode={settings.volume_leveling_mode}
-          onModeChange={(mode) => updateSettings({ volume_leveling_mode: mode })}
-        />
-      </section>
-
-      {/* Buffer Settings Section */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold mb-1">Buffer Settings</h2>
-          <p className="text-sm text-muted-foreground">
-            Configure audio buffering and pre-loading behavior
-          </p>
-        </div>
-
-        <BufferSettings
-          bufferSize={settings.buffer_size}
-          preloadEnabled={settings.preload_enabled}
-          onBufferSizeChange={(size) => updateSettings({ buffer_size: size })}
-          onPreloadChange={(enabled) => updateSettings({ preload_enabled: enabled })}
-        />
-      </section>
-
-      {/* Reset to Defaults */}
-      <div className="pt-6 border-t">
-        <button
-          className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
-          onClick={() => {
-            if (confirm('Reset all audio settings to defaults?')) {
-              updateSettings({
-                backend: 'default',
-                device_name: null,
-                dsp_enabled: false,
-                dsp_slots: [null, null, null, null],
-                upsampling_quality: 'high',
-                upsampling_target_rate: 'auto',
-                volume_leveling_mode: 'disabled',
-                preload_enabled: true,
-                buffer_size: 'auto',
-              });
-            }
-          }}
+      {/* Pipeline Stages - Order matches overview: Resample → DSP → Leveling → Buffer → Output */}
+      <div>
+        {/* Stage 1: Resampling */}
+        <PipelineStage
+          id="audio-stage-1"
+          title="Resampling"
+          description="Automatic sample rate conversion to match your output device"
+          isActive={true}
+          currentConfig={settings.resampling_quality.charAt(0).toUpperCase() + settings.resampling_quality.slice(1)}
+          statusText={settings.resampling_backend === 'auto' ? 'Auto' : settings.resampling_backend}
         >
-          Reset to Defaults
-        </button>
+          <UpsamplingSettings
+            quality={settings.resampling_quality}
+            targetRate={settings.resampling_target_rate}
+            backend={settings.resampling_backend}
+            r8brainAvailable={r8brainAvailable}
+            onQualityChange={(quality) => updateSettings({ resampling_quality: quality })}
+            onTargetRateChange={(rate) => updateSettings({ resampling_target_rate: rate })}
+            onBackendChange={(backend) => updateSettings({ resampling_backend: backend })}
+          />
+        </PipelineStage>
+
+        {/* Stage 2: DSP Effects */}
+        <PipelineStage
+          id="audio-stage-2"
+          title="DSP Effects"
+          description="Digital signal processing - EQ, compression, and effects applied to audio"
+          isActive={settings.dsp_enabled}
+          isOptional={true}
+          currentConfig={dspEffectCount > 0 ? `${dspEffectCount} active` : 'None'}
+          statusText={settings.dsp_enabled ? 'Enabled' : 'Disabled'}
+        >
+          <DspConfig onChainChange={handleDspChainChange} />
+        </PipelineStage>
+
+        {/* Stage 3: Volume Leveling */}
+        <PipelineStage
+          id="audio-stage-3"
+          title="Volume Leveling"
+          description="Automatic loudness normalization using ReplayGain or EBU R128"
+          isActive={settings.volume_leveling_mode !== 'disabled'}
+          isOptional={true}
+          currentConfig={getVolumeLevelingDisplay()}
+          statusText={settings.volume_leveling_mode !== 'disabled' ? 'Enabled' : 'Disabled'}
+        >
+          <VolumeLevelingSettings
+            mode={settings.volume_leveling_mode}
+            onModeChange={(mode) => updateSettings({ volume_leveling_mode: mode })}
+          />
+        </PipelineStage>
+
+        {/* Stage 4: Buffer Settings */}
+        <PipelineStage
+          id="audio-stage-4"
+          title="Buffer & Performance"
+          description="Configure audio buffering and pre-loading for optimal playback"
+          isActive={true}
+          currentConfig={settings.buffer_size === 'auto' ? 'Auto' : `${settings.buffer_size} samples`}
+          statusText={settings.preload_enabled ? 'Preload On' : 'Streaming'}
+        >
+          <BufferSettings
+            bufferSize={settings.buffer_size}
+            preloadEnabled={settings.preload_enabled}
+            crossfade={{
+              enabled: settings.crossfade_enabled,
+              durationMs: settings.crossfade_duration_ms,
+              curve: settings.crossfade_curve,
+            }}
+            onBufferSizeChange={(size) => updateSettings({ buffer_size: size })}
+            onPreloadChange={(enabled) => updateSettings({ preload_enabled: enabled })}
+            onCrossfadeChange={(crossfade) => updateSettings({
+              crossfade_enabled: crossfade.enabled,
+              crossfade_duration_ms: crossfade.durationMs,
+              crossfade_curve: crossfade.curve,
+            })}
+          />
+        </PipelineStage>
+
+        {/* Stage 5: Audio Output (Backend & Device) */}
+        <PipelineStage
+          id="audio-stage-5"
+          title="Audio Output"
+          description="Select your audio driver backend and output device for playback"
+          isActive={true}
+          isLast={true}
+        >
+          <div className="space-y-6">
+            <BackendSelector
+              backends={backends}
+              currentBackend={settings.backend}
+              onBackendChange={handleBackendChange}
+              loading={loading}
+            />
+            <DeviceSelector
+              devices={devices}
+              currentDevice={settings.device_name}
+              onDeviceChange={handleDeviceChange}
+              loading={loading}
+            />
+          </div>
+        </PipelineStage>
       </div>
     </div>
   );

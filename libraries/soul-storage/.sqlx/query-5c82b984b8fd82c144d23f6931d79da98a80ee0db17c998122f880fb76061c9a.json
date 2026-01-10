@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO loudness_analysis_queue (track_id, priority, status, created_at)\n        VALUES (?, ?, 'pending', ?)\n        ON CONFLICT(track_id) DO UPDATE SET\n            priority = MAX(priority, excluded.priority),\n            status = CASE WHEN status = 'failed' THEN 'pending' ELSE status END\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "5c82b984b8fd82c144d23f6931d79da98a80ee0db17c998122f880fb76061c9a"
+}

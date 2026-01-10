@@ -3,6 +3,7 @@
 //! Coordinates queue, history, volume, shuffle, and audio processing
 
 use crate::{
+    crossfade::{CrossfadeEngine, CrossfadeSettings, CrossfadeState, FadeCurve},
     error::{PlaybackError, Result},
     history::History,
     queue::Queue,
@@ -14,6 +15,9 @@ use crate::{
 
 #[cfg(feature = "effects")]
 use soul_audio::effects::EffectChain;
+
+#[cfg(feature = "volume-leveling")]
+use soul_loudness::{LoudnessNormalizer, NormalizationMode};
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -41,21 +45,36 @@ pub struct PlaybackManager {
     volume: Volume,
     shuffle: ShuffleMode,
     repeat: RepeatMode,
-    #[allow(dead_code)]
     gapless_enabled: bool,
 
     // Audio processing
     #[cfg(feature = "effects")]
     effect_chain: EffectChain,
+    #[cfg(feature = "volume-leveling")]
+    loudness_normalizer: LoudnessNormalizer,
     audio_source: Option<Box<dyn AudioSource>>,
-    next_source: Option<Box<dyn AudioSource>>, // For gapless
+    next_source: Option<Box<dyn AudioSource>>, // For gapless/crossfade
+    next_track: Option<QueueTrack>,            // Metadata for next track
+
+    // Crossfade engine
+    crossfade: CrossfadeEngine,
+
+    // Pre-allocated buffers for crossfade (to avoid allocation in audio callback)
+    outgoing_buffer: Vec<f32>,
+    incoming_buffer: Vec<f32>,
 
     // Sample rate (for effects processing)
     sample_rate: u32,
 
     // Output channels (1 = mono, 2 = stereo)
     output_channels: u16,
+
+    // Track if we're in a manual skip (for crossfade on_skip setting)
+    is_manual_skip: bool,
 }
+
+/// Default buffer size for crossfade (10 seconds at 48kHz stereo)
+const CROSSFADE_BUFFER_SIZE: usize = 10 * 48000 * 2;
 
 impl PlaybackManager {
     /// Create new playback manager
@@ -71,10 +90,17 @@ impl PlaybackManager {
             gapless_enabled: config.gapless,
             #[cfg(feature = "effects")]
             effect_chain: EffectChain::new(),
+            #[cfg(feature = "volume-leveling")]
+            loudness_normalizer: LoudnessNormalizer::new(44100, 2),
             audio_source: None,
             next_source: None,
+            next_track: None,
+            crossfade: CrossfadeEngine::with_settings(config.crossfade),
+            outgoing_buffer: vec![0.0; CROSSFADE_BUFFER_SIZE],
+            incoming_buffer: vec![0.0; CROSSFADE_BUFFER_SIZE],
             sample_rate: 44100,    // Default, will be updated by platform
             output_channels: 2,     // Default stereo, will be updated by platform
+            is_manual_skip: false,
         }
     }
 
@@ -114,11 +140,16 @@ impl PlaybackManager {
         self.current_track = None;
         self.audio_source = None;
         self.next_source = None;
+        self.next_track = None;
+        self.crossfade.reset();
+        self.is_manual_skip = false;
     }
 
     /// Skip to next track
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<()> {
+        self.is_manual_skip = true;
+
         // Save current track to history (if any)
         if let Some(track) = self.current_track.take() {
             self.history.push(track);
@@ -524,6 +555,10 @@ impl PlaybackManager {
                 return Ok(0);
             }
 
+            // Apply loudness normalization to stereo buffer (before channel conversion)
+            #[cfg(feature = "volume-leveling")]
+            self.loudness_normalizer.process(&mut stereo_buffer[..samples_read]);
+
             // Convert stereo to mono by averaging L and R channels
             let frames = samples_read / 2;
             for i in 0..frames {
@@ -541,14 +576,18 @@ impl PlaybackManager {
 
             Ok(frames)
         } else if self.output_channels == 2 {
-            // Stereo output - direct passthrough
-            let samples_read = source.read_samples(output)?;
+            // Stereo output - with crossfade support
+            let samples_read = self.process_stereo_with_crossfade(output)?;
 
             if samples_read == 0 {
-                // Track finished
+                // Track finished (no crossfade or crossfade completed)
                 self.handle_track_finished()?;
                 return Ok(0);
             }
+
+            // Apply loudness normalization
+            #[cfg(feature = "volume-leveling")]
+            self.loudness_normalizer.process(&mut output[..samples_read]);
 
             // Apply effects (if feature enabled)
             #[cfg(feature = "effects")]
@@ -574,6 +613,10 @@ impl PlaybackManager {
             }
 
             let frames_read = samples_read / 2;
+
+            // Apply loudness normalization to stereo buffer
+            #[cfg(feature = "volume-leveling")]
+            self.loudness_normalizer.process(&mut stereo_buffer[..samples_read]);
 
             // Apply effects to stereo buffer (if feature enabled)
             #[cfg(feature = "effects")]
@@ -602,8 +645,137 @@ impl PlaybackManager {
         }
     }
 
+    /// Process stereo audio with crossfade support
+    ///
+    /// Handles:
+    /// - Normal playback (no crossfade)
+    /// - Crossfade initiation (when approaching end of track)
+    /// - Crossfade mixing (when active)
+    /// - Gapless transition (0ms crossfade)
+    fn process_stereo_with_crossfade(&mut self, output: &mut [f32]) -> Result<usize> {
+        // Check if crossfade is currently active
+        if self.crossfade.is_active() {
+            return self.process_active_crossfade(output);
+        }
+
+        // Normal playback - check if we should start crossfade
+        let source = self.audio_source.as_mut().ok_or(PlaybackError::NoTrackLoaded)?;
+
+        // Check if we're approaching the crossfade window
+        let position = source.position();
+        let duration = source.duration();
+        let crossfade_duration_ms = self.crossfade.settings().duration_ms;
+        let crossfade_duration = Duration::from_millis(crossfade_duration_ms as u64);
+        let remaining = duration.saturating_sub(position);
+
+        // Should we start crossfade?
+        let should_crossfade = self.crossfade.settings().enabled
+            && self.next_source.is_some()
+            && remaining <= crossfade_duration;
+
+        if should_crossfade {
+            // Start crossfade
+            let started = self.crossfade.start(self.is_manual_skip);
+            if started {
+                return self.process_active_crossfade(output);
+            }
+        }
+
+        // Check for gapless transition (crossfade disabled but gapless enabled)
+        let should_gapless = !self.crossfade.settings().enabled
+            && self.gapless_enabled
+            && self.next_source.is_some();
+
+        // Normal playback
+        let samples_read = source.read_samples(output)?;
+
+        if samples_read == 0 {
+            // Track finished
+            if should_gapless {
+                // Seamless transition to next track
+                self.transition_to_next_track()?;
+                // Try to read from new source
+                if let Some(ref mut new_source) = self.audio_source {
+                    return new_source.read_samples(output);
+                }
+            }
+            return Ok(0);
+        }
+
+        Ok(samples_read)
+    }
+
+    /// Process audio during active crossfade
+    fn process_active_crossfade(&mut self, output: &mut [f32]) -> Result<usize> {
+        let buffer_len = output.len();
+
+        // Read from outgoing (current) track
+        let outgoing_samples = if let Some(ref mut source) = self.audio_source {
+            let len = buffer_len.min(self.outgoing_buffer.len());
+            source.read_samples(&mut self.outgoing_buffer[..len]).unwrap_or(0)
+        } else {
+            // Fill with silence if no outgoing source
+            self.outgoing_buffer[..buffer_len].fill(0.0);
+            buffer_len
+        };
+
+        // Read from incoming (next) track
+        let incoming_samples = if let Some(ref mut source) = self.next_source {
+            let len = buffer_len.min(self.incoming_buffer.len());
+            source.read_samples(&mut self.incoming_buffer[..len]).unwrap_or(0)
+        } else {
+            // Fill with silence if no incoming source
+            self.incoming_buffer[..buffer_len].fill(0.0);
+            buffer_len
+        };
+
+        // Use the minimum of available samples
+        let samples_to_process = outgoing_samples.min(incoming_samples).min(buffer_len);
+
+        if samples_to_process == 0 {
+            // Both sources exhausted
+            self.crossfade.reset();
+            return Ok(0);
+        }
+
+        // Process crossfade mixing
+        let (processed, completed) = self.crossfade.process(
+            &self.outgoing_buffer[..samples_to_process],
+            &self.incoming_buffer[..samples_to_process],
+            &mut output[..samples_to_process],
+        );
+
+        if completed {
+            // Crossfade completed - transition to next track
+            self.transition_to_next_track()?;
+            self.crossfade.reset();
+        }
+
+        Ok(processed)
+    }
+
+    /// Transition from current track to next track
+    fn transition_to_next_track(&mut self) -> Result<()> {
+        // Save current track to history
+        if let Some(track) = self.current_track.take() {
+            self.history.push(track);
+        }
+
+        // Move next source to current
+        self.audio_source = self.next_source.take();
+        self.current_track = self.next_track.take();
+        self.is_manual_skip = false;
+
+        // Reset loudness normalizer for new track
+        #[cfg(feature = "volume-leveling")]
+        self.loudness_normalizer.reset();
+
+        Ok(())
+    }
+
     /// Handle track finished
     fn handle_track_finished(&mut self) -> Result<()> {
+        self.is_manual_skip = false;
         // Auto-advance to next track
         self.next()
     }
@@ -611,6 +783,7 @@ impl PlaybackManager {
     /// Set sample rate (called by platform)
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         self.sample_rate = sample_rate;
+        self.crossfade.set_sample_rate(sample_rate);
     }
 
     /// Get sample rate
@@ -629,10 +802,232 @@ impl PlaybackManager {
         &mut self.effect_chain
     }
 
+    // ===== Volume Leveling =====
+
+    /// Set volume leveling mode (ReplayGain track/album, EBU R128, etc.)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_volume_leveling_mode(&mut self, mode: NormalizationMode) {
+        self.loudness_normalizer.set_mode(mode);
+    }
+
+    /// Get current volume leveling mode
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_volume_leveling_mode(&self) -> NormalizationMode {
+        self.loudness_normalizer.mode()
+    }
+
+    /// Set track gain for current track (called when loading track)
+    ///
+    /// # Arguments
+    /// * `gain_db` - ReplayGain value in dB
+    /// * `peak_dbfs` - Peak value in dBFS (for clipping prevention)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_track_gain(&mut self, gain_db: f64, peak_dbfs: f64) {
+        self.loudness_normalizer.set_track_gain(gain_db, peak_dbfs);
+    }
+
+    /// Set album gain for current track (called when loading track)
+    ///
+    /// # Arguments
+    /// * `gain_db` - Album ReplayGain value in dB
+    /// * `peak_dbfs` - Album peak value in dBFS
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_album_gain(&mut self, gain_db: f64, peak_dbfs: f64) {
+        self.loudness_normalizer.set_album_gain(gain_db, peak_dbfs);
+    }
+
+    /// Clear gain values (for new track without loudness data)
+    #[cfg(feature = "volume-leveling")]
+    pub fn clear_loudness_gains(&mut self) {
+        self.loudness_normalizer.clear_gains();
+    }
+
+    /// Set pre-amp gain for volume leveling (-12 to +12 dB)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_loudness_preamp(&mut self, preamp_db: f64) {
+        self.loudness_normalizer.set_preamp_db(preamp_db);
+    }
+
+    /// Get pre-amp gain
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_loudness_preamp(&self) -> f64 {
+        self.loudness_normalizer.preamp_db()
+    }
+
+    /// Set whether clipping prevention is enabled
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_prevent_clipping(&mut self, prevent: bool) {
+        self.loudness_normalizer.set_prevent_clipping(prevent);
+    }
+
+    /// Get the effective gain being applied in dB
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_effective_gain_db(&mut self) -> f64 {
+        self.loudness_normalizer.effective_gain_db()
+    }
+
+    /// Reset loudness normalizer state (e.g., between tracks)
+    #[cfg(feature = "volume-leveling")]
+    pub fn reset_loudness_normalizer(&mut self) {
+        self.loudness_normalizer.reset();
+    }
+
     /// Set audio source (called by platform after loading track)
     pub fn set_audio_source(&mut self, source: Box<dyn AudioSource>) {
         self.audio_source = Some(source);
         self.state = PlaybackState::Playing;
+        self.is_manual_skip = false;
+    }
+
+    // ===== Crossfade Settings =====
+
+    /// Set crossfade settings
+    pub fn set_crossfade_settings(&mut self, settings: CrossfadeSettings) {
+        self.crossfade.set_settings(settings);
+    }
+
+    /// Get current crossfade settings
+    pub fn get_crossfade_settings(&self) -> &CrossfadeSettings {
+        self.crossfade.settings()
+    }
+
+    /// Enable or disable crossfade
+    pub fn set_crossfade_enabled(&mut self, enabled: bool) {
+        let mut settings = self.crossfade.settings().clone();
+        settings.enabled = enabled;
+        self.crossfade.set_settings(settings);
+    }
+
+    /// Check if crossfade is enabled
+    pub fn is_crossfade_enabled(&self) -> bool {
+        self.crossfade.settings().enabled
+    }
+
+    /// Set crossfade duration in milliseconds (0-10000)
+    pub fn set_crossfade_duration(&mut self, duration_ms: u32) {
+        let mut settings = self.crossfade.settings().clone();
+        settings.duration_ms = duration_ms.min(10000);
+        self.crossfade.set_settings(settings);
+    }
+
+    /// Get crossfade duration in milliseconds
+    pub fn get_crossfade_duration(&self) -> u32 {
+        self.crossfade.settings().duration_ms
+    }
+
+    /// Set crossfade curve type
+    pub fn set_crossfade_curve(&mut self, curve: FadeCurve) {
+        let mut settings = self.crossfade.settings().clone();
+        settings.curve = curve;
+        self.crossfade.set_settings(settings);
+    }
+
+    /// Get crossfade curve type
+    pub fn get_crossfade_curve(&self) -> FadeCurve {
+        self.crossfade.settings().curve
+    }
+
+    /// Set whether crossfade applies on manual skip
+    pub fn set_crossfade_on_skip(&mut self, on_skip: bool) {
+        let mut settings = self.crossfade.settings().clone();
+        settings.on_skip = on_skip;
+        self.crossfade.set_settings(settings);
+    }
+
+    /// Check crossfade state
+    pub fn get_crossfade_state(&self) -> CrossfadeState {
+        self.crossfade.state()
+    }
+
+    /// Check if crossfade is currently active
+    pub fn is_crossfading(&self) -> bool {
+        self.crossfade.is_active()
+    }
+
+    /// Get crossfade progress (0.0 to 1.0)
+    pub fn get_crossfade_progress(&self) -> f32 {
+        self.crossfade.progress()
+    }
+
+    // ===== Pre-decode / Gapless Support =====
+
+    /// Set the next audio source for gapless/crossfade playback
+    ///
+    /// Called by platform when pre-decoding the next track
+    pub fn set_next_source(&mut self, source: Box<dyn AudioSource>, track: QueueTrack) {
+        self.next_source = Some(source);
+        self.next_track = Some(track);
+    }
+
+    /// Check if next source is ready
+    pub fn has_next_source(&self) -> bool {
+        self.next_source.is_some()
+    }
+
+    /// Get metadata for the next pre-decoded track
+    pub fn get_next_track(&self) -> Option<&QueueTrack> {
+        self.next_track.as_ref()
+    }
+
+    /// Get time remaining until crossfade should start (if applicable)
+    ///
+    /// Returns None if crossfade is disabled or position can't be determined.
+    /// Returns Some(duration) with the time before crossfade should trigger.
+    pub fn time_until_crossfade(&self) -> Option<Duration> {
+        if !self.crossfade.settings().enabled {
+            return None;
+        }
+
+        let source = self.audio_source.as_ref()?;
+        let position = source.position();
+        let duration = source.duration();
+        let crossfade_duration = Duration::from_millis(self.crossfade.settings().duration_ms as u64);
+
+        // Crossfade starts when: remaining_time <= crossfade_duration
+        let remaining = duration.saturating_sub(position);
+
+        if remaining <= crossfade_duration {
+            Some(Duration::ZERO)
+        } else {
+            Some(remaining - crossfade_duration)
+        }
+    }
+
+    /// Check if we should start preparing the next track for crossfade
+    ///
+    /// Returns true when we're approaching the crossfade window
+    /// and should pre-decode the next track.
+    pub fn should_prepare_next_track(&self) -> bool {
+        if !self.crossfade.settings().enabled && !self.gapless_enabled {
+            return false;
+        }
+
+        // If we already have the next source ready, no need to prepare
+        if self.next_source.is_some() {
+            return false;
+        }
+
+        // Check if queue has next track
+        if self.queue.is_empty() && self.repeat != RepeatMode::All {
+            return false;
+        }
+
+        // Check time remaining
+        if let Some(time_until) = self.time_until_crossfade() {
+            // Start preparing 5 seconds before crossfade
+            // or immediately if crossfade is disabled (gapless mode)
+            time_until <= Duration::from_secs(5)
+        } else if self.gapless_enabled {
+            // For gapless without crossfade, prepare when within 2 seconds
+            if let Some(ref source) = self.audio_source {
+                let remaining = source.duration().saturating_sub(source.position());
+                remaining <= Duration::from_secs(2)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }
 

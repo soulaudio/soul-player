@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { usePlayerStore } from '../stores/player';
 import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext';
 import { ArtworkImage } from './ArtworkImage';
@@ -11,20 +12,16 @@ interface QueueSidebarProps {
 
 export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   const [queue, setQueue] = useState<QueueTrack[]>([]);
-  const { currentTrack } = usePlayerStore();
+  const { currentTrack, isPlaying } = usePlayerStore();
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
 
   useEffect(() => {
     if (isOpen) {
-      // Load queue when opened
       loadQueue();
-
-      // Listen for queue updates
       const unsubscribe = events.onQueueUpdate(() => {
         loadQueue();
       });
-
       return unsubscribe;
     }
   }, [isOpen, commands, events]);
@@ -32,10 +29,6 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   const loadQueue = async () => {
     try {
       const queueData = await commands.getQueue();
-      console.log('[QueueSidebar] Loaded queue:', queueData);
-      if (queueData.length > 0) {
-        console.log('[QueueSidebar] First track coverArtPath:', queueData[0].coverArtPath);
-      }
       setQueue(queueData);
     } catch (error) {
       console.error('[QueueSidebar] Failed to load queue:', error);
@@ -82,108 +75,124 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
             <p className="text-sm mt-2">Play a track to start building your queue</p>
           </div>
         ) : (
-          <>
-            {/* Now Playing Section */}
-            {currentTrack && (
-              <div className="border-b border-border">
-                <div className="px-4 py-2 bg-muted/30">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Now Playing
-                  </h3>
-                </div>
-                <div className="px-4 py-3 bg-primary/5">
-                  <div className="flex items-start gap-3">
-                    {/* Album art with playing indicator */}
-                    <div className="flex-shrink-0 relative">
-                      <div className="w-12 h-12 bg-muted rounded overflow-hidden">
-                        <ArtworkImage
-                          trackId={currentTrack.id}
-                          coverArtPath={currentTrack.coverArtPath}
-                          alt={currentTrack.album || 'Album art'}
-                          className="w-full h-full object-cover"
-                          fallbackClassName="w-full h-full flex items-center justify-center"
-                        />
-                      </div>
-                      {/* Playing indicator overlay */}
-                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-primary rounded-sm animate-pulse"></div>
-                    </div>
-
-                    {/* Track info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-primary truncate">
-                        {currentTrack.title}
-                      </div>
-                      <div className="text-sm text-muted-foreground truncate">
-                        {currentTrack.artist}
-                        {currentTrack.album && ` • ${currentTrack.album}`}
-                      </div>
-                    </div>
-
-                    {/* Duration */}
-                    <div className="text-xs text-muted-foreground font-mono flex-shrink-0 pt-1">
-                      {formatDuration(currentTrack.duration)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Up Next Section */}
-            {queue.length > 0 && (
-              <>
-                <div className="px-4 py-2 bg-muted/30">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Up Next • {queue.length}
-                  </h3>
-                </div>
-                <div className="py-1">
-                  {queue.map((track, index) => (
-                    <div
-                      key={`${track.trackId}-${index}`}
-                      className="px-4 py-3 hover:bg-accent transition-colors cursor-pointer"
-                      onClick={() => handleQueueItemClick(index)}
+          <LayoutGroup>
+            <div className="py-2">
+              {/* Now Playing Section */}
+              <AnimatePresence mode="popLayout">
+                {currentTrack && (
+                  <motion.div
+                    key={`now-playing-${currentTrack.id}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <h3 className="px-4 pt-2 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Now Playing
+                    </h3>
+                    <motion.div
+                      layoutId={`track-${currentTrack.id}`}
+                      className="px-4 py-2"
+                      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                     >
-                      <div className="flex items-start gap-3">
-                        {/* Album art thumbnail */}
+                      <div className="flex items-center gap-3">
                         <div className="flex-shrink-0">
-                          <div className="w-10 h-10 bg-muted rounded overflow-hidden">
+                          <motion.div
+                            layout
+                            className="w-12 h-12 bg-muted rounded overflow-hidden"
+                          >
                             <ArtworkImage
-                              trackId={track.trackId}
-                              coverArtPath={track.coverArtPath}
-                              alt={track.album || 'Album art'}
+                              trackId={currentTrack.id}
+                              coverArtPath={currentTrack.coverArtPath}
+                              alt={currentTrack.album || 'Album art'}
                               className="w-full h-full object-cover"
                               fallbackClassName="w-full h-full flex items-center justify-center"
                             />
-                          </div>
+                          </motion.div>
                         </div>
-
-                        {/* Track info */}
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">{track.title}</div>
+                          <div className="flex items-center gap-2">
+                            {/* Now playing indicator - animated equalizer bars (only animate when playing) */}
+                            <div className="flex items-end gap-[2px] h-3">
+                              <span className={`w-[3px] bg-primary rounded-full origin-bottom ${isPlaying ? 'h-full animate-[equalize_0.8s_ease-in-out_infinite]' : 'h-1/2'}`} />
+                              <span className={`w-[3px] bg-primary rounded-full origin-bottom ${isPlaying ? 'h-full animate-[equalize_0.8s_ease-in-out_infinite_0.2s]' : 'h-3/4'}`} />
+                              <span className={`w-[3px] bg-primary rounded-full origin-bottom ${isPlaying ? 'h-full animate-[equalize_0.8s_ease-in-out_infinite_0.4s]' : 'h-1/3'}`} />
+                            </div>
+                            <div className="font-medium text-primary truncate">
+                              {currentTrack.title}
+                            </div>
+                          </div>
                           <div className="text-sm text-muted-foreground truncate">
-                            {track.artist}
-                            {track.album && ` • ${track.album}`}
+                            {currentTrack.artist}
                           </div>
                         </div>
-
-                        {/* Duration */}
-                        <div className="text-xs text-muted-foreground font-mono flex-shrink-0 pt-1">
-                          {formatDuration(track.durationSeconds)}
+                        <div className="text-xs text-muted-foreground font-mono flex-shrink-0">
+                          {formatDuration(currentTrack.duration)}
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Up Next Section */}
+              {queue.length > 0 && (
+                <>
+                  <h3 className="px-4 pt-4 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Up Next
+                  </h3>
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    {queue.map((track, index) => (
+                      <motion.div
+                        key={track.trackId}
+                        layoutId={`track-${track.trackId}`}
+                        layout
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                        className="px-4 py-2 mx-2 hover:bg-accent/50 transition-colors cursor-pointer rounded-md"
+                        onClick={() => handleQueueItemClick(index)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0">
+                            <motion.div
+                              layout
+                              className="w-10 h-10 bg-muted rounded overflow-hidden"
+                            >
+                              <ArtworkImage
+                                trackId={track.trackId}
+                                coverArtPath={track.coverArtPath}
+                                alt={track.album || 'Album art'}
+                                className="w-full h-full object-cover"
+                                fallbackClassName="w-full h-full flex items-center justify-center"
+                              />
+                            </motion.div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate text-sm">{track.title}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {track.artist}
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground font-mono flex-shrink-0">
+                            {formatDuration(track.durationSeconds)}
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </>
+              )}
+            </div>
+          </LayoutGroup>
         )}
       </div>
 
       {/* Footer stats */}
       {(currentTrack || queue.length > 0) && (
         <div className="p-4 border-t border-border text-sm text-muted-foreground">
-          {currentTrack ? queue.length + 1 : queue.length} {currentTrack || queue.length !== 1 ? 'tracks' : 'track'} total
+          {(currentTrack ? 1 : 0) + queue.length} {(currentTrack ? 1 : 0) + queue.length !== 1 ? 'tracks' : 'track'} total
         </div>
       )}
     </div>

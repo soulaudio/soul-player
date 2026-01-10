@@ -1,6 +1,11 @@
 mod audio;
+mod device;
+mod external_file_settings;
 mod ids;
 mod legacy;
+mod library_source;
+mod managed_library;
+mod playback_state;
 mod user;
 
 // Multi-source types (primary types)
@@ -12,8 +17,20 @@ mod multisource_track;
 mod source;
 
 pub use audio::{AudioBuffer, AudioFormat, SampleRate};
+pub use device::{Device, DeviceType, RegisterDevice};
+pub use external_file_settings::{
+    ExternalFileAction, ExternalFileSettings, ImportDestination, UpdateExternalFileSettings,
+};
 pub use ids::{PlaylistId, TrackId, UserId};
+pub use library_source::{
+    CreateLibrarySource, LibrarySource, ScanProgress, ScanProgressStatus, ScanStatus,
+    UpdateLibrarySource,
+};
+pub use managed_library::{
+    ImportAction, ManagedLibrarySettings, PathTemplatePreset, UpdateManagedLibrarySettings,
+};
 pub use legacy::{Permission, PlaylistShare, TrackMetadata};
+pub use playback_state::{PlaybackState, RepeatMode, TransferPlayback, UpdatePlaybackState};
 pub use user::User;
 
 // Multi-source exports (these are the primary types)

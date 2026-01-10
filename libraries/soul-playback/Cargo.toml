@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 soul-audio = { workspace = true, optional = true }
+soul-loudness = { workspace = true, optional = true }
 
 thiserror = { workspace = true }
 serde = { workspace = true }
@@ -27,8 +28,9 @@ uuid = { version = "1.19", default-features = false, features = ["js"], optional
 console_error_panic_hook = { version = "0.1", optional = true }
 
 [features]
-default = ["effects"]
+default = ["effects", "volume-leveling"]
 effects = ["soul-audio"]
+volume-leveling = ["soul-loudness"]
 wasm = ["wasm-bindgen", "serde-wasm-bindgen", "js-sys", "web-sys", "getrandom", "uuid", "console_error_panic_hook"]
 
 [dev-dependencies]

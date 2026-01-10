@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Speaker, Check } from 'lucide-react';
 import {
   DropdownMenu,
@@ -11,6 +11,7 @@ import {
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
+import { usePlayerStore } from '../../stores/player';
 
 interface AudioDevice {
   name: string;
@@ -65,6 +66,7 @@ const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] 
  * - Grouped by backend (Default, ASIO, JACK)
  * - Spotify-style design
  * - Shows mock devices with "(Desktop only)" in browser demo
+ * - Auto-updates when device sample rate changes
  */
 export function DeviceSelector() {
   const commands = usePlayerCommands();
@@ -72,34 +74,28 @@ export function DeviceSelector() {
   const [backends, setBackends] = useState<AudioBackend[]>([]);
   const [devices, setDevices] = useState<Map<string, AudioDevice[]>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  // Use ref to track isOpen state for event handler (avoids stale closure)
+  const isOpenRef = useRef(false);
+  isOpenRef.current = isOpen;
 
   // Check if we're in browser demo mode (no real device commands)
   const isBrowserDemo = !commands?.getCurrentAudioDevice;
 
-  // Load current device on mount
-  useEffect(() => {
-    if (isBrowserDemo) {
-      // Set default mock device
-      setCurrentDevice(MOCK_DEVICES[0].devices[0]);
-    } else {
-      loadCurrentDevice();
-    }
-  }, [isBrowserDemo]);
-
-  const loadCurrentDevice = async () => {
+  const loadCurrentDevice = useCallback(async () => {
     try {
       if (!commands?.getCurrentAudioDevice) return;
       const device = await commands.getCurrentAudioDevice();
+      console.log('[DeviceSelector] Loaded current device:', device?.name, 'at', device?.sampleRate, 'Hz');
       setCurrentDevice(device);
     } catch (error) {
       console.error('[DeviceSelector] Failed to load current device:', error);
     }
-  };
+  }, [commands]);
 
-  // Load available backends and devices when dropdown opens
-  const loadDevices = async () => {
+  // Memoize loadDevices to avoid recreating it
+  const loadDevicesCallback = useCallback(async () => {
     if (isBrowserDemo) {
-      // Use mock devices for browser demo
       const deviceMap = new Map<string, AudioDevice[]>();
       MOCK_DEVICES.forEach(mock => {
         deviceMap.set(mock.backend, mock.devices);
@@ -112,12 +108,10 @@ export function DeviceSelector() {
 
     setIsLoading(true);
     try {
-      // Load backends
       if (commands?.getAudioBackends) {
         const backendList = await commands.getAudioBackends();
         setBackends(backendList);
 
-        // Load devices for each available backend
         const deviceMap = new Map<string, AudioDevice[]>();
 
         for (const backend of backendList) {
@@ -138,7 +132,57 @@ export function DeviceSelector() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isBrowserDemo, commands, isLoading]);
+
+  // Load current device on mount and listen for sample rate changes
+  useEffect(() => {
+    if (isBrowserDemo) {
+      // Set default mock device
+      setCurrentDevice(MOCK_DEVICES[0].devices[0]);
+      return;
+    }
+
+    loadCurrentDevice();
+
+    // Listen for sample rate changes from the backend
+    // This fires when the device sample rate changes externally
+    // (e.g., via ASIO control panel or Windows sound settings)
+    let unlistenFn: (() => void) | undefined;
+    let mounted = true;
+
+    const setupListener = async () => {
+      try {
+        // Dynamic import to avoid issues in browser demo mode
+        const { listen } = await import('@tauri-apps/api/event');
+
+        const unlisten = await listen<{ from: number; to: number }>('playback:sample-rate-changed', (event) => {
+          if (!mounted) return;
+          console.log('[DeviceSelector] Sample rate changed:', event.payload.from, 'Hz ->', event.payload.to, 'Hz');
+          // Refresh current device to get updated sample rate
+          loadCurrentDevice();
+          // Also refresh device list if dropdown is open (using ref to get current value)
+          if (isOpenRef.current) {
+            console.log('[DeviceSelector] Dropdown is open, refreshing device list');
+            loadDevicesCallback();
+          }
+        });
+
+        unlistenFn = unlisten;
+      } catch (error) {
+        // Tauri not available (browser mode), ignore
+        console.log('[DeviceSelector] Tauri event listener not available');
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      mounted = false;
+      if (unlistenFn) {
+        unlistenFn();
+      }
+    };
+  }, [isBrowserDemo, loadCurrentDevice, loadDevicesCallback]);
 
   const switchDevice = async (backend: string, deviceName: string) => {
     // In browser demo, only allow selecting the System default
@@ -155,6 +199,16 @@ export function DeviceSelector() {
       await commands.setAudioDevice(backend, deviceName);
       await loadCurrentDevice(); // Refresh current device
 
+      // Explicitly sync playback state after device switch
+      // This ensures the play/pause button reflects the actual state
+      // Belt-and-suspenders: backend also emits StateChanged event, but we sync explicitly too
+      if (commands?.getPlaybackState) {
+        const state = await commands.getPlaybackState();
+        const isPlaying = state === 'Playing';
+        console.log('[DeviceSelector] Syncing playback state after device switch:', state, '-> isPlaying:', isPlaying);
+        usePlayerStore.setState({ isPlaying });
+      }
+
       console.log('[DeviceSelector] Switched to:', backend, deviceName);
     } catch (error) {
       console.error('[DeviceSelector] Failed to switch device:', error);
@@ -163,8 +217,9 @@ export function DeviceSelector() {
 
   return (
     <DropdownMenu onOpenChange={(open) => {
+      setIsOpen(open);
       if (open) {
-        loadDevices();
+        loadDevicesCallback();
       }
     }}>
       <DropdownMenuTrigger asChild>
@@ -176,16 +231,13 @@ export function DeviceSelector() {
         >
           <Speaker className={cn(
             "h-4 w-4",
-            currentDevice?.isRunning ? "text-green-500" : ""
+            currentDevice?.isRunning ? "text-primary" : ""
           )} />
         </Button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
         align="end"
-        side="top"
-        sticky="always"
-        collisionPadding={8}
         className="w-[320px] max-h-[400px] overflow-y-auto"
       >
         <DropdownMenuLabel className="flex items-center justify-between">
@@ -239,7 +291,7 @@ export function DeviceSelector() {
                           </span>
                         </div>
                         {isSelected && (
-                          <Check className="h-4 w-4 text-green-500 ml-2 flex-shrink-0" />
+                          <Check className="h-4 w-4 text-primary ml-2 flex-shrink-0" />
                         )}
                       </DropdownMenuItem>
                     );
@@ -293,7 +345,7 @@ export function DeviceSelector() {
                           )}
                         </div>
                         {isSelected && (
-                          <Check className="h-4 w-4 text-green-500 ml-2 flex-shrink-0" />
+                          <Check className="h-4 w-4 text-primary ml-2 flex-shrink-0" />
                         )}
                       </DropdownMenuItem>
                     );

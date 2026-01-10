@@ -6,6 +6,7 @@ interface PlayerState {
   currentTrack: Track | null;
   isPlaying: boolean;
   volume: number; // 0.0 to 1.0
+  previousVolume: number; // For mute toggle restore
   progress: number; // 0 to 100
   duration: number; // seconds
 
@@ -37,6 +38,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   currentTrack: null,
   isPlaying: false,
   volume: 0.8,
+  previousVolume: 0.8,
   progress: 0,
   duration: 0,
   queue: [],

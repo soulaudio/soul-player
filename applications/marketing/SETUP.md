@@ -3,7 +3,7 @@
 ## Prerequisites
 
 This project requires:
-- **Node.js**: v20.10.0 or higher (current: 18.19.1 - **UPGRADE NEEDED**)
+- **Node.js**: v20.10.0 or higher
 - **Yarn**: 4.0.2 (managed via Corepack)
 - **Corepack**: Enabled for package manager management
 
@@ -33,7 +33,7 @@ This enables Yarn 4.0.2 as specified in `package.json`.
 
 ### 3. Install Dependencies
 
-From the **workspace root** (`/mnt/d/dev/soulaudio/soul-player`):
+From the **workspace root** (the soul-player directory):
 
 ```bash
 yarn install

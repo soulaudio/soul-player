@@ -837,6 +837,228 @@ fn parse_metadata_source(s: &str) -> MetadataSource {
     }
 }
 
+// =============================================================================
+// Library Scanning Functions
+// =============================================================================
+
+/// Track file info for library scanning
+#[derive(Debug, Clone)]
+pub struct TrackFileInfo {
+    pub id: i64,
+    pub file_path: Option<String>,
+    pub file_size: Option<i64>,
+    pub file_mtime: Option<i64>,
+    pub content_hash: Option<String>,
+}
+
+/// Get tracks for a library source with file metadata
+pub async fn get_by_library_source(
+    pool: &SqlitePool,
+    source_id: i64,
+) -> Result<Vec<TrackFileInfo>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT id, file_path, file_size, file_mtime, content_hash
+        FROM tracks
+        WHERE library_source_id = ? AND is_available = 1
+        "#,
+        source_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| TrackFileInfo {
+            id: r.id,
+            file_path: r.file_path,
+            file_size: r.file_size,
+            file_mtime: r.file_mtime,
+            content_hash: r.content_hash,
+        })
+        .collect())
+}
+
+/// Update track file metadata after file change
+pub async fn update_file_metadata(
+    pool: &SqlitePool,
+    track_id: i64,
+    title: Option<&str>,
+    track_number: Option<u32>,
+    disc_number: Option<u32>,
+    year: Option<i32>,
+    duration_seconds: Option<f64>,
+    bitrate: Option<u32>,
+    sample_rate: Option<u32>,
+    channels: Option<u8>,
+    file_format: &str,
+    file_size: i64,
+    file_mtime: i64,
+    content_hash: Option<&str>,
+) -> Result<()> {
+    sqlx::query!(
+        r#"
+        UPDATE tracks
+        SET title = COALESCE(?, title),
+            track_number = ?,
+            disc_number = ?,
+            year = ?,
+            duration_seconds = ?,
+            bitrate = ?,
+            sample_rate = ?,
+            channels = ?,
+            file_format = ?,
+            file_size = ?,
+            file_mtime = ?,
+            content_hash = COALESCE(?, content_hash),
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+        title,
+        track_number,
+        disc_number,
+        year,
+        duration_seconds,
+        bitrate,
+        sample_rate,
+        channels,
+        file_format,
+        file_size,
+        file_mtime,
+        content_hash,
+        track_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Update track path after file relocation
+pub async fn update_file_path(
+    pool: &SqlitePool,
+    track_id: &str,
+    file_path: &str,
+    source_id: i64,
+    file_size: i64,
+    file_mtime: i64,
+) -> Result<()> {
+    sqlx::query!(
+        r#"
+        UPDATE tracks
+        SET file_path = ?,
+            library_source_id = ?,
+            file_size = ?,
+            file_mtime = ?,
+            is_available = 1,
+            unavailable_since = NULL,
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+        file_path,
+        source_id,
+        file_size,
+        file_mtime,
+        track_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Update library source for a track
+pub async fn set_library_source(
+    pool: &SqlitePool,
+    track_id: i64,
+    source_id: i64,
+    file_size: i64,
+    file_mtime: i64,
+) -> Result<()> {
+    sqlx::query!(
+        r#"
+        UPDATE tracks
+        SET library_source_id = ?, file_size = ?, file_mtime = ?, is_available = 1
+        WHERE id = ?
+        "#,
+        source_id,
+        file_size,
+        file_mtime,
+        track_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Mark a track as unavailable (soft delete)
+pub async fn mark_unavailable(pool: &SqlitePool, track_id: i64) -> Result<()> {
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query!(
+        r#"
+        UPDATE tracks
+        SET is_available = 0, unavailable_since = ?, updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+        now,
+        track_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Mark a track as available again
+pub async fn mark_available(pool: &SqlitePool, track_id: i64) -> Result<()> {
+    sqlx::query!(
+        r#"
+        UPDATE tracks
+        SET is_available = 1, unavailable_since = NULL, updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+        track_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Get unavailable tracks for a library source
+pub async fn get_unavailable_by_source(
+    pool: &SqlitePool,
+    source_id: i64,
+) -> Result<Vec<TrackFileInfo>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT id, file_path, file_size, file_mtime, content_hash
+        FROM tracks
+        WHERE library_source_id = ? AND is_available = 0
+        "#,
+        source_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| TrackFileInfo {
+            id: r.id,
+            file_path: r.file_path,
+            file_size: r.file_size,
+            file_mtime: r.file_mtime,
+            content_hash: r.content_hash,
+        })
+        .collect())
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
 fn format_metadata_source(source: &MetadataSource) -> &'static str {
     match source {
         MetadataSource::File => "file",

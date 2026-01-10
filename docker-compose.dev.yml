@@ -1,0 +1,68 @@
+version: '3.8'
+
+# Soul Player - Development Docker Compose
+# =========================================
+# Runs server with hot reload and web dev server with HMR
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up
+#
+# Access:
+#   - Web UI (dev): http://localhost:3000  (Vite with HMR)
+#   - API:          http://localhost:8080/api
+#
+# Note: Web dev server proxies /api to the Rust server
+
+services:
+  # Rust server with cargo-watch for hot reload
+  server:
+    build:
+      context: .
+      dockerfile: applications/server/Dockerfile.dev
+    ports:
+      - "8080:8080"
+    environment:
+      SOUL_AUTH_JWT_SECRET: dev-secret-do-not-use-in-production
+      SOUL_STORAGE_DATABASE_URL: sqlite:///data/soul.db
+      SOUL_STORAGE_MUSIC_STORAGE_PATH: /data/tracks
+      SOUL_SERVER_HOST: 0.0.0.0
+      SOUL_SERVER_PORT: 8080
+      SOUL_WEB_DIR: ""  # Disable static file serving in dev
+      RUST_LOG: soul_server=debug,tower_http=debug
+      CARGO_HOME: /cargo
+    volumes:
+      - .:/app
+      - cargo-registry:/cargo/registry
+      - cargo-git:/cargo/git
+      - target-cache:/app/target
+      - soul-data:/data
+    working_dir: /app
+    command: cargo watch -x 'run -p soul-server -- serve'
+
+  # Vite dev server with HMR
+  web:
+    image: node:20-alpine
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - web-node-modules:/app/applications/web/node_modules
+      - shared-node-modules:/app/applications/shared/node_modules
+    working_dir: /app/applications/web
+    command: sh -c "yarn install && yarn dev --host 0.0.0.0"
+    depends_on:
+      - server
+
+volumes:
+  soul-data:
+    driver: local
+  cargo-registry:
+    driver: local
+  cargo-git:
+    driver: local
+  target-cache:
+    driver: local
+  web-node-modules:
+    driver: local
+  shared-node-modules:
+    driver: local

@@ -571,3 +571,174 @@ fn test_large_queue_performance() {
     manager.remove_from_queue(500).ok();
     assert_eq!(manager.queue_len(), 999);
 }
+
+// ===== Crossfade Integration Tests =====
+
+#[test]
+fn test_crossfade_settings_default() {
+    let manager = PlaybackManager::default();
+    let settings = manager.get_crossfade_settings();
+
+    // Default: disabled, 3 second duration, equal power curve
+    assert!(!settings.enabled);
+    assert_eq!(settings.duration_ms, 3000);
+    assert_eq!(settings.curve, soul_playback::FadeCurve::EqualPower);
+}
+
+#[test]
+fn test_crossfade_enable_disable() {
+    let mut manager = PlaybackManager::default();
+
+    // Enable crossfade
+    manager.set_crossfade_enabled(true);
+    assert!(manager.is_crossfade_enabled());
+
+    // Disable crossfade
+    manager.set_crossfade_enabled(false);
+    assert!(!manager.is_crossfade_enabled());
+}
+
+#[test]
+fn test_crossfade_duration_setting() {
+    let mut manager = PlaybackManager::default();
+
+    // Set duration
+    manager.set_crossfade_duration(5000);
+    assert_eq!(manager.get_crossfade_duration(), 5000);
+
+    // Should clamp to max
+    manager.set_crossfade_duration(15000);
+    assert_eq!(manager.get_crossfade_duration(), 10000);
+}
+
+#[test]
+fn test_crossfade_curve_setting() {
+    let mut manager = PlaybackManager::default();
+
+    manager.set_crossfade_curve(soul_playback::FadeCurve::Linear);
+    assert_eq!(manager.get_crossfade_curve(), soul_playback::FadeCurve::Linear);
+
+    manager.set_crossfade_curve(soul_playback::FadeCurve::SCurve);
+    assert_eq!(manager.get_crossfade_curve(), soul_playback::FadeCurve::SCurve);
+}
+
+#[test]
+fn test_gapless_config() {
+    let config = PlaybackConfig::gapless();
+    assert!(config.crossfade.enabled);
+    assert_eq!(config.crossfade.duration_ms, 0);
+}
+
+#[test]
+fn test_crossfade_with_next_source() {
+    let mut manager = PlaybackManager::default();
+    manager.set_crossfade_enabled(true);
+    manager.set_crossfade_duration(1000);
+
+    // Add tracks
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 10));
+    manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist B", 10));
+
+    // Set current source
+    manager.set_audio_source(Box::new(MockAudioSource::new(
+        Duration::from_secs(10),
+        44100,
+    )));
+
+    assert!(!manager.has_next_source());
+
+    // Pre-decode next track
+    let next_source = Box::new(MockAudioSource::new(Duration::from_secs(10), 44100));
+    let next_track = create_test_track("2", "Track 2", "Artist B", 10);
+    manager.set_next_source(next_source, next_track);
+
+    assert!(manager.has_next_source());
+    assert_eq!(manager.get_next_track().unwrap().id, "2");
+}
+
+#[test]
+fn test_should_prepare_next_track_timing() {
+    let mut manager = PlaybackManager::default();
+    manager.set_crossfade_enabled(true);
+    manager.set_crossfade_duration(3000); // 3 second crossfade
+
+    // Add tracks
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 10));
+    manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist B", 10));
+
+    // Set source at position 0 (10 seconds remaining)
+    let source = MockAudioSource::new(Duration::from_secs(10), 44100);
+    manager.set_audio_source(Box::new(source));
+
+    // At start, should not need to prepare (more than 5 seconds until crossfade)
+    // 10 seconds total - 3 second crossfade = 7 seconds until crossfade start
+    // 7 > 5, so should_prepare_next_track = false initially
+    // But our mock starts at position 0, so 10 - 0 - 3 = 7 seconds until crossfade
+
+    // Since our mock doesn't advance position in this test, let's verify the logic
+    // with a shorter track
+    let mut manager2 = PlaybackManager::default();
+    manager2.set_crossfade_enabled(true);
+    manager2.set_crossfade_duration(3000); // 3 second crossfade
+
+    manager2.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 5));
+    manager2.add_to_queue_end(create_test_track("2", "Track 2", "Artist B", 5));
+
+    // 5 second track with 3 second crossfade = crossfade at 2 seconds
+    // Prepare 5 seconds before crossfade = need to start at position -3 (immediately)
+    let source2 = MockAudioSource::new(Duration::from_secs(5), 44100);
+    manager2.set_audio_source(Box::new(source2));
+
+    // Should prepare immediately since we're already within window
+    assert!(
+        manager2.should_prepare_next_track(),
+        "Should prepare next track when within 5 seconds of crossfade"
+    );
+}
+
+#[test]
+fn test_crossfade_not_active_initially() {
+    let mut manager = PlaybackManager::default();
+    manager.set_crossfade_enabled(true);
+
+    assert!(!manager.is_crossfading());
+    assert_eq!(
+        manager.get_crossfade_state(),
+        soul_playback::CrossfadeState::Inactive
+    );
+}
+
+#[test]
+fn test_stop_resets_crossfade() {
+    let mut manager = PlaybackManager::default();
+    manager.set_crossfade_enabled(true);
+
+    // Set up some state
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 10));
+    manager.set_audio_source(Box::new(MockAudioSource::new(
+        Duration::from_secs(10),
+        44100,
+    )));
+
+    let next_source = Box::new(MockAudioSource::new(Duration::from_secs(10), 44100));
+    let next_track = create_test_track("2", "Track 2", "Artist B", 10);
+    manager.set_next_source(next_source, next_track);
+
+    // Stop should clear next source
+    manager.stop();
+
+    assert!(!manager.has_next_source());
+    assert!(manager.get_next_track().is_none());
+}
+
+#[test]
+fn test_crossfade_progress_initial() {
+    let manager = PlaybackManager::default();
+
+    // Initially should be at 0 or 1 (depends on state)
+    let progress = manager.get_crossfade_progress();
+    assert!(
+        (0.0..=1.0).contains(&progress),
+        "Progress should be between 0 and 1"
+    );
+}

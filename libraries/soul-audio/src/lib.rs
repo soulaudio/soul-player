@@ -49,6 +49,7 @@
 //! ```
 
 mod decoder;
+pub mod dsd;
 pub mod effects;
 mod error;
 pub mod resampling;
@@ -58,4 +59,5 @@ pub mod resampling;
 pub mod test_utils;
 
 pub use decoder::SymphoniaDecoder;
+pub use dsd::{DsdConverter, DsdFormat, DsdSettings, DoP, DopEncoder, DopDecoder};
 pub use error::{AudioError, Result};

@@ -1,8 +1,9 @@
 # Soul Services - Architecture & Implementation Plan
 
 **Status**: Planning Phase
-**Target Implementation**: Separate Repository
-**Last Updated**: 2026-01-06
+**Target Implementation**: Separate Repository (`soul-services`)
+**Stack**: Next.js 14+ (App Router) + PostgreSQL + Prisma
+**Last Updated**: 2026-01-10
 
 ---
 
@@ -13,9 +14,26 @@
 ### Why Separate from Soul Player?
 
 1. **Business Model**: Soul Player is open-source; Soul Services is a sustainable revenue stream
-2. **Scalability**: Independent scaling of compute-intensive services (fingerprinting, scraping)
+2. **Scalability**: Independent scaling of web services
 3. **Licensing**: Closed-source service protects business logic while keeping player open
 4. **Infrastructure**: PostgreSQL + cloud hosting vs SQLite + local-first for player
+
+### Why Next.js Instead of Rust?
+
+Soul Services is a **web product** (API + dashboard + auth), not a performance-critical audio engine:
+
+| Aspect | Soul Player | Soul Services |
+|--------|-------------|---------------|
+| **Type** | Desktop app + audio engine | Web API + dashboard |
+| **CPU-intensive?** | Yes (audio decoding, DSP) | No (proxying APIs, caching) |
+| **Best tool** | Rust | TypeScript/Next.js |
+
+**Benefits of Next.js**:
+- Faster development iteration
+- Excellent auth ecosystem (NextAuth.js)
+- Dashboard is just another route (no separate frontend)
+- Serverless-ready (Vercel) or Docker deployable
+- TypeScript end-to-end
 
 ### Core Value Proposition
 
@@ -49,39 +67,40 @@
 
 ```
 ┌─────────────────┐
-│   Soul Player   │ (Open Source - Local First)
+│   Soul Player   │ (Open Source - Rust/Tauri)
 │   (Desktop)     │
 └────────┬────────┘
          │ OAuth 2.0 + PKCE
          │ REST API
          ▼
-┌─────────────────────────────────────────┐
-│         Soul Services Platform          │ (Closed Source - Cloud/Self-Hosted)
-│  ┌──────────────────────────────────┐  │
-│  │     soul-discovery (MVP)         │  │
-│  │  - Metadata Enrichment           │  │
-│  │  - Audio Fingerprinting          │  │
-│  │  - Lyrics (synced + unsynced)    │  │
-│  │  - Discovery/Recommendations     │  │
-│  │  - Bandcamp/Discogs Scraping     │  │
-│  └──────────────────────────────────┘  │
-│                                         │
-│  ┌──────────────────────────────────┐  │
-│  │     soul-auth (OAuth Provider)   │  │
-│  │  - User Registration/Login       │  │
-│  │  - Stripe Subscription Webhooks  │  │
-│  │  - Device Management             │  │
-│  │  - API Key Management            │  │
-│  └──────────────────────────────────┘  │
-│                                         │
-│  ┌──────────────────────────────────┐  │
-│  │     PostgreSQL Database          │  │
-│  │  - Users & Subscriptions         │  │
-│  │  - Cached Metadata               │  │
-│  │  - Fingerprints & Lyrics         │  │
-│  │  - Usage Analytics               │  │
-│  └──────────────────────────────────┘  │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│              Soul Services (Next.js)                         │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                   Next.js App                         │   │
+│  │                                                       │   │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │   │
+│  │  │  Dashboard  │  │  API Routes │  │    Auth     │  │   │
+│  │  │   (React)   │  │  /api/v1/*  │  │ (NextAuth)  │  │   │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  │   │
+│  │                                                       │   │
+│  │  ┌─────────────────────────────────────────────────┐ │   │
+│  │  │              Service Layer                       │ │   │
+│  │  │  - MusicBrainz client                           │ │   │
+│  │  │  - AcoustID client                              │ │   │
+│  │  │  - Genius/LRCLIB client                         │ │   │
+│  │  │  - Stripe integration                           │ │   │
+│  │  └─────────────────────────────────────────────────┘ │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              PostgreSQL (via Prisma)                  │   │
+│  │  - Users & Sessions                                   │   │
+│  │  - Subscriptions (Stripe)                            │   │
+│  │  - Cached Metadata                                    │   │
+│  │  - API Usage Tracking                                │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
          │
          │ External APIs
          ▼
@@ -90,498 +109,1332 @@
 │  - MusicBrainz API                      │
 │  - AcoustID API                         │
 │  - Genius API (Lyrics)                  │
-│  - Musixmatch API (Lyrics)              │
-│  - Bandcamp (Scraping)                  │
+│  - LRCLIB (Synced Lyrics)               │
 │  - Discogs API                          │
 │  - Stripe (Payments)                    │
 └─────────────────────────────────────────┘
 ```
 
-### Microservices (Future)
+### Domain Structure
 
-Initial MVP combines everything in one deployable. Future split:
-
-1. **soul-auth**: Authentication, subscriptions, user management
-2. **soul-discovery**: All music intelligence features
-3. **soul-gateway**: Rate limiting, request routing, API versioning
-4. **soul-worker**: Background jobs (scraping, batch processing)
-
----
-
-## soul-discovery Service Specification
-
-### Core Features
-
-#### 1. Audio Fingerprinting (AcoustID)
-
-**Purpose**: Identify unknown tracks, auto-tag incorrectly labeled files
-
-**Flow**:
-```
-1. Soul Player sends audio fingerprint (generated locally using chromaprint)
-2. soul-discovery queries AcoustID API
-3. Returns MusicBrainz Recording ID + basic metadata
-4. Optionally enriches with full MusicBrainz data
-```
-
-**API Endpoint**:
-```http
-POST /api/v1/fingerprint
-Content-Type: application/json
-Authorization: Bearer <jwt_token>
-
-{
-  "fingerprint": "AQADtN...",  // Chromaprint fingerprint
-  "duration": 245,              // Track duration in seconds
-  "enrich": true                // Auto-fetch full metadata
-}
-
-Response:
-{
-  "match_score": 0.98,
-  "track": {
-    "musicbrainz_id": "abc-123",
-    "title": "Bohemian Rhapsody",
-    "artist": "Queen",
-    "album": "A Night at the Opera",
-    "year": 1975,
-    "isrc": "GBUM71029604"
-  }
-}
-```
-
-**Cost**: AcoustID charges per lookup (~$0.001/lookup). Audiophile tier only.
-
-#### 2. Metadata Enrichment (MusicBrainz)
-
-**Purpose**: Fetch comprehensive artist/album data beyond basic tags
-
-**Data Retrieved**:
-- **Artists**: Biography, formation date, country, genre tags, similar artists
-- **Albums**: Release date, label, catalog number, cover art (multiple sizes), track listing
-- **Tracks**: Recording date, composers, lyricists, ISRC codes
-- **Relationships**: Band members, producers, featured artists
-
-**API Endpoints**:
-```http
-GET /api/v1/artist/:id/enrich
-GET /api/v1/album/:id/enrich
-GET /api/v1/track/:musicbrainz_id
-```
-
-**Caching**: 90-day cache for immutable data (older releases), 7-day for recent releases
-
-#### 3. Lyrics Fetching
-
-**Sources** (in priority order):
-1. **Embedded LRC files** (if user uploaded)
-2. **Genius API** (official, reliable, but rate-limited)
-3. **Musixmatch API** (synced lyrics available)
-4. **LRCLIB** (community-driven, free)
-5. **Web scraping** (fallback, respects robots.txt)
-
-**Features**:
-- Unsynced lyrics (plain text)
-- Synced lyrics (LRC format with timestamps)
-- Multi-language support
-- Romanization for non-Latin scripts
-
-**API Endpoints**:
-```http
-GET /api/v1/lyrics
-  ?artist=Queen
-  &title=Bohemian+Rhapsody
-  &album=A+Night+at+the+Opera
-  &duration=354
-  &synced=true
-
-Response:
-{
-  "lyrics": "[00:00.00] Is this the real life?\n[00:04.50] Is this just fantasy?...",
-  "synced": true,
-  "source": "musixmatch",
-  "language": "en"
-}
-```
-
-#### 4. Discovery & Recommendations
-
-**Algorithms**:
-- **Similar Artists**: MusicBrainz relationships + collaborative filtering
-- **Genre Exploration**: Curated genre trees from MusicBrainz + Last.fm tags
-- **New Releases**: Track followed artists' latest releases via MusicBrainz
-- **Hidden Gems**: Recommend under-played tracks from user's library
-
-**API Endpoints**:
-```http
-GET /api/v1/discover/similar-artists?artist_id=123
-GET /api/v1/discover/new-releases?user_id=456
-GET /api/v1/discover/genre/:genre_name
-```
-
-#### 5. Bandcamp & Discogs Integration
-
-**Bandcamp**:
-- Artist discovery (trending, tags)
-- Album scraping (when MusicBrainz lacks data for obscure releases)
-- Purchase link integration
-
-**Discogs**:
-- Vinyl/physical release info (pressing details, catalog numbers)
-- Marketplace pricing data (for collectors)
-- Artist discography completion
-
-**Rate Limiting**: Aggressive caching + respect for site policies (no mass scraping)
+| Domain | Purpose |
+|--------|---------|
+| `soul.audio` | Marketing site (in soul-player repo) |
+| `services.soul.audio` | API endpoints + Dashboard |
+| `services.soul.audio/api/v1/*` | REST API for Soul Player |
+| `services.soul.audio/dashboard/*` | Web dashboard for users |
 
 ---
 
-## Authentication & Authorization
+## Repository Structure
 
-### OAuth 2.0 with PKCE Flow
-
-**Why PKCE?** Desktop apps can't securely store client secrets. PKCE (Proof Key for Code Exchange) adds security without requiring secrets.
-
-**Flow**:
 ```
-1. Soul Player generates code_verifier + code_challenge
-2. Opens browser to: https://services.soul.audio/oauth/authorize
-3. User logs in / signs up
-4. Redirects to soul://oauth/callback?code=xyz
-5. Soul Player exchanges code + code_verifier for access_token
-6. Stores access_token securely (OS keychain)
-7. Includes in all API requests: Authorization: Bearer <token>
-```
-
-**Token Lifecycle**:
-- Access tokens: 1-hour expiry
-- Refresh tokens: 30-day expiry
-- Automatic refresh in background
-
-### Device Management
-
-Users can manage devices in web portal:
-- View active sessions
-- Revoke access per device
-- See last used timestamp
-
----
-
-## Database Schema (PostgreSQL)
-
-### Core Tables
-
-```sql
--- Users & Authentication
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,  -- bcrypt
-    email_verified BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE oauth_clients (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    device_name VARCHAR(100),  -- "John's MacBook Pro"
-    device_type VARCHAR(20),   -- "desktop", "mobile", "web"
-    last_used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE oauth_tokens (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    client_id UUID REFERENCES oauth_clients(id) ON DELETE CASCADE,
-    access_token VARCHAR(255) UNIQUE NOT NULL,
-    refresh_token VARCHAR(255) UNIQUE,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Subscriptions (Stripe)
-CREATE TABLE subscriptions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    stripe_customer_id VARCHAR(100) UNIQUE,
-    stripe_subscription_id VARCHAR(100) UNIQUE,
-    tier VARCHAR(20) NOT NULL,  -- "pro", "audiophile"
-    status VARCHAR(20) NOT NULL, -- "active", "canceled", "past_due"
-    current_period_end TIMESTAMPTZ NOT NULL,
-    cancel_at_period_end BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Self-Hosted API Keys
-CREATE TABLE api_keys (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    service VARCHAR(50) NOT NULL,  -- "musicbrainz", "acoustid", "genius"
-    encrypted_key TEXT NOT NULL,   -- AES-256 encrypted
-    is_valid BOOLEAN DEFAULT TRUE,
-    last_checked_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Metadata Cache
-CREATE TABLE artist_metadata (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    musicbrainz_id UUID UNIQUE NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    sort_name VARCHAR(255),
-    bio TEXT,
-    country VARCHAR(2),
-    formed_date DATE,
-    genre_tags JSONB,  -- ["rock", "progressive rock"]
-    similar_artists JSONB,  -- [{"id": "...", "name": "..."}, ...]
-    cached_at TIMESTAMPTZ DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE TABLE album_metadata (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    musicbrainz_id UUID UNIQUE NOT NULL,
-    title VARCHAR(500) NOT NULL,
-    artist_id UUID REFERENCES artist_metadata(musicbrainz_id),
-    release_date DATE,
-    label VARCHAR(255),
-    catalog_number VARCHAR(100),
-    cover_art_url TEXT,
-    cover_art_hires_url TEXT,
-    track_listing JSONB,
-    cached_at TIMESTAMPTZ DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE TABLE lyrics (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    track_fingerprint VARCHAR(50) NOT NULL,  -- SHA-256 of artist+title+album
-    artist VARCHAR(255) NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    album VARCHAR(255),
-    lyrics TEXT NOT NULL,
-    synced BOOLEAN DEFAULT FALSE,
-    language VARCHAR(5) DEFAULT 'en',
-    source VARCHAR(50),  -- "genius", "musixmatch", "lrclib"
-    cached_at TIMESTAMPTZ DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX idx_lyrics_fingerprint ON lyrics(track_fingerprint);
-
--- Usage Tracking (Rate Limiting)
-CREATE TABLE api_usage (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    endpoint VARCHAR(100) NOT NULL,
-    request_count INTEGER DEFAULT 1,
-    date DATE NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE UNIQUE INDEX idx_usage_user_endpoint_date ON api_usage(user_id, endpoint, date);
-
--- AcoustID Fingerprints (Audiophile tier only)
-CREATE TABLE fingerprints (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    fingerprint TEXT NOT NULL,
-    duration INTEGER NOT NULL,
-    matched_recording_id UUID,  -- MusicBrainz recording ID
-    match_score DECIMAL(3,2),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-### Indexes
-
-```sql
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_oauth_tokens_access ON oauth_tokens(access_token);
-CREATE INDEX idx_subscriptions_user_status ON subscriptions(user_id, status);
-CREATE INDEX idx_artist_metadata_mb_id ON artist_metadata(musicbrainz_id);
-CREATE INDEX idx_album_metadata_mb_id ON album_metadata(musicbrainz_id);
-CREATE INDEX idx_fingerprints_user_created ON fingerprints(user_id, created_at);
-```
-
----
-
-## API Design
-
-### Base URL
-
-- Production: `https://services.soul.audio`
-- Self-Hosted: `http://localhost:3001` (default)
-
-### Versioning
-
-All endpoints prefixed with `/api/v1/` for future-proofing.
-
-### Authentication
-
-```http
-Authorization: Bearer <jwt_access_token>
-```
-
-### Rate Limiting
-
-| Tier | Requests/Minute | Fingerprints/Month | Cache TTL |
-|------|-----------------|-----------------------|-----------|
-| Pro | 60 | N/A | 7 days |
-| Audiophile | 120 | 1,000 | 90 days |
-| Self-Hosted | Unlimited* | Unlimited* | Configurable |
-
-*Self-hosted limits based on your API key quotas
-
-### Error Responses
-
-```json
-{
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "You have exceeded your monthly fingerprint quota (1000)",
-    "details": {
-      "reset_at": "2026-02-01T00:00:00Z",
-      "current_usage": 1001,
-      "limit": 1000
-    }
-  }
-}
-```
-
-### Core Endpoints
-
-#### Authentication
-
-```http
-POST   /api/v1/auth/register
-POST   /api/v1/auth/login
-POST   /api/v1/auth/refresh
-POST   /api/v1/auth/logout
-GET    /api/v1/auth/me
-```
-
-#### OAuth
-
-```http
-GET    /oauth/authorize
-POST   /oauth/token
-POST   /oauth/revoke
-```
-
-#### Metadata
-
-```http
-GET    /api/v1/artist/:id/enrich
-GET    /api/v1/album/:id/enrich
-GET    /api/v1/track/:musicbrainz_id
-POST   /api/v1/fingerprint
-GET    /api/v1/lyrics
-```
-
-#### Discovery
-
-```http
-GET    /api/v1/discover/similar-artists
-GET    /api/v1/discover/new-releases
-GET    /api/v1/discover/genre/:name
-GET    /api/v1/discover/trending
-```
-
-#### Subscription Management
-
-```http
-GET    /api/v1/subscription
-POST   /api/v1/subscription/create-checkout
-POST   /api/v1/subscription/portal
-POST   /webhooks/stripe  (Stripe webhooks)
-```
-
-#### Self-Hosted API Keys
-
-```http
-GET    /api/v1/api-keys
-POST   /api/v1/api-keys
-DELETE /api/v1/api-keys/:id
-POST   /api/v1/api-keys/:id/validate
+soul-services/
+├── package.json
+├── next.config.ts
+├── tailwind.config.ts
+├── .env.example
+├── docker-compose.yml
+├── Dockerfile
+│
+├── prisma/
+│   ├── schema.prisma              # Database schema
+│   └── migrations/                # Prisma migrations
+│
+├── app/                           # Next.js App Router
+│   ├── layout.tsx                 # Root layout
+│   ├── page.tsx                   # Landing/marketing page
+│   │
+│   ├── (auth)/                    # Auth pages (public)
+│   │   ├── login/page.tsx
+│   │   ├── register/page.tsx
+│   │   └── verify-email/page.tsx
+│   │
+│   ├── (dashboard)/               # Dashboard (authenticated)
+│   │   ├── layout.tsx             # Dashboard layout with sidebar
+│   │   ├── page.tsx               # Dashboard home
+│   │   ├── account/page.tsx       # Account settings
+│   │   ├── subscription/page.tsx  # Subscription management
+│   │   ├── api-keys/page.tsx      # Self-hosted API key management
+│   │   ├── devices/page.tsx       # Connected devices
+│   │   └── usage/page.tsx         # API usage stats
+│   │
+│   ├── api/                       # API Routes
+│   │   ├── auth/
+│   │   │   └── [...nextauth]/route.ts  # NextAuth.js
+│   │   │
+│   │   ├── v1/                    # Public API (for Soul Player)
+│   │   │   ├── fingerprint/route.ts
+│   │   │   ├── lyrics/route.ts
+│   │   │   ├── artist/
+│   │   │   │   └── [id]/
+│   │   │   │       └── enrich/route.ts
+│   │   │   ├── album/
+│   │   │   │   └── [id]/
+│   │   │   │       └── enrich/route.ts
+│   │   │   ├── discover/
+│   │   │   │   ├── similar-artists/route.ts
+│   │   │   │   ├── new-releases/route.ts
+│   │   │   │   └── genre/[name]/route.ts
+│   │   │   └── subscription/route.ts
+│   │   │
+│   │   ├── oauth/                 # OAuth Provider endpoints
+│   │   │   ├── authorize/route.ts
+│   │   │   ├── token/route.ts
+│   │   │   └── revoke/route.ts
+│   │   │
+│   │   └── webhooks/
+│   │       └── stripe/route.ts    # Stripe webhooks
+│   │
+│   └── docs/                      # API documentation (optional)
+│       └── [[...slug]]/page.tsx   # Nextra or similar
+│
+├── lib/                           # Shared utilities
+│   ├── auth.ts                    # NextAuth configuration
+│   ├── db.ts                      # Prisma client
+│   ├── stripe.ts                  # Stripe helpers
+│   ├── rate-limit.ts              # Rate limiting
+│   │
+│   ├── external/                  # External API clients
+│   │   ├── musicbrainz.ts
+│   │   ├── acoustid.ts
+│   │   ├── genius.ts
+│   │   ├── lrclib.ts
+│   │   └── discogs.ts
+│   │
+│   └── services/                  # Business logic
+│       ├── enrichment.ts
+│       ├── lyrics.ts
+│       ├── discovery.ts
+│       └── fingerprint.ts
+│
+├── components/                    # React components
+│   ├── ui/                        # shadcn/ui components
+│   ├── dashboard/
+│   │   ├── Sidebar.tsx
+│   │   ├── UsageChart.tsx
+│   │   └── DeviceList.tsx
+│   └── marketing/
+│       ├── PricingTable.tsx
+│       └── FeatureGrid.tsx
+│
+├── types/                         # TypeScript types
+│   ├── api.ts
+│   ├── musicbrainz.ts
+│   └── index.ts
+│
+└── scripts/
+    └── seed.ts                    # Database seeding
 ```
 
 ---
 
 ## Technology Stack
 
-### Backend
+### Core Stack
 
 | Component | Technology | Reasoning |
 |-----------|------------|-----------|
-| **Web Framework** | Axum | Fast, type-safe, integrates with Tokio |
-| **Database** | PostgreSQL 16 | JSON support (JSONB), robust, scalable |
-| **ORM** | SQLx | Compile-time checked queries, async-first |
-| **Auth** | OAuth2 crate + JWT | Standard implementations |
-| **HTTP Client** | reqwest | Async, widely used for API calls |
-| **Scraping** | scraper (HTML) + headless_chrome | Static pages + JS-rendered content |
-| **Caching** | Redis (optional) | Session storage, hot metadata cache |
-| **Background Jobs** | tokio-cron-scheduler | Scheduled scraping, cleanup tasks |
+| **Framework** | Next.js 14+ (App Router) | Full-stack React, API routes, SSR |
+| **Language** | TypeScript | Type safety, great DX |
+| **Database** | PostgreSQL 16 | JSON support, robust, scalable |
+| **ORM** | Prisma | Type-safe queries, migrations, great DX |
+| **Auth** | NextAuth.js v5 | OAuth providers, sessions, JWT |
+| **Styling** | Tailwind CSS + shadcn/ui | Rapid UI development |
+| **Validation** | Zod | Runtime type checking for API inputs |
+| **HTTP Client** | Native fetch | Built into Next.js, no extra deps |
 
-### External APIs
+### External Services
 
 | Service | Purpose | Cost Model |
 |---------|---------|------------|
 | **MusicBrainz** | Artist/album metadata | Free (1 req/sec, rate-limited) |
 | **AcoustID** | Audio fingerprinting | $0.001/lookup (paid credits) |
 | **Genius** | Lyrics (official) | Free API (rate-limited) |
-| **Musixmatch** | Synced lyrics | Paid API (~$50/month for commercial) |
-| **LRCLIB** | Community lyrics | Free (donations accepted) |
+| **LRCLIB** | Synced lyrics | Free (community-driven) |
 | **Discogs** | Vinyl/physical data | Free API (rate-limited) |
 | **Stripe** | Payment processing | 2.9% + $0.30/transaction |
 
 ### Infrastructure
 
-| Component | Options | Recommendation |
-|-----------|---------|----------------|
-| **Hosting** | Fly.io, Railway, AWS | Fly.io (edge deployment, easy Postgres) |
-| **Database** | Fly Postgres, Supabase, AWS RDS | Fly Postgres (integrated) |
-| **Object Storage** | S3, Cloudflare R2 | R2 (free egress, cheaper) |
-| **CDN** | Cloudflare | Free tier sufficient for images |
-| **Monitoring** | Sentry, Honeycomb | Sentry (error tracking) |
+| Component | Recommendation | Alternative |
+|-----------|----------------|-------------|
+| **Hosting** | Vercel (simplest) | Fly.io, Railway, Docker |
+| **Database** | Vercel Postgres or Supabase | Fly Postgres, Neon |
+| **Object Storage** | Cloudflare R2 | S3 |
+| **CDN** | Vercel Edge / Cloudflare | - |
+| **Monitoring** | Vercel Analytics + Sentry | - |
+| **Background Jobs** | Vercel Cron or Inngest | BullMQ + Redis |
 
-### Deployment (Docker)
+---
+
+## Database Schema (Prisma)
+
+```prisma
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ Users & Auth ============
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  username      String    @unique
+  passwordHash  String?   // null if using OAuth provider
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  subscription  Subscription?
+  apiKeys       ApiKey[]
+  devices       Device[]
+  apiUsage      ApiUsage[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============ Subscriptions ============
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  stripeCustomerId     String   @unique
+  stripeSubscriptionId String?  @unique
+  tier                 Tier     @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Tier {
+  FREE
+  PRO
+  AUDIOPHILE
+  SELF_HOSTED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+}
+
+// ============ Self-Hosted API Keys ============
+
+model ApiKey {
+  id            String   @id @default(cuid())
+  userId        String
+  service       String   // "musicbrainz", "acoustid", "genius"
+  encryptedKey  String   // AES-256 encrypted
+  isValid       Boolean  @default(true)
+  lastCheckedAt DateTime?
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, service])
+}
+
+// ============ Devices (OAuth Clients) ============
+
+model Device {
+  id         String     @id @default(cuid())
+  userId     String
+  name       String     // "John's MacBook Pro"
+  type       DeviceType
+  lastUsedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  // OAuth tokens for this device
+  accessToken  String?  @unique
+  refreshToken String?  @unique
+  tokenExpiry  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+}
+
+enum DeviceType {
+  DESKTOP
+  MOBILE
+  WEB
+  DAP
+}
+
+// ============ Usage Tracking ============
+
+model ApiUsage {
+  id           String   @id @default(cuid())
+  userId       String
+  endpoint     String
+  requestCount Int      @default(1)
+  date         DateTime @db.Date
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint, date])
+  @@index([userId, date])
+}
+
+// ============ Metadata Cache ============
+
+model ArtistMetadata {
+  id             String   @id @default(cuid())
+  musicbrainzId  String   @unique
+  name           String
+  sortName       String?
+  bio            String?  @db.Text
+  country        String?
+  formedDate     DateTime?
+  genreTags      Json?    // ["rock", "progressive rock"]
+  similarArtists Json?    // [{"id": "...", "name": "..."}, ...]
+  cachedAt       DateTime @default(now())
+  expiresAt      DateTime
+
+  @@index([musicbrainzId])
+}
+
+model AlbumMetadata {
+  id              String   @id @default(cuid())
+  musicbrainzId   String   @unique
+  title           String
+  artistMbId      String?
+  releaseDate     DateTime?
+  label           String?
+  catalogNumber   String?
+  coverArtUrl     String?
+  coverArtHiresUrl String?
+  trackListing    Json?
+  cachedAt        DateTime @default(now())
+  expiresAt       DateTime
+
+  @@index([musicbrainzId])
+}
+
+model Lyrics {
+  id               String   @id @default(cuid())
+  trackFingerprint String   // SHA-256 of artist+title+album
+  artist           String
+  title            String
+  album            String?
+  lyrics           String   @db.Text
+  synced           Boolean  @default(false)
+  language         String   @default("en")
+  source           String   // "genius", "lrclib", "musixmatch"
+  cachedAt         DateTime @default(now())
+  expiresAt        DateTime
+
+  @@unique([trackFingerprint])
+  @@index([artist, title])
+}
+
+model Fingerprint {
+  id                 String   @id @default(cuid())
+  userId             String
+  fingerprint        String   @db.Text
+  duration           Int
+  matchedRecordingId String?  // MusicBrainz recording ID
+  matchScore         Float?
+  createdAt          DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+```
+
+---
+
+## Authentication
+
+### NextAuth.js Configuration
+
+```typescript
+// lib/auth.ts
+import NextAuth from "next-auth"
+import { PrismaAdapter } from "@auth/prisma-adapter"
+import Credentials from "next-auth/providers/credentials"
+import Google from "next-auth/providers/google"
+import { prisma } from "./db"
+import { compare } from "bcryptjs"
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  adapter: PrismaAdapter(prisma),
+  session: { strategy: "jwt" },
+
+  providers: [
+    // Email/password login
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email as string },
+          include: { subscription: true }
+        })
+
+        if (!user?.passwordHash) return null
+
+        const isValid = await compare(
+          credentials.password as string,
+          user.passwordHash
+        )
+        if (!isValid) return null
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.username,
+          tier: user.subscription?.tier ?? "FREE"
+        }
+      }
+    }),
+
+    // Optional: OAuth providers
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  ],
+
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id
+        token.tier = (user as any).tier
+      }
+      return token
+    },
+    async session({ session, token }) {
+      session.user.id = token.id as string
+      session.user.tier = token.tier as string
+      return session
+    }
+  },
+
+  pages: {
+    signIn: "/login",
+    error: "/login",
+  }
+})
+```
+
+### OAuth 2.0 + PKCE for Soul Player
+
+Soul Player (desktop app) authenticates via OAuth with PKCE:
+
+```typescript
+// app/api/oauth/authorize/route.ts
+import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/db"
+import { auth } from "@/lib/auth"
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  const { searchParams } = new URL(req.url)
+
+  const clientId = searchParams.get("client_id")
+  const redirectUri = searchParams.get("redirect_uri") // soul://oauth/callback
+  const codeChallenge = searchParams.get("code_challenge")
+  const codeChallengeMethod = searchParams.get("code_challenge_method") // S256
+  const state = searchParams.get("state")
+
+  // Validate params
+  if (!codeChallenge || codeChallengeMethod !== "S256") {
+    return NextResponse.json({ error: "PKCE required" }, { status: 400 })
+  }
+
+  // If not logged in, redirect to login with return URL
+  if (!session?.user) {
+    const returnUrl = encodeURIComponent(req.url)
+    return NextResponse.redirect(new URL(`/login?returnTo=${returnUrl}`, req.url))
+  }
+
+  // Generate authorization code
+  const code = crypto.randomUUID()
+
+  // Store code + challenge (5 min expiry)
+  await prisma.authorizationCode.create({
+    data: {
+      code,
+      userId: session.user.id,
+      codeChallenge,
+      redirectUri,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+    }
+  })
+
+  // Redirect back to Soul Player
+  const callbackUrl = new URL(redirectUri!)
+  callbackUrl.searchParams.set("code", code)
+  if (state) callbackUrl.searchParams.set("state", state)
+
+  return NextResponse.redirect(callbackUrl)
+}
+```
+
+```typescript
+// app/api/oauth/token/route.ts
+import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/db"
+import { createHash } from "crypto"
+import { SignJWT } from "jose"
+
+export async function POST(req: NextRequest) {
+  const body = await req.json()
+  const { code, code_verifier, grant_type } = body
+
+  if (grant_type === "authorization_code") {
+    // Find the authorization code
+    const authCode = await prisma.authorizationCode.findUnique({
+      where: { code },
+      include: { user: { include: { subscription: true } } }
+    })
+
+    if (!authCode || authCode.expiresAt < new Date()) {
+      return NextResponse.json({ error: "invalid_grant" }, { status: 400 })
+    }
+
+    // Verify PKCE
+    const expectedChallenge = createHash("sha256")
+      .update(code_verifier)
+      .digest("base64url")
+
+    if (expectedChallenge !== authCode.codeChallenge) {
+      return NextResponse.json({ error: "invalid_grant" }, { status: 400 })
+    }
+
+    // Generate tokens
+    const accessToken = await new SignJWT({
+      sub: authCode.user.id,
+      tier: authCode.user.subscription?.tier ?? "FREE"
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("1h")
+      .sign(new TextEncoder().encode(process.env.JWT_SECRET))
+
+    const refreshToken = crypto.randomUUID()
+
+    // Store refresh token
+    await prisma.device.upsert({
+      where: { accessToken },
+      create: {
+        userId: authCode.user.id,
+        name: body.device_name ?? "Unknown Device",
+        type: body.device_type ?? "DESKTOP",
+        accessToken,
+        refreshToken,
+        tokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+      },
+      update: {
+        accessToken,
+        refreshToken,
+        tokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      }
+    })
+
+    // Delete used auth code
+    await prisma.authorizationCode.delete({ where: { code } })
+
+    return NextResponse.json({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: "Bearer",
+      expires_in: 3600
+    })
+  }
+
+  if (grant_type === "refresh_token") {
+    // Handle refresh token flow
+    // ...
+  }
+
+  return NextResponse.json({ error: "unsupported_grant_type" }, { status: 400 })
+}
+```
+
+---
+
+## API Implementation Examples
+
+### Lyrics Endpoint
+
+```typescript
+// app/api/v1/lyrics/route.ts
+import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/db"
+import { getLyricsFromGenius } from "@/lib/external/genius"
+import { getLyricsFromLrclib } from "@/lib/external/lrclib"
+import { createHash } from "crypto"
+import { z } from "zod"
+
+const querySchema = z.object({
+  artist: z.string().min(1),
+  title: z.string().min(1),
+  album: z.string().optional(),
+  duration: z.coerce.number().optional(),
+  synced: z.coerce.boolean().default(false)
+})
+
+export async function GET(req: NextRequest) {
+  // Authenticate
+  const session = await auth()
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  // Parse & validate query params
+  const { searchParams } = new URL(req.url)
+  const parsed = querySchema.safeParse(Object.fromEntries(searchParams))
+
+  if (!parsed.success) {
+    return NextResponse.json({
+      error: "Invalid parameters",
+      details: parsed.error.flatten()
+    }, { status: 400 })
+  }
+
+  const { artist, title, album, duration, synced } = parsed.data
+
+  // Check rate limit
+  const tier = session.user.tier
+  const rateLimit = tier === "AUDIOPHILE" ? 120 : 60
+  // ... rate limiting logic
+
+  // Check cache first
+  const fingerprint = createHash("sha256")
+    .update(`${artist.toLowerCase()}|${title.toLowerCase()}|${album?.toLowerCase() ?? ""}`)
+    .digest("hex")
+
+  const cached = await prisma.lyrics.findUnique({
+    where: { trackFingerprint: fingerprint }
+  })
+
+  if (cached && cached.expiresAt > new Date()) {
+    // Return cached if synced requirement is met
+    if (!synced || cached.synced) {
+      return NextResponse.json({
+        lyrics: cached.lyrics,
+        synced: cached.synced,
+        source: cached.source,
+        language: cached.language,
+        cached: true
+      })
+    }
+  }
+
+  // Fetch from external sources
+  let lyrics = null
+  let source = ""
+  let isSynced = false
+
+  // Try LRCLIB first for synced lyrics
+  if (synced) {
+    const lrcResult = await getLyricsFromLrclib(artist, title, album, duration)
+    if (lrcResult?.syncedLyrics) {
+      lyrics = lrcResult.syncedLyrics
+      source = "lrclib"
+      isSynced = true
+    }
+  }
+
+  // Fallback to Genius for unsynced
+  if (!lyrics) {
+    const geniusResult = await getLyricsFromGenius(artist, title)
+    if (geniusResult) {
+      lyrics = geniusResult.lyrics
+      source = "genius"
+      isSynced = false
+    }
+  }
+
+  if (!lyrics) {
+    return NextResponse.json({ error: "Lyrics not found" }, { status: 404 })
+  }
+
+  // Cache the result
+  await prisma.lyrics.upsert({
+    where: { trackFingerprint: fingerprint },
+    create: {
+      trackFingerprint: fingerprint,
+      artist,
+      title,
+      album,
+      lyrics,
+      synced: isSynced,
+      source,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+    },
+    update: {
+      lyrics,
+      synced: isSynced,
+      source,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    }
+  })
+
+  // Track usage
+  await trackApiUsage(session.user.id, "lyrics")
+
+  return NextResponse.json({
+    lyrics,
+    synced: isSynced,
+    source,
+    language: "en",
+    cached: false
+  })
+}
+
+async function trackApiUsage(userId: string, endpoint: string) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  await prisma.apiUsage.upsert({
+    where: {
+      userId_endpoint_date: { userId, endpoint, date: today }
+    },
+    create: { userId, endpoint, date: today, requestCount: 1 },
+    update: { requestCount: { increment: 1 } }
+  })
+}
+```
+
+### Artist Enrichment Endpoint
+
+```typescript
+// app/api/v1/artist/[id]/enrich/route.ts
+import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/db"
+import { getArtistFromMusicBrainz } from "@/lib/external/musicbrainz"
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const session = await auth()
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const musicbrainzId = params.id
+
+  // Check cache
+  const cached = await prisma.artistMetadata.findUnique({
+    where: { musicbrainzId }
+  })
+
+  if (cached && cached.expiresAt > new Date()) {
+    return NextResponse.json({
+      ...cached,
+      cached: true
+    })
+  }
+
+  // Fetch from MusicBrainz
+  const artist = await getArtistFromMusicBrainz(musicbrainzId)
+
+  if (!artist) {
+    return NextResponse.json({ error: "Artist not found" }, { status: 404 })
+  }
+
+  // Cache for 90 days (older artists rarely change)
+  const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+
+  await prisma.artistMetadata.upsert({
+    where: { musicbrainzId },
+    create: {
+      musicbrainzId,
+      name: artist.name,
+      sortName: artist.sortName,
+      bio: artist.bio,
+      country: artist.country,
+      formedDate: artist.formedDate,
+      genreTags: artist.genreTags,
+      similarArtists: artist.similarArtists,
+      expiresAt
+    },
+    update: {
+      name: artist.name,
+      sortName: artist.sortName,
+      bio: artist.bio,
+      country: artist.country,
+      formedDate: artist.formedDate,
+      genreTags: artist.genreTags,
+      similarArtists: artist.similarArtists,
+      expiresAt
+    }
+  })
+
+  await trackApiUsage(session.user.id, "artist_enrich")
+
+  return NextResponse.json({
+    ...artist,
+    cached: false
+  })
+}
+```
+
+### Fingerprint Endpoint (Audiophile Tier)
+
+```typescript
+// app/api/v1/fingerprint/route.ts
+import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/db"
+import { lookupFingerprint } from "@/lib/external/acoustid"
+import { getArtistFromMusicBrainz } from "@/lib/external/musicbrainz"
+import { z } from "zod"
+
+const bodySchema = z.object({
+  fingerprint: z.string().min(1),
+  duration: z.number().int().positive(),
+  enrich: z.boolean().default(false)
+})
+
+export async function POST(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  // Check tier - fingerprinting is Audiophile only
+  if (session.user.tier !== "AUDIOPHILE" && session.user.tier !== "SELF_HOSTED") {
+    return NextResponse.json({
+      error: "Fingerprinting requires Audiophile tier",
+      upgrade_url: "/dashboard/subscription"
+    }, { status: 403 })
+  }
+
+  // Check monthly quota (1000 for Audiophile)
+  const startOfMonth = new Date()
+  startOfMonth.setDate(1)
+  startOfMonth.setHours(0, 0, 0, 0)
+
+  const usage = await prisma.apiUsage.aggregate({
+    where: {
+      userId: session.user.id,
+      endpoint: "fingerprint",
+      date: { gte: startOfMonth }
+    },
+    _sum: { requestCount: true }
+  })
+
+  const monthlyUsage = usage._sum.requestCount ?? 0
+  if (session.user.tier === "AUDIOPHILE" && monthlyUsage >= 1000) {
+    return NextResponse.json({
+      error: {
+        code: "RATE_LIMIT_EXCEEDED",
+        message: "Monthly fingerprint quota exceeded (1000)",
+        details: {
+          current_usage: monthlyUsage,
+          limit: 1000,
+          reset_at: new Date(startOfMonth.getFullYear(), startOfMonth.getMonth() + 1, 1)
+        }
+      }
+    }, { status: 429 })
+  }
+
+  const body = await req.json()
+  const parsed = bodySchema.safeParse(body)
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const { fingerprint, duration, enrich } = parsed.data
+
+  // Lookup via AcoustID
+  const result = await lookupFingerprint(fingerprint, duration)
+
+  if (!result || result.results.length === 0) {
+    return NextResponse.json({
+      match_score: 0,
+      track: null,
+      message: "No match found"
+    })
+  }
+
+  const bestMatch = result.results[0]
+  const recording = bestMatch.recordings?.[0]
+
+  // Store for analytics
+  await prisma.fingerprint.create({
+    data: {
+      userId: session.user.id,
+      fingerprint: fingerprint.substring(0, 100), // Truncate for storage
+      duration,
+      matchedRecordingId: recording?.id,
+      matchScore: bestMatch.score
+    }
+  })
+
+  await trackApiUsage(session.user.id, "fingerprint")
+
+  let enrichedData = null
+  if (enrich && recording?.artists?.[0]?.id) {
+    enrichedData = await getArtistFromMusicBrainz(recording.artists[0].id)
+  }
+
+  return NextResponse.json({
+    match_score: bestMatch.score,
+    track: recording ? {
+      musicbrainz_id: recording.id,
+      title: recording.title,
+      artist: recording.artists?.[0]?.name,
+      album: recording.releasegroups?.[0]?.title,
+    } : null,
+    enriched: enrichedData
+  })
+}
+```
+
+---
+
+## Dashboard Pages
+
+### Subscription Management
+
+```typescript
+// app/(dashboard)/subscription/page.tsx
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/db"
+import { redirect } from "next/navigation"
+import { SubscriptionCard } from "@/components/dashboard/SubscriptionCard"
+import { PricingTable } from "@/components/marketing/PricingTable"
+import { createCheckoutSession, createPortalSession } from "@/lib/stripe"
+
+export default async function SubscriptionPage() {
+  const session = await auth()
+  if (!session?.user) redirect("/login")
+
+  const subscription = await prisma.subscription.findUnique({
+    where: { userId: session.user.id }
+  })
+
+  // Get usage stats
+  const startOfMonth = new Date()
+  startOfMonth.setDate(1)
+  startOfMonth.setHours(0, 0, 0, 0)
+
+  const usage = await prisma.apiUsage.groupBy({
+    by: ["endpoint"],
+    where: {
+      userId: session.user.id,
+      date: { gte: startOfMonth }
+    },
+    _sum: { requestCount: true }
+  })
+
+  return (
+    <div className="space-y-8">
+      <h1 className="text-3xl font-bold">Subscription</h1>
+
+      {subscription ? (
+        <SubscriptionCard
+          subscription={subscription}
+          usage={usage}
+          onManage={async () => {
+            "use server"
+            const url = await createPortalSession(subscription.stripeCustomerId)
+            redirect(url)
+          }}
+        />
+      ) : (
+        <div className="space-y-6">
+          <p className="text-muted-foreground">
+            Upgrade to unlock premium features like lyrics, metadata enrichment,
+            and audio fingerprinting.
+          </p>
+          <PricingTable
+            onSelectPlan={async (tier: string) => {
+              "use server"
+              const url = await createCheckoutSession(session.user.id, tier)
+              redirect(url)
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+### API Keys Management (Self-Hosted)
+
+```typescript
+// app/(dashboard)/api-keys/page.tsx
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/db"
+import { redirect } from "next/navigation"
+import { ApiKeyForm } from "@/components/dashboard/ApiKeyForm"
+import { ApiKeyList } from "@/components/dashboard/ApiKeyList"
+
+const SERVICES = [
+  { id: "musicbrainz", name: "MusicBrainz", required: false, freeApi: true },
+  { id: "acoustid", name: "AcoustID", required: false, freeApi: false },
+  { id: "genius", name: "Genius", required: false, freeApi: true },
+  { id: "discogs", name: "Discogs", required: false, freeApi: true },
+]
+
+export default async function ApiKeysPage() {
+  const session = await auth()
+  if (!session?.user) redirect("/login")
+
+  // Only show for self-hosted tier
+  const subscription = await prisma.subscription.findUnique({
+    where: { userId: session.user.id }
+  })
+
+  if (subscription?.tier !== "SELF_HOSTED") {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold">API Keys</h1>
+        <p className="text-muted-foreground">
+          API key management is only available for Self-Hosted tier users.
+          With Pro or Audiophile tiers, we handle all API integrations for you.
+        </p>
+      </div>
+    )
+  }
+
+  const apiKeys = await prisma.apiKey.findMany({
+    where: { userId: session.user.id },
+    select: {
+      id: true,
+      service: true,
+      isValid: true,
+      lastCheckedAt: true,
+      createdAt: true
+      // Note: we never return the actual key
+    }
+  })
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold">API Keys</h1>
+        <p className="text-muted-foreground mt-2">
+          Configure your own API keys for external services.
+          Keys are encrypted at rest.
+        </p>
+      </div>
+
+      <ApiKeyList keys={apiKeys} services={SERVICES} />
+
+      <ApiKeyForm services={SERVICES} existingKeys={apiKeys} />
+    </div>
+  )
+}
+```
+
+---
+
+## Integration with Soul Player
+
+### Rust Client SDK
+
+The Soul Player desktop app (Rust/Tauri) uses a client library to communicate with Soul Services:
+
+```rust
+// In soul-player repo: libraries/soul-services-client/src/lib.rs
+
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum SoulServicesError {
+    #[error("Not authenticated - please sign in")]
+    Unauthenticated,
+    #[error("Subscription required: {0}")]
+    SubscriptionRequired(String),
+    #[error("Rate limit exceeded")]
+    RateLimited,
+    #[error("Network error: {0}")]
+    Network(#[from] reqwest::Error),
+    #[error("Not found")]
+    NotFound,
+}
+
+pub struct SoulServicesClient {
+    base_url: String,
+    client: Client,
+    access_token: Option<String>,
+}
+
+impl SoulServicesClient {
+    pub fn new(base_url: &str) -> Self {
+        Self {
+            base_url: base_url.to_string(),
+            client: Client::new(),
+            access_token: None,
+        }
+    }
+
+    pub fn with_token(mut self, token: String) -> Self {
+        self.access_token = Some(token);
+        self
+    }
+
+    pub async fn get_lyrics(
+        &self,
+        artist: &str,
+        title: &str,
+        synced: bool,
+    ) -> Result<LyricsResponse, SoulServicesError> {
+        let token = self.access_token.as_ref()
+            .ok_or(SoulServicesError::Unauthenticated)?;
+
+        let resp = self.client
+            .get(format!("{}/api/v1/lyrics", self.base_url))
+            .query(&[
+                ("artist", artist),
+                ("title", title),
+                ("synced", if synced { "true" } else { "false" }),
+            ])
+            .bearer_auth(token)
+            .send()
+            .await?;
+
+        match resp.status().as_u16() {
+            200 => Ok(resp.json().await?),
+            401 => Err(SoulServicesError::Unauthenticated),
+            403 => Err(SoulServicesError::SubscriptionRequired(
+                "Lyrics require Pro tier".into()
+            )),
+            404 => Err(SoulServicesError::NotFound),
+            429 => Err(SoulServicesError::RateLimited),
+            _ => Err(SoulServicesError::Network(
+                resp.error_for_status().unwrap_err()
+            )),
+        }
+    }
+
+    pub async fn enrich_artist(
+        &self,
+        musicbrainz_id: &str,
+    ) -> Result<ArtistMetadata, SoulServicesError> {
+        let token = self.access_token.as_ref()
+            .ok_or(SoulServicesError::Unauthenticated)?;
+
+        let resp = self.client
+            .get(format!("{}/api/v1/artist/{}/enrich", self.base_url, musicbrainz_id))
+            .bearer_auth(token)
+            .send()
+            .await?;
+
+        match resp.status().as_u16() {
+            200 => Ok(resp.json().await?),
+            401 => Err(SoulServicesError::Unauthenticated),
+            404 => Err(SoulServicesError::NotFound),
+            429 => Err(SoulServicesError::RateLimited),
+            _ => Err(SoulServicesError::Network(
+                resp.error_for_status().unwrap_err()
+            )),
+        }
+    }
+
+    pub async fn fingerprint(
+        &self,
+        fingerprint: &str,
+        duration: u32,
+        enrich: bool,
+    ) -> Result<FingerprintResponse, SoulServicesError> {
+        let token = self.access_token.as_ref()
+            .ok_or(SoulServicesError::Unauthenticated)?;
+
+        let resp = self.client
+            .post(format!("{}/api/v1/fingerprint", self.base_url))
+            .bearer_auth(token)
+            .json(&serde_json::json!({
+                "fingerprint": fingerprint,
+                "duration": duration,
+                "enrich": enrich
+            }))
+            .send()
+            .await?;
+
+        match resp.status().as_u16() {
+            200 => Ok(resp.json().await?),
+            401 => Err(SoulServicesError::Unauthenticated),
+            403 => Err(SoulServicesError::SubscriptionRequired(
+                "Fingerprinting requires Audiophile tier".into()
+            )),
+            429 => Err(SoulServicesError::RateLimited),
+            _ => Err(SoulServicesError::Network(
+                resp.error_for_status().unwrap_err()
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LyricsResponse {
+    pub lyrics: String,
+    pub synced: bool,
+    pub source: String,
+    pub language: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ArtistMetadata {
+    pub musicbrainz_id: String,
+    pub name: String,
+    pub bio: Option<String>,
+    pub country: Option<String>,
+    pub formed_date: Option<String>,
+    pub genre_tags: Option<Vec<String>>,
+    pub similar_artists: Option<Vec<SimilarArtist>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SimilarArtist {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FingerprintResponse {
+    pub match_score: f32,
+    pub track: Option<TrackMatch>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TrackMatch {
+    pub musicbrainz_id: String,
+    pub title: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+}
+```
+
+---
+
+## Deployment
+
+### Vercel (Recommended for Simplicity)
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+
+# Set environment variables in Vercel dashboard:
+# DATABASE_URL, NEXTAUTH_SECRET, STRIPE_SECRET_KEY, etc.
+```
+
+### Docker (Self-Hosted)
 
 ```dockerfile
 # Dockerfile
-FROM rust:1.75 AS builder
-WORKDIR /app
-COPY . .
-RUN cargo build --release --bin soul-discovery
+FROM node:20-alpine AS base
 
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libpq5 \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/soul-discovery /usr/local/bin/
-EXPOSE 3001
-CMD ["soul-discovery"]
+FROM base AS deps
+WORKDIR /app
+COPY package.json yarn.lock* ./
+RUN yarn install --frozen-lockfile
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npx prisma generate
+RUN yarn build
+
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/prisma ./prisma
+
+USER nextjs
+EXPOSE 3000
+ENV PORT 3000
+
+CMD ["node", "server.js"]
 ```
 
 ```yaml
 # docker-compose.yml
 version: '3.8'
 services:
-  soul-discovery:
+  soul-services:
     build: .
     ports:
-      - "3001:3001"
+      - "3000:3000"
     environment:
       DATABASE_URL: postgres://user:pass@db:5432/soul_services
-      REDIS_URL: redis://redis:6379
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-      JWT_SECRET: ${JWT_SECRET}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
     depends_on:
       - db
-      - redis
 
   db:
     image: postgres:16
@@ -591,303 +1444,86 @@ services:
       POSTGRES_DB: soul_services
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
-
-  redis:
-    image: redis:7
-    volumes:
-      - redis_data:/data
+    ports:
+      - "5432:5432"
 
 volumes:
   postgres_data:
-  redis_data:
 ```
 
----
+### Environment Variables
 
-## Integration with Soul Player
+```bash
+# .env.example
 
-### Client SDK (Rust Crate)
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/soul_services"
 
-Publish `soul-services-client` crate for easy integration:
+# NextAuth
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
 
-```rust
-// In Soul Player's Cargo.toml
-[dependencies]
-soul-services-client = "0.1"
+# OAuth Providers (optional)
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
 
-// Usage in Soul Player
-use soul_services_client::{SoulServicesClient, AuthFlow};
+# Stripe
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+STRIPE_PRICE_PRO="price_..."
+STRIPE_PRICE_AUDIOPHILE="price_..."
 
-#[tokio::main]
-async fn main() {
-    // Initialize client
-    let client = SoulServicesClient::new("https://services.soul.audio");
+# External APIs
+MUSICBRAINZ_APP_NAME="SoulServices"
+MUSICBRAINZ_APP_VERSION="1.0.0"
+MUSICBRAINZ_CONTACT="contact@soul.audio"
 
-    // OAuth flow (opens browser)
-    let auth = client.authenticate_pkce().await?;
+ACOUSTID_API_KEY=""
+GENIUS_ACCESS_TOKEN=""
+DISCOGS_API_KEY=""
 
-    // Store tokens securely
-    keyring::set_password("soul-services", "access_token", &auth.access_token)?;
-
-    // Enrich metadata
-    let artist = client.enrich_artist("queen-musicbrainz-id").await?;
-    println!("Bio: {}", artist.bio);
-
-    // Fetch lyrics
-    let lyrics = client.get_lyrics("Queen", "Bohemian Rhapsody", true).await?;
-    if lyrics.synced {
-        // Display with timestamps
-    }
-}
-```
-
-### Fallback Handling
-
-Soul Player should gracefully handle service unavailability:
-
-```rust
-match client.enrich_artist(id).await {
-    Ok(metadata) => display_rich_artist_page(metadata),
-    Err(SoulServicesError::Unauthenticated) => {
-        // Prompt user to subscribe
-        show_subscription_prompt()
-    }
-    Err(SoulServicesError::NetworkError(_)) => {
-        // Show cached data or basic info
-        display_basic_artist_info(local_db)
-    }
-    Err(e) => {
-        log::error!("Enrichment failed: {}", e);
-        // Continue with local data
-    }
-}
-```
-
-### UI Integration
-
-**Settings Page**:
-```
-[ Soul Services ]
-Status: Connected (Pro Tier)
-Email: user@example.com
-
-[ Manage Subscription ] [ Disconnect ]
-
-Features Enabled:
-✓ Metadata Enrichment
-✓ Lyrics (Synced)
-✓ Discovery
-✗ Audio Fingerprinting (Upgrade to Audiophile)
-```
-
-**Artist Page** (if enriched):
-```
-Queen
-📍 London, United Kingdom
-🎸 Formed: 1970
-
-[Rich biography from MusicBrainz]
-
-Similar Artists:
-• David Bowie
-• Led Zeppelin
-• Pink Floyd
-
-[Powered by Soul Services]
+# Self-hosted mode (disables Stripe)
+SELF_HOSTED_MODE="false"
 ```
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: MVP (Weeks 1-4)
+### Phase 1: Foundation (2-3 weeks)
 
-**Week 1-2: Core Infrastructure**
-- [ ] Repository setup + monorepo structure
-- [ ] PostgreSQL schema + migrations
-- [ ] Axum server with basic routing
+- [ ] Repository setup with Next.js 14 App Router
+- [ ] Prisma schema + PostgreSQL setup
+- [ ] NextAuth.js configuration (credentials + optional OAuth)
+- [ ] OAuth 2.0 + PKCE endpoints for Soul Player
+- [ ] Basic dashboard layout (account page)
 - [ ] Docker + docker-compose for local dev
-- [ ] OAuth 2.0 + PKCE implementation
-- [ ] JWT token generation/validation
+- [ ] Deploy to Vercel (or Fly.io)
 
-**Week 3: MusicBrainz Integration**
-- [ ] MusicBrainz API client
-- [ ] Artist/album enrichment endpoints
-- [ ] Response caching (90-day TTL)
-- [ ] Rate limiting middleware
+### Phase 2: Core API (2-3 weeks)
 
-**Week 4: Lyrics + Stripe**
+- [ ] MusicBrainz client + artist/album enrichment
 - [ ] Lyrics fetching (Genius + LRCLIB)
-- [ ] Synced lyrics parsing (LRC format)
-- [ ] Stripe subscription webhooks
-- [ ] Subscription tier enforcement
+- [ ] Response caching with Prisma
+- [ ] Rate limiting middleware
+- [ ] API usage tracking
+- [ ] Stripe subscription integration
+- [ ] Subscription management dashboard page
 
-**Deliverable**: Working service with metadata + lyrics, deployable to Fly.io
+### Phase 3: Advanced Features (2-3 weeks)
 
-### Phase 2: Advanced Features (Weeks 5-8)
+- [ ] AcoustID fingerprinting (Audiophile tier)
+- [ ] Discovery endpoints (similar artists, new releases)
+- [ ] Self-hosted API key management
+- [ ] Usage statistics dashboard
 
-**Week 5: Audio Fingerprinting**
-- [ ] AcoustID API integration
-- [ ] Fingerprint caching
-- [ ] Audiophile tier quota enforcement
+### Phase 4: Polish (1-2 weeks)
 
-**Week 6: Discovery Algorithms**
-- [ ] Similar artists (MusicBrainz relationships)
-- [ ] New releases tracking
-- [ ] Genre exploration endpoints
-
-**Week 7-8: Scraping**
-- [ ] Bandcamp scraper (respect rate limits)
-- [ ] Discogs API integration
-- [ ] Background job scheduler
-
-**Deliverable**: Full feature parity with planned spec
-
-### Phase 3: Polish & Scale (Weeks 9-12)
-
-**Week 9: Client SDK**
-- [ ] Publish `soul-services-client` crate
-- [ ] Integration examples
-- [ ] Error handling best practices
-
-**Week 10: Self-Hosted Support**
-- [ ] API key management UI
-- [ ] Validation checks for user-provided keys
-- [ ] Configuration guide
-
-**Week 11: Monitoring + Optimization**
+- [ ] Rust client SDK (`soul-services-client` crate)
+- [ ] API documentation (OpenAPI/Swagger or Nextra docs)
+- [ ] Error handling improvements
 - [ ] Sentry integration
-- [ ] Database query optimization
-- [ ] Cache hit rate monitoring
-
-**Week 12: Documentation + Launch**
-- [ ] API documentation (OpenAPI/Swagger)
-- [ ] Self-hosting guide
-- [ ] Pricing page + Stripe checkout flow
-
----
-
-## Self-Hosted Deployment Guide
-
-### Prerequisites
-
-- Docker + Docker Compose
-- Domain with SSL (Let's Encrypt recommended)
-- API keys for:
-  - Genius API (free tier)
-  - AcoustID (if using fingerprinting)
-  - (Optional) Musixmatch API
-
-### Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/soulaudio/soul-services
-cd soul-services
-
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your API keys
-nano .env
-
-# Generate JWT secret
-openssl rand -base64 32
-
-# Start services
-docker-compose up -d
-
-# Run migrations
-docker-compose exec soul-discovery ./migrate
-
-# Access at http://localhost:3001
-```
-
-### Environment Variables
-
-```bash
-# .env
-DATABASE_URL=postgres://user:password@db:5432/soul_services
-REDIS_URL=redis://redis:6379
-JWT_SECRET=<generate-with-openssl-rand-base64-32>
-
-# External API Keys (Self-Hosted)
-MUSICBRAINZ_APP_NAME=SoulServices
-MUSICBRAINZ_APP_VERSION=0.1.0
-MUSICBRAINZ_CONTACT=your-email@example.com
-ACOUSTID_API_KEY=<your-key>
-GENIUS_API_TOKEN=<your-token>
-MUSIXMATCH_API_KEY=<your-key-optional>
-
-# Disable Stripe for self-hosted (no payments)
-DISABLE_STRIPE=true
-
-# Optional: Scraping
-ENABLE_BANDCAMP_SCRAPING=true
-ENABLE_DISCOGS_API=true
-DISCOGS_API_KEY=<your-key>
-```
-
-### Connecting Soul Player
-
-In Soul Player settings:
-```
-Soul Services URL: https://your-domain.com
-(or http://localhost:3001 for local dev)
-
-Authentication: [ Configure OAuth ]
-```
-
----
-
-## Security Considerations
-
-### API Key Storage (Self-Hosted)
-
-User-provided API keys are encrypted at rest:
-- **Algorithm**: AES-256-GCM
-- **Key Derivation**: User's password (via Argon2)
-- **Never logged**: Keys never appear in logs or errors
-
-### Rate Limiting
-
-Prevent abuse of external APIs:
-- Per-user limits (tracked in `api_usage` table)
-- Global rate limiter for external APIs
-- Exponential backoff on failures
-
-### Scraping Ethics
-
-- Respect `robots.txt`
-- User-Agent identifies as Soul Services
-- Rate-limited (max 1 req/5 seconds per site)
-- Cache aggressively (7-90 days)
-- Fallback to APIs when available
-
-### GDPR Compliance
-
-- Users can delete all data (subscription history excluded for legal)
-- No selling of data
-- Optional analytics (user can opt-out)
-- Self-hosted users have full control
-
----
-
-## Open Questions / Future Considerations
-
-### Short-Term
-
-1. **Lyrics Legality**: Confirm licensing for Musixmatch/Genius. May need to use LRCLIB exclusively for non-commercial.
-2. **AcoustID Costs**: At scale, fingerprinting could get expensive. Consider bulk pricing.
-3. **MusicBrainz Rate Limits**: 1 req/sec is slow. May need to run local mirror for heavy users.
-
-### Long-Term
-
-4. **Multi-Tenant Self-Hosting**: Allow companies to host for multiple users (license required?)
-5. **soul-sync Service**: Sync playlists/library across devices (separate service)
-6. **soul-social Service**: Scrobbling, friend activity, shared playlists
-7. **Mobile App Support**: Extend OAuth flow to iOS/Android clients
-8. **Public API**: Let third-party apps use Soul Services (API key system)
+- [ ] Self-hosting documentation
 
 ---
 
@@ -895,113 +1531,34 @@ Prevent abuse of external APIs:
 
 ### Technical
 
-- [ ] 99.9% uptime (excluding maintenance)
+- [ ] 99.9% uptime
 - [ ] <200ms p95 latency for metadata endpoints
 - [ ] <2s p95 latency for fingerprinting
-- [ ] 80%+ cache hit rate for metadata
+- [ ] 80%+ cache hit rate
 
 ### Business
 
 - [ ] 100 paying subscribers in first 3 months
 - [ ] <5% monthly churn rate
-- [ ] 70%+ gross margin (API costs < 30% revenue)
-- [ ] Net Promoter Score (NPS) > 40
+- [ ] 70%+ gross margin
 
 ### Product
 
-- [ ] 90%+ metadata match rate (MusicBrainz coverage)
-- [ ] 80%+ lyrics match rate (Genius + LRCLIB)
-- [ ] 95%+ fingerprint accuracy (AcoustID)
-- [ ] <1% error rate on API calls
-
----
-
-## FAQ
-
-### For Users
-
-**Q: Can I try before subscribing?**
-A: We'll offer a 7-day free trial or limited free tier (TBD).
-
-**Q: What if Soul Services shuts down?**
-A: Soul Player works offline. Cached metadata remains. Self-hosted option always available.
-
-**Q: Is my listening data shared?**
-A: No. We only store metadata you request (artist names, track titles). No listening history unless you opt-in to scrobbling (future feature).
-
-### For Developers
-
-**Q: Will there be a public API?**
-A: Phase 2 consideration. Initially only for Soul Player integration.
-
-**Q: Can I contribute to Soul Services?**
-A: The core will be closed-source initially, but we may open-source client SDKs and utilities.
-
-**Q: What if I want to integrate into my own music app?**
-A: Contact us for licensing. We're open to partnerships.
-
----
-
-## Repository Structure (Proposed)
-
-```
-soul-services/
-├── Cargo.toml                  # Workspace root
-├── .env.example
-├── docker-compose.yml
-├── Dockerfile
-│
-├── crates/
-│   ├── soul-discovery/         # Main service
-│   │   ├── src/
-│   │   │   ├── main.rs
-│   │   │   ├── api/            # Axum routes
-│   │   │   ├── services/       # Business logic
-│   │   │   ├── models/         # DB models
-│   │   │   └── external/       # API clients
-│   │   └── tests/
-│   │
-│   ├── soul-auth/              # OAuth + subscription logic
-│   │   ├── src/
-│   │   └── tests/
-│   │
-│   └── soul-services-client/   # Published SDK for Soul Player
-│       ├── src/
-│       └── examples/
-│
-├── migrations/                 # SQLx migrations
-│   ├── 001_create_users.sql
-│   ├── 002_create_subscriptions.sql
-│   └── ...
-│
-├── docs/
-│   ├── API.md                  # API documentation
-│   ├── SELF_HOSTING.md
-│   └── CONTRIBUTING.md
-│
-└── scripts/
-    ├── setup.sh                # Local dev setup
-    └── migrate.sh              # Run migrations
-```
+- [ ] 90%+ metadata match rate
+- [ ] 80%+ lyrics match rate
+- [ ] 95%+ fingerprint accuracy
+- [ ] <1% API error rate
 
 ---
 
 ## Next Steps
 
 1. **Create Repository**: `https://github.com/soulaudio/soul-services`
-2. **Initial Commit**: Setup Cargo workspace + basic Axum server
-3. **Deploy Fly.io**: Get production environment running early
-4. **Stripe Dashboard**: Create products (Pro + Audiophile tiers)
-5. **Domain Setup**: `services.soul.audio` + SSL certificate
-6. **Begin Phase 1**: Follow implementation plan above
-
----
-
-## Contact & Discussion
-
-- **GitHub Issues**: For bugs, feature requests
-- **Discussions**: Architecture decisions, community input
-- **Email**: services@soul.audio (for partnerships, licensing)
+2. **Initial Setup**: `npx create-next-app@latest soul-services --typescript --tailwind --app`
+3. **Add Prisma**: `npx prisma init`
+4. **Deploy to Vercel**: Connect repo, add environment variables
+5. **Stripe Dashboard**: Create products (Pro + Audiophile tiers)
+6. **Domain Setup**: `services.soul.audio` pointing to Vercel
 
 ---
 

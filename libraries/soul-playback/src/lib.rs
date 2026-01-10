@@ -116,6 +116,7 @@
 //! manager.process_audio(&mut output_buffer).ok();
 //! ```
 
+mod crossfade;
 mod error;
 mod history;
 mod manager;
@@ -130,10 +131,15 @@ mod volume;
 pub mod wasm;
 
 // Public exports
+pub use crossfade::{CrossfadeEngine, CrossfadeSettings, CrossfadeState, FadeCurve};
 pub use error::{PlaybackError, Result};
 pub use manager::PlaybackManager;
 pub use source::AudioSource;
 pub use types::{PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMode, TrackSource};
+
+// Volume leveling exports (conditionally compiled)
+#[cfg(feature = "volume-leveling")]
+pub use soul_loudness::NormalizationMode;
 
 // WASM exports
 #[cfg(feature = "wasm")]

@@ -1,0 +1,23 @@
+# Development Dockerfile with cargo-watch for hot reload
+FROM rust:1.83-slim
+
+# Install build dependencies and cargo-watch
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && cargo install cargo-watch
+
+# Create app user and directories
+RUN useradd -m -u 1000 soul && \
+    mkdir -p /app /data /data/tracks && \
+    chown -R soul:soul /app /data
+
+WORKDIR /app
+
+# Expose server port
+EXPOSE 8080
+
+# Default command (can be overridden in docker-compose)
+CMD ["cargo", "watch", "-x", "run -p soul-server -- serve"]

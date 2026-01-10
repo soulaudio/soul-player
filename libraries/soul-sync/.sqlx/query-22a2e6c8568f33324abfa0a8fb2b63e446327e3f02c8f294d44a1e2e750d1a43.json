@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE tracks\n        SET title = COALESCE(?, title),\n            track_number = ?,\n            disc_number = ?,\n            year = ?,\n            duration_seconds = ?,\n            bitrate = ?,\n            sample_rate = ?,\n            channels = ?,\n            file_format = ?,\n            file_size = ?,\n            file_mtime = ?,\n            content_hash = COALESCE(?, content_hash),\n            updated_at = datetime('now')\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "22a2e6c8568f33324abfa0a8fb2b63e446327e3f02c8f294d44a1e2e750d1a43"
+}

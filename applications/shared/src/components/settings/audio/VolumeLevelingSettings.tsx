@@ -39,7 +39,7 @@ export function VolumeLevelingSettings({
   onModeChange,
 }: VolumeLevelingSettingsProps) {
   return (
-    <div className="bg-card border border-border rounded-lg p-6 space-y-6">
+    <div className="space-y-6">
       {/* Mode Selection */}
       <div className="space-y-3">
         <label className="text-sm font-medium">Normalization Mode</label>

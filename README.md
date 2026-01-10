@@ -70,12 +70,94 @@ See `docs/development/MOBILE_SETUP.md` for prerequisites.
 
 ---
 
+## Server
+
+Run the multi-user streaming server with web interface.
+
+### Local (No Docker)
+
+```bash
+# Server only (API on port 8080)
+cargo run -p soul-server -- serve
+
+# Server + Web UI (two terminals)
+cargo run -p soul-server -- serve   # Terminal 1: API on :8080
+yarn dev:web                         # Terminal 2: Web UI on :3000 (proxies to API)
+```
+
+Access:
+- **Web UI**: http://localhost:3000
+- **API**: http://localhost:8080/api
+
+### Docker - Production
+
+```bash
+# Build and run (serves web UI + API on port 8080)
+docker compose up -d
+
+# Or build manually
+docker build -f applications/server/Dockerfile -t soul-player .
+docker run -p 8080:8080 -v soul-data:/app/data soul-player
+```
+
+Access:
+- **Web UI**: http://localhost:8080
+- **API**: http://localhost:8080/api
+
+### Development (Hot Reload)
+
+```bash
+# Start server with cargo-watch + web dev server with HMR
+docker compose -f docker-compose.dev.yml up
+
+# Or use yarn scripts
+yarn dev:all           # Start both server and web
+yarn dev:all:down      # Stop
+```
+
+Access:
+- **Web UI (Vite HMR)**: http://localhost:3000
+- **API**: http://localhost:8080/api
+
+### API-Only (No Web UI)
+
+```bash
+docker build -f applications/server/Dockerfile.server-only -t soul-server:api .
+docker run -p 8080:8080 -v soul-data:/app/data soul-server:api
+```
+
+### Create User
+
+```bash
+# Inside container
+docker compose exec soul-player soul-server add-user -u myuser -p mypassword
+
+# Or with docker run
+docker run --rm -v soul-data:/app/data soul-player soul-server add-user -u myuser -p mypassword
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SOUL_SERVER_HOST` | `0.0.0.0` | Server bind address |
+| `SOUL_SERVER_PORT` | `8080` | Server port |
+| `SOUL_AUTH_JWT_SECRET` | - | **Required**: JWT signing secret |
+| `SOUL_STORAGE_DATABASE_URL` | `sqlite:///app/data/soul.db` | Database path |
+| `SOUL_STORAGE_MUSIC_STORAGE_PATH` | `/app/data/tracks` | Music storage path |
+| `SOUL_TRANSCODING_ENABLED` | `true` | Enable audio transcoding |
+| `SOUL_WEB_DIR` | `/app/web` | Web UI static files path |
+
+---
+
 ## Build
 
 ```bash
 # From repository root
-yarn build:desktop
-yarn build:mobile
+yarn build:desktop     # Desktop app
+yarn build:mobile      # Mobile app
+yarn build:web         # Web player
+yarn build:marketing   # Marketing site
 ```
 
 ---
@@ -85,10 +167,12 @@ yarn build:mobile
 ```
 libraries/          # Rust libraries (audio, storage, metadata, sync)
 applications/
-  shared/          # React components (shared across desktop/mobile)
+  shared/          # React components (shared across desktop/mobile/web)
   desktop/         # Desktop Tauri app
   mobile/          # Mobile Tauri app (iOS/Android)
-  server/          # Multi-user server
+  web/             # Web player (connects to server)
+  server/          # Multi-user streaming server
+  marketing/       # Marketing website with demo
   firmware/        # ESP32-S3 DAP firmware
 docs/              # Architecture, testing, CI/CD guides
 ```

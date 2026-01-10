@@ -1,8 +1,12 @@
 //! Core types for playback management
 
+use crate::crossfade::CrossfadeSettings;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
+
+// Re-export crossfade types for convenience
+pub use crate::crossfade::{CrossfadeSettings as CrossfadeConfig, FadeCurve};
 
 /// Track information for queue management
 ///
@@ -96,7 +100,7 @@ pub enum ShuffleMode {
 }
 
 /// Configuration for playback manager
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PlaybackConfig {
     /// Maximum history size (default: 50)
     pub history_size: usize,
@@ -112,6 +116,9 @@ pub struct PlaybackConfig {
 
     /// Gapless playback enabled (default: true)
     pub gapless: bool,
+
+    /// Crossfade settings
+    pub crossfade: CrossfadeSettings,
 }
 
 impl Default for PlaybackConfig {
@@ -122,6 +129,30 @@ impl Default for PlaybackConfig {
             shuffle: ShuffleMode::Off,
             repeat: RepeatMode::Off,
             gapless: true,
+            crossfade: CrossfadeSettings::default(),
+        }
+    }
+}
+
+impl PlaybackConfig {
+    /// Create config with gapless playback (no crossfade)
+    pub fn gapless() -> Self {
+        Self {
+            crossfade: CrossfadeSettings::gapless(),
+            ..Default::default()
+        }
+    }
+
+    /// Create config with crossfade
+    pub fn with_crossfade(duration_ms: u32, curve: FadeCurve) -> Self {
+        Self {
+            crossfade: CrossfadeSettings {
+                enabled: true,
+                duration_ms,
+                curve,
+                on_skip: false,
+            },
+            ..Default::default()
         }
     }
 }

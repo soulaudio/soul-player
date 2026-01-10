@@ -28,11 +28,8 @@ interface NavTab {
 }
 
 const NAV_TABS: NavTab[] = [
-  { path: '/', label: 'Library', icon: '📚' },
-  { path: '/playlists', label: 'Playlists', icon: '🎵' },
-  { path: '/artists', label: 'Artists', icon: '👤' },
-  { path: '/albums', label: 'Albums', icon: '💿' },
-  { path: '/genres', label: 'Genres', icon: '🎸' },
+  { path: '/', label: 'Home', icon: '🏠' },
+  { path: '/library', label: 'Library', icon: '📚' },
 ];
 
 export function MainLayout({ children, onImport, showKeyboardShortcuts = false }: MainLayoutProps) {
@@ -41,7 +38,7 @@ export function MainLayout({ children, onImport, showKeyboardShortcuts = false }
   const [showSourcesDialog, setShowSourcesDialog] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
 
-  // Keyboard shortcuts for navigation
+  // Keyboard shortcuts for navigation (playback shortcuts handled by global shortcuts system)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd/Ctrl + K for search
@@ -50,12 +47,17 @@ export function MainLayout({ children, onImport, showKeyboardShortcuts = false }
         navigate('/search');
       }
       // Cmd/Ctrl + number for quick tab switching
-      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '5') {
+      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '2') {
         e.preventDefault();
         const index = parseInt(e.key) - 1;
         if (NAV_TABS[index]) {
           navigate(NAV_TABS[index].path);
         }
+      }
+      // Cmd/Ctrl + L for library
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault();
+        navigate('/library');
       }
       // Cmd/Ctrl + H for home
       if ((e.metaKey || e.ctrlKey) && e.key === 'h') {

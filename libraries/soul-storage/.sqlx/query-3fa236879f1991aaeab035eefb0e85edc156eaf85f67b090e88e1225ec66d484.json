@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO track_sources (track_id, source_id, status, local_file_path)\n         VALUES (?, 1, 'cached', '/cache/track.mp3')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "3fa236879f1991aaeab035eefb0e85edc156eaf85f67b090e88e1225ec66d484"
+}

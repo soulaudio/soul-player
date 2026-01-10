@@ -72,17 +72,21 @@ pub struct LocalAudioSource {
     track_id: u32,
     time_base: TimeBase,
 
-    // Ring buffer for decoded samples
-    buffer: VecDeque<f32>,
-    buffer_capacity: usize, // Max samples to buffer
+    // Ring buffer for decoded samples (at SOURCE rate, before resampling)
+    input_buffer: VecDeque<f32>,
+
+    // Ring buffer for resampled samples (at TARGET rate, ready for output)
+    output_buffer: VecDeque<f32>,
+    output_buffer_capacity: usize, // Max samples to buffer
 
     // Resampler (if needed)
     resampler: Option<SincFixedIn<f32>>,
     needs_resampling: bool,
+    resampler_chunk_frames: usize, // Number of frames needed per resample chunk
 
     // Position tracking
-    samples_decoded: usize, // Total samples decoded from start
-    samples_read: usize,    // Total samples read by audio callback
+    samples_decoded: usize, // Total samples decoded from start (at source rate)
+    samples_read: usize,    // Total samples read by audio callback (at target rate)
     total_duration: Duration,
     is_eof: bool,
 }
@@ -149,10 +153,9 @@ impl LocalAudioSource {
         eprintln!("  - Channels: {}", channels);
         eprintln!("  - Needs resampling: {}", sample_rate != target_sample_rate);
         if sample_rate != target_sample_rate {
-            eprintln!(
-                "  - Speed ratio: {:.4}x",
-                sample_rate as f64 / target_sample_rate as f64
-            );
+            let resample_ratio = target_sample_rate as f64 / sample_rate as f64;
+            eprintln!("  - Resample ratio: {:.6} ({}x)", resample_ratio,
+                if resample_ratio > 1.0 { "upsampling" } else { "downsampling" });
         }
 
         // Calculate total duration if available
@@ -168,13 +171,18 @@ impl LocalAudioSource {
             .map_err(|e| PlaybackError::AudioSource(format!("Failed to create decoder: {}", e)))?;
 
         // Calculate buffer capacity (5 seconds of stereo audio at target sample rate)
-        let buffer_capacity =
+        let output_buffer_capacity =
             (BUFFER_SIZE_SECONDS * target_sample_rate as usize) * channels as usize;
 
         // Check if resampling is needed
         let needs_resampling = sample_rate != target_sample_rate;
+
+        // Use a smaller chunk size for lower latency (1024 frames is common)
+        // This must match what we pass to the resampler
+        let resampler_chunk_frames = 1024;
+
         let resampler = if needs_resampling {
-            // Create resampler for streaming (using SincFixedIn with chunk size)
+            // Create resampler for streaming (using SincFixedIn with fixed input chunk size)
             let params = SincInterpolationParameters {
                 sinc_len: 256,
                 f_cutoff: 0.95,
@@ -183,17 +191,24 @@ impl LocalAudioSource {
                 window: WindowFunction::BlackmanHarris2,
             };
 
-            // Use a reasonable chunk size for streaming (0.1 seconds)
-            let chunk_frames = (sample_rate as usize) / 10;
+            let resample_ratio = target_sample_rate as f64 / sample_rate as f64;
+            eprintln!("[LocalAudioSource] Creating resampler:");
+            eprintln!("  - Ratio: {:.6}", resample_ratio);
+            eprintln!("  - Chunk frames: {}", resampler_chunk_frames);
+            eprintln!("  - Channels: {}", channels);
 
             match SincFixedIn::<f32>::new(
-                target_sample_rate as f64 / sample_rate as f64,
-                2.0,
+                resample_ratio,
+                2.0, // max relative ratio change
                 params,
-                chunk_frames,
+                resampler_chunk_frames,
                 channels as usize,
             ) {
-                Ok(resampler) => Some(resampler),
+                Ok(resampler) => {
+                    eprintln!("[LocalAudioSource] Resampler created successfully");
+                    eprintln!("  - Input frames needed: {}", resampler.input_frames_next());
+                    Some(resampler)
+                }
                 Err(e) => {
                     return Err(PlaybackError::AudioSource(format!(
                         "Failed to create resampler: {}",
@@ -205,6 +220,10 @@ impl LocalAudioSource {
             None
         };
 
+        // Pre-allocate input buffer for accumulating samples before resampling
+        // Size: enough for several chunks worth of samples
+        let input_buffer_capacity = resampler_chunk_frames * channels as usize * 4;
+
         Ok(Self {
             path,
             source_sample_rate: sample_rate,
@@ -214,10 +233,12 @@ impl LocalAudioSource {
             decoder,
             track_id,
             time_base,
-            buffer: VecDeque::with_capacity(buffer_capacity),
-            buffer_capacity,
+            input_buffer: VecDeque::with_capacity(input_buffer_capacity),
+            output_buffer: VecDeque::with_capacity(output_buffer_capacity),
+            output_buffer_capacity,
             resampler,
             needs_resampling,
+            resampler_chunk_frames,
             samples_decoded: 0,
             samples_read: 0,
             total_duration,
@@ -225,7 +246,14 @@ impl LocalAudioSource {
         })
     }
 
-    /// Decode next packet and add samples to ring buffer
+    /// Decode next packet and add samples to the appropriate buffer
+    ///
+    /// If resampling is needed:
+    /// - Decoded samples go to input_buffer
+    /// - When input_buffer has enough frames, resample and move to output_buffer
+    ///
+    /// If no resampling:
+    /// - Decoded samples go directly to output_buffer
     fn decode_next_packet(&mut self) -> Result<bool> {
         if self.is_eof {
             return Ok(false);
@@ -238,6 +266,10 @@ impl LocalAudioSource {
                 if e.kind() == std::io::ErrorKind::UnexpectedEof =>
             {
                 self.is_eof = true;
+                // Process any remaining samples in input buffer
+                if self.needs_resampling {
+                    self.flush_resampler()?;
+                }
                 return Ok(false);
             }
             Err(e) => {
@@ -259,22 +291,27 @@ impl LocalAudioSource {
             .decode(&packet)
             .map_err(|e| PlaybackError::AudioSource(format!("Decode error: {}", e)))?;
 
-        // Convert to f32 samples (borrowing decoded, not self)
-        let mut samples = Self::convert_to_f32_interleaved(decoded, self.channels)?;
-
-        // Resample if needed
-        if self.needs_resampling {
-            samples = self.resample_samples(samples)?;
-        }
-
-        // Now append samples to buffer
+        // Convert to f32 samples
+        let samples = Self::convert_to_f32_interleaved(decoded, self.channels)?;
         let samples_len = samples.len();
-        for sample in samples {
-            self.buffer.push_back(sample);
 
-            // Enforce buffer size limit
-            if self.buffer.len() > self.buffer_capacity {
-                self.buffer.pop_front();
+        if self.needs_resampling {
+            // Add samples to input buffer (at source rate)
+            for sample in samples {
+                self.input_buffer.push_back(sample);
+            }
+
+            // Process resampling when we have enough samples
+            self.process_resampling()?;
+        } else {
+            // No resampling needed - add directly to output buffer
+            for sample in samples {
+                self.output_buffer.push_back(sample);
+
+                // Enforce buffer size limit
+                if self.output_buffer.len() > self.output_buffer_capacity {
+                    self.output_buffer.pop_front();
+                }
             }
         }
 
@@ -283,33 +320,29 @@ impl LocalAudioSource {
         Ok(true)
     }
 
-    /// Resample interleaved samples from source rate to target rate
-    fn resample_samples(&mut self, samples: Vec<f32>) -> Result<Vec<f32>> {
+    /// Process resampling: convert samples from input_buffer to output_buffer
+    ///
+    /// Rubato's SincFixedIn requires a fixed number of input frames per call.
+    /// We accumulate samples in input_buffer until we have enough for a chunk,
+    /// then resample the chunk and add to output_buffer.
+    fn process_resampling(&mut self) -> Result<()> {
         let Some(ref mut resampler) = self.resampler else {
-            return Ok(samples);
+            return Ok(());
         };
 
         let channels = self.channels as usize;
-        let frames = samples.len() / channels;
-        let chunk_frames = resampler.input_frames_next();
+        let chunk_frames = self.resampler_chunk_frames;
+        let samples_per_chunk = chunk_frames * channels;
 
-        // If we have fewer frames than needed for a chunk, just pass them through
-        // They'll be buffered in our ring buffer and combined with the next packet
-        if frames < chunk_frames {
-            return Ok(samples);
-        }
+        // Process all complete chunks we have
+        while self.input_buffer.len() >= samples_per_chunk {
+            // Deinterleave chunk for rubato (rubato expects Vec<Vec<f32>> for each channel)
+            let mut deinterleaved: Vec<Vec<f32>> = vec![Vec::with_capacity(chunk_frames); channels];
 
-        // Process in chunks
-        let mut result = Vec::new();
-        let mut offset = 0;
-
-        while offset + chunk_frames <= frames {
-            // Deinterleave chunk for rubato
-            let mut deinterleaved = vec![Vec::with_capacity(chunk_frames); channels];
-            for frame_idx in 0..chunk_frames {
+            for _ in 0..chunk_frames {
                 for ch in 0..channels {
-                    let sample_idx = (offset + frame_idx) * channels + ch;
-                    deinterleaved[ch].push(samples[sample_idx]);
+                    let sample = self.input_buffer.pop_front().unwrap();
+                    deinterleaved[ch].push(sample);
                 }
             }
 
@@ -318,24 +351,77 @@ impl LocalAudioSource {
                 .process(&deinterleaved, None)
                 .map_err(|e| PlaybackError::AudioSource(format!("Resampling error: {}", e)))?;
 
-            // Interleave resampled chunk
+            // Interleave resampled chunk and add to output buffer
             let output_frames = resampled[0].len();
             for frame_idx in 0..output_frames {
                 for ch in 0..channels {
-                    result.push(resampled[ch][frame_idx]);
+                    self.output_buffer.push_back(resampled[ch][frame_idx]);
+
+                    // Enforce buffer size limit
+                    if self.output_buffer.len() > self.output_buffer_capacity {
+                        self.output_buffer.pop_front();
+                    }
                 }
             }
-
-            offset += chunk_frames;
         }
 
-        // If there are leftover samples, pass them through
-        // They'll be buffered for the next packet
-        for i in (offset * channels)..(frames * channels) {
-            result.push(samples[i]);
+        Ok(())
+    }
+
+    /// Flush remaining samples through the resampler at end of file
+    ///
+    /// When we reach EOF, there may be samples left in input_buffer that
+    /// don't form a complete chunk. We need to pad them and process.
+    fn flush_resampler(&mut self) -> Result<()> {
+        let Some(ref mut resampler) = self.resampler else {
+            return Ok(());
+        };
+
+        if self.input_buffer.is_empty() {
+            return Ok(());
         }
 
-        Ok(result)
+        let channels = self.channels as usize;
+        let chunk_frames = self.resampler_chunk_frames;
+        let remaining_samples = self.input_buffer.len();
+        let remaining_frames = remaining_samples / channels;
+
+        if remaining_frames == 0 {
+            return Ok(());
+        }
+
+        // Deinterleave remaining samples
+        let mut deinterleaved: Vec<Vec<f32>> = vec![Vec::with_capacity(chunk_frames); channels];
+
+        for _ in 0..remaining_frames {
+            for ch in 0..channels {
+                let sample = self.input_buffer.pop_front().unwrap();
+                deinterleaved[ch].push(sample);
+            }
+        }
+
+        // Pad with zeros to make a complete chunk
+        let frames_to_pad = chunk_frames - remaining_frames;
+        for ch in 0..channels {
+            deinterleaved[ch].extend(std::iter::repeat(0.0f32).take(frames_to_pad));
+        }
+
+        // Process the padded chunk
+        let resampled = resampler
+            .process(&deinterleaved, None)
+            .map_err(|e| PlaybackError::AudioSource(format!("Resampling error: {}", e)))?;
+
+        // Only take the valid output frames (proportional to input)
+        let output_frames = resampled[0].len();
+        let valid_output_frames = (remaining_frames as f64 / chunk_frames as f64 * output_frames as f64) as usize;
+
+        for frame_idx in 0..valid_output_frames {
+            for ch in 0..channels {
+                self.output_buffer.push_back(resampled[ch][frame_idx]);
+            }
+        }
+
+        Ok(())
     }
 
     /// Generic helper to interleave planar audio buffer to stereo f32
@@ -447,25 +533,25 @@ impl AudioSource for LocalAudioSource {
         let mut samples_written = 0;
 
         while samples_written < output.len() {
-            // If buffer is running low, decode more packets
-            if self.buffer.len() < output.len() && !self.is_eof {
-                // Decode packets until buffer is full or EOF
-                while self.buffer.len() < self.buffer_capacity && !self.is_eof {
+            // If output buffer is running low, decode more packets
+            if self.output_buffer.len() < output.len() && !self.is_eof {
+                // Decode packets until output buffer is full or EOF
+                while self.output_buffer.len() < self.output_buffer_capacity && !self.is_eof {
                     if !self.decode_next_packet()? {
                         break;
                     }
                 }
             }
 
-            // Copy from buffer to output
-            let available = self.buffer.len().min(output.len() - samples_written);
+            // Copy from output buffer to output
+            let available = self.output_buffer.len().min(output.len() - samples_written);
             if available == 0 {
                 // No more data available
                 break;
             }
 
             for i in 0..available {
-                output[samples_written + i] = self.buffer.pop_front().unwrap();
+                output[samples_written + i] = self.output_buffer.pop_front().unwrap();
             }
 
             samples_written += available;
@@ -502,8 +588,9 @@ impl AudioSource for LocalAudioSource {
         // Reset decoder state
         self.decoder.reset();
 
-        // Clear buffer and reset position tracking
-        self.buffer.clear();
+        // Clear both buffers and reset position tracking
+        self.input_buffer.clear();
+        self.output_buffer.clear();
         self.samples_read =
             (position.as_secs_f64() * self.target_sample_rate as f64 * self.channels as f64)
                 as usize;
@@ -529,7 +616,7 @@ impl AudioSource for LocalAudioSource {
     }
 
     fn is_finished(&self) -> bool {
-        self.is_eof && self.buffer.is_empty()
+        self.is_eof && self.output_buffer.is_empty() && self.input_buffer.is_empty()
     }
 }
 
