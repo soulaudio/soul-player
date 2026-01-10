@@ -29,8 +29,11 @@ pub mod copy;
 pub mod fuzzy;
 pub mod importer;
 pub mod library_scanner;
+pub mod managed_import;
 pub mod metadata;
+pub mod path_template;
 pub mod scanner;
+pub mod watcher;
 
 // Paid features (stubbed)
 pub mod paid;

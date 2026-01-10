@@ -119,7 +119,12 @@
       "Bash(tr:*)",
       "WebFetch(domain:api.github.com)",
       "Bash(sqlite3:*)",
-      "Bash(DATABASE_URL=\"sqlite:test_migrations.db\" sqlx migrate run:*)"
+      "Bash(DATABASE_URL=\"sqlite:test_migrations.db\" sqlx migrate run:*)",
+      "Bash(DATABASE_URL=\"sqlite:test_offline.db\" sqlx db:*)",
+      "Bash(DATABASE_URL=\"sqlite:test_offline.db\" sqlx migrate run:*)",
+      "Bash(DATABASE_URL=\"sqlite:test_offline.db\" cargo sqlx prepare:*)",
+      "Bash(DATABASE_URL=\"sqlite:D:/dev/soulaudio/soul-player/libraries/soul-storage/test_offline.db\" cargo sqlx prepare:*)",
+      "Bash(cargo install:*)"
     ]
   }
 }

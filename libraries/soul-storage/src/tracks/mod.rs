@@ -827,6 +827,26 @@ pub async fn find_by_hash(pool: &SqlitePool, file_hash: &str) -> Result<Option<T
     }
 }
 
+/// Find track file path by content hash (for duplicate detection during import)
+pub async fn find_path_by_content_hash(
+    pool: &SqlitePool,
+    content_hash: &str,
+) -> Result<Option<String>> {
+    let row = sqlx::query!(
+        r#"
+        SELECT file_path
+        FROM tracks
+        WHERE content_hash = ? AND is_available = 1
+        LIMIT 1
+        "#,
+        content_hash
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.and_then(|r| r.file_path))
+}
+
 // Helper functions
 
 fn parse_metadata_source(s: &str) -> MetadataSource {

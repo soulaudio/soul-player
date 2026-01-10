@@ -7,6 +7,7 @@ mod audio_settings;
 mod deep_link;
 mod dsp_commands;
 mod import;
+mod library_settings;
 mod loudness;
 mod playback;
 mod shortcuts;
@@ -1057,7 +1058,7 @@ fn main() {
             dsp_commands::save_dsp_chain_preset,
             dsp_commands::delete_dsp_chain_preset,
             dsp_commands::load_dsp_chain_preset,
-            // Library management (TODO)
+            // Library management
             get_all_tracks,
             get_track_by_id,
             delete_track,
@@ -1067,6 +1068,20 @@ fn main() {
             create_playlist,
             add_track_to_playlist,
             scan_library,
+            // Library settings
+            library_settings::get_library_sources,
+            library_settings::add_library_source,
+            library_settings::remove_library_source,
+            library_settings::toggle_library_source,
+            library_settings::rescan_library_source,
+            library_settings::rescan_all_sources,
+            library_settings::get_managed_library_settings,
+            library_settings::set_managed_library_settings,
+            library_settings::get_external_file_settings,
+            library_settings::set_external_file_settings,
+            library_settings::get_path_template_presets,
+            library_settings::preview_path_template,
+            library_settings::pick_folder,
             // Import management
             import::import_files,
             import::import_directory,

@@ -10,8 +10,9 @@
 //! - Real-time safety: no allocations in process path
 
 use soul_audio::effects::{
-    AudioEffect, Crossfeed, CrossfeedPreset, EqBand, GraphicEq, GraphicEqPreset, Limiter,
-    LimiterSettings, ParametricEq, StereoEnhancer, StereoSettings, mono_compatibility,
+    AudioEffect, Compressor, CompressorSettings, Crossfeed, CrossfeedPreset, EffectChain,
+    EqBand, GraphicEq, GraphicEqPreset, Limiter, LimiterSettings, ParametricEq,
+    StereoEnhancer, StereoSettings, mono_compatibility,
 };
 use std::f32::consts::PI;
 
@@ -1402,5 +1403,426 @@ mod realtime_safety_tests {
             elapsed.as_secs_f64() * 1000.0,
             buffer_time_ms
         );
+    }
+}
+
+// ============================================================================
+// COMPRESSOR INTEGRATION TESTS
+// ============================================================================
+
+mod compressor_integration_tests {
+    use super::*;
+
+    #[test]
+    fn test_compressor_reduces_peaks() {
+        let mut compressor = Compressor::with_settings(CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 4.0,
+            attack_ms: 1.0,
+            release_ms: 50.0,
+            knee_db: 0.0,
+            makeup_gain_db: 0.0,
+        });
+
+        // Signal that peaks above threshold
+        let mut buffer = generate_sine_wave(1000.0, SAMPLE_RATE, 4096);
+        let original_peak: f32 = buffer.iter().map(|s| s.abs()).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+
+        compressor.process(&mut buffer, SAMPLE_RATE);
+
+        let compressed_peak: f32 = buffer.iter().map(|s| s.abs()).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+
+        // Peak should be reduced
+        assert!(
+            compressed_peak < original_peak,
+            "Compressor should reduce peaks: original={}, compressed={}",
+            original_peak,
+            compressed_peak
+        );
+    }
+
+    #[test]
+    fn test_compressor_makeup_gain() {
+        // Test that makeup gain actually boosts the signal
+        // Compare same settings with and without makeup gain
+        let mut compressor_no_makeup = Compressor::with_settings(CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 4.0,
+            attack_ms: 1.0,
+            release_ms: 50.0,
+            knee_db: 0.0,
+            makeup_gain_db: 0.0,
+        });
+
+        let mut compressor_with_makeup = Compressor::with_settings(CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 4.0,
+            attack_ms: 1.0,
+            release_ms: 50.0,
+            knee_db: 0.0,
+            makeup_gain_db: 6.0, // +6 dB makeup
+        });
+
+        let mut buffer_no_makeup = generate_sine_wave(1000.0, SAMPLE_RATE, 4096);
+        let mut buffer_with_makeup = buffer_no_makeup.clone();
+
+        compressor_no_makeup.process(&mut buffer_no_makeup, SAMPLE_RATE);
+        compressor_with_makeup.process(&mut buffer_with_makeup, SAMPLE_RATE);
+
+        let rms_no_makeup = calculate_rms(&buffer_no_makeup);
+        let rms_with_makeup = calculate_rms(&buffer_with_makeup);
+
+        // With makeup gain, output should be louder
+        assert!(
+            rms_with_makeup > rms_no_makeup,
+            "Makeup gain should increase output level: without={}, with={}",
+            rms_no_makeup,
+            rms_with_makeup
+        );
+    }
+
+    #[test]
+    fn test_compressor_soft_knee() {
+        let mut hard_knee = Compressor::with_settings(CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 4.0,
+            attack_ms: 1.0,
+            release_ms: 50.0,
+            knee_db: 0.0, // Hard knee
+            makeup_gain_db: 0.0,
+        });
+
+        let mut soft_knee = Compressor::with_settings(CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 4.0,
+            attack_ms: 1.0,
+            release_ms: 50.0,
+            knee_db: 12.0, // Soft knee
+            makeup_gain_db: 0.0,
+        });
+
+        let mut hard_buffer = generate_sine_wave(1000.0, SAMPLE_RATE, 4096);
+        let mut soft_buffer = hard_buffer.clone();
+
+        hard_knee.process(&mut hard_buffer, SAMPLE_RATE);
+        soft_knee.process(&mut soft_buffer, SAMPLE_RATE);
+
+        // Both should produce valid output
+        for sample in hard_buffer.iter().chain(soft_buffer.iter()) {
+            assert!(sample.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_compressor_attack_time() {
+        // Very fast attack
+        let mut fast_attack = Compressor::with_settings(CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 8.0,
+            attack_ms: 0.1, // Very fast
+            release_ms: 100.0,
+            knee_db: 0.0,
+            makeup_gain_db: 0.0,
+        });
+
+        // Slow attack
+        let mut slow_attack = Compressor::with_settings(CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 8.0,
+            attack_ms: 100.0, // Slow
+            release_ms: 100.0,
+            knee_db: 0.0,
+            makeup_gain_db: 0.0,
+        });
+
+        // Impulse followed by sustained signal
+        let mut fast_buffer = vec![0.0; 8820]; // 0.1 sec silence
+        let mut slow_buffer = fast_buffer.clone();
+
+        // Add impulse at the start
+        fast_buffer[0] = 0.9;
+        fast_buffer[1] = 0.9;
+        slow_buffer[0] = 0.9;
+        slow_buffer[1] = 0.9;
+
+        fast_attack.process(&mut fast_buffer, SAMPLE_RATE);
+        slow_attack.process(&mut slow_buffer, SAMPLE_RATE);
+
+        // Both should complete without error
+        for sample in fast_buffer.iter().chain(slow_buffer.iter()) {
+            assert!(sample.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_compressor_in_effect_chain() {
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 6.0)); // Bass boost
+
+        let mut compressor = Compressor::with_settings(CompressorSettings {
+            threshold_db: -12.0,
+            ratio: 4.0,
+            attack_ms: 10.0,
+            release_ms: 100.0,
+            knee_db: 3.0,
+            makeup_gain_db: 0.0,
+        });
+
+        let mut limiter = Limiter::with_settings(LimiterSettings::brickwall());
+
+        let mut buffer = generate_sine_wave(60.0, SAMPLE_RATE, 4096); // Bass frequency
+
+        eq.process(&mut buffer, SAMPLE_RATE);
+        compressor.process(&mut buffer, SAMPLE_RATE);
+        limiter.process(&mut buffer, SAMPLE_RATE);
+
+        // Should be limited to safe range
+        for sample in &buffer {
+            assert!(sample.is_finite());
+            assert!(sample.abs() <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_compressor_with_all_effects() {
+        let mut eq = ParametricEq::new();
+        eq.set_mid_band(EqBand::peaking(1000.0, 3.0, 1.0));
+
+        let mut compressor = Compressor::with_settings(CompressorSettings::default());
+
+        let mut stereo = StereoEnhancer::with_settings(StereoSettings::wide());
+
+        let mut limiter = Limiter::with_settings(LimiterSettings::brickwall());
+
+        let mut buffer = generate_stereo_signal(1000.0, SAMPLE_RATE, 4096, 0.25);
+
+        eq.process(&mut buffer, SAMPLE_RATE);
+        compressor.process(&mut buffer, SAMPLE_RATE);
+        stereo.process(&mut buffer, SAMPLE_RATE);
+        limiter.process(&mut buffer, SAMPLE_RATE);
+
+        for sample in &buffer {
+            assert!(sample.is_finite());
+            assert!(sample.abs() <= 1.0);
+        }
+    }
+}
+
+// ============================================================================
+// EFFECT CHAIN API TESTS
+// ============================================================================
+
+mod effect_chain_api_tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_chain_passthrough() {
+        let mut chain = EffectChain::new();
+
+        let original = generate_sine_wave(1000.0, SAMPLE_RATE, 4096);
+        let mut buffer = original.clone();
+
+        chain.process(&mut buffer, SAMPLE_RATE);
+
+        // Empty chain should be passthrough
+        assert_eq!(buffer, original);
+    }
+
+    #[test]
+    fn test_add_single_effect() {
+        let mut chain = EffectChain::new();
+
+        let eq = ParametricEq::new();
+        chain.add_effect(Box::new(eq));
+
+        assert_eq!(chain.len(), 1);
+        assert!(!chain.is_empty());
+    }
+
+    #[test]
+    fn test_add_multiple_effects() {
+        let mut chain = EffectChain::new();
+
+        chain.add_effect(Box::new(ParametricEq::new()));
+        chain.add_effect(Box::new(GraphicEq::new_10_band()));
+        chain.add_effect(Box::new(Limiter::new()));
+
+        assert_eq!(chain.len(), 3);
+    }
+
+    #[test]
+    fn test_chain_processing_order() {
+        let mut chain = EffectChain::new();
+
+        // First effect: high gain EQ
+        let mut eq = ParametricEq::new();
+        eq.set_mid_band(EqBand::peaking(1000.0, 12.0, 1.0));
+        chain.add_effect(Box::new(eq));
+
+        // Second effect: limiter
+        let limiter = Limiter::with_settings(LimiterSettings::brickwall());
+        chain.add_effect(Box::new(limiter));
+
+        let mut buffer = generate_sine_wave(1000.0, SAMPLE_RATE, 4096);
+        chain.process(&mut buffer, SAMPLE_RATE);
+
+        // With EQ first then limiter, output should be limited
+        for sample in &buffer {
+            assert!(sample.abs() <= 1.0, "Limiter should cap output");
+        }
+    }
+
+    #[test]
+    fn test_chain_clear() {
+        let mut chain = EffectChain::new();
+
+        chain.add_effect(Box::new(ParametricEq::new()));
+        chain.add_effect(Box::new(Limiter::new()));
+
+        assert_eq!(chain.len(), 2);
+
+        chain.clear();
+
+        assert_eq!(chain.len(), 0);
+        assert!(chain.is_empty());
+    }
+
+    #[test]
+    fn test_chain_reset() {
+        let mut chain = EffectChain::new();
+
+        let mut eq = ParametricEq::new();
+        eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 10.0)); // High Q
+        chain.add_effect(Box::new(eq));
+
+        // Process to build up filter state
+        for _ in 0..100 {
+            let mut buffer = generate_sine_wave(1000.0, SAMPLE_RATE, 512);
+            chain.process(&mut buffer, SAMPLE_RATE);
+        }
+
+        // Reset chain
+        chain.reset();
+
+        // Should work normally after reset
+        let mut buffer = generate_sine_wave(1000.0, SAMPLE_RATE, 512);
+        chain.process(&mut buffer, SAMPLE_RATE);
+
+        for sample in &buffer {
+            assert!(sample.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_chain_get_effect() {
+        let mut chain = EffectChain::new();
+
+        chain.add_effect(Box::new(ParametricEq::new()));
+        chain.add_effect(Box::new(Limiter::new()));
+
+        let effect0 = chain.get_effect(0);
+        assert!(effect0.is_some());
+        assert_eq!(effect0.unwrap().name(), "3-Band Parametric EQ");
+
+        let effect1 = chain.get_effect(1);
+        assert!(effect1.is_some());
+        assert_eq!(effect1.unwrap().name(), "Limiter");
+
+        let effect2 = chain.get_effect(2);
+        assert!(effect2.is_none());
+    }
+
+    #[test]
+    fn test_chain_enable_disable_all() {
+        let mut chain = EffectChain::new();
+
+        let mut eq = ParametricEq::new();
+        eq.set_mid_band(EqBand::peaking(1000.0, 12.0, 1.0));
+        chain.add_effect(Box::new(eq));
+
+        let original = generate_sine_wave(1000.0, SAMPLE_RATE, 4096);
+
+        // Disable all
+        chain.set_enabled(false);
+
+        let mut buffer = original.clone();
+        chain.process(&mut buffer, SAMPLE_RATE);
+
+        // All disabled should be passthrough
+        assert_eq!(buffer, original);
+    }
+
+    #[test]
+    fn test_chain_with_many_effects() {
+        let mut chain = EffectChain::new();
+
+        // Add 10 effects
+        for _ in 0..10 {
+            chain.add_effect(Box::new(ParametricEq::new()));
+        }
+
+        assert_eq!(chain.len(), 10);
+
+        let mut buffer = generate_sine_wave(1000.0, SAMPLE_RATE, 4096);
+        chain.process(&mut buffer, SAMPLE_RATE);
+
+        for sample in &buffer {
+            assert!(sample.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_chain_continuous_add_and_process() {
+        let mut chain = EffectChain::new();
+
+        for i in 0..10 {
+            // Add effect
+            let mut eq = ParametricEq::new();
+            let gain = (i as f32 - 5.0) * 2.0; // -10 to +8 dB
+            eq.set_mid_band(EqBand::peaking(1000.0, gain, 1.0));
+            chain.add_effect(Box::new(eq));
+
+            // Process
+            let mut buffer = generate_sine_wave(1000.0, SAMPLE_RATE, 512);
+            chain.process(&mut buffer, SAMPLE_RATE);
+
+            for sample in &buffer {
+                assert!(sample.is_finite());
+            }
+        }
+    }
+
+    #[test]
+    fn test_chain_with_all_effect_types() {
+        let mut chain = EffectChain::new();
+
+        // Add one of each effect type
+        let mut eq = ParametricEq::new();
+        eq.set_mid_band(EqBand::peaking(1000.0, 3.0, 1.0));
+        chain.add_effect(Box::new(eq));
+
+        let mut geq = GraphicEq::new_10_band();
+        geq.set_preset(GraphicEqPreset::Rock);
+        chain.add_effect(Box::new(geq));
+
+        chain.add_effect(Box::new(StereoEnhancer::with_settings(StereoSettings::wide())));
+
+        let mut crossfeed = Crossfeed::new();
+        crossfeed.set_enabled(true);
+        chain.add_effect(Box::new(crossfeed));
+
+        chain.add_effect(Box::new(Compressor::with_settings(CompressorSettings::default())));
+
+        chain.add_effect(Box::new(Limiter::with_settings(LimiterSettings::brickwall())));
+
+        assert_eq!(chain.len(), 6);
+
+        let mut buffer = generate_stereo_signal(1000.0, SAMPLE_RATE, 4096, 0.25);
+        chain.process(&mut buffer, SAMPLE_RATE);
+
+        for sample in &buffer {
+            assert!(sample.is_finite());
+            assert!(sample.abs() <= 1.0);
+        }
     }
 }

@@ -7,6 +7,9 @@ on:
     paths:
       - 'applications/marketing/**'
       - 'applications/shared/**'
+      - 'libraries/soul-playback/**'
+      - 'libraries/soul-audio/**'
+      - 'libraries/soul-core/**'
       - '.github/workflows/deploy-marketing.yml'
   # Allow manual trigger
   workflow_dispatch:
