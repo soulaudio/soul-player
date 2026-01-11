@@ -3,6 +3,37 @@
 //! Prevents clipping when applying ReplayGain by limiting peaks that exceed 0 dBTP.
 //! Uses lookahead and soft-knee limiting for transparent operation.
 
+/// Lookahead presets for different use cases
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LookaheadPreset {
+    /// No lookahead (0ms) - instant limiting, may cause distortion on transients
+    Instant,
+    /// Balanced lookahead (1.5ms) - good tradeoff between latency and transparency
+    Balanced,
+    /// Transparent lookahead (5ms) - minimal audible artifacts
+    Transparent,
+    /// Custom lookahead in milliseconds
+    Custom(f32),
+}
+
+impl LookaheadPreset {
+    /// Get the lookahead time in milliseconds
+    pub fn as_ms(&self) -> f32 {
+        match self {
+            Self::Instant => 0.0,
+            Self::Balanced => 1.5,
+            Self::Transparent => 5.0,
+            Self::Custom(ms) => *ms,
+        }
+    }
+}
+
+impl Default for LookaheadPreset {
+    fn default() -> Self {
+        Self::Balanced
+    }
+}
+
 /// True peak limiter to prevent clipping
 ///
 /// Uses a lookahead design with release smoothing to prevent inter-sample peaks
@@ -39,6 +70,8 @@ pub struct TruePeakLimiter {
     peak_hold: usize,
     /// Peak hold time in samples
     peak_hold_time: usize,
+    /// Lookahead preset
+    lookahead_preset: LookaheadPreset,
 }
 
 impl TruePeakLimiter {
@@ -53,8 +86,19 @@ impl TruePeakLimiter {
     /// - Default release: 100ms
     /// - Lookahead: 1.5ms (for true peak detection)
     pub fn new(sample_rate: u32, channels: usize) -> Self {
-        // Lookahead of 1.5ms is sufficient for true peak detection
-        let lookahead_size = (sample_rate as f32 * 0.0015).ceil() as usize;
+        Self::with_lookahead(sample_rate, channels, LookaheadPreset::Balanced)
+    }
+
+    /// Create a new true peak limiter with custom lookahead
+    ///
+    /// # Arguments
+    /// * `sample_rate` - Sample rate in Hz
+    /// * `channels` - Number of audio channels
+    /// * `lookahead` - Lookahead preset
+    pub fn with_lookahead(sample_rate: u32, channels: usize, lookahead: LookaheadPreset) -> Self {
+        let lookahead_ms = lookahead.as_ms();
+        // Minimum 1 sample for instant mode to avoid division by zero
+        let lookahead_size = ((sample_rate as f32 * lookahead_ms / 1000.0).ceil() as usize).max(1);
         let release_samples = (sample_rate as f32 * 0.1) as usize; // 100ms release
         let peak_hold_time = (sample_rate as f32 * 0.01) as usize; // 10ms hold
 
@@ -71,7 +115,40 @@ impl TruePeakLimiter {
             sample_rate,
             peak_hold: 0,
             peak_hold_time,
+            lookahead_preset: lookahead,
         }
+    }
+
+    /// Set the lookahead preset
+    ///
+    /// Note: This will reset the limiter state and reallocate buffers
+    pub fn set_lookahead(&mut self, preset: LookaheadPreset) {
+        if self.lookahead_preset == preset {
+            return;
+        }
+
+        self.lookahead_preset = preset;
+        let lookahead_ms = preset.as_ms();
+        let new_size = ((self.sample_rate as f32 * lookahead_ms / 1000.0).ceil() as usize).max(1);
+
+        if new_size != self.lookahead_size {
+            self.lookahead_size = new_size;
+            self.lookahead_buffers = vec![vec![0.0; new_size]; self.channels];
+            self.write_pos = 0;
+            self.gain_reduction = 1.0;
+            self.peak_hold = 0;
+        }
+    }
+
+    /// Get the current lookahead preset
+    pub fn lookahead_preset(&self) -> LookaheadPreset {
+        self.lookahead_preset
+    }
+
+    /// Set lookahead time in milliseconds (0-10ms)
+    pub fn set_lookahead_ms(&mut self, lookahead_ms: f32) {
+        let clamped = lookahead_ms.clamp(0.0, 10.0);
+        self.set_lookahead(LookaheadPreset::Custom(clamped));
     }
 
     /// Set the threshold in dB (0 dB = no limiting, negative values = lower threshold)

@@ -23,7 +23,7 @@ pub use chain::{AudioEffect, EffectChain};
 pub use compressor::{Compressor, CompressorSettings};
 pub use convolution::{ConvolutionEngine, ConvolutionError};
 pub use crossfeed::{Crossfeed, CrossfeedPreset, CrossfeedSettings};
-pub use eq::{EqBand, ParametricEq};
+pub use eq::{EqBand, ParametricEq, MAX_EQ_BANDS};
 pub use graphic_eq::{
     GraphicEq, GraphicEqBands, GraphicEqPreset, ISO_10_BAND_FREQUENCIES, ISO_31_BAND_FREQUENCIES,
 };

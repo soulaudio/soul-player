@@ -1383,3 +1383,464 @@ fn test_crossfade_full_settings_update() {
     assert_eq!(settings.curve, new_settings.curve);
     assert_eq!(settings.on_skip, new_settings.on_skip);
 }
+
+// ============================================================================
+// 12. Crossfade Audio Mixing Tests - Verify actual crossfade behavior
+// ============================================================================
+
+/// Test that verifies both tracks are audible during crossfade transition
+/// This is the core test for the crossfade bug investigation
+#[test]
+fn test_crossfade_both_tracks_audible_during_transition() {
+    let mut manager = PlaybackManager::default();
+    manager.set_crossfade_enabled(true);
+    manager.set_crossfade_duration(500); // 500ms crossfade for easier testing
+    manager.set_crossfade_curve(FadeCurve::Linear);
+    manager.set_sample_rate(44100);
+    manager.set_output_channels(2);
+
+    // Track 1: 440Hz sine wave (A4 note)
+    // Track 2: 880Hz sine wave (A5 note - one octave higher)
+    // If crossfade works correctly, we should hear both frequencies during transition
+
+    // Add queue tracks
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 1)); // 1 second track
+    manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist B", 1));
+
+    // Set up current source (440Hz)
+    let current_source = MockAudioSource::new(Duration::from_secs(1), 44100).with_frequency(440.0);
+    manager.set_audio_source(Box::new(current_source));
+
+    // Set up next source (880Hz) - THIS IS CRITICAL for crossfade to work
+    let next_source = MockAudioSource::new(Duration::from_secs(1), 44100).with_frequency(880.0);
+    let next_track = create_test_track("2", "Track 2", "Artist B", 1);
+    manager.set_next_source(Box::new(next_source), next_track);
+
+    // Verify next source is set
+    assert!(
+        manager.has_next_source(),
+        "Next source must be set for crossfade to work"
+    );
+
+    // Advance near end of track to trigger crossfade
+    // Track is 1 second, crossfade is 500ms, so seek to 400ms (100ms before crossfade starts)
+    manager.seek_to(Duration::from_millis(400)).ok();
+
+    // Process audio through the crossfade region
+    let mut all_samples: Vec<f32> = Vec::new();
+    let mut buffer = vec![0.0f32; 4096];
+    let mut crossfade_triggered = false;
+
+    for _ in 0..50 {
+        // Process up to 50 buffers
+        match manager.process_audio(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => {
+                all_samples.extend_from_slice(&buffer[..n]);
+
+                // Check if crossfade is active
+                if manager.is_crossfading() {
+                    crossfade_triggered = true;
+                }
+            }
+            Err(_) => break,
+        }
+
+        // Stop if we've processed enough for the crossfade
+        if all_samples.len() > 44100 * 2 {
+            // More than 1 second stereo
+            break;
+        }
+    }
+
+    // Crossfade should have been triggered
+    assert!(
+        crossfade_triggered,
+        "Crossfade should have been triggered during playback"
+    );
+
+    // Verify we got audio output
+    assert!(
+        !all_samples.is_empty(),
+        "Should have produced audio samples"
+    );
+
+    // During crossfade, both frequencies should be present in the output
+    // We can verify this by checking that the output contains both frequency components
+    // A simple check: we should have audio output (some non-zero samples)
+    let rms = calculate_rms(&all_samples);
+    let peak = calculate_peak(&all_samples);
+
+    // We should have SOME audio (the sources have amplitude 0.5)
+    // During crossfade, the gains vary but we should see output
+    assert!(
+        rms > 0.01,
+        "Audio should have some output during crossfade, got RMS: {}, peak: {}",
+        rms,
+        peak
+    );
+
+    // Peak should show that audio was actually produced
+    assert!(
+        peak > 0.05,
+        "Peak should show audio was produced, got peak: {}",
+        peak
+    );
+}
+
+/// Test that crossfade engine correctly mixes samples from both tracks
+#[test]
+fn test_crossfade_engine_mixing_directly() {
+    use soul_playback::CrossfadeEngine;
+
+    let settings = CrossfadeSettings {
+        enabled: true,
+        duration_ms: 100, // 100ms for easy testing
+        curve: FadeCurve::Linear,
+        on_skip: true,
+    };
+
+    let mut engine = CrossfadeEngine::with_settings(settings);
+    engine.set_sample_rate(1000); // 1000Hz for simple math
+
+    // Start crossfade
+    let started = engine.start(false);
+    assert!(started, "Crossfade should start when enabled");
+    assert!(engine.is_active(), "Crossfade should be active after start");
+
+    // Prepare test buffers
+    // Outgoing track: all 1.0
+    // Incoming track: all 0.0
+    // With linear crossfade, output should go from 1.0 to 0.0
+    let outgoing = vec![1.0f32; 200]; // 100 stereo frames = 100ms at 1000Hz
+    let incoming = vec![0.0f32; 200];
+    let mut output = vec![0.0f32; 200];
+
+    let (samples, completed) = engine.process(&outgoing, &incoming, &mut output);
+
+    // Should have processed all samples
+    assert_eq!(samples, 200, "Should process all samples");
+    assert!(completed, "Crossfade should complete");
+
+    // Verify output: first sample should be mostly outgoing, last should be mostly incoming
+    assert!(
+        output[0] > 0.9,
+        "First sample should be mostly outgoing (1.0), got {}",
+        output[0]
+    );
+    assert!(
+        output[198] < 0.1,
+        "Last sample should be mostly incoming (0.0), got {}",
+        output[198]
+    );
+
+    // Middle should be roughly 0.5 (linear crossfade)
+    // 200 samples total = 100 stereo frames
+    // At frame 50, progress = 100/200 = 0.5, so output should be ~0.5
+    let mid_frame = 50;
+    let mid_sample_idx = mid_frame * 2; // Index 100
+    assert!(
+        output[mid_sample_idx] > 0.4 && output[mid_sample_idx] < 0.6,
+        "Middle sample at index {} should be ~0.5 for linear crossfade, got {}",
+        mid_sample_idx,
+        output[mid_sample_idx]
+    );
+}
+
+/// Test equal power crossfade maintains constant perceived loudness
+#[test]
+fn test_crossfade_equal_power_constant_loudness() {
+    use soul_playback::CrossfadeEngine;
+
+    let settings = CrossfadeSettings {
+        enabled: true,
+        duration_ms: 100,
+        curve: FadeCurve::EqualPower,
+        on_skip: true,
+    };
+
+    let mut engine = CrossfadeEngine::with_settings(settings);
+    engine.set_sample_rate(1000);
+
+    engine.start(false);
+
+    // Both tracks at full volume (1.0)
+    // With equal power crossfade, sum of squares should be constant (~1.0)
+    let outgoing = vec![1.0f32; 200];
+    let incoming = vec![1.0f32; 200];
+    let mut output = vec![0.0f32; 200];
+
+    let (samples, _) = engine.process(&outgoing, &incoming, &mut output);
+    assert_eq!(samples, 200);
+
+    // Check that output maintains approximately constant power throughout
+    // For equal power crossfade: out_gain^2 + in_gain^2 = 1
+    // So if both inputs are 1.0, output should be ~sqrt(2) = ~1.414 at midpoint
+    // But since we're mixing, the actual value depends on the gains
+
+    // At the start (t=0): out_gain=1.0, in_gain=0.0, output=1.0
+    // At the end (t=1): out_gain=0.0, in_gain=1.0, output=1.0
+    // At midpoint (t=0.5): out_gain=0.707, in_gain=0.707, output=0.707+0.707=1.414
+
+    let start_sample = output[0];
+    let mid_sample = output[99 * 2]; // Approximately midpoint
+    let end_sample = output[198];
+
+    // Start and end should be ~1.0 (one track at full, other at zero)
+    assert!(
+        (start_sample - 1.0).abs() < 0.1,
+        "Start should be ~1.0, got {}",
+        start_sample
+    );
+    assert!(
+        (end_sample - 1.0).abs() < 0.1,
+        "End should be ~1.0, got {}",
+        end_sample
+    );
+
+    // Middle should be higher due to both tracks contributing
+    assert!(
+        mid_sample > 1.0,
+        "Middle should be >1.0 with equal power when both tracks are 1.0, got {}",
+        mid_sample
+    );
+}
+
+/// Test that crossfade is NOT triggered when on_skip is false and it's a manual skip
+#[test]
+fn test_crossfade_respects_on_skip_setting() {
+    use soul_playback::CrossfadeEngine;
+
+    let settings = CrossfadeSettings {
+        enabled: true,
+        duration_ms: 1000,
+        curve: FadeCurve::Linear,
+        on_skip: false, // Crossfade only on auto-advance
+    };
+
+    let mut engine = CrossfadeEngine::with_settings(settings);
+    engine.set_sample_rate(44100);
+
+    // Try to start with manual skip - should NOT start
+    let started = engine.start(true); // true = manual skip
+    assert!(!started, "Crossfade should NOT start on manual skip when on_skip is false");
+    assert!(
+        !engine.is_active(),
+        "Engine should remain inactive"
+    );
+
+    // Reset and try with auto-advance - should start
+    engine.reset();
+    let started = engine.start(false); // false = auto-advance
+    assert!(started, "Crossfade SHOULD start on auto-advance");
+    assert!(engine.is_active(), "Engine should be active");
+}
+
+/// Test that crossfade is triggered on manual skip when on_skip is true
+#[test]
+fn test_crossfade_on_manual_skip() {
+    use soul_playback::CrossfadeEngine;
+
+    let settings = CrossfadeSettings {
+        enabled: true,
+        duration_ms: 1000,
+        curve: FadeCurve::Linear,
+        on_skip: true, // Crossfade on both auto-advance and manual skip
+    };
+
+    let mut engine = CrossfadeEngine::with_settings(settings);
+    engine.set_sample_rate(44100);
+
+    // Should start with manual skip
+    let started = engine.start(true);
+    assert!(started, "Crossfade should start on manual skip when on_skip is true");
+}
+
+/// Test crossfade with different curve types
+#[test]
+fn test_crossfade_curve_differences() {
+    use soul_playback::CrossfadeEngine;
+
+    let curves = [
+        FadeCurve::Linear,
+        FadeCurve::EqualPower,
+        FadeCurve::SCurve,
+        FadeCurve::SquareRoot,
+    ];
+
+    for curve in curves {
+        let settings = CrossfadeSettings {
+            enabled: true,
+            duration_ms: 100,
+            curve,
+            on_skip: true,
+        };
+
+        let mut engine = CrossfadeEngine::with_settings(settings);
+        engine.set_sample_rate(1000);
+        engine.start(false);
+
+        // Process crossfade
+        let outgoing = vec![1.0f32; 200];
+        let incoming = vec![0.0f32; 200];
+        let mut output = vec![0.0f32; 200];
+
+        let (samples, completed) = engine.process(&outgoing, &incoming, &mut output);
+
+        assert_eq!(samples, 200, "Curve {:?}: Should process all samples", curve);
+        assert!(completed, "Curve {:?}: Should complete", curve);
+
+        // All curves should go from ~1.0 to ~0.0
+        assert!(
+            output[0] > 0.9,
+            "Curve {:?}: Start should be mostly outgoing",
+            curve
+        );
+        assert!(
+            output[198] < 0.1,
+            "Curve {:?}: End should be mostly incoming",
+            curve
+        );
+    }
+}
+
+/// Test that crossfade duration calculation is correct at different sample rates
+#[test]
+fn test_crossfade_duration_at_different_sample_rates() {
+    use soul_playback::CrossfadeEngine;
+
+    let sample_rates = [44100, 48000, 96000, 192000];
+
+    for rate in sample_rates {
+        let settings = CrossfadeSettings {
+            enabled: true,
+            duration_ms: 1000, // 1 second
+            curve: FadeCurve::Linear,
+            on_skip: true,
+        };
+
+        let mut engine = CrossfadeEngine::with_settings(settings);
+        engine.set_sample_rate(rate);
+        engine.start(false);
+
+        // Calculate expected samples for 1 second
+        // Note: duration_samples in crossfade is multiplied by 2 for stereo
+        let expected_samples = rate as usize * 2; // 1 second of stereo samples
+
+        // Verify remaining samples
+        let remaining = engine.remaining_samples();
+        assert_eq!(
+            remaining, expected_samples,
+            "At {}Hz, 1s crossfade should have {} remaining samples, got {}",
+            rate, expected_samples, remaining
+        );
+    }
+}
+
+/// Integration test: Verify crossfade actually triggers when approaching end of track
+#[test]
+fn test_crossfade_triggers_at_correct_time() {
+    let mut manager = PlaybackManager::default();
+    manager.set_crossfade_enabled(true);
+    manager.set_crossfade_duration(1000); // 1 second crossfade
+    manager.set_sample_rate(44100);
+    manager.set_output_channels(2);
+
+    // Add two tracks
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 5)); // 5 seconds
+    manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
+
+    // Set up 5-second source
+    manager.set_audio_source(Box::new(MockAudioSource::new(
+        Duration::from_secs(5),
+        44100,
+    )));
+
+    // Pre-load next track
+    let next_source = MockAudioSource::new(Duration::from_secs(5), 44100);
+    let next_track = create_test_track("2", "Track 2", "Artist", 5);
+    manager.set_next_source(Box::new(next_source), next_track);
+
+    // Seek to 3.5 seconds (1.5 seconds before end, 0.5 seconds before crossfade should start)
+    manager.seek_to(Duration::from_millis(3500)).ok();
+
+    // Should NOT be crossfading yet (0.5s before crossfade region)
+    assert!(
+        !manager.is_crossfading(),
+        "Should not be crossfading 0.5s before crossfade region"
+    );
+
+    // Process some audio to advance time into the crossfade region
+    let mut buffer = vec![0.0f32; 44100]; // ~0.5 seconds at 44.1kHz stereo
+    let mut crossfade_started = false;
+
+    for _ in 0..10 {
+        match manager.process_audio(&mut buffer) {
+            Ok(0) => break,
+            Ok(_) => {
+                if manager.is_crossfading() {
+                    crossfade_started = true;
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
+    // Crossfade should have started
+    assert!(
+        crossfade_started,
+        "Crossfade should start when entering the last 1 second of track"
+    );
+}
+
+/// Test that demonstrates the root cause: crossfade doesn't work without pre-loaded next source
+#[test]
+fn test_crossfade_fails_without_next_source() {
+    let mut manager = PlaybackManager::default();
+    manager.set_crossfade_enabled(true);
+    manager.set_crossfade_duration(500);
+    manager.set_sample_rate(44100);
+    manager.set_output_channels(2);
+
+    // Add tracks but DON'T set next source (simulating the bug)
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 1));
+    manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 1));
+
+    // Only set current source, NOT next source
+    manager.set_audio_source(Box::new(MockAudioSource::new(
+        Duration::from_secs(1),
+        44100,
+    )));
+
+    // Verify next source is NOT set
+    assert!(
+        !manager.has_next_source(),
+        "Next source should NOT be set (this is the bug condition)"
+    );
+
+    // Seek near end
+    manager.seek_to(Duration::from_millis(400)).ok();
+
+    // Process audio - crossfade cannot happen without next source
+    let mut buffer = vec![0.0f32; 4096];
+    let mut crossfade_triggered = false;
+
+    for _ in 0..50 {
+        match manager.process_audio(&mut buffer) {
+            Ok(0) => break,
+            Ok(_) => {
+                if manager.is_crossfading() {
+                    crossfade_triggered = true;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
+    // Crossfade should NOT have been triggered because next_source wasn't set
+    assert!(
+        !crossfade_triggered,
+        "Crossfade should NOT trigger without next_source - this demonstrates the root cause of the bug"
+    );
+}

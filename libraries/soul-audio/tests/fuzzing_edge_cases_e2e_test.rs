@@ -339,7 +339,7 @@ mod parameter_fuzzing {
 
         // Beyond clamped range (should be clamped)
         let band = EqBand::peaking(1000.0, 100.0, 1.0);
-        assert!(band.gain_db() <= 12.0, "Gain should be clamped to 12dB");
+        assert!(band.gain_db() <= 24.0, "Gain should be clamped to 24dB");
     }
 
     #[test]
@@ -1125,8 +1125,8 @@ mod boundary_conditions {
     #[test]
     fn minimum_parameter_values() {
         // EQ with minimum values
-        let band = EqBand::new(0.0, -12.0, 0.1);
-        assert!(band.gain_db() >= -12.0);
+        let band = EqBand::new(0.0, -24.0, 0.1);
+        assert!(band.gain_db() >= -24.0);
         assert!(band.q() >= 0.1);
 
         // Compressor with minimum values
@@ -1147,7 +1147,7 @@ mod boundary_conditions {
     fn maximum_parameter_values() {
         // EQ with maximum values (should be clamped)
         let band = EqBand::new(100000.0, 100.0, 100.0);
-        assert!(band.gain_db() <= 12.0);
+        assert!(band.gain_db() <= 24.0);
         assert!(band.q() <= 10.0);
 
         // Compressor with maximum values

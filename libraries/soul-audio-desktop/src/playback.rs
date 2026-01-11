@@ -99,7 +99,7 @@ pub enum PlaybackEvent {
     /// Playback state changed
     StateChanged(soul_playback::PlaybackState),
 
-    /// Track changed
+    /// Track changed (emitted at correct time: 50% crossfade or immediately for gapless)
     TrackChanged(Option<QueueTrack>),
 
     /// Position updated (in seconds)
@@ -114,8 +114,114 @@ pub enum PlaybackEvent {
     /// Device sample rate changed (old_rate, new_rate)
     SampleRateChanged(u32, u32),
 
+    /// Crossfade started between two tracks
+    CrossfadeStarted {
+        /// ID of the outgoing track
+        from_track_id: String,
+        /// ID of the incoming track
+        to_track_id: String,
+        /// Duration in milliseconds
+        duration_ms: u32,
+    },
+
+    /// Crossfade progress update (for UI animations)
+    CrossfadeProgress {
+        /// Progress from 0.0 to 1.0
+        progress: f32,
+        /// Whether metadata has been switched (at 50%)
+        metadata_switched: bool,
+    },
+
+    /// Crossfade completed
+    CrossfadeCompleted,
+
     /// Error occurred
     Error(String),
+}
+
+/// Sample rate mode for playback
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SampleRateMode {
+    /// Resample all audio to device's current sample rate (default)
+    /// This is the most compatible mode - works with all devices
+    #[default]
+    MatchDevice,
+    /// Switch device sample rate to match track's native rate when possible
+    /// Requires exclusive mode for most audio APIs
+    /// Falls back to MatchDevice if rate switching fails
+    MatchTrack,
+    /// No resampling - send audio at native rate (requires exclusive mode)
+    /// Only works if device supports the track's sample rate
+    Passthrough,
+    /// Fixed output rate - always resample to this rate
+    Fixed(u32),
+}
+
+impl SampleRateMode {
+    /// Parse from string for settings persistence
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "match_device" | "device" | "auto" => Some(Self::MatchDevice),
+            "match_track" | "track" => Some(Self::MatchTrack),
+            "passthrough" | "native" | "bitperfect" => Some(Self::Passthrough),
+            s if s.starts_with("fixed:") => {
+                let rate_str = s.trim_start_matches("fixed:");
+                rate_str.parse::<u32>().ok().map(Self::Fixed)
+            }
+            s => s.parse::<u32>().ok().map(Self::Fixed),
+        }
+    }
+
+    /// Convert to string for settings persistence
+    pub fn as_str(&self) -> String {
+        match self {
+            Self::MatchDevice => "match_device".to_string(),
+            Self::MatchTrack => "match_track".to_string(),
+            Self::Passthrough => "passthrough".to_string(),
+            Self::Fixed(rate) => format!("fixed:{}", rate),
+        }
+    }
+
+    /// Check if this mode requires exclusive device access
+    pub fn requires_exclusive(&self) -> bool {
+        matches!(self, Self::MatchTrack | Self::Passthrough)
+    }
+
+    /// Get the target sample rate for a given track and device
+    ///
+    /// # Arguments
+    /// * `track_rate` - Native sample rate of the track
+    /// * `device_rate` - Current sample rate of the device
+    /// * `device_supported_rates` - Sample rates supported by the device
+    ///
+    /// # Returns
+    /// Target sample rate for output, and whether resampling is needed
+    pub fn resolve_rate(
+        &self,
+        track_rate: u32,
+        device_rate: u32,
+        device_supported_rates: Option<&[u32]>,
+    ) -> (u32, bool) {
+        match self {
+            Self::MatchDevice => (device_rate, track_rate != device_rate),
+            Self::MatchTrack => {
+                // Try to use track's native rate if device supports it
+                if let Some(rates) = device_supported_rates {
+                    if rates.contains(&track_rate) {
+                        return (track_rate, false);
+                    }
+                }
+                // Fall back to device rate
+                (device_rate, track_rate != device_rate)
+            }
+            Self::Passthrough => {
+                // Send at native rate - assume device can handle it
+                // (caller should verify device supports the rate)
+                (track_rate, false)
+            }
+            Self::Fixed(target) => (*target, track_rate != *target),
+        }
+    }
 }
 
 /// Resampling settings for audio playback
@@ -126,7 +232,10 @@ pub enum PlaybackEvent {
 pub struct ResamplingSettings {
     /// Quality preset: "fast", "balanced", "high", "maximum"
     pub quality: String,
+    /// Sample rate mode (replaces target_rate)
+    pub sample_rate_mode: SampleRateMode,
     /// Target sample rate override. 0 = auto (use device rate)
+    /// Deprecated: Use sample_rate_mode instead
     pub target_rate: u32,
     /// Backend: "auto", "rubato", "r8brain"
     pub backend: String,
@@ -136,7 +245,8 @@ impl Default for ResamplingSettings {
     fn default() -> Self {
         Self {
             quality: "high".to_string(),
-            target_rate: 0, // auto
+            sample_rate_mode: SampleRateMode::MatchDevice,
+            target_rate: 0, // deprecated, use sample_rate_mode
             backend: "auto".to_string(),
         }
     }
@@ -207,6 +317,9 @@ pub struct DesktopPlayback {
 
     /// Resampling settings (applied when loading tracks)
     resampling_settings: Arc<Mutex<ResamplingSettings>>,
+
+    /// Background track loader (keeps disk I/O off audio thread)
+    track_loader: Arc<crate::track_loader::TrackLoader>,
 }
 
 // SAFETY: DesktopPlayback is safe to send between threads because:
@@ -253,13 +366,17 @@ impl DesktopPlayback {
         let (command_tx, command_rx) = bounded(32);
         let (event_tx, event_rx) = bounded(32);
 
-        // Create CPAL stream with specified device
+        // Create background track loader FIRST - keeps disk I/O off audio thread
+        let track_loader = Arc::new(crate::track_loader::TrackLoader::new());
+
+        // Create CPAL stream with specified device (passes track_loader to callbacks)
         let (stream, actual_device_name, sample_rate) = Self::create_audio_stream(
             manager.clone(),
             command_rx.clone(),
             event_tx.clone(),
             backend,
             device_name,
+            track_loader.clone(),
         )?;
 
         let stream = Arc::new(Mutex::new(Some(stream)));
@@ -278,6 +395,7 @@ impl DesktopPlayback {
             current_device,
             current_sample_rate,
             resampling_settings,
+            track_loader,
         })
     }
 
@@ -290,6 +408,7 @@ impl DesktopPlayback {
         event_tx: Sender<PlaybackEvent>,
         backend: crate::AudioBackend,
         device_name: Option<String>,
+        track_loader: Arc<crate::track_loader::TrackLoader>,
     ) -> Result<(Stream, String, u32)> {
         let host = backend
             .to_cpal_host()
@@ -327,6 +446,7 @@ impl DesktopPlayback {
         let stream = match sample_format {
             cpal::SampleFormat::F32 => {
                 let manager_clone = manager.clone();
+                let track_loader_clone = track_loader.clone();
                 // Per-stream callback counter for logging
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
@@ -343,6 +463,7 @@ impl DesktopPlayback {
                             manager_clone.clone(),
                             &command_rx,
                             &event_tx,
+                            &track_loader_clone,
                             callback_count,
                             stream_id,
                         );
@@ -353,6 +474,7 @@ impl DesktopPlayback {
             }
             cpal::SampleFormat::I32 => {
                 let manager_clone = manager.clone();
+                let track_loader_clone = track_loader.clone();
                 // Pre-allocate conversion buffer to avoid allocation in audio callback
                 // Use a reasonable default size that will be resized if needed
                 let mut f32_buffer: Vec<f32> = Vec::with_capacity(4096);
@@ -373,6 +495,9 @@ impl DesktopPlayback {
                     sample_format: "I32",
                 };
 
+                // Create TPDF dither for high-quality F32→I32 conversion
+                let mut dither = soul_audio::dither::StereoDither::new();
+
                 device.build_output_stream(
                     &config,
                     move |data: &mut [i32], _: &cpal::OutputCallbackInfo| {
@@ -384,7 +509,9 @@ impl DesktopPlayback {
                             manager_clone.clone(),
                             &command_rx,
                             &event_tx,
+                            &track_loader_clone,
                             &mut f32_buffer,
+                            &mut dither,
                             callback_count,
                             stream_id,
                         );
@@ -401,6 +528,7 @@ impl DesktopPlayback {
             }
             cpal::SampleFormat::I16 => {
                 let manager_clone = manager.clone();
+                let track_loader_clone = track_loader.clone();
                 // Pre-allocate conversion buffer to avoid allocation in audio callback
                 let mut f32_buffer: Vec<f32> = Vec::with_capacity(4096);
                 // Per-stream callback counter for logging
@@ -410,6 +538,10 @@ impl DesktopPlayback {
                     "[CPAL] Creating I16 stream callback (stream_id: {:?})",
                     stream_id
                 );
+                // Create TPDF dither for high-quality F32→I16 conversion
+                // This is especially important for 16-bit output where quantization is audible
+                let mut dither = soul_audio::dither::StereoDither::new();
+
                 device.build_output_stream(
                     &config,
                     move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
@@ -419,7 +551,9 @@ impl DesktopPlayback {
                             manager_clone.clone(),
                             &command_rx,
                             &event_tx,
+                            &track_loader_clone,
                             &mut f32_buffer,
+                            &mut dither,
                             callback_count,
                             stream_id,
                         );
@@ -599,30 +733,84 @@ impl DesktopPlayback {
         Ok((stream_config, sample_format))
     }
 
+    /// Pre-load the next track for crossfade/gapless playback
+    ///
+    /// This function is called from audio callbacks to check if we should
+    /// prepare the next track for crossfade. If we're approaching the
+    /// crossfade region and don't have a next source loaded yet, we request
+    /// loading via the background track loader.
+    ///
+    /// This is the key fix for crossfade not working - without pre-loading
+    /// the next track's audio source, the crossfade engine has nothing to
+    /// mix with the current track.
+    fn prepare_next_track_if_needed(
+        mgr: &mut PlaybackManager,
+        track_loader: &Arc<crate::track_loader::TrackLoader>,
+    ) {
+        // Check if we should prepare (approaching crossfade region and no next source)
+        if !mgr.should_prepare_next_track() {
+            return;
+        }
+
+        // Get the next track from the queue without advancing
+        let next_track = match mgr.peek_next_queue_track() {
+            Some(track) => track.clone(),
+            None => return, // No next track available
+        };
+
+        // Request loading the audio source for the next track (non-blocking)
+        let target_sample_rate = mgr.get_sample_rate();
+        let request = crate::track_loader::LoadRequest {
+            path: std::path::PathBuf::from(&next_track.path),
+            track: next_track.clone(),
+            target_sample_rate,
+            is_preload: true, // This is a preload for crossfade/gapless
+        };
+
+        if track_loader.request_load(request) {
+            eprintln!(
+                "[prepare_next_track] Requested preload for crossfade: {}",
+                next_track.title
+            );
+            // Mark that we've requested a preload to avoid duplicate requests
+            // The result will be handled by poll_track_loader
+        }
+        // If queue is full, we'll try again next callback
+    }
+
     /// Load next track when track finishes (called from audio callbacks)
     ///
     /// This handles the case where `process_audio` detects track end and calls
     /// `handle_track_finished()` → `next()`, which sets state to Loading.
-    /// We need to load the audio source for the new track and emit events.
-    fn load_next_track(mgr: &mut PlaybackManager, event_tx: &Sender<PlaybackEvent>) {
+    /// We request loading via the background track loader (non-blocking).
+    fn load_next_track(
+        mgr: &mut PlaybackManager,
+        track_loader: &Arc<crate::track_loader::TrackLoader>,
+        event_tx: &Sender<PlaybackEvent>,
+    ) {
         if let Some(track) = mgr.get_current_track().cloned() {
             let target_sample_rate = mgr.get_sample_rate();
-            match crate::sources::local::LocalAudioSource::new(&track.path, target_sample_rate) {
-                Ok(source) => {
-                    mgr.set_audio_source(Box::new(source));
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-                    let _ = event_tx.try_send(PlaybackEvent::TrackChanged(Some(track)));
-                    let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
-                }
-                Err(e) => {
-                    eprintln!("[load_next_track] Failed to load next track: {}", e);
-                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                        "Failed to load next track: {}",
-                        e
-                    )));
-                    mgr.stop();
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-                }
+            let request = crate::track_loader::LoadRequest {
+                path: track.path.clone(),
+                track: track.clone(),
+                target_sample_rate,
+                is_preload: false, // This is a current track load, not preload
+            };
+
+            if track_loader.request_load(request) {
+                eprintln!(
+                    "[load_next_track] Requested load for next track: {}",
+                    track.title
+                );
+                // Result will be handled by poll_track_loader in next callback
+            } else {
+                eprintln!("[load_next_track] Load request queue full");
+                // Queue full - emit error and stop
+                let _ = event_tx.try_send(PlaybackEvent::Error(
+                    "Track load queue full".to_string(),
+                ));
+                mgr.stop();
+                let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
             }
         } else {
             // No more tracks - queue is empty, stop playback
@@ -638,6 +826,7 @@ impl DesktopPlayback {
         manager: Arc<Mutex<PlaybackManager>>,
         command_rx: &Receiver<PlaybackCommand>,
         event_tx: &Sender<PlaybackEvent>,
+        track_loader: &Arc<crate::track_loader::TrackLoader>,
         callback_count: u32,
         stream_id: std::time::Instant,
     ) {
@@ -668,7 +857,7 @@ impl DesktopPlayback {
 
         // Process any pending commands
         while let Ok(command) = command_rx.try_recv() {
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx) {
+            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader) {
                 let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
             }
         }
@@ -676,11 +865,23 @@ impl DesktopPlayback {
         // Get audio from playback manager
         let mut mgr = manager.lock().unwrap();
 
+        // Poll for any ready track loads from the background loader (non-blocking)
+        // This moves disk I/O results back to the audio thread without blocking
+        Self::poll_track_loader(&mut mgr, track_loader, event_tx);
+
+        // Check if we need to pre-load the next track for crossfade/gapless
+        // This must happen BEFORE process_audio so the crossfade engine has
+        // the next source ready when entering the crossfade region
+        Self::prepare_next_track_if_needed(&mut mgr, track_loader);
+
         match mgr.process_audio(data) {
             Ok(_) => {
+                // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
+                Self::forward_manager_events(&mut mgr, event_tx);
+
                 // Check if track finished and next track is ready to load
                 if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    Self::load_next_track(&mut mgr, event_tx);
+                    Self::load_next_track(&mut mgr, track_loader, event_tx);
                 }
             }
             Err(e) => {
@@ -697,12 +898,15 @@ impl DesktopPlayback {
     /// Audio callback for i32 sample format (ASIO)
     ///
     /// Uses a pre-allocated f32 buffer to avoid allocation in the real-time audio thread.
+    /// Uses TPDF dithering for high-quality F32→I32 conversion.
     fn audio_callback_i32(
         data: &mut [i32],
         manager: Arc<Mutex<PlaybackManager>>,
         command_rx: &Receiver<PlaybackCommand>,
         event_tx: &Sender<PlaybackEvent>,
+        track_loader: &Arc<crate::track_loader::TrackLoader>,
         f32_buffer: &mut Vec<f32>,
+        dither: &mut soul_audio::dither::StereoDither,
         callback_count: u32,
         stream_id: std::time::Instant,
     ) {
@@ -753,7 +957,7 @@ impl DesktopPlayback {
         // Process any pending commands
         while let Ok(command) = command_rx.try_recv() {
             eprintln!("[audio_callback_i32] Received command: {:?}", command);
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx) {
+            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader) {
                 let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
             }
         }
@@ -768,19 +972,28 @@ impl DesktopPlayback {
         // Get audio from playback manager into f32 buffer, then convert to i32
         let mut mgr = manager.lock().unwrap();
 
+        // Poll for any ready track loads from the background loader (non-blocking)
+        // This moves disk I/O results back to the audio thread without blocking
+        Self::poll_track_loader(&mut mgr, track_loader, event_tx);
+
+        // Check if we need to pre-load the next track for crossfade/gapless
+        // This must happen BEFORE process_audio so the crossfade engine has
+        // the next source ready when entering the crossfade region
+        Self::prepare_next_track_if_needed(&mut mgr, track_loader);
+
         match mgr.process_audio(f32_slice) {
             Ok(_) => {
+                // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
+                Self::forward_manager_events(&mut mgr, event_tx);
+
                 // Check if track finished and next track is ready to load
                 if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    Self::load_next_track(&mut mgr, event_tx);
+                    Self::load_next_track(&mut mgr, track_loader, event_tx);
                 }
 
-                // Convert f32 [-1.0, 1.0] to i32 [-2147483648, 2147483647]
-                for (out, &sample) in data.iter_mut().zip(f32_slice.iter()) {
-                    // Clamp to valid range and scale to i32
-                    let clamped = sample.clamp(-1.0, 1.0);
-                    *out = (clamped * i32::MAX as f32) as i32;
-                }
+                // Convert f32 [-1.0, 1.0] to i32 with TPDF dithering
+                // Dithering reduces quantization noise for higher quality audio
+                dither.process_stereo_to_i32(f32_slice, data);
             }
             Err(e) => {
                 // Error processing audio - fill with silence
@@ -796,12 +1009,15 @@ impl DesktopPlayback {
     /// Audio callback for i16 sample format
     ///
     /// Uses a pre-allocated f32 buffer to avoid allocation in the real-time audio thread.
+    /// Uses TPDF dithering for high-quality F32→I16 conversion.
     fn audio_callback_i16(
         data: &mut [i16],
         manager: Arc<Mutex<PlaybackManager>>,
         command_rx: &Receiver<PlaybackCommand>,
         event_tx: &Sender<PlaybackEvent>,
+        track_loader: &Arc<crate::track_loader::TrackLoader>,
         f32_buffer: &mut Vec<f32>,
+        dither: &mut soul_audio::dither::StereoDither,
         callback_count: u32,
         stream_id: std::time::Instant,
     ) {
@@ -832,7 +1048,7 @@ impl DesktopPlayback {
 
         // Process any pending commands
         while let Ok(command) = command_rx.try_recv() {
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx) {
+            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader) {
                 let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
             }
         }
@@ -847,19 +1063,28 @@ impl DesktopPlayback {
         // Get audio from playback manager into f32 buffer, then convert to i16
         let mut mgr = manager.lock().unwrap();
 
+        // Poll for any ready track loads from the background loader (non-blocking)
+        // This moves disk I/O results back to the audio thread without blocking
+        Self::poll_track_loader(&mut mgr, track_loader, event_tx);
+
+        // Check if we need to pre-load the next track for crossfade/gapless
+        // This must happen BEFORE process_audio so the crossfade engine has
+        // the next source ready when entering the crossfade region
+        Self::prepare_next_track_if_needed(&mut mgr, track_loader);
+
         match mgr.process_audio(f32_slice) {
             Ok(_) => {
+                // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
+                Self::forward_manager_events(&mut mgr, event_tx);
+
                 // Check if track finished and next track is ready to load
                 if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    Self::load_next_track(&mut mgr, event_tx);
+                    Self::load_next_track(&mut mgr, track_loader, event_tx);
                 }
 
-                // Convert f32 [-1.0, 1.0] to i16 [-32768, 32767]
-                for (out, &sample) in data.iter_mut().zip(f32_slice.iter()) {
-                    // Clamp to valid range and scale to i16
-                    let clamped = sample.clamp(-1.0, 1.0);
-                    *out = (clamped * i16::MAX as f32) as i16;
-                }
+                // Convert f32 [-1.0, 1.0] to i16 with TPDF dithering
+                // Dithering is essential for 16-bit audio quality
+                dither.process_stereo_to_i16(f32_slice, data);
             }
             Err(e) => {
                 // Error processing audio - fill with silence
@@ -872,11 +1097,154 @@ impl DesktopPlayback {
         }
     }
 
+    /// Forward events from PlaybackManager to the desktop event channel
+    ///
+    /// This drains events from the manager (e.g., crossfade progress, track changes at 50%)
+    /// and converts them to desktop PlaybackEvent format.
+    fn forward_manager_events(mgr: &mut PlaybackManager, event_tx: &Sender<PlaybackEvent>) {
+        for event in mgr.drain_events() {
+            let desktop_event = match event {
+                soul_playback::PlaybackEvent::StateChanged { state } => {
+                    // Convert PlaybackStateEvent to PlaybackState
+                    let state = match state {
+                        soul_playback::PlaybackStateEvent::Stopped => {
+                            soul_playback::PlaybackState::Stopped
+                        }
+                        soul_playback::PlaybackStateEvent::Loading => {
+                            soul_playback::PlaybackState::Loading
+                        }
+                        soul_playback::PlaybackStateEvent::Playing => {
+                            soul_playback::PlaybackState::Playing
+                        }
+                        soul_playback::PlaybackStateEvent::Paused => {
+                            soul_playback::PlaybackState::Paused
+                        }
+                        soul_playback::PlaybackStateEvent::Crossfading => {
+                            // Map crossfading to Playing for UI compatibility
+                            soul_playback::PlaybackState::Playing
+                        }
+                    };
+                    Some(PlaybackEvent::StateChanged(state))
+                }
+                soul_playback::PlaybackEvent::TrackChanged {
+                    track_id,
+                    previous_track_id: _,
+                } => {
+                    // Get the full track info from the manager
+                    // During crossfade at 50%, this is emitted with the NEW track ID
+                    // Try to find the track in the queue or as current track
+                    let track = if let Some(current) = mgr.get_current_track() {
+                        if current.id == track_id {
+                            Some(current.clone())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    Some(PlaybackEvent::TrackChanged(track))
+                }
+                soul_playback::PlaybackEvent::CrossfadeStarted {
+                    from_track_id,
+                    to_track_id,
+                    duration_ms,
+                } => Some(PlaybackEvent::CrossfadeStarted {
+                    from_track_id,
+                    to_track_id,
+                    duration_ms,
+                }),
+                soul_playback::PlaybackEvent::CrossfadeProgress {
+                    progress,
+                    metadata_switched,
+                } => Some(PlaybackEvent::CrossfadeProgress {
+                    progress,
+                    metadata_switched,
+                }),
+                soul_playback::PlaybackEvent::CrossfadeCompleted => {
+                    Some(PlaybackEvent::CrossfadeCompleted)
+                }
+                soul_playback::PlaybackEvent::TrackFinished { track_id: _ } => {
+                    // Already handled by track loading logic
+                    None
+                }
+                soul_playback::PlaybackEvent::PositionUpdate {
+                    position_ms,
+                    duration_ms: _,
+                } => Some(PlaybackEvent::PositionUpdated(position_ms as f64 / 1000.0)),
+                soul_playback::PlaybackEvent::NextTrackPrepared { track_id: _ } => {
+                    // Internal event, not needed for UI
+                    None
+                }
+                soul_playback::PlaybackEvent::VolumeChanged { level, is_muted: _ } => {
+                    Some(PlaybackEvent::VolumeChanged(level))
+                }
+                soul_playback::PlaybackEvent::QueueChanged { length: _ } => {
+                    Some(PlaybackEvent::QueueUpdated)
+                }
+                soul_playback::PlaybackEvent::Error { message } => {
+                    Some(PlaybackEvent::Error(message))
+                }
+            };
+
+            if let Some(event) = desktop_event {
+                let _ = event_tx.try_send(event);
+            }
+        }
+    }
+
+    /// Poll for ready track loads from the background loader (non-blocking)
+    ///
+    /// This is called from the audio callback to check if any track loads have completed.
+    /// When a load completes, we set the source on the manager and emit events.
+    fn poll_track_loader(
+        mgr: &mut PlaybackManager,
+        track_loader: &Arc<crate::track_loader::TrackLoader>,
+        event_tx: &Sender<PlaybackEvent>,
+    ) {
+        while let Some(result) = track_loader.poll_ready() {
+            if let Some(source) = result.source {
+                if result.is_preload {
+                    // Pre-loaded next track for crossfade/gapless
+                    eprintln!(
+                        "[poll_track_loader] Next track ready for crossfade: {}",
+                        result.track.title
+                    );
+                    mgr.set_next_source(source, result.track);
+                } else {
+                    // Current track loaded (initial load or track change)
+                    eprintln!(
+                        "[poll_track_loader] Track loaded: {}",
+                        result.track.title
+                    );
+                    mgr.set_audio_source(source);
+                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                    let _ = event_tx.try_send(PlaybackEvent::TrackChanged(Some(result.track)));
+                    let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
+                }
+            } else if let Some(error) = result.error {
+                eprintln!(
+                    "[poll_track_loader] Failed to load '{}': {}",
+                    result.track.title, error
+                );
+                if !result.is_preload {
+                    // Only emit error for current track loads, not preloads
+                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
+                        "Failed to load track: {}",
+                        error
+                    )));
+                    mgr.stop();
+                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                }
+            }
+        }
+    }
+
     /// Process playback command
     fn process_command(
         command: PlaybackCommand,
         manager: Arc<Mutex<PlaybackManager>>,
         event_tx: &Sender<PlaybackEvent>,
+        track_loader: &Arc<crate::track_loader::TrackLoader>,
     ) -> Result<()> {
         let mut mgr = manager.lock().unwrap();
 
@@ -888,50 +1256,30 @@ impl DesktopPlayback {
                 let state = mgr.get_state();
                 eprintln!("[PlaybackCommand::Play] State after play(): {:?}", state);
 
-                // If state is Loading, we need to load the audio source
+                // If state is Loading, request track load via background loader
                 if state == soul_playback::PlaybackState::Loading {
                     if let Some(track) = mgr.get_current_track().cloned() {
                         eprintln!(
-                            "[PlaybackCommand::Play] Loading track: {} from {}",
+                            "[PlaybackCommand::Play] Requesting track load: {} from {}",
                             track.title,
                             track.path.display()
                         );
-                        // Get target sample rate from manager
                         let target_sample_rate = mgr.get_sample_rate();
                         eprintln!(
                             "[PlaybackCommand::Play] Target sample rate: {}",
                             target_sample_rate
                         );
-                        // Create audio source from file path
-                        match crate::sources::local::LocalAudioSource::new(
-                            &track.path,
+                        // Request load via background loader (non-blocking)
+                        let request = crate::track_loader::LoadRequest {
+                            path: track.path.clone(),
+                            track: track.clone(),
                             target_sample_rate,
-                        ) {
-                            Ok(source) => {
-                                eprintln!(
-                                    "[PlaybackCommand::Play] Audio source loaded successfully (source rate: {}, target rate: {})",
-                                    source.source_sample_rate(),
-                                    source.sample_rate()
-                                );
-                                mgr.set_audio_source(Box::new(source));
-                                event_tx
-                                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
-                                    .ok();
-                                event_tx
-                                    .send(PlaybackEvent::TrackChanged(Some(track.clone())))
-                                    .ok();
-                            }
-                            Err(e) => {
-                                eprintln!("[PlaybackCommand::Play] Failed to load audio: {}", e);
-                                event_tx
-                                    .send(PlaybackEvent::Error(format!(
-                                        "Failed to load audio: {}",
-                                        e
-                                    )))
-                                    .ok();
-                                mgr.stop();
-                            }
+                            is_preload: false,
+                        };
+                        if !track_loader.request_load(request) {
+                            eprintln!("[PlaybackCommand::Play] Load request queue full");
                         }
+                        // Result will be handled by poll_track_loader in next callback
                     } else {
                         eprintln!("[PlaybackCommand::Play] No current track to load");
                     }
@@ -960,33 +1308,20 @@ impl DesktopPlayback {
             PlaybackCommand::Next => {
                 mgr.next()?;
 
-                // If state is Loading, we need to load the audio source
+                // If state is Loading, request track load via background loader
                 if mgr.get_state() == soul_playback::PlaybackState::Loading {
                     if let Some(track) = mgr.get_current_track().cloned() {
                         let target_sample_rate = mgr.get_sample_rate();
-                        match crate::sources::local::LocalAudioSource::new(
-                            &track.path,
+                        let request = crate::track_loader::LoadRequest {
+                            path: track.path.clone(),
+                            track: track.clone(),
                             target_sample_rate,
-                        ) {
-                            Ok(source) => {
-                                mgr.set_audio_source(Box::new(source));
-                                event_tx
-                                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
-                                    .ok();
-                                event_tx
-                                    .send(PlaybackEvent::TrackChanged(Some(track.clone())))
-                                    .ok();
-                            }
-                            Err(e) => {
-                                event_tx
-                                    .send(PlaybackEvent::Error(format!(
-                                        "Failed to load audio: {}",
-                                        e
-                                    )))
-                                    .ok();
-                                mgr.stop();
-                            }
+                            is_preload: false,
+                        };
+                        if !track_loader.request_load(request) {
+                            eprintln!("[PlaybackCommand::Next] Load request queue full");
                         }
+                        // Result will be handled by poll_track_loader in next callback
                     }
                 } else {
                     event_tx
@@ -1001,33 +1336,20 @@ impl DesktopPlayback {
             PlaybackCommand::Previous => {
                 mgr.previous()?;
 
-                // If state is Loading, we need to load the audio source
+                // If state is Loading, request track load via background loader
                 if mgr.get_state() == soul_playback::PlaybackState::Loading {
                     if let Some(track) = mgr.get_current_track().cloned() {
                         let target_sample_rate = mgr.get_sample_rate();
-                        match crate::sources::local::LocalAudioSource::new(
-                            &track.path,
+                        let request = crate::track_loader::LoadRequest {
+                            path: track.path.clone(),
+                            track: track.clone(),
                             target_sample_rate,
-                        ) {
-                            Ok(source) => {
-                                mgr.set_audio_source(Box::new(source));
-                                event_tx
-                                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
-                                    .ok();
-                                event_tx
-                                    .send(PlaybackEvent::TrackChanged(Some(track.clone())))
-                                    .ok();
-                            }
-                            Err(e) => {
-                                event_tx
-                                    .send(PlaybackEvent::Error(format!(
-                                        "Failed to load audio: {}",
-                                        e
-                                    )))
-                                    .ok();
-                                mgr.stop();
-                            }
+                            is_preload: false,
+                        };
+                        if !track_loader.request_load(request) {
+                            eprintln!("[PlaybackCommand::Previous] Load request queue full");
                         }
+                        // Result will be handled by poll_track_loader in next callback
                     }
                 } else {
                     event_tx
@@ -1074,33 +1396,20 @@ impl DesktopPlayback {
             PlaybackCommand::SkipToQueueIndex(index) => {
                 mgr.skip_to_queue_index(index)?;
 
-                // If state is Loading, we need to load the audio source
+                // If state is Loading, request track load via background loader
                 if mgr.get_state() == soul_playback::PlaybackState::Loading {
                     if let Some(track) = mgr.get_current_track().cloned() {
                         let target_sample_rate = mgr.get_sample_rate();
-                        match crate::sources::local::LocalAudioSource::new(
-                            &track.path,
+                        let request = crate::track_loader::LoadRequest {
+                            path: track.path.clone(),
+                            track: track.clone(),
                             target_sample_rate,
-                        ) {
-                            Ok(source) => {
-                                mgr.set_audio_source(Box::new(source));
-                                event_tx
-                                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
-                                    .ok();
-                                event_tx
-                                    .send(PlaybackEvent::TrackChanged(Some(track.clone())))
-                                    .ok();
-                            }
-                            Err(e) => {
-                                event_tx
-                                    .send(PlaybackEvent::Error(format!(
-                                        "Failed to load audio: {}",
-                                        e
-                                    )))
-                                    .ok();
-                                mgr.stop();
-                            }
+                            is_preload: false,
+                        };
+                        if !track_loader.request_load(request) {
+                            eprintln!("[PlaybackCommand::SkipToQueueIndex] Load request queue full");
                         }
+                        // Result will be handled by poll_track_loader in next callback
                     }
                 }
                 event_tx.send(PlaybackEvent::QueueUpdated).ok();
@@ -1337,6 +1646,7 @@ impl DesktopPlayback {
             self.event_tx.clone(),
             backend,
             device_name.clone(),
+            self.track_loader.clone(),
         )?;
 
         // Check if sample rate changed

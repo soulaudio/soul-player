@@ -20,7 +20,7 @@ fn create_test_wav(
     duration_secs: f32,
     frequency: f32,
     sample_rate: u32,
-) -> std::io::Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     use hound::{WavSpec, WavWriter};
 
     let spec = WavSpec {
@@ -139,7 +139,7 @@ fn test_resampled_duration_accuracy() {
     );
 
     // Allow 5% tolerance for resampling and encoder/decoder overhead
-    let tolerance = expected_duration * 0.05;
+    let tolerance = (expected_duration * 0.05) as f64;
     assert!(
         (duration_secs - expected_duration as f64).abs() < tolerance,
         "Duration mismatch: expected {:.3}s ± {:.3}s, got {:.3}s",
@@ -321,9 +321,9 @@ fn test_playback_speed_verification() {
         );
 
         // Allow 5% tolerance
-        let tolerance = expected_duration * 0.05;
+        let tolerance = (expected_duration * 0.05) as f64;
         assert!(
-            (calculated_duration - expected_duration).abs() < tolerance,
+            (calculated_duration - expected_duration as f64).abs() < tolerance,
             "Duration mismatch at {}Hz: expected {:.3}s ± {:.3}s, got {:.3}s",
             target_rate,
             expected_duration,

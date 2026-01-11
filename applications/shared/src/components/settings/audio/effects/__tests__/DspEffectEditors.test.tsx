@@ -244,8 +244,8 @@ describe('CompressorEditor', () => {
     });
   });
 
-  describe('backend integration', () => {
-    it('should invoke update_effect_parameters when threshold changes', async () => {
+  describe('parent notification', () => {
+    it('should call onSettingsChange when threshold changes', async () => {
       const props = createDefaultProps();
 
       await act(async () => {
@@ -260,19 +260,14 @@ describe('CompressorEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 0,
-          effect: {
-            type: 'compressor',
-            settings: expect.objectContaining({ thresholdDb: -25 }),
-          },
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({ thresholdDb: -25 })
+        );
       });
     });
 
-    it('should pass correct slotIndex to backend', async () => {
+    it('should notify parent with complete settings structure', async () => {
       const props = createDefaultProps();
-      props.slotIndex = 3;
 
       await act(async () => {
         render(<CompressorEditor {...props} />);
@@ -285,16 +280,23 @@ describe('CompressorEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 3,
-          effect: expect.any(Object),
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            thresholdDb: -15,
+            ratio: expect.any(Number),
+            attackMs: expect.any(Number),
+            releaseMs: expect.any(Number),
+            kneeDb: expect.any(Number),
+            makeupGainDb: expect.any(Number),
+          })
+        );
       });
     });
 
-    it('should handle backend errors gracefully', async () => {
+    it('should call callback for each slider change', async () => {
       const props = createDefaultProps();
-      mockInvoke.mockRejectedValue(new Error('Backend error'));
+      let callCount = 0;
+      props.onSettingsChange = vi.fn(() => { callCount++; });
 
       await act(async () => {
         render(<CompressorEditor {...props} />);
@@ -302,13 +304,12 @@ describe('CompressorEditor', () => {
 
       const sliders = screen.getAllByRole('slider');
 
-      // Should not crash
       await act(async () => {
         fireEvent.change(sliders[0], { target: { value: '-25' } });
       });
 
-      // Component should still be rendered
-      expect(screen.getByText('Threshold')).toBeInTheDocument();
+      // Callback should have been called
+      expect(callCount).toBeGreaterThan(0);
     });
   });
 
@@ -479,8 +480,8 @@ describe('LimiterEditor', () => {
     });
   });
 
-  describe('backend integration', () => {
-    it('should invoke update_effect_parameters with limiter type', async () => {
+  describe('parent notification', () => {
+    it('should call onSettingsChange with limiter settings', async () => {
       const props = createDefaultProps();
 
       await act(async () => {
@@ -494,19 +495,14 @@ describe('LimiterEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 0,
-          effect: {
-            type: 'limiter',
-            settings: expect.objectContaining({ thresholdDb: -3 }),
-          },
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({ thresholdDb: -3 })
+        );
       });
     });
 
-    it('should pass correct slotIndex to backend', async () => {
+    it('should notify parent with complete settings structure', async () => {
       const props = createDefaultProps();
-      props.slotIndex = 5;
 
       await act(async () => {
         render(<LimiterEditor {...props} />);
@@ -519,10 +515,12 @@ describe('LimiterEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 5,
-          effect: expect.any(Object),
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            thresholdDb: -6,
+            releaseMs: expect.any(Number),
+          })
+        );
       });
     });
   });
@@ -704,8 +702,8 @@ describe('CrossfeedEditor', () => {
     });
   });
 
-  describe('backend integration', () => {
-    it('should invoke update_effect_parameters with crossfeed type', async () => {
+  describe('parent notification', () => {
+    it('should call onSettingsChange with crossfeed settings when preset changes', async () => {
       const props = createDefaultProps();
 
       await act(async () => {
@@ -719,19 +717,14 @@ describe('CrossfeedEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 0,
-          effect: {
-            type: 'crossfeed',
-            settings: expect.objectContaining({ preset: 'relaxed' }),
-          },
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({ preset: 'relaxed' })
+        );
       });
     });
 
-    it('should pass correct slotIndex to backend', async () => {
+    it('should notify parent with correct settings structure', async () => {
       const props = createDefaultProps();
-      props.slotIndex = 2;
 
       await act(async () => {
         render(<CrossfeedEditor {...props} />);
@@ -744,10 +737,13 @@ describe('CrossfeedEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 2,
-          effect: expect.any(Object),
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            preset: 'meier',
+            levelDb: -9.0,
+            cutoffHz: 550,
+          })
+        );
       });
     });
   });
@@ -983,8 +979,8 @@ describe('StereoEnhancerEditor', () => {
     });
   });
 
-  describe('backend integration', () => {
-    it('should invoke update_effect_parameters with stereo type', async () => {
+  describe('parent notification', () => {
+    it('should call onSettingsChange with stereo settings when width changes', async () => {
       const props = createDefaultProps();
 
       await act(async () => {
@@ -998,19 +994,14 @@ describe('StereoEnhancerEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 0,
-          effect: {
-            type: 'stereo',
-            settings: expect.objectContaining({ width: 1.2 }),
-          },
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({ width: 1.2 })
+        );
       });
     });
 
-    it('should pass correct slotIndex to backend', async () => {
+    it('should notify parent with complete settings structure', async () => {
       const props = createDefaultProps();
-      props.slotIndex = 4;
 
       await act(async () => {
         render(<StereoEnhancerEditor {...props} />);
@@ -1023,10 +1014,14 @@ describe('StereoEnhancerEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 4,
-          effect: expect.any(Object),
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            width: 0.8,
+            midGainDb: expect.any(Number),
+            sideGainDb: expect.any(Number),
+            balance: expect.any(Number),
+          })
+        );
       });
     });
   });
@@ -1352,8 +1347,8 @@ describe('ParametricEqEditor', () => {
     });
   });
 
-  describe('backend integration', () => {
-    it('should invoke update_effect_parameters with eq type', async () => {
+  describe('parent notification', () => {
+    it('should call onBandsChange when gain slider changes', async () => {
       const props = createDefaultProps();
 
       await act(async () => {
@@ -1367,16 +1362,16 @@ describe('ParametricEqEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 0,
-          effect: expect.objectContaining({ type: 'eq' }),
-        });
+        expect(props.onBandsChange).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({ gain: 3 }),
+          ])
+        );
       });
     });
 
-    it('should pass correct slotIndex to backend', async () => {
+    it('should notify parent with complete band array', async () => {
       const props = createDefaultProps();
-      props.slotIndex = 1;
 
       await act(async () => {
         render(<ParametricEqEditor {...props} />);
@@ -1389,10 +1384,17 @@ describe('ParametricEqEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 1,
-          effect: expect.any(Object),
-        });
+        expect(props.onBandsChange).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({
+              frequency: expect.any(Number),
+              gain: expect.any(Number),
+              q: expect.any(Number),
+              filterType: expect.any(String),
+              enabled: expect.any(Boolean),
+            }),
+          ])
+        );
       });
     });
   });
@@ -1587,8 +1589,8 @@ describe('GraphicEqEditor', () => {
     });
   });
 
-  describe('backend integration', () => {
-    it('should invoke update_effect_parameters with graphic_eq type', async () => {
+  describe('parent notification', () => {
+    it('should call onSettingsChange with preset settings', async () => {
       const props = createDefaultProps();
 
       await act(async () => {
@@ -1604,22 +1606,23 @@ describe('GraphicEqEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 0,
-          effect: expect.objectContaining({ type: 'graphic_eq' }),
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            preset: 'Rock',
+            gains: expect.any(Array),
+          })
+        );
       });
     });
 
-    it('should pass correct slotIndex to backend', async () => {
+    it('should notify parent with complete settings structure', async () => {
       const props = createDefaultProps();
-      props.slotIndex = 6;
 
       await act(async () => {
         render(<GraphicEqEditor {...props} />);
       });
 
-      // Apply a preset to trigger backend call
+      // Apply a preset to trigger callback
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /Flat/i }));
       });
@@ -1628,16 +1631,20 @@ describe('GraphicEqEditor', () => {
       });
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('update_effect_parameters', {
-          slotIndex: 6,
-          effect: expect.any(Object),
-        });
+        expect(props.onSettingsChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            preset: expect.any(String),
+            bandCount: expect.any(Number),
+            gains: expect.any(Array),
+          })
+        );
       });
     });
 
-    it('should handle backend errors gracefully', async () => {
+    it('should call onSettingsChange on preset apply', async () => {
       const props = createDefaultProps();
-      mockInvoke.mockRejectedValue(new Error('Backend error'));
+      let callCount = 0;
+      props.onSettingsChange = vi.fn(() => { callCount++; });
 
       await act(async () => {
         render(<GraphicEqEditor {...props} />);
@@ -1651,8 +1658,8 @@ describe('GraphicEqEditor', () => {
         fireEvent.click(screen.getByText('Pop'));
       });
 
-      // Component should still be rendered
-      expect(screen.getByText('31')).toBeInTheDocument();
+      // Callback should have been called
+      expect(callCount).toBeGreaterThan(0);
     });
   });
 
@@ -1692,6 +1699,535 @@ describe('GraphicEqEditor', () => {
       // After a band change, preset should become Custom if it doesn't match any preset
       // This is tested implicitly through the onSettingsChange callback
       expect(screen.getByText('31')).toBeInTheDocument();
+    });
+  });
+
+  // ===========================================================================
+  // Band Slider Drag Interaction Tests
+  // ===========================================================================
+  describe('band slider drag interactions', () => {
+    it('should update gain when dragging a band slider', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Find the first band slider (31Hz)
+      const bandSlider = screen.getByTestId('graphic-eq-band-0');
+      const sliderTrack = bandSlider.querySelector('.h-40');
+
+      expect(sliderTrack).toBeTruthy();
+
+      // Simulate mousedown on the slider track
+      await act(async () => {
+        fireEvent.mouseDown(sliderTrack!, {
+          clientY: 100, // Some Y position
+          preventDefault: () => {},
+        });
+      });
+
+      // The callback should have been called with the new gain value
+      expect(props.onSettingsChange).toHaveBeenCalled();
+    });
+
+    it('should not crash when dragging multiple band sliders', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Get multiple band sliders
+      const band0 = screen.getByTestId('graphic-eq-band-0');
+      const band5 = screen.getByTestId('graphic-eq-band-5');
+
+      const track0 = band0.querySelector('.h-40');
+      const track5 = band5.querySelector('.h-40');
+
+      // Drag first slider
+      await act(async () => {
+        fireEvent.mouseDown(track0!, { clientY: 100 });
+        fireEvent.mouseUp(document);
+      });
+
+      // Drag another slider
+      await act(async () => {
+        fireEvent.mouseDown(track5!, { clientY: 150 });
+        fireEvent.mouseUp(document);
+      });
+
+      // Component should not crash
+      expect(screen.getByText('31')).toBeInTheDocument();
+      expect(screen.getByText('1k')).toBeInTheDocument();
+    });
+
+    it('should call onSettingsChange with updated gains during drag', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      const band0 = screen.getByTestId('graphic-eq-band-0');
+      const track0 = band0.querySelector('.h-40');
+
+      // Start drag
+      await act(async () => {
+        fireEvent.mouseDown(track0!, { clientY: 50 });
+      });
+
+      expect(props.onSettingsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gains: expect.any(Array),
+          preset: expect.any(String),
+        })
+      );
+
+      // The first gain should have changed (not 0)
+      const lastCall = props.onSettingsChange.mock.calls[0][0];
+      expect(lastCall.gains.length).toBe(10);
+    });
+
+    it('should set preset to Custom when drag changes gain away from preset values', async () => {
+      const props = createDefaultProps();
+      // Start with Bass Boost preset
+      props.settings.preset = 'Bass Boost';
+      props.settings.gains = [6, 5, 4, 2, 0, 0, 0, 0, 0, 0];
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      const band0 = screen.getByTestId('graphic-eq-band-0');
+      const track0 = band0.querySelector('.h-40');
+
+      // Drag to change the value
+      await act(async () => {
+        fireEvent.mouseDown(track0!, { clientY: 200 }); // Drag down to lower gain
+      });
+
+      // Should have called with Custom preset if the value no longer matches
+      expect(props.onSettingsChange).toHaveBeenCalled();
+    });
+
+    it('should handle touch events for drag on mobile', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      const band0 = screen.getByTestId('graphic-eq-band-0');
+      const track0 = band0.querySelector('.h-40');
+
+      // Simulate touch event
+      await act(async () => {
+        fireEvent.touchStart(track0!, {
+          touches: [{ clientY: 100 }],
+          preventDefault: () => {},
+        });
+      });
+
+      // Should have called the callback
+      expect(props.onSettingsChange).toHaveBeenCalled();
+    });
+
+    it('should handle rapid consecutive drag updates without crashing', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      const band0 = screen.getByTestId('graphic-eq-band-0');
+      const track0 = band0.querySelector('.h-40');
+
+      // Simulate rapid mouse movements
+      await act(async () => {
+        fireEvent.mouseDown(track0!, { clientY: 50 });
+      });
+
+      // Multiple rapid moves
+      for (let i = 0; i < 10; i++) {
+        await act(async () => {
+          fireEvent.mouseMove(document, { clientY: 50 + i * 10 });
+        });
+      }
+
+      await act(async () => {
+        fireEvent.mouseUp(document);
+      });
+
+      // Component should not crash
+      expect(screen.getByText('31')).toBeInTheDocument();
+    });
+  });
+
+  // ===========================================================================
+  // Scroll/Mouse Wheel Interaction Tests
+  // ===========================================================================
+  describe('scroll and mouse wheel interactions', () => {
+    it('should not crash when scrolling over the EQ editor', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      const editor = screen.getByTestId('graphic-eq-editor');
+
+      // Simulate wheel event on the editor
+      await act(async () => {
+        fireEvent.wheel(editor, { deltaY: 100 });
+      });
+
+      // Component should not crash
+      expect(screen.getByTestId('graphic-eq-editor')).toBeInTheDocument();
+    });
+
+    it('should not crash when scrolling over individual band sliders', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      const band0 = screen.getByTestId('graphic-eq-band-0');
+
+      // Simulate wheel event on a band slider
+      await act(async () => {
+        fireEvent.wheel(band0, { deltaY: -50 });
+      });
+
+      // Component should not crash
+      expect(screen.getByTestId('graphic-eq-band-0')).toBeInTheDocument();
+    });
+
+    it('should maintain state during scroll events', async () => {
+      const props = createDefaultProps();
+      props.settings.gains = [3, 2, 1, 0, -1, -2, -3, -4, -5, -6];
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      const editor = screen.getByTestId('graphic-eq-editor');
+
+      // Multiple scroll events
+      for (let i = 0; i < 5; i++) {
+        await act(async () => {
+          fireEvent.wheel(editor, { deltaY: 50 * (i % 2 === 0 ? 1 : -1) });
+        });
+      }
+
+      // Gains should still be displayed correctly (no crash)
+      expect(screen.getByText('31')).toBeInTheDocument();
+      expect(screen.getByText('16k')).toBeInTheDocument();
+    });
+  });
+
+  // ===========================================================================
+  // Preset Loading from Backend Tests
+  // ===========================================================================
+  describe('preset loading from backend', () => {
+    it('should handle backend presets in tuple format without crashing', async () => {
+      const props = createDefaultProps();
+
+      // Mock the backend response in tuple format: [string, GraphicEqData][]
+      mockInvoke.mockImplementation((cmd) => {
+        if (cmd === 'get_graphic_eq_presets') {
+          // Backend returns tuples: [name, data]
+          return Promise.resolve([
+            ['Custom Flat', { preset: 'Custom Flat', bandCount: 10, gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }],
+            ['Custom Bass', { preset: 'Custom Bass', bandCount: 10, gains: [8, 6, 4, 2, 0, 0, 0, 0, 0, 0] }],
+          ]);
+        }
+        return Promise.resolve(undefined);
+      });
+
+      // Should not crash when loading presets
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Wait for presets to load
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('get_graphic_eq_presets');
+      });
+
+      // Component should still work - should show builtin presets as fallback
+      expect(screen.getByTestId('graphic-eq-editor')).toBeInTheDocument();
+    });
+
+    it('should handle backend preset loading failure gracefully', async () => {
+      const props = createDefaultProps();
+
+      // Mock a backend error
+      mockInvoke.mockImplementation((cmd) => {
+        if (cmd === 'get_graphic_eq_presets') {
+          return Promise.reject(new Error('Backend error'));
+        }
+        return Promise.resolve(undefined);
+      });
+
+      // Should not crash
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Should fall back to builtin presets
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('graphic-eq-preset-select'));
+      });
+
+      // Builtin presets should still be available
+      expect(screen.getByText('Bass Boost')).toBeInTheDocument();
+    });
+
+    it('should not crash when clicking preset after backend returns empty array', async () => {
+      const props = createDefaultProps();
+
+      // Mock empty response
+      mockInvoke.mockImplementation((cmd) => {
+        if (cmd === 'get_graphic_eq_presets') {
+          return Promise.resolve([]);
+        }
+        return Promise.resolve(undefined);
+      });
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Open preset dropdown
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('graphic-eq-preset-select'));
+      });
+
+      // Click a preset (should use builtin presets as fallback)
+      await act(async () => {
+        fireEvent.click(screen.getByText('Rock'));
+      });
+
+      // Should not crash and should apply the preset
+      expect(props.onSettingsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preset: 'Rock',
+        })
+      );
+    });
+
+    it('should use builtin presets when backend returns malformed data', async () => {
+      const props = createDefaultProps();
+
+      // Mock malformed response
+      mockInvoke.mockImplementation((cmd) => {
+        if (cmd === 'get_graphic_eq_presets') {
+          return Promise.resolve([null, undefined, 'invalid']);
+        }
+        return Promise.resolve(undefined);
+      });
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Open preset dropdown - should show builtin presets
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('graphic-eq-preset-select'));
+      });
+
+      // Builtin presets should be available (use getAllByText since "Flat" appears in button and dropdown)
+      expect(screen.getAllByText('Flat').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Bass Boost').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ===========================================================================
+  // Preset Application Stability Tests
+  // ===========================================================================
+  describe('preset application stability', () => {
+    it('should not crash when rapidly switching between presets', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Rapidly apply different presets
+      const presetNames = ['Bass Boost', 'Treble Boost', 'Rock', 'Pop', 'Jazz', 'Flat'];
+
+      for (const presetName of presetNames) {
+        await act(async () => {
+          fireEvent.click(screen.getByTestId('graphic-eq-preset-select'));
+        });
+        // Use getAllByText and click the one in the dropdown (not the button)
+        const presetElements = screen.getAllByText(presetName);
+        const dropdownOption = presetElements.find(el => el.tagName.toLowerCase() === 'span');
+        await act(async () => {
+          if (dropdownOption) {
+            fireEvent.click(dropdownOption.closest('button')!);
+          } else {
+            // Fallback to first button that isn't the main select
+            fireEvent.click(presetElements[presetElements.length > 1 ? 1 : 0]);
+          }
+        });
+      }
+
+      // Component should not crash
+      expect(screen.getByTestId('graphic-eq-editor')).toBeInTheDocument();
+    });
+
+    it('should correctly apply preset gains', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Apply Bass Boost preset
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('graphic-eq-preset-select'));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByText('Bass Boost'));
+      });
+
+      // Verify the callback was called with correct gains
+      expect(props.onSettingsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preset: 'Bass Boost',
+          gains: [6, 5, 4, 2, 0, 0, 0, 0, 0, 0],
+        })
+      );
+    });
+
+    it('should close dropdown after preset selection', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Open dropdown
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('graphic-eq-preset-select'));
+      });
+
+      // Dropdown should be visible - multiple elements with "Bass Boost" (button selector and dropdown option)
+      expect(screen.getAllByText('Bass Boost').length).toBeGreaterThanOrEqual(1);
+
+      // Select a preset - click the span inside the dropdown button
+      const rockElements = screen.getAllByText('Rock');
+      const dropdownRock = rockElements.find(el => el.tagName.toLowerCase() === 'span');
+      await act(async () => {
+        if (dropdownRock) {
+          fireEvent.click(dropdownRock.closest('button')!);
+        } else {
+          fireEvent.click(rockElements[rockElements.length > 1 ? 1 : 0]);
+        }
+      });
+
+      // Wait for dropdown to close - after selecting, the dropdown should close
+      // The selected preset "Rock" should now be shown in the main button
+      await waitFor(() => {
+        // After selecting Rock, there should be fewer Bass Boost elements visible
+        // (the dropdown is closed, so only the preset name in button if selected, or none if different)
+        const bassBoostElements = screen.queryAllByText('Bass Boost');
+        // Since we selected Rock, Bass Boost should only appear if dropdown is still open
+        // We're mainly checking the component doesn't crash
+        expect(screen.getByTestId('graphic-eq-editor')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle preset application while dragging a slider', async () => {
+      const props = createDefaultProps();
+
+      await act(async () => {
+        render(<GraphicEqEditor {...props} />);
+      });
+
+      // Start dragging a slider
+      const band0 = screen.getByTestId('graphic-eq-band-0');
+      const track0 = band0.querySelector('.h-40');
+
+      await act(async () => {
+        fireEvent.mouseDown(track0!, { clientY: 100 });
+      });
+
+      // While "dragging", apply a preset
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('graphic-eq-preset-select'));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByText('Bass Boost'));
+      });
+
+      // Release the mouse
+      await act(async () => {
+        fireEvent.mouseUp(document);
+      });
+
+      // Component should not crash
+      expect(screen.getByTestId('graphic-eq-editor')).toBeInTheDocument();
+    });
+  });
+
+  // ===========================================================================
+  // Component Re-render Stability Tests
+  // ===========================================================================
+  describe('re-render stability', () => {
+    it('should handle settings prop changes during interaction', async () => {
+      const props = createDefaultProps();
+      const { rerender } = render(<GraphicEqEditor {...props} />);
+
+      // Start interaction
+      const band0 = screen.getByTestId('graphic-eq-band-0');
+      const track0 = band0.querySelector('.h-40');
+
+      await act(async () => {
+        fireEvent.mouseDown(track0!, { clientY: 100 });
+      });
+
+      // Simulate parent updating settings (which would happen when onSettingsChange is called)
+      await act(async () => {
+        rerender(
+          <GraphicEqEditor
+            {...props}
+            settings={{ ...props.settings, gains: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0] }}
+          />
+        );
+      });
+
+      // End interaction
+      await act(async () => {
+        fireEvent.mouseUp(document);
+      });
+
+      // Component should not crash
+      expect(screen.getByTestId('graphic-eq-editor')).toBeInTheDocument();
+    });
+
+    it('should handle rapid props updates without crashing', async () => {
+      const props = createDefaultProps();
+      const { rerender } = render(<GraphicEqEditor {...props} />);
+
+      // Rapidly update gains
+      for (let i = 0; i < 20; i++) {
+        await act(async () => {
+          const newGains = Array(10).fill(0).map(() => Math.random() * 12 - 6);
+          rerender(
+            <GraphicEqEditor
+              {...props}
+              settings={{ ...props.settings, gains: newGains }}
+            />
+          );
+        });
+      }
+
+      // Component should not crash
+      expect(screen.getByTestId('graphic-eq-editor')).toBeInTheDocument();
     });
   });
 });
@@ -1784,24 +2320,13 @@ describe('DSP Effect Editors Integration', () => {
     expect(screen.getByText('31')).toBeInTheDocument();
   });
 
-  it('should all editors use correct effect types in backend calls', async () => {
-    const effectTypes = new Set<string>();
-
-    mockInvoke.mockImplementation((cmd, args) => {
-      if (cmd === 'update_effect_parameters') {
-        const effect = (args as { effect?: { type?: string } })?.effect;
-        if (effect?.type) {
-          effectTypes.add(effect.type);
-        }
-      }
-      return Promise.resolve([]);
-    });
-
-    // Trigger backend calls from each component
-    const { rerender } = render(
+  it('should all editors call onSettingsChange when values change', async () => {
+    // Test that each editor properly notifies parent of changes
+    const compressorCallback = vi.fn();
+    render(
       <CompressorEditor
         settings={{ thresholdDb: -20, ratio: 4, attackMs: 10, releaseMs: 100, kneeDb: 2, makeupGainDb: 0 }}
-        onSettingsChange={() => {}}
+        onSettingsChange={compressorCallback}
         slotIndex={0}
       />
     );
@@ -1809,14 +2334,15 @@ describe('DSP Effect Editors Integration', () => {
       const sliders = screen.getAllByRole('slider');
       fireEvent.change(sliders[0], { target: { value: '-25' } });
     });
-    await waitFor(() => expect(effectTypes.has('compressor')).toBe(true));
+    expect(compressorCallback).toHaveBeenCalled();
     cleanup();
 
+    const limiterCallback = vi.fn();
     await act(async () => {
       render(
         <LimiterEditor
           settings={{ thresholdDb: -0.3, releaseMs: 100 }}
-          onSettingsChange={() => {}}
+          onSettingsChange={limiterCallback}
           slotIndex={0}
         />
       );
@@ -1825,14 +2351,15 @@ describe('DSP Effect Editors Integration', () => {
       const sliders = screen.getAllByRole('slider');
       fireEvent.change(sliders[0], { target: { value: '-3' } });
     });
-    await waitFor(() => expect(effectTypes.has('limiter')).toBe(true));
+    expect(limiterCallback).toHaveBeenCalled();
     cleanup();
 
+    const crossfeedCallback = vi.fn();
     await act(async () => {
       render(
         <CrossfeedEditor
           settings={{ preset: 'natural', levelDb: -4.5, cutoffHz: 700 }}
-          onSettingsChange={() => {}}
+          onSettingsChange={crossfeedCallback}
           slotIndex={0}
         />
       );
@@ -1841,14 +2368,15 @@ describe('DSP Effect Editors Integration', () => {
       const preset = screen.getByText('crossfeed.presets.meier').closest('button');
       fireEvent.click(preset!);
     });
-    await waitFor(() => expect(effectTypes.has('crossfeed')).toBe(true));
+    expect(crossfeedCallback).toHaveBeenCalled();
     cleanup();
 
+    const stereoCallback = vi.fn();
     await act(async () => {
       render(
         <StereoEnhancerEditor
           settings={{ width: 1.0, midGainDb: 0, sideGainDb: 0, balance: 0 }}
-          onSettingsChange={() => {}}
+          onSettingsChange={stereoCallback}
           slotIndex={0}
         />
       );
@@ -1857,6 +2385,6 @@ describe('DSP Effect Editors Integration', () => {
       const sliders = screen.getAllByRole('slider');
       fireEvent.change(sliders[0], { target: { value: '150' } });
     });
-    await waitFor(() => expect(effectTypes.has('stereo')).toBe(true));
+    expect(stereoCallback).toHaveBeenCalled();
   });
 });

@@ -1722,7 +1722,7 @@ mod effect_chain_api_tests {
 
         let effect0 = chain.get_effect(0);
         assert!(effect0.is_some());
-        assert_eq!(effect0.unwrap().name(), "3-Band Parametric EQ");
+        assert_eq!(effect0.unwrap().name(), "Parametric EQ");
 
         let effect1 = chain.get_effect(1);
         assert!(effect1.is_some());

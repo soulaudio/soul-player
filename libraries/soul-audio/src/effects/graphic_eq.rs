@@ -85,15 +85,32 @@ impl GraphicEqPreset {
     }
 }
 
+/// Number of samples over which to smooth coefficient changes
+/// At 44.1kHz, 64 samples = ~1.5ms, which is imperceptible but prevents clicks
+const SMOOTH_SAMPLES: u32 = 64;
+
 /// Biquad filter for graphic EQ bands
+///
+/// Implements coefficient smoothing to prevent audio artifacts (clicks, pops,
+/// zipper noise) when parameters change at runtime.
 #[derive(Debug, Clone)]
 struct BiquadBand {
-    // Coefficients
+    // Target coefficients (set by update_coefficients)
+    target_b0: f32,
+    target_b1: f32,
+    target_b2: f32,
+    target_a1: f32,
+    target_a2: f32,
+
+    // Active coefficients (used for processing, smoothed toward target)
     b0: f32,
     b1: f32,
     b2: f32,
     a1: f32,
     a2: f32,
+
+    // Smoothing state
+    smooth_samples_remaining: u32,
 
     // State (stereo)
     x1_l: f32,
@@ -114,11 +131,21 @@ struct BiquadBand {
 impl BiquadBand {
     fn new(frequency: f32, q: f32) -> Self {
         Self {
+            // Target coefficients (for smoothing)
+            target_b0: 1.0,
+            target_b1: 0.0,
+            target_b2: 0.0,
+            target_a1: 0.0,
+            target_a2: 0.0,
+            // Active coefficients
             b0: 1.0,
             b1: 0.0,
             b2: 0.0,
             a1: 0.0,
             a2: 0.0,
+            // Smoothing state
+            smooth_samples_remaining: 0,
+            // Filter state (stereo)
             x1_l: 0.0,
             x2_l: 0.0,
             y1_l: 0.0,
@@ -127,6 +154,7 @@ impl BiquadBand {
             x2_r: 0.0,
             y1_r: 0.0,
             y2_r: 0.0,
+            // Band parameters
             frequency,
             gain_db: 0.0,
             q,
@@ -487,6 +515,14 @@ impl AudioEffect for GraphicEq {
             GraphicEqBands::Ten => "10-Band Graphic EQ",
             GraphicEqBands::ThirtyOne => "31-Band Graphic EQ",
         }
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 

@@ -3,6 +3,8 @@
 /// This module provides a trait-based architecture for chaining audio effects.
 /// Effects are processed in order, and all operate on f32 samples in [-1.0, 1.0] range.
 
+use std::any::Any;
+
 /// Trait for audio effects that can be chained together
 ///
 /// # Safety
@@ -32,6 +34,14 @@ pub trait AudioEffect: Send {
 
     /// Get effect name (for debugging)
     fn name(&self) -> &str;
+
+    /// Get a reference to self as Any for downcasting
+    /// Required for in-place parameter updates without rebuilding
+    fn as_any(&self) -> &dyn Any;
+
+    /// Get a mutable reference to self as Any for downcasting
+    /// Required for in-place parameter updates without rebuilding
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 /// Chain of audio effects processed in order
@@ -111,6 +121,46 @@ impl EffectChain {
             effect.set_enabled(enabled);
         }
     }
+
+    /// Replace effect at index, or add if index equals current length
+    ///
+    /// Returns the old effect if one was replaced, None otherwise.
+    /// This preserves other effects in the chain (doesn't clear everything).
+    pub fn replace_effect(&mut self, index: usize, effect: Box<dyn AudioEffect>) -> Option<Box<dyn AudioEffect>> {
+        if index < self.effects.len() {
+            Some(std::mem::replace(&mut self.effects[index], effect))
+        } else if index == self.effects.len() {
+            self.effects.push(effect);
+            None
+        } else {
+            // Index out of bounds - fill with the effect at the requested slot
+            // This handles sparse slot assignments
+            while self.effects.len() < index {
+                // This shouldn't normally happen in practice
+                self.effects.push(effect.into());
+                return None;
+            }
+            self.effects.push(effect);
+            None
+        }
+    }
+
+    /// Get effect at index, downcasted to specific type
+    ///
+    /// Use this for in-place parameter updates:
+    /// ```ignore
+    /// if let Some(eq) = chain.get_effect_as_mut::<ParametricEq>(0) {
+    ///     eq.set_band(0, new_band);
+    /// }
+    /// ```
+    pub fn get_effect_as<T: 'static>(&self, index: usize) -> Option<&T> {
+        self.effects.get(index).and_then(|e| e.as_any().downcast_ref::<T>())
+    }
+
+    /// Get mutable effect at index, downcasted to specific type
+    pub fn get_effect_as_mut<T: 'static>(&mut self, index: usize) -> Option<&mut T> {
+        self.effects.get_mut(index).and_then(|e| e.as_any_mut().downcast_mut::<T>())
+    }
 }
 
 impl Default for EffectChain {
@@ -150,6 +200,14 @@ mod tests {
 
         fn name(&self) -> &str {
             "Gain"
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn Any {
+            self
         }
     }
 

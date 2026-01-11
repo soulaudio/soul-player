@@ -4,8 +4,7 @@
 // Crossfeed reduces the extreme stereo separation of headphones by adding
 // subtle channel mixing, simulating how speakers sound in a room.
 
-import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Headphones, ChevronDown, ChevronUp, Info, Check } from 'lucide-react';
 
@@ -66,12 +65,10 @@ const PRESETS: CrossfeedPreset[] = [
 export function CrossfeedEditor({
   settings,
   onSettingsChange,
-  slotIndex,
 }: CrossfeedEditorProps) {
   const { t } = useTranslation();
   const [showAdvanced, setShowAdvanced] = useState(settings.preset === 'custom');
   const [localSettings, setLocalSettings] = useState<CrossfeedSettings>(settings);
-  const [isUpdating, setIsUpdating] = useState(false);
 
   // Sync local state when props change
   useEffect(() => {
@@ -79,27 +76,8 @@ export function CrossfeedEditor({
     setShowAdvanced(settings.preset === 'custom');
   }, [settings]);
 
-  // Update backend when settings change
-  const updateBackend = async (newSettings: CrossfeedSettings) => {
-    setIsUpdating(true);
-    try {
-      await invoke('update_effect_parameters', {
-        slotIndex,
-        effect: {
-          type: 'crossfeed',
-          settings: newSettings,
-        },
-      });
-      onSettingsChange(newSettings);
-    } catch (error) {
-      console.error('Failed to update crossfeed settings:', error);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // Handle preset selection
-  const handlePresetSelect = async (presetId: string) => {
+  // Handle preset selection - parent handles backend via onSettingsChange
+  const handlePresetSelect = useCallback((presetId: string) => {
     const preset = PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
 
@@ -111,44 +89,40 @@ export function CrossfeedEditor({
 
     setLocalSettings(newSettings);
     setShowAdvanced(presetId === 'custom');
-    await updateBackend(newSettings);
-  };
+    onSettingsChange(newSettings);
+  }, [onSettingsChange]);
 
-  // Handle level slider change
-  const handleLevelChange = (levelDb: number) => {
+  // Handle level slider change - update local state for responsive UI
+  const handleLevelChange = useCallback((levelDb: number) => {
     const newSettings: CrossfeedSettings = {
       ...localSettings,
       preset: 'custom',
       levelDb,
     };
     setLocalSettings(newSettings);
-  };
+  }, [localSettings]);
 
-  // Handle level slider release (commit to backend)
-  const handleLevelCommit = async () => {
-    if (localSettings.preset !== 'custom') {
-      localSettings.preset = 'custom';
-    }
-    await updateBackend(localSettings);
-  };
+  // Handle level slider release - commit to parent
+  const handleLevelCommit = useCallback(() => {
+    const newSettings = { ...localSettings, preset: 'custom' };
+    onSettingsChange(newSettings);
+  }, [localSettings, onSettingsChange]);
 
-  // Handle cutoff slider change
-  const handleCutoffChange = (cutoffHz: number) => {
+  // Handle cutoff slider change - update local state for responsive UI
+  const handleCutoffChange = useCallback((cutoffHz: number) => {
     const newSettings: CrossfeedSettings = {
       ...localSettings,
       preset: 'custom',
       cutoffHz,
     };
     setLocalSettings(newSettings);
-  };
+  }, [localSettings]);
 
-  // Handle cutoff slider release (commit to backend)
-  const handleCutoffCommit = async () => {
-    if (localSettings.preset !== 'custom') {
-      localSettings.preset = 'custom';
-    }
-    await updateBackend(localSettings);
-  };
+  // Handle cutoff slider release - commit to parent
+  const handleCutoffCommit = useCallback(() => {
+    const newSettings = { ...localSettings, preset: 'custom' };
+    onSettingsChange(newSettings);
+  }, [localSettings, onSettingsChange]);
 
   // Convert level dB to percentage for display (0 dB = 100%, -10 dB = 0%)
   const levelToPercent = (db: number) => Math.round(((db + 10) / 10) * 100);
@@ -187,15 +161,13 @@ export function CrossfeedEditor({
                 key={preset.id}
                 data-testid={`crossfeed-preset-${preset.id}`}
                 onClick={() => handlePresetSelect(preset.id)}
-                disabled={isUpdating}
                 className={`
-                  relative text-left p-3 rounded-lg border-2 transition-all
+                  relative text-left p-3 rounded-lg border-2 transition-all cursor-pointer
                   ${
                     isSelected || isCustomSelected
                       ? 'border-primary bg-primary/5 shadow-sm'
                       : 'border-border hover:border-primary/50 hover:bg-muted/30'
                   }
-                  ${isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
               >
                 {/* Selected indicator */}
@@ -254,7 +226,6 @@ export function CrossfeedEditor({
             onChange={(e) => handleLevelChange(parseFloat(e.target.value))}
             onMouseUp={handleLevelCommit}
             onTouchEnd={handleLevelCommit}
-            disabled={isUpdating}
             className="w-full accent-primary"
           />
           <div className="flex justify-between text-xs text-muted-foreground">
@@ -299,7 +270,6 @@ export function CrossfeedEditor({
               onChange={(e) => handleCutoffChange(parseFloat(e.target.value))}
               onMouseUp={handleCutoffCommit}
               onTouchEnd={handleCutoffCommit}
-              disabled={isUpdating}
               className="w-full accent-primary"
             />
             <div className="flex justify-between text-xs text-muted-foreground">

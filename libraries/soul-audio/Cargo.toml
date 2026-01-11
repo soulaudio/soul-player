@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 soul-core.workspace = true
+soul-loudness.workspace = true
 symphonia = { workspace = true, features = ["mp3", "isomp4", "flac", "vorbis", "wav", "aac", "ogg"] }
 cpal = { workspace = true, optional = true }
 thiserror.workspace = true

@@ -606,12 +606,12 @@ mod parameter_ranges {
 
     #[test]
     fn test_eq_band_gain_clamping() {
-        // EqBand clamps gain to -12 to +12 dB
-        let band = EqBand::new(1000.0, 20.0, 1.0);
-        assert_eq!(band.gain_db(), 12.0, "Gain should be clamped to 12.0");
+        // EqBand clamps gain to -24 to +24 dB
+        let band = EqBand::new(1000.0, 30.0, 1.0);
+        assert_eq!(band.gain_db(), 24.0, "Gain should be clamped to 24.0");
 
-        let band_low = EqBand::new(1000.0, -20.0, 1.0);
-        assert_eq!(band_low.gain_db(), -12.0, "Gain should be clamped to -12.0");
+        let band_low = EqBand::new(1000.0, -30.0, 1.0);
+        assert_eq!(band_low.gain_db(), -24.0, "Gain should be clamped to -24.0");
     }
 
     #[test]

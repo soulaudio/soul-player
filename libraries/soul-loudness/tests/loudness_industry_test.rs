@@ -70,7 +70,13 @@ fn generate_sine_at_dbfs(
     duration_secs: f64,
 ) -> Vec<f32> {
     let amplitude = 10.0_f64.powf(level_dbfs / 20.0);
-    generate_sine_wave(sample_rate, channels, frequency_hz, amplitude, duration_secs)
+    generate_sine_wave(
+        sample_rate,
+        channels,
+        frequency_hz,
+        amplitude,
+        duration_secs,
+    )
 }
 
 /// Generate calibrated pink noise at specified LUFS level (approximation)
@@ -120,7 +126,8 @@ fn generate_pink_noise(
     }
 
     // Calculate current RMS
-    let rms: f64 = (raw_samples.iter().map(|s| s * s).sum::<f64>() / raw_samples.len() as f64).sqrt();
+    let rms: f64 =
+        (raw_samples.iter().map(|s| s * s).sum::<f64>() / raw_samples.len() as f64).sqrt();
     let current_dbfs = 20.0 * rms.log10();
 
     // K-weighting adds roughly +0.7 dB for pink noise, so LUFS ~ dBFS + 0.7
@@ -191,7 +198,8 @@ fn generate_intersample_peak_signal(
     for i in 0..num_samples {
         let t = i as f64 / sample_rate as f64;
         // Two sine waves that sum to create inter-sample peaks
-        let sample = (0.5 * (2.0 * PI * freq1 * t).sin() + 0.5 * (2.0 * PI * freq2 * t).sin()) as f32;
+        let sample =
+            (0.5 * (2.0 * PI * freq1 * t).sin() + 0.5 * (2.0 * PI * freq2 * t).sin()) as f32;
         for _ in 0..channels {
             samples.push(sample);
         }
@@ -600,9 +608,7 @@ fn test_true_peak_intersample_detection() {
          Sample peak (calculated): {:.3} dBFS\n\
          Sample peak (reported): {:.3} dBFS\n\
          True peak: {:.3} dBTP",
-        manual_sample_peak_db,
-        info.sample_peak_dbfs,
-        info.true_peak_dbfs
+        manual_sample_peak_db, info.sample_peak_dbfs, info.true_peak_dbfs
     );
 
     assert!(
@@ -809,10 +815,10 @@ fn test_replaygain_calculation() {
     // Reference (-18 LUFS) needs -18 - (-18) = 0 dB (no change)
     // Quiet track (-23 LUFS) needs -18 - (-23) = +5 dB (turn UP)
     let test_cases = [
-        (-14.0, -4.0),  // Loud track (-14 LUFS) needs -4 dB to reach -18
-        (-18.0, 0.0),   // Reference level needs 0 dB
-        (-23.0, 5.0),   // Quiet track (-23 LUFS) needs +5 dB
-        (-28.0, 10.0),  // Very quiet needs +10 dB
+        (-14.0, -4.0), // Loud track (-14 LUFS) needs -4 dB to reach -18
+        (-18.0, 0.0),  // Reference level needs 0 dB
+        (-23.0, 5.0),  // Quiet track (-23 LUFS) needs +5 dB
+        (-28.0, 10.0), // Very quiet needs +10 dB
     ];
 
     for (lufs, expected_gain) in test_cases {
@@ -1257,10 +1263,8 @@ fn test_itu_compliance_summary() {
 
     // Test 3: Sample rate consistency
     {
-        let sr_44100 =
-            generate_sine_at_dbfs(44100, 1, 997.0, -20.0, 5.0);
-        let sr_48000 =
-            generate_sine_at_dbfs(48000, 1, 997.0, -20.0, 5.0);
+        let sr_44100 = generate_sine_at_dbfs(44100, 1, 997.0, -20.0, 5.0);
+        let sr_48000 = generate_sine_at_dbfs(48000, 1, 997.0, -20.0, 5.0);
 
         let mut a1 = LoudnessAnalyzer::new(44100, 1).unwrap();
         a1.add_frames(&sr_44100).unwrap();
@@ -1295,7 +1299,10 @@ fn test_itu_compliance_summary() {
     }
     println!("--------------------------------------------");
     println!("Total: {} passed, {} failed", passed, failed);
-    println!("Compliance: {:.1}%", 100.0 * passed as f64 / (passed + failed) as f64);
+    println!(
+        "Compliance: {:.1}%",
+        100.0 * passed as f64 / (passed + failed) as f64
+    );
     println!("============================================\n");
 
     assert!(

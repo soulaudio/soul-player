@@ -45,6 +45,7 @@ pub mod exclusive;
 mod output;
 pub mod playback;
 pub mod sources;
+pub mod track_loader;
 
 pub use backend::{AudioBackend, BackendError, BackendInfo};
 pub use device::{
@@ -55,5 +56,6 @@ pub use device::{
 pub use error::{AudioError, AudioOutputError, Result};
 pub use exclusive::{AudioData, ExclusiveConfig, ExclusiveOutput, LatencyInfo};
 pub use output::{CpalOutput, ResamplingQuality};
-pub use playback::{DesktopPlayback, PlaybackCommand, PlaybackEvent, ResamplingSettings};
+pub use playback::{DesktopPlayback, PlaybackCommand, PlaybackEvent, ResamplingSettings, SampleRateMode};
 pub use sources::{LocalAudioSource, StreamingAudioSource};
+pub use track_loader::{LoadRequest, LoadResult, TrackLoader};

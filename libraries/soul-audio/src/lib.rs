@@ -49,10 +49,13 @@
 //! ```
 
 mod decoder;
+pub mod dither;
 pub mod dsd;
 pub mod effects;
+pub mod encoder_delay;
 mod error;
 pub mod metadata;
+pub mod pipeline;
 pub mod resampling;
 
 // Audio fingerprinting (optional feature)

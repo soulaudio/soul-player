@@ -604,6 +604,10 @@ pub async fn toggle_effect(
 }
 
 /// Update effect parameters
+///
+/// This uses in-place parameter updates to preserve filter states and prevent
+/// audio artifacts (sizzle/pops) during parameter drags. Falls back to full
+/// rebuild only if the effect type changed or the effect doesn't exist yet.
 #[tauri::command]
 pub async fn update_effect_parameters(
     #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
@@ -620,17 +624,28 @@ pub async fn update_effect_parameters(
     {
         let slots = playback.get_effect_slots()?;
         if let Some(slot_state) = &slots[slot_index] {
-            playback.set_effect_slot(
-                slot_index,
-                Some(EffectSlotState {
-                    effect,
-                    enabled: slot_state.enabled,
-                }),
-            )?;
-            eprintln!(
-                "[update_effect_parameters] Slot {}: parameters updated",
-                slot_index
-            );
+            // Try in-place update first (preserves filter states, no sizzle)
+            let updated_in_place = playback.update_effect_parameters_in_place(slot_index, &effect)?;
+
+            if updated_in_place {
+                eprintln!(
+                    "[update_effect_parameters] Slot {}: parameters updated in-place (smooth)",
+                    slot_index
+                );
+            } else {
+                // Fall back to full rebuild (effect type mismatch or effect not found)
+                playback.set_effect_slot(
+                    slot_index,
+                    Some(EffectSlotState {
+                        effect,
+                        enabled: slot_state.enabled,
+                    }),
+                )?;
+                eprintln!(
+                    "[update_effect_parameters] Slot {}: parameters updated (rebuilt)",
+                    slot_index
+                );
+            }
 
             // Persist the updated chain
             persist_current_chain(&playback, &app_state).await;

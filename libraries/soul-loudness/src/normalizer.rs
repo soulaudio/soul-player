@@ -94,6 +94,8 @@ pub struct LoudnessNormalizer {
     limiter: TruePeakLimiter,
     /// Whether to prevent clipping (apply limiting if gain would clip)
     prevent_clipping: bool,
+    /// Whether to use internal limiter (false = external limiter expected)
+    use_internal_limiter: bool,
     /// Fallback gain when no ReplayGain tags are available (dB)
     fallback_gain_db: f64,
     /// Current linear gain being applied (cached for efficiency)
@@ -114,10 +116,25 @@ impl LoudnessNormalizer {
             album_peak_dbfs: None,
             limiter: TruePeakLimiter::new(sample_rate, channels),
             prevent_clipping: true,
+            use_internal_limiter: true, // Default: use internal limiter
             fallback_gain_db: 0.0,
             current_linear_gain: 1.0,
             gain_dirty: true,
         }
+    }
+
+    /// Set whether to use internal limiter
+    ///
+    /// When false, the normalizer only applies gain and expects an external
+    /// limiter to be applied later in the signal chain (e.g., after volume).
+    /// This is the recommended configuration for high-quality audio processing.
+    pub fn set_use_internal_limiter(&mut self, use_internal: bool) {
+        self.use_internal_limiter = use_internal;
+    }
+
+    /// Check if internal limiter is enabled
+    pub fn uses_internal_limiter(&self) -> bool {
+        self.use_internal_limiter
     }
 
     /// Set the normalization mode
@@ -226,8 +243,8 @@ impl LoudnessNormalizer {
             }
         }
 
-        // Apply limiter if enabled and clipping prevention is on
-        if self.prevent_clipping {
+        // Apply limiter if enabled, clipping prevention is on, AND we're using internal limiter
+        if self.prevent_clipping && self.use_internal_limiter {
             self.limiter.process(samples);
         }
     }
@@ -284,8 +301,14 @@ impl LoudnessNormalizer {
     }
 
     /// Get the latency in samples introduced by the normalizer
+    ///
+    /// Note: When using external limiter (use_internal_limiter = false),
+    /// this returns 0 since the limiter latency is handled externally.
     pub fn latency_samples(&self) -> usize {
-        if self.prevent_clipping && self.mode != NormalizationMode::Disabled {
+        if self.prevent_clipping
+            && self.use_internal_limiter
+            && self.mode != NormalizationMode::Disabled
+        {
             self.limiter.latency_samples()
         } else {
             0

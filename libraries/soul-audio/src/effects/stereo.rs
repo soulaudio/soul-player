@@ -80,15 +80,34 @@ impl StereoSettings {
 /// - 0% = mono (only mid)
 /// - 100% = normal stereo
 /// - 200% = double the stereo width (emphasized side)
+///
+/// # Parameter Smoothing
+/// All gains are smoothed over 64 samples (~1.5ms) to prevent audible clicks
+/// when parameters are adjusted during playback.
+
+/// Number of samples over which to smooth parameter changes
+const SMOOTH_SAMPLES: u32 = 64;
+
 pub struct StereoEnhancer {
     /// Current settings
     settings: StereoSettings,
 
-    /// Derived mid gain (linear)
-    mid_gain: f32,
+    /// Target mid gain (linear) - what we're smoothing toward
+    target_mid_gain: f32,
+    /// Target side gain (linear)
+    target_side_gain: f32,
+    /// Target width
+    target_width: f32,
 
-    /// Derived side gain (linear)
+    /// Active mid gain (linear) - used for processing
+    mid_gain: f32,
+    /// Active side gain (linear)
     side_gain: f32,
+    /// Active width
+    width: f32,
+
+    /// Samples remaining until parameters match target
+    smooth_samples_remaining: u32,
 
     /// Effect enabled state
     enabled: bool,
@@ -102,8 +121,13 @@ impl StereoEnhancer {
     pub fn new() -> Self {
         Self {
             settings: StereoSettings::default(),
+            target_mid_gain: 1.0,
+            target_side_gain: 1.0,
+            target_width: 1.0,
             mid_gain: 1.0,
             side_gain: 1.0,
+            width: 1.0,
+            smooth_samples_remaining: 0,
             enabled: true,
             needs_update: true,
         }
@@ -111,19 +135,50 @@ impl StereoEnhancer {
 
     /// Create with specific settings
     pub fn with_settings(settings: StereoSettings) -> Self {
+        let mid_gain = 10.0_f32.powf(settings.mid_gain_db / 20.0);
+        let side_gain = 10.0_f32.powf(settings.side_gain_db / 20.0);
         Self {
+            target_mid_gain: mid_gain,
+            target_side_gain: side_gain,
+            target_width: settings.width,
+            mid_gain,
+            side_gain,
+            width: settings.width,
+            smooth_samples_remaining: 0,
             settings,
-            mid_gain: 1.0,
-            side_gain: 1.0,
             enabled: true,
-            needs_update: true,
+            needs_update: false, // Already initialized
         }
     }
 
     /// Set stereo width (0.0 = mono, 1.0 = normal, 2.0 = extra wide)
     pub fn set_width(&mut self, width: f32) {
         self.settings.width = width.clamp(0.0, 2.0);
+        self.target_width = self.settings.width;
         self.needs_update = true;
+        self.smooth_samples_remaining = SMOOTH_SAMPLES;
+    }
+
+    /// Smooth parameters toward target values
+    #[inline]
+    fn smooth_parameters(&mut self) {
+        if self.smooth_samples_remaining == 0 {
+            return;
+        }
+
+        let alpha = 1.0 / self.smooth_samples_remaining as f32;
+        self.mid_gain += alpha * (self.target_mid_gain - self.mid_gain);
+        self.side_gain += alpha * (self.target_side_gain - self.side_gain);
+        self.width += alpha * (self.target_width - self.width);
+
+        self.smooth_samples_remaining -= 1;
+
+        // Snap to target when done
+        if self.smooth_samples_remaining == 0 {
+            self.mid_gain = self.target_mid_gain;
+            self.side_gain = self.target_side_gain;
+            self.width = self.target_width;
+        }
     }
 
     /// Get current width setting
@@ -134,19 +189,24 @@ impl StereoEnhancer {
     /// Set mid gain in dB
     pub fn set_mid_gain_db(&mut self, gain_db: f32) {
         self.settings.mid_gain_db = gain_db.clamp(-12.0, 12.0);
+        self.target_mid_gain = 10.0_f32.powf(self.settings.mid_gain_db / 20.0);
         self.needs_update = true;
+        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
     /// Set side gain in dB
     pub fn set_side_gain_db(&mut self, gain_db: f32) {
         self.settings.side_gain_db = gain_db.clamp(-12.0, 12.0);
+        self.target_side_gain = 10.0_f32.powf(self.settings.side_gain_db / 20.0);
         self.needs_update = true;
+        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
     /// Set balance (-1.0 = full left, 0.0 = center, 1.0 = full right)
     pub fn set_balance(&mut self, balance: f32) {
         self.settings.balance = balance.clamp(-1.0, 1.0);
         self.needs_update = true;
+        // Note: Balance doesn't need smoothing as it's already handled in process_sample
     }
 
     /// Get current balance
@@ -161,20 +221,20 @@ impl StereoEnhancer {
 
     /// Apply settings directly
     pub fn apply_settings(&mut self, settings: StereoSettings) {
+        // Extract values before moving settings
+        self.target_mid_gain = 10.0_f32.powf(settings.mid_gain_db / 20.0);
+        self.target_side_gain = 10.0_f32.powf(settings.side_gain_db / 20.0);
+        self.target_width = settings.width;
         self.settings = settings;
         self.needs_update = true;
+        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
-    /// Update derived parameters
+    /// Update derived parameters (sets targets, smoothing handles the transition)
     fn update_parameters(&mut self) {
         if self.needs_update {
-            // Convert dB gains to linear
-            let mid_db = self.settings.mid_gain_db;
-            let side_db = self.settings.side_gain_db;
-
-            self.mid_gain = 10.0_f32.powf(mid_db / 20.0);
-            self.side_gain = 10.0_f32.powf(side_db / 20.0);
-
+            // Targets are already set by the setters
+            // The actual smoothing happens in smooth_parameters()
             self.needs_update = false;
         }
     }
@@ -186,12 +246,11 @@ impl StereoEnhancer {
         let mid = (left + right) * 0.5;
         let side = (left - right) * 0.5;
 
-        // Apply width and gains
+        // Apply width and gains (using smoothed values)
         // Width < 1.0 reduces side (toward mono)
         // Width > 1.0 increases side (wider stereo)
-        let width = self.settings.width;
         let processed_mid = mid * self.mid_gain;
-        let processed_side = side * self.side_gain * width;
+        let processed_side = side * self.side_gain * self.width;
 
         // Convert back to L/R
         let mut new_left = processed_mid + processed_side;
@@ -239,11 +298,12 @@ impl AudioEffect for StereoEnhancer {
 
         self.update_parameters();
 
-        // Quick bypass if all settings are neutral
+        // Quick bypass if all settings are neutral AND not smoothing
         let is_neutral = (self.settings.width - 1.0).abs() < 0.001
             && self.settings.mid_gain_db.abs() < 0.1
             && self.settings.side_gain_db.abs() < 0.1
-            && self.settings.balance.abs() < 0.001;
+            && self.settings.balance.abs() < 0.001
+            && self.smooth_samples_remaining == 0;
 
         if is_neutral {
             return;
@@ -251,6 +311,9 @@ impl AudioEffect for StereoEnhancer {
 
         // Process interleaved stereo buffer
         for chunk in buffer.chunks_exact_mut(2) {
+            // Smooth parameters to prevent clicks during parameter changes
+            self.smooth_parameters();
+
             let (new_left, new_right) = self.process_sample(chunk[0], chunk[1]);
             chunk[0] = new_left;
             chunk[1] = new_right;
@@ -258,6 +321,11 @@ impl AudioEffect for StereoEnhancer {
     }
 
     fn reset(&mut self) {
+        // Snap to target when resetting
+        self.mid_gain = self.target_mid_gain;
+        self.side_gain = self.target_side_gain;
+        self.width = self.target_width;
+        self.smooth_samples_remaining = 0;
         // No state to reset for stereo enhancer
     }
 
@@ -271,6 +339,14 @@ impl AudioEffect for StereoEnhancer {
 
     fn name(&self) -> &str {
         "Stereo Enhancer"
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 

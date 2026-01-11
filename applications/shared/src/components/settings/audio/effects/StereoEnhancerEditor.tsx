@@ -2,7 +2,6 @@
 // Inspired by iZotope Ozone Imager, Waves S1 Stereo Imager
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
@@ -42,117 +41,56 @@ const DEFAULT_PRESETS: StereoPreset[] = [
 export function StereoEnhancerEditor({
   settings,
   onSettingsChange,
-  slotIndex,
 }: StereoEnhancerEditorProps) {
   const { t } = useTranslation();
 
   // Local state for responsive UI updates
   const [localSettings, setLocalSettings] = useState<StereoSettings>(settings);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [presets, setPresets] = useState<StereoPreset[]>(DEFAULT_PRESETS);
-  const [isUpdating, setIsUpdating] = useState(false);
 
   // Sync local state when props change
   useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
 
-  // Load presets from backend
-  useEffect(() => {
-    loadPresets();
-  }, []);
-
-  const loadPresets = async () => {
-    try {
-      const backendPresets = await invoke<[string, { width: number; midGainDb: number; sideGainDb: number; balance: number }][]>('get_stereo_presets');
-      if (backendPresets && backendPresets.length > 0) {
-        const formattedPresets: StereoPreset[] = backendPresets.map(([name, preset]) => ({
-          name,
-          settings: {
-            width: preset.width,
-            midGainDb: preset.midGainDb,
-            sideGainDb: preset.sideGainDb,
-            balance: preset.balance,
-          },
-        }));
-        // Add Narrow preset if not present (backend might not have it)
-        if (!formattedPresets.find(p => p.name === 'Narrow')) {
-          formattedPresets.splice(2, 0, {
-            name: 'Narrow',
-            settings: { width: 0.5, midGainDb: 0, sideGainDb: 0, balance: 0 }
-          });
-        }
-        setPresets(formattedPresets);
-      }
-    } catch (error) {
-      console.error('Failed to load stereo presets:', error);
-    }
-  };
-
-  // Update backend with debounce
-  const updateBackend = useCallback(async (newSettings: StereoSettings) => {
-    if (isUpdating) return;
-
-    setIsUpdating(true);
-    try {
-      await invoke('update_effect_parameters', {
-        slotIndex,
-        effect: {
-          type: 'stereo',
-          settings: {
-            width: newSettings.width,
-            midGainDb: newSettings.midGainDb,
-            sideGainDb: newSettings.sideGainDb,
-            balance: newSettings.balance,
-          }
-        },
-      });
-      onSettingsChange(newSettings);
-    } catch (error) {
-      console.error('Failed to update stereo settings:', error);
-    } finally {
-      setIsUpdating(false);
-    }
-  }, [slotIndex, onSettingsChange, isUpdating]);
-
-  // Handlers for individual controls
-  const handleWidthChange = (width: number) => {
+  // Handlers for individual controls - parent handles backend via onSettingsChange
+  const handleWidthChange = useCallback((width: number) => {
     const newSettings = { ...localSettings, width };
     setLocalSettings(newSettings);
-    updateBackend(newSettings);
-  };
+    onSettingsChange(newSettings);
+  }, [localSettings, onSettingsChange]);
 
-  const handleMidGainChange = (midGainDb: number) => {
+  const handleMidGainChange = useCallback((midGainDb: number) => {
     const newSettings = { ...localSettings, midGainDb };
     setLocalSettings(newSettings);
-    updateBackend(newSettings);
-  };
+    onSettingsChange(newSettings);
+  }, [localSettings, onSettingsChange]);
 
-  const handleSideGainChange = (sideGainDb: number) => {
+  const handleSideGainChange = useCallback((sideGainDb: number) => {
     const newSettings = { ...localSettings, sideGainDb };
     setLocalSettings(newSettings);
-    updateBackend(newSettings);
-  };
+    onSettingsChange(newSettings);
+  }, [localSettings, onSettingsChange]);
 
-  const handleBalanceChange = (balance: number) => {
+  const handleBalanceChange = useCallback((balance: number) => {
     const newSettings = { ...localSettings, balance };
     setLocalSettings(newSettings);
-    updateBackend(newSettings);
-  };
+    onSettingsChange(newSettings);
+  }, [localSettings, onSettingsChange]);
 
-  const handlePresetChange = (presetName: string) => {
-    const preset = presets.find(p => p.name === presetName);
+  const handlePresetChange = useCallback((presetName: string) => {
+    const preset = DEFAULT_PRESETS.find(p => p.name === presetName);
     if (preset) {
       setLocalSettings(preset.settings);
-      updateBackend(preset.settings);
+      onSettingsChange(preset.settings);
     }
-  };
+  }, [onSettingsChange]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     const defaultSettings: StereoSettings = { width: 1.0, midGainDb: 0, sideGainDb: 0, balance: 0 };
     setLocalSettings(defaultSettings);
-    updateBackend(defaultSettings);
-  };
+    onSettingsChange(defaultSettings);
+  }, [onSettingsChange]);
 
   // Calculate display values
   const widthPercent = Math.round(localSettings.width * 100);
@@ -160,13 +98,13 @@ export function StereoEnhancerEditor({
 
   // Determine current preset (if any matches)
   const currentPreset = useMemo(() => {
-    return presets.find(p =>
+    return DEFAULT_PRESETS.find(p =>
       Math.abs(p.settings.width - localSettings.width) < 0.01 &&
       Math.abs(p.settings.midGainDb - localSettings.midGainDb) < 0.1 &&
       Math.abs(p.settings.sideGainDb - localSettings.sideGainDb) < 0.1 &&
       Math.abs(p.settings.balance - localSettings.balance) < 0.01
     )?.name || '';
-  }, [localSettings, presets]);
+  }, [localSettings]);
 
   // Calculate balance display
   const balanceDisplay = useMemo(() => {
@@ -193,7 +131,7 @@ export function StereoEnhancerEditor({
             className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">{t('dsp.stereo.customPreset')}</option>
-            {presets.map((preset) => (
+            {DEFAULT_PRESETS.map((preset) => (
               <option key={preset.name} value={preset.name}>
                 {t(`dsp.stereo.presets.${preset.name.toLowerCase().replace(' ', '')}`, preset.name)}
               </option>

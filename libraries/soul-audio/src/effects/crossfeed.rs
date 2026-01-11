@@ -130,13 +130,27 @@ impl LowPassFilter {
     }
 }
 
+/// Number of samples over which to smooth level changes
+/// At 44.1kHz, 64 samples = ~1.5ms, which is imperceptible but prevents clicks
+const SMOOTH_SAMPLES: u32 = 64;
+
 /// Crossfeed effect (Bauer stereophonic-to-binaural DSP)
 ///
 /// Adds controlled crosstalk between stereo channels with low-pass filtering
 /// to simulate natural speaker listening through headphones.
+///
+/// # Parameter Smoothing
+/// Level changes are smoothed over 64 samples (~1.5ms) to prevent audible clicks
+/// when parameters are adjusted during playback.
 pub struct Crossfeed {
-    /// Crossfeed mix level (0.0 to 1.0, derived from dB)
+    /// Target crossfeed level (set by user, smoothed toward)
+    target_level: f32,
+
+    /// Active crossfeed mix level (0.0 to 1.0, smoothed toward target)
     level: f32,
+
+    /// Samples remaining until level matches target
+    smooth_samples_remaining: u32,
 
     /// Low-pass filter for left-to-right crossfeed
     lpf_l_to_r: LowPassFilter,
@@ -170,8 +184,11 @@ impl Crossfeed {
 
     /// Create a crossfeed effect with custom settings
     pub fn with_settings(settings: CrossfeedSettings) -> Self {
+        let level = 10.0_f32.powf(settings.level_db / 20.0);
         Self {
-            level: 0.0,
+            target_level: level,
+            level,
+            smooth_samples_remaining: 0,
             lpf_l_to_r: LowPassFilter::new(),
             lpf_r_to_l: LowPassFilter::new(),
             settings,
@@ -181,17 +198,38 @@ impl Crossfeed {
         }
     }
 
+    /// Smooth level toward target value
+    #[inline]
+    fn smooth_level(&mut self) {
+        if self.smooth_samples_remaining == 0 {
+            return;
+        }
+
+        let alpha = 1.0 / self.smooth_samples_remaining as f32;
+        self.level += alpha * (self.target_level - self.level);
+        self.smooth_samples_remaining -= 1;
+
+        // Snap to target when done
+        if self.smooth_samples_remaining == 0 {
+            self.level = self.target_level;
+        }
+    }
+
     /// Set crossfeed preset
     pub fn set_preset(&mut self, preset: CrossfeedPreset) {
         self.settings = CrossfeedSettings::from_preset(preset);
+        self.target_level = 10.0_f32.powf(self.settings.level_db / 20.0);
         self.needs_update = true;
+        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
     /// Set custom crossfeed level in dB
     pub fn set_level_db(&mut self, level_db: f32) {
         self.settings.level_db = level_db.clamp(-12.0, -3.0);
         self.settings.preset = CrossfeedPreset::Custom;
+        self.target_level = 10.0_f32.powf(self.settings.level_db / 20.0);
         self.needs_update = true;
+        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
     /// Set custom cutoff frequency in Hz
@@ -199,6 +237,7 @@ impl Crossfeed {
         self.settings.cutoff_hz = cutoff_hz.clamp(300.0, 1000.0);
         self.settings.preset = CrossfeedPreset::Custom;
         self.needs_update = true;
+        // Cutoff change doesn't need smoothing as filters handle it naturally
     }
 
     /// Get current settings
@@ -214,10 +253,8 @@ impl Crossfeed {
     /// Update internal parameters based on settings
     fn update_parameters(&mut self) {
         if self.needs_update {
-            // Convert dB to linear level
-            self.level = 10.0_f32.powf(self.settings.level_db / 20.0);
-
-            // Update filter cutoffs
+            // Note: level is handled by target_level/smooth_level mechanism
+            // Only update filter cutoffs here
             let sr = self.sample_rate as f32;
             self.lpf_l_to_r.set_cutoff(self.settings.cutoff_hz, sr);
             self.lpf_r_to_l.set_cutoff(self.settings.cutoff_hz, sr);
@@ -247,16 +284,19 @@ impl AudioEffect for Crossfeed {
 
         self.update_parameters();
 
-        // Pre-calculate gain compensation based on crossfeed level.
-        // When we add crossfeed from the opposite channel, the total energy increases.
-        // For a mono signal: output = signal * (1 + level) when crossfeed adds constructively.
-        // To maintain unity gain, we compensate by dividing by (1 + level).
-        let compensation = 1.0 / (1.0 + self.level);
-
         // Process interleaved stereo buffer
         for chunk in buffer.chunks_exact_mut(2) {
+            // Smooth level toward target for each sample to prevent clicks
+            self.smooth_level();
+
             let left = chunk[0];
             let right = chunk[1];
+
+            // Calculate gain compensation based on current (smoothed) crossfeed level.
+            // When we add crossfeed from the opposite channel, the total energy increases.
+            // For a mono signal: output = signal * (1 + level) when crossfeed adds constructively.
+            // To maintain unity gain, we compensate by dividing by (1 + level).
+            let compensation = 1.0 / (1.0 + self.level);
 
             // Apply low-pass filtering to crossfeed signals
             // The LPF simulates the frequency-dependent attenuation of sound
@@ -286,6 +326,9 @@ impl AudioEffect for Crossfeed {
     fn reset(&mut self) {
         self.lpf_l_to_r.reset();
         self.lpf_r_to_l.reset();
+        // Snap level to target when resetting
+        self.level = self.target_level;
+        self.smooth_samples_remaining = 0;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
@@ -298,6 +341,14 @@ impl AudioEffect for Crossfeed {
 
     fn name(&self) -> &str {
         "Crossfeed"
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 

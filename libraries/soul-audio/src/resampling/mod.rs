@@ -109,7 +109,7 @@ impl ResamplingQuality {
 }
 
 /// Resampler backend selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ResamplerBackend {
     /// r8brain-rs: Highest quality, audiophile-grade
     R8Brain,
@@ -118,7 +118,66 @@ pub enum ResamplerBackend {
     Rubato,
 
     /// Auto: Choose best available (r8brain if available, else rubato)
+    #[default]
     Auto,
+}
+
+impl ResamplerBackend {
+    /// Check if r8brain backend is available (compiled with feature)
+    pub fn r8brain_available() -> bool {
+        cfg!(feature = "r8brain")
+    }
+
+    /// Get the actual backend that will be used (resolving Auto)
+    pub fn resolved(&self) -> Self {
+        match self {
+            Self::Auto => {
+                if Self::r8brain_available() {
+                    Self::R8Brain
+                } else {
+                    Self::Rubato
+                }
+            }
+            other => *other,
+        }
+    }
+
+    /// Get list of available backends
+    pub fn available_backends() -> Vec<Self> {
+        let mut backends = vec![Self::Auto, Self::Rubato];
+        if Self::r8brain_available() {
+            backends.push(Self::R8Brain);
+        }
+        backends
+    }
+
+    /// Parse from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "auto" => Some(Self::Auto),
+            "rubato" => Some(Self::Rubato),
+            "r8brain" | "r8brain-rs" => Some(Self::R8Brain),
+            _ => None,
+        }
+    }
+
+    /// Convert to string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Rubato => "rubato",
+            Self::R8Brain => "r8brain",
+        }
+    }
+
+    /// Get human-readable description
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::Auto => "Automatic (best available)",
+            Self::Rubato => "Rubato (fast, portable)",
+            Self::R8Brain => "r8brain (audiophile quality)",
+        }
+    }
 }
 
 /// Trait for resampler implementations

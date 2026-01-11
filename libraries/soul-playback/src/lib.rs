@@ -118,6 +118,7 @@
 
 mod crossfade;
 mod error;
+pub mod events;
 mod history;
 mod manager;
 mod queue;
@@ -133,6 +134,7 @@ pub mod wasm;
 // Public exports
 pub use crossfade::{CrossfadeEngine, CrossfadeSettings, CrossfadeState, FadeCurve};
 pub use error::{PlaybackError, Result};
+pub use events::{CrossfadeProgressTracker, PlaybackEvent, PlaybackStateEvent};
 pub use manager::PlaybackManager;
 pub use source::AudioSource;
 pub use types::{PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMode, TrackSource};

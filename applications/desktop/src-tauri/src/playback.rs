@@ -128,6 +128,42 @@ impl PlaybackManager {
                             }),
                         )
                     }
+                    PlaybackEvent::CrossfadeStarted {
+                        from_track_id,
+                        to_track_id,
+                        duration_ms,
+                    } => {
+                        eprintln!(
+                            "[playback] Crossfade started: {} -> {} ({}ms)",
+                            from_track_id, to_track_id, duration_ms
+                        );
+                        app_handle.emit(
+                            "playback:crossfade-started",
+                            serde_json::json!({
+                                "from_track_id": from_track_id,
+                                "to_track_id": to_track_id,
+                                "duration_ms": duration_ms
+                            }),
+                        )
+                    }
+                    PlaybackEvent::CrossfadeProgress {
+                        progress,
+                        metadata_switched,
+                    } => {
+                        // Only emit occasionally to avoid flooding the frontend
+                        // The actual track change is emitted via TrackChanged at 50%
+                        app_handle.emit(
+                            "playback:crossfade-progress",
+                            serde_json::json!({
+                                "progress": progress,
+                                "metadata_switched": metadata_switched
+                            }),
+                        )
+                    }
+                    PlaybackEvent::CrossfadeCompleted => {
+                        eprintln!("[playback] Crossfade completed");
+                        app_handle.emit("playback:crossfade-completed", ())
+                    }
                 };
             }
 
@@ -439,6 +475,114 @@ impl PlaybackManager {
 
         // Rebuild effect chain
         self.rebuild_effect_chain()
+    }
+
+    /// Update effect parameters in-place WITHOUT rebuilding the chain
+    ///
+    /// This preserves filter states and prevents audio artifacts (sizzle/pops)
+    /// that occur when effects are recreated during parameter drags.
+    #[cfg(feature = "effects")]
+    pub fn update_effect_parameters_in_place(
+        &self,
+        slot_index: usize,
+        effect: &crate::dsp_commands::EffectType,
+    ) -> Result<bool, String> {
+        use crate::dsp_commands::EffectType;
+        use soul_audio::effects::{
+            Compressor, Crossfeed, CrossfeedPreset, GraphicEq, Limiter, ParametricEq,
+            StereoEnhancer,
+        };
+
+        if slot_index >= 4 {
+            return Err("Slot index must be 0-3".to_string());
+        }
+
+        // Try to update in-place
+        let updated = self.with_effect_chain(|chain| {
+            match effect {
+                EffectType::Eq { bands } => {
+                    if let Some(eq) = chain.get_effect_as_mut::<ParametricEq>(slot_index) {
+                        eq.set_bands(bands.iter().map(|b| b.clone().into()).collect());
+                        true
+                    } else {
+                        false
+                    }
+                }
+                EffectType::GraphicEq { settings } => {
+                    if let Some(geq) = chain.get_effect_as_mut::<GraphicEq>(slot_index) {
+                        for (i, &gain) in settings.gains.iter().enumerate() {
+                            geq.set_band_gain(i, gain);
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                EffectType::Limiter { settings } => {
+                    if let Some(lim) = chain.get_effect_as_mut::<Limiter>(slot_index) {
+                        lim.set_threshold(settings.threshold_db);
+                        lim.set_release(settings.release_ms);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                EffectType::Compressor { settings } => {
+                    if let Some(comp) = chain.get_effect_as_mut::<Compressor>(slot_index) {
+                        // Use set_settings to update all parameters including knee
+                        comp.set_settings(settings.clone().into());
+                        true
+                    } else {
+                        false
+                    }
+                }
+                EffectType::Stereo { settings } => {
+                    if let Some(stereo) = chain.get_effect_as_mut::<StereoEnhancer>(slot_index) {
+                        stereo.set_width(settings.width);
+                        stereo.set_mid_gain_db(settings.mid_gain_db);
+                        stereo.set_side_gain_db(settings.side_gain_db);
+                        stereo.set_balance(settings.balance);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                EffectType::Crossfeed { settings } => {
+                    if let Some(cf) = chain.get_effect_as_mut::<Crossfeed>(slot_index) {
+                        let preset = match settings.preset.as_str() {
+                            "natural" => CrossfeedPreset::Natural,
+                            "relaxed" => CrossfeedPreset::Relaxed,
+                            "meier" => CrossfeedPreset::Meier,
+                            _ => CrossfeedPreset::Custom,
+                        };
+
+                        if preset == CrossfeedPreset::Custom {
+                            cf.set_level_db(settings.level_db);
+                            cf.set_cutoff_hz(settings.cutoff_hz);
+                        } else {
+                            cf.set_preset(preset);
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                EffectType::Convolution { .. } => {
+                    // Convolution can't be updated in-place (needs IR reload)
+                    false
+                }
+            }
+        })?;
+
+        // Also update the stored slot state
+        if updated {
+            let mut slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
+            if let Some(ref mut slot_state) = slots[slot_index] {
+                slot_state.effect = effect.clone();
+            }
+        }
+
+        Ok(updated)
     }
 
     /// Rebuild the entire effect chain from current slot state

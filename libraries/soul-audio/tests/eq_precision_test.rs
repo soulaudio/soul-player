@@ -783,7 +783,7 @@ fn test_shelf_filter_phase_response() {
     /// Shelf filters have asymmetric phase response
 
     let mut eq = ParametricEq::new();
-    eq.set_low_band(EqBand::new(200.0, 6.0, 0.707));
+    eq.set_low_band(EqBand::low_shelf(200.0, 6.0));
 
     eprintln!("LOW SHELF PHASE RESPONSE (+6dB at 200Hz):");
 
@@ -839,7 +839,7 @@ fn test_dc_blocking_shelf_filters() {
     /// Shelf filters should not block DC entirely but should not amplify it infinitely
 
     let mut eq = ParametricEq::new();
-    eq.set_low_band(EqBand::new(100.0, 12.0, 0.707)); // +12dB low shelf
+    eq.set_low_band(EqBand::low_shelf(100.0, 12.0)); // +12dB low shelf
 
     let mut buffer = generate_dc(0.1, 44100); // 1 second of DC
 
@@ -938,7 +938,7 @@ fn test_low_shelf_response_curve() {
     /// Above cutoff: approaches unity
 
     let mut eq = ParametricEq::new();
-    eq.set_low_band(EqBand::new(200.0, 6.0, 0.707));
+    eq.set_low_band(EqBand::low_shelf(200.0, 6.0));
 
     let test_points = [
         (20.0, 6.0, 1.5, "Well below cutoff"),
@@ -987,7 +987,7 @@ fn test_high_shelf_response_curve() {
     /// Verify high shelf filter response matches expected curve
 
     let mut eq = ParametricEq::new();
-    eq.set_high_band(EqBand::new(5000.0, 6.0, 0.707));
+    eq.set_high_band(EqBand::high_shelf(5000.0, 6.0));
 
     let test_points = [
         (100.0, 0.0, 1.0, "Far below cutoff"),
@@ -1043,8 +1043,8 @@ fn test_shelf_boost_and_cut_symmetry() {
         let mut eq_boost = ParametricEq::new();
         let mut eq_cut = ParametricEq::new();
 
-        eq_boost.set_low_band(EqBand::new(200.0, 6.0, 0.707));
-        eq_cut.set_low_band(EqBand::new(200.0, -6.0, 0.707));
+        eq_boost.set_low_band(EqBand::low_shelf(200.0, 6.0));
+        eq_cut.set_low_band(EqBand::low_shelf(200.0, -6.0));
 
         let gain_boost = measure_gain_db(&mut eq_boost, freq, 44100, 0.5);
         let gain_cut = measure_gain_db(&mut eq_cut, freq, 44100, 0.5);
@@ -1165,9 +1165,9 @@ fn test_cumulative_gain_multiple_bands() {
     let mut eq = ParametricEq::new();
 
     // All three bands boost at their respective frequencies
-    eq.set_low_band(EqBand::new(100.0, 6.0, 0.707));
+    eq.set_low_band(EqBand::low_shelf(100.0, 6.0));
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0));
-    eq.set_high_band(EqBand::new(8000.0, 6.0, 0.707));
+    eq.set_high_band(EqBand::high_shelf(8000.0, 6.0));
 
     // At 1kHz, only mid band should contribute significantly
     let gain_1k = measure_gain_db(&mut eq, 1000.0, 44100, 0.5);
@@ -1318,7 +1318,7 @@ fn test_low_frequency_coefficient_precision() {
 
     for &freq in &test_frequencies {
         let mut eq = ParametricEq::new();
-        eq.set_low_band(EqBand::new(freq, 6.0, 0.707));
+        eq.set_low_band(EqBand::low_shelf(freq, 6.0));
 
         // Process at this frequency
         let mut buffer = generate_sine(freq, 44100, 1.0, 0.5);

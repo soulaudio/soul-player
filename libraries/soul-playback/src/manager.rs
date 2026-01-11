@@ -5,6 +5,7 @@
 use crate::{
     crossfade::{CrossfadeEngine, CrossfadeSettings, CrossfadeState, FadeCurve},
     error::{PlaybackError, Result},
+    events::{CrossfadeProgressTracker, PlaybackEvent},
     history::History,
     queue::Queue,
     shuffle::shuffle_queue,
@@ -17,7 +18,7 @@ use crate::{
 use soul_audio::effects::EffectChain;
 
 #[cfg(feature = "volume-leveling")]
-use soul_loudness::{LoudnessNormalizer, NormalizationMode};
+use soul_loudness::{LookaheadPreset, LoudnessNormalizer, NormalizationMode, TruePeakLimiter};
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -52,6 +53,8 @@ pub struct PlaybackManager {
     effect_chain: EffectChain,
     #[cfg(feature = "volume-leveling")]
     loudness_normalizer: LoudnessNormalizer,
+    #[cfg(feature = "volume-leveling")]
+    output_limiter: TruePeakLimiter,
     audio_source: Option<Box<dyn AudioSource>>,
     next_source: Option<Box<dyn AudioSource>>, // For gapless/crossfade
     next_track: Option<QueueTrack>,            // Metadata for next track
@@ -75,6 +78,12 @@ pub struct PlaybackManager {
 
     // Track if we're in a manual skip (for crossfade on_skip setting)
     is_manual_skip: bool,
+
+    // Event queue for UI synchronization
+    pending_events: Vec<PlaybackEvent>,
+
+    // Crossfade progress tracker for 50% metadata switch
+    crossfade_progress: CrossfadeProgressTracker,
 }
 
 /// Default buffer size for crossfade (10 seconds at max supported sample rate 192kHz stereo)
@@ -88,6 +97,13 @@ const MAX_STEREO_BUFFER_SIZE: usize = 8192 * 2;
 impl PlaybackManager {
     /// Create new playback manager
     pub fn new(config: PlaybackConfig) -> Self {
+        // Configure loudness normalizer to NOT use internal limiter
+        // We use a separate output_limiter at the end of the chain
+        #[cfg(feature = "volume-leveling")]
+        let mut loudness_normalizer = LoudnessNormalizer::new(44100, 2);
+        #[cfg(feature = "volume-leveling")]
+        loudness_normalizer.set_use_internal_limiter(false);
+
         Self {
             state: PlaybackState::Stopped,
             current_track: None,
@@ -100,7 +116,9 @@ impl PlaybackManager {
             #[cfg(feature = "effects")]
             effect_chain: EffectChain::new(),
             #[cfg(feature = "volume-leveling")]
-            loudness_normalizer: LoudnessNormalizer::new(44100, 2),
+            loudness_normalizer,
+            #[cfg(feature = "volume-leveling")]
+            output_limiter: TruePeakLimiter::new(44100, 2),
             audio_source: None,
             next_source: None,
             next_track: None,
@@ -111,6 +129,8 @@ impl PlaybackManager {
             sample_rate: 44100, // Default, will be updated by platform
             output_channels: 2, // Default stereo, will be updated by platform
             is_manual_skip: false,
+            pending_events: Vec::new(),
+            crossfade_progress: CrossfadeProgressTracker::new(),
         }
     }
 
@@ -122,6 +142,7 @@ impl PlaybackManager {
             PlaybackState::Paused => {
                 // Resume from pause
                 self.state = PlaybackState::Playing;
+                self.emit_state_changed(PlaybackState::Playing);
                 Ok(())
             }
             PlaybackState::Stopped | PlaybackState::Loading => {
@@ -139,6 +160,7 @@ impl PlaybackManager {
     pub fn pause(&mut self) {
         if self.state == PlaybackState::Playing {
             self.state = PlaybackState::Paused;
+            self.emit_state_changed(PlaybackState::Paused);
         }
     }
 
@@ -152,7 +174,9 @@ impl PlaybackManager {
         self.next_source = None;
         self.next_track = None;
         self.crossfade.reset();
+        self.crossfade_progress.reset();
         self.is_manual_skip = false;
+        self.emit_state_changed(PlaybackState::Stopped);
     }
 
     /// Skip to next track
@@ -530,6 +554,28 @@ impl PlaybackManager {
         !self.history.get_all().is_empty() || self.repeat == RepeatMode::One
     }
 
+    /// Peek at the next track in queue without advancing
+    ///
+    /// Returns the next track that would play when current track finishes.
+    /// Used by platform code to pre-load the next track for crossfade/gapless.
+    pub fn peek_next_queue_track(&self) -> Option<&QueueTrack> {
+        // If repeat one is enabled, return current track
+        if self.repeat == RepeatMode::One {
+            return self.current_track.as_ref();
+        }
+
+        // Otherwise peek at the queue
+        if let Some(track) = self.queue.peek_next() {
+            Some(track)
+        } else if self.repeat == RepeatMode::All && !self.queue.is_empty() {
+            // If queue is empty but repeat all, would loop back to first track
+            // For pre-loading purposes, we don't handle this case
+            None
+        } else {
+            None
+        }
+    }
+
     // ===== Audio Processing =====
 
     /// Process audio samples for output
@@ -606,6 +652,10 @@ impl PlaybackManager {
             // Apply volume
             self.volume.apply(&mut output[..frames]);
 
+            // Apply output limiter AFTER volume to catch ALL peaks
+            #[cfg(feature = "volume-leveling")]
+            self.output_limiter.process(&mut output[..frames]);
+
             Ok(frames)
         } else if self.output_channels == 2 {
             // Stereo output - with crossfade support
@@ -617,7 +667,7 @@ impl PlaybackManager {
                 return Ok(0);
             }
 
-            // Apply loudness normalization
+            // Apply loudness normalization (gain only, no internal limiter)
             #[cfg(feature = "volume-leveling")]
             self.loudness_normalizer
                 .process(&mut output[..samples_read]);
@@ -629,6 +679,11 @@ impl PlaybackManager {
 
             // Apply volume
             self.volume.apply(&mut output[..samples_read]);
+
+            // Apply output limiter AFTER volume to catch ALL peaks
+            // This is the correct DSP chain order for preventing clipping
+            #[cfg(feature = "volume-leveling")]
+            self.output_limiter.process(&mut output[..samples_read]);
 
             Ok(samples_read)
         } else {
@@ -664,6 +719,11 @@ impl PlaybackManager {
             // Apply volume to stereo buffer
             self.volume
                 .apply(&mut self.stereo_conversion_buffer[..samples_read]);
+
+            // Apply output limiter AFTER volume to catch ALL peaks
+            #[cfg(feature = "volume-leveling")]
+            self.output_limiter
+                .process(&mut self.stereo_conversion_buffer[..samples_read]);
 
             // Upmix stereo to multi-channel: put L/R in first two channels, silence in rest
             for frame in 0..frames_read {
@@ -720,6 +780,22 @@ impl PlaybackManager {
             // Start crossfade
             let started = self.crossfade.start(self.is_manual_skip);
             if started {
+                // Initialize crossfade progress tracker
+                let from_track_id = self
+                    .current_track
+                    .as_ref()
+                    .map(|t| t.id.clone())
+                    .unwrap_or_default();
+                let to_track_id = self
+                    .next_track
+                    .as_ref()
+                    .map(|t| t.id.clone())
+                    .unwrap_or_default();
+
+                self.crossfade_progress
+                    .start(from_track_id.clone(), to_track_id.clone(), crossfade_duration_ms);
+                self.emit_crossfade_started(from_track_id, to_track_id, crossfade_duration_ms);
+
                 return self.process_active_crossfade(output);
             }
         }
@@ -782,6 +858,7 @@ impl PlaybackManager {
         if samples_to_process == 0 {
             // Both sources exhausted
             self.crossfade.reset();
+            self.crossfade_progress.reset();
             return Ok(0);
         }
 
@@ -792,10 +869,29 @@ impl PlaybackManager {
             &mut output[..samples_to_process],
         );
 
+        // Update crossfade progress and check for metadata switch
+        let progress = self.crossfade.progress();
+        let should_switch_metadata = self.crossfade_progress.update(progress);
+
+        // Emit TrackChanged at 50% crossfade (metadata switch point)
+        if should_switch_metadata {
+            if let (Some(from_id), Some(to_id)) = (
+                self.crossfade_progress.from_track_id().map(String::from),
+                self.crossfade_progress.to_track_id().map(String::from),
+            ) {
+                self.emit_track_changed(to_id, Some(from_id));
+            }
+        }
+
+        // Emit crossfade progress event
+        self.emit_crossfade_progress(progress, self.crossfade_progress.metadata_switched());
+
         if completed {
             // Crossfade completed - transition to next track
             self.transition_to_next_track()?;
             self.crossfade.reset();
+            self.crossfade_progress.reset();
+            self.emit_crossfade_completed();
         }
 
         Ok(processed)
@@ -803,6 +899,10 @@ impl PlaybackManager {
 
     /// Transition from current track to next track
     fn transition_to_next_track(&mut self) -> Result<()> {
+        // Get track IDs before moving
+        let previous_track_id = self.current_track.as_ref().map(|t| t.id.clone());
+        let next_track_id = self.next_track.as_ref().map(|t| t.id.clone());
+
         // Save current track to history
         if let Some(track) = self.current_track.take() {
             self.history.push(track);
@@ -812,6 +912,14 @@ impl PlaybackManager {
         self.audio_source = self.next_source.take();
         self.current_track = self.next_track.take();
         self.is_manual_skip = false;
+
+        // Emit track changed for gapless (non-crossfade) transitions
+        // Note: For crossfade, TrackChanged is emitted at 50% in process_active_crossfade
+        if !self.crossfade_progress.is_active() {
+            if let Some(track_id) = next_track_id {
+                self.emit_track_changed(track_id, previous_track_id);
+            }
+        }
 
         // Reset loudness normalizer for new track
         #[cfg(feature = "volume-leveling")]
@@ -823,6 +931,12 @@ impl PlaybackManager {
     /// Handle track finished
     fn handle_track_finished(&mut self) -> Result<()> {
         self.is_manual_skip = false;
+
+        // Emit track finished event
+        if let Some(ref track) = self.current_track {
+            self.emit_track_finished(track.id.clone());
+        }
+
         // Auto-advance to next track
         self.next()
     }
@@ -919,11 +1033,67 @@ impl PlaybackManager {
         self.loudness_normalizer.reset();
     }
 
+    // ===== Output Limiter =====
+
+    /// Set output limiter lookahead preset
+    ///
+    /// The limiter runs after volume to catch all peaks from the DSP chain.
+    /// - Instant (0ms): No latency, may cause distortion on transients
+    /// - Balanced (1.5ms): Good tradeoff between latency and transparency
+    /// - Transparent (5ms): Minimal audible artifacts
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_output_limiter_lookahead(&mut self, preset: LookaheadPreset) {
+        self.output_limiter.set_lookahead(preset);
+    }
+
+    /// Get current output limiter lookahead preset
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_output_limiter_lookahead(&self) -> LookaheadPreset {
+        self.output_limiter.lookahead_preset()
+    }
+
+    /// Set output limiter lookahead in milliseconds (0-10ms)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_output_limiter_lookahead_ms(&mut self, lookahead_ms: f32) {
+        self.output_limiter.set_lookahead_ms(lookahead_ms);
+    }
+
+    /// Set output limiter threshold in dB (0 dB = 0 dBFS, use negative for headroom)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_output_limiter_threshold_db(&mut self, threshold_db: f32) {
+        self.output_limiter.set_threshold_db(threshold_db);
+    }
+
+    /// Get current output limiter gain reduction in dB (0 = no limiting)
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_output_limiter_gain_reduction_db(&self) -> f32 {
+        self.output_limiter.gain_reduction_db()
+    }
+
+    /// Get output limiter latency in samples
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_output_limiter_latency(&self) -> usize {
+        self.output_limiter.latency_samples()
+    }
+
+    /// Reset output limiter state
+    #[cfg(feature = "volume-leveling")]
+    pub fn reset_output_limiter(&mut self) {
+        self.output_limiter.reset();
+    }
+
     /// Set audio source (called by platform after loading track)
     pub fn set_audio_source(&mut self, source: Box<dyn AudioSource>) {
+        let previous_track_id = self.current_track.as_ref().map(|t| t.id.clone());
         self.audio_source = Some(source);
         self.state = PlaybackState::Playing;
         self.is_manual_skip = false;
+
+        // Emit track changed event (for non-crossfade transitions)
+        if let Some(ref track) = self.current_track {
+            self.emit_track_changed(track.id.clone(), previous_track_id);
+        }
+        self.emit_state_changed(PlaybackState::Playing);
     }
 
     // ===== Crossfade Settings =====
@@ -1002,8 +1172,10 @@ impl PlaybackManager {
     ///
     /// Called by platform when pre-decoding the next track
     pub fn set_next_source(&mut self, source: Box<dyn AudioSource>, track: QueueTrack) {
+        let track_id = track.id.clone();
         self.next_source = Some(source);
         self.next_track = Some(track);
+        self.emit_next_track_prepared(track_id);
     }
 
     /// Check if next source is ready
@@ -1075,6 +1247,123 @@ impl PlaybackManager {
             }
         } else {
             false
+        }
+    }
+
+    // ===== Events =====
+
+    /// Drain all pending events
+    ///
+    /// Returns all events that have been emitted since the last drain.
+    /// The UI should call this periodically (e.g., every frame or on audio callback)
+    /// to synchronize with playback state.
+    pub fn drain_events(&mut self) -> Vec<PlaybackEvent> {
+        std::mem::take(&mut self.pending_events)
+    }
+
+    /// Check if there are pending events
+    pub fn has_pending_events(&self) -> bool {
+        !self.pending_events.is_empty()
+    }
+
+    /// Get the crossfade progress tracker
+    pub fn crossfade_progress_tracker(&self) -> &CrossfadeProgressTracker {
+        &self.crossfade_progress
+    }
+
+    /// Get the track ID that should be displayed in the UI
+    ///
+    /// During crossfade before 50%: returns outgoing track ID
+    /// During crossfade after 50%: returns incoming track ID
+    /// Otherwise: returns current track ID
+    pub fn display_track_id(&self) -> Option<&str> {
+        if self.crossfade_progress.is_active() {
+            self.crossfade_progress.display_track_id()
+        } else {
+            self.current_track.as_ref().map(|t| t.id.as_str())
+        }
+    }
+
+    /// Emit a state changed event
+    fn emit_state_changed(&mut self, state: PlaybackState) {
+        self.pending_events.push(PlaybackEvent::StateChanged {
+            state: state.into(),
+        });
+    }
+
+    /// Emit a track changed event
+    fn emit_track_changed(&mut self, track_id: String, previous_track_id: Option<String>) {
+        self.pending_events.push(PlaybackEvent::TrackChanged {
+            track_id,
+            previous_track_id,
+        });
+    }
+
+    /// Emit a crossfade started event
+    fn emit_crossfade_started(
+        &mut self,
+        from_track_id: String,
+        to_track_id: String,
+        duration_ms: u32,
+    ) {
+        self.pending_events.push(PlaybackEvent::CrossfadeStarted {
+            from_track_id,
+            to_track_id,
+            duration_ms,
+        });
+    }
+
+    /// Emit a crossfade progress event
+    fn emit_crossfade_progress(&mut self, progress: f32, metadata_switched: bool) {
+        self.pending_events.push(PlaybackEvent::CrossfadeProgress {
+            progress,
+            metadata_switched,
+        });
+    }
+
+    /// Emit a crossfade completed event
+    fn emit_crossfade_completed(&mut self) {
+        self.pending_events.push(PlaybackEvent::CrossfadeCompleted);
+    }
+
+    /// Emit a track finished event
+    fn emit_track_finished(&mut self, track_id: String) {
+        self.pending_events.push(PlaybackEvent::TrackFinished { track_id });
+    }
+
+    /// Emit a volume changed event
+    fn emit_volume_changed(&mut self) {
+        self.pending_events.push(PlaybackEvent::VolumeChanged {
+            level: self.volume.level(),
+            is_muted: self.volume.is_muted(),
+        });
+    }
+
+    /// Emit a queue changed event
+    fn emit_queue_changed(&mut self) {
+        self.pending_events.push(PlaybackEvent::QueueChanged {
+            length: self.queue.len(),
+        });
+    }
+
+    /// Emit an error event
+    fn emit_error(&mut self, message: String) {
+        self.pending_events.push(PlaybackEvent::Error { message });
+    }
+
+    /// Emit a next track prepared event
+    fn emit_next_track_prepared(&mut self, track_id: String) {
+        self.pending_events
+            .push(PlaybackEvent::NextTrackPrepared { track_id });
+    }
+
+    /// Emit a position update event
+    pub fn emit_position_update(&mut self) {
+        if let Some(ref source) = self.audio_source {
+            self.pending_events.push(PlaybackEvent::PositionUpdate {
+                position_ms: source.position().as_millis() as u64,
+                duration_ms: source.duration().as_millis() as u64,
+            });
         }
     }
 }

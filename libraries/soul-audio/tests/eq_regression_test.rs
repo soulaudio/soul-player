@@ -328,13 +328,13 @@ fn test_eq_band_public_fields_bypass_clamp() {
     let clamped_band = EqBand::new(1000.0, 50.0, 50.0);
     assert_eq!(
         clamped_band.gain_db(),
-        12.0,
-        "Constructor should clamp gain"
+        24.0,
+        "Constructor should clamp gain to 24 dB"
     );
     assert_eq!(clamped_band.q(), 10.0, "Constructor should clamp Q");
 
     // BUG FIX VERIFIED: Now use setters which enforce clamping
-    band.set_gain_db(100.0); // Now properly clamped to 12.0
+    band.set_gain_db(100.0); // Now properly clamped to 24.0
     band.set_q(0.001); // Now properly clamped to 0.1
 
     // Now use the band (with clamped values due to fix)
@@ -344,12 +344,14 @@ fn test_eq_band_public_fields_bypass_clamp() {
     let mut buffer = generate_sine(1000.0, SAMPLE_RATE, 0.1);
     eq.process(&mut buffer, SAMPLE_RATE);
 
-    // BUG FIX VERIFIED: With clamping, gain is limited to +12 dB (about 4x linear)
+    // BUG FIX VERIFIED: With clamping, gain is limited to +24 dB (about 16x linear)
     let output_peak = peak_level(&buffer);
 
     // Verify the fix - output should be reasonable (not massive like +100 dB would give)
+    // With 24 dB max gain (~16x) and possible transient overshoot from low Q,
+    // output peak should be well under 100 but may exceed 10
     assert!(
-        output_peak < 10.0,
+        output_peak < 50.0,
         "BUG FIX VERIFIED: Gain clamping prevents extreme output. Peak: {}",
         output_peak
     );

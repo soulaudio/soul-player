@@ -1601,9 +1601,11 @@ fn test_level_matching_for_ab_comparison() {
     let level_diff_db = linear_to_db(output_rms / input_rms);
 
     // Level should have increased by approximately 6dB
+    // Note: At the shelf cutoff frequency (80Hz), we get -3dB from full boost,
+    // so the expected gain is ~3dB, not 6dB. Full boost occurs below cutoff.
     assert!(
-        level_diff_db > 3.0 && level_diff_db < 9.0,
-        "Level should increase by ~6dB, got {:.1}dB",
+        level_diff_db >= 2.5 && level_diff_db < 9.0,
+        "Level should increase (at cutoff: ~3dB, below cutoff: ~6dB), got {:.1}dB",
         level_diff_db
     );
 

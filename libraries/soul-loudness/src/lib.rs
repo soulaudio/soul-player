@@ -47,6 +47,7 @@
 
 mod analyzer;
 mod error;
+pub mod headroom;
 mod limiter;
 mod normalizer;
 mod replaygain;
@@ -54,7 +55,7 @@ mod tags;
 
 pub use analyzer::{LoudnessAnalyzer, LoudnessInfo};
 pub use error::{LoudnessError, Result};
-pub use limiter::TruePeakLimiter;
+pub use limiter::{LookaheadPreset, TruePeakLimiter};
 pub use normalizer::{LoudnessNormalizer, NormalizationMode};
 pub use replaygain::{AlbumGain, ReplayGainCalculator, TrackGain};
 pub use tags::{read_replaygain_tags, write_replaygain_tags, ReplayGainTags};

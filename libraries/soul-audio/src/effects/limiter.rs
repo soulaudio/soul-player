@@ -51,15 +51,28 @@ impl LimiterSettings {
     }
 }
 
+/// Number of samples over which to smooth threshold changes
+/// At 44.1kHz, 64 samples = ~1.5ms, which is imperceptible but prevents clicks
+const SMOOTH_SAMPLES: u32 = 64;
+
 /// Brick-wall limiter effect
 ///
 /// # Real-Time Safety
 /// - Pre-allocates envelope buffer in constructor
 /// - No allocations in `process()`
 /// - Suitable for real-time audio threads
+///
+/// # Parameter Smoothing
+/// Threshold changes are smoothed over 64 samples (~1.5ms) to prevent
+/// audible clicks when adjusting the threshold during playback.
 pub struct Limiter {
     settings: LimiterSettings,
+    /// Target threshold (set by user, smoothed toward)
+    target_threshold_linear: f32,
+    /// Active threshold (used for processing, smoothed toward target)
     threshold_linear: f32,
+    /// Samples remaining until threshold matches target
+    smooth_samples_remaining: u32,
     release_coeff: f32,
     envelope: f32,
     enabled: bool,
@@ -79,7 +92,9 @@ impl Limiter {
 
         Self {
             settings,
+            target_threshold_linear: threshold_linear,
             threshold_linear,
+            smooth_samples_remaining: 0,
             release_coeff: 0.0, // Will be updated in process()
             envelope: 0.0,      // Start with no signal detected
             enabled: true,
@@ -87,9 +102,34 @@ impl Limiter {
     }
 
     /// Set threshold in dB
+    ///
+    /// The threshold is smoothed over 64 samples to prevent clicks.
     pub fn set_threshold(&mut self, threshold_db: f32) {
         self.settings.threshold_db = threshold_db.min(0.0);
-        self.threshold_linear = Self::db_to_linear(self.settings.threshold_db);
+        let new_target = Self::db_to_linear(self.settings.threshold_db);
+
+        // Only initiate smoothing if threshold changed and not starting from default
+        if (new_target - self.target_threshold_linear).abs() > 1e-6 {
+            self.target_threshold_linear = new_target;
+            self.smooth_samples_remaining = SMOOTH_SAMPLES;
+        }
+    }
+
+    /// Smooth threshold toward target value
+    #[inline]
+    fn smooth_threshold(&mut self) {
+        if self.smooth_samples_remaining == 0 {
+            return;
+        }
+
+        let alpha = 1.0 / self.smooth_samples_remaining as f32;
+        self.threshold_linear += alpha * (self.target_threshold_linear - self.threshold_linear);
+        self.smooth_samples_remaining -= 1;
+
+        // Snap to target when done
+        if self.smooth_samples_remaining == 0 {
+            self.threshold_linear = self.target_threshold_linear;
+        }
     }
 
     /// Set release time in milliseconds
@@ -131,6 +171,9 @@ impl AudioEffect for Limiter {
 
         // Process stereo interleaved samples
         for chunk in buffer.chunks_exact_mut(2) {
+            // Smooth threshold to prevent clicks during parameter changes
+            self.smooth_threshold();
+
             let left = chunk[0];
             let right = chunk[1];
 
@@ -161,6 +204,9 @@ impl AudioEffect for Limiter {
 
     fn reset(&mut self) {
         self.envelope = 0.0; // Reset to "no signal detected"
+        // Snap threshold to target when resetting
+        self.threshold_linear = self.target_threshold_linear;
+        self.smooth_samples_remaining = 0;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
@@ -173,6 +219,14 @@ impl AudioEffect for Limiter {
 
     fn name(&self) -> &str {
         "Limiter"
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 

@@ -274,27 +274,144 @@ async fn test_jwt_expiration_and_refresh() {
 
 ## Audio Testing
 
-### Correctness Testing
+Soul Player has comprehensive audio testing organized into three tiers based on environment requirements.
+
+### Test Categories
+
+| Category | Environment | CI Support | Description |
+|----------|-------------|------------|-------------|
+| **Unit Tests** | Any | ✅ Full | DSP algorithms, effect processing, resampling |
+| **Integration Tests** | Docker | ✅ Full | Effect chains, pipeline quality, glitch detection |
+| **Device Tests** | Hardware | ❌ Skip | Real audio output, device switching, latency |
+
+### Tier 1: Unit Tests (Any Environment)
+
+These tests run everywhere - local dev, CI, Docker. No audio device required.
+
 ```rust
 #[test]
 fn test_eq_frequency_response() {
     let eq = ThreeBandEq::new(44100);
-
-    // Generate sine wave at target frequency
     let freq = 1000.0; // 1kHz
     let samples = generate_sine_wave(freq, 44100, 1.0);
 
-    // Boost at 1kHz
     eq.set_mid_gain(6.0); // +6dB at 1kHz
-
     let output = eq.process(&samples);
 
-    // Measure output amplitude
     let output_rms = calculate_rms(&output);
     let expected_rms = 1.0 * (6.0f32).db_to_linear();
-
-    assert!((output_rms - expected_rms).abs() < 0.1); // 10% tolerance
+    assert!((output_rms - expected_rms).abs() < 0.1);
 }
+```
+
+**Test files in this tier:**
+- `libraries/soul-audio/tests/*_precision_test.rs` - DSP precision tests
+- `libraries/soul-audio/tests/*_conformance_test.rs` - Standard compliance
+- `libraries/soul-audio/tests/regression_test.rs` - Edge case coverage
+- `libraries/soul-audio/tests/integration_test.rs` - Effect chain behavior
+
+### Tier 2: Docker-Based Integration Tests
+
+These tests use PulseAudio virtual devices in Docker containers. They verify:
+- Buffer underrun detection
+- Playback gap detection (important for Windows issues)
+- Long-running stability
+- Sample rate transitions
+
+#### Running with Docker
+
+```bash
+# Start the audio test container
+cd docker/audio-test
+docker-compose up -d
+
+# Run tests inside container
+docker-compose exec audio-test bash
+cd /workspace
+cargo test --package soul-audio --test playback_glitch_test
+
+# Alternative: Run directly (testcontainers)
+cargo test --package soul-audio --test playback_glitch_test --features testcontainers
+```
+
+#### Docker Audio Test Files
+
+| Test File | Purpose |
+|-----------|---------|
+| `playback_glitch_test.rs` | Buffer underruns, gaps, batch processing stress |
+| `memory_stability_test.rs` | Memory leaks, long-running stability |
+| `pipeline_quality_test.rs` | Full pipeline quality verification |
+
+#### PulseAudio Virtual Devices
+
+The Docker container (`docker/audio-test/Dockerfile`) provides:
+- `virtual_output_1` - 44.1kHz stereo output
+- `virtual_output_2` - 48kHz stereo output
+- `virtual_output_3` - 96kHz stereo output
+- `virtual_output_hires` - 192kHz high-resolution output
+- Virtual input devices (for recording/loopback testing)
+
+```bash
+# Verify devices are available
+docker-compose exec audio-test pactl list sinks short
+```
+
+### Tier 3: Hardware-Specific Tests (Manual/Local Only)
+
+These tests require real audio hardware and **cannot run in CI**:
+
+```rust
+#[test]
+#[ignore] // Skip in CI - requires real audio hardware
+fn test_real_audio_output() {
+    // This test is IGNORED by default
+    // Run manually: cargo test test_real_audio_output -- --ignored
+}
+```
+
+**Hardware-dependent behaviors:**
+- Real audio device enumeration
+- Actual audio output quality (subjective)
+- Hardware-specific latency measurements
+- Device hot-plugging behavior
+- Exclusive mode / WASAPI shared mode
+
+**Running hardware tests locally:**
+```bash
+# Run all ignored tests (requires audio hardware)
+cargo test --package soul-audio -- --ignored
+
+# Run specific hardware test
+cargo test test_real_audio_output -- --ignored
+```
+
+### CI Configuration
+
+```yaml
+# .github/workflows/audio-tests.yml
+name: Audio Tests
+
+jobs:
+  # Tier 1 & 2: Run in CI
+  unit-and-integration:
+    runs-on: ubuntu-latest
+    services:
+      audio:
+        image: soul-audio-test:latest
+        options: --health-cmd="pactl info"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run audio unit tests
+        run: cargo test --package soul-audio --lib
+
+      - name: Run audio integration tests
+        run: cargo test --package soul-audio --test integration_test
+
+      - name: Run glitch detection tests
+        run: cargo test --package soul-audio --test playback_glitch_test
+
+  # Tier 3: NOT run in CI (no audio hardware)
+  # These are run manually before releases
 ```
 
 ### Performance Testing
@@ -315,6 +432,45 @@ fn bench_decode_mp3_realtime(b: &mut Bencher) {
     });
 }
 ```
+
+### Nightly Extended Tests
+
+Some tests are designed for nightly CI runs (resource-intensive):
+
+```rust
+#[test]
+#[ignore] // Run nightly: cargo test -- --ignored
+fn test_one_hour_actual_playback() {
+    // 1-hour sustained load test
+    // Too long for regular CI
+}
+```
+
+**Nightly test files:**
+- `memory_stability_test.rs` - Extended memory leak detection
+- `playback_glitch_test.rs` (ignored tests) - 1-hour playback tests
+
+### Troubleshooting Audio Tests
+
+**"No audio device found" errors:**
+```bash
+# Ensure PulseAudio is running (Docker)
+docker-compose exec audio-test pulseaudio --check
+
+# Restart PulseAudio
+docker-compose exec audio-test pulseaudio --kill
+docker-compose exec audio-test pulseaudio --start
+```
+
+**High timing variance in tests:**
+- Expected in CI environments (shared resources)
+- Tests use relaxed thresholds for CI compatibility
+- Run locally for precise timing measurements
+
+**Windows playback gaps:**
+- These tests specifically target the Windows batch processing issue
+- `test_windows_batch_processing_gap_simulation` simulates the scenario
+- `test_inter_buffer_gap_detection` catches discontinuities
 
 ---
 

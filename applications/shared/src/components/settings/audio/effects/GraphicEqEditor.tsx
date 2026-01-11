@@ -245,9 +245,42 @@ export function GraphicEqEditor({
   useEffect(() => {
     const loadPresets = async () => {
       try {
-        const backendPresets = await invoke<{ id: string; gains: number[] }[]>('get_graphic_eq_presets');
-        if (backendPresets && backendPresets.length > 0) {
-          setPresets(backendPresets);
+        // Backend returns tuples: [string, GraphicEqData][] where GraphicEqData = { preset, bandCount, gains }
+        // We need to transform this to our expected format: { id: string; gains: number[] }[]
+        const backendResponse = await invoke<unknown>('get_graphic_eq_presets');
+
+        if (backendResponse && Array.isArray(backendResponse) && backendResponse.length > 0) {
+          const transformedPresets: { id: string; gains: number[] }[] = [];
+
+          for (const item of backendResponse) {
+            // Skip null/undefined items
+            if (item == null) continue;
+
+            // Handle tuple format: [string, GraphicEqData]
+            if (Array.isArray(item) && item.length >= 2) {
+              const [name, data] = item;
+              if (typeof name === 'string' && data && typeof data === 'object' && 'gains' in data && Array.isArray(data.gains)) {
+                transformedPresets.push({
+                  id: name,
+                  gains: data.gains.map((g: unknown) => typeof g === 'number' ? g : 0),
+                });
+              }
+            }
+            // Handle object format: { id: string; gains: number[] }
+            else if (typeof item === 'object' && 'id' in item && 'gains' in item) {
+              const preset = item as { id: string; gains: number[] };
+              if (typeof preset.id === 'string' && Array.isArray(preset.gains)) {
+                transformedPresets.push({
+                  id: preset.id,
+                  gains: preset.gains.map(g => typeof g === 'number' ? g : 0),
+                });
+              }
+            }
+          }
+
+          if (transformedPresets.length > 0) {
+            setPresets(transformedPresets);
+          }
         }
       } catch (error) {
         console.error('Failed to load presets, using defaults:', error);
@@ -273,8 +306,12 @@ export function GraphicEqEditor({
     const newGains = [...gains];
     newGains[index] = gain;
 
-    // Check if it matches any preset
-    const matchingPreset = presets.find(p =>
+    // Check if it matches any preset (with null safety)
+    const validPresets = presets.filter(
+      (p): p is { id: string; gains: number[] } =>
+        p != null && typeof p.id === 'string' && Array.isArray(p.gains)
+    );
+    const matchingPreset = validPresets.find(p =>
       p.gains.every((g, i) => Math.abs(g - newGains[i]) < 0.1)
     );
 
@@ -300,7 +337,12 @@ export function GraphicEqEditor({
 
   // Reset to flat
   const handleReset = useCallback(() => {
-    const flatPreset = presets.find(p => p.id === 'Flat') || { id: 'Flat', gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
+    // Filter valid presets and find Flat (with null safety)
+    const validPresets = presets.filter(
+      (p): p is { id: string; gains: number[] } =>
+        p != null && typeof p.id === 'string' && Array.isArray(p.gains)
+    );
+    const flatPreset = validPresets.find(p => p.id === 'Flat') || { id: 'Flat', gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
     applyPreset(flatPreset);
   }, [presets, applyPreset]);
 
@@ -333,25 +375,29 @@ export function GraphicEqEditor({
           {/* Dropdown menu */}
           {showPresetDropdown && (
             <div className="absolute z-50 w-full mt-1 py-1 bg-popover border border-border rounded-lg shadow-lg max-h-64 overflow-auto">
-              {presets.map((preset) => {
-                const isSelected = settings.preset === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    onClick={() => applyPreset(preset)}
-                    className={`
-                      w-full flex items-center justify-between px-3 py-2 text-sm text-left
-                      transition-colors hover:bg-muted/50
-                      ${isSelected ? 'bg-primary/10 text-primary' : ''}
-                    `}
-                  >
-                    <span>
-                      {t(`settings.audio.graphicEq.presets.${preset.id.toLowerCase().replace(/\s+/g, '')}`, preset.id)}
-                    </span>
-                    {isSelected && <Check className="w-4 h-4" />}
-                  </button>
-                );
-              })}
+              {presets
+                .filter((preset): preset is { id: string; gains: number[] } =>
+                  preset != null && typeof preset.id === 'string' && Array.isArray(preset.gains)
+                )
+                .map((preset) => {
+                  const isSelected = settings.preset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => applyPreset(preset)}
+                      className={`
+                        w-full flex items-center justify-between px-3 py-2 text-sm text-left
+                        transition-colors hover:bg-muted/50
+                        ${isSelected ? 'bg-primary/10 text-primary' : ''}
+                      `}
+                    >
+                      <span>
+                        {t(`settings.audio.graphicEq.presets.${preset.id.toLowerCase().replace(/\s+/g, '')}`, preset.id)}
+                      </span>
+                      {isSelected && <Check className="w-4 h-4" />}
+                    </button>
+                  );
+                })}
             </div>
           )}
         </div>
