@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT id, user_id, context_type, context_id, context_name, context_artwork_path, last_played_at\n        FROM playback_contexts\n        WHERE user_id = ?\n        ORDER BY last_played_at DESC\n        LIMIT ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_type",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_name",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_artwork_path",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_played_at",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "88b95dd27c5d18f6eb6de220315d5ad18e4626f6af91bd452967ab0b506f6e6e"
+}

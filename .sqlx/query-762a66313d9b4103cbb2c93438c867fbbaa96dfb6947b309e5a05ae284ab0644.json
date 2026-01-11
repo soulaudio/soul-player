@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE library_sources\n        SET enabled = ?, updated_at = ?\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "762a66313d9b4103cbb2c93438c867fbbaa96dfb6947b309e5a05ae284ab0644"
+}

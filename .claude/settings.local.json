@@ -141,7 +141,10 @@
       "Bash(Get-Content \"D:\\\\dev\\\\soulaudio\\\\soul-player\\\\applications\\\\desktop\\\\src-tauri\\\\src\\\\audio_settings.rs\")",
       "Bash(Select-Object -Index 1112)",
       "Bash(npx vitest:*)",
-      "Bash(docker:*)"
+      "Bash(docker:*)",
+      "Bash(npx playwright:*)",
+      "Bash(curl:*)",
+      "Bash(tasklist:*)"
     ]
   },
   "hooks": {

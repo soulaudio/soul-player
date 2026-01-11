@@ -7,8 +7,111 @@
 //! Both return the same `ExtractedMetadata` struct for compatibility.
 
 use crate::{ImportError, Result};
-use lofty::{Accessor, AudioFile, Probe, TaggedFileExt};
+use lofty::{Accessor, AudioFile, Probe, TaggedFile, TaggedFileExt};
 use std::path::Path;
+
+/// Parsed folder name components
+#[derive(Debug, Clone, Default)]
+pub struct FolderMetadata {
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub year: Option<i32>,
+}
+
+/// Parse folder name for Artist - Album pattern
+///
+/// Supports common patterns:
+/// - `Artist - Album`
+/// - `Artist - Year - Album`
+/// - `Year - Artist - Album`
+///
+/// Uses ` - ` (space-hyphen-space) as delimiter to avoid splitting
+/// on hyphens within names.
+pub fn parse_folder_name(folder_name: &str) -> FolderMetadata {
+    let parts: Vec<&str> = folder_name.split(" - ").collect();
+
+    match parts.len() {
+        2 => {
+            // Artist - Album
+            let (artist, album) = (parts[0].trim(), parts[1].trim());
+
+            // Check if first part is a year
+            if let Some(year) = parse_year(artist) {
+                FolderMetadata {
+                    artist: None,
+                    album: Some(album.to_string()),
+                    year: Some(year),
+                }
+            } else {
+                FolderMetadata {
+                    artist: Some(artist.to_string()),
+                    album: Some(album.to_string()),
+                    year: None,
+                }
+            }
+        }
+        3 => {
+            // Could be: Artist - Year - Album OR Year - Artist - Album
+            let (p1, p2, p3) = (parts[0].trim(), parts[1].trim(), parts[2].trim());
+
+            if let Some(year) = parse_year(p1) {
+                // Year - Artist - Album
+                FolderMetadata {
+                    artist: Some(p2.to_string()),
+                    album: Some(p3.to_string()),
+                    year: Some(year),
+                }
+            } else if let Some(year) = parse_year(p2) {
+                // Artist - Year - Album
+                FolderMetadata {
+                    artist: Some(p1.to_string()),
+                    album: Some(p3.to_string()),
+                    year: Some(year),
+                }
+            } else {
+                // No year found, treat as Artist - Album (with dash in album)
+                FolderMetadata {
+                    artist: Some(p1.to_string()),
+                    album: Some(format!("{} - {}", p2, p3)),
+                    year: None,
+                }
+            }
+        }
+        n if n > 3 => {
+            // First part is artist, rest is album (may contain dashes)
+            let artist = parts[0].trim();
+            let album_parts = &parts[1..];
+
+            // Check if second part is a year
+            if let Some(year) = parse_year(parts[1].trim()) {
+                let album = album_parts[1..].join(" - ");
+                FolderMetadata {
+                    artist: Some(artist.to_string()),
+                    album: if album.is_empty() {
+                        None
+                    } else {
+                        Some(album)
+                    },
+                    year: Some(year),
+                }
+            } else {
+                FolderMetadata {
+                    artist: Some(artist.to_string()),
+                    album: Some(album_parts.join(" - ")),
+                    year: None,
+                }
+            }
+        }
+        _ => FolderMetadata::default(),
+    }
+}
+
+/// Parse a string as a year (1900-2099)
+fn parse_year(s: &str) -> Option<i32> {
+    s.parse::<i32>()
+        .ok()
+        .filter(|&y| (1900..=2099).contains(&y))
+}
 
 /// Extracted metadata from an audio file
 #[derive(Debug, Clone)]
@@ -69,6 +172,50 @@ impl ExtractedMetadata {
     }
 }
 
+/// Find the best tag from a file that has actual metadata
+///
+/// Files can have multiple tag types (ID3v1, ID3v2, APEv2, Vorbis comments).
+/// The primary tag might be empty while another tag has all the data.
+/// This function scores each tag and returns the one with the most useful metadata.
+fn find_best_tag(file: &TaggedFile) -> Option<&lofty::Tag> {
+    let tags = file.tags();
+
+    if tags.is_empty() {
+        return None;
+    }
+
+    // Score each tag by how much useful metadata it has
+    let score_tag = |tag: &lofty::Tag| -> usize {
+        let mut score = 0;
+        if tag.artist().is_some() {
+            score += 3; // Artist is most important
+        }
+        if tag.album().is_some() {
+            score += 2;
+        }
+        if tag.title().is_some() {
+            score += 1;
+        }
+        if tag.genre().is_some() {
+            score += 1;
+        }
+        if tag.year().is_some() {
+            score += 1;
+        }
+        score
+    };
+
+    // Find tag with highest score, fall back to primary_tag if all are empty
+    let best = tags.iter().max_by_key(|t| score_tag(t));
+
+    // If best tag has no data, try primary_tag as last resort
+    if best.map(|t| score_tag(t)).unwrap_or(0) == 0 {
+        file.primary_tag()
+    } else {
+        best
+    }
+}
+
 /// Extract metadata from an audio file
 pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     let tagged_file = Probe::open(path)
@@ -76,8 +223,9 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         .read()
         .map_err(|e| ImportError::Metadata(format!("Failed to read file: {}", e)))?;
 
-    // Get primary tag (prefer ID3v2 for MP3, Vorbis for OGG/FLAC)
-    let tag = tagged_file.primary_tag().or(tagged_file.first_tag());
+    // Find the best tag - prefer one with artist metadata
+    // Files may have multiple tag types (ID3v1, ID3v2, APEv2, Vorbis) with data in different places
+    let tag = find_best_tag(&tagged_file);
 
     // Extract audio properties
     let properties = tagged_file.properties();
@@ -130,6 +278,39 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
             .and_then(|s| s.to_str())
             .map(|s| s.to_string())
     });
+
+    // Fallback: Parse parent folder name for artist/album if missing from tags
+    let folder_meta = if artist.is_none() || album.is_none() {
+        let folder_name = path.parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str());
+
+        if let Some(name) = folder_name {
+            let parsed = parse_folder_name(name);
+            eprintln!(
+                "[metadata] Folder fallback for {:?}: folder='{}' -> artist={:?}, album={:?}",
+                path.file_name(),
+                name,
+                parsed.artist,
+                parsed.album
+            );
+            Some(parsed)
+        } else {
+            None
+        }
+    } else {
+        eprintln!(
+            "[metadata] Tags found for {:?}: artist={:?}, album={:?}",
+            path.file_name(),
+            artist,
+            album
+        );
+        None
+    };
+
+    let artist = artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()));
+    let album = album.or_else(|| folder_meta.as_ref().and_then(|m| m.album.clone()));
+    let year = year.or_else(|| folder_meta.as_ref().and_then(|m| m.year));
 
     // Get file format from extension
     let file_format = path
@@ -342,5 +523,55 @@ mod tests {
         };
 
         assert!(!not_sparse.is_sparse());
+    }
+
+    #[test]
+    fn test_parse_folder_name_artist_album() {
+        let result = parse_folder_name("Sebastián Stupák - Down- Below the Surface");
+        assert_eq!(result.artist, Some("Sebastián Stupák".to_string()));
+        assert_eq!(result.album, Some("Down- Below the Surface".to_string()));
+        assert_eq!(result.year, None);
+    }
+
+    #[test]
+    fn test_parse_folder_name_artist_year_album() {
+        let result = parse_folder_name("Queen - 1975 - A Night at the Opera");
+        assert_eq!(result.artist, Some("Queen".to_string()));
+        assert_eq!(result.album, Some("A Night at the Opera".to_string()));
+        assert_eq!(result.year, Some(1975));
+    }
+
+    #[test]
+    fn test_parse_folder_name_year_artist_album() {
+        let result = parse_folder_name("2020 - Artist Name - Album Title");
+        assert_eq!(result.artist, Some("Artist Name".to_string()));
+        assert_eq!(result.album, Some("Album Title".to_string()));
+        assert_eq!(result.year, Some(2020));
+    }
+
+    #[test]
+    fn test_parse_folder_name_no_pattern() {
+        let result = parse_folder_name("Just an Album Name");
+        assert_eq!(result.artist, None);
+        assert_eq!(result.album, None);
+        assert_eq!(result.year, None);
+    }
+
+    #[test]
+    fn test_parse_folder_name_album_with_dashes() {
+        let result = parse_folder_name("Artist - Part 1 - The Beginning - Remastered");
+        assert_eq!(result.artist, Some("Artist".to_string()));
+        assert_eq!(result.album, Some("Part 1 - The Beginning - Remastered".to_string()));
+        assert_eq!(result.year, None);
+    }
+
+    #[test]
+    fn test_parse_year() {
+        assert_eq!(parse_year("1975"), Some(1975));
+        assert_eq!(parse_year("2024"), Some(2024));
+        assert_eq!(parse_year("1899"), None); // too old
+        assert_eq!(parse_year("2100"), None); // too new
+        assert_eq!(parse_year("abc"), None);
+        assert_eq!(parse_year(""), None);
     }
 }

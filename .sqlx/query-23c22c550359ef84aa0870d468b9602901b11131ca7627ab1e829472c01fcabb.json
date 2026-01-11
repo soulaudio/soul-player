@@ -1,0 +1,140 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,\n            t.track_number, t.disc_number, t.year, t.duration_seconds,\n            t.bitrate, t.sample_rate, t.channels, t.file_format,\n            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,\n            t.metadata_source, t.created_at, t.updated_at,\n            ar.name as artist_name,\n            al.title as album_title\n        FROM tracks t\n        LEFT JOIN artists ar ON t.artist_id = ar.id\n        LEFT JOIN albums al ON t.album_id = al.id\n        ORDER BY t.title\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "artist_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "album_id",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "album_artist_id",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "track_number",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "disc_number",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "year",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "duration_seconds",
+        "ordinal": 8,
+        "type_info": "Float"
+      },
+      {
+        "name": "bitrate",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "sample_rate",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "channels",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "file_format",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "origin_source_id",
+        "ordinal": 13,
+        "type_info": "Integer"
+      },
+      {
+        "name": "musicbrainz_recording_id",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "fingerprint",
+        "ordinal": 15,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata_source",
+        "ordinal": 16,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 17,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 18,
+        "type_info": "Text"
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 19,
+        "type_info": "Text"
+      },
+      {
+        "name": "album_title",
+        "ordinal": 20,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "23c22c550359ef84aa0870d468b9602901b11131ca7627ab1e829472c01fcabb"
+}

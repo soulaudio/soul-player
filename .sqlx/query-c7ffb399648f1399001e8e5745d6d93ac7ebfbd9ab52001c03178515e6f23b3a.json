@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO user_playback_state\n         (user_id, active_device_id, is_playing, current_track_id, position_ms,\n          volume, shuffle_enabled, repeat_mode, queue_json, updated_at)\n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n         ON CONFLICT(user_id)\n         DO UPDATE SET\n            active_device_id = excluded.active_device_id,\n            is_playing = excluded.is_playing,\n            current_track_id = excluded.current_track_id,\n            position_ms = excluded.position_ms,\n            volume = excluded.volume,\n            shuffle_enabled = excluded.shuffle_enabled,\n            repeat_mode = excluded.repeat_mode,\n            queue_json = excluded.queue_json,\n            updated_at = excluded.updated_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "c7ffb399648f1399001e8e5745d6d93ac7ebfbd9ab52001c03178515e6f23b3a"
+}

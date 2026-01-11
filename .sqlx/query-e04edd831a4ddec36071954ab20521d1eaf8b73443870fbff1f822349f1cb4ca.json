@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM playback_contexts WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "e04edd831a4ddec36071954ab20521d1eaf8b73443870fbff1f822349f1cb4ca"
+}

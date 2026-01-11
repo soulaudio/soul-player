@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowLeft, Play, ListMusic, Clock, Trash2, MoreHorizontal } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { usePlaybackContext } from '../hooks/usePlaybackContext';
 
 interface Playlist {
   id: string;
@@ -29,6 +30,7 @@ export function PlaylistPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { recordContext } = usePlaybackContext();
 
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [tracks, setTracks] = useState<PlaylistTrack[]>([]);
@@ -93,6 +95,15 @@ export function PlaylistPage() {
     if (validQueue.length === 0) return;
 
     try {
+      // Record playback context
+      if (playlist) {
+        await recordContext({
+          contextType: 'playlist',
+          contextId: playlist.id,
+          contextName: playlist.name,
+          contextArtworkPath: null, // Playlists don't have artwork yet
+        });
+      }
       await invoke('play_queue', { queue: validQueue, startIndex: 0 });
     } catch (err) {
       console.error('Failed to play playlist:', err);

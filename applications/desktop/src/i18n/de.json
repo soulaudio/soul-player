@@ -3,6 +3,11 @@
     "title": "Soul Player",
     "loading": "Wird geladen..."
   },
+  "home": {
+    "welcome": "Willkommen bei Soul Player",
+    "welcomeSubtitle": "Wählen Sie einen Titel aus Ihrer Bibliothek aus",
+    "jumpBackInto": "Weiterhören"
+  },
   "nav": {
     "home": "Startseite",
     "library": "Bibliothek",
@@ -10,6 +15,14 @@
     "playlists": "Wiedergabelisten",
     "settings": "Einstellungen",
     "import": "Importieren"
+  },
+  "nowPlaying": {
+    "fromLibrary": "Aus der Bibliothek",
+    "playingFromAlbum": "Wiedergabe vom Album",
+    "playingFromPlaylist": "Wiedergabe von Playlist",
+    "playingFromArtist": "Wiedergabe vom Künstler",
+    "playingFromGenre": "Wiedergabe vom Genre",
+    "playingFromLibrary": "Wiedergabe aus Bibliothek"
   },
   "sidebar": {
     "nowPlaying": "Aktuelle Wiedergabe",
@@ -33,9 +46,40 @@
   "library": {
     "tracks": "Titel",
     "albums": "Alben",
+    "album": "Album",
+    "artist": "Künstler",
     "artists": "Künstler",
+    "genre": "Genre",
+    "genres": "Genres",
+    "playlist": "Playlist",
+    "playlists": "Playlists",
+    "allTracks": "Alle Titel",
     "noTracks": "Keine Titel in Ihrer Bibliothek",
-    "addTracks": "Fügen Sie Musik hinzu, um zu beginnen"
+    "noAlbums": "Keine Alben gefunden",
+    "noAlbumsHint": "Importieren Sie Musik, um Ihre Alben zu sehen",
+    "addTracks": "Fügen Sie Musik hinzu, um zu beginnen",
+    "source": "Quelle",
+    "format": "Format",
+    "cached": "Zwischengespeichert",
+    "quickFilter": "Schnellfilter",
+    "noSearchResults": "Keine Ergebnisse gefunden",
+    "tryDifferentSearch": "Versuchen Sie einen anderen Suchbegriff",
+    "databaseIssue": "Datenbankproblem erkannt",
+    "loadFailed": "Bibliothek konnte nicht geladen werden",
+    "deleteTrack": "Titel löschen",
+    "deleteTrackConfirm": "Möchten Sie diesen Titel wirklich löschen? Der Titel wird aus Ihrer Bibliothek entfernt.",
+    "tab": {
+      "albums": "Alben",
+      "playlists": "Playlists",
+      "artists": "Künstler",
+      "tracks": "Titel"
+    },
+    "search": {
+      "albums": "Alben suchen...",
+      "playlists": "Playlists suchen...",
+      "artists": "Künstler suchen...",
+      "tracks": "Titel suchen..."
+    }
   },
   "settings": {
     "title": "Einstellungen",
@@ -87,8 +131,20 @@
     "name": "Name der Wiedergabeliste",
     "description": "Beschreibung",
     "addTrack": "Zur Wiedergabeliste hinzufügen",
+    "addToPlaylist": "Zur Wiedergabeliste hinzufügen",
+    "addingTrack": "Titel hinzufügen",
+    "searchPlaylists": "Wiedergabelisten suchen...",
+    "createNew": "Neue Wiedergabeliste erstellen",
+    "willRemove": "wird entfernt",
+    "noPlaylists": "Noch keine Wiedergabelisten",
+    "newPlaylistName": "Neue Wiedergabeliste",
     "removeTrack": "Aus Wiedergabeliste entfernen",
     "deletePlaylist": "Wiedergabeliste löschen"
+  },
+  "librarySettings": {
+    "errors": {
+      "duplicatePath": "Dieser Ordner ist bereits in Ihrer Bibliothek vorhanden"
+    }
   },
   "common": {
     "save": "Speichern",
@@ -100,6 +156,15 @@
     "duration": "Dauer",
     "artist": "Künstler",
     "album": "Album",
-    "title": "Titel"
+    "title": "Titel",
+    "browse": "Durchsuchen",
+    "all": "Alle",
+    "filters": "Filter",
+    "clearFilters": "Filter löschen",
+    "done": "Fertig",
+    "saving": "Wird gespeichert...",
+    "loading": "Wird geladen...",
+    "retry": "Erneut versuchen",
+    "error": "Fehler"
   }
 }

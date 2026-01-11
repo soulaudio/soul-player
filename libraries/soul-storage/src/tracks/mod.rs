@@ -954,6 +954,31 @@ pub async fn update_file_metadata(
     Ok(())
 }
 
+/// Update artist and album for a track
+pub async fn update_artist_album(
+    pool: &SqlitePool,
+    track_id: i64,
+    artist_id: Option<ArtistId>,
+    album_id: Option<AlbumId>,
+) -> Result<()> {
+    sqlx::query!(
+        r#"
+        UPDATE tracks
+        SET artist_id = COALESCE(?, artist_id),
+            album_id = COALESCE(?, album_id),
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+        artist_id,
+        album_id,
+        track_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 /// Update track path after file relocation
 pub async fn update_file_path(
     pool: &SqlitePool,

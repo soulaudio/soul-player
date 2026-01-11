@@ -446,6 +446,37 @@ pub async fn unshare_playlist(
     Ok(())
 }
 
+/// Get playlist IDs that contain a specific track
+pub async fn get_playlists_containing_track(
+    pool: &SqlitePool,
+    track_id: TrackId,
+    user_id: UserId,
+) -> Result<Vec<PlaylistId>> {
+    // Convert TrackId (String) to i64 for database
+    let track_id_i64: i64 = track_id
+        .as_str()
+        .parse()
+        .map_err(|_| soul_core::SoulError::InvalidInput("Invalid track ID".to_string()))?;
+
+    let rows = sqlx::query!(
+        r#"
+        SELECT DISTINCT p.id
+        FROM playlists p
+        INNER JOIN playlist_tracks pt ON p.id = pt.playlist_id
+        LEFT JOIN playlist_shares ps ON p.id = ps.playlist_id
+        WHERE pt.track_id = ?
+          AND (p.owner_id = ? OR ps.shared_with_user_id = ? OR p.is_public = 1)
+        "#,
+        track_id_i64,
+        user_id,
+        user_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|row| PlaylistId::new(row.id)).collect())
+}
+
 // Helper functions
 
 async fn check_write_permission(

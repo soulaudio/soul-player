@@ -5,7 +5,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Kbd } from '@soul-player/shared'
+import { Kbd, useTranslation } from '@soul-player/shared'
 import { ThemePicker } from '@soul-player/shared/theme'
 import {
   Settings,
@@ -21,18 +21,19 @@ type SettingsTab = 'general' | 'audio' | 'shortcuts' | 'about'
 
 interface NavItem {
   id: SettingsTab
-  label: string
+  labelKey: string
   icon: React.ComponentType<{ className?: string }>
 }
 
 const navigationItems: NavItem[] = [
-  { id: 'general', label: 'General', icon: Settings },
-  { id: 'audio', label: 'Audio', icon: Volume2 },
-  { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
-  { id: 'about', label: 'About', icon: Info },
+  { id: 'general', labelKey: 'settings.general', icon: Settings },
+  { id: 'audio', labelKey: 'settings.audio.title', icon: Volume2 },
+  { id: 'shortcuts', labelKey: 'settings.shortcuts', icon: Keyboard },
+  { id: 'about', labelKey: 'settings.about', icon: Info },
 ]
 
 export function SettingsPage() {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -63,7 +64,7 @@ export function SettingsPage() {
                     `}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span>{item.label}</span>
+                    <span>{t(item.labelKey)}</span>
                   </button>
                 </li>
               )
@@ -81,7 +82,7 @@ export function SettingsPage() {
           >
             <div className="flex items-center gap-3">
               {activeItem && <activeItem.icon className="w-5 h-5" />}
-              <span className="font-medium">{activeItem?.label}</span>
+              <span className="font-medium">{activeItem ? t(activeItem.labelKey) : ''}</span>
             </div>
             <ChevronDown
               className={`w-5 h-5 text-muted-foreground transition-transform ${
@@ -115,7 +116,7 @@ export function SettingsPage() {
                     `}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span>{item.label}</span>
+                    <span>{t(item.labelKey)}</span>
                   </button>
                 )
               })}
@@ -139,14 +140,15 @@ export function SettingsPage() {
 
 // General Settings Tab Content - matches desktop structure
 function GeneralSettings() {
+  const { t } = useTranslation()
   return (
     <div className="space-y-8">
       {/* Appearance Section */}
       <section>
-        <h2 className="text-xl font-semibold mb-4">Appearance</h2>
+        <h2 className="text-xl font-semibold mb-4">{t('settings.appearance')}</h2>
         <div className="space-y-6">
           <div>
-            <label className="block text-sm font-medium mb-2">Theme</label>
+            <label className="block text-sm font-medium mb-2">{t('settings.theme')}</label>
             <ThemePicker
               showImportExport={false}
               showAccessibilityInfo={true}
@@ -154,7 +156,7 @@ function GeneralSettings() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Language</label>
+            <label className="block text-sm font-medium mb-2">{t('settings.language')}</label>
             <select
               className="w-full max-w-xs px-3 py-2 rounded-lg bg-muted opacity-60 cursor-not-allowed"
               defaultValue="en-US"
@@ -165,7 +167,7 @@ function GeneralSettings() {
               <option value="ja">日本語</option>
             </select>
             <p className="text-xs text-muted-foreground mt-1">
-              Language selection available in desktop app
+              {t('settings.demoDisabled')}
             </p>
           </div>
 
@@ -178,9 +180,9 @@ function GeneralSettings() {
                 disabled
               />
               <div>
-                <span className="text-sm font-medium block">Show keyboard shortcuts</span>
+                <span className="text-sm font-medium block">{t('settings.showShortcuts')}</span>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Display keyboard shortcuts in tooltips and UI elements. For example: <Kbd keys={['mod', 'k']} size="sm" />
+                  {t('settings.showShortcutsDescription')} <Kbd keys={['mod', 'k']} size="sm" />
                 </p>
               </div>
             </label>
@@ -190,7 +192,7 @@ function GeneralSettings() {
 
       {/* Updates Section */}
       <section>
-        <h2 className="text-xl font-semibold mb-4">Updates</h2>
+        <h2 className="text-xl font-semibold mb-4">{t('settings.updates')}</h2>
         <div className="space-y-4">
           <label className="flex items-center space-x-3 cursor-not-allowed opacity-60">
             <input
@@ -199,7 +201,7 @@ function GeneralSettings() {
               className="w-4 h-4"
               disabled
             />
-            <span className="text-sm">Automatically check for updates</span>
+            <span className="text-sm">{t('settings.autoUpdate')}</span>
           </label>
 
           <label className="flex items-center space-x-3 cursor-not-allowed opacity-60">
@@ -209,17 +211,17 @@ function GeneralSettings() {
               className="w-4 h-4"
               disabled
             />
-            <span className="text-sm">Install updates silently in background</span>
+            <span className="text-sm">{t('settings.silentUpdate')}</span>
           </label>
 
           <button
             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg opacity-50 cursor-not-allowed"
             disabled
           >
-            Check for Updates
+            {t('settings.checkNow')}
           </button>
           <p className="text-xs text-muted-foreground">
-            Update checking available in desktop app
+            {t('settings.demoDisabled')}
           </p>
         </div>
       </section>
@@ -229,12 +231,13 @@ function GeneralSettings() {
 
 // Audio Settings - Pipeline-based layout matching desktop
 function AudioSettings() {
+  const { t } = useTranslation()
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Audio</h1>
+          <h1 className="text-3xl font-bold mb-2">{t('settings.audio.title')}</h1>
           <p className="text-muted-foreground">
             Configure your audio processing pipeline stage by stage
           </p>
@@ -502,21 +505,22 @@ function PipelineStage({
 
 // Shortcuts Settings - matches desktop ShortcutsSettings structure
 function ShortcutsSettings() {
+  const { t } = useTranslation()
   const shortcuts = [
-    { action: 'play_pause', label: 'Play / Pause', keys: ['space'] },
-    { action: 'next', label: 'Next Track', keys: ['mod', 'right'] },
-    { action: 'previous', label: 'Previous Track', keys: ['mod', 'left'] },
-    { action: 'volume_up', label: 'Volume Up', keys: ['mod', 'up'] },
-    { action: 'volume_down', label: 'Volume Down', keys: ['mod', 'down'] },
-    { action: 'mute', label: 'Mute', keys: ['mod', 'm'] },
-    { action: 'toggle_shuffle', label: 'Toggle Shuffle', keys: ['mod', 's'] },
-    { action: 'toggle_repeat', label: 'Toggle Repeat', keys: ['mod', 'r'] },
+    { action: 'play_pause', labelKey: 'shortcuts.playPause', keys: ['space'] },
+    { action: 'next', labelKey: 'shortcuts.next', keys: ['mod', 'right'] },
+    { action: 'previous', labelKey: 'shortcuts.previous', keys: ['mod', 'left'] },
+    { action: 'volume_up', labelKey: 'shortcuts.volumeUp', keys: ['mod', 'up'] },
+    { action: 'volume_down', labelKey: 'shortcuts.volumeDown', keys: ['mod', 'down'] },
+    { action: 'mute', labelKey: 'shortcuts.mute', keys: ['mod', 'm'] },
+    { action: 'toggle_shuffle', labelKey: 'shortcuts.toggleShuffle', keys: ['mod', 's'] },
+    { action: 'toggle_repeat', labelKey: 'shortcuts.toggleRepeat', keys: ['mod', 'r'] },
   ]
 
   return (
     <div className="max-w-2xl">
       <div className="mb-6">
-        <h2 className="text-2xl font-semibold mb-2">Shortcuts</h2>
+        <h2 className="text-2xl font-semibold mb-2">{t('settings.shortcuts')}</h2>
         <p className="text-sm text-muted-foreground">
           Configure keyboard shortcuts for playback control. Shortcuts only work when the app is focused and are disabled when typing in text fields.
         </p>
@@ -530,7 +534,7 @@ function ShortcutsSettings() {
               index !== shortcuts.length - 1 ? 'border-b border-border' : ''
             }`}
           >
-            <span className="text-sm font-medium">{shortcut.label}</span>
+            <span className="text-sm font-medium">{t(shortcut.labelKey)}</span>
             <button
               className="min-w-[120px] px-3 py-1.5 rounded-md text-sm bg-muted cursor-not-allowed opacity-70"
               disabled
@@ -545,10 +549,10 @@ function ShortcutsSettings() {
         className="px-4 py-2 border border-border rounded-lg opacity-50 cursor-not-allowed text-sm"
         disabled
       >
-        Reset to Defaults
+        {t('settings.resetShortcuts')}
       </button>
       <p className="text-xs text-muted-foreground mt-2">
-        Custom shortcuts available in desktop app
+        {t('settings.demoDisabled')}
       </p>
     </div>
   )
@@ -556,6 +560,7 @@ function ShortcutsSettings() {
 
 // About Settings - matches desktop structure
 function AboutSettings() {
+  const { t } = useTranslation()
   return (
     <div className="space-y-8">
       <section>
@@ -564,19 +569,19 @@ function AboutSettings() {
             <Volume2 className="w-7 h-7 text-primary" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold">Soul Player</h3>
+            <h3 className="text-lg font-semibold">{t('app.title')}</h3>
             <p className="text-sm text-muted-foreground">
-              Version 0.1.0 (Demo)
+              {t('settings.version')} 0.1.0 (Demo)
             </p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          A local-first music player with high-quality audio processing pipeline. Download the desktop app for the full experience.
+          {t('settings.aboutDescription')}
         </p>
       </section>
 
       <section>
-        <h2 className="text-sm font-medium mb-3">Features</h2>
+        <h2 className="text-sm font-medium mb-3">{t('marketing.features.title')}</h2>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-center gap-2">
             <span className="text-green-500">✓</span>
@@ -606,7 +611,7 @@ function AboutSettings() {
       </section>
 
       <section>
-        <h2 className="text-sm font-medium mb-3">Links</h2>
+        <h2 className="text-sm font-medium mb-3">{t('settings.links')}</h2>
         <div className="space-y-2">
           <a
             href={GITHUB_REPO}
@@ -614,7 +619,7 @@ function AboutSettings() {
             rel="noopener noreferrer"
             className="block text-sm text-primary hover:underline"
           >
-            GitHub Repository
+            {t('settings.github')}
           </a>
           <a
             href="https://soulplayer.app"
@@ -622,7 +627,7 @@ function AboutSettings() {
             rel="noopener noreferrer"
             className="block text-sm text-primary hover:underline"
           >
-            Website
+            {t('settings.website')}
           </a>
         </div>
       </section>

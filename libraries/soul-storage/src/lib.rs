@@ -60,6 +60,7 @@ pub mod fingerprint_queue;
 
 // Multi-device sync
 pub mod devices;
+pub mod playback_contexts;
 pub mod playback_state;
 
 // Audio analysis

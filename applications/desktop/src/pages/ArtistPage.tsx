@@ -2,10 +2,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { TrackList, type Track, type QueueTrack } from '@soul-player/shared';
+import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks } from '@soul-player/shared';
 import { AlbumGrid, type Album } from '../components/AlbumGrid';
 import { TrackMenu } from '../components/TrackMenu';
 import { ArrowLeft, Users, Play, Disc3, Music } from 'lucide-react';
+import { usePlaybackContext } from '../hooks/usePlaybackContext';
 
 interface Artist {
   id: number;
@@ -21,12 +22,18 @@ interface DesktopTrack extends Track {
   duration_seconds?: number;
   file_path?: string;
   year?: number;
+  // Audio format info
+  file_format?: string;
+  bit_rate?: number;
+  sample_rate?: number;
+  channels?: number;
 }
 
 export function ArtistPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { recordContext } = usePlaybackContext();
 
   const [artist, setArtist] = useState<Artist | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -66,30 +73,53 @@ export function ArtistPage() {
     }
   };
 
-  const buildQueue = useCallback((_allTracks: Track[], clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
-    const validTracks = tracks.filter((t) => t.file_path);
-    const validClickedIndex = validTracks.findIndex(t => t.id === clickedTrack.id);
+  const buildQueue = useCallback((allTracks: Track[], clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
+    // allTracks is already deduplicated by TrackList's internal grouping
+    // We need to map back to DesktopTrack to get file_path
+    const trackMap = new Map(tracks.map(t => [String(t.id), t]));
+
+    // Filter to only tracks we have file_path for
+    const validTracks = allTracks.filter(t => {
+      const desktopTrack = trackMap.get(String(t.id));
+      return desktopTrack?.file_path;
+    });
+
+    const validClickedIndex = validTracks.findIndex(t => String(t.id) === String(clickedTrack.id));
     if (validClickedIndex === -1) return [];
+
+    // Record playback context when playing from artist
+    if (artist) {
+      recordContext({
+        contextType: 'artist',
+        contextId: String(artist.id),
+        contextName: artist.name,
+        contextArtworkPath: null, // Artists don't have artwork yet
+      });
+    }
 
     return [
       ...validTracks.slice(validClickedIndex),
       ...validTracks.slice(0, validClickedIndex),
-    ].map((t) => ({
-      trackId: String(t.id),
-      title: String(t.title || 'Unknown'),
-      artist: t.artist_name || 'Unknown Artist',
-      album: t.album_title || null,
-      filePath: t.file_path!,
-      durationSeconds: t.duration_seconds || null,
-      trackNumber: t.trackNumber || null,
-    }));
-  }, [tracks]);
+    ].map((t) => {
+      const desktopTrack = trackMap.get(String(t.id))!;
+      return {
+        trackId: String(t.id),
+        title: String(t.title || 'Unknown'),
+        artist: desktopTrack.artist_name || 'Unknown Artist',
+        album: desktopTrack.album_title || null,
+        filePath: desktopTrack.file_path!,
+        durationSeconds: desktopTrack.duration_seconds || null,
+        trackNumber: desktopTrack.trackNumber || null,
+      };
+    });
+  }, [tracks, artist, recordContext]);
 
   const handlePlayAll = async () => {
-    const validTracks = tracks.filter(t => t.file_path);
-    if (validTracks.length === 0) return;
+    // Deduplicate tracks (selects best quality version for each unique track)
+    const deduplicatedTracks = getDeduplicatedTracks(tracks.filter(t => t.file_path));
+    if (deduplicatedTracks.length === 0) return;
 
-    const queue = validTracks.map((t) => ({
+    const queue = deduplicatedTracks.map((t) => ({
       trackId: String(t.id),
       title: String(t.title || 'Unknown'),
       artist: t.artist_name || 'Unknown Artist',
@@ -100,14 +130,19 @@ export function ArtistPage() {
     }));
 
     try {
+      // Record playback context
+      if (artist) {
+        await recordContext({
+          contextType: 'artist',
+          contextId: String(artist.id),
+          contextName: artist.name,
+          contextArtworkPath: null,
+        });
+      }
       await invoke('play_queue', { queue, startIndex: 0 });
     } catch (err) {
       console.error('Failed to play all tracks:', err);
     }
-  };
-
-  const handleAlbumPlay = async (album: Album) => {
-    navigate(`/albums/${album.id}`);
   };
 
   if (loading) {
@@ -199,7 +234,7 @@ export function ArtistPage() {
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {activeTab === 'albums' && (
-          <AlbumGrid albums={albums} onPlay={handleAlbumPlay} />
+          <AlbumGrid albums={albums} />
         )}
 
         {activeTab === 'tracks' && (
@@ -212,6 +247,10 @@ export function ArtistPage() {
               duration: t.duration_seconds,
               trackNumber: t.trackNumber,
               isAvailable: !!t.file_path,
+              format: t.file_format,
+              bitrate: t.bit_rate,
+              sampleRate: t.sample_rate,
+              channels: t.channels,
             }))}
             buildQueue={buildQueue}
             onTrackAction={() => {}}

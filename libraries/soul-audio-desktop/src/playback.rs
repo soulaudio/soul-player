@@ -17,6 +17,135 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// This is updated by audio_callback_i32 and read by send_command for debugging
 static GLOBAL_I32_CALLBACK_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Stream-level fade envelope to prevent clicks/pops at audio stream start
+///
+/// When a CPAL audio stream first starts, the DAC may be in an undefined state.
+/// Jumping directly to audio output can cause a hardware-level pop.
+/// This envelope applies a 30ms fade at stream start to let the DAC settle.
+///
+/// See: https://www.kernel.org/doc/html/v4.13/sound/soc/pops-clicks.html
+struct StreamStartEnvelope {
+    /// Current position in the fade (in stereo samples)
+    position: usize,
+    /// Total duration of fade (in stereo samples)
+    duration: usize,
+    /// Whether fade has completed
+    completed: bool,
+}
+
+/// Stream start fade duration in milliseconds (30ms recommended by Linux kernel docs)
+const STREAM_START_FADE_MS: u32 = 30;
+
+impl StreamStartEnvelope {
+    /// Create a new stream start envelope for the given sample rate
+    fn new(sample_rate: u32, channels: u16) -> Self {
+        // Calculate duration in samples: sample_rate * duration_ms / 1000 * channels
+        let duration = ((sample_rate as u64 * STREAM_START_FADE_MS as u64 * channels as u64) / 1000) as usize;
+        Self {
+            position: 0,
+            duration,
+            completed: false,
+        }
+    }
+
+    /// Apply the stream start envelope to an audio buffer
+    ///
+    /// Uses a smooth S-curve for natural-sounding fade.
+    /// Returns true if the fade is still active, false if completed.
+    #[inline]
+    fn process(&mut self, buffer: &mut [f32]) -> bool {
+        if self.completed {
+            return false;
+        }
+
+        // Debug: log first buffer
+        if self.position == 0 {
+            eprintln!(
+                "[StreamEnvelope] Processing FIRST buffer: {} samples, duration: {} samples",
+                buffer.len(),
+                self.duration
+            );
+            if buffer.len() >= 4 {
+                eprintln!(
+                    "[StreamEnvelope] Input samples: [{:.6}, {:.6}, {:.6}, {:.6}]",
+                    buffer[0], buffer[1], buffer[2], buffer[3]
+                );
+            }
+        }
+
+        let remaining = self.duration.saturating_sub(self.position);
+        let samples_to_process = buffer.len().min(remaining);
+
+        // Apply S-curve fade (smoother than linear)
+        // S-curve: (1 - cos(π * t)) / 2
+        for i in 0..samples_to_process {
+            let progress = (self.position + i) as f32 / self.duration as f32;
+            // S-curve formula for smooth start and end
+            let gain = (1.0 - (std::f32::consts::PI * progress).cos()) * 0.5;
+            buffer[i] *= gain;
+        }
+
+        self.position += samples_to_process;
+
+        if self.position >= self.duration {
+            self.completed = true;
+            eprintln!("[StreamEnvelope] Fade COMPLETED after {} samples", self.position);
+        }
+
+        !self.completed
+    }
+
+    /// Process i32 buffer (for ASIO)
+    #[inline]
+    fn process_i32(&mut self, buffer: &mut [i32]) -> bool {
+        if self.completed {
+            return false;
+        }
+
+        let remaining = self.duration.saturating_sub(self.position);
+        let samples_to_process = buffer.len().min(remaining);
+
+        for i in 0..samples_to_process {
+            let progress = (self.position + i) as f32 / self.duration as f32;
+            let gain = (1.0 - (std::f32::consts::PI * progress).cos()) * 0.5;
+            buffer[i] = (buffer[i] as f32 * gain) as i32;
+        }
+
+        self.position += samples_to_process;
+
+        if self.position >= self.duration {
+            self.completed = true;
+        }
+
+        !self.completed
+    }
+
+    /// Process i16 buffer
+    #[inline]
+    fn process_i16(&mut self, buffer: &mut [i16]) -> bool {
+        if self.completed {
+            return false;
+        }
+
+        let remaining = self.duration.saturating_sub(self.position);
+        let samples_to_process = buffer.len().min(remaining);
+
+        for i in 0..samples_to_process {
+            let progress = (self.position + i) as f32 / self.duration as f32;
+            let gain = (1.0 - (std::f32::consts::PI * progress).cos()) * 0.5;
+            buffer[i] = (buffer[i] as f32 * gain) as i16;
+        }
+
+        self.position += samples_to_process;
+
+        if self.position >= self.duration {
+            self.completed = true;
+        }
+
+        !self.completed
+    }
+}
+
 /// Drop guard for detecting when callback closures are dropped
 /// This helps diagnose ASIO stream issues where the callback is silently dropped
 struct CallbackDropGuard {
@@ -450,6 +579,8 @@ impl DesktopPlayback {
                 // Per-stream callback counter for logging
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
+                // Create stream start envelope for click-free startup (30ms fade)
+                let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
                 eprintln!(
                     "[CPAL] Creating F32 stream callback (stream_id: {:?})",
                     stream_id
@@ -467,6 +598,8 @@ impl DesktopPlayback {
                             callback_count,
                             stream_id,
                         );
+                        // Apply stream start envelope to prevent DAC pop
+                        stream_envelope.process(data);
                     },
                     |err| eprintln!("[CPAL] Audio stream error callback: {}", err),
                     None,
@@ -481,6 +614,8 @@ impl DesktopPlayback {
                 // Per-stream callback counter for logging
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
+                // Create stream start envelope for click-free startup (30ms fade)
+                let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
                 eprintln!(
                     "[CPAL] Creating I32 stream callback (stream_id: {:?})",
                     stream_id
@@ -515,6 +650,8 @@ impl DesktopPlayback {
                             callback_count,
                             stream_id,
                         );
+                        // Apply stream start envelope to prevent DAC pop
+                        stream_envelope.process_i32(data);
                     },
                     move |err| {
                         eprintln!("[CPAL] !!! AUDIO STREAM ERROR CALLBACK !!!");
@@ -534,6 +671,8 @@ impl DesktopPlayback {
                 // Per-stream callback counter for logging
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
+                // Create stream start envelope for click-free startup (30ms fade)
+                let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
                 eprintln!(
                     "[CPAL] Creating I16 stream callback (stream_id: {:?})",
                     stream_id
@@ -557,6 +696,8 @@ impl DesktopPlayback {
                             callback_count,
                             stream_id,
                         );
+                        // Apply stream start envelope to prevent DAC pop
+                        stream_envelope.process_i16(data);
                     },
                     |err| eprintln!("[CPAL] Audio stream error callback: {}", err),
                     None,

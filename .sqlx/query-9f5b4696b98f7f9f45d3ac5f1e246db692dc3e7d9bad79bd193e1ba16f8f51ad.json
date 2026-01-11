@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM fingerprint_queue WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "9f5b4696b98f7f9f45d3ac5f1e246db692dc3e7d9bad79bd193e1ba16f8f51ad"
+}

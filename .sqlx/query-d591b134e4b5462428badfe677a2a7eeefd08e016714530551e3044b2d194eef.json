@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO play_history (user_id, track_id, play_duration_seconds, completed)\n        VALUES (?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "d591b134e4b5462428badfe677a2a7eeefd08e016714530551e3044b2d194eef"
+}

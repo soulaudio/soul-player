@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            pt.track_id, pt.position, pt.added_at,\n            t.title, t.duration_seconds,\n            ar.name as artist_name\n        FROM playlist_tracks pt\n        INNER JOIN tracks t ON pt.track_id = t.id\n        LEFT JOIN artists ar ON t.artist_id = ar.id\n        WHERE pt.playlist_id = ?\n        ORDER BY pt.position\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "track_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "position",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "added_at",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "duration_seconds",
+        "ordinal": 4,
+        "type_info": "Float"
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "69ac5226dc3ef4c4d3a55aa107a9ec089e855182e13fde093d8f5ab05801a14c"
+}

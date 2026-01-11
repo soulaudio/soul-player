@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, LayoutGroup } from 'framer-motion';
 import {
   Play,
   Pause,
@@ -16,10 +16,9 @@ import {
   VolumeX,
   Speaker,
   Check,
-  Upload,
-  FolderOpen,
   Settings,
   Music,
+  Heart,
 } from 'lucide-react';
 import { usePlayerStore } from '../stores/player';
 import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext';
@@ -33,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { cn } from '../lib/utils';
+import { usePlatform } from '../contexts/PlatformContext';
 
 interface NavItem {
   id: string;
@@ -60,8 +60,10 @@ interface AudioBackend {
 
 const navigationItems: NavItem[] = [
   { id: 'home', labelKey: 'nav.home', path: '/' },
-  { id: 'library', labelKey: 'nav.library', path: '/library' },
-  { id: 'discovery', labelKey: 'nav.discovery', path: '/discovery' },
+  { id: 'albums', labelKey: 'library.tab.albums', path: '/albums' },
+  { id: 'artists', labelKey: 'library.tab.artists', path: '/artists' },
+  { id: 'playlists', labelKey: 'library.tab.playlists', path: '/playlists' },
+  { id: 'tracks', labelKey: 'library.tab.tracks', path: '/tracks' },
 ];
 
 const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] = [
@@ -74,50 +76,55 @@ const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] 
   },
 ];
 
-interface LeftSidebarProps {
-  onImport?: () => void;
-  onOpenSources?: () => void;
-}
-
-// Unified track item component for consistent structure
+// Shared track item component with layoutId for animations
 interface TrackItemProps {
-  id: string | number;
+  trackId: string | number;
   title: string;
   artist: string;
   coverArtPath?: string;
   album?: string;
-  size: 'small' | 'large';
+  isLarge?: boolean;
   isPlaying?: boolean;
-  showPlayingIndicator?: boolean;
+  showEqualizer?: boolean;
   onClick?: () => void;
 }
 
-function TrackItem({ id, title, artist, coverArtPath, album, size, isPlaying, showPlayingIndicator, onClick }: TrackItemProps) {
-  const artworkSize = size === 'large' ? 'w-12 h-12' : 'w-8 h-8';
-  const gap = size === 'large' ? 'gap-3' : 'gap-2';
+function TrackItem({ trackId, title, artist, coverArtPath, album, isLarge, isPlaying, showEqualizer, onClick }: TrackItemProps) {
+  // Ensure consistent string conversion for layoutId matching
+  const layoutId = `sidebar-track-${String(trackId)}`;
 
   return (
     <motion.div
-      layoutId={`track-${id}`}
-      layout
-      className={cn("flex items-center", gap, onClick && "cursor-pointer")}
+      layoutId={layoutId}
+      layout="position"
+      className={cn(
+        "flex items-center group/track",
+        isLarge ? "gap-3" : "gap-2",
+        onClick && "cursor-pointer"
+      )}
       onClick={onClick}
       transition={{
-        layout: { duration: 0.4, ease: [0.4, 0, 0.2, 1] }
+        layout: {
+          type: "tween",
+          duration: 0.25,
+          ease: [0.4, 0, 0.2, 1], // Material Design standard easing
+        },
       }}
     >
-      <motion.div
-        layoutId={`artwork-${id}`}
-        className={cn(artworkSize, "bg-muted rounded overflow-hidden flex-shrink-0 relative")}
+      <div
+        className={cn(
+          "bg-muted rounded overflow-hidden flex-shrink-0 relative",
+          isLarge ? "w-12 h-12" : "w-8 h-8"
+        )}
       >
         <ArtworkImage
-          trackId={id}
+          trackId={trackId}
           coverArtPath={coverArtPath}
           alt={album || 'Album art'}
           className="w-full h-full object-cover"
           fallbackClassName="w-full h-full flex items-center justify-center"
         />
-        {showPlayingIndicator && isPlaying && (
+        {showEqualizer && isPlaying && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/30">
             <div className="flex items-end gap-[2px] h-3">
               <span className="w-[3px] bg-white rounded-full origin-bottom h-full animate-[equalize_0.8s_ease-in-out_infinite]" />
@@ -126,23 +133,33 @@ function TrackItem({ id, title, artist, coverArtPath, album, size, isPlaying, sh
             </div>
           </div>
         )}
-      </motion.div>
-      <div className="flex-1 min-w-0">
-        <motion.div layoutId={`title-${id}`} className="text-sm truncate">
-          {title}
-        </motion.div>
-        <motion.div layoutId={`artist-${id}`} className="text-xs text-muted-foreground truncate">
-          {artist}
-        </motion.div>
+      </div>
+      <div
+        className={cn(
+          "flex-1 min-w-0",
+          onClick && "group-hover/track:text-foreground"
+        )}
+      >
+        <div className="text-sm truncate">{title}</div>
+        <div className={cn(
+          "text-xs truncate transition-colors",
+          onClick ? "text-muted-foreground/70 group-hover/track:text-muted-foreground" : "text-muted-foreground"
+        )}>{artist}</div>
       </div>
     </motion.div>
   );
 }
 
-export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
+interface LeftSidebarProps {
+  /** Callback when the "Add to Playlist" button is clicked */
+  onAddToPlaylist?: () => void;
+}
+
+export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { features } = usePlatform();
   const [queue, setQueue] = useState<QueueTrack[]>([]);
   const {
     currentTrack,
@@ -163,13 +180,23 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueScrollRef = useRef<HTMLDivElement>(null);
 
+  // Scroll queue to bottom (with requestAnimationFrame to ensure DOM is updated)
+  const scrollQueueToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (queueScrollRef.current) {
+        queueScrollRef.current.scrollTop = queueScrollRef.current.scrollHeight;
+      }
+    });
+  }, []);
+
   // Device selector state
   const [currentDevice, setCurrentDevice] = useState<AudioDevice | null>(null);
   const [backends, setBackends] = useState<AudioBackend[]>([]);
   const [devices, setDevices] = useState<Map<string, AudioDevice[]>>(new Map());
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
 
-  const isBrowserDemo = !commands?.getCurrentAudioDevice;
+  // Use feature flags to determine if real audio devices are available
+  const hasRealDevices = features.hasRealAudioDevices;
 
   useEffect(() => {
     loadQueue();
@@ -179,6 +206,17 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
     return unsubscribe;
   }, [commands, events]);
 
+  // Scroll queue to bottom when track changes
+  useEffect(() => {
+    const unsubscribe = events.onTrackChange(() => {
+      // Small delay to allow queue to update first
+      setTimeout(() => {
+        scrollQueueToBottom();
+      }, 50);
+    });
+    return unsubscribe;
+  }, [events, scrollQueueToBottom]);
+
   useEffect(() => {
     if (volume > 0 && !isMuted) {
       setVolumeBeforeMute(volume);
@@ -186,12 +224,12 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
   }, [volume, isMuted]);
 
   useEffect(() => {
-    if (isBrowserDemo) {
+    if (!hasRealDevices) {
       setCurrentDevice(MOCK_DEVICES[0].devices[0]);
     } else {
       loadCurrentDevice();
     }
-  }, [isBrowserDemo]);
+  }, [hasRealDevices]);
 
   const loadCurrentDevice = async () => {
     try {
@@ -204,7 +242,7 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
   };
 
   const loadDevices = async () => {
-    if (isBrowserDemo) {
+    if (!hasRealDevices) {
       const deviceMap = new Map<string, AudioDevice[]>();
       MOCK_DEVICES.forEach(mock => {
         deviceMap.set(mock.backend, mock.devices);
@@ -242,7 +280,7 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
   };
 
   const switchDevice = async (backend: string, deviceName: string) => {
-    if (isBrowserDemo) {
+    if (!hasRealDevices) {
       if (backend === 'System') {
         setCurrentDevice(MOCK_DEVICES[0].devices[0]);
       }
@@ -288,12 +326,6 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
   }, [isPlaying, commands]);
 
   const handlePrevious = useCallback(async () => {
-    if (queueScrollRef.current) {
-      queueScrollRef.current.scrollTo({
-        top: queueScrollRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
-    }
     try {
       await commands.skipPrevious();
     } catch (error) {
@@ -395,15 +427,21 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
     if (path === '/') {
       return location.pathname === '/';
     }
-    return location.pathname.startsWith(path);
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
-  // Filter out current track from queue and reverse
+  // Get current track ID for filtering
   const currentTrackId = currentTrack?.id;
-  const filteredQueue = queue.filter(t => String(t.trackId) !== String(currentTrackId));
-  const reversedQueue = [...filteredQueue].reverse();
 
-  const progressPercentage = duration ? (progress / duration) * 100 : 0;
+  // Filter out current track from queue, reverse so items closest to now playing are at bottom
+  const displayQueue = queue
+    .filter(t => String(t.trackId) !== String(currentTrackId))
+    .reverse();
+
+  // progress is already a percentage (0-100) from the store
+  const progressPercentage = progress;
+  // Calculate current position in seconds for time display
+  const currentPositionSeconds = duration > 0 ? (progress / 100) * duration : 0;
   const displayVolume = isMuted ? 0 : volume;
 
   const formatTime = (seconds: number) => {
@@ -413,52 +451,25 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Handle mouse wheel for volume control
+  const handleVolumeWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.05 : 0.05; // Scroll down = decrease, scroll up = increase
+    applyVolumeChange(volume + delta);
+  }, [volume, applyVolumeChange]);
+
   return (
     <div className="w-72 bg-card border-r border-border flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-end gap-1 px-3 py-2 border-b border-border">
-        <button
-          onClick={onImport}
-          disabled={!onImport}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Import Music"
-          title="Import Music"
-        >
-          <Upload className="w-4 h-4" />
-        </button>
-        <button
-          onClick={onOpenSources}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          aria-label="Manage Sources"
-          title="Manage Sources"
-        >
-          <FolderOpen className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => navigate('/settings')}
-          className={cn(
-            "p-1.5 rounded-lg transition-colors",
-            location.pathname === '/settings'
-              ? 'text-primary bg-accent'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-          )}
-          aria-label="Settings"
-          title="Settings"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
-      </div>
-
       {/* Navigation */}
-      <nav className="p-4">
-        <ul className="space-y-2">
+      <nav className="p-4 pt-6">
+        <ul className="space-y-1">
           {navigationItems.map((item) => (
             <li key={item.id}>
               <button
                 onClick={() => navigate(item.path)}
                 className={cn(
-                  "w-full text-left px-3 py-2 text-xl font-bold",
-                  isActive(item.path) ? 'text-primary' : 'text-muted-foreground'
+                  "w-full text-left px-3 py-2 text-xl font-bold transition-colors",
+                  isActive(item.path) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {t(item.labelKey)}
@@ -468,132 +479,151 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
         </ul>
       </nav>
 
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Queue + Now Playing */}
-      <div className="flex flex-col">
-        {/* Queue */}
-        <AnimatePresence mode="popLayout">
-          {reversedQueue.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="flex flex-col max-h-[40%] group/queue"
-            >
+      {/* Queue Section - can expand/contract */}
+      <div className="mt-auto flex flex-col">
+        <LayoutGroup>
+          {displayQueue.length > 0 && (
+            <div className="flex flex-col max-h-[40vh] group/queue">
               <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 {t('sidebar.queue')}
               </div>
-              <div
+              {/* Scrollable queue */}
+              <motion.div
                 ref={queueScrollRef}
-                className="overflow-y-auto px-4 queue-scrollbar"
+                layoutScroll
+                className="flex-1 overflow-y-auto px-4 pb-2 queue-scrollbar"
               >
-                {reversedQueue.map((track, reversedIndex) => {
-                  const originalIndex = queue.findIndex(q => q.trackId === track.trackId);
-                  return (
-                    <div key={track.trackId} className="py-1">
+                <div className="flex flex-col justify-end min-h-full gap-1">
+                  {displayQueue.map((track) => {
+                    const originalIndex = queue.findIndex(q => q.trackId === track.trackId);
+                    return (
                       <TrackItem
-                        id={track.trackId}
+                        key={String(track.trackId)}
+                        trackId={track.trackId}
                         title={track.title}
                         artist={track.artist}
                         coverArtPath={track.coverArtPath}
-                        album={track.album}
-                        size="small"
+                        album={track.album ?? undefined}
                         onClick={() => handleQueueItemClick(originalIndex)}
                       />
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            </div>
           )}
-        </AnimatePresence>
 
-        {/* Now Playing */}
-        <div className="p-4">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-            {t('sidebar.nowPlaying')}
-          </div>
+          {/* Now Playing Section - completely static, fixed at bottom */}
+          <div className="p-4">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+              {t('sidebar.nowPlaying')}
+            </div>
 
-          <div className="min-h-[48px]">
-            <AnimatePresence mode="wait">
-              {currentTrack ? (
-                <motion.div
-                  key={currentTrack.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                >
+            {/* Fixed height container for track item */}
+            <div className="h-12 flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                {currentTrack ? (
                   <TrackItem
-                    id={currentTrack.id}
+                    key={String(currentTrack.id)}
+                    trackId={currentTrack.id}
                     title={currentTrack.title}
                     artist={currentTrack.artist}
                     coverArtPath={currentTrack.coverArtPath}
                     album={currentTrack.album}
-                    size="large"
+                    isLarge
                     isPlaying={isPlaying}
-                    showPlayingIndicator
+                    showEqualizer
+                    onClick={() => navigate('/now-playing')}
                   />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="empty"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center gap-3 text-muted-foreground"
-                >
-                  <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-                    <Music className="w-6 h-6 opacity-50" />
+                ) : (
+                  <div className="flex items-center gap-3 text-muted-foreground h-12">
+                    <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                      <Music className="w-6 h-6 opacity-50" />
+                    </div>
+                    <span className="text-sm">{t('sidebar.noTrackPlaying')}</span>
                   </div>
-                  <span className="text-sm">{t('sidebar.noTrackPlaying')}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                )}
+              </div>
+              <button
+                onClick={onAddToPlaylist}
+                disabled={!currentTrack || !features.canCreatePlaylists}
+                className={cn(
+                  "p-1.5 transition-colors text-muted-foreground flex-shrink-0",
+                  currentTrack && features.canCreatePlaylists ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
+                )}
+                title={features.canCreatePlaylists
+                  ? t('playlist.addToPlaylist', 'Add to Playlist')
+                  : t('settings.demoDisabled', 'Available in desktop app')
+                }
+              >
+                <Heart className="w-4 h-4" />
+              </button>
+            </div>
 
-          {/* Controls */}
-          {currentTrack && (
+            {/* Controls */}
             <div className="mt-4 space-y-3">
               {/* Progress */}
               <div>
                 <div
-                  className="h-1 bg-muted rounded-full cursor-pointer overflow-hidden"
-                  onClick={handleSeek}
+                  className={cn(
+                    "py-2 -my-2",
+                    currentTrack ? "cursor-pointer" : "cursor-default"
+                  )}
+                  onClick={currentTrack ? handleSeek : undefined}
                 >
                   <div
-                    className="h-full bg-primary rounded-full transition-[width] duration-150"
-                    style={{ width: `${progressPercentage}%` }}
-                  />
+                    className={cn(
+                      "h-1.5 bg-muted rounded-full overflow-hidden",
+                      !currentTrack && "opacity-50"
+                    )}
+                  >
+                    <div
+                      className="h-full bg-primary rounded-full transition-[width] duration-150"
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
                 </div>
                 <div className="flex justify-between mt-1 text-[10px] text-muted-foreground font-mono">
-                  <span>{formatTime(progress)}</span>
+                  <span>{formatTime(currentPositionSeconds)}</span>
                   <span>{formatTime(duration)}</span>
                 </div>
               </div>
 
-              {/* Playback Controls */}
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  onClick={handleShuffleToggle}
-                  className={cn(
-                    "p-1.5 transition-colors",
-                    shuffleEnabled ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Shuffle className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={handlePrevious}
-                  className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <SkipBack className="w-4 h-4" />
-                </button>
+              {/* Playback Controls - Grid layout to keep play/pause centered */}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
+                {/* Left group */}
+                <div className="flex items-center justify-end gap-1">
+                  <button
+                    onClick={handleShuffleToggle}
+                    disabled={!currentTrack}
+                    className={cn(
+                      "p-1.5 transition-colors",
+                      !currentTrack && "opacity-50 cursor-not-allowed",
+                      shuffleEnabled ? 'text-primary' : 'text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground'
+                    )}
+                  >
+                    <Shuffle className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={handlePrevious}
+                    disabled={!currentTrack}
+                    className={cn(
+                      "p-1.5 text-muted-foreground transition-colors",
+                      currentTrack ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <SkipBack className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Center - Play/Pause */}
                 <button
                   onClick={handlePlayPause}
-                  className="w-8 h-8 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors flex items-center justify-center"
+                  disabled={!currentTrack}
+                  className={cn(
+                    "w-8 h-8 bg-primary text-primary-foreground rounded-full transition-colors flex items-center justify-center",
+                    currentTrack ? "hover:bg-primary/90" : "opacity-50 cursor-not-allowed"
+                  )}
                 >
                   {isPlaying ? (
                     <Pause className="w-4 h-4" />
@@ -601,32 +631,42 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
                     <Play className="w-4 h-4 translate-x-[1px]" />
                   )}
                 </button>
-                <button
-                  onClick={handleNext}
-                  className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <SkipForward className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleRepeatToggle}
-                  className={cn(
-                    "p-1.5 transition-colors",
-                    repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {repeatMode === 'one' ? <Repeat1 className="w-3.5 h-3.5" /> : <Repeat className="w-3.5 h-3.5" />}
-                </button>
+
+                {/* Right group */}
+                <div className="flex items-center justify-start gap-1">
+                  <button
+                    onClick={handleNext}
+                    disabled={!currentTrack}
+                    className={cn(
+                      "p-1.5 text-muted-foreground transition-colors",
+                      currentTrack ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <SkipForward className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleRepeatToggle}
+                    disabled={!currentTrack}
+                    className={cn(
+                      "p-1.5 transition-colors",
+                      !currentTrack && "opacity-50 cursor-not-allowed",
+                      repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground'
+                    )}
+                  >
+                    {repeatMode === 'one' ? <Repeat1 className="w-3.5 h-3.5" /> : <Repeat className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
 
               {/* Volume + Device */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" onWheel={handleVolumeWheel}>
                 <button
                   onClick={handleMuteToggle}
                   className="p-1 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                 </button>
-                <div className="flex-1 relative h-1">
+                <div className="flex-1 relative h-4 flex items-center cursor-pointer group">
                   <input
                     type="range"
                     min="0"
@@ -636,9 +676,9 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
                     onChange={handleVolumeChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                   />
-                  <div className="absolute inset-0 bg-muted rounded-full" />
+                  <div className="absolute inset-x-0 h-1 bg-muted rounded-full" />
                   <div
-                    className="absolute inset-y-0 left-0 bg-primary rounded-full"
+                    className="absolute left-0 h-1 bg-primary rounded-full"
                     style={{ width: `${displayVolume * 100}%` }}
                   />
                 </div>
@@ -666,7 +706,7 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
                     <DropdownMenuSeparator />
                     {isLoadingDevices ? (
                       <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
-                    ) : isBrowserDemo ? (
+                    ) : !hasRealDevices ? (
                       MOCK_DEVICES.map((mockBackend) => (
                         <div key={mockBackend.backend}>
                           <DropdownMenuLabel className="text-xs uppercase text-muted-foreground">
@@ -727,7 +767,23 @@ export function LeftSidebar({ onImport, onOpenSources }: LeftSidebarProps) {
                 </DropdownMenu>
               </div>
             </div>
-          )}
+          </div>
+        </LayoutGroup>
+
+        {/* Settings - bottom of sidebar */}
+        <div className="border-t border-border">
+          <button
+            onClick={() => navigate('/settings')}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors",
+              location.pathname === '/settings'
+                ? 'text-primary bg-accent/20'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
+            )}
+          >
+            <Settings className="w-4 h-4" />
+            <span>{t('nav.settings')}</span>
+          </button>
         </div>
       </div>
     </div>

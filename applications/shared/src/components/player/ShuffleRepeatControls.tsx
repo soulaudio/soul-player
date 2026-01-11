@@ -1,8 +1,15 @@
 import { usePlayerStore } from '../../stores/player';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
-import { Shuffle, Repeat, Repeat1 } from 'lucide-react';
+import { Shuffle, Repeat, Repeat1, Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
-export function ShuffleRepeatControls() {
+interface ShuffleRepeatControlsProps {
+  /** Callback when the "Add to Playlist" button is clicked */
+  onAddToPlaylist?: () => void;
+}
+
+export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControlsProps) {
+  const { t } = useTranslation();
   const { shuffleEnabled, repeatMode, toggleShuffle, setRepeatMode } = usePlayerStore();
   const commands = usePlayerCommands();
 
@@ -65,6 +72,18 @@ export function ShuffleRepeatControls() {
           <Repeat className="w-4 h-4" />
         )}
       </button>
+
+      {/* Add to Playlist button */}
+      {onAddToPlaylist && (
+        <button
+          onClick={onAddToPlaylist}
+          className="p-2 rounded-full transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label={t('playlist.addToPlaylist', 'Add to Playlist')}
+          title={t('playlist.addToPlaylist', 'Add to Playlist')}
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }

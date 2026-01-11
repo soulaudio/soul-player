@@ -1,14 +1,33 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { usePlayerStore } from '@soul-player/shared/stores/player';
-import { ArtworkImage, usePlayerCommands } from '@soul-player/shared';
-import { Play, Pause, SkipBack, SkipForward, Music, ListMusic, Users, Disc3, Guitar, Sparkles, Radio } from 'lucide-react';
+import { ArtworkImage, usePlayerCommands, getDeduplicatedTracks } from '@soul-player/shared';
+import { Play, Pause, SkipBack, SkipForward, Music, ListMusic, Users, Guitar, Library } from 'lucide-react';
+import { usePlaybackContext, type PlaybackContext, type ContextType } from '../hooks/usePlaybackContext';
+import { AlbumCard } from '../components/AlbumCard';
 
 export function HomePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { currentTrack, isPlaying } = usePlayerStore();
   const { resumePlayback, pausePlayback, skipNext, skipPrevious } = usePlayerCommands();
+  const { getRecentContexts } = usePlaybackContext();
+  const [recentContexts, setRecentContexts] = useState<PlaybackContext[]>([]);
 
   const hasPlayingTrack = currentTrack !== null;
+
+  useEffect(() => {
+    // Fetch recent playback contexts for "Jump back into" section
+    getRecentContexts(8)
+      .then((contexts) => {
+        setRecentContexts(contexts);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch recent contexts:', err);
+      });
+  }, [getRecentContexts]);
 
   const handlePlayPause = async () => {
     if (isPlaying) {
@@ -19,228 +38,269 @@ export function HomePage() {
   };
 
   return (
-    <div className="h-full flex flex-col space-y-8">
-      {/* Discovery Section - Always visible */}
-      <section>
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-bold">Discovery</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DiscoveryCard
-            icon={<Radio className="w-6 h-6" />}
-            title="Radio Stations"
-            subtitle="Coming soon"
-            disabled
-          />
-          <DiscoveryCard
-            icon={<Sparkles className="w-6 h-6" />}
-            title="Recommendations"
-            subtitle="Coming soon"
-            disabled
-          />
-          <DiscoveryCard
-            icon={<Music className="w-6 h-6" />}
-            title="New Releases"
-            subtitle="Coming soon"
-            disabled
-          />
-          <DiscoveryCard
-            icon={<ListMusic className="w-6 h-6" />}
-            title="Curated Playlists"
-            subtitle="Coming soon"
-            disabled
-          />
-        </div>
-      </section>
-
-      {/* Now Playing / Discovery Placeholder Section */}
-      <section>
+    <div className="h-full flex flex-col">
+      {/* Now Playing Section */}
+      <section className="mb-8">
         {hasPlayingTrack ? (
-          <>
-            <div className="flex items-center gap-2 mb-4">
-              <Music className="w-5 h-5 text-primary" />
-              <h2 className="text-xl font-bold">Now Playing</h2>
-            </div>
+          <div className="flex items-start gap-8">
+            {/* Large Album Artwork */}
             <div
+              className="w-64 h-64 rounded-lg overflow-hidden bg-muted flex-shrink-0 cursor-pointer shadow-lg hover:shadow-xl transition-shadow"
               onClick={() => navigate('/now-playing')}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && navigate('/now-playing')}
-              className="w-full bg-card rounded-xl p-6 border hover:border-primary hover:bg-accent/30 transition-all text-left group cursor-pointer"
             >
-              <div className="flex items-center gap-6">
-                {/* Album Artwork */}
-                <div className="w-32 h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                  <ArtworkImage
-                    trackId={currentTrack.id}
-                    coverArtPath={currentTrack.coverArtPath}
-                    alt={currentTrack.album || currentTrack.title}
-                    className="w-full h-full object-cover"
-                    fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
-                  />
-                </div>
-
-                {/* Track Info */}
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-2xl font-bold truncate group-hover:text-primary transition-colors">{currentTrack.title}</h3>
-                  <p className="text-lg text-muted-foreground truncate">{currentTrack.artist}</p>
-                  {currentTrack.album && (
-                    <p className="text-sm text-muted-foreground truncate mt-1">{currentTrack.album}</p>
-                  )}
-                </div>
-
-                {/* Playback Controls */}
-                <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={skipPrevious}
-                    className="p-3 rounded-full hover:bg-accent transition-colors"
-                    aria-label="Previous track"
-                  >
-                    <SkipBack className="w-6 h-6" />
-                  </button>
-                  <button
-                    onClick={handlePlayPause}
-                    className="p-4 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                    aria-label={isPlaying ? 'Pause' : 'Play'}
-                  >
-                    {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
-                  </button>
-                  <button
-                    onClick={skipNext}
-                    className="p-3 rounded-full hover:bg-accent transition-colors"
-                    aria-label="Next track"
-                  >
-                    <SkipForward className="w-6 h-6" />
-                  </button>
-                </div>
-              </div>
+              <ArtworkImage
+                trackId={currentTrack.id}
+                coverArtPath={currentTrack.coverArtPath}
+                alt={currentTrack.album || currentTrack.title}
+                className="w-full h-full object-cover"
+                fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
+              />
             </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 mb-4">
-              <Music className="w-5 h-5 text-muted-foreground" />
-              <h2 className="text-xl font-bold text-muted-foreground">Now Playing</h2>
-            </div>
-            <div className="bg-card/50 rounded-xl p-8 border border-dashed">
-              <div className="flex flex-col items-center justify-center text-center">
-                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                  <Music className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-medium text-muted-foreground">Nothing playing</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Select a track from your library to start listening
-                </p>
+
+            {/* Track Info and Controls */}
+            <div className="flex flex-col justify-center py-4">
+              <p className="text-sm text-muted-foreground mb-1">{t('sidebar.nowPlaying')}</p>
+              <h1
+                className="text-3xl font-bold mb-2 cursor-pointer hover:text-primary transition-colors"
+                onClick={() => navigate('/now-playing')}
+              >
+                {currentTrack.title}
+              </h1>
+              <p className="text-lg text-muted-foreground mb-1">{currentTrack.artist}</p>
+              {currentTrack.album && (
+                <p className="text-sm text-muted-foreground">{currentTrack.album}</p>
+              )}
+
+              {/* Playback Controls */}
+              <div className="flex items-center gap-3 mt-6">
                 <button
-                  onClick={() => navigate('/library')}
-                  className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                  onClick={skipPrevious}
+                  className="p-2 rounded-full hover:bg-accent/30 transition-colors"
+                  aria-label={t('playback.previous')}
                 >
-                  Browse Library
+                  <SkipBack className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={handlePlayPause}
+                  className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/80 transition-colors"
+                  aria-label={isPlaying ? t('playback.pause') : t('playback.play')}
+                >
+                  {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                </button>
+                <button
+                  onClick={skipNext}
+                  className="p-2 rounded-full hover:bg-accent/30 transition-colors"
+                  aria-label={t('playback.next')}
+                >
+                  <SkipForward className="w-5 h-5" />
                 </button>
               </div>
             </div>
-          </>
+          </div>
+        ) : (
+          /* Welcome Message */
+          <div className="py-12">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Music className="w-8 h-8 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold">{t('home.welcome')}</h1>
+                <p className="text-muted-foreground">{t('home.welcomeSubtitle')}</p>
+              </div>
+            </div>
+          </div>
         )}
       </section>
 
-      {/* Library Section - Merged categories */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Music className="w-5 h-5 text-primary" />
-            <h2 className="text-xl font-bold">Library</h2>
+      {/* Jump Back Into Section */}
+      {recentContexts.length > 0 && (
+        <section>
+          <h2 className="text-xl font-bold mb-4">{t('home.jumpBackInto')}</h2>
+          <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+            {recentContexts.map((context) =>
+              context.contextType === 'album' && context.contextId ? (
+                <AlbumCard
+                  key={context.id}
+                  album={{
+                    id: parseInt(context.contextId, 10),
+                    title: context.contextName || 'Unknown Album',
+                    artist_name: undefined,
+                    cover_art_path: context.contextArtworkPath ?? undefined,
+                  }}
+                  showArtist={false}
+                />
+              ) : (
+                <ContextCard key={context.id} context={context} />
+              )
+            )}
           </div>
-          <button
-            onClick={() => navigate('/library')}
-            className="text-sm text-primary hover:underline"
-          >
-            View All
-          </button>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <LibraryCard
-            icon={<ListMusic className="w-6 h-6" />}
-            title="Playlists"
-            onClick={() => navigate('/library?tab=playlists')}
-          />
-          <LibraryCard
-            icon={<Users className="w-6 h-6" />}
-            title="Artists"
-            onClick={() => navigate('/library?tab=artists')}
-          />
-          <LibraryCard
-            icon={<Disc3 className="w-6 h-6" />}
-            title="Albums"
-            onClick={() => navigate('/library?tab=albums')}
-          />
-          <LibraryCard
-            icon={<Guitar className="w-6 h-6" />}
-            title="Genres"
-            onClick={() => navigate('/library?tab=genres')}
-          />
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 }
 
-interface DiscoveryCardProps {
-  icon: React.ReactNode;
+/** Get icon for context type */
+function getContextIcon(contextType: ContextType) {
+  switch (contextType) {
+    case 'playlist':
+      return ListMusic;
+    case 'artist':
+      return Users;
+    case 'genre':
+      return Guitar;
+    case 'tracks':
+      return Library;
+    default:
+      return Music;
+  }
+}
+
+/** Get route for context */
+function getContextRoute(context: PlaybackContext): string {
+  switch (context.contextType) {
+    case 'playlist':
+      return `/playlists/${context.contextId}`;
+    case 'artist':
+      return `/artists/${context.contextId}`;
+    case 'genre':
+      return `/genres/${context.contextId}`;
+    case 'tracks':
+      return '/library';
+    default:
+      return '/library';
+  }
+}
+
+interface ContextCardProps {
+  context: PlaybackContext;
+}
+
+interface ContextTrack {
+  id: number;
   title: string;
-  subtitle?: string;
-  disabled?: boolean;
-  onClick?: () => void;
+  artist_name?: string;
+  album_title?: string;
+  file_path?: string;
+  duration_seconds?: number;
 }
 
-function DiscoveryCard({ icon, title, subtitle, disabled, onClick }: DiscoveryCardProps) {
+/** Card for non-album contexts (playlist, artist, genre, tracks) */
+function ContextCard({ context }: ContextCardProps) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { recordContext } = usePlaybackContext();
+  const Icon = getContextIcon(context.contextType);
+
+  /** Get context type label */
+  const getContextTypeLabel = (contextType: ContextType): string => {
+    switch (contextType) {
+      case 'playlist':
+        return t('library.playlist', 'Playlist');
+      case 'artist':
+        return t('library.artist', 'Artist');
+      case 'genre':
+        return t('library.genre', 'Genre');
+      case 'tracks':
+        return t('library.allTracks', 'All Tracks');
+      default:
+        return '';
+    }
+  };
+
+  /** Play all tracks from this context */
+  const handlePlay = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    try {
+      let tracks: ContextTrack[] = [];
+
+      switch (context.contextType) {
+        case 'playlist':
+          if (context.contextId) {
+            tracks = await invoke<ContextTrack[]>('get_playlist_tracks', {
+              playlistId: context.contextId,
+            });
+          }
+          break;
+        case 'artist':
+          if (context.contextId) {
+            tracks = await invoke<ContextTrack[]>('get_artist_tracks', {
+              artistId: parseInt(context.contextId, 10),
+            });
+          }
+          break;
+        case 'genre':
+          if (context.contextId) {
+            tracks = await invoke<ContextTrack[]>('get_genre_tracks', {
+              genreId: parseInt(context.contextId, 10),
+            });
+          }
+          break;
+        case 'tracks':
+          tracks = await invoke<ContextTrack[]>('get_all_tracks');
+          break;
+      }
+
+      // Deduplicate tracks (selects best quality version for each unique track)
+      const deduplicatedTracks = getDeduplicatedTracks(tracks.filter((t) => t.file_path));
+      if (deduplicatedTracks.length === 0) return;
+
+      const queue = deduplicatedTracks.map((t) => ({
+        trackId: String(t.id),
+        title: t.title || 'Unknown',
+        artist: t.artist_name || 'Unknown Artist',
+        album: t.album_title || null,
+        filePath: t.file_path!,
+        durationSeconds: t.duration_seconds || null,
+        trackNumber: null,
+      }));
+
+      await recordContext({
+        contextType: context.contextType,
+        contextId: context.contextId,
+        contextName: context.contextName,
+        contextArtworkPath: context.contextArtworkPath,
+      });
+
+      await invoke('play_queue', { queue, startIndex: 0 });
+    } catch (err) {
+      console.error('Failed to play context:', err);
+    }
+  };
+
+  const handleClick = () => {
+    navigate(getContextRoute(context));
+  };
+
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`p-4 rounded-xl border text-left transition-all ${
-        disabled
-          ? 'bg-muted/50 border-dashed opacity-60 cursor-not-allowed'
-          : 'bg-card hover:bg-accent hover:border-primary cursor-pointer'
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${disabled ? 'bg-muted' : 'bg-primary/10 text-primary'}`}>
-          {icon}
+    <div className="flex-shrink-0 w-40 cursor-pointer group">
+      <div
+        className="w-40 h-40 rounded-lg overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer"
+        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+      >
+        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 group-hover:from-primary/30 group-hover:to-primary/10 transition-colors">
+          <Icon className="w-16 h-16 text-primary/60" />
         </div>
-        <div>
-          <h3 className="font-medium">{title}</h3>
-          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-        </div>
+        {/* Play button - centered, smaller, visible on hover */}
+        <button
+          onClick={handlePlay}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200"
+          aria-label={t('playback.play')}
+        >
+          <Play className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" />
+        </button>
       </div>
-    </button>
-  );
-}
-
-interface LibraryCardProps {
-  icon: React.ReactNode;
-  title: string;
-  count?: number;
-  onClick?: () => void;
-}
-
-function LibraryCard({ icon, title, count, onClick }: LibraryCardProps) {
-  return (
-    <button
-      onClick={onClick}
-      className="p-4 rounded-xl bg-card border hover:bg-accent hover:border-primary transition-all text-left"
-    >
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10 text-primary">
-          {icon}
-        </div>
-        <div>
-          <h3 className="font-medium">{title}</h3>
-          {count !== undefined && (
-            <p className="text-xs text-muted-foreground">{count} items</p>
-          )}
-        </div>
-      </div>
-    </button>
+      <p className="font-medium truncate group-hover:text-primary transition-colors" onClick={handleClick}>
+        {context.contextName || t('common.unknown', 'Unknown')}
+      </p>
+      <p className="text-sm text-muted-foreground truncate" onClick={handleClick}>
+        {getContextTypeLabel(context.contextType)}
+      </p>
+    </div>
   );
 }

@@ -3,6 +3,11 @@
     "title": "Soul Player",
     "loading": "読み込み中..."
   },
+  "home": {
+    "welcome": "Soul Playerへようこそ",
+    "welcomeSubtitle": "ライブラリからトラックを選択して再生を開始",
+    "jumpBackInto": "最近聴いた曲"
+  },
   "nav": {
     "home": "ホーム",
     "library": "ライブラリ",
@@ -10,6 +15,14 @@
     "playlists": "プレイリスト",
     "settings": "設定",
     "import": "インポート"
+  },
+  "nowPlaying": {
+    "fromLibrary": "ライブラリから",
+    "playingFromAlbum": "アルバムから再生中",
+    "playingFromPlaylist": "プレイリストから再生中",
+    "playingFromArtist": "アーティストから再生中",
+    "playingFromGenre": "ジャンルから再生中",
+    "playingFromLibrary": "ライブラリから再生中"
   },
   "sidebar": {
     "nowPlaying": "再生中",
@@ -33,9 +46,40 @@
   "library": {
     "tracks": "トラック",
     "albums": "アルバム",
+    "album": "アルバム",
+    "artist": "アーティスト",
     "artists": "アーティスト",
+    "genre": "ジャンル",
+    "genres": "ジャンル",
+    "playlist": "プレイリスト",
+    "playlists": "プレイリスト",
+    "allTracks": "すべてのトラック",
     "noTracks": "ライブラリにトラックがありません",
-    "addTracks": "音楽を追加して始めましょう"
+    "noAlbums": "アルバムが見つかりません",
+    "noAlbumsHint": "音楽をインポートしてアルバムを表示",
+    "addTracks": "音楽を追加して始めましょう",
+    "source": "ソース",
+    "format": "フォーマット",
+    "cached": "キャッシュ済み",
+    "quickFilter": "クイックフィルター",
+    "noSearchResults": "結果が見つかりません",
+    "tryDifferentSearch": "別の検索語を試してください",
+    "databaseIssue": "データベースの問題が検出されました",
+    "loadFailed": "ライブラリの読み込みに失敗しました",
+    "deleteTrack": "トラックを削除",
+    "deleteTrackConfirm": "このトラックを削除してもよろしいですか？ライブラリから削除されます。",
+    "tab": {
+      "albums": "アルバム",
+      "playlists": "プレイリスト",
+      "artists": "アーティスト",
+      "tracks": "トラック"
+    },
+    "search": {
+      "albums": "アルバムを検索...",
+      "playlists": "プレイリストを検索...",
+      "artists": "アーティストを検索...",
+      "tracks": "トラックを検索..."
+    }
   },
   "settings": {
     "title": "設定",
@@ -87,8 +131,20 @@
     "name": "プレイリスト名",
     "description": "説明",
     "addTrack": "プレイリストに追加",
+    "addToPlaylist": "プレイリストに追加",
+    "addingTrack": "トラックを追加中",
+    "searchPlaylists": "プレイリストを検索...",
+    "createNew": "新しいプレイリストを作成",
+    "willRemove": "削除されます",
+    "noPlaylists": "プレイリストがありません",
+    "newPlaylistName": "新しいプレイリスト",
     "removeTrack": "プレイリストから削除",
     "deletePlaylist": "プレイリストを削除"
+  },
+  "librarySettings": {
+    "errors": {
+      "duplicatePath": "このフォルダはすでにライブラリに追加されています"
+    }
   },
   "common": {
     "save": "保存",
@@ -100,6 +156,15 @@
     "duration": "再生時間",
     "artist": "アーティスト",
     "album": "アルバム",
-    "title": "タイトル"
+    "title": "タイトル",
+    "browse": "参照",
+    "all": "すべて",
+    "filters": "フィルター",
+    "clearFilters": "フィルターをクリア",
+    "done": "完了",
+    "saving": "保存中...",
+    "loading": "読み込み中...",
+    "retry": "再試行",
+    "error": "エラー"
   }
 }

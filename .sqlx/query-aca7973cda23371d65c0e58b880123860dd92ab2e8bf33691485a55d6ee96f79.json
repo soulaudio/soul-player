@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT id, user_id, context_type, context_id, context_name, context_artwork_path, last_played_at\n        FROM playback_contexts\n        WHERE user_id = ? AND context_type = ? AND COALESCE(context_id, '') = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_type",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_name",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_artwork_path",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_played_at",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "aca7973cda23371d65c0e58b880123860dd92ab2e8bf33691485a55d6ee96f79"
+}

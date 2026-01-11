@@ -15,6 +15,7 @@
   "dependencies": {
     "@radix-ui/react-dropdown-menu": "^2.0.6",
     "@soul-player/shared": "workspace:*",
+    "@tanstack/react-virtual": "^3.13.18",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
     "i18next": "^23.7.0",

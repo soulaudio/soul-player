@@ -401,9 +401,13 @@ fn test_volume_linear_scaling() {
         44100,
     )));
 
+    // Process warmup audio to get past start fade (20ms = ~1764 samples at 44100Hz stereo)
+    let mut warmup = vec![0.0f32; 4096];
+    manager.process_audio(&mut warmup).ok();
+
     let mut buffer = vec![0.0f32; 1024];
 
-    // Test at 100% volume
+    // Test at 100% volume (now past fade period)
     manager.set_volume(100);
     manager.process_audio(&mut buffer).ok();
     let rms_100 = calculate_rms(&buffer);
@@ -413,6 +417,10 @@ fn test_volume_linear_scaling() {
         Duration::from_secs(5),
         44100,
     )));
+    // Process warmup for new source
+    let mut warmup = vec![0.0f32; 4096];
+    manager.process_audio(&mut warmup).ok();
+
     manager.set_volume(50);
     let mut buffer = vec![0.0f32; 1024];
     manager.process_audio(&mut buffer).ok();
@@ -454,6 +462,10 @@ fn test_unmute_restores_audio() {
         Duration::from_secs(5),
         44100,
     )));
+
+    // Process warmup to get past start fade (20ms = ~1764 samples at 44100Hz stereo)
+    let mut warmup = vec![0.0f32; 4096];
+    manager.process_audio(&mut warmup).ok();
 
     // Mute then unmute
     manager.mute();
@@ -536,6 +548,10 @@ fn test_volume_boundary_values() {
     )));
     manager.set_volume(100);
     assert_eq!(manager.get_volume(), 100);
+
+    // Process warmup to get past start fade (20ms = ~1764 samples at 44100Hz stereo)
+    let mut warmup = vec![0.0f32; 4096];
+    manager.process_audio(&mut warmup).ok();
 
     let mut buffer = vec![0.0f32; 1024];
     manager.process_audio(&mut buffer).ok();

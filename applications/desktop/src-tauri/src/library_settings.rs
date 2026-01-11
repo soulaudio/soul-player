@@ -116,7 +116,15 @@ pub async fn add_library_source(
         &create_source,
     )
     .await
-    .map_err(|e| format!("Failed to create library source: {}", e))?;
+    .map_err(|e| {
+        let err_str = e.to_string();
+        // Check for UNIQUE constraint violation on path
+        if err_str.contains("UNIQUE constraint failed") && err_str.contains("path") {
+            "DUPLICATE_PATH".to_string()
+        } else {
+            format!("Failed to create library source: {}", e)
+        }
+    })?;
 
     Ok(FrontendLibrarySource::from(source))
 }
@@ -145,9 +153,11 @@ pub async fn toggle_library_source(
 }
 
 /// Trigger a rescan of a specific library source
+/// If force_refresh is true, re-extracts metadata even for unchanged files
 #[tauri::command]
 pub async fn rescan_library_source(
     source_id: i64,
+    force_refresh: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let device_id = get_device_id();
@@ -163,7 +173,8 @@ pub async fn rescan_library_source(
         (*state.pool).clone(),
         state.user_id.clone(),
         device_id,
-    );
+    )
+    .force_metadata_refresh(force_refresh.unwrap_or(false));
 
     scanner
         .scan_source(&source)
@@ -174,15 +185,20 @@ pub async fn rescan_library_source(
 }
 
 /// Trigger a rescan of all enabled library sources
+/// If force_refresh is true, re-extracts metadata even for unchanged files
 #[tauri::command]
-pub async fn rescan_all_sources(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn rescan_all_sources(
+    force_refresh: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let device_id = get_device_id();
 
     let scanner = soul_importer::library_scanner::LibraryScanner::new(
         (*state.pool).clone(),
         state.user_id.clone(),
         device_id,
-    );
+    )
+    .force_metadata_refresh(force_refresh.unwrap_or(false));
 
     scanner
         .scan_all()

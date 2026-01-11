@@ -4,7 +4,6 @@ export { SettingsLayout } from './SettingsLayout';
 export { SettingsSidebar } from './SettingsSidebar';
 export { AudioSettingsPage } from './AudioSettingsPage';
 export { LibrarySettingsPage } from './LibrarySettingsPage';
-export { SourcesSettingsPage } from './SourcesSettingsPage';
 export { ImportToServerDialog } from './ImportToServerDialog';
 
 // Audio settings sub-components

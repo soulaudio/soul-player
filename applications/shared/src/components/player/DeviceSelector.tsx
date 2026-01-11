@@ -42,7 +42,7 @@ const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] 
   },
   {
     backend: 'WASAPI',
-    name: 'WASAPI (Desktop only)',
+    name: 'WASAPI',
     devices: [
       { name: 'Speakers (Realtek Audio)', backend: 'WASAPI', isDefault: false, sampleRate: 48000, channels: 2, isRunning: false },
       { name: 'Headphones (USB Audio)', backend: 'WASAPI', isDefault: false, sampleRate: 96000, channels: 2, isRunning: false },
@@ -50,7 +50,7 @@ const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] 
   },
   {
     backend: 'ASIO',
-    name: 'ASIO (Desktop only)',
+    name: 'ASIO',
     devices: [
       { name: 'Focusrite USB ASIO', backend: 'ASIO', isDefault: false, sampleRate: 192000, channels: 2, isRunning: false },
     ],
@@ -65,7 +65,7 @@ const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] 
  * - Dropdown menu with available devices
  * - Grouped by backend (Default, ASIO, JACK)
  * - Spotify-style design
- * - Shows mock devices with "(Desktop only)" in browser demo
+ * - Shows mock devices in browser demo
  * - Auto-updates when device sample rate changes
  */
 export function DeviceSelector() {

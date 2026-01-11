@@ -2,14 +2,26 @@
 
 import { useEffect, useState } from 'react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import { MainLayout } from '@soul-player/shared'
+import {
+  MainLayout,
+  initI18n,
+  PlatformProvider,
+  HomePage,
+  LibraryPage,
+  AlbumPage,
+  ArtistPage,
+  PlaylistPage,
+  NowPlayingPage,
+  SettingsPage,
+} from '@soul-player/shared'
 import { DemoPlayerCommandsProvider } from '@/providers/DemoPlayerCommandsProvider'
+import { DemoBackendProvider } from '@/providers/DemoBackendProvider'
 import { MockSettingsProvider } from './MockContexts'
-import { HomePage } from './HomePage'
-import { LibraryPage } from './LibraryPage'
-import { NowPlayingPage } from './NowPlayingPage'
-import { SettingsPage } from './SettingsPage'
+import { DemoInitializer } from './DemoInitializer'
 import { initializeDemoStorage } from '@/lib/demo/storage'
+
+// Initialize i18n for the demo
+initI18n()
 
 /**
  * Demo version of the Soul Player app for marketing showcase
@@ -69,23 +81,57 @@ export function DemoApp() {
     <div
       data-demo-container
       data-theme="dark"
-      className="bg-background text-foreground flex flex-col"
+      className="bg-background text-foreground flex flex-col overflow-hidden"
       style={{ width: 1200, height: 750 }}
     >
       <MemoryRouter initialEntries={['/']}>
-        <DemoPlayerCommandsProvider>
-          <MockSettingsProvider>
-            <MainLayout showKeyboardShortcuts={false}>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/library" element={<LibraryPage />} />
-                <Route path="/now-playing" element={<NowPlayingPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/search" element={<div className="text-center py-20 text-muted-foreground">Search Page (Demo)</div>} />
-              </Routes>
-            </MainLayout>
-          </MockSettingsProvider>
-        </DemoPlayerCommandsProvider>
+        <PlatformProvider
+          platform="web"
+          features={{
+            // Library features - disabled for web demo
+            canDeleteTracks: false,
+            canCreatePlaylists: false,
+            hasFilters: false,
+            hasHealthCheck: false,
+            hasVirtualization: false,
+            hasTrackMenu: false,
+            hasPlaybackContext: false,
+            // Settings features - disabled for web demo
+            hasLibrarySettings: false,
+            hasAudioSettings: false,
+            hasShortcutSettings: false,
+            hasUpdateSettings: false,
+            hasLanguageSettings: false,
+            hasThemeImportExport: false,
+            // Audio features - disabled for web demo
+            hasRealAudioDevices: false,
+            hasRealDeviceSelection: false,
+          }}
+        >
+          <DemoPlayerCommandsProvider>
+            <DemoBackendProvider>
+              <MockSettingsProvider>
+                <DemoInitializer>
+                  {/* Wrapper to ensure MainLayout fills available space */}
+                  <div className="flex-1 min-h-0 h-full">
+                    <MainLayout>
+                      <Routes>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/library" element={<LibraryPage />} />
+                        <Route path="/albums/:id" element={<AlbumPage />} />
+                        <Route path="/artists/:id" element={<ArtistPage />} />
+                        <Route path="/playlists/:id" element={<PlaylistPage />} />
+                        <Route path="/now-playing" element={<NowPlayingPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="/search" element={<div className="text-center py-20 text-muted-foreground">Search Page (Demo)</div>} />
+                      </Routes>
+                    </MainLayout>
+                  </div>
+                </DemoInitializer>
+              </MockSettingsProvider>
+            </DemoBackendProvider>
+          </DemoPlayerCommandsProvider>
+        </PlatformProvider>
       </MemoryRouter>
     </div>
   )

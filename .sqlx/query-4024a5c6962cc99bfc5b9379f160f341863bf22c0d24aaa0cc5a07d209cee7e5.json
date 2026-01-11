@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT id, track_id, priority, attempts, last_error, created_at\n        FROM fingerprint_queue\n        WHERE attempts < 3\n        ORDER BY priority DESC, created_at ASC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "track_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "priority",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "attempts",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_error",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 5,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "4024a5c6962cc99bfc5b9379f160f341863bf22c0d24aaa0cc5a07d209cee7e5"
+}

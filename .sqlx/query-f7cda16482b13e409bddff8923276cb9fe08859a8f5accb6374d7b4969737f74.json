@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT file_path\n        FROM tracks\n        WHERE content_hash = ? AND is_available = 1\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_path",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f7cda16482b13e409bddff8923276cb9fe08859a8f5accb6374d7b4969737f74"
+}

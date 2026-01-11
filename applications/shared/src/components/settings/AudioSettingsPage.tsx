@@ -3,12 +3,13 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import {
   AlertCircle,
   CheckCircle2,
   RotateCcw,
+  Volume2,
 } from 'lucide-react';
+import { usePlatform } from '../../contexts/PlatformContext';
 import { ConfirmDialog } from '../ui/Dialog';
 import { PipelineVisualization } from './audio/PipelineVisualization';
 import { PipelineStage } from './audio/PipelineStage';
@@ -57,7 +58,97 @@ export interface AudioSettings {
 }
 
 export function AudioSettingsPage() {
+  const { features } = usePlatform();
+
+  // If audio settings are not available (web demo), show a simplified view
+  if (!features.hasAudioSettings) {
+    return <AudioSettingsDemoView />;
+  }
+
+  return <AudioSettingsDesktop />;
+}
+
+// Demo view for web - shows audio features without Tauri integration
+function AudioSettingsDemoView() {
   const { t } = useTranslation();
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold mb-2">{t('settings.audio.title')}</h1>
+        <p className="text-muted-foreground">
+          Audio processing pipeline configuration
+        </p>
+      </div>
+
+      {/* Demo Pipeline Overview */}
+      <div className="bg-muted/30 rounded-lg p-6">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+            <Volume2 className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold">Professional Audio Pipeline</h3>
+            <p className="text-sm text-muted-foreground">
+              {t('settings.demoDisabled')}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FeatureCard
+              title="High-Quality Resampling"
+              description="r8brain and Rubato algorithms for sample rate conversion"
+            />
+            <FeatureCard
+              title="DSP Effects Chain"
+              description="4-slot parametric EQ, compressor, limiter, crossfeed"
+            />
+            <FeatureCard
+              title="Volume Leveling"
+              description="ReplayGain (track/album) and EBU R128 normalization"
+            />
+            <FeatureCard
+              title="Gapless Playback"
+              description="Seamless transitions with crossfade support"
+            />
+            <FeatureCard
+              title="ASIO & JACK Support"
+              description="Low-latency audio output on Windows and Linux"
+            />
+            <FeatureCard
+              title="Headroom Management"
+              description="Automatic clipping prevention during DSP processing"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeatureCard({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="bg-background rounded-lg p-4 border border-border">
+      <h4 className="font-medium text-sm">{title}</h4>
+      <p className="text-xs text-muted-foreground mt-1">{description}</p>
+    </div>
+  );
+}
+
+// Full audio settings for desktop with Tauri integration
+function AudioSettingsDesktop() {
+  const { t } = useTranslation();
+
+  // Dynamic import of invoke to avoid errors on web
+  const [invoke, setInvoke] = useState<typeof import('@tauri-apps/api/core').invoke | null>(null);
+
+  useEffect(() => {
+    import('@tauri-apps/api/core').then(mod => {
+      setInvoke(() => mod.invoke);
+    });
+  }, []);
 
   const [backends, setBackends] = useState<AudioBackend[]>([]);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -85,8 +176,10 @@ export function AudioSettingsPage() {
   const [showResetDialog, setShowResetDialog] = useState(false);
 
   useEffect(() => {
-    loadAudioSettings();
-  }, []);
+    if (invoke) {
+      loadAudioSettings();
+    }
+  }, [invoke]);
 
   // Auto-hide notification after 3 seconds
   useEffect(() => {
@@ -101,6 +194,8 @@ export function AudioSettingsPage() {
   };
 
   const loadAudioSettings = async () => {
+    if (!invoke) return;
+
     try {
       setLoading(true);
 
@@ -140,8 +235,8 @@ export function AudioSettingsPage() {
             crossfade_duration_ms: parsed.crossfade_duration_ms ?? 3000,
             crossfade_curve: parsed.crossfade_curve ?? 'equal_power',
           };
-          // Filter out 'disabled' which is no longer valid for resampling_quality
-          if (migrated.resampling_quality === 'disabled') {
+          // Filter out 'disabled' which is no longer valid for resampling_quality (migration from old settings)
+          if ((migrated.resampling_quality as string) === 'disabled') {
             migrated.resampling_quality = 'high';
           }
           setSettings(migrated);
@@ -165,6 +260,8 @@ export function AudioSettingsPage() {
   };
 
   const updateSettings = async (updates: Partial<AudioSettings>) => {
+    if (!invoke) return;
+
     const newSettings = { ...settings, ...updates };
     setSettings(newSettings);
 
@@ -179,6 +276,7 @@ export function AudioSettingsPage() {
   };
 
   const handleBackendChange = async (backend: 'default' | 'asio' | 'jack') => {
+    if (!invoke) return;
     updateSettings({ backend });
 
     // Reload devices for new backend
@@ -191,6 +289,7 @@ export function AudioSettingsPage() {
   };
 
   const handleDeviceChange = async (deviceName: string) => {
+    if (!invoke) return;
     updateSettings({ device_name: deviceName });
 
     try {
@@ -211,6 +310,7 @@ export function AudioSettingsPage() {
   };
 
   const loadDspChainCount = async () => {
+    if (!invoke) return;
     try {
       const chain = await invoke<{ effect: unknown }[]>('get_dsp_chain');
       setDspEffectCount(chain.filter(slot => slot.effect !== null).length);
@@ -221,10 +321,13 @@ export function AudioSettingsPage() {
   };
 
   useEffect(() => {
-    loadDspChainCount();
-  }, []);
+    if (invoke) {
+      loadDspChainCount();
+    }
+  }, [invoke]);
 
   const resetToDefaults = async () => {
+    if (!invoke) return;
     updateSettings({
       backend: 'default',
       device_name: null,
@@ -277,6 +380,7 @@ export function AudioSettingsPage() {
 
   // Handle preamp change
   const handlePreampChange = async (preampDb: number) => {
+    if (!invoke) return;
     updateSettings({ volume_leveling_preamp_db: preampDb });
     try {
       await invoke('set_volume_leveling_preamp', { preampDb });
@@ -287,6 +391,7 @@ export function AudioSettingsPage() {
 
   // Handle prevent clipping change
   const handlePreventClippingChange = async (prevent: boolean) => {
+    if (!invoke) return;
     updateSettings({ volume_leveling_prevent_clipping: prevent });
     try {
       await invoke('set_volume_leveling_prevent_clipping', { prevent });
@@ -301,6 +406,7 @@ export function AudioSettingsPage() {
     durationMs: number;
     curve: 'linear' | 'logarithmic' | 's_curve' | 'equal_power';
   }) => {
+    if (!invoke) return;
     // Update local state and persist to JSON settings
     updateSettings({
       crossfade_enabled: crossfade.enabled,
@@ -331,6 +437,7 @@ export function AudioSettingsPage() {
 
   // Handle resampling quality change
   const handleResamplingQualityChange = async (quality: 'fast' | 'balanced' | 'high' | 'maximum') => {
+    if (!invoke) return;
     // Update local state and persist to JSON
     updateSettings({ resampling_quality: quality });
 
@@ -346,6 +453,7 @@ export function AudioSettingsPage() {
 
   // Handle resampling target rate change
   const handleResamplingTargetRateChange = async (rate: 'auto' | number) => {
+    if (!invoke) return;
     // Update local state and persist to JSON
     updateSettings({ resampling_target_rate: rate });
 
@@ -363,6 +471,7 @@ export function AudioSettingsPage() {
 
   // Handle resampling backend change
   const handleResamplingBackendChange = async (backend: 'auto' | 'rubato' | 'r8brain') => {
+    if (!invoke) return;
     // Update local state and persist to JSON
     updateSettings({ resampling_backend: backend });
 
@@ -375,6 +484,15 @@ export function AudioSettingsPage() {
       showNotification('error', 'Failed to apply resampling backend');
     }
   };
+
+  // Show loading state while Tauri invoke is being loaded
+  if (!invoke) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-muted-foreground">Loading audio settings...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -402,7 +520,7 @@ export function AudioSettingsPage() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">{t('settings.audio')}</h1>
+          <h1 className="text-3xl font-bold mb-2">{t('settings.audio.title')}</h1>
           <p className="text-muted-foreground">
             Configure your audio processing pipeline stage by stage
           </p>
@@ -492,6 +610,7 @@ export function AudioSettingsPage() {
             preampDb={settings.volume_leveling_preamp_db}
             preventClipping={settings.volume_leveling_prevent_clipping}
             onModeChange={async (mode) => {
+              if (!invoke) return;
               // First apply to audio engine immediately
               try {
                 await invoke('set_volume_leveling_mode', { mode });

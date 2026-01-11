@@ -14,6 +14,269 @@ use crate::{
     volume::Volume,
 };
 
+/// Start/resume fade envelope for click-free playback transitions
+///
+/// Applies a short fade-in when playback starts or resumes to prevent
+/// audible clicks/pops from sudden amplitude changes.
+///
+/// **Key feature**: The fade is AMPLITUDE-TRIGGERED, not time-based.
+/// It waits for actual audio content (amplitude > threshold) before
+/// starting the fade. This handles MP3 encoder delay (~26ms of silence)
+/// that would otherwise "waste" a time-based fade.
+///
+/// The envelope includes:
+/// 1. Wait for audio detection - outputs zeros until signal detected
+/// 2. Fade-in period (20ms) - gradual amplitude increase with S-curve
+/// 3. DC blocker - removes any DC offset from decoded audio
+///
+/// The envelope is applied BEFORE volume and effects to ensure proper click prevention.
+struct StartFadeEnvelope {
+    /// Whether fade-in is currently active
+    active: bool,
+
+    /// Whether we've detected actual audio content yet
+    audio_detected: bool,
+
+    /// Current position in the fade (in stereo samples, starts after audio detected)
+    position_samples: usize,
+
+    /// Total duration of fade (in stereo samples)
+    duration_samples: usize,
+
+    /// Sample rate for duration calculations
+    sample_rate: u32,
+
+    /// DC blocker state (left channel)
+    dc_blocker_prev_input_l: f32,
+    dc_blocker_prev_output_l: f32,
+
+    /// DC blocker state (right channel)
+    dc_blocker_prev_input_r: f32,
+    dc_blocker_prev_output_r: f32,
+
+    /// Samples processed while waiting for audio (for timeout)
+    wait_samples: usize,
+
+    /// Maximum wait time before forcing fade start (in samples)
+    max_wait_samples: usize,
+}
+
+/// Default fade-in duration in milliseconds
+const START_FADE_DURATION_MS: u32 = 30;
+
+/// Audio detection threshold - amplitude above this triggers fade start
+/// Set to -34dB (0.02) to catch real musical content, not encoder delay junk
+const AUDIO_DETECT_THRESHOLD: f32 = 0.02;
+
+/// Maximum wait time for audio detection (ms) before forcing fade start
+/// Handles edge case of tracks that start with genuine silence
+const MAX_WAIT_MS: u32 = 200;
+
+/// DC blocker coefficient (0.995-0.9999, higher = less bass removal but slower response)
+const DC_BLOCKER_COEFF: f32 = 0.9975;
+
+impl StartFadeEnvelope {
+    /// Create a new start fade envelope
+    fn new(sample_rate: u32) -> Self {
+        Self {
+            active: false,
+            audio_detected: false,
+            position_samples: 0,
+            duration_samples: Self::calculate_duration_samples(sample_rate, START_FADE_DURATION_MS),
+            sample_rate,
+            dc_blocker_prev_input_l: 0.0,
+            dc_blocker_prev_output_l: 0.0,
+            dc_blocker_prev_input_r: 0.0,
+            dc_blocker_prev_output_r: 0.0,
+            wait_samples: 0,
+            max_wait_samples: Self::calculate_duration_samples(sample_rate, MAX_WAIT_MS),
+        }
+    }
+
+    /// Calculate duration in stereo samples from milliseconds
+    #[inline]
+    fn calculate_duration_samples(sample_rate: u32, duration_ms: u32) -> usize {
+        // duration_samples = sample_rate * duration_ms / 1000 * 2 (stereo)
+        ((sample_rate as u64 * duration_ms as u64 * 2) / 1000) as usize
+    }
+
+    /// Start a new fade-in
+    #[inline]
+    fn start(&mut self) {
+        self.active = true;
+        self.audio_detected = false;
+        self.position_samples = 0;
+        self.wait_samples = 0;
+        // Reset DC blocker state for clean start
+        self.dc_blocker_prev_input_l = 0.0;
+        self.dc_blocker_prev_output_l = 0.0;
+        self.dc_blocker_prev_input_r = 0.0;
+        self.dc_blocker_prev_output_r = 0.0;
+    }
+
+    /// Reset the envelope (stop any active fade)
+    #[inline]
+    fn reset(&mut self) {
+        self.active = false;
+        self.audio_detected = false;
+        self.position_samples = 0;
+        self.wait_samples = 0;
+    }
+
+    /// Update sample rate and recalculate duration
+    fn set_sample_rate(&mut self, sample_rate: u32) {
+        if self.sample_rate != sample_rate {
+            self.sample_rate = sample_rate;
+            self.duration_samples =
+                Self::calculate_duration_samples(sample_rate, START_FADE_DURATION_MS);
+            self.max_wait_samples = Self::calculate_duration_samples(sample_rate, MAX_WAIT_MS);
+        }
+    }
+
+    /// Check if fade is currently active
+    #[inline]
+    fn is_active(&self) -> bool {
+        self.active
+    }
+
+    /// Apply DC blocker to remove DC offset (first-order highpass)
+    /// Formula: y[n] = gain * (x[n] - x[n-1]) + beta * y[n-1]
+    #[inline]
+    fn dc_block_sample(&mut self, input_l: f32, input_r: f32) -> (f32, f32) {
+        const GAIN: f32 = (1.0 + DC_BLOCKER_COEFF) / 2.0;
+
+        let output_l = GAIN * (input_l - self.dc_blocker_prev_input_l)
+            + DC_BLOCKER_COEFF * self.dc_blocker_prev_output_l;
+        let output_r = GAIN * (input_r - self.dc_blocker_prev_input_r)
+            + DC_BLOCKER_COEFF * self.dc_blocker_prev_output_r;
+
+        self.dc_blocker_prev_input_l = input_l;
+        self.dc_blocker_prev_output_l = output_l;
+        self.dc_blocker_prev_input_r = input_r;
+        self.dc_blocker_prev_output_r = output_r;
+
+        (output_l, output_r)
+    }
+
+    /// Check if a sample pair contains actual audio content
+    #[inline]
+    fn is_audio_content(&self, left: f32, right: f32) -> bool {
+        left.abs() > AUDIO_DETECT_THRESHOLD || right.abs() > AUDIO_DETECT_THRESHOLD
+    }
+
+    /// Apply fade envelope to audio buffer (in-place)
+    ///
+    /// AMPLITUDE-TRIGGERED fade:
+    /// 1. Wait phase - outputs zeros until audio detected (amplitude > threshold)
+    /// 2. Fade phase - gradual amplitude increase with S-curve
+    /// 3. DC blocking throughout - removes any DC offset
+    ///
+    /// This handles MP3 encoder delay (~26ms silence) that would otherwise
+    /// "waste" a time-based fade.
+    ///
+    /// MUST be called BEFORE volume/effects processing.
+    ///
+    /// Returns the number of samples processed.
+    #[inline]
+    fn process(&mut self, buffer: &mut [f32]) -> usize {
+        if !self.active {
+            return buffer.len();
+        }
+
+        // Debug: log first process call
+        if self.wait_samples == 0 && self.position_samples == 0 {
+            eprintln!(
+                "[StartFade] Starting amplitude-triggered fade: fade duration {} samples ({:.1}ms), threshold {:.6}",
+                self.duration_samples,
+                self.duration_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0,
+                AUDIO_DETECT_THRESHOLD
+            );
+            if buffer.len() >= 4 {
+                eprintln!(
+                    "[StartFade] Input samples: [{:.6}, {:.6}, {:.6}, {:.6}]",
+                    buffer[0], buffer[1], buffer[2], buffer[3]
+                );
+            }
+        }
+
+        // Process stereo frames (2 samples per frame)
+        let frames = buffer.len() / 2;
+
+        for frame in 0..frames {
+            let left_idx = frame * 2;
+            let right_idx = frame * 2 + 1;
+
+            let input_l = buffer[left_idx];
+            let input_r = buffer[right_idx];
+
+            // Apply DC blocker first
+            let (blocked_l, blocked_r) = self.dc_block_sample(input_l, input_r);
+
+            if !self.audio_detected {
+                // WAIT PHASE: Looking for actual audio content
+                // Check if this sample has audio content OR if we've waited too long
+                let timeout = self.wait_samples >= self.max_wait_samples;
+                let has_audio = self.is_audio_content(blocked_l, blocked_r);
+
+                if has_audio || timeout {
+                    // Audio detected (or timeout)! Start the fade
+                    self.audio_detected = true;
+                    if has_audio {
+                        eprintln!(
+                            "[StartFade] Audio DETECTED at sample {}, amplitude: L={:.6} R={:.6}",
+                            self.wait_samples, blocked_l.abs(), blocked_r.abs()
+                        );
+                    } else {
+                        eprintln!(
+                            "[StartFade] Timeout after {} samples ({:.1}ms), forcing fade start",
+                            self.wait_samples,
+                            self.wait_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0
+                        );
+                    }
+                    // Apply fade gain = 0 for first sample
+                    buffer[left_idx] = 0.0;
+                    buffer[right_idx] = 0.0;
+                    self.position_samples = 2; // Next frame starts at position 2
+                } else {
+                    // Still waiting - output silence
+                    buffer[left_idx] = 0.0;
+                    buffer[right_idx] = 0.0;
+                    self.wait_samples += 2;
+                }
+            } else {
+                // FADE PHASE: Apply gradual fade-in
+                let progress = self.position_samples as f32 / self.duration_samples as f32;
+
+                if progress >= 1.0 {
+                    // Fade complete - pass through with DC blocking only
+                    buffer[left_idx] = blocked_l;
+                    buffer[right_idx] = blocked_r;
+                } else {
+                    // S-curve: (1 - cos(π * t)) / 2 - smooth at start and end
+                    let gain = (1.0 - (std::f32::consts::PI * progress).cos()) * 0.5;
+                    buffer[left_idx] = blocked_l * gain;
+                    buffer[right_idx] = blocked_r * gain;
+                    self.position_samples += 2;
+                }
+            }
+        }
+
+        // Check if fade completed
+        if self.audio_detected && self.position_samples >= self.duration_samples {
+            self.active = false;
+            eprintln!(
+                "[StartFade] Fade COMPLETED: waited {} samples ({:.1}ms), faded {} samples ({:.1}ms)",
+                self.wait_samples,
+                self.wait_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0,
+                self.position_samples,
+                self.position_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0
+            );
+        }
+
+        buffer.len()
+    }
+}
+
 #[cfg(feature = "effects")]
 use soul_audio::effects::EffectChain;
 
@@ -89,6 +352,9 @@ pub struct PlaybackManager {
 
     // Crossfade progress tracker for 50% metadata switch
     crossfade_progress: CrossfadeProgressTracker,
+
+    // Start fade envelope for click-free playback start/resume
+    start_fade: StartFadeEnvelope,
 }
 
 /// Default buffer size for crossfade (10 seconds at max supported sample rate 192kHz stereo)
@@ -138,6 +404,7 @@ impl PlaybackManager {
             is_manual_skip: false,
             pending_events: Vec::new(),
             crossfade_progress: CrossfadeProgressTracker::new(),
+            start_fade: StartFadeEnvelope::new(44100), // Will be updated by set_sample_rate
         }
     }
 
@@ -149,6 +416,8 @@ impl PlaybackManager {
             PlaybackState::Paused => {
                 // Resume from pause
                 self.state = PlaybackState::Playing;
+                // Start fade-in for click-free resume
+                self.start_fade.start();
                 self.emit_state_changed(PlaybackState::Playing);
                 Ok(())
             }
@@ -210,6 +479,8 @@ impl PlaybackManager {
                 // Restart current track
                 if let Some(ref mut src) = self.audio_source {
                     src.reset()?;
+                    // Start fade-in for click-free restart
+                    self.start_fade.start();
                 }
                 return Ok(());
             }
@@ -237,6 +508,8 @@ impl PlaybackManager {
             // No history, restart current track
             if let Some(ref mut source) = self.audio_source {
                 source.reset()?;
+                // Start fade-in for click-free restart
+                self.start_fade.start();
             }
             Ok(())
         }
@@ -249,6 +522,8 @@ impl PlaybackManager {
             // Restart current track
             if let Some(ref mut source) = self.audio_source {
                 source.reset()?;
+                // Start fade-in for click-free restart
+                self.start_fade.start();
                 self.state = PlaybackState::Playing;
                 return Ok(());
             }
@@ -295,6 +570,8 @@ impl PlaybackManager {
     pub fn seek_to(&mut self, position: Duration) -> Result<()> {
         if let Some(ref mut source) = self.audio_source {
             source.seek(position)?;
+            // Start fade-in for click-free seek
+            self.start_fade.start();
             Ok(())
         } else {
             Err(PlaybackError::NoTrackLoaded)
@@ -638,6 +915,11 @@ impl PlaybackManager {
                 return Ok(0);
             }
 
+            // Apply start fade envelope for click-free playback start/resume
+            // This must come BEFORE any other processing
+            self.start_fade
+                .process(&mut self.stereo_conversion_buffer[..samples_read]);
+
             // Apply loudness normalization to stereo buffer (before channel conversion)
             #[cfg(feature = "volume-leveling")]
             self.loudness_normalizer
@@ -677,6 +959,12 @@ impl PlaybackManager {
                 // Track finished (no crossfade or crossfade completed)
                 self.handle_track_finished()?;
                 return Ok(0);
+            }
+
+            // Apply start fade envelope for click-free playback start/resume
+            // Only apply when NOT crossfading (crossfade has its own fade curves)
+            if !self.crossfade.is_active() {
+                self.start_fade.process(&mut output[..samples_read]);
             }
 
             // Apply loudness normalization (gain only, no internal limiter)
@@ -719,6 +1007,11 @@ impl PlaybackManager {
             }
 
             let frames_read = samples_read / 2;
+
+            // Apply start fade envelope for click-free playback start/resume
+            // This must come BEFORE any other processing
+            self.start_fade
+                .process(&mut self.stereo_conversion_buffer[..samples_read]);
 
             // Apply loudness normalization to stereo buffer
             #[cfg(feature = "volume-leveling")]
@@ -966,6 +1259,7 @@ impl PlaybackManager {
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         self.sample_rate = sample_rate;
         self.crossfade.set_sample_rate(sample_rate);
+        self.start_fade.set_sample_rate(sample_rate);
     }
 
     /// Get sample rate
@@ -1188,6 +1482,11 @@ impl PlaybackManager {
     /// Set audio source (called by platform after loading track)
     pub fn set_audio_source(&mut self, source: Box<dyn AudioSource>) {
         let previous_track_id = self.current_track.as_ref().map(|t| t.id.clone());
+
+        // IMPORTANT: Start fade BEFORE setting audio source to prevent race condition
+        // where audio callback reads samples before fade is active
+        self.start_fade.start();
+
         self.audio_source = Some(source);
         self.state = PlaybackState::Playing;
         self.is_manual_skip = false;

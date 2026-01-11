@@ -1,0 +1,189 @@
+{
+  "app": {
+    "title": "Soul Player",
+    "loading": "読み込み中..."
+  },
+  "home": {
+    "welcome": "Soul Playerへようこそ",
+    "welcomeSubtitle": "ライブラリからトラックを選択して再生を開始",
+    "jumpBackInto": "最近聴いた曲",
+    "discovery": "ディスカバリー",
+    "recentlyPlayed": "最近再生した曲",
+    "startPlaying": "音楽を再生して履歴を表示"
+  },
+  "nav": {
+    "home": "ホーム",
+    "library": "ライブラリ",
+    "discovery": "ディスカバリー",
+    "playlists": "プレイリスト",
+    "settings": "設定",
+    "import": "インポート"
+  },
+  "nowPlaying": {
+    "fromLibrary": "ライブラリから",
+    "playingFromAlbum": "アルバムから再生中",
+    "playingFromPlaylist": "プレイリストから再生中",
+    "playingFromArtist": "アーティストから再生中",
+    "playingFromGenre": "ジャンルから再生中",
+    "playingFromLibrary": "ライブラリから再生中"
+  },
+  "sidebar": {
+    "nowPlaying": "再生中",
+    "queue": "キュー",
+    "upNext": "次に再生",
+    "noTrackPlaying": "再生中のトラックはありません",
+    "emptyQueue": "キューは空です",
+    "tracksInQueue": "キューに{{count}}曲"
+  },
+  "playback": {
+    "play": "再生",
+    "pause": "一時停止",
+    "next": "次のトラック",
+    "previous": "前のトラック",
+    "shuffle": "シャッフル",
+    "repeat": "リピート",
+    "volume": "音量",
+    "mute": "ミュート",
+    "unmute": "ミュート解除"
+  },
+  "library": {
+    "tracks": "トラック",
+    "albums": "アルバム",
+    "album": "アルバム",
+    "artist": "アーティスト",
+    "artists": "アーティスト",
+    "genre": "ジャンル",
+    "genres": "ジャンル",
+    "playlist": "プレイリスト",
+    "playlists": "プレイリスト",
+    "allTracks": "すべてのトラック",
+    "noTracks": "ライブラリにトラックがありません",
+    "noAlbums": "アルバムが見つかりません",
+    "noAlbumsHint": "音楽をインポートしてアルバムを表示",
+    "addTracks": "音楽を追加して始めましょう",
+    "source": "ソース",
+    "format": "フォーマット",
+    "cached": "キャッシュ済み",
+    "quickFilter": "クイックフィルター",
+    "noSearchResults": "結果が見つかりません",
+    "tryDifferentSearch": "別の検索語を試してください",
+    "databaseIssue": "データベースの問題が検出されました",
+    "loadFailed": "ライブラリの読み込みに失敗しました",
+    "deleteTrack": "トラックを削除",
+    "deleteTrackConfirm": "このトラックを削除してもよろしいですか？ライブラリから削除されます。",
+    "tab": {
+      "albums": "アルバム",
+      "playlists": "プレイリスト",
+      "artists": "アーティスト",
+      "tracks": "トラック"
+    },
+    "search": {
+      "albums": "アルバムを検索...",
+      "playlists": "プレイリストを検索...",
+      "artists": "アーティストを検索...",
+      "tracks": "トラックを検索..."
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "general": "一般",
+    "library": "ライブラリ",
+    "appearance": "外観",
+    "theme": "テーマ",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeOcean": "オーシャン",
+    "themeAuto": "自動（デバイスに合わせる）",
+    "language": "言語",
+    "showShortcuts": "キーボードショートカットを表示",
+    "showShortcutsDescription": "ツールチップやUI要素にキーボードショートカットを表示します。例：",
+    "audio": {
+      "title": "オーディオ",
+      "outputDevice": "出力デバイス"
+    },
+    "updates": "アップデート",
+    "autoUpdate": "自動的にアップデートを確認",
+    "silentUpdate": "自動的にアップデートをインストール",
+    "checkNow": "今すぐ確認",
+    "checking": "確認中...",
+    "shortcuts": "キーボードショートカット",
+    "resetShortcuts": "デフォルトに戻す",
+    "about": "について",
+    "aboutDescription": "高品質なオーディオ再生とプロフェッショナルなオーディオ処理パイプラインを備えたローカルファーストの音楽プレーヤー。",
+    "version": "バージョン",
+    "links": "リンク",
+    "github": "GitHub",
+    "website": "ウェブサイト",
+    "demoDisabled": "デスクトップアプリで利用可能"
+  },
+  "shortcuts": {
+    "playPause": "再生/一時停止",
+    "next": "次のトラック",
+    "previous": "前のトラック",
+    "volumeUp": "音量を上げる",
+    "volumeDown": "音量を下げる",
+    "mute": "ミュート",
+    "toggleShuffle": "シャッフル切り替え",
+    "toggleRepeat": "リピート切り替え"
+  },
+  "import": {
+    "title": "音楽をインポート",
+    "selectFiles": "ファイルを選択",
+    "selectFolder": "フォルダを選択",
+    "importing": "インポート中...",
+    "imported": "{{count}}トラックをインポートしました",
+    "cancel": "インポートをキャンセル"
+  },
+  "playlist": {
+    "create": "プレイリストを作成",
+    "name": "プレイリスト名",
+    "description": "説明",
+    "addTrack": "プレイリストに追加",
+    "removeTrack": "プレイリストから削除",
+    "deletePlaylist": "プレイリストを削除",
+    "notFound": "プレイリストが見つかりません",
+    "backToPlaylists": "プレイリストに戻る",
+    "noPlaylists": "プレイリストがまだありません",
+    "createHint": "プレイリストを作成して音楽を整理しましょう",
+    "newPlaylistName": "新しいプレイリスト",
+    "empty": "このプレイリストは空です",
+    "emptyHint": "ライブラリからトラックを追加してください"
+  },
+  "librarySettings": {
+    "watchedFolders": "監視フォルダ",
+    "watchedFoldersDescription": "音楽ファイルをスキャンするフォルダ",
+    "noWatchedFolders": "監視フォルダが設定されていません",
+    "addFolder": "フォルダを追加",
+    "errors": {
+      "duplicatePath": "このフォルダはすでにライブラリに追加されています"
+    }
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "remove": "削除",
+    "edit": "編集",
+    "close": "閉じる",
+    "search": "検索",
+    "duration": "再生時間",
+    "artist": "アーティスト",
+    "album": "アルバム",
+    "title": "タイトル",
+    "continue": "続ける",
+    "back": "戻る",
+    "browse": "参照",
+    "all": "すべて",
+    "filters": "フィルター",
+    "clearFilters": "フィルターをクリア",
+    "loading": "読み込み中...",
+    "playAll": "すべて再生",
+    "unknownArtist": "不明なアーティスト",
+    "unknown": "不明",
+    "reset": "リセット",
+    "disabled": "無効",
+    "enabled": "有効",
+    "retry": "再試行",
+    "error": "エラー"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO managed_library_settings\n            (user_id, device_id, library_path, path_template, import_action, created_at, updated_at)\n        VALUES (?, ?, ?, ?, ?, ?, ?)\n        ON CONFLICT(user_id, device_id) DO UPDATE SET\n            library_path = excluded.library_path,\n            path_template = excluded.path_template,\n            import_action = excluded.import_action,\n            updated_at = excluded.updated_at\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "5874b3ed84acf8f9b16223dd60c19efd3a83086661161d88cb615c6ec2c4756d"
+}

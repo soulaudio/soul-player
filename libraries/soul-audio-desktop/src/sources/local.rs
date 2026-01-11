@@ -331,7 +331,15 @@ impl LocalAudioSource {
                 resampler_chunk_frames,
                 channels as usize,
             ) {
-                Ok(r) => Some(r),
+                Ok(r) => {
+                    let delay = r.output_delay();
+                    eprintln!(
+                        "[DecoderThread] Resampler created with output delay: {} frames ({} samples)",
+                        delay,
+                        delay * channels as usize
+                    );
+                    Some(r)
+                }
                 Err(e) => {
                     eprintln!("[DecoderThread] Failed to create resampler: {}", e);
                     return;
@@ -340,6 +348,14 @@ impl LocalAudioSource {
         } else {
             None
         };
+
+        // Track resampler output delay - skip this many samples at start and after seeks
+        // This prevents resampler startup artifacts from reaching the output
+        let resampler_delay_samples = resampler
+            .as_ref()
+            .map(|r| r.output_delay() * channels as usize)
+            .unwrap_or(0);
+        let mut samples_to_skip = resampler_delay_samples;
 
         // Input buffer for accumulating samples before resampling
         let mut input_buffer: VecDeque<f32> = VecDeque::with_capacity(resampler_chunk_frames * channels as usize * 4);
@@ -372,6 +388,8 @@ impl LocalAudioSource {
                         input_buffer.clear();
                         if let Some(ref mut r) = resampler {
                             r.reset();
+                            // Reset delay skip counter after resampler reset
+                            samples_to_skip = resampler_delay_samples;
                         }
                         is_eof = false;
 

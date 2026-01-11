@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM managed_library_settings WHERE user_id = ? AND device_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "0fdd8970f66c9876f0b83e1bade80c331c9608d1320ed9bc50aa6987febe12a5"
+}

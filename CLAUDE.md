@@ -303,6 +303,68 @@ The desktop app supports customizable keyboard shortcuts with these characterist
 4. Add case to `executeAction()` in `useKeyboardShortcuts.ts`
 5. Add translation key in `i18n/*.json` files
 
+### Backend Abstraction (BackendContext)
+
+The frontend uses a `BackendContext` abstraction to ensure **zero parity** between desktop and marketing demo - both use the EXACT SAME UI components.
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Shared Package (@soul-player/shared)                           │
+│  ├── BackendContext.tsx - Interface definition                  │
+│  │   └── BackendInterface: getAllTracks, getAlbumTracks, etc.   │
+│  ├── PlatformContext.tsx - Platform detection                   │
+│  │   └── DesktopOnly, WebOnly, FeatureGate components           │
+│  └── Shared Pages (HomePage, LibraryPage, AlbumPage, etc.)      │
+│      └── Use useBackend() - no direct invoke() calls            │
+├─────────────────────────────────────────────────────────────────┤
+│  Desktop (applications/desktop)                                  │
+│  └── TauriBackendProvider.tsx                                   │
+│      └── Implements BackendInterface using Tauri invoke()       │
+├─────────────────────────────────────────────────────────────────┤
+│  Marketing Demo (applications/marketing)                         │
+│  └── DemoBackendProvider.tsx                                    │
+│      └── Implements BackendInterface using DemoStorage + WASM   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Files:**
+- `applications/shared/src/contexts/BackendContext.tsx` - Core interface
+- `applications/shared/src/contexts/PlatformContext.tsx` - Platform awareness
+- `applications/desktop/src/providers/TauriBackendProvider.tsx` - Desktop implementation
+- `applications/marketing/src/providers/DemoBackendProvider.tsx` - Demo implementation
+
+**Critical Rules:**
+1. **Never use `invoke()` directly in shared pages** - always use `useBackend()` hook
+2. **Shared pages must work on both platforms** - no platform-specific imports
+3. **Use `DesktopOnly`/`WebOnly`/`FeatureGate` for conditional rendering**
+4. **New backend operations must be added to BackendInterface first**
+
+```typescript
+// ✅ CORRECT - Use BackendContext in shared pages
+import { useBackend } from '../contexts/BackendContext'
+
+function LibraryPage() {
+  const backend = useBackend()
+  const tracks = await backend.getAllTracks()
+  await backend.playQueue(queue, 0)
+}
+
+// ❌ WRONG - Direct invoke() in shared code
+import { invoke } from '@tauri-apps/api/core'
+
+function LibraryPage() {
+  const tracks = await invoke('get_all_tracks')  // Won't work in marketing!
+}
+```
+
+**Adding a New Backend Operation:**
+1. Add method signature to `BackendInterface` in `BackendContext.tsx`
+2. Add types if needed (e.g., new data structures)
+3. Implement in `TauriBackendProvider.tsx` using Tauri invoke
+4. Implement in `DemoBackendProvider.tsx` using demo storage/WASM
+5. Export new types from `applications/shared/src/index.ts`
+
 ### Running Tests
 
 Tests use isolated databases in system temp directories:
@@ -337,6 +399,7 @@ cargo check -p soul-storage         # Verify compile-time queries
 6. **Dependencies**: Libraries can't depend on applications
 7. **UI Strings**: Always use localization, never hardcode text
 8. **Keyboard shortcuts**: Add to app-level shortcuts in useKeyboardShortcuts.ts (NOT global/OS-level)
+9. **Shared pages**: Use `useBackend()` hook, never direct `invoke()` calls - ensures desktop/marketing parity
 
 ---
 

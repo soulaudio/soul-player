@@ -1,34 +1,43 @@
 /**
- * Desktop MainLayout - wrapper around shared MainLayout with ImportDialog
+ * Desktop MainLayout - wrapper around shared MainLayout
  */
-import { ReactNode, useState } from 'react';
-import { MainLayout as SharedMainLayout } from '@soul-player/shared';
-import { ImportDialog } from '../components/ImportDialog';
+import { ReactNode, useState, useCallback } from 'react';
+import { MainLayout as SharedMainLayout, usePlayerStore } from '@soul-player/shared';
 import { ScanProgressIndicator } from '../components/ScanProgressIndicator';
-import { useSettings } from '../contexts/SettingsContext';
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog';
 
 interface MainLayoutProps {
   children: ReactNode;
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
-  const { showKeyboardShortcuts } = useSettings();
-  const [showImportDialog, setShowImportDialog] = useState(false);
+  const { currentTrack } = usePlayerStore();
+  const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+
+  const handleAddToPlaylist = useCallback(() => {
+    if (currentTrack) {
+      setShowAddToPlaylist(true);
+    }
+  }, [currentTrack]);
 
   return (
     <div className="h-screen">
-      <SharedMainLayout
-        onImport={() => setShowImportDialog(true)}
-        showKeyboardShortcuts={showKeyboardShortcuts}
-      >
+      <SharedMainLayout onAddToPlaylist={handleAddToPlaylist}>
         {children}
       </SharedMainLayout>
 
-      {/* Desktop-specific ImportDialog */}
-      <ImportDialog open={showImportDialog} onClose={() => setShowImportDialog(false)} />
-
       {/* Scan progress indicator (shows when scanning library sources) */}
       <ScanProgressIndicator position="footer" />
+
+      {/* Add to Playlist dialog */}
+      {currentTrack && (
+        <AddToPlaylistDialog
+          open={showAddToPlaylist}
+          onClose={() => setShowAddToPlaylist(false)}
+          trackId={currentTrack.id}
+          trackTitle={currentTrack.title}
+        />
+      )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ mod import;
 mod library_settings;
 mod loudness;
 mod playback;
+mod playback_context;
 mod shortcuts;
 mod sources;
 mod splash;
@@ -40,6 +41,11 @@ struct FrontendTrack {
     file_path: Option<String>,
     track_number: Option<i32>,
     year: Option<i32>,
+    // Audio format metadata
+    file_format: String,
+    bit_rate: Option<i32>,
+    sample_rate: Option<i32>,
+    channels: Option<i32>,
 }
 
 impl From<soul_core::types::Track> for FrontendTrack {
@@ -67,6 +73,10 @@ impl From<soul_core::types::Track> for FrontendTrack {
             file_path,
             track_number: track.track_number,
             year: track.year,
+            file_format: track.file_format,
+            bit_rate: track.bitrate,
+            sample_rate: track.sample_rate,
+            channels: track.channels,
         }
     }
 }
@@ -204,7 +214,7 @@ async fn play_track(
     playback.play_track(track)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 async fn play_queue(
     queue: Vec<TrackData>,
     start_index: usize,
@@ -960,6 +970,25 @@ async fn reorder_playlist_track(
 }
 
 #[tauri::command]
+async fn get_playlists_containing_track(
+    track_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let track_id = soul_core::types::TrackId::new(track_id);
+
+    let playlist_ids =
+        soul_storage::playlists::get_playlists_containing_track(&state.pool, track_id, user_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    Ok(playlist_ids
+        .into_iter()
+        .map(|id| id.as_str().to_string())
+        .collect())
+}
+
+#[tauri::command]
 async fn scan_library(path: String) -> Result<(), String> {
     // TODO: Integrate with soul-metadata
     println!("Scanning library at: {}", path);
@@ -1582,6 +1611,7 @@ fn main() {
             add_track_to_playlist,
             remove_track_from_playlist,
             reorder_playlist_track,
+            get_playlists_containing_track,
             scan_library,
             // Library settings
             library_settings::get_library_sources,
@@ -1672,6 +1702,11 @@ fn main() {
             sources::get_active_source,
             sources::sync_from_server,
             sources::upload_to_server,
+            // Playback context (Jump Back Into, Now Playing context)
+            playback_context::record_playback_context,
+            playback_context::get_recent_playback_contexts,
+            playback_context::get_current_playback_context,
+            playback_context::clear_playback_context_history,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

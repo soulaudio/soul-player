@@ -1,31 +1,21 @@
 'use client';
 
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LeftSidebar } from '../components/LeftSidebar';
-import { SourcesDialog } from '../components/SourcesDialog';
 
 interface MainLayoutProps {
   children: ReactNode;
-  /**
-   * Optional callback when Import button is clicked
-   * If not provided, Import button will be disabled (for demo)
-   */
-  onImport?: () => void;
+  /** Callback when the "Add to Playlist" button is clicked in the sidebar */
+  onAddToPlaylist?: () => void;
 }
 
-export function MainLayout({ children, onImport }: MainLayoutProps) {
+export function MainLayout({ children, onAddToPlaylist }: MainLayoutProps) {
   const navigate = useNavigate();
-  const [showSourcesDialog, setShowSourcesDialog] = useState(false);
 
   // Keyboard shortcuts for navigation (playback shortcuts handled by global shortcuts system)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + K for search
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        navigate('/search');
-      }
       // Cmd/Ctrl + 1 for home
       if ((e.metaKey || e.ctrlKey) && e.key === '1') {
         e.preventDefault();
@@ -35,11 +25,6 @@ export function MainLayout({ children, onImport }: MainLayoutProps) {
       if ((e.metaKey || e.ctrlKey) && e.key === '2') {
         e.preventDefault();
         navigate('/library');
-      }
-      // Cmd/Ctrl + 3 for discovery
-      if ((e.metaKey || e.ctrlKey) && e.key === '3') {
-        e.preventDefault();
-        navigate('/discovery');
       }
       // Cmd/Ctrl + L for library
       if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
@@ -60,23 +45,14 @@ export function MainLayout({ children, onImport }: MainLayoutProps) {
   return (
     <div className="flex h-full bg-background text-foreground">
       {/* Left Sidebar - full height, always visible */}
-      <LeftSidebar
-        onImport={onImport}
-        onOpenSources={() => setShowSourcesDialog(true)}
-      />
+      <LeftSidebar onAddToPlaylist={onAddToPlaylist} />
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-auto">
-        <div className="container mx-auto p-6">
+        <div className="h-full p-6">
           {children}
         </div>
       </main>
-
-      {/* Sources Dialog - overlay */}
-      <SourcesDialog
-        open={showSourcesDialog}
-        onClose={() => setShowSourcesDialog(false)}
-      />
     </div>
   );
 }

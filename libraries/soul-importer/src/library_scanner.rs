@@ -3,7 +3,7 @@
 //! Scans library sources (watched folders) and synchronizes with the database.
 //! Uses mtime + size for change detection and content hash for file relocation.
 
-use crate::{metadata, scanner::FileScanner, ImportError, Result};
+use crate::{fuzzy::FuzzyMatcher, metadata, scanner::FileScanner, ImportError, Result};
 use soul_core::types::{CreateTrack, LibrarySource, ScanStatus};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -34,6 +34,10 @@ pub struct LibraryScanner {
     compute_hashes: bool,
     /// Progress callback
     progress_callback: Option<ProgressCallback>,
+    /// Fuzzy matcher for artist/album/genre matching
+    fuzzy_matcher: FuzzyMatcher,
+    /// Force re-extraction of metadata even for unchanged files
+    force_metadata_refresh: bool,
 }
 
 impl LibraryScanner {
@@ -45,12 +49,20 @@ impl LibraryScanner {
             device_id: device_id.into(),
             compute_hashes: true,
             progress_callback: None,
+            fuzzy_matcher: FuzzyMatcher::new(),
+            force_metadata_refresh: false,
         }
     }
 
     /// Set whether to compute content hashes (default: true)
     pub fn compute_hashes(mut self, compute: bool) -> Self {
         self.compute_hashes = compute;
+        self
+    }
+
+    /// Force re-extraction of metadata even for unchanged files
+    pub fn force_metadata_refresh(mut self, force: bool) -> Self {
+        self.force_metadata_refresh = force;
         self
     }
 
@@ -282,13 +294,16 @@ impl LibraryScanner {
 
         // Check if file exists in our database
         if let Some(existing) = existing_tracks.get(&path_str) {
-            // File exists - check if it changed
-            if existing.file_size == Some(file_size) && existing.file_mtime == Some(file_mtime) {
-                // Unchanged - skip
+            // File exists - check if it changed (or if we're forcing refresh)
+            let unchanged =
+                existing.file_size == Some(file_size) && existing.file_mtime == Some(file_mtime);
+
+            if unchanged && !self.force_metadata_refresh {
+                // Unchanged and no force refresh - skip
                 return Ok(FileAction::Unchanged);
             }
 
-            // File changed - update metadata
+            // File changed or force refresh - update metadata
             self.update_track_metadata(existing.id, file_path, file_size, file_mtime)
                 .await?;
             return Ok(FileAction::Updated);
@@ -336,6 +351,50 @@ impl LibraryScanner {
     ) -> Result<()> {
         // Extract metadata
         let meta = metadata::extract_metadata(file_path)?;
+        tracing::info!(
+            "import_new_file: file={}, artist={:?}, album={:?}",
+            file_path.display(),
+            meta.artist,
+            meta.album
+        );
+
+        // Fuzzy match artist
+        let artist_id = if let Some(ref artist_name) = meta.artist {
+            let artist_match = self
+                .fuzzy_matcher
+                .find_or_create_artist(&self.pool, artist_name)
+                .await?;
+            Some(artist_match.entity.id)
+        } else {
+            None
+        };
+
+        // Fuzzy match album (linked to artist if available)
+        let album_id = if let Some(ref album_title) = meta.album {
+            let album_match = self
+                .fuzzy_matcher
+                .find_or_create_album(&self.pool, album_title, artist_id)
+                .await?;
+            Some(album_match.entity.id)
+        } else {
+            None
+        };
+
+        // Fuzzy match album artist (if different from track artist)
+        let album_artist_id = if let Some(ref album_artist_name) = meta.album_artist {
+            // Only create separate album artist if different from track artist
+            if meta.artist.as_ref() != Some(album_artist_name) {
+                let artist_match = self
+                    .fuzzy_matcher
+                    .find_or_create_artist(&self.pool, album_artist_name)
+                    .await?;
+                Some(artist_match.entity.id)
+            } else {
+                artist_id
+            }
+        } else {
+            None
+        };
 
         // Create the track
         let create_track = CreateTrack {
@@ -346,9 +405,9 @@ impl LibraryScanner {
                     .unwrap_or("Unknown")
                     .to_string()
             }),
-            artist_id: None, // TODO: fuzzy match artist
-            album_id: None,  // TODO: fuzzy match album
-            album_artist_id: None,
+            artist_id,
+            album_id,
+            album_artist_id,
             track_number: meta.track_number.map(|n| n as i32),
             disc_number: meta.disc_number.map(|n| n as i32),
             year: meta.year,
@@ -360,7 +419,7 @@ impl LibraryScanner {
             file_hash: content_hash,
             origin_source_id: 1, // Default local source
             local_file_path: Some(file_path.display().to_string()),
-            musicbrainz_recording_id: None,
+            musicbrainz_recording_id: meta.musicbrainz_recording_id.clone(),
             fingerprint: None,
         };
 
@@ -379,6 +438,16 @@ impl LibraryScanner {
         )
         .await?;
 
+        // Add genres to track
+        let track_id_typed = soul_core::types::TrackId::new(track_id.to_string());
+        for genre_name in &meta.genres {
+            let genre_match = self
+                .fuzzy_matcher
+                .find_or_create_genre(&self.pool, genre_name)
+                .await?;
+            soul_storage::genres::add_to_track(&self.pool, track_id_typed.clone(), genre_match.entity.id).await?;
+        }
+
         Ok(())
     }
 
@@ -392,8 +461,36 @@ impl LibraryScanner {
     ) -> Result<()> {
         // Re-extract metadata
         let meta = metadata::extract_metadata(file_path)?;
+        tracing::info!(
+            "update_track_metadata: file={}, artist={:?}, album={:?}",
+            file_path.display(),
+            meta.artist,
+            meta.album
+        );
         let content_hash = if self.compute_hashes {
             Some(metadata::calculate_file_hash(file_path)?)
+        } else {
+            None
+        };
+
+        // Fuzzy match artist
+        let artist_id = if let Some(ref artist_name) = meta.artist {
+            let artist_match = self
+                .fuzzy_matcher
+                .find_or_create_artist(&self.pool, artist_name)
+                .await?;
+            Some(artist_match.entity.id)
+        } else {
+            None
+        };
+
+        // Fuzzy match album (linked to artist if available)
+        let album_id = if let Some(ref album_title) = meta.album {
+            let album_match = self
+                .fuzzy_matcher
+                .find_or_create_album(&self.pool, album_title, artist_id)
+                .await?;
+            Some(album_match.entity.id)
         } else {
             None
         };
@@ -416,6 +513,17 @@ impl LibraryScanner {
             content_hash.as_deref(),
         )
         .await?;
+
+        // Update artist/album relationships if we have them
+        if artist_id.is_some() || album_id.is_some() {
+            soul_storage::tracks::update_artist_album(
+                &self.pool,
+                track_id,
+                artist_id,
+                album_id,
+            )
+            .await?;
+        }
 
         Ok(())
     }

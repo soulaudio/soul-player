@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM playlist_shares WHERE playlist_id = ? AND shared_with_user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6ca445749b0b8e9ba5e04bf00b932a20b9c274299cb0aea0a1f01fcd74b69598"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE tracks SET\n            replaygain_album_gain = ?,\n            replaygain_album_peak = ?\n        WHERE album_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "03eebd976793772ed699138a4e737669d52852fc26b5eaf73f2b0d13a313af1c"
+}

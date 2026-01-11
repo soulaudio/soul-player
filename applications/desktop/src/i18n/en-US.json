@@ -3,6 +3,11 @@
     "title": "Soul Player",
     "loading": "Loading..."
   },
+  "home": {
+    "welcome": "Welcome to Soul Player",
+    "welcomeSubtitle": "Select a track from your library to start listening",
+    "jumpBackInto": "Jump back into"
+  },
   "nav": {
     "home": "Home",
     "library": "Library",
@@ -10,6 +15,14 @@
     "playlists": "Playlists",
     "settings": "Settings",
     "import": "Import"
+  },
+  "nowPlaying": {
+    "fromLibrary": "From Library",
+    "playingFromAlbum": "Playing from album",
+    "playingFromPlaylist": "Playing from playlist",
+    "playingFromArtist": "Playing from artist",
+    "playingFromGenre": "Playing from genre",
+    "playingFromLibrary": "Playing from library"
   },
   "sidebar": {
     "nowPlaying": "Now Playing",
@@ -34,17 +47,39 @@
     "tracks": "tracks",
     "albums": "albums",
     "album": "Album",
-    "artists": "Artists",
+    "artist": "Artist",
+    "artists": "artists",
     "genre": "Genre",
     "genres": "Genres",
     "playlist": "Playlist",
     "playlists": "Playlists",
+    "allTracks": "All Tracks",
     "noTracks": "No tracks in your library",
+    "noAlbums": "No albums found",
+    "noAlbumsHint": "Import music to see your albums",
     "addTracks": "Add some music to get started",
     "source": "Source",
     "format": "Format",
     "cached": "Cached",
-    "quickFilter": "Quick Filter"
+    "quickFilter": "Quick Filter",
+    "noSearchResults": "No results found",
+    "tryDifferentSearch": "Try a different search term",
+    "databaseIssue": "Database Issue Detected",
+    "loadFailed": "Failed to load library",
+    "deleteTrack": "Delete Track",
+    "deleteTrackConfirm": "Are you sure you want to delete this track? This will remove the track from your library.",
+    "tab": {
+      "albums": "Albums",
+      "playlists": "Playlists",
+      "artists": "Artists",
+      "tracks": "Tracks"
+    },
+    "search": {
+      "albums": "Search albums...",
+      "playlists": "Search playlists...",
+      "artists": "Search artists...",
+      "tracks": "Search tracks..."
+    }
   },
   "settings": {
     "title": "Settings",
@@ -171,6 +206,8 @@
     "lastScanned": "Last scanned",
     "rescan": "Rescan",
     "rescanAll": "Rescan All",
+    "forceRefresh": "Force Re-import",
+    "forceRefreshDescription": "Re-extract metadata for all files, even unchanged ones. Use this to fix missing artist/album info.",
     "managedLibrary": "Managed Library",
     "managedLibraryDescription": "Where imported files are organized",
     "libraryPath": "Library folder",
@@ -203,7 +240,10 @@
     },
     "targetFolder": "Target folder",
     "selectFolder": "Select a folder",
-    "showImportNotification": "Show notification after import"
+    "showImportNotification": "Show notification after import",
+    "errors": {
+      "duplicatePath": "This folder is already added to your library"
+    }
   },
   "shortcuts": {
     "playPause": "Play/Pause",
@@ -252,6 +292,11 @@
     "name": "Playlist Name",
     "description": "Description",
     "addTrack": "Add to Playlist",
+    "addToPlaylist": "Add to Playlist",
+    "addingTrack": "Adding track",
+    "searchPlaylists": "Search playlists...",
+    "createNew": "Create new playlist",
+    "willRemove": "will remove",
     "removeTrack": "Remove from Playlist",
     "deletePlaylist": "Delete Playlist",
     "notFound": "Playlist not found",
@@ -314,13 +359,17 @@
     "clearFilters": "Clear filters",
     "browse": "Browse",
     "done": "Done",
+    "saving": "Saving...",
     "andMore": "and {{count}} more",
     "loading": "Loading...",
     "playAll": "Play All",
     "unknownArtist": "Unknown Artist",
+    "unknown": "Unknown",
     "reset": "Reset",
     "disabled": "Disabled",
-    "enabled": "Enabled"
+    "enabled": "Enabled",
+    "retry": "Retry",
+    "error": "Error"
   },
   "crossfeed": {
     "title": "Crossfeed",

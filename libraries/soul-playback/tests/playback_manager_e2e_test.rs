@@ -932,7 +932,12 @@ mod volume_control {
             MockAudioSource::new(Duration::from_secs(10), 44100).with_amplitude(1.0),
         ));
 
-        // Process at high volume
+        // First, process enough audio to get past the start fade period (20ms = ~1764 samples)
+        // Process 4096 samples (~46ms) to be well past the fade
+        let mut warmup_buffer = vec![0.0f32; 4096];
+        manager.process_audio(&mut warmup_buffer).ok();
+
+        // Process at high volume (now past the fade period)
         manager.set_volume(100);
         let mut buffer1 = vec![0.0f32; 1024];
         manager.process_audio(&mut buffer1).ok();

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT source_id, access_token, refresh_token, token_expires_at\n         FROM server_auth_tokens\n         WHERE source_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "source_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "access_token",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "refresh_token",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "token_expires_at",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "0ef95c83bb59de3a30f0d90d3abe7af18d4b9a5a165520ae59c0f46c109f7bf5"
+}

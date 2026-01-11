@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO global_shortcuts (user_id, action, accelerator, enabled, is_default, updated_at)\n         VALUES (?, ?, ?, 1, 0, ?)\n         ON CONFLICT(user_id, action) DO UPDATE SET accelerator = excluded.accelerator, updated_at = excluded.updated_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e8dbe0af5ad0cd113e448885e756a50dbebb86789ddf1559a7d0ac14afeec4c8"
+}

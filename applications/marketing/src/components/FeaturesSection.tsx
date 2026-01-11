@@ -1,59 +1,85 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Music, Layers, Lock, Wand2, Globe, Server } from 'lucide-react'
 
-const FEATURES = [
+// Marketing pages use dynamic import to avoid SSR issues with i18n
+function useMarketingTranslation() {
+  const [t, setT] = useState<(key: string) => string>(() => (key: string) => key)
+
+  useEffect(() => {
+    import('@soul-player/shared/i18n').then(({ initI18n }) => {
+      const i18n = initI18n()
+      setT(() => (key: string) => i18n.t(key) || key)
+    })
+  }, [])
+
+  return { t }
+}
+
+interface Feature {
+  icon: typeof Layers
+  titleKey: string
+  descriptionKey: string
+  technicalKey: string
+  comingSoon?: boolean
+  subscription?: boolean
+}
+
+const FEATURES: Feature[] = [
   {
     icon: Layers,
-    title: 'Multi-Source Support',
-    description: 'Play from local files, network shares, or your personal server. One library, multiple sources.',
-    technical: 'Trait-based architecture supports local, streaming, and network audio sources',
+    titleKey: 'marketing.features.multiSource.title',
+    descriptionKey: 'marketing.features.multiSource.description',
+    technicalKey: 'marketing.features.multiSource.technical',
   },
   {
     icon: Music,
-    title: 'Advanced Effects Chain',
-    description: 'Parametric EQ, dynamic compression, and custom effects. Professional audio quality.',
-    technical: 'Real-time DSP with zero-allocation audio processing callbacks',
+    titleKey: 'marketing.features.effects.title',
+    descriptionKey: 'marketing.features.effects.description',
+    technicalKey: 'marketing.features.effects.technical',
     comingSoon: true,
   },
   {
     icon: Server,
-    title: 'Multi-User from Day 1',
-    description: 'Personal libraries, shared playlists, user authentication. Built for families and teams.',
-    technical: 'SQLite schema designed for multi-tenancy across all platforms',
+    titleKey: 'marketing.features.multiUser.title',
+    descriptionKey: 'marketing.features.multiUser.description',
+    technicalKey: 'marketing.features.multiUser.technical',
   },
   {
     icon: Globe,
-    title: 'Cross-Platform Native',
-    description: 'Desktop (Windows, macOS, Linux), server streaming, and embedded hardware. Seamless experience everywhere.',
-    technical: 'Native desktop apps, containerized server, and dedicated hardware support',
+    titleKey: 'marketing.features.crossPlatform.title',
+    descriptionKey: 'marketing.features.crossPlatform.description',
+    technicalKey: 'marketing.features.crossPlatform.technical',
   },
   {
     icon: Lock,
-    title: 'Privacy-First, Self-Hosted',
-    description: 'Your music, your server, your data. No tracking, no subscriptions, no cloud lock-in.',
-    technical: 'Local-first architecture with optional server sync',
+    titleKey: 'marketing.features.privacy.title',
+    descriptionKey: 'marketing.features.privacy.description',
+    technicalKey: 'marketing.features.privacy.technical',
   },
   {
     icon: Wand2,
-    title: 'Optional Discovery Service',
-    description: 'Bandcamp & Discogs integration, metadata enhancement, lyrics, AcoustID fingerprinting.',
-    technical: 'Join our community subscription for enhanced discovery features',
+    titleKey: 'marketing.features.discovery.title',
+    descriptionKey: 'marketing.features.discovery.description',
+    technicalKey: 'marketing.features.discovery.technical',
     comingSoon: false,
     subscription: true,
   },
 ]
 
 export function FeaturesSection() {
+  const { t } = useMarketingTranslation()
+
   return (
     <section className="py-24 bg-zinc-950">
       <div className="container mx-auto px-6">
         <div className="text-center mb-16">
           <h2 className="text-5xl font-serif font-bold mb-4">
-            Why Soul Player?
+            {t('marketing.features.title')}
           </h2>
           <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-            Built for music lovers who value control, quality, and privacy
+            {t('marketing.features.subtitle')}
           </p>
         </div>
 
@@ -65,31 +91,31 @@ export function FeaturesSection() {
             >
               {feature.comingSoon && (
                 <span className="absolute top-4 right-4 text-xs font-mono text-violet-400 bg-violet-950/50 px-2 py-1 rounded">
-                  COMING SOON
+                  {t('marketing.features.comingSoon')}
                 </span>
               )}
               {feature.subscription && (
                 <span className="absolute top-4 right-4 text-xs font-mono text-amber-400 bg-amber-950/50 px-2 py-1 rounded">
-                  OPTIONAL
+                  {t('marketing.features.optional')}
                 </span>
               )}
 
               <feature.icon className="w-10 h-10 text-violet-400 mb-4" />
 
               <h3 className="text-xl font-bold mb-2">
-                {feature.title}
+                {t(feature.titleKey)}
               </h3>
 
               <p className="text-zinc-400 mb-4">
-                {feature.description}
+                {t(feature.descriptionKey)}
               </p>
 
               <details className="text-xs text-zinc-500 group">
                 <summary className="cursor-pointer font-mono hover:text-violet-400 transition-colors">
-                  Technical details →
+                  {t('marketing.features.technicalDetails')} →
                 </summary>
                 <p className="mt-2 text-zinc-500 font-mono">
-                  {feature.technical}
+                  {t(feature.technicalKey)}
                 </p>
               </details>
             </div>
