@@ -7,8 +7,9 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = ["effects"]
+default = ["effects", "volume-leveling"]
 effects = ["soul-playback/effects"]  # DSP effects (EQ, compressor, limiter)
+volume-leveling = ["soul-playback/volume-leveling"]  # ReplayGain, headroom management
 asio = ["cpal/asio"]  # Windows ASIO support (low-latency, exclusive mode)
 jack = ["cpal/jack"]  # JACK audio connection kit (Linux/macOS pro audio)
 r8brain = ["dep:r8brain-rs"]  # High-quality r8brain resampling (requires cmake)

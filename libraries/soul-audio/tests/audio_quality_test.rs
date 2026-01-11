@@ -1413,9 +1413,11 @@ fn test_balance_control_precision() {
     // Test balance control
     let input = generate_sine(1000.0, SAMPLE_RATE, 1.0, 0.5);
 
-    // Hard pan left
-    let mut enhancer = StereoEnhancer::new();
-    enhancer.set_balance(-1.0);
+    // Hard pan left - use with_settings to initialize with target values (no smoothing delay)
+    let mut enhancer = StereoEnhancer::with_settings(StereoSettings {
+        balance: -1.0,
+        ..Default::default()
+    });
 
     let mut output = input.clone();
     enhancer.process(&mut output, SAMPLE_RATE);

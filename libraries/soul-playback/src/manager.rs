@@ -18,7 +18,10 @@ use crate::{
 use soul_audio::effects::EffectChain;
 
 #[cfg(feature = "volume-leveling")]
-use soul_loudness::{LookaheadPreset, LoudnessNormalizer, NormalizationMode, TruePeakLimiter};
+use soul_loudness::{
+    headroom::{HeadroomManager, HeadroomMode},
+    LookaheadPreset, LoudnessNormalizer, NormalizationMode, TruePeakLimiter,
+};
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -53,6 +56,8 @@ pub struct PlaybackManager {
     effect_chain: EffectChain,
     #[cfg(feature = "volume-leveling")]
     loudness_normalizer: LoudnessNormalizer,
+    #[cfg(feature = "volume-leveling")]
+    headroom_manager: HeadroomManager,
     #[cfg(feature = "volume-leveling")]
     output_limiter: TruePeakLimiter,
     audio_source: Option<Box<dyn AudioSource>>,
@@ -117,6 +122,8 @@ impl PlaybackManager {
             effect_chain: EffectChain::new(),
             #[cfg(feature = "volume-leveling")]
             loudness_normalizer,
+            #[cfg(feature = "volume-leveling")]
+            headroom_manager: HeadroomManager::new(),
             #[cfg(feature = "volume-leveling")]
             output_limiter: TruePeakLimiter::new(44100, 2),
             audio_source: None,
@@ -636,6 +643,11 @@ impl PlaybackManager {
             self.loudness_normalizer
                 .process(&mut self.stereo_conversion_buffer[..samples_read]);
 
+            // Apply headroom attenuation BEFORE effects to prevent clipping in DSP chain
+            #[cfg(feature = "volume-leveling")]
+            self.headroom_manager
+                .process(&mut self.stereo_conversion_buffer[..samples_read]);
+
             // Convert stereo to mono by averaging L and R channels
             let frames = samples_read / 2;
             for i in 0..frames {
@@ -672,6 +684,10 @@ impl PlaybackManager {
             self.loudness_normalizer
                 .process(&mut output[..samples_read]);
 
+            // Apply headroom attenuation BEFORE effects to prevent clipping in DSP chain
+            #[cfg(feature = "volume-leveling")]
+            self.headroom_manager.process(&mut output[..samples_read]);
+
             // Apply effects (if feature enabled)
             #[cfg(feature = "effects")]
             self.effect_chain
@@ -707,6 +723,11 @@ impl PlaybackManager {
             // Apply loudness normalization to stereo buffer
             #[cfg(feature = "volume-leveling")]
             self.loudness_normalizer
+                .process(&mut self.stereo_conversion_buffer[..samples_read]);
+
+            // Apply headroom attenuation BEFORE effects to prevent clipping in DSP chain
+            #[cfg(feature = "volume-leveling")]
+            self.headroom_manager
                 .process(&mut self.stereo_conversion_buffer[..samples_read]);
 
             // Apply effects to stereo buffer (if feature enabled)
@@ -1080,6 +1101,88 @@ impl PlaybackManager {
     #[cfg(feature = "volume-leveling")]
     pub fn reset_output_limiter(&mut self) {
         self.output_limiter.reset();
+    }
+
+    // ===== Headroom Management =====
+
+    /// Set headroom mode
+    ///
+    /// Controls how headroom attenuation is calculated:
+    /// - Auto: Calculates from ReplayGain + preamp + EQ boost
+    /// - Manual(dB): Fixed headroom reserve (e.g., -6 dB)
+    /// - Disabled: No headroom attenuation
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_mode(&mut self, mode: HeadroomMode) {
+        self.headroom_manager.set_mode(mode);
+    }
+
+    /// Get current headroom mode
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_headroom_mode(&self) -> HeadroomMode {
+        self.headroom_manager.mode()
+    }
+
+    /// Set ReplayGain value for headroom calculation (in dB)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_replaygain_db(&mut self, gain_db: f64) {
+        self.headroom_manager.set_replaygain_db(gain_db);
+    }
+
+    /// Set pre-amp gain for headroom calculation (in dB)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_preamp_db(&mut self, preamp_db: f64) {
+        self.headroom_manager.set_preamp_db(preamp_db);
+    }
+
+    /// Set maximum EQ boost for headroom calculation (in dB)
+    ///
+    /// This should be the maximum positive gain from any EQ band.
+    /// Call this whenever EQ settings change.
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_eq_boost_db(&mut self, boost_db: f64) {
+        self.headroom_manager.set_eq_max_boost_db(boost_db);
+    }
+
+    /// Set additional DSP gain for headroom calculation (in dB)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_additional_gain_db(&mut self, gain_db: f64) {
+        self.headroom_manager.set_additional_gain_db(gain_db);
+    }
+
+    /// Get total potential gain in dB (for UI display)
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_headroom_total_gain_db(&self) -> f64 {
+        self.headroom_manager.total_potential_gain_db()
+    }
+
+    /// Get current headroom attenuation in dB (for UI display)
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_headroom_attenuation_db(&mut self) -> f64 {
+        self.headroom_manager.attenuation_db()
+    }
+
+    /// Enable or disable headroom management
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_enabled(&mut self, enabled: bool) {
+        self.headroom_manager.set_enabled(enabled);
+    }
+
+    /// Check if headroom management is enabled
+    #[cfg(feature = "volume-leveling")]
+    pub fn is_headroom_enabled(&self) -> bool {
+        self.headroom_manager.is_enabled()
+    }
+
+    /// Reset headroom manager state (e.g., for new track)
+    #[cfg(feature = "volume-leveling")]
+    pub fn reset_headroom(&mut self) {
+        self.headroom_manager.reset();
+    }
+
+    /// Clear track-specific headroom values (ReplayGain) but keep settings
+    #[cfg(feature = "volume-leveling")]
+    pub fn clear_headroom_track_gains(&mut self) {
+        self.headroom_manager.clear_track_gains();
     }
 
     /// Set audio source (called by platform after loading track)

@@ -85,8 +85,10 @@ impl StereoSettings {
 /// All gains are smoothed over 64 samples (~1.5ms) to prevent audible clicks
 /// when parameters are adjusted during playback.
 
-/// Number of samples over which to smooth parameter changes
-const SMOOTH_SAMPLES: u32 = 64;
+/// Smoothing coefficient for exponential parameter interpolation.
+/// Value of 0.003 at 44.1kHz gives ~1.5ms time constant.
+/// This ensures ~95% convergence within typical buffer sizes while remaining smooth.
+const SMOOTH_COEFF: f32 = 0.003;
 
 pub struct StereoEnhancer {
     /// Current settings
@@ -98,6 +100,8 @@ pub struct StereoEnhancer {
     target_side_gain: f32,
     /// Target width
     target_width: f32,
+    /// Target balance
+    target_balance: f32,
 
     /// Active mid gain (linear) - used for processing
     mid_gain: f32,
@@ -105,9 +109,8 @@ pub struct StereoEnhancer {
     side_gain: f32,
     /// Active width
     width: f32,
-
-    /// Samples remaining until parameters match target
-    smooth_samples_remaining: u32,
+    /// Active balance (smoothed)
+    balance: f32,
 
     /// Effect enabled state
     enabled: bool,
@@ -124,10 +127,11 @@ impl StereoEnhancer {
             target_mid_gain: 1.0,
             target_side_gain: 1.0,
             target_width: 1.0,
+            target_balance: 0.0,
             mid_gain: 1.0,
             side_gain: 1.0,
             width: 1.0,
-            smooth_samples_remaining: 0,
+            balance: 0.0,
             enabled: true,
             needs_update: true,
         }
@@ -137,14 +141,16 @@ impl StereoEnhancer {
     pub fn with_settings(settings: StereoSettings) -> Self {
         let mid_gain = 10.0_f32.powf(settings.mid_gain_db / 20.0);
         let side_gain = 10.0_f32.powf(settings.side_gain_db / 20.0);
+        let balance = settings.balance;
         Self {
             target_mid_gain: mid_gain,
             target_side_gain: side_gain,
             target_width: settings.width,
+            target_balance: balance,
             mid_gain,
             side_gain,
             width: settings.width,
-            smooth_samples_remaining: 0,
+            balance,
             settings,
             enabled: true,
             needs_update: false, // Already initialized
@@ -156,29 +162,19 @@ impl StereoEnhancer {
         self.settings.width = width.clamp(0.0, 2.0);
         self.target_width = self.settings.width;
         self.needs_update = true;
-        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
-    /// Smooth parameters toward target values
+    /// Smooth parameters toward target values using exponential smoothing
+    ///
+    /// Uses constant-rate exponential smoothing which naturally handles continuous
+    /// parameter changes without needing to track a smoothing window.
     #[inline]
     fn smooth_parameters(&mut self) {
-        if self.smooth_samples_remaining == 0 {
-            return;
-        }
-
-        let alpha = 1.0 / self.smooth_samples_remaining as f32;
-        self.mid_gain += alpha * (self.target_mid_gain - self.mid_gain);
-        self.side_gain += alpha * (self.target_side_gain - self.side_gain);
-        self.width += alpha * (self.target_width - self.width);
-
-        self.smooth_samples_remaining -= 1;
-
-        // Snap to target when done
-        if self.smooth_samples_remaining == 0 {
-            self.mid_gain = self.target_mid_gain;
-            self.side_gain = self.target_side_gain;
-            self.width = self.target_width;
-        }
+        // Exponential smoothing: new = old + alpha * (target - old)
+        self.mid_gain += SMOOTH_COEFF * (self.target_mid_gain - self.mid_gain);
+        self.side_gain += SMOOTH_COEFF * (self.target_side_gain - self.side_gain);
+        self.width += SMOOTH_COEFF * (self.target_width - self.width);
+        self.balance += SMOOTH_COEFF * (self.target_balance - self.balance);
     }
 
     /// Get current width setting
@@ -191,7 +187,6 @@ impl StereoEnhancer {
         self.settings.mid_gain_db = gain_db.clamp(-12.0, 12.0);
         self.target_mid_gain = 10.0_f32.powf(self.settings.mid_gain_db / 20.0);
         self.needs_update = true;
-        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
     /// Set side gain in dB
@@ -199,14 +194,13 @@ impl StereoEnhancer {
         self.settings.side_gain_db = gain_db.clamp(-12.0, 12.0);
         self.target_side_gain = 10.0_f32.powf(self.settings.side_gain_db / 20.0);
         self.needs_update = true;
-        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
     /// Set balance (-1.0 = full left, 0.0 = center, 1.0 = full right)
     pub fn set_balance(&mut self, balance: f32) {
         self.settings.balance = balance.clamp(-1.0, 1.0);
+        self.target_balance = self.settings.balance;
         self.needs_update = true;
-        // Note: Balance doesn't need smoothing as it's already handled in process_sample
     }
 
     /// Get current balance
@@ -225,9 +219,9 @@ impl StereoEnhancer {
         self.target_mid_gain = 10.0_f32.powf(settings.mid_gain_db / 20.0);
         self.target_side_gain = 10.0_f32.powf(settings.side_gain_db / 20.0);
         self.target_width = settings.width;
+        self.target_balance = settings.balance;
         self.settings = settings;
         self.needs_update = true;
-        self.smooth_samples_remaining = SMOOTH_SAMPLES;
     }
 
     /// Update derived parameters (sets targets, smoothing handles the transition)
@@ -267,7 +261,8 @@ impl StereoEnhancer {
 
         // Apply balance using constant-power panning to preserve perceived loudness
         // Linear pan causes ~3dB drop at hard pan positions
-        let balance = self.settings.balance;
+        // Use smoothed balance value to prevent clicks
+        let balance = self.balance;
         if balance.abs() > 0.001 {
             // Map balance [-1, 1] to angle [0, PI/2]
             // At balance=0: angle=PI/4 (equal power to both channels)
@@ -298,14 +293,19 @@ impl AudioEffect for StereoEnhancer {
 
         self.update_parameters();
 
-        // Quick bypass if all settings are neutral AND not smoothing
-        let is_neutral = (self.settings.width - 1.0).abs() < 0.001
-            && self.settings.mid_gain_db.abs() < 0.1
-            && self.settings.side_gain_db.abs() < 0.1
-            && self.settings.balance.abs() < 0.001
-            && self.smooth_samples_remaining == 0;
+        // Quick bypass if all active values are neutral (targets and current)
+        // Check both targets and current values to ensure no smoothing in progress
+        let targets_neutral = (self.target_width - 1.0).abs() < 0.001
+            && (self.target_mid_gain - 1.0).abs() < 0.001
+            && (self.target_side_gain - 1.0).abs() < 0.001
+            && self.target_balance.abs() < 0.001;
 
-        if is_neutral {
+        let current_neutral = (self.width - 1.0).abs() < 0.001
+            && (self.mid_gain - 1.0).abs() < 0.001
+            && (self.side_gain - 1.0).abs() < 0.001
+            && self.balance.abs() < 0.001;
+
+        if targets_neutral && current_neutral {
             return;
         }
 
@@ -325,7 +325,7 @@ impl AudioEffect for StereoEnhancer {
         self.mid_gain = self.target_mid_gain;
         self.side_gain = self.target_side_gain;
         self.width = self.target_width;
-        self.smooth_samples_remaining = 0;
+        self.balance = self.target_balance;
         // No state to reset for stereo enhancer
     }
 
@@ -474,8 +474,11 @@ mod tests {
 
     #[test]
     fn test_balance_left() {
-        let mut enhancer = StereoEnhancer::new();
-        enhancer.set_balance(-1.0);
+        // Use with_settings to initialize with target values (no smoothing needed)
+        let mut enhancer = StereoEnhancer::with_settings(StereoSettings {
+            balance: -1.0,
+            ..Default::default()
+        });
 
         let mut buffer = vec![0.5, 0.5, 0.5, 0.5];
         enhancer.process(&mut buffer, 44100);
@@ -498,8 +501,11 @@ mod tests {
 
     #[test]
     fn test_balance_right() {
-        let mut enhancer = StereoEnhancer::new();
-        enhancer.set_balance(1.0);
+        // Use with_settings to initialize with target values (no smoothing needed)
+        let mut enhancer = StereoEnhancer::with_settings(StereoSettings {
+            balance: 1.0,
+            ..Default::default()
+        });
 
         let mut buffer = vec![0.5, 0.5, 0.5, 0.5];
         enhancer.process(&mut buffer, 44100);

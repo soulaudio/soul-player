@@ -1398,3 +1398,111 @@ pub async fn get_resampling_settings(
         backend: playback.get_resampling_backend(),
     })
 }
+
+// ===== Headroom Management =====
+
+/// Headroom mode for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontendHeadroomMode {
+    /// Mode type: "auto", "manual", or "disabled"
+    pub mode: String,
+    /// Manual headroom value in dB (only used when mode is "manual")
+    pub manual_db: Option<f64>,
+}
+
+/// Headroom settings info for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadroomSettingsInfo {
+    pub enabled: bool,
+    pub mode: FrontendHeadroomMode,
+    pub total_gain_db: f64,
+    pub attenuation_db: f64,
+}
+
+/// Get headroom settings
+#[tauri::command]
+pub async fn get_headroom_settings(
+    playback: State<'_, PlaybackManager>,
+) -> Result<HeadroomSettingsInfo, String> {
+    use soul_playback::HeadroomMode;
+
+    let mode = playback.get_headroom_mode();
+    let frontend_mode = match mode {
+        HeadroomMode::Auto => FrontendHeadroomMode {
+            mode: "auto".to_string(),
+            manual_db: None,
+        },
+        HeadroomMode::Manual(db) => FrontendHeadroomMode {
+            mode: "manual".to_string(),
+            manual_db: Some(db),
+        },
+        HeadroomMode::Disabled => FrontendHeadroomMode {
+            mode: "disabled".to_string(),
+            manual_db: None,
+        },
+    };
+
+    Ok(HeadroomSettingsInfo {
+        enabled: playback.is_headroom_enabled(),
+        mode: frontend_mode,
+        total_gain_db: playback.get_headroom_total_gain_db(),
+        attenuation_db: playback.get_headroom_attenuation_db(),
+    })
+}
+
+/// Set headroom mode
+#[tauri::command]
+pub async fn set_headroom_mode(
+    playback: State<'_, PlaybackManager>,
+    mode: String,
+    manual_db: Option<f64>,
+) -> Result<(), String> {
+    use soul_playback::HeadroomMode;
+
+    let headroom_mode = match mode.as_str() {
+        "auto" => HeadroomMode::Auto,
+        "manual" => {
+            let db = manual_db.unwrap_or(-6.0);
+            HeadroomMode::Manual(db)
+        }
+        "disabled" => HeadroomMode::Disabled,
+        _ => return Err(format!("Invalid headroom mode: {}", mode)),
+    };
+
+    playback.set_headroom_mode(headroom_mode);
+    eprintln!("[audio_settings] Headroom mode set to: {:?}", mode);
+    Ok(())
+}
+
+/// Enable or disable headroom management
+#[tauri::command]
+pub async fn set_headroom_enabled(
+    playback: State<'_, PlaybackManager>,
+    enabled: bool,
+) -> Result<(), String> {
+    playback.set_headroom_enabled(enabled);
+    eprintln!("[audio_settings] Headroom enabled: {}", enabled);
+    Ok(())
+}
+
+/// Set headroom EQ boost (called when EQ settings change)
+#[tauri::command]
+pub async fn set_headroom_eq_boost(
+    playback: State<'_, PlaybackManager>,
+    boost_db: f64,
+) -> Result<(), String> {
+    playback.set_headroom_eq_boost_db(boost_db);
+    Ok(())
+}
+
+/// Set headroom preamp gain
+#[tauri::command]
+pub async fn set_headroom_preamp(
+    playback: State<'_, PlaybackManager>,
+    preamp_db: f64,
+) -> Result<(), String> {
+    playback.set_headroom_preamp_db(preamp_db);
+    Ok(())
+}

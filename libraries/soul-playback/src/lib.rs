@@ -141,7 +141,7 @@ pub use types::{PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMo
 
 // Volume leveling exports (conditionally compiled)
 #[cfg(feature = "volume-leveling")]
-pub use soul_loudness::NormalizationMode;
+pub use soul_loudness::{headroom::HeadroomMode, NormalizationMode};
 
 // WASM exports
 #[cfg(feature = "wasm")]

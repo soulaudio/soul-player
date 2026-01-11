@@ -918,6 +918,8 @@ fn test_peaking_filter_frequency_response() {
 fn test_low_shelf_frequency_response() {
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(200.0, 6.0)); // +6dB below 200Hz
+    // Reset to snap coefficients to target (bypass smoothing for deterministic test)
+    eq.reset();
 
     // Test well below shelf frequency
     let mut buffer_50 = generate_sine(50.0, SAMPLE_RATE, 0.2);

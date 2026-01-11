@@ -62,11 +62,15 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       const track = event.payload;
       console.log('[TauriPlayerCommandsProvider] Track changed:', track);
       console.log('[TauriPlayerCommandsProvider] coverArtPath:', track?.coverArtPath);
-      usePlayerStore.setState({
-        currentTrack: track,
-        duration: track?.duration || 0,
-        progress: 0
-      });
+      // Only update if track is valid - don't clear current track on null/undefined
+      // (e.g., when skipPrevious is called at the start of queue)
+      if (track && track.id) {
+        usePlayerStore.setState({
+          currentTrack: track,
+          duration: track.duration || 0,
+          progress: 0
+        });
+      }
     });
 
     // Listen for volume changes (0-100 from backend)

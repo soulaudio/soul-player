@@ -527,7 +527,7 @@ mod tests {
 
     #[test]
     fn test_headroom_manager_update_in_place() {
-        use super::loudness_impls::HeadroomParams;
+        use crate::pipeline::loudness_impls::HeadroomParams;
 
         let registry = EffectRegistry::with_builtin_effects();
 

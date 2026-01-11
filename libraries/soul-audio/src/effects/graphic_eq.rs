@@ -171,41 +171,76 @@ impl BiquadBand {
             return;
         }
 
-        // Bug fix: Lowered threshold from 0.1 to 0.01 to reduce discontinuity at near-zero gains
-        if self.gain_db.abs() < 0.01 {
-            self.b0 = 1.0;
-            self.b1 = 0.0;
-            self.b2 = 0.0;
-            self.a1 = 0.0;
-            self.a2 = 0.0;
-            return;
+        // Calculate new target coefficients
+        let (new_b0, new_b1, new_b2, new_a1, new_a2) = if self.gain_db.abs() < 0.01 {
+            // Near-zero gain: bypass filter (unity gain)
+            (1.0, 0.0, 0.0, 0.0, 0.0)
+        } else {
+            let a = 10.0_f32.powf(self.gain_db / 40.0);
+            // Bug fix: Clamp frequency to 45% of sample rate to prevent near-Nyquist instability
+            let clamped_freq = self.frequency.min(sample_rate * 0.45);
+            let omega = 2.0 * PI * clamped_freq / sample_rate;
+            let sin_omega = omega.sin();
+            let cos_omega = omega.cos();
+            let alpha = sin_omega / (2.0 * self.q);
+
+            let b0 = 1.0 + alpha * a;
+            let b1 = -2.0 * cos_omega;
+            let b2 = 1.0 - alpha * a;
+            let a0 = 1.0 + alpha / a;
+            let a1 = -2.0 * cos_omega;
+            let a2 = 1.0 - alpha / a;
+
+            // Normalize
+            (b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0)
+        };
+
+        // Check if coefficients actually changed (avoid unnecessary smoothing)
+        let coeffs_changed = (new_b0 - self.target_b0).abs() > 1e-9
+            || (new_b1 - self.target_b1).abs() > 1e-9
+            || (new_b2 - self.target_b2).abs() > 1e-9
+            || (new_a1 - self.target_a1).abs() > 1e-9
+            || (new_a2 - self.target_a2).abs() > 1e-9;
+
+        if coeffs_changed {
+            // Set target coefficients
+            self.target_b0 = new_b0;
+            self.target_b1 = new_b1;
+            self.target_b2 = new_b2;
+            self.target_a1 = new_a1;
+            self.target_a2 = new_a2;
+
+            // Start smoothing transition
+            self.smooth_samples_remaining = SMOOTH_SAMPLES;
         }
-
-        let a = 10.0_f32.powf(self.gain_db / 40.0);
-        // Bug fix: Clamp frequency to 45% of sample rate to prevent near-Nyquist instability
-        let clamped_freq = self.frequency.min(sample_rate * 0.45);
-        let omega = 2.0 * PI * clamped_freq / sample_rate;
-        let sin_omega = omega.sin();
-        let cos_omega = omega.cos();
-        let alpha = sin_omega / (2.0 * self.q);
-
-        let b0 = 1.0 + alpha * a;
-        let b1 = -2.0 * cos_omega;
-        let b2 = 1.0 - alpha * a;
-        let a0 = 1.0 + alpha / a;
-        let a1 = -2.0 * cos_omega;
-        let a2 = 1.0 - alpha / a;
-
-        // Normalize
-        self.b0 = b0 / a0;
-        self.b1 = b1 / a0;
-        self.b2 = b2 / a0;
-        self.a1 = a1 / a0;
-        self.a2 = a2 / a0;
     }
 
     #[inline]
     fn process(&mut self, left: f32, right: f32) -> (f32, f32) {
+        // Smooth coefficient transition if in progress
+        if self.smooth_samples_remaining > 0 {
+            // Linear interpolation factor (0.0 = current, 1.0 = target)
+            let alpha = 1.0 - (self.smooth_samples_remaining as f32 / SMOOTH_SAMPLES as f32);
+
+            // Interpolate coefficients
+            self.b0 = self.b0 + alpha * (self.target_b0 - self.b0);
+            self.b1 = self.b1 + alpha * (self.target_b1 - self.b1);
+            self.b2 = self.b2 + alpha * (self.target_b2 - self.b2);
+            self.a1 = self.a1 + alpha * (self.target_a1 - self.a1);
+            self.a2 = self.a2 + alpha * (self.target_a2 - self.a2);
+
+            self.smooth_samples_remaining -= 1;
+
+            // Snap to target when done
+            if self.smooth_samples_remaining == 0 {
+                self.b0 = self.target_b0;
+                self.b1 = self.target_b1;
+                self.b2 = self.target_b2;
+                self.a1 = self.target_a1;
+                self.a2 = self.target_a2;
+            }
+        }
+
         // Left channel
         let mut out_l = self.b0 * left + self.b1 * self.x1_l + self.b2 * self.x2_l
             - self.a1 * self.y1_l
@@ -248,6 +283,13 @@ impl BiquadBand {
         self.x2_r = 0.0;
         self.y1_r = 0.0;
         self.y2_r = 0.0;
+        // Snap coefficients to target for deterministic behavior after reset
+        self.b0 = self.target_b0;
+        self.b1 = self.target_b1;
+        self.b2 = self.target_b2;
+        self.a1 = self.target_a1;
+        self.a2 = self.target_a2;
+        self.smooth_samples_remaining = 0;
     }
 }
 
@@ -361,8 +403,7 @@ impl GraphicEq {
     pub fn set_band_gain(&mut self, index: usize, gain_db: f32) {
         if let Some(band) = self.bands.get_mut(index) {
             band.set_gain(gain_db);
-            // Bug fix: Reset filter state on parameter change to prevent clicks
-            band.reset();
+            // Coefficient smoothing handles the transition - no reset needed
             self.preset = GraphicEqPreset::Custom;
             self.needs_update = true;
         }
@@ -375,8 +416,7 @@ impl GraphicEq {
         }
         for (band, &gain) in self.bands.iter_mut().zip(gains.iter()) {
             band.set_gain(gain);
-            // Bug fix: Reset filter state on parameter change to prevent clicks
-            band.reset();
+            // Coefficient smoothing handles the transition - no reset needed
         }
         self.preset = GraphicEqPreset::Custom;
         self.needs_update = true;
@@ -399,8 +439,7 @@ impl GraphicEq {
         // Apply gains to matching bands (first 10 bands)
         for (band, &gain) in self.bands.iter_mut().zip(gains.iter()) {
             band.set_gain(gain);
-            // Bug fix: Reset filter state on parameter change to prevent clicks
-            band.reset();
+            // Coefficient smoothing handles the transition - no reset needed
         }
 
         // For 31-band, interpolate the remaining bands
@@ -421,8 +460,7 @@ impl GraphicEq {
                     }
                 }
                 band.set_gain(nearest_gain);
-                // Bug fix: Reset filter state on parameter change to prevent clicks
-                band.reset();
+                // Coefficient smoothing handles the transition - no reset needed
             }
         }
 
@@ -438,8 +476,7 @@ impl GraphicEq {
     pub fn reset_to_flat(&mut self) {
         for band in &mut self.bands {
             band.set_gain(0.0);
-            // Bug fix: Reset filter state on parameter change to prevent clicks
-            band.reset();
+            // Coefficient smoothing handles the transition - no reset needed
         }
         self.preset = GraphicEqPreset::Flat;
         self.needs_update = true;
@@ -497,6 +534,10 @@ impl AudioEffect for GraphicEq {
     }
 
     fn reset(&mut self) {
+        // Update target coefficients first so bands snap to current settings
+        self.needs_update = true;
+        self.update_coefficients();
+
         for band in &mut self.bands {
             band.reset();
         }
@@ -648,14 +689,22 @@ mod tests {
         let mut eq = GraphicEq::new_10_band();
         eq.set_preset(GraphicEqPreset::BassBoost);
 
-        // Process some samples
+        // Process a small buffer to trigger coefficient calculation
+        // (set_preset only sets gain_db, coefficients update on first process)
+        let mut dummy = vec![0.0; 2];
+        eq.process(&mut dummy, 44100);
+
+        // Reset to ensure deterministic starting state (snaps coefficients to target)
+        eq.reset();
+
+        // Process first buffer
         let mut buffer = vec![0.5; 100];
         eq.process(&mut buffer, 44100);
 
-        // Reset
+        // Reset again to same state
         eq.reset();
 
-        // Process again - should be deterministic
+        // Process second buffer - should match first (deterministic)
         let mut buffer2 = vec![0.5; 100];
         eq.process(&mut buffer2, 44100);
 

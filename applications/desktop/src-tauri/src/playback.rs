@@ -896,4 +896,54 @@ impl PlaybackManager {
         let playback = self.playback.lock().unwrap();
         playback.get_resampling_backend()
     }
+
+    // ===== Headroom Management =====
+
+    /// Set headroom management mode
+    pub fn set_headroom_mode(&self, mode: soul_playback::HeadroomMode) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_headroom_mode(mode);
+    }
+
+    /// Get current headroom mode
+    pub fn get_headroom_mode(&self) -> soul_playback::HeadroomMode {
+        let playback = self.playback.lock().unwrap();
+        playback.get_headroom_mode()
+    }
+
+    /// Set headroom enabled state
+    pub fn set_headroom_enabled(&self, enabled: bool) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_headroom_enabled(enabled);
+    }
+
+    /// Check if headroom management is enabled
+    pub fn is_headroom_enabled(&self) -> bool {
+        let playback = self.playback.lock().unwrap();
+        playback.is_headroom_enabled()
+    }
+
+    /// Set EQ boost value for headroom calculation
+    pub fn set_headroom_eq_boost_db(&self, boost_db: f64) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_headroom_eq_boost_db(boost_db);
+    }
+
+    /// Set pre-amp value for headroom calculation
+    pub fn set_headroom_preamp_db(&self, preamp_db: f64) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_headroom_preamp_db(preamp_db);
+    }
+
+    /// Get total potential gain from all sources
+    pub fn get_headroom_total_gain_db(&self) -> f64 {
+        let playback = self.playback.lock().unwrap();
+        playback.get_headroom_total_gain_db()
+    }
+
+    /// Get current attenuation being applied
+    pub fn get_headroom_attenuation_db(&self) -> f64 {
+        let playback = self.playback.lock().unwrap();
+        playback.get_headroom_attenuation_db()
+    }
 }

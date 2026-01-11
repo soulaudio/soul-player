@@ -4,10 +4,20 @@
     "loading": "読み込み中..."
   },
   "nav": {
+    "home": "ホーム",
     "library": "ライブラリ",
+    "discovery": "ディスカバリー",
     "playlists": "プレイリスト",
     "settings": "設定",
     "import": "インポート"
+  },
+  "sidebar": {
+    "nowPlaying": "再生中",
+    "queue": "キュー",
+    "upNext": "次に再生",
+    "noTrackPlaying": "再生中のトラックはありません",
+    "emptyQueue": "キューは空です",
+    "tracksInQueue": "キューに{{count}}曲"
   },
   "playback": {
     "play": "再生",

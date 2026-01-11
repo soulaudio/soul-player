@@ -17,6 +17,7 @@ import { DeviceSelector } from './audio/DeviceSelector';
 import { DspConfig } from './audio/DspConfig';
 import { UpsamplingSettings } from './audio/UpsamplingSettings';
 import { VolumeLevelingSettings } from './audio/VolumeLevelingSettings';
+import { HeadroomSettings } from './audio/HeadroomSettings';
 import { BufferSettings } from './audio/BufferSettings';
 
 export interface AudioBackend {
@@ -505,9 +506,22 @@ export function AudioSettingsPage() {
           />
         </PipelineStage>
 
-        {/* Stage 4: Buffer Settings */}
+        {/* Stage 4: Headroom Management */}
         <PipelineStage
           id="audio-stage-4"
+          title="Headroom Management"
+          description="Prevents clipping by attenuating signal before DSP processing"
+          isActive={true}
+          isOptional={true}
+          currentConfig="Auto"
+          statusText="Active"
+        >
+          <HeadroomSettings />
+        </PipelineStage>
+
+        {/* Stage 5: Buffer Settings */}
+        <PipelineStage
+          id="audio-stage-5"
           title="Buffer & Performance"
           description="Configure audio buffering and pre-loading for optimal playback"
           isActive={true}
@@ -528,9 +542,9 @@ export function AudioSettingsPage() {
           />
         </PipelineStage>
 
-        {/* Stage 5: Audio Output (Backend & Device) */}
+        {/* Stage 6: Audio Output (Backend & Device) */}
         <PipelineStage
-          id="audio-stage-5"
+          id="audio-stage-6"
           title="Audio Output"
           description="Select your audio driver backend and output device for playback"
           isActive={true}

@@ -195,6 +195,40 @@
     width: 8px;
     height: 8px;
   }
+
+  /* Queue scrollbar - overlay style with theme colors */
+  .queue-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .queue-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    background: transparent;
+  }
+
+  .queue-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .queue-scrollbar::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 3px;
+    transition: background 0.2s;
+  }
+
+  /* Show scrollbar on hover */
+  .group\/queue:hover .queue-scrollbar {
+    scrollbar-color: hsl(var(--primary) / 0.5) transparent;
+  }
+
+  .group\/queue:hover .queue-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.5);
+  }
+
+  .group\/queue:hover .queue-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.7);
+  }
 }
 
 /* Now playing equalizer animation */

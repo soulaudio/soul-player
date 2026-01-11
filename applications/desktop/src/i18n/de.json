@@ -4,10 +4,20 @@
     "loading": "Wird geladen..."
   },
   "nav": {
+    "home": "Startseite",
     "library": "Bibliothek",
+    "discovery": "Entdecken",
     "playlists": "Wiedergabelisten",
     "settings": "Einstellungen",
     "import": "Importieren"
+  },
+  "sidebar": {
+    "nowPlaying": "Aktuelle Wiedergabe",
+    "queue": "Warteschlange",
+    "upNext": "Als Nächstes",
+    "noTrackPlaying": "Kein Titel wird abgespielt",
+    "emptyQueue": "Warteschlange ist leer",
+    "tracksInQueue": "{{count}} Titel in der Warteschlange"
   },
   "playback": {
     "play": "Abspielen",

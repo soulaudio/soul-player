@@ -584,6 +584,7 @@ fn test_eq_mid_peaking_golden() {
 
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 3.0, 2.0));
+    eq.reset(); // Snap coefficients to target for deterministic test
 
     eq.process(&mut signal, sample_rate);
 

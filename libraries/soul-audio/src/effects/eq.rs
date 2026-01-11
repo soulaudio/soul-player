@@ -191,32 +191,18 @@ impl BiquadFilter {
     /// The exponential smoothing in smooth_coefficients() will gradually
     /// move the active coefficients toward these targets. This naturally
     /// handles both single changes and continuous parameter updates.
+    ///
+    /// Note: Always uses smooth transitions to prevent audio artifacts when
+    /// adding/removing bands during playback. New filters start at neutral
+    /// and smoothly transition to target values.
     fn set_target_coefficients(&mut self, b0: f32, b1: f32, b2: f32, a1: f32, a2: f32) {
-        // Check if current coefficients are at neutral/bypass (initial state)
-        // If so, snap immediately rather than smoothing - prevents audible artifacts
-        // only when transitioning from unity gain (no processing) to active filtering
-        let is_neutral = (self.b0 - 1.0).abs() < 1e-6
-            && self.b1.abs() < 1e-6
-            && self.b2.abs() < 1e-6
-            && self.a1.abs() < 1e-6
-            && self.a2.abs() < 1e-6;
-
-        // Update targets
+        // Update targets - exponential smoothing in smooth_coefficients() handles transitions
+        // We always smooth, even from neutral state, to prevent clicks when adding bands
         self.target_b0 = b0;
         self.target_b1 = b1;
         self.target_b2 = b2;
         self.target_a1 = a1;
         self.target_a2 = a2;
-
-        if is_neutral {
-            // Snap directly to target - no smoothing needed from neutral state
-            self.b0 = b0;
-            self.b1 = b1;
-            self.b2 = b2;
-            self.a1 = a1;
-            self.a2 = a2;
-        }
-        // Otherwise, exponential smoothing in smooth_coefficients() handles it
     }
 
     /// Configure as peaking EQ filter
@@ -357,6 +343,24 @@ impl BiquadFilter {
         self.a1 = self.target_a1;
         self.a2 = self.target_a2;
     }
+
+    /// Set filter to neutral (bypass) state without clearing filter state
+    ///
+    /// This is used when adding new bands during playback. The filter starts
+    /// at neutral (pass-through) and smoothly transitions to target coefficients.
+    /// Filter state is preserved so there's no transient from zeroed state.
+    fn set_to_neutral(&mut self) {
+        self.b0 = 1.0;
+        self.b1 = 0.0;
+        self.b2 = 0.0;
+        self.a1 = 0.0;
+        self.a2 = 0.0;
+        self.target_b0 = 1.0;
+        self.target_b1 = 0.0;
+        self.target_b2 = 0.0;
+        self.target_a1 = 0.0;
+        self.target_a2 = 0.0;
+    }
 }
 
 /// Dynamic Parametric Equalizer supporting 1-8 bands
@@ -449,13 +453,15 @@ impl ParametricEq {
     ///
     /// When increasing the band count, the new bands will have their
     /// pre-existing configurations (default or previously set).
-    /// Filter states for new bands are reset to prevent clicks.
+    /// New bands start with neutral coefficients and smoothly transition
+    /// to their target values to prevent clicks.
     pub fn set_band_count(&mut self, count: usize) {
         let new_count = count.clamp(1, MAX_EQ_BANDS);
 
-        // Reset filter states for newly added bands to prevent clicks
+        // For newly added bands, ensure they start at neutral coefficients
+        // Don't reset filter state - let coefficient smoothing handle the transition
         for i in self.band_count..new_count {
-            self.filters[i].reset();
+            self.filters[i].set_to_neutral();
         }
 
         self.band_count = new_count;
@@ -498,10 +504,10 @@ impl ParametricEq {
 
         self.bands[index] = band;
 
-        // Only reset filter state for newly added bands (outside current band_count)
+        // For newly added bands, set to neutral and let smoothing transition to target
         // For existing bands, preserve state - coefficient smoothing handles the transition
         if index >= self.band_count {
-            self.filters[index].reset();
+            self.filters[index].set_to_neutral();
             self.band_count = index + 1;
         }
 
@@ -532,7 +538,7 @@ impl ParametricEq {
     /// If the vector exceeds MAX_EQ_BANDS, excess bands are ignored.
     ///
     /// Note: Filter states are preserved for existing bands to prevent audio
-    /// artifacts. Only newly added bands have their states reset.
+    /// artifacts. New bands start neutral and smoothly transition to targets.
     pub fn set_bands(&mut self, bands: Vec<EqBand>) {
         if bands.is_empty() {
             // Set a single flat band - preserve filter state
@@ -544,9 +550,9 @@ impl ParametricEq {
 
             for (i, band) in bands.into_iter().take(MAX_EQ_BANDS).enumerate() {
                 self.bands[i] = band;
-                // Only reset filter state for newly added bands
+                // For newly added bands, set to neutral and let smoothing transition
                 if i >= self.band_count {
-                    self.filters[i].reset();
+                    self.filters[i].set_to_neutral();
                 }
             }
 
@@ -594,6 +600,9 @@ impl ParametricEq {
     ///
     /// # Returns
     /// The index of the added band, or None if at max capacity
+    ///
+    /// Note: New bands start with neutral coefficients and smoothly
+    /// transition to their target values to prevent audio artifacts.
     pub fn add_band(&mut self, band: EqBand) -> Option<usize> {
         if self.band_count >= MAX_EQ_BANDS {
             return None;
@@ -601,7 +610,8 @@ impl ParametricEq {
 
         let index = self.band_count;
         self.bands[index] = band;
-        self.filters[index].reset();
+        // Set to neutral - smoothing will transition to target coefficients
+        self.filters[index].set_to_neutral();
         self.band_count += 1;
         self.needs_update = true;
 

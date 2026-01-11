@@ -1170,10 +1170,11 @@ mod boundary_conditions {
 
     #[test]
     fn stereo_enhancer_boundary_balance() {
-        let mut enhancer = StereoEnhancer::new();
-
-        // Full left
-        enhancer.set_balance(-1.0);
+        // Full left - use with_settings to initialize with target values (no smoothing delay)
+        let mut enhancer = StereoEnhancer::with_settings(StereoSettings {
+            balance: -1.0,
+            ..Default::default()
+        });
         let mut buffer = vec![0.5, 0.5, 0.5, 0.5];
         enhancer.process(&mut buffer, 44100);
         assert!(
@@ -1181,8 +1182,11 @@ mod boundary_conditions {
             "Full left should silence right channel"
         );
 
-        // Full right
-        enhancer.set_balance(1.0);
+        // Full right - create new enhancer to avoid smoothing from previous state
+        let mut enhancer = StereoEnhancer::with_settings(StereoSettings {
+            balance: 1.0,
+            ..Default::default()
+        });
         let mut buffer = vec![0.5, 0.5, 0.5, 0.5];
         enhancer.process(&mut buffer, 44100);
         assert!(
@@ -1315,6 +1319,9 @@ mod regression_hunting {
             let mut eq = ParametricEq::new();
             eq.set_low_band(EqBand::low_shelf(100.0, 6.0));
             eq.set_mid_band(EqBand::peaking(1000.0, 3.0, 2.0));
+
+            // Initial reset to snap coefficients to target (avoid smoothing during first run)
+            eq.reset();
 
             // First run
             let mut buffer1 = samples.clone();

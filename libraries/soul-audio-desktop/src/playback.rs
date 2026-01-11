@@ -2266,6 +2266,71 @@ impl DesktopPlayback {
         let settings = self.resampling_settings.lock().unwrap();
         settings.clone()
     }
+
+    // ===========================================================================
+    // Headroom Management
+    // ===========================================================================
+
+    /// Set headroom management mode
+    ///
+    /// Modes:
+    /// - Auto: Calculate from ReplayGain + EQ boost
+    /// - Manual(dB): Fixed headroom reserve
+    /// - Disabled: No headroom attenuation
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_mode(&self, mode: soul_playback::HeadroomMode) {
+        let mut manager = self.manager.lock().unwrap();
+        manager.set_headroom_mode(mode);
+    }
+
+    /// Get current headroom mode
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_headroom_mode(&self) -> soul_playback::HeadroomMode {
+        let manager = self.manager.lock().unwrap();
+        manager.get_headroom_mode()
+    }
+
+    /// Set headroom enabled state
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_enabled(&self, enabled: bool) {
+        let mut manager = self.manager.lock().unwrap();
+        manager.set_headroom_enabled(enabled);
+    }
+
+    /// Check if headroom management is enabled
+    #[cfg(feature = "volume-leveling")]
+    pub fn is_headroom_enabled(&self) -> bool {
+        let manager = self.manager.lock().unwrap();
+        manager.is_headroom_enabled()
+    }
+
+    /// Set EQ boost value for headroom calculation (used in Auto mode)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_eq_boost_db(&self, boost_db: f64) {
+        let mut manager = self.manager.lock().unwrap();
+        manager.set_headroom_eq_boost_db(boost_db);
+    }
+
+    /// Set pre-amp value for headroom calculation (used in Auto mode)
+    #[cfg(feature = "volume-leveling")]
+    pub fn set_headroom_preamp_db(&self, preamp_db: f64) {
+        let mut manager = self.manager.lock().unwrap();
+        manager.set_headroom_preamp_db(preamp_db);
+    }
+
+    /// Get total potential gain from all sources
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_headroom_total_gain_db(&self) -> f64 {
+        let manager = self.manager.lock().unwrap();
+        manager.get_headroom_total_gain_db()
+    }
+
+    /// Get current attenuation being applied
+    #[cfg(feature = "volume-leveling")]
+    pub fn get_headroom_attenuation_db(&self) -> f64 {
+        let mut manager = self.manager.lock().unwrap();
+        manager.get_headroom_attenuation_db()
+    }
 }
 
 #[cfg(test)]

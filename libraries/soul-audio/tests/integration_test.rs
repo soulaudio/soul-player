@@ -38,6 +38,7 @@ fn test_eq_affects_frequency_content() {
 
     // Extreme boost on low band
     eq.set_low_band(EqBand::low_shelf(200.0, 12.0)); // +12 dB boost
+    eq.reset(); // Snap coefficients to target for deterministic test
 
     // Generate low frequency signal (100 Hz)
     let mut buffer = generate_sine(100.0, 0.1, 44100);
@@ -227,6 +228,7 @@ fn test_multiple_effect_resets() {
     // Verify resetting effects produces consistent results
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(100.0, 6.0));
+    eq.reset(); // Snap coefficients to target for deterministic starting state
 
     let mut buffer = generate_sine(100.0, 0.1, 44100);
 
@@ -251,6 +253,7 @@ fn test_sample_rate_change_handling() {
     // Verify effects adapt to sample rate changes
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0));
+    eq.reset(); // Snap coefficients to target for deterministic test
 
     // Process at 44.1kHz
     let mut buffer1 = generate_sine(1000.0, 0.1, 44100);

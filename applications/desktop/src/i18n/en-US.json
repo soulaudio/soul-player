@@ -4,10 +4,20 @@
     "loading": "Loading..."
   },
   "nav": {
+    "home": "Home",
     "library": "Library",
+    "discovery": "Discovery",
     "playlists": "Playlists",
     "settings": "Settings",
     "import": "Import"
+  },
+  "sidebar": {
+    "nowPlaying": "Now Playing",
+    "queue": "Queue",
+    "upNext": "Up Next",
+    "noTrackPlaying": "No track playing",
+    "emptyQueue": "Queue is empty",
+    "tracksInQueue": "{{count}} tracks in queue"
   },
   "playback": {
     "play": "Play",
