@@ -59,7 +59,10 @@ pub async fn get_by_id(pool: &SqlitePool, id: i64) -> Result<Option<ScanProgress
 }
 
 /// Get the currently running scan for a library source (if any)
-pub async fn get_running(pool: &SqlitePool, library_source_id: i64) -> Result<Option<ScanProgress>> {
+pub async fn get_running(
+    pool: &SqlitePool,
+    library_source_id: i64,
+) -> Result<Option<ScanProgress>> {
     let row = sqlx::query!(
         r#"
         SELECT id, library_source_id, started_at, completed_at, total_files,
@@ -287,7 +290,11 @@ pub async fn cancel(pool: &SqlitePool, id: i64) -> Result<()> {
 }
 
 /// Delete old scan progress records (keep only the last N per source)
-pub async fn cleanup_old(pool: &SqlitePool, library_source_id: i64, keep_count: i64) -> Result<u64> {
+pub async fn cleanup_old(
+    pool: &SqlitePool,
+    library_source_id: i64,
+    keep_count: i64,
+) -> Result<u64> {
     let result = sqlx::query!(
         r#"
         DELETE FROM scan_progress

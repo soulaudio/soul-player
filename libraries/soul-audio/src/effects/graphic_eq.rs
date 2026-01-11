@@ -138,8 +138,13 @@ impl BiquadBand {
     }
 
     fn update_coefficients(&mut self, sample_rate: f32) {
-        // Skip calculation if gain is essentially zero
-        if self.gain_db.abs() < 0.1 {
+        // Bug fix: Early return if sample rate is invalid to prevent division by zero
+        if sample_rate < 1.0 {
+            return;
+        }
+
+        // Bug fix: Lowered threshold from 0.1 to 0.01 to reduce discontinuity at near-zero gains
+        if self.gain_db.abs() < 0.01 {
             self.b0 = 1.0;
             self.b1 = 0.0;
             self.b2 = 0.0;
@@ -149,7 +154,9 @@ impl BiquadBand {
         }
 
         let a = 10.0_f32.powf(self.gain_db / 40.0);
-        let omega = 2.0 * PI * self.frequency / sample_rate;
+        // Bug fix: Clamp frequency to 45% of sample rate to prevent near-Nyquist instability
+        let clamped_freq = self.frequency.min(sample_rate * 0.45);
+        let omega = 2.0 * PI * clamped_freq / sample_rate;
         let sin_omega = omega.sin();
         let cos_omega = omega.cos();
         let alpha = sin_omega / (2.0 * self.q);
@@ -172,18 +179,30 @@ impl BiquadBand {
     #[inline]
     fn process(&mut self, left: f32, right: f32) -> (f32, f32) {
         // Left channel
-        let out_l = self.b0 * left + self.b1 * self.x1_l + self.b2 * self.x2_l
+        let mut out_l = self.b0 * left + self.b1 * self.x1_l + self.b2 * self.x2_l
             - self.a1 * self.y1_l
             - self.a2 * self.y2_l;
+
+        // Bug fix: Flush denormal numbers to zero to prevent CPU performance issues
+        if out_l.abs() < 1e-15 {
+            out_l = 0.0;
+        }
+
         self.x2_l = self.x1_l;
         self.x1_l = left;
         self.y2_l = self.y1_l;
         self.y1_l = out_l;
 
         // Right channel
-        let out_r = self.b0 * right + self.b1 * self.x1_r + self.b2 * self.x2_r
+        let mut out_r = self.b0 * right + self.b1 * self.x1_r + self.b2 * self.x2_r
             - self.a1 * self.y1_r
             - self.a2 * self.y2_r;
+
+        // Bug fix: Flush denormal numbers to zero to prevent CPU performance issues
+        if out_r.abs() < 1e-15 {
+            out_r = 0.0;
+        }
+
         self.x2_r = self.x1_r;
         self.x1_r = right;
         self.y2_r = self.y1_r;
@@ -233,7 +252,7 @@ impl GraphicEqBands {
     /// Get the Q factor for this band count
     pub fn q_factor(&self) -> f32 {
         match self {
-            Self::Ten => 1.41, // Octave bandwidth
+            Self::Ten => 1.41,       // Octave bandwidth
             Self::ThirtyOne => 4.32, // Third-octave bandwidth
         }
     }
@@ -314,6 +333,8 @@ impl GraphicEq {
     pub fn set_band_gain(&mut self, index: usize, gain_db: f32) {
         if let Some(band) = self.bands.get_mut(index) {
             band.set_gain(gain_db);
+            // Bug fix: Reset filter state on parameter change to prevent clicks
+            band.reset();
             self.preset = GraphicEqPreset::Custom;
             self.needs_update = true;
         }
@@ -326,6 +347,8 @@ impl GraphicEq {
         }
         for (band, &gain) in self.bands.iter_mut().zip(gains.iter()) {
             band.set_gain(gain);
+            // Bug fix: Reset filter state on parameter change to prevent clicks
+            band.reset();
         }
         self.preset = GraphicEqPreset::Custom;
         self.needs_update = true;
@@ -348,6 +371,8 @@ impl GraphicEq {
         // Apply gains to matching bands (first 10 bands)
         for (band, &gain) in self.bands.iter_mut().zip(gains.iter()) {
             band.set_gain(gain);
+            // Bug fix: Reset filter state on parameter change to prevent clicks
+            band.reset();
         }
 
         // For 31-band, interpolate the remaining bands
@@ -368,6 +393,8 @@ impl GraphicEq {
                     }
                 }
                 band.set_gain(nearest_gain);
+                // Bug fix: Reset filter state on parameter change to prevent clicks
+                band.reset();
             }
         }
 
@@ -383,6 +410,8 @@ impl GraphicEq {
     pub fn reset_to_flat(&mut self) {
         for band in &mut self.bands {
             band.set_gain(0.0);
+            // Bug fix: Reset filter state on parameter change to prevent clicks
+            band.reset();
         }
         self.preset = GraphicEqPreset::Flat;
         self.needs_update = true;
@@ -415,6 +444,10 @@ impl AudioEffect for GraphicEq {
         // Update sample rate if changed
         if self.sample_rate != sample_rate {
             self.sample_rate = sample_rate;
+            // Bug fix: Reset filter state when sample rate changes to prevent transients
+            for band in &mut self.bands {
+                band.reset();
+            }
             self.needs_update = true;
         }
 

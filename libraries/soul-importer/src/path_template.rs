@@ -94,8 +94,8 @@ impl PathTemplate {
             .unwrap_or("flac");
 
         // Detect if this is a multi-disc album
-        let is_multi_disc = metadata.disc_number.map(|_| true).unwrap_or(false)
-            && metadata.disc_number != Some(1);
+        let is_multi_disc =
+            metadata.disc_number.map(|_| true).unwrap_or(false) && metadata.disc_number != Some(1);
 
         // Detect if this is a compilation/VA album
         let is_compilation = self.is_compilation(metadata);
@@ -104,33 +104,18 @@ impl PathTemplate {
         let mut resolved = self.template.clone();
 
         // Resolve all placeholders
-        resolved = self.resolve_placeholder(&resolved, "AlbumArtist", || {
-            self.get_album_artist(metadata)
-        });
-        resolved = self.resolve_placeholder(&resolved, "Artist", || {
-            self.get_artist(metadata)
-        });
-        resolved = self.resolve_placeholder(&resolved, "Album", || {
-            self.get_album(metadata)
-        });
-        resolved = self.resolve_placeholder(&resolved, "Title", || {
-            self.get_title(metadata, source_path)
-        });
-        resolved = self.resolve_placeholder(&resolved, "TrackNo", || {
-            self.get_track_number(metadata)
-        });
-        resolved = self.resolve_placeholder(&resolved, "DiscNo", || {
-            self.get_disc_number(metadata)
-        });
-        resolved = self.resolve_placeholder(&resolved, "Year", || {
-            self.get_year(metadata)
-        });
-        resolved = self.resolve_placeholder(&resolved, "Genre", || {
-            self.get_genre(metadata)
-        });
-        resolved = self.resolve_placeholder(&resolved, "Composer", || {
-            self.get_composer(metadata)
-        });
+        resolved =
+            self.resolve_placeholder(&resolved, "AlbumArtist", || self.get_album_artist(metadata));
+        resolved = self.resolve_placeholder(&resolved, "Artist", || self.get_artist(metadata));
+        resolved = self.resolve_placeholder(&resolved, "Album", || self.get_album(metadata));
+        resolved =
+            self.resolve_placeholder(&resolved, "Title", || self.get_title(metadata, source_path));
+        resolved =
+            self.resolve_placeholder(&resolved, "TrackNo", || self.get_track_number(metadata));
+        resolved = self.resolve_placeholder(&resolved, "DiscNo", || self.get_disc_number(metadata));
+        resolved = self.resolve_placeholder(&resolved, "Year", || self.get_year(metadata));
+        resolved = self.resolve_placeholder(&resolved, "Genre", || self.get_genre(metadata));
+        resolved = self.resolve_placeholder(&resolved, "Composer", || self.get_composer(metadata));
 
         // Handle multi-disc albums
         if self.add_disc_folder && is_multi_disc {
@@ -421,6 +406,9 @@ mod tests {
             sample_rate: Some(44100),
             channels: Some(2),
             file_format: "flac".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art: None,
         }
     }
 
@@ -483,6 +471,9 @@ mod tests {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art: None,
         };
         let source = Path::new("/path/to/original_song.mp3");
 
@@ -505,10 +496,7 @@ mod tests {
 
         // Should fall back to track artist (use components for cross-platform)
         let components: Vec<_> = path.components().collect();
-        assert_eq!(
-            components[0].as_os_str().to_string_lossy(),
-            "Queen"
-        );
+        assert_eq!(components[0].as_os_str().to_string_lossy(), "Queen");
     }
 
     #[test]
@@ -541,7 +529,10 @@ mod tests {
     fn test_sanitize_path_component() {
         assert_eq!(sanitize_path_component("Valid Name"), "Valid Name");
         assert_eq!(sanitize_path_component("Artist/Album"), "Artist_Album");
-        assert_eq!(sanitize_path_component("Song: The Remix"), "Song_ The Remix");
+        assert_eq!(
+            sanitize_path_component("Song: The Remix"),
+            "Song_ The Remix"
+        );
         assert_eq!(sanitize_path_component("A<B>C"), "A_B_C");
         assert_eq!(sanitize_path_component("  Trimmed  "), "Trimmed");
         assert_eq!(sanitize_path_component("trailing..."), "trailing");

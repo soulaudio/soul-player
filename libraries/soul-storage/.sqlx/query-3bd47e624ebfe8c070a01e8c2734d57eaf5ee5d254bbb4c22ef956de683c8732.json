@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE sources SET server_username = ?, server_token = ?, updated_at = datetime('now') WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "3bd47e624ebfe8c070a01e8c2734d57eaf5ee5d254bbb4c22ef956de683c8732"
+}

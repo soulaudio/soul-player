@@ -6,8 +6,8 @@
 //! - Passthrough configurations preserve exact values
 
 use soul_audio::effects::{
-    AudioEffect, Compressor, Crossfeed, EqBand, GraphicEq, GraphicEqPreset, Limiter,
-    ParametricEq, StereoEnhancer, StereoSettings,
+    AudioEffect, Compressor, Crossfeed, EqBand, GraphicEq, GraphicEqPreset, Limiter, ParametricEq,
+    StereoEnhancer, StereoSettings,
 };
 use std::f32::consts::PI;
 
@@ -47,7 +47,9 @@ fn buffers_identical(a: &[f32], b: &[f32]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).all(|(x, y)| x.to_bits() == y.to_bits())
+    a.iter()
+        .zip(b.iter())
+        .all(|(x, y)| x.to_bits() == y.to_bits())
 }
 
 /// Compare two buffers for near-equality (within epsilon)
@@ -401,7 +403,10 @@ fn test_dc_offset_preserved_when_disabled() {
 
     // DC should be preserved exactly when bypassed
     for sample in &buffer {
-        assert_eq!(*sample, dc_value, "DC should be preserved exactly when disabled");
+        assert_eq!(
+            *sample, dc_value,
+            "DC should be preserved exactly when disabled"
+        );
     }
 }
 

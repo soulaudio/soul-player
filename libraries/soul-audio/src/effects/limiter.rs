@@ -3,7 +3,6 @@
 /// A limiter is essentially a compressor with an infinite ratio, designed to prevent
 /// audio peaks from exceeding a threshold. This implementation uses a lookahead buffer
 /// for zero-latency brick-wall limiting.
-
 use super::AudioEffect;
 
 /// Limiter settings
@@ -82,7 +81,7 @@ impl Limiter {
             settings,
             threshold_linear,
             release_coeff: 0.0, // Will be updated in process()
-            envelope: 1.0,
+            envelope: 0.0,      // Start with no signal detected
             enabled: true,
         }
     }
@@ -161,7 +160,7 @@ impl AudioEffect for Limiter {
     }
 
     fn reset(&mut self) {
-        self.envelope = 1.0;
+        self.envelope = 0.0; // Reset to "no signal detected"
     }
 
     fn set_enabled(&mut self, enabled: bool) {
@@ -257,8 +256,8 @@ mod tests {
 
         limiter.reset();
 
-        // Envelope should be reset
-        assert!((limiter.envelope - 1.0).abs() < 0.0001);
+        // Envelope should be reset to 0 (no signal detected)
+        assert!((limiter.envelope - 0.0).abs() < 0.0001);
     }
 
     #[test]
@@ -291,7 +290,13 @@ mod tests {
         // Signal should be mostly unchanged (minor envelope follower effect)
         for (i, sample) in buffer.iter().enumerate() {
             let diff = (sample - original[i]).abs();
-            assert!(diff < 0.05, "Sample {} changed too much: {} vs {}", i, sample, original[i]);
+            assert!(
+                diff < 0.05,
+                "Sample {} changed too much: {} vs {}",
+                i,
+                sample,
+                original[i]
+            );
         }
     }
 

@@ -22,7 +22,10 @@ impl AudioTestImage {
         // Build the image using the Dockerfile
         let dockerfile_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/docker");
 
-        eprintln!("Building audio test image from Dockerfile at: {}", dockerfile_dir);
+        eprintln!(
+            "Building audio test image from Dockerfile at: {}",
+            dockerfile_dir
+        );
 
         let output = std::process::Command::new("docker")
             .args([
@@ -103,7 +106,10 @@ async fn test_device_enumeration_in_container() {
     AudioTestImage::build_if_needed();
 
     // Start the container using testcontainers
-    let container = AudioTestImage.start().await.expect("Failed to start container");
+    let container = AudioTestImage
+        .start()
+        .await
+        .expect("Failed to start container");
 
     eprintln!("✓ Container started: {}", container.id());
 
@@ -352,7 +358,10 @@ async fn test_docker_audio_container_health() {
     AudioTestImage::build_if_needed();
 
     // Start container using testcontainers
-    let container = AudioTestImage.start().await.expect("Failed to start container");
+    let container = AudioTestImage
+        .start()
+        .await
+        .expect("Failed to start container");
 
     eprintln!("✓ Container started: {}", container.id());
 

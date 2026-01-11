@@ -30,12 +30,12 @@ cargo check -p soul-storage
 ```
 
 The script will:
-- ✅ Create `.env` from `.env.example` (do this manually: `copy .env.example .env`)
-- ✅ Install `sqlx-cli` if needed
-- ✅ Create development database at `libraries/soul-storage/.tmp/dev.db`
-- ✅ Run all migrations
-- ✅ Prepare offline mode (optional)
-- ✅ Verify setup
+- Create `.env` from `.env.example` (do this manually: `copy .env.example .env`)
+- Install `sqlx-cli` if needed
+- Create development database at `libraries/soul-storage/.tmp/dev.db`
+- Run all migrations
+- Prepare offline mode (optional)
+- Verify setup
 
 ## How It Works
 
@@ -52,7 +52,7 @@ This catches SQL bugs at compile time, not runtime.
 
 ```bash
 cargo build    # Automatically verifies queries
-cargo test     # Uses testcontainers (isolated DBs)
+cargo test     # Uses temp databases (isolated)
 ```
 
 ### After Schema Changes
@@ -173,7 +173,7 @@ Used by Soul Player apps at runtime (NOT by SQLx):
 DATABASE_PATH=/path/to/my-music.db
 ```
 
-⚠️ Don't confuse `DATABASE_URL` (SQLx) with `DATABASE_PATH` (runtime)!
+Don't confuse `DATABASE_URL` (SQLx) with `DATABASE_PATH` (runtime)!
 
 ## Database Contexts
 
@@ -182,7 +182,47 @@ DATABASE_PATH=/path/to/my-music.db
 | **Compile-time** | `.tmp/dev.db` | SQLx query verification |
 | **Desktop Runtime** | App data dir | User's music library |
 | **Server Runtime** | Configured path | Multi-user production |
-| **Tests** | Testcontainers | Isolated test databases |
+| **Tests** | System temp dir | Isolated test databases |
+
+## Test Database Conventions
+
+Tests create isolated databases that are automatically cleaned up:
+
+### How Tests Handle Databases
+
+1. **Location**: Tests create databases in the system temp directory (e.g., `%TEMP%` on Windows, `/tmp` on Unix)
+2. **Naming**: Unique names like `soul_test_{uuid}.db` prevent conflicts between parallel tests
+3. **Cleanup**: Test databases are deleted after tests complete
+
+### Writing Tests with Databases
+
+```rust
+use tempfile::NamedTempFile;
+
+#[tokio::test]
+async fn test_with_database() {
+    // Create temp database file
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path().to_str().unwrap();
+    let db_url = format!("sqlite:{}", db_path);
+
+    // Create pool and run migrations
+    let pool = SqlitePool::connect(&db_url).await.unwrap();
+    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+    // Run test...
+
+    // Cleanup happens automatically when temp_file drops
+}
+```
+
+### Gitignore Rules
+
+All database files are gitignored:
+- `*.db`, `*.db-shm`, `*.db-wal` - SQLite database files
+- `libraries/soul-storage/.tmp/` - Compile-time verification databases
+
+**Never commit database files to git.**
 
 ## Migration Workflow
 

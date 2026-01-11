@@ -1,10 +1,12 @@
 //! WASM-compatible PlaybackManager wrapper
 
-use wasm_bindgen::prelude::*;
-use js_sys::Function;
-use crate::{PlaybackManager, PlaybackConfig, PlaybackError, PlaybackState, ShuffleMode, RepeatMode};
 use super::types::WasmQueueTrack;
+use crate::{
+    PlaybackConfig, PlaybackError, PlaybackManager, PlaybackState, RepeatMode, ShuffleMode,
+};
+use js_sys::Function;
 use std::time::Duration;
+use wasm_bindgen::prelude::*;
 
 /// WASM-compatible playback manager
 ///
@@ -44,9 +46,7 @@ impl WasmPlaybackManager {
     pub fn play(&mut self) -> Result<(), JsValue> {
         let old_state = self.inner.get_state();
 
-        self.inner
-            .play()
-            .map_err(|e| self.handle_error(e))?;
+        self.inner.play().map_err(|e| self.handle_error(e))?;
 
         let new_state = self.inner.get_state();
 
@@ -83,9 +83,7 @@ impl WasmPlaybackManager {
 
     /// Go to previous track
     pub fn previous(&mut self) -> Result<(), JsValue> {
-        self.inner
-            .previous()
-            .map_err(|e| self.handle_error(e))?;
+        self.inner.previous().map_err(|e| self.handle_error(e))?;
         self.emit_track_change();
         self.emit_queue_change();
         Ok(())
@@ -251,7 +249,8 @@ impl WasmPlaybackManager {
     /// Remove track from queue by index
     #[wasm_bindgen(js_name = removeFromQueue)]
     pub fn remove_from_queue(&mut self, index: usize) -> Result<JsValue, JsValue> {
-        let removed_track = self.inner
+        let removed_track = self
+            .inner
             .remove_from_queue(index)
             .map_err(|e| self.handle_error(e))?;
 
@@ -297,7 +296,11 @@ impl WasmPlaybackManager {
             "off" => ShuffleMode::Off,
             "random" => ShuffleMode::Random,
             "smart" => ShuffleMode::Smart,
-            _ => return Err(JsValue::from_str("Invalid shuffle mode. Use 'off', 'random', or 'smart'")),
+            _ => {
+                return Err(JsValue::from_str(
+                    "Invalid shuffle mode. Use 'off', 'random', or 'smart'",
+                ))
+            }
         };
 
         self.inner.set_shuffle(shuffle);
@@ -322,7 +325,11 @@ impl WasmPlaybackManager {
             "off" => RepeatMode::Off,
             "all" => RepeatMode::All,
             "one" => RepeatMode::One,
-            _ => return Err(JsValue::from_str("Invalid repeat mode. Use 'off', 'all', or 'one'")),
+            _ => {
+                return Err(JsValue::from_str(
+                    "Invalid repeat mode. Use 'off', 'all', or 'one'",
+                ))
+            }
         };
 
         self.inner.set_repeat(repeat);
@@ -370,8 +377,7 @@ impl WasmPlaybackManager {
     fn emit_state_change(&self) {
         if let Some(ref cb) = self.on_state_change {
             let state = self.get_state();
-            cb.call1(&JsValue::NULL, &JsValue::from_str(&state))
-                .ok();
+            cb.call1(&JsValue::NULL, &JsValue::from_str(&state)).ok();
         }
     }
 
@@ -399,8 +405,7 @@ impl WasmPlaybackManager {
 
         // Emit error event
         if let Some(ref cb) = self.on_error {
-            cb.call1(&JsValue::NULL, &JsValue::from_str(&err_msg))
-                .ok();
+            cb.call1(&JsValue::NULL, &JsValue::from_str(&err_msg)).ok();
         }
 
         JsValue::from_str(&err_msg)

@@ -105,17 +105,33 @@ impl Default for CompressorSettings {
 }
 
 /// Dynamic Range Compressor
+///
+/// Uses a two-stage design for proper timing and low THD:
+/// 1. Peak level detection with instant attack and slow release (peak hold)
+///    This accurately tracks the signal level without per-cycle variation
+/// 2. Gain smoothing with configurable attack/release for proper dynamics
+///    This controls how fast compression responds
+///
+/// The key insight is that:
+/// - Peak detection needs SLOW release to hold peaks across waveform cycles (reduces THD)
+/// - Gain smoothing uses the user-configured attack/release times
+/// - These are independent: peak detector affects level accuracy, gain smoother affects timing
 pub struct Compressor {
     settings: CompressorSettings,
     enabled: bool,
 
-    // Envelope followers (per channel)
-    envelope_l: f32,
-    envelope_r: f32,
+    // Peak level detector (in dB)
+    // Uses instant attack, slow release to hold peaks across cycles
+    peak_level_db: f32,
+
+    // Smoothed gain reduction in dB
+    // This is what gets smoothed with user-configured attack/release
+    gain_reduction_db: f32,
 
     // Coefficient cache
-    attack_coeff: f32,
-    release_coeff: f32,
+    peak_release_coeff: f32,  // Slow release for peak hold (~100ms)
+    gr_attack_coeff: f32,     // User-configured attack
+    gr_release_coeff: f32,    // User-configured release
     makeup_gain_linear: f32,
 
     sample_rate: u32,
@@ -133,10 +149,11 @@ impl Compressor {
         let mut comp = Self {
             settings,
             enabled: true,
-            envelope_l: 0.0,
-            envelope_r: 0.0,
-            attack_coeff: 0.0,
-            release_coeff: 0.0,
+            peak_level_db: -120.0,   // Start with very low level
+            gain_reduction_db: 0.0,  // Start with no gain reduction
+            peak_release_coeff: 0.0,
+            gr_attack_coeff: 0.0,
+            gr_release_coeff: 0.0,
             makeup_gain_linear: 1.0,
             sample_rate: 44100,
             needs_update: true,
@@ -194,10 +211,25 @@ impl Compressor {
 
         let sr = self.sample_rate as f32;
 
-        // Calculate attack/release coefficients
-        // Formula: 1 - e^(-1 / (time_ms * sample_rate / 1000))
-        self.attack_coeff = (-1.0 / (self.settings.attack_ms * sr / 1000.0)).exp();
-        self.release_coeff = (-1.0 / (self.settings.release_ms * sr / 1000.0)).exp();
+        // Peak level detector coefficient
+        // Use a relatively long hold time to capture true peaks
+        // This ensures the peak level is stable within each waveform cycle
+        // A 50ms release means peaks are held for about 50 cycles at 1kHz
+        // This is enough to accurately measure steady-state level
+        // while still responding to level changes within ~100ms
+        let peak_release_ms = 50.0;
+        let peak_release_samples = peak_release_ms * sr / 1000.0;
+        self.peak_release_coeff = (-1.0 / peak_release_samples).exp();
+
+        // Gain reduction smoothing coefficients
+        // These are the user-configurable attack/release times
+        // Using the standard formula: coeff = exp(-1 / (time_ms * sample_rate / 1000))
+        // This gives 63.2% (1 - 1/e) response at the specified time
+        let attack_samples = self.settings.attack_ms * sr / 1000.0;
+        let release_samples = self.settings.release_ms * sr / 1000.0;
+
+        self.gr_attack_coeff = (-1.0 / attack_samples).exp();
+        self.gr_release_coeff = (-1.0 / release_samples).exp();
 
         // Convert makeup gain from dB to linear
         self.makeup_gain_linear = 10.0_f32.powf(self.settings.makeup_gain_db / 20.0);
@@ -205,50 +237,86 @@ impl Compressor {
         self.needs_update = false;
     }
 
-    /// Compute gain reduction for a given input level
+    /// Compute the desired output level for a given input level (in dB)
+    /// Returns the output level in dB
     #[inline]
-    fn compute_gain_reduction(&self, input_db: f32) -> f32 {
+    fn compute_output_level(&self, input_db: f32) -> f32 {
         let threshold = self.settings.threshold_db;
         let ratio = self.settings.ratio;
         let knee = self.settings.knee_db;
 
-        if input_db < threshold - knee / 2.0 {
-            // Below knee - no compression
-            0.0
-        } else if input_db > threshold + knee / 2.0 {
-            // Above knee - full compression
-            (threshold - input_db) + (input_db - threshold) / ratio
+        if knee <= 0.0 {
+            // Hard knee
+            if input_db <= threshold {
+                input_db // No compression below threshold
+            } else {
+                // Above threshold: output = threshold + (input - threshold) / ratio
+                threshold + (input_db - threshold) / ratio
+            }
         } else {
-            // Within knee - soft transition
-            let knee_start = threshold - knee / 2.0;
-            let knee_factor = (input_db - knee_start) / knee;
-            let knee_gain = knee_factor * knee_factor / 2.0;
-            -knee_gain * knee * (1.0 - 1.0 / ratio)
+            // Soft knee
+            let half_knee = knee / 2.0;
+            let knee_start = threshold - half_knee;
+            let knee_end = threshold + half_knee;
+
+            if input_db <= knee_start {
+                // Below knee region - no compression
+                input_db
+            } else if input_db >= knee_end {
+                // Above knee region - full compression
+                threshold + (input_db - threshold) / ratio
+            } else {
+                // Within knee region - smooth quadratic transition
+                // This implements the standard soft-knee formula
+                let x = input_db - knee_start;
+                let slope_change = (1.0 - 1.0 / ratio) / (2.0 * knee);
+                input_db - slope_change * x * x
+            }
         }
     }
 
-    /// Process a single sample for one channel
+    /// Compute gain reduction for a given input level (in dB)
+    /// Returns gain reduction in dB (negative value means gain reduction)
     #[inline]
-    fn process_sample(&mut self, sample: f32, envelope: &mut f32) -> f32 {
-        // Convert to dB (with floor to avoid log(0))
-        let input_level = sample.abs().max(0.000001);
-        let input_db = 20.0 * input_level.log10();
+    fn compute_gain_reduction(&self, input_db: f32) -> f32 {
+        self.compute_output_level(input_db) - input_db
+    }
 
-        // Envelope follower with attack/release
-        let coeff = if input_db > *envelope {
-            self.attack_coeff // Attack
+    /// Update peak level detector
+    /// Uses instant attack (new peaks are captured immediately)
+    /// and slow release (peaks decay toward noise floor, not input)
+    #[inline]
+    fn update_peak_level(&mut self, input_db: f32) {
+        if input_db > self.peak_level_db {
+            // Instant attack - capture new peaks immediately
+            self.peak_level_db = input_db;
         } else {
-            self.release_coeff // Release
+            // Slow release - decay toward noise floor at fixed rate
+            // We don't decay toward input because input can be -inf at zero crossings
+            // This holds peaks properly across waveform cycles
+            // Decay by (1 - coeff) * range_to_floor per sample
+            // Effectively: peak = peak * coeff (multiplicative decay in linear, fixed dB/s in log)
+            const NOISE_FLOOR_DB: f32 = -120.0;
+            self.peak_level_db = self.peak_release_coeff * (self.peak_level_db - NOISE_FLOOR_DB)
+                + NOISE_FLOOR_DB;
+        }
+    }
+
+    /// Smooth gain reduction with attack/release
+    /// Attack = time to increase gain reduction (compress)
+    /// Release = time to decrease gain reduction (release)
+    #[inline]
+    fn smooth_gain_reduction(&mut self, target_gr_db: f32) {
+        // Attack means more negative gain reduction (more compression)
+        // Release means less negative gain reduction (less compression)
+        let coeff = if target_gr_db < self.gain_reduction_db {
+            self.gr_attack_coeff // Target is more negative = attacking
+        } else {
+            self.gr_release_coeff // Target is less negative = releasing
         };
 
-        *envelope = coeff * *envelope + (1.0 - coeff) * input_db;
-
-        // Compute gain reduction
-        let gain_reduction_db = self.compute_gain_reduction(*envelope);
-        let gain = 10.0_f32.powf(gain_reduction_db / 20.0);
-
-        // Apply gain and makeup gain
-        sample * gain * self.makeup_gain_linear
+        self.gain_reduction_db = coeff * self.gain_reduction_db
+            + (1.0 - coeff) * target_gr_db;
     }
 }
 
@@ -274,24 +342,42 @@ impl AudioEffect for Compressor {
         // Update coefficients if needed
         self.update_coefficients();
 
-        // Process interleaved stereo buffer
-        // Extract envelopes to avoid borrow checker issues
-        let mut env_l = self.envelope_l;
-        let mut env_r = self.envelope_r;
-
+        // Process interleaved stereo buffer with linked stereo detection
         for chunk in buffer.chunks_exact_mut(2) {
-            chunk[0] = self.process_sample(chunk[0], &mut env_l);
-            chunk[1] = self.process_sample(chunk[1], &mut env_r);
-        }
+            // For linked stereo, use the louder channel (peak of both)
+            let max_sample = chunk[0].abs().max(chunk[1].abs());
 
-        // Store back
-        self.envelope_l = env_l;
-        self.envelope_r = env_r;
+            // Convert instantaneous level to dB
+            let input_db = if max_sample > 1e-10 {
+                20.0 * max_sample.log10()
+            } else {
+                -200.0 // Very quiet
+            };
+
+            // Stage 1: Update peak level detector
+            // This holds peaks across waveform cycles for accurate level measurement
+            self.update_peak_level(input_db);
+
+            // Compute target gain reduction based on peak level
+            let target_gr_db = self.compute_gain_reduction(self.peak_level_db);
+
+            // Stage 2: Smooth the gain reduction with attack/release
+            // This is where the user-configurable timing happens
+            self.smooth_gain_reduction(target_gr_db);
+
+            // Convert smoothed gain reduction to linear
+            let gain = 10.0_f32.powf(self.gain_reduction_db / 20.0);
+
+            // Apply same gain to both channels (linked stereo)
+            // This preserves stereo image
+            chunk[0] = chunk[0] * gain * self.makeup_gain_linear;
+            chunk[1] = chunk[1] * gain * self.makeup_gain_linear;
+        }
     }
 
     fn reset(&mut self) {
-        self.envelope_l = 0.0;
-        self.envelope_r = 0.0;
+        self.peak_level_db = -120.0;
+        self.gain_reduction_db = 0.0;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
@@ -377,9 +463,10 @@ mod tests {
         // Reset
         comp.reset();
 
-        // Envelopes should be zero
-        assert_eq!(comp.envelope_l, 0.0);
-        assert_eq!(comp.envelope_r, 0.0);
+        // Peak level detector should be reset to very low value (-120 dB)
+        assert_eq!(comp.peak_level_db, -120.0);
+        // Gain reduction should be reset to 0 dB (no reduction)
+        assert_eq!(comp.gain_reduction_db, 0.0);
     }
 
     #[test]
@@ -438,6 +525,75 @@ mod tests {
             "Expected processed ({}) > original ({})",
             processed_avg,
             original_avg
+        );
+    }
+
+    #[test]
+    fn gain_reduction_calculation() {
+        let settings = CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 4.0,
+            attack_ms: 5.0,
+            release_ms: 50.0,
+            knee_db: 0.0, // Hard knee
+            makeup_gain_db: 0.0,
+        };
+        let comp = Compressor::with_settings(settings);
+
+        // Test below threshold - no compression
+        assert_eq!(comp.compute_gain_reduction(-30.0), 0.0);
+        assert_eq!(comp.compute_gain_reduction(-25.0), 0.0);
+        assert_eq!(comp.compute_gain_reduction(-20.0), 0.0);
+
+        // Test above threshold - should compress
+        // At -16dB (4dB above threshold), 4:1 ratio means 3dB reduction
+        let gr = comp.compute_gain_reduction(-16.0);
+        assert!(
+            (gr - (-3.0)).abs() < 0.01,
+            "Expected -3.0dB gain reduction, got {}",
+            gr
+        );
+
+        // At -10dB (10dB above threshold), 4:1 ratio means 7.5dB reduction
+        let gr = comp.compute_gain_reduction(-10.0);
+        assert!(
+            (gr - (-7.5)).abs() < 0.01,
+            "Expected -7.5dB gain reduction, got {}",
+            gr
+        );
+    }
+
+    #[test]
+    fn output_level_calculation() {
+        let settings = CompressorSettings {
+            threshold_db: -20.0,
+            ratio: 4.0,
+            attack_ms: 5.0,
+            release_ms: 50.0,
+            knee_db: 0.0,
+            makeup_gain_db: 0.0,
+        };
+        let comp = Compressor::with_settings(settings);
+
+        // Below threshold: output = input
+        assert_eq!(comp.compute_output_level(-30.0), -30.0);
+        assert_eq!(comp.compute_output_level(-20.0), -20.0);
+
+        // Above threshold: output = threshold + (input - threshold) / ratio
+        // At -16dB: output = -20 + (-16 - -20) / 4 = -20 + 1 = -19
+        let output = comp.compute_output_level(-16.0);
+        assert!(
+            (output - (-19.0)).abs() < 0.01,
+            "Expected -19.0dB output, got {}",
+            output
+        );
+
+        // At -10dB: output = -20 + (-10 - -20) / 4 = -20 + 2.5 = -17.5
+        let output = comp.compute_output_level(-10.0);
+        assert!(
+            (output - (-17.5)).abs() < 0.01,
+            "Expected -17.5dB output, got {}",
+            output
         );
     }
 }

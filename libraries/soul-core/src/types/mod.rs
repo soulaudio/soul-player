@@ -22,6 +22,7 @@ pub use external_file_settings::{
     ExternalFileAction, ExternalFileSettings, ImportDestination, UpdateExternalFileSettings,
 };
 pub use ids::{PlaylistId, TrackId, UserId};
+pub use legacy::{Permission, PlaylistShare, TrackMetadata};
 pub use library_source::{
     CreateLibrarySource, LibrarySource, ScanProgress, ScanProgressStatus, ScanStatus,
     UpdateLibrarySource,
@@ -29,7 +30,6 @@ pub use library_source::{
 pub use managed_library::{
     ImportAction, ManagedLibrarySettings, PathTemplatePreset, UpdateManagedLibrarySettings,
 };
-pub use legacy::{Permission, PlaylistShare, TrackMetadata};
 pub use playback_state::{PlaybackState, RepeatMode, TransferPlayback, UpdatePlaybackState};
 pub use user::User;
 

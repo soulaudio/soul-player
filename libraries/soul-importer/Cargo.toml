@@ -12,6 +12,7 @@ rust-version.workspace = true
 soul-core = { workspace = true }
 soul-storage = { workspace = true }
 soul-metadata = { workspace = true }
+soul-audio = { workspace = true }
 
 # Database (for error types)
 sqlx = { workspace = true }

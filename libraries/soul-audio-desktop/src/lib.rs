@@ -41,18 +41,19 @@
 pub mod backend;
 pub mod device;
 mod error;
+pub mod exclusive;
 mod output;
 pub mod playback;
 pub mod sources;
 
 pub use backend::{AudioBackend, BackendError, BackendInfo};
 pub use device::{
-    AudioDeviceInfo, DeviceCapabilities, DeviceError, SupportedBitDepth,
-    detect_device_capabilities, get_default_device_with_capabilities,
-    get_device_capabilities, list_devices_with_capabilities,
-    STANDARD_SAMPLE_RATES, DSD_RATES,
+    detect_device_capabilities, get_default_device_with_capabilities, get_device_capabilities,
+    list_devices_with_capabilities, AudioDeviceInfo, DeviceCapabilities, DeviceError,
+    SupportedBitDepth, DSD_RATES, STANDARD_SAMPLE_RATES,
 };
 pub use error::{AudioError, AudioOutputError, Result};
+pub use exclusive::{AudioData, ExclusiveConfig, ExclusiveOutput, LatencyInfo};
 pub use output::{CpalOutput, ResamplingQuality};
-pub use playback::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
+pub use playback::{DesktopPlayback, PlaybackCommand, PlaybackEvent, ResamplingSettings};
 pub use sources::{LocalAudioSource, StreamingAudioSource};

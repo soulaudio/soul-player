@@ -134,10 +134,33 @@ async fn test_track_search() {
     let artist2 = create_test_artist(pool, "Led Zeppelin", None).await;
 
     // Create tracks
-    create_test_track(pool, "Bohemian Rhapsody", Some(artist1), None, 1, Some("/m/1.mp3")).await;
-    create_test_track(pool, "Another One Bites the Dust", Some(artist1), None, 1, Some("/m/2.mp3"))
-        .await;
-    create_test_track(pool, "Stairway to Heaven", Some(artist2), None, 1, Some("/m/3.mp3")).await;
+    create_test_track(
+        pool,
+        "Bohemian Rhapsody",
+        Some(artist1),
+        None,
+        1,
+        Some("/m/1.mp3"),
+    )
+    .await;
+    create_test_track(
+        pool,
+        "Another One Bites the Dust",
+        Some(artist1),
+        None,
+        1,
+        Some("/m/2.mp3"),
+    )
+    .await;
+    create_test_track(
+        pool,
+        "Stairway to Heaven",
+        Some(artist2),
+        None,
+        1,
+        Some("/m/3.mp3"),
+    )
+    .await;
 
     // Search by artist name
     let queen_tracks = soul_storage::tracks::search(pool, "Queen")
@@ -168,10 +191,24 @@ async fn test_track_by_artist_and_album() {
     let album = create_test_album(pool, "Greatest Hits", Some(artist), Some(1981)).await;
 
     // Create tracks in album
-    create_test_track(pool, "We Will Rock You", Some(artist), Some(album), 1, Some("/m/1.mp3"))
-        .await;
-    create_test_track(pool, "We Are the Champions", Some(artist), Some(album), 1, Some("/m/2.mp3"))
-        .await;
+    create_test_track(
+        pool,
+        "We Will Rock You",
+        Some(artist),
+        Some(album),
+        1,
+        Some("/m/1.mp3"),
+    )
+    .await;
+    create_test_track(
+        pool,
+        "We Are the Champions",
+        Some(artist),
+        Some(album),
+        1,
+        Some("/m/2.mp3"),
+    )
+    .await;
 
     // Get tracks by artist
     let artist_tracks = soul_storage::tracks::get_by_artist(pool, artist)
@@ -266,10 +303,11 @@ async fn test_playlist_full_workflow() {
         .unwrap();
 
     // Get playlist with tracks
-    let with_tracks = soul_storage::playlists::get_with_tracks(pool, playlist.id.clone(), user.clone())
-        .await
-        .unwrap()
-        .unwrap();
+    let with_tracks =
+        soul_storage::playlists::get_with_tracks(pool, playlist.id.clone(), user.clone())
+            .await
+            .unwrap()
+            .unwrap();
     let tracks = with_tracks.tracks.unwrap();
     assert_eq!(tracks.len(), 3);
     assert_eq!(tracks[0].track_id, track1);
@@ -281,10 +319,11 @@ async fn test_playlist_full_workflow() {
         .await
         .unwrap();
 
-    let after_remove = soul_storage::playlists::get_with_tracks(pool, playlist.id.clone(), user.clone())
-        .await
-        .unwrap()
-        .unwrap();
+    let after_remove =
+        soul_storage::playlists::get_with_tracks(pool, playlist.id.clone(), user.clone())
+            .await
+            .unwrap()
+            .unwrap();
     assert_eq!(after_remove.tracks.unwrap().len(), 2);
 
     // Delete playlist
@@ -313,7 +352,9 @@ async fn test_playlist_user_isolation() {
         .await
         .unwrap();
     assert_eq!(alice_playlists.len(), 2);
-    assert!(alice_playlists.iter().all(|p| p.name.starts_with("Alice's")));
+    assert!(alice_playlists
+        .iter()
+        .all(|p| p.name.starts_with("Alice's")));
 
     // Get Bob's playlists
     let bob_playlists = soul_storage::playlists::get_user_playlists(pool, bob)
@@ -423,9 +464,15 @@ async fn test_playlist_reordering() {
         .unwrap();
 
     // Move track1 from position 0 to position 2 (becomes last)
-    soul_storage::playlists::reorder_tracks(pool, playlist.clone(), track1.clone(), 2, user.clone())
-        .await
-        .unwrap();
+    soul_storage::playlists::reorder_tracks(
+        pool,
+        playlist.clone(),
+        track1.clone(),
+        2,
+        user.clone(),
+    )
+    .await
+    .unwrap();
 
     // Verify new order: [track2, track3, track1]
     let reordered = soul_storage::playlists::get_with_tracks(pool, playlist, user)
@@ -640,11 +687,12 @@ async fn test_delete_track_cascades() {
         .unwrap();
 
     // Verify track_sources deleted
-    let sources_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM track_sources WHERE track_id = ?")
-        .bind(track.clone())
-        .fetch_one(pool)
-        .await
-        .unwrap();
+    let sources_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM track_sources WHERE track_id = ?")
+            .bind(track.clone())
+            .fetch_one(pool)
+            .await
+            .unwrap();
     assert_eq!(sources_count, 0);
 
     // Verify playlist_tracks entry deleted
@@ -695,9 +743,7 @@ async fn test_delete_playlist_cascades() {
     assert_eq!(tracks_count, 0);
 
     // Verify track still exists (not cascade deleted)
-    let track_exists = soul_storage::tracks::get_by_id(pool, track)
-        .await
-        .unwrap();
+    let track_exists = soul_storage::tracks::get_by_id(pool, track).await.unwrap();
     assert!(track_exists.is_some());
 }
 
@@ -804,9 +850,15 @@ async fn test_complete_music_library_workflow() {
         .unwrap();
 
     // 4. Alice shares workout playlist with Bob
-    soul_storage::playlists::share_playlist(pool, workout.clone(), bob.clone(), "write", alice.clone())
-        .await
-        .unwrap();
+    soul_storage::playlists::share_playlist(
+        pool,
+        workout.clone(),
+        bob.clone(),
+        "write",
+        alice.clone(),
+    )
+    .await
+    .unwrap();
 
     // 5. Bob adds a track to shared playlist
     soul_storage::playlists::add_track(pool, workout.clone(), track2.id.clone(), bob.clone())
@@ -849,8 +901,6 @@ async fn test_complete_music_library_workflow() {
     assert_eq!(alice_recent.len(), 2);
 
     // Search works
-    let queen_tracks = soul_storage::tracks::search(pool, "Queen")
-        .await
-        .unwrap();
+    let queen_tracks = soul_storage::tracks::search(pool, "Queen").await.unwrap();
     assert_eq!(queen_tracks.len(), 2);
 }

@@ -5,5 +5,6 @@ pub mod devices;
 pub mod health;
 pub mod playback;
 pub mod playlists;
+pub mod sources;
 pub mod stream;
 pub mod tracks;

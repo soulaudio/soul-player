@@ -195,10 +195,7 @@ fn test_dsd_preserves_signal_characteristics() {
     let dsd_sine = converter.process_pcm(&sine);
 
     // Check that there's variation in consecutive bytes
-    let variations: usize = dsd_sine
-        .windows(2)
-        .filter(|w| w[0] != w[1])
-        .count();
+    let variations: usize = dsd_sine.windows(2).filter(|w| w[0] != w[1]).count();
 
     assert!(
         variations > dsd_sine.len() / 4,
@@ -225,7 +222,9 @@ fn test_dsd_frequency_response_relative() {
 
     // Calculate "run length" - consecutive same bits indicate low frequency
     fn avg_run_length(data: &[u8]) -> f32 {
-        if data.is_empty() { return 0.0; }
+        if data.is_empty() {
+            return 0.0;
+        }
 
         let mut runs = 0;
         let mut current_run = 0;
@@ -237,7 +236,9 @@ fn test_dsd_frequency_response_relative() {
                 if Some(bit) == last_bit {
                     current_run += 1;
                 } else {
-                    if current_run > 0 { runs += 1; }
+                    if current_run > 0 {
+                        runs += 1;
+                    }
                     current_run = 1;
                     last_bit = Some(bit);
                 }
@@ -319,11 +320,7 @@ fn test_dsd_format_output_sizes() {
     let _pcm = vec![0.5f32; 882]; // 20ms mono (441 frames at 44100, *2 for stereo interleave check)
     let mono_pcm = vec![0.5f32; 441];
 
-    for format in [
-        DsdFormat::Dsd64,
-        DsdFormat::Dsd128,
-        DsdFormat::Dsd256,
-    ] {
+    for format in [DsdFormat::Dsd64, DsdFormat::Dsd128, DsdFormat::Dsd256] {
         let mut converter = DsdConverter::with_settings(
             DsdSettings::for_format(format),
             pcm_rate,
@@ -581,11 +578,8 @@ fn test_full_dsd_pipeline_with_dop() {
     let pcm = generate_sine(1000.0, pcm_rate, 0.05, 2); // 50ms stereo
 
     // Convert PCM to DSD
-    let mut dsd_converter = DsdConverter::with_settings(
-        DsdSettings::for_format(DsdFormat::Dsd64),
-        pcm_rate,
-        2,
-    );
+    let mut dsd_converter =
+        DsdConverter::with_settings(DsdSettings::for_format(DsdFormat::Dsd64), pcm_rate, 2);
     let dsd_bytes = dsd_converter.process_pcm(&pcm);
 
     // Encode as DoP
@@ -597,10 +591,7 @@ fn test_full_dsd_pipeline_with_dop() {
     let decoded_dsd = dop_decoder.decode(&dop_samples).expect("Should decode");
 
     // DSD should be identical after DoP roundtrip
-    assert_eq!(
-        decoded_dsd, dsd_bytes,
-        "DoP transport should be lossless"
-    );
+    assert_eq!(decoded_dsd, dsd_bytes, "DoP transport should be lossless");
 
     // Convert back to PCM for analysis
     let dsd_rate = DsdFormat::Dsd64.sample_rate();
@@ -613,9 +604,8 @@ fn test_full_dsd_pipeline_with_dop() {
     );
 
     // Verify signal is present
-    let rms: f32 = (reconstructed.iter().map(|s| s * s).sum::<f32>()
-        / reconstructed.len() as f32)
-        .sqrt();
+    let rms: f32 =
+        (reconstructed.iter().map(|s| s * s).sum::<f32>() / reconstructed.len() as f32).sqrt();
     assert!(
         rms > 0.01,
         "Output should have significant signal (RMS: {})",

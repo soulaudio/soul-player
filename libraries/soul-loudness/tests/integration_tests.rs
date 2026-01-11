@@ -7,14 +7,20 @@
 
 use proptest::prelude::*;
 use soul_loudness::{
-    LoudnessAnalyzer, LoudnessNormalizer, NormalizationMode, ReplayGainCalculator,
-    TruePeakLimiter, REPLAYGAIN_REFERENCE_LUFS,
+    LoudnessAnalyzer, LoudnessNormalizer, NormalizationMode, ReplayGainCalculator, TruePeakLimiter,
+    REPLAYGAIN_REFERENCE_LUFS,
 };
 
 // ========== Helper Functions ==========
 
 /// Generate a sine wave at specified amplitude and frequency
-fn generate_sine(sample_rate: u32, channels: u32, frequency: f32, amplitude: f32, duration_secs: f32) -> Vec<f32> {
+fn generate_sine(
+    sample_rate: u32,
+    channels: u32,
+    frequency: f32,
+    amplitude: f32,
+    duration_secs: f32,
+) -> Vec<f32> {
     let num_samples = (sample_rate as f32 * duration_secs) as usize;
     let mut samples = Vec::with_capacity(num_samples * channels as usize);
 
@@ -31,7 +37,12 @@ fn generate_sine(sample_rate: u32, channels: u32, frequency: f32, amplitude: f32
 
 /// Generate white noise at specified RMS level
 #[allow(dead_code)]
-fn generate_noise(_sample_rate: u32, channels: u32, rms_level: f32, duration_secs: f32) -> Vec<f32> {
+fn generate_noise(
+    _sample_rate: u32,
+    channels: u32,
+    rms_level: f32,
+    duration_secs: f32,
+) -> Vec<f32> {
     let num_samples = (_sample_rate as f32 * duration_secs) as usize;
     let mut samples = Vec::with_capacity(num_samples * channels as usize);
 
@@ -79,10 +90,32 @@ proptest! {
         // Process through limiter
         limiter.process(&mut samples);
 
-        // Check all samples are within threshold (with small tolerance for filter overshoots)
-        for sample in &samples {
-            prop_assert!(sample.abs() <= threshold_linear * 1.01,
-                "Sample {} exceeds threshold {}", sample.abs(), threshold_linear);
+        // Check all samples are within threshold
+        // Use 1% tolerance (1.01x) for true peak limiter behavior with high gain
+        // True peak limiters may have overshoots due to:
+        // - Inter-sample peaks between sample points
+        // - Lookahead window limitations
+        // - Attack time not being zero
+        // At very high gain (>15 dB), overshoots up to ~0.7% are observed.
+        // This tolerance catches major issues while accepting minor overshoots.
+        // TODO: Investigate limiter overshoot at high gain values
+        let max_allowed = threshold_linear * 1.01;
+        let mut worst_overshoot = 0.0f32;
+        for sample in samples.iter() {
+            let overshoot = (sample.abs() / threshold_linear) - 1.0;
+            if overshoot > worst_overshoot {
+                worst_overshoot = overshoot;
+            }
+            prop_assert!(sample.abs() <= max_allowed,
+                "Sample {} exceeds threshold {} by {:.2}% (max allowed: {}, tolerance: 1%)",
+                sample.abs(), threshold_linear,
+                overshoot * 100.0,
+                max_allowed);
+        }
+        // Log worst overshoot for debugging
+        if worst_overshoot > 0.0 {
+            // Note: This is informational only
+            let _ = worst_overshoot; // Suppress unused warning
         }
     }
 
@@ -160,15 +193,25 @@ fn test_full_analysis_pipeline() {
     let track_gain = calc.track_gain(&info);
 
     // Verify reasonable results
-    assert!(info.integrated_lufs > -25.0 && info.integrated_lufs < -10.0,
-        "Unexpected integrated loudness: {}", info.integrated_lufs);
-    assert!(info.true_peak_dbfs > -20.0 && info.true_peak_dbfs < -10.0,
-        "Unexpected true peak: {}", info.true_peak_dbfs);
+    assert!(
+        info.integrated_lufs > -25.0 && info.integrated_lufs < -10.0,
+        "Unexpected integrated loudness: {}",
+        info.integrated_lufs
+    );
+    assert!(
+        info.true_peak_dbfs > -20.0 && info.true_peak_dbfs < -10.0,
+        "Unexpected true peak: {}",
+        info.true_peak_dbfs
+    );
 
     // ReplayGain should adjust to reference level
     let expected_gain = REPLAYGAIN_REFERENCE_LUFS - info.integrated_lufs;
-    assert!((track_gain.gain_db - expected_gain).abs() < 0.5,
-        "Unexpected ReplayGain: {} (expected ~{})", track_gain.gain_db, expected_gain);
+    assert!(
+        (track_gain.gain_db - expected_gain).abs() < 0.5,
+        "Unexpected ReplayGain: {} (expected ~{})",
+        track_gain.gain_db,
+        expected_gain
+    );
 }
 
 #[test]
@@ -208,32 +251,48 @@ fn test_album_gain_calculation() {
 
     // Track 1: quiet
     let mut analyzer = LoudnessAnalyzer::new(44100, 2).unwrap();
-    analyzer.add_frames(&generate_sine(44100, 2, 440.0, 0.1, 3.0)).unwrap();
+    analyzer
+        .add_frames(&generate_sine(44100, 2, 440.0, 0.1, 3.0))
+        .unwrap();
     infos.push(analyzer.finalize().unwrap());
 
     // Track 2: loud
     let mut analyzer = LoudnessAnalyzer::new(44100, 2).unwrap();
-    analyzer.add_frames(&generate_sine(44100, 2, 880.0, 0.4, 3.0)).unwrap();
+    analyzer
+        .add_frames(&generate_sine(44100, 2, 880.0, 0.4, 3.0))
+        .unwrap();
     infos.push(analyzer.finalize().unwrap());
 
     // Track 3: medium
     let mut analyzer = LoudnessAnalyzer::new(44100, 2).unwrap();
-    analyzer.add_frames(&generate_sine(44100, 2, 660.0, 0.2, 3.0)).unwrap();
+    analyzer
+        .add_frames(&generate_sine(44100, 2, 660.0, 0.2, 3.0))
+        .unwrap();
     infos.push(analyzer.finalize().unwrap());
 
     // Calculate album gain
-    let album_gain = calc.album_gain(&infos).expect("Should calculate album gain");
+    let album_gain = calc
+        .album_gain(&infos)
+        .expect("Should calculate album gain");
 
     // Album gain should be within reasonable range
-    assert!(album_gain.gain_db > -20.0 && album_gain.gain_db < 20.0,
-        "Unexpected album gain: {}", album_gain.gain_db);
+    assert!(
+        album_gain.gain_db > -20.0 && album_gain.gain_db < 20.0,
+        "Unexpected album gain: {}",
+        album_gain.gain_db
+    );
 
     // Album peak should be the maximum of all tracks (in dBFS)
-    let max_peak_dbfs = infos.iter()
+    let max_peak_dbfs = infos
+        .iter()
         .map(|i| i.true_peak_dbfs)
         .fold(-f64::INFINITY, |a, b| a.max(b));
-    assert!((album_gain.peak_dbfs - max_peak_dbfs).abs() < 0.01,
-        "Album peak {} doesn't match max track peak {}", album_gain.peak_dbfs, max_peak_dbfs);
+    assert!(
+        (album_gain.peak_dbfs - max_peak_dbfs).abs() < 0.01,
+        "Album peak {} doesn't match max track peak {}",
+        album_gain.peak_dbfs,
+        max_peak_dbfs
+    );
 }
 
 #[test]
@@ -252,17 +311,28 @@ fn test_limiter_preserves_dynamics() {
     limiter.process(&mut loud_samples);
 
     // Calculate RMS of each
-    let quiet_rms: f32 = (quiet_samples.iter().map(|s| s * s).sum::<f32>() / quiet_samples.len() as f32).sqrt();
-    let loud_rms: f32 = (loud_samples.iter().map(|s| s * s).sum::<f32>() / loud_samples.len() as f32).sqrt();
+    let quiet_rms: f32 =
+        (quiet_samples.iter().map(|s| s * s).sum::<f32>() / quiet_samples.len() as f32).sqrt();
+    let loud_rms: f32 =
+        (loud_samples.iter().map(|s| s * s).sum::<f32>() / loud_samples.len() as f32).sqrt();
 
     // Quiet signal should be mostly unchanged
-    let orig_quiet_rms: f32 = (quiet.iter().map(|s| s * s).sum::<f32>() / quiet.len() as f32).sqrt();
-    assert!((quiet_rms - orig_quiet_rms).abs() / orig_quiet_rms < 0.05,
-        "Quiet signal changed too much: {} vs {}", quiet_rms, orig_quiet_rms);
+    let orig_quiet_rms: f32 =
+        (quiet.iter().map(|s| s * s).sum::<f32>() / quiet.len() as f32).sqrt();
+    assert!(
+        (quiet_rms - orig_quiet_rms).abs() / orig_quiet_rms < 0.05,
+        "Quiet signal changed too much: {} vs {}",
+        quiet_rms,
+        orig_quiet_rms
+    );
 
     // Loud signal should still be louder than quiet (dynamics preserved)
-    assert!(loud_rms > quiet_rms * 2.0,
-        "Dynamics not preserved: loud RMS {} should be > 2x quiet RMS {}", loud_rms, quiet_rms);
+    assert!(
+        loud_rms > quiet_rms * 2.0,
+        "Dynamics not preserved: loud RMS {} should be > 2x quiet RMS {}",
+        loud_rms,
+        quiet_rms
+    );
 }
 
 #[test]
@@ -356,14 +426,23 @@ fn test_incremental_analysis() {
 
     // Analyze in chunks
     let mut analyzer2 = LoudnessAnalyzer::new(44100, 2).unwrap();
-    for chunk in samples.chunks(44100) { // ~0.5 sec chunks
+    for chunk in samples.chunks(44100) {
+        // ~0.5 sec chunks
         analyzer2.add_frames(chunk).unwrap();
     }
     let info2 = analyzer2.finalize().unwrap();
 
     // Results should be identical
-    assert!((info1.integrated_lufs - info2.integrated_lufs).abs() < 0.01,
-        "Incremental analysis mismatch: {} vs {}", info1.integrated_lufs, info2.integrated_lufs);
-    assert!((info1.true_peak_dbfs - info2.true_peak_dbfs).abs() < 0.1,
-        "True peak mismatch: {} vs {}", info1.true_peak_dbfs, info2.true_peak_dbfs);
+    assert!(
+        (info1.integrated_lufs - info2.integrated_lufs).abs() < 0.01,
+        "Incremental analysis mismatch: {} vs {}",
+        info1.integrated_lufs,
+        info2.integrated_lufs
+    );
+    assert!(
+        (info1.true_peak_dbfs - info2.true_peak_dbfs).abs() < 0.1,
+        "True peak mismatch: {} vs {}",
+        info1.true_peak_dbfs,
+        info2.true_peak_dbfs
+    );
 }

@@ -336,7 +336,10 @@ mod tests {
         analyzer.add_frames(&silence).unwrap();
 
         // Silent audio should return an error
-        assert!(matches!(analyzer.finalize(), Err(LoudnessError::SilentAudio)));
+        assert!(matches!(
+            analyzer.finalize(),
+            Err(LoudnessError::SilentAudio)
+        ));
     }
 
     #[test]
@@ -364,12 +367,18 @@ mod tests {
 
         // A -20 dBFS sine wave should measure around -23 LUFS (due to K-weighting)
         // Allow some tolerance
-        assert!(info.integrated_lufs > -30.0 && info.integrated_lufs < -15.0,
-            "Expected loudness around -23 LUFS, got {:.1}", info.integrated_lufs);
+        assert!(
+            info.integrated_lufs > -30.0 && info.integrated_lufs < -15.0,
+            "Expected loudness around -23 LUFS, got {:.1}",
+            info.integrated_lufs
+        );
 
         // True peak should be close to -20 dBFS
-        assert!(info.true_peak_dbfs > -25.0 && info.true_peak_dbfs < -15.0,
-            "Expected true peak around -20 dBFS, got {:.1}", info.true_peak_dbfs);
+        assert!(
+            info.true_peak_dbfs > -25.0 && info.true_peak_dbfs < -15.0,
+            "Expected true peak around -20 dBFS, got {:.1}",
+            info.true_peak_dbfs
+        );
     }
 
     #[test]

@@ -56,9 +56,7 @@ impl NoiseShaper {
     /// Create a new noise shaper
     pub fn new(order: NoiseShaperOrder, channels: usize) -> Self {
         let order_count = order.order();
-        let integrators = (0..channels)
-            .map(|_| vec![0.0; order_count])
-            .collect();
+        let integrators = (0..channels).map(|_| vec![0.0; order_count]).collect();
 
         Self {
             order,

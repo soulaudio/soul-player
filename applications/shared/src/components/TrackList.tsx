@@ -1,11 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Pause, Music } from 'lucide-react';
+import { Play, Pause, Music, AlertTriangle } from 'lucide-react';
 import { usePlayerStore } from '../stores/player';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import type { QueueTrack } from '../contexts/PlayerCommandsContext';
 import { Tooltip } from './ui/Tooltip';
+import { TrackQualityBadge } from './TrackQualityBadge';
+import { SourceIndicator } from './SourceIndicator';
+
+export type SourceType = 'local' | 'server' | 'cached';
 
 export interface Track {
   id: number | string;
@@ -14,6 +18,22 @@ export interface Track {
   album?: string;
   duration?: number;
   trackNumber?: number;
+  /** Whether the track is available (file exists). Defaults to true. */
+  isAvailable?: boolean;
+  /** Audio file format (e.g., 'flac', 'mp3', 'aac') */
+  format?: string;
+  /** Bitrate in kbps (for lossy formats) */
+  bitrate?: number;
+  /** Sample rate in Hz */
+  sampleRate?: number;
+  /** Number of audio channels */
+  channels?: number;
+  /** Source type: local file, server stream, or cached from server */
+  sourceType?: SourceType;
+  /** Name of the source (e.g., server name or folder name) */
+  sourceName?: string;
+  /** Whether the source is currently online (for server sources) */
+  sourceOnline?: boolean;
 }
 
 interface TrackListProps {
@@ -72,7 +92,7 @@ export function TrackList({ tracks, buildQueue, onTrackAction, renderMenu }: Tra
   return (
     <div className="border rounded-lg overflow-hidden">
       <div className="bg-muted/50">
-        <div className="grid grid-cols-[40px_minmax(200px,1fr)_minmax(150px,200px)_minmax(150px,200px)_80px_40px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground">
+        <div className="grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_90px_70px_80px_40px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground">
           <Tooltip content="Track number" position="top" delay={700}>
             <div>#</div>
           </Tooltip>
@@ -85,6 +105,12 @@ export function TrackList({ tracks, buildQueue, onTrackAction, renderMenu }: Tra
           <Tooltip content="Album title" position="top" delay={700}>
             <div>Album</div>
           </Tooltip>
+          <Tooltip content="Audio format and quality" position="top" delay={700}>
+            <div>Format</div>
+          </Tooltip>
+          <Tooltip content="Track source" position="top" delay={700}>
+            <div>Source</div>
+          </Tooltip>
           <Tooltip content="Track duration" position="top" delay={700}>
             <div className="text-right">Duration</div>
           </Tooltip>
@@ -96,19 +122,26 @@ export function TrackList({ tracks, buildQueue, onTrackAction, renderMenu }: Tra
           const trackId = String(track.id);
           const isCurrentTrack = String(currentTrack?.id) === trackId;
           const showPauseButton = isCurrentTrack && isPlaying;
+          const isUnavailable = track.isAvailable === false;
 
           return (
             <div
               key={trackId}
-              className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(150px,200px)_minmax(150px,200px)_80px_40px] gap-4 px-4 py-3 hover:bg-accent/50 border-b last:border-b-0 transition-colors group ${
+              className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_90px_70px_80px_40px] gap-4 px-4 py-3 hover:bg-accent/50 border-b last:border-b-0 transition-colors group ${
                 isCurrentTrack ? 'bg-accent/30' : ''
-              }`}
+              } ${isUnavailable ? 'opacity-60' : ''}`}
               onMouseEnter={() => setHoveredTrackId(trackId)}
               onMouseLeave={() => setHoveredTrackId(null)}
-              onDoubleClick={() => handlePlay(track, index)}
+              onDoubleClick={() => !isUnavailable && handlePlay(track, index)}
             >
               <div className="flex items-center justify-center">
-                {hoveredTrackId === trackId || isCurrentTrack ? (
+                {isUnavailable ? (
+                  <Tooltip content="File not found" position="right">
+                    <div className="w-8 h-8 flex items-center justify-center text-amber-500">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                  </Tooltip>
+                ) : hoveredTrackId === trackId || isCurrentTrack ? (
                   <button
                     onClick={() => (showPauseButton ? handlePause() : handlePlay(track, index))}
                     className="w-8 h-8 flex items-center justify-center rounded hover:bg-primary/10 transition-colors"
@@ -127,7 +160,7 @@ export function TrackList({ tracks, buildQueue, onTrackAction, renderMenu }: Tra
                 )}
               </div>
               <div className="flex flex-col justify-center min-w-0">
-                <div className={`truncate ${isCurrentTrack ? 'text-primary font-medium' : ''}`}>
+                <div className={`truncate ${isCurrentTrack ? 'text-primary font-medium' : ''} ${isUnavailable ? 'line-through' : ''}`}>
                   {track.title}
                 </div>
               </div>
@@ -136,6 +169,30 @@ export function TrackList({ tracks, buildQueue, onTrackAction, renderMenu }: Tra
               </div>
               <div className="flex items-center text-sm text-muted-foreground truncate">
                 {track.album || '—'}
+              </div>
+              <div className="flex items-center">
+                {track.format ? (
+                  <TrackQualityBadge
+                    format={track.format}
+                    bitrate={track.bitrate}
+                    sampleRate={track.sampleRate}
+                    channels={track.channels}
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </div>
+              <div className="flex items-center">
+                {track.sourceType ? (
+                  <SourceIndicator
+                    sourceType={track.sourceType}
+                    sourceName={track.sourceName}
+                    isOnline={track.sourceOnline}
+                    size="sm"
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
               </div>
               <div className="flex items-center justify-end text-sm text-muted-foreground font-mono">
                 {formatDuration(track.duration)}

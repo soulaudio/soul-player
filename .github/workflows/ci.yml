@@ -84,6 +84,8 @@ jobs:
           # - RUSTSEC-2025-007x/008x/010x: unic-* unmaintained (from Tauri)
           # - RUSTSEC-2025-0119: number_prefix unmaintained (from indicatif progress bar)
           # - RUSTSEC-2025-0134: rustls-pemfile unmaintained (from reqwest)
+          # - RUSTSEC-2024-0384: instant unmaintained (from notify-types/fastrand)
+          # - RUSTSEC-2025-0111: tokio-tar PAX header parsing (from testcontainers, no fix available)
           cargo audit --deny warnings \
             --ignore RUSTSEC-2023-0071 \
             --ignore RUSTSEC-2024-0370 \
@@ -116,7 +118,9 @@ jobs:
             --ignore RUSTSEC-2025-0098 \
             --ignore RUSTSEC-2025-0100 \
             --ignore RUSTSEC-2025-0119 \
-            --ignore RUSTSEC-2025-0134
+            --ignore RUSTSEC-2025-0134 \
+            --ignore RUSTSEC-2024-0384 \
+            --ignore RUSTSEC-2025-0111
 
   # ============================================================================
   # Tests - Multi-Platform

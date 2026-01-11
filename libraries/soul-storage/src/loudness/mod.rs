@@ -109,10 +109,7 @@ pub struct AnalysisQueueItem {
 }
 
 /// Get loudness metadata for a track
-pub async fn get_track_loudness(
-    pool: &SqlitePool,
-    track_id: i64,
-) -> Result<Option<TrackLoudness>> {
+pub async fn get_track_loudness(pool: &SqlitePool, track_id: i64) -> Result<Option<TrackLoudness>> {
     let row = sqlx::query!(
         r#"
         SELECT

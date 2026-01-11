@@ -51,9 +51,7 @@ pub async fn set_global_shortcut(
 
 /// Tauri command to reset shortcuts to defaults
 #[tauri::command]
-pub async fn reset_global_shortcuts(
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn reset_global_shortcuts(state: tauri::State<'_, AppState>) -> Result<(), String> {
     shortcuts::reset_shortcuts_to_defaults(&state.pool, &state.user_id)
         .await
         .map_err(|e| e.to_string())?;

@@ -168,7 +168,10 @@ pub struct AudioDeviceInfo {
 }
 
 /// Detect detailed capabilities for a CPAL device
-pub fn detect_device_capabilities(device: &cpal::Device, backend: AudioBackend) -> DeviceCapabilities {
+pub fn detect_device_capabilities(
+    device: &cpal::Device,
+    backend: AudioBackend,
+) -> DeviceCapabilities {
     use std::collections::HashSet;
 
     let mut sample_rates = HashSet::new();
@@ -241,9 +244,13 @@ pub fn detect_device_capabilities(device: &cpal::Device, backend: AudioBackend) 
         AudioBackend::Default // WASAPI can do exclusive mode
     ) || {
         #[cfg(all(target_os = "windows", feature = "asio"))]
-        { matches!(backend, AudioBackend::Asio) }
+        {
+            matches!(backend, AudioBackend::Asio)
+        }
         #[cfg(not(all(target_os = "windows", feature = "asio")))]
-        { false }
+        {
+            false
+        }
     };
 
     DeviceCapabilities {
@@ -300,14 +307,15 @@ pub fn list_devices_with_capabilities(
             let channels = config.channels();
 
             // Get sample rate range if available (non-critical, so don't fail if missing)
-            let sample_rate_range = device
-                .supported_output_configs()
-                .ok()
-                .and_then(|mut configs| {
-                    configs.next().map(|config| {
-                        (config.min_sample_rate(), config.max_sample_rate())
-                    })
-                });
+            let sample_rate_range =
+                device
+                    .supported_output_configs()
+                    .ok()
+                    .and_then(|mut configs| {
+                        configs
+                            .next()
+                            .map(|config| (config.min_sample_rate(), config.max_sample_rate()))
+                    });
 
             // Optionally detect full capabilities
             let capabilities = if include_capabilities {
@@ -333,12 +341,10 @@ pub fn list_devices_with_capabilities(
     }
 
     // Sort: default first, then alphabetically
-    device_list.sort_by(|a, b| {
-        match (a.is_default, b.is_default) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    device_list.sort_by(|a, b| match (a.is_default, b.is_default) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
 
     Ok(device_list)
@@ -377,9 +383,9 @@ pub fn get_default_device_with_capabilities(
         .supported_output_configs()
         .ok()
         .and_then(|mut configs| {
-            configs.next().map(|config| {
-                (config.min_sample_rate(), config.max_sample_rate())
-            })
+            configs
+                .next()
+                .map(|config| (config.min_sample_rate(), config.max_sample_rate()))
         });
 
     let capabilities = if include_capabilities {
@@ -507,7 +513,10 @@ mod tests {
         let device = device.unwrap();
         assert!(device.is_default, "Device should be marked as default");
         assert!(!device.name.is_empty(), "Device should have a name");
-        assert!(device.sample_rate > 0, "Device should have valid sample rate");
+        assert!(
+            device.sample_rate > 0,
+            "Device should have valid sample rate"
+        );
     }
 
     #[test]
@@ -616,11 +625,20 @@ mod tests {
     fn test_device_capabilities_default() {
         let caps = DeviceCapabilities::default();
 
-        assert!(!caps.sample_rates.is_empty(), "Should have default sample rates");
-        assert!(!caps.bit_depths.is_empty(), "Should have default bit depths");
+        assert!(
+            !caps.sample_rates.is_empty(),
+            "Should have default sample rates"
+        );
+        assert!(
+            !caps.bit_depths.is_empty(),
+            "Should have default bit depths"
+        );
         assert_eq!(caps.max_channels, 2, "Default should be stereo");
         assert!(!caps.supports_dsd, "Default should not support DSD");
-        assert!(caps.dsd_rates.is_empty(), "Default should have no DSD rates");
+        assert!(
+            caps.dsd_rates.is_empty(),
+            "Default should have no DSD rates"
+        );
     }
 
     #[test]
@@ -628,7 +646,10 @@ mod tests {
         let backend = AudioBackend::Default;
         let devices = list_devices_with_capabilities(backend, true);
 
-        assert!(devices.is_ok(), "Should be able to list devices with capabilities");
+        assert!(
+            devices.is_ok(),
+            "Should be able to list devices with capabilities"
+        );
 
         let devices = devices.unwrap();
         if !devices.is_empty() {
@@ -651,7 +672,10 @@ mod tests {
         let backend = AudioBackend::Default;
         let device = get_default_device_with_capabilities(backend, true);
 
-        assert!(device.is_ok(), "Should be able to get default device with capabilities");
+        assert!(
+            device.is_ok(),
+            "Should be able to get default device with capabilities"
+        );
 
         let device = device.unwrap();
         assert!(device.capabilities.is_some(), "Should have capabilities");
@@ -686,10 +710,22 @@ mod tests {
     #[test]
     fn test_standard_sample_rates() {
         // Verify standard sample rates are defined correctly
-        assert!(STANDARD_SAMPLE_RATES.contains(&44100), "Should include CD quality");
-        assert!(STANDARD_SAMPLE_RATES.contains(&48000), "Should include DAT quality");
-        assert!(STANDARD_SAMPLE_RATES.contains(&96000), "Should include high-res");
-        assert!(STANDARD_SAMPLE_RATES.contains(&192000), "Should include high-res 192k");
+        assert!(
+            STANDARD_SAMPLE_RATES.contains(&44100),
+            "Should include CD quality"
+        );
+        assert!(
+            STANDARD_SAMPLE_RATES.contains(&48000),
+            "Should include DAT quality"
+        );
+        assert!(
+            STANDARD_SAMPLE_RATES.contains(&96000),
+            "Should include high-res"
+        );
+        assert!(
+            STANDARD_SAMPLE_RATES.contains(&192000),
+            "Should include high-res 192k"
+        );
 
         // Should be sorted
         for i in 1..STANDARD_SAMPLE_RATES.len() {
@@ -706,12 +742,20 @@ mod tests {
         assert_eq!(DSD_RATES.len(), 4, "Should have 4 DSD rate levels");
 
         // Check DSD64
-        assert!(DSD_RATES.iter().any(|(r, n)| *r == 2822400 && *n == "DSD64"));
+        assert!(DSD_RATES
+            .iter()
+            .any(|(r, n)| *r == 2822400 && *n == "DSD64"));
         // Check DSD128
-        assert!(DSD_RATES.iter().any(|(r, n)| *r == 5644800 && *n == "DSD128"));
+        assert!(DSD_RATES
+            .iter()
+            .any(|(r, n)| *r == 5644800 && *n == "DSD128"));
         // Check DSD256
-        assert!(DSD_RATES.iter().any(|(r, n)| *r == 11289600 && *n == "DSD256"));
+        assert!(DSD_RATES
+            .iter()
+            .any(|(r, n)| *r == 11289600 && *n == "DSD256"));
         // Check DSD512
-        assert!(DSD_RATES.iter().any(|(r, n)| *r == 22579200 && *n == "DSD512"));
+        assert!(DSD_RATES
+            .iter()
+            .any(|(r, n)| *r == 22579200 && *n == "DSD512"));
     }
 }

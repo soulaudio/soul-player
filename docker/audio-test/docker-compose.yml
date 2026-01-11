@@ -1,0 +1,81 @@
+# Docker Compose for Soul Player audio testing
+# Provides isolated audio environment with PulseAudio virtual devices
+#
+# Usage:
+#   docker-compose up -d          # Start container
+#   docker-compose exec audio-test bash  # Interactive shell
+#   docker-compose down           # Stop and clean up
+#
+# For CI/CD, use testcontainers-rs instead (see testcontainers_audio.rs)
+
+services:
+  audio-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: soul-audio-test:latest
+    container_name: soul-audio-test
+    # Keep container running
+    tty: true
+    stdin_open: true
+    # Volume mounts for development
+    volumes:
+      # Mount the workspace for running tests inside container
+      - ../../:/workspace:ro
+      # Shared tmp for audio files
+      - audio-tmp:/tmp/audio
+    # Environment for PulseAudio
+    environment:
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+    # Health check to verify audio is working
+    healthcheck:
+      test: ["CMD", "pactl", "info"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    # Resource limits for CI environments
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Optional: Audio analysis service for complex test scenarios
+  audio-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: soul-audio-test:latest
+    container_name: soul-audio-analyzer
+    depends_on:
+      audio-test:
+        condition: service_healthy
+    volumes:
+      - audio-tmp:/tmp/audio
+    environment:
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - XDG_RUNTIME_DIR=/run/user/1000
+    # Run analysis scripts
+    command: >
+      bash -c "
+        echo 'Audio Analyzer ready.'
+        echo 'Use: docker-compose exec audio-analyzer /usr/local/bin/audio-test-helpers.sh'
+        tail -f /dev/null
+      "
+    profiles:
+      - analysis  # Only start with --profile analysis
+
+volumes:
+  audio-tmp:
+    driver: local
+
+networks:
+  default:
+    name: soul-audio-test-net

@@ -37,6 +37,50 @@ fn arbitrary_tracks() -> impl Strategy<Value = Vec<QueueTrack>> {
     prop::collection::vec(arbitrary_track(), 1..50)
 }
 
+/// Generate tracks with unique IDs to avoid duplicate removal issues
+fn arbitrary_unique_tracks() -> impl Strategy<Value = Vec<QueueTrack>> {
+    (1usize..50).prop_flat_map(|count| {
+        prop::collection::vec(
+            (
+                "[A-Za-z ]{1,30}",                       // title
+                "[A-Za-z ]{1,20}",                       // artist
+                proptest::option::of("[A-Za-z ]{1,20}"), // album
+                1u64..600,                               // duration (1-600 seconds)
+            ),
+            count,
+        )
+        .prop_map(|data| {
+            data.into_iter()
+                .enumerate()
+                .map(|(i, (title, artist, album, duration_secs))| QueueTrack {
+                    id: format!("track_{}", i), // Unique ID based on index
+                    path: PathBuf::from("/music/test.mp3"),
+                    title,
+                    artist,
+                    album,
+                    duration: Duration::from_secs(duration_secs),
+                    track_number: Some(1),
+                    source: TrackSource::Single,
+                })
+                .collect()
+        })
+    })
+}
+
+/// Calculate expected queue length after duplicate removal
+fn count_after_consecutive_duplicate_removal(tracks: &[QueueTrack]) -> usize {
+    if tracks.is_empty() {
+        return 0;
+    }
+    let mut count = 1;
+    for i in 1..tracks.len() {
+        if tracks[i].id != tracks[i - 1].id {
+            count += 1;
+        }
+    }
+    count
+}
+
 // ===== Property Tests =====
 
 proptest! {
@@ -58,12 +102,13 @@ proptest! {
     /// Property: Queue length is always consistent after operations
     #[test]
     fn queue_length_consistency(
-        tracks in arbitrary_tracks(),
+        tracks in arbitrary_unique_tracks(),
         operations in prop::collection::vec(0u8..5, 1..20)
     ) {
         let mut manager = PlaybackManager::default();
         manager.add_playlist_to_queue(tracks.clone());
 
+        // Use unique tracks so no duplicates are removed
         let initial_len = manager.queue_len();
         prop_assert_eq!(initial_len, tracks.len());
 
@@ -173,9 +218,10 @@ proptest! {
 
     /// Property: Shuffle restore returns to original order
     #[test]
-    fn shuffle_restore_original_order(tracks in arbitrary_tracks()) {
+    fn shuffle_restore_original_order(tracks in arbitrary_unique_tracks()) {
         let mut manager = PlaybackManager::default();
 
+        // Use unique tracks so no duplicates are removed
         let original_ids: Vec<String> = tracks.iter().map(|t| t.id.clone()).collect();
 
         manager.add_playlist_to_queue(tracks);

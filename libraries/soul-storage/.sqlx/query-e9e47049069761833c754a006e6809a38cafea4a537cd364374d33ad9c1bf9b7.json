@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT server_sync_token FROM source_sync_state WHERE source_id = ? AND user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "server_sync_token",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "e9e47049069761833c754a006e6809a38cafea4a537cd364374d33ad9c1bf9b7"
+}

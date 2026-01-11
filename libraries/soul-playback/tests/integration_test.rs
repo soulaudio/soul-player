@@ -340,8 +340,15 @@ fn test_auto_advance_on_track_end() {
     let mut manager = PlaybackManager::default();
 
     // Add two tracks
-    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 1)); // 1 second
-    manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist B", 180));
+    let track1 = create_test_track("1", "Track 1", "Artist A", 1); // 1 second
+    let track2 = create_test_track("2", "Track 2", "Artist B", 180);
+
+    manager.add_to_queue_end(track1.clone());
+    manager.add_to_queue_end(track2.clone());
+
+    // Get initial queue length
+    let initial_queue_len = manager.queue_len();
+    assert_eq!(initial_queue_len, 2, "Should start with 2 tracks in queue");
 
     manager.set_audio_source(Box::new(MockAudioSource::new(
         Duration::from_secs(1),
@@ -351,18 +358,94 @@ fn test_auto_advance_on_track_end() {
     // Process audio until track ends
     let mut total_samples = 0;
     let mut buffer = vec![0.0f32; 1024];
+    let mut finished = false;
 
     // Read until we get 0 samples (track finished)
-    for _ in 0..100 {
+    for _ in 0..200 {
         // Max iterations to prevent infinite loop
         match manager.process_audio(&mut buffer) {
-            Ok(0) | Err(_) => break, // Track finished or error
+            Ok(0) => {
+                finished = true;
+                break;
+            }
+            Err(_) => break,
             Ok(n) => total_samples += n,
         }
     }
 
     // Should have read some samples
     assert!(total_samples > 0, "Should have read some samples");
+
+    // Track should have finished
+    assert!(finished, "First track should have finished");
+
+    // After track finishes, queue should reflect that track 1 was consumed
+    // The queue should now have fewer tracks or the current track should have advanced
+    let final_queue_len = manager.queue_len();
+
+    // Either the queue is shorter (track was removed) or we need to verify state changed
+    if final_queue_len < initial_queue_len {
+        // Track was consumed from queue - this is the expected behavior
+        assert!(
+            final_queue_len < initial_queue_len,
+            "Queue should have fewer tracks after playback"
+        );
+    } else {
+        // If queue length didn't change, verify playback state changed appropriately
+        // (e.g., state might be Stopped if no next source was set)
+        let state = manager.get_state();
+        assert!(
+            state == PlaybackState::Stopped || state == PlaybackState::Playing,
+            "After track ends, state should be Stopped (waiting for next source) or Playing (advanced to next)"
+        );
+    }
+}
+
+#[test]
+fn test_audio_source_processes_expected_sample_count() {
+    let mut manager = PlaybackManager::default();
+
+    // Add a short track (1 second)
+    manager.add_to_queue_end(create_test_track("first", "First Track", "Artist A", 1));
+
+    // Start playback
+    manager.set_audio_source(Box::new(MockAudioSource::new(
+        Duration::from_secs(1),
+        44100,
+    )));
+
+    // Process audio and count samples
+    let mut buffer = vec![0.0f32; 1024];
+    let mut total_samples = 0;
+    let mut zero_count = 0;
+    let max_iterations = 200; // Prevent infinite loop
+
+    for _ in 0..max_iterations {
+        match manager.process_audio(&mut buffer) {
+            Ok(0) => {
+                zero_count += 1;
+                if zero_count >= 3 {
+                    // Source consistently returning 0, it's exhausted
+                    break;
+                }
+            }
+            Err(_) => break,
+            Ok(n) => {
+                total_samples += n;
+                zero_count = 0; // Reset counter
+            }
+        }
+    }
+
+    // 1 second at 44100 Hz stereo = 88200 samples
+    // Allow some tolerance for buffering
+    let expected_samples = 44100 * 2; // 1 second, stereo
+    assert!(
+        total_samples > expected_samples / 2,
+        "Should have processed approximately {} samples, got {}",
+        expected_samples,
+        total_samples
+    );
 }
 
 #[test]
@@ -616,10 +699,16 @@ fn test_crossfade_curve_setting() {
     let mut manager = PlaybackManager::default();
 
     manager.set_crossfade_curve(soul_playback::FadeCurve::Linear);
-    assert_eq!(manager.get_crossfade_curve(), soul_playback::FadeCurve::Linear);
+    assert_eq!(
+        manager.get_crossfade_curve(),
+        soul_playback::FadeCurve::Linear
+    );
 
     manager.set_crossfade_curve(soul_playback::FadeCurve::SCurve);
-    assert_eq!(manager.get_crossfade_curve(), soul_playback::FadeCurve::SCurve);
+    assert_eq!(
+        manager.get_crossfade_curve(),
+        soul_playback::FadeCurve::SCurve
+    );
 }
 
 #[test]

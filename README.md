@@ -21,19 +21,62 @@ yarn dev:desktop    # Run desktop app
 
 ## System Dependencies
 
-### Linux (Ubuntu/Debian)
+### Quick Install (Recommended)
+
 ```bash
+# Unix/Linux/macOS (bash)
+./scripts/install-deps.sh
+
+# Windows (PowerShell as Administrator)
+.\scripts\install-deps.ps1 -AutoInstall
+```
+
+### Manual Installation
+
+#### Linux (Ubuntu/Debian)
+```bash
+# Tauri / WebKit
 sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf pkg-config
+
+# Audio (ALSA)
+sudo apt install libasound2-dev
+
+# Build tools (CMake for r8brain resampler)
+sudo apt install cmake build-essential clang
+
+# GTK
+sudo apt install libglib2.0-dev libgtk-3-dev
+
+# SQLite
+sudo apt install sqlite3
 ```
 
-### macOS
+#### macOS
 ```bash
-xcode-select --install
+xcode-select --install   # Xcode Command Line Tools
+brew install cmake pkg-config sqlite
 ```
 
-### Windows
-- Install WebView2 (usually pre-installed)
-- Install Visual Studio Build Tools
+#### Windows
+
+| Dependency | Install Command | Notes |
+|------------|-----------------|-------|
+| Visual Studio Build Tools | `winget install Microsoft.VisualStudio.2022.BuildTools` | C++ workload required |
+| CMake | `winget install Kitware.CMake` | Required for r8brain resampler |
+| LLVM/Clang | `winget install LLVM.LLVM` | Required for ASIO audio support |
+| WebView2 | Usually pre-installed | [Download](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) |
+
+**Important (Windows)**: Set the `LIBCLANG_PATH` environment variable:
+```powershell
+[System.Environment]::SetEnvironmentVariable("LIBCLANG_PATH", "C:\Program Files\LLVM\bin", "User")
+```
+
+### Cargo Tools (All Platforms)
+```bash
+cargo install cargo-audit --locked      # Security auditing
+cargo install sqlx-cli --no-default-features --features sqlite --locked  # Database migrations
+cargo install wasm-pack --locked        # WASM builds (optional, for marketing demo)
+```
 
 ---
 
@@ -187,6 +230,68 @@ yarn test          # Run all tests
 yarn lint          # Lint all workspaces
 yarn type-check    # TypeScript type checking
 ```
+
+---
+
+## Testing
+
+### Test Categories
+
+| Category | Description | Docker Required |
+|----------|-------------|-----------------|
+| **Unit tests** | Fast, isolated tests for individual functions | No |
+| **Integration tests** | Database and component interaction tests | No |
+| **Testcontainer tests** | Audio backend tests with PulseAudio virtual device | Yes |
+| **Hardware tests** | Physical audio device tests (skipped in CI) | No |
+
+### Running Tests
+
+```bash
+# Quick tests (no Docker needed)
+cargo test --all
+
+# Full tests with Docker/testcontainers
+cargo test --all --features testcontainers
+
+# Nightly tests (memory stability)
+cargo test -p soul-audio --test memory_stability_test
+
+# Run specific test crate
+cargo test -p soul-storage
+cargo test -p soul-audio
+```
+
+### Hardware-Dependent Tests
+
+These tests require physical audio hardware and are marked `#[ignore]` in CI:
+
+- **WASAPI exclusive mode** - Windows-only, requires audio device
+- **Device hot-plug detection** - Tests USB audio device connect/disconnect
+- **Real-time latency measurement** - Measures actual audio latency
+- **Platform-specific backends** - ASIO (Windows), CoreAudio (macOS), ALSA (Linux)
+
+Run locally with:
+```bash
+cargo test --all -- --ignored
+```
+
+### Testcontainers Setup
+
+For full audio backend testing with Docker:
+
+1. **Install Docker** - [Get Docker](https://docs.docker.com/get-docker/)
+2. **Run tests** - The testcontainer automatically provisions a PulseAudio virtual audio device
+3. **Local testing**:
+   ```bash
+   cargo test --all --features testcontainers
+   ```
+
+The testcontainer provides:
+- PulseAudio virtual audio sink
+- Simulated audio device enumeration
+- Cross-platform audio backend testing
+
+See [docs/TESTING.md](./docs/TESTING.md) for detailed testing strategy.
 
 ---
 

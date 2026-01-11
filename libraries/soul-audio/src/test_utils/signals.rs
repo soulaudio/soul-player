@@ -503,8 +503,11 @@ mod tests {
         let first_quarter = &mono[0..quarter_len];
         let second_quarter = &mono[quarter_len..quarter_len * 2];
 
-        let first_rms: f32 = (first_quarter.iter().map(|s| s * s).sum::<f32>() / first_quarter.len() as f32).sqrt();
-        let second_rms: f32 = (second_quarter.iter().map(|s| s * s).sum::<f32>() / second_quarter.len() as f32).sqrt();
+        let first_rms: f32 =
+            (first_quarter.iter().map(|s| s * s).sum::<f32>() / first_quarter.len() as f32).sqrt();
+        let second_rms: f32 = (second_quarter.iter().map(|s| s * s).sum::<f32>()
+            / second_quarter.len() as f32)
+            .sqrt();
 
         // Second quarter should be much louder (0.9 vs 0.1 amplitude = 9x in RMS)
         assert!(second_rms > first_rms * 5.0);

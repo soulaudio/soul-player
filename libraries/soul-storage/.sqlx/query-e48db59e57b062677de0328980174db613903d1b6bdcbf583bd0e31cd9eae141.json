@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO server_auth_tokens (source_id, access_token, refresh_token, token_expires_at)\n        VALUES (?, ?, ?, ?)\n        ON CONFLICT(source_id) DO UPDATE SET\n            access_token = excluded.access_token,\n            refresh_token = excluded.refresh_token,\n            token_expires_at = excluded.token_expires_at,\n            updated_at = datetime('now')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e48db59e57b062677de0328980174db613903d1b6bdcbf583bd0e31cd9eae141"
+}

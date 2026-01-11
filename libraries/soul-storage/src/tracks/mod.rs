@@ -1077,7 +1077,203 @@ pub async fn get_unavailable_by_source(
 
 // =============================================================================
 // Helper Functions
+/// Set the audio fingerprint for a track
+pub async fn set_fingerprint(pool: &SqlitePool, track_id: &str, fingerprint: &str) -> Result<()> {
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query!(
+        r#"
+        UPDATE tracks
+        SET fingerprint = ?, updated_at = ?
+        WHERE id = ?
+        "#,
+        fingerprint,
+        now,
+        track_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Get tracks that don't have fingerprints yet
+pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Vec<Track>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+            t.track_number, t.disc_number, t.year, t.duration_seconds,
+            t.bitrate, t.sample_rate, t.channels, t.file_format,
+            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+            t.metadata_source, t.created_at, t.updated_at,
+            ar.name as artist_name,
+            al.title as album_title
+        FROM tracks t
+        LEFT JOIN artists ar ON t.artist_id = ar.id
+        LEFT JOIN albums al ON t.album_id = al.id
+        WHERE t.fingerprint IS NULL
+        LIMIT ?
+        "#,
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut tracks = Vec::new();
+    for row in rows {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
+
+        tracks.push(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            album_id: row.album_id,
+            album_title: row.album_title,
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        });
+    }
+
+    Ok(tracks)
+}
+
+/// Get all tracks that have fingerprints (for duplicate detection)
+pub async fn get_with_fingerprints(pool: &SqlitePool) -> Result<Vec<Track>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+            t.track_number, t.disc_number, t.year, t.duration_seconds,
+            t.bitrate, t.sample_rate, t.channels, t.file_format,
+            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+            t.metadata_source, t.created_at, t.updated_at,
+            ar.name as artist_name,
+            al.title as album_title
+        FROM tracks t
+        LEFT JOIN artists ar ON t.artist_id = ar.id
+        LEFT JOIN albums al ON t.album_id = al.id
+        WHERE t.fingerprint IS NOT NULL
+        "#
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut tracks = Vec::new();
+    for row in rows {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
+
+        tracks.push(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            album_id: row.album_id,
+            album_title: row.album_title,
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        });
+    }
+
+    Ok(tracks)
+}
+
 // =============================================================================
+
+/// Get tracks by genre
+pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Track>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+            t.track_number, t.disc_number, t.year, t.duration_seconds,
+            t.bitrate, t.sample_rate, t.channels, t.file_format,
+            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+            t.metadata_source, t.created_at, t.updated_at,
+            ar.name as "artist_name?",
+            al.title as "album_title?"
+        FROM tracks t
+        LEFT JOIN artists ar ON t.artist_id = ar.id
+        LEFT JOIN albums al ON t.album_id = al.id
+        INNER JOIN track_genres tg ON t.id = tg.track_id
+        WHERE tg.genre_id = ?
+        ORDER BY ar.name, al.title, t.disc_number, t.track_number, t.title
+        "#,
+        genre_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut tracks = Vec::new();
+    for row in rows {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
+
+        tracks.push(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            album_id: row.album_id,
+            album_title: row.album_title,
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        });
+    }
+
+    Ok(tracks)
+}
 
 fn format_metadata_source(source: &MetadataSource) -> &'static str {
     match source {

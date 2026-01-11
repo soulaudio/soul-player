@@ -1,10 +1,10 @@
 //! Crossfade engine for smooth track transitions
 //!
 //! Provides multiple fade curve types for seamless transitions between tracks:
-//! - Linear: Simple linear fade
-//! - Logarithmic: Natural perceived volume change
+//! - Linear: Simple linear fade (note: has 3dB volume dip at midpoint)
+//! - SquareRoot: Faster rise than linear, natural-sounding transitions
 //! - S-Curve: Smooth transitions with slow start/end
-//! - Equal Power: Constant perceived loudness (best for music)
+//! - Equal Power: Constant perceived loudness (best for music, default)
 
 use std::f32::consts::PI;
 
@@ -12,9 +12,27 @@ use std::f32::consts::PI;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FadeCurve {
     /// Linear fade: simple and predictable
+    ///
+    /// **Note**: Linear crossfade has a 3dB volume dip at the midpoint because
+    /// it maintains constant amplitude sum (0.5 + 0.5 = 1.0) but not constant power.
+    /// At the midpoint: power = 0.5^2 + 0.5^2 = 0.5 (-3dB).
+    /// For music, prefer `EqualPower` which maintains constant perceived loudness.
     Linear,
 
-    /// Logarithmic fade: natural perceived volume change
+    /// Square root fade: faster rise than linear, creates natural-sounding transitions
+    ///
+    /// Uses t^0.5 (square root) curve. This creates a curve that rises faster
+    /// initially then slows down, which sounds more natural than linear.
+    SquareRoot,
+
+    /// Logarithmic fade (alias for SquareRoot for backwards compatibility)
+    ///
+    /// **Deprecated**: Use `SquareRoot` instead. This uses t^0.5 (square root),
+    /// not a true logarithmic curve. The name was misleading.
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use SquareRoot instead - this is actually a square root curve, not logarithmic"
+    )]
     Logarithmic,
 
     /// S-Curve fade: slow start, fast middle, slow end
@@ -43,13 +61,13 @@ impl FadeCurve {
         match self {
             FadeCurve::Linear => t,
 
-            FadeCurve::Logarithmic => {
-                // Attempt to create a more natural volume curve
-                // Human perception of volume is logarithmic
+            #[allow(deprecated)]
+            FadeCurve::SquareRoot | FadeCurve::Logarithmic => {
+                // Square root curve: faster rise than linear, sounds natural
+                // t^0.5 creates a curve that rises quickly at first then slows
                 if t <= 0.0 {
                     0.0
                 } else {
-                    // Use a power curve that approximates logarithmic perception
                     t.powf(0.5)
                 }
             }
@@ -70,10 +88,12 @@ impl FadeCurve {
     }
 
     /// Get a human-readable name for the curve
+    #[allow(deprecated)]
     pub fn display_name(&self) -> &'static str {
         match self {
             FadeCurve::Linear => "Linear",
-            FadeCurve::Logarithmic => "Logarithmic",
+            FadeCurve::SquareRoot => "Square Root",
+            FadeCurve::Logarithmic => "Square Root", // Deprecated alias
             FadeCurve::SCurve => "S-Curve",
             FadeCurve::EqualPower => "Equal Power",
         }
@@ -324,7 +344,6 @@ impl CrossfadeEngine {
 
         (samples_to_process, completed)
     }
-
 }
 
 impl Default for CrossfadeEngine {
@@ -535,29 +554,44 @@ mod tests {
     #[test]
     fn test_fade_curve_display_names() {
         assert_eq!(FadeCurve::Linear.display_name(), "Linear");
-        assert_eq!(FadeCurve::Logarithmic.display_name(), "Logarithmic");
+        assert_eq!(FadeCurve::SquareRoot.display_name(), "Square Root");
         assert_eq!(FadeCurve::SCurve.display_name(), "S-Curve");
         assert_eq!(FadeCurve::EqualPower.display_name(), "Equal Power");
     }
 
     #[test]
-    fn test_logarithmic_curve() {
-        let curve = FadeCurve::Logarithmic;
+    fn test_square_root_curve() {
+        let curve = FadeCurve::SquareRoot;
 
         // At boundaries
         assert!((curve.calculate_gain(0.0, false) - 0.0).abs() < 0.001);
         assert!((curve.calculate_gain(1.0, false) - 1.0).abs() < 0.001);
 
-        // Logarithmic should rise faster at the start than linear
-        let log_mid = curve.calculate_gain(0.5, false);
+        // SquareRoot should rise faster at the start than linear
+        let sqrt_mid = curve.calculate_gain(0.5, false);
         let linear_mid = FadeCurve::Linear.calculate_gain(0.5, false);
 
         // sqrt(0.5) ≈ 0.707, which is > 0.5
         assert!(
-            log_mid > linear_mid,
-            "Logarithmic should rise faster: {} vs {}",
-            log_mid,
+            sqrt_mid > linear_mid,
+            "SquareRoot should rise faster: {} vs {}",
+            sqrt_mid,
             linear_mid
         );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn test_logarithmic_alias_works() {
+        // Test that deprecated Logarithmic alias still works
+        let curve = FadeCurve::Logarithmic;
+        let sqrt_curve = FadeCurve::SquareRoot;
+
+        // Both should produce the same result
+        assert_eq!(
+            curve.calculate_gain(0.5, false),
+            sqrt_curve.calculate_gain(0.5, false)
+        );
+        assert_eq!(curve.display_name(), "Square Root");
     }
 }

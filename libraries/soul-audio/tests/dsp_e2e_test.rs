@@ -39,12 +39,25 @@ fn test_eq_boosts_frequency() {
     let input_rms = calculate_rms(&input_mono);
     let output_rms = calculate_rms(&output_mono);
 
-    println!("EQ Boost Test - Input RMS: {:.4}, Output RMS: {:.4}", input_rms, output_rms);
-    println!("Gain ratio: {:.2}x ({:.2} dB)", output_rms / input_rms, linear_to_db(output_rms / input_rms));
+    println!(
+        "EQ Boost Test - Input RMS: {:.4}, Output RMS: {:.4}",
+        input_rms, output_rms
+    );
+    println!(
+        "Gain ratio: {:.2}x ({:.2} dB)",
+        output_rms / input_rms,
+        linear_to_db(output_rms / input_rms)
+    );
 
     // +6dB should be ~2x amplitude
-    assert!(output_rms > input_rms * 1.8, "Output should be ~2x louder after +6dB boost");
-    assert!(output_rms < input_rms * 2.2, "Output shouldn't be too much louder");
+    assert!(
+        output_rms > input_rms * 1.8,
+        "Output should be ~2x louder after +6dB boost"
+    );
+    assert!(
+        output_rms < input_rms * 2.2,
+        "Output shouldn't be too much louder"
+    );
 }
 
 #[test]
@@ -69,12 +82,25 @@ fn test_eq_cuts_frequency() {
     let input_rms = calculate_rms(&input_mono);
     let output_rms = calculate_rms(&output_mono);
 
-    println!("EQ Cut Test - Input RMS: {:.4}, Output RMS: {:.4}", input_rms, output_rms);
-    println!("Gain ratio: {:.2}x ({:.2} dB)", output_rms / input_rms, linear_to_db(output_rms / input_rms));
+    println!(
+        "EQ Cut Test - Input RMS: {:.4}, Output RMS: {:.4}",
+        input_rms, output_rms
+    );
+    println!(
+        "Gain ratio: {:.2}x ({:.2} dB)",
+        output_rms / input_rms,
+        linear_to_db(output_rms / input_rms)
+    );
 
     // -12dB should be ~0.25x amplitude
-    assert!(output_rms < input_rms * 0.3, "Output should be ~4x quieter after -12dB cut");
-    assert!(output_rms > input_rms * 0.2, "Output shouldn't be too quiet");
+    assert!(
+        output_rms < input_rms * 0.3,
+        "Output should be ~4x quieter after -12dB cut"
+    );
+    assert!(
+        output_rms > input_rms * 0.2,
+        "Output shouldn't be too quiet"
+    );
 }
 
 #[test]
@@ -100,10 +126,16 @@ fn test_eq_doesnt_affect_other_frequencies() {
     let input_rms = calculate_rms(&input_mono);
     let output_rms = calculate_rms(&output_mono);
 
-    println!("EQ Isolation Test - RMS change: {:.2}%", ((output_rms / input_rms) - 1.0) * 100.0);
+    println!(
+        "EQ Isolation Test - RMS change: {:.2}%",
+        ((output_rms / input_rms) - 1.0) * 100.0
+    );
 
     // Should be within 10% (some bleed expected due to Q factor)
-    assert!((output_rms / input_rms - 1.0).abs() < 0.1, "100Hz should not be significantly affected by 1kHz boost");
+    assert!(
+        (output_rms / input_rms - 1.0).abs() < 0.1,
+        "100Hz should not be significantly affected by 1kHz boost"
+    );
 }
 
 #[test]
@@ -158,12 +190,26 @@ fn test_compressor_reduces_peaks() {
     let output_rms = calculate_rms(&output_mono);
 
     println!("Compressor Peak Test:");
-    println!("  Input RMS: {:.4} ({:.2} dB)", input_rms, linear_to_db(input_rms));
-    println!("  Output RMS: {:.4} ({:.2} dB)", output_rms, linear_to_db(output_rms));
-    println!("  Change: {:.2} dB", linear_to_db(output_rms) - linear_to_db(input_rms));
+    println!(
+        "  Input RMS: {:.4} ({:.2} dB)",
+        input_rms,
+        linear_to_db(input_rms)
+    );
+    println!(
+        "  Output RMS: {:.4} ({:.2} dB)",
+        output_rms,
+        linear_to_db(output_rms)
+    );
+    println!(
+        "  Change: {:.2} dB",
+        linear_to_db(output_rms) - linear_to_db(input_rms)
+    );
 
     // Output RMS should be lower (compression reduces dynamic range)
-    assert!(output_rms < input_rms, "Compressor should reduce average level");
+    assert!(
+        output_rms < input_rms,
+        "Compressor should reduce average level"
+    );
 }
 
 #[test]
@@ -192,13 +238,27 @@ fn test_compressor_doesnt_affect_quiet_signals() {
     let output_rms = calculate_rms(&output_mono);
 
     println!("Compressor Quiet Signal Test:");
-    println!("  Input RMS: {:.4} ({:.2} dB)", input_rms, linear_to_db(input_rms));
-    println!("  Output RMS: {:.4} ({:.2} dB)", output_rms, linear_to_db(output_rms));
-    println!("  Difference: {:.2} dB", (linear_to_db(output_rms) - linear_to_db(input_rms)).abs());
+    println!(
+        "  Input RMS: {:.4} ({:.2} dB)",
+        input_rms,
+        linear_to_db(input_rms)
+    );
+    println!(
+        "  Output RMS: {:.4} ({:.2} dB)",
+        output_rms,
+        linear_to_db(output_rms)
+    );
+    println!(
+        "  Difference: {:.2} dB",
+        (linear_to_db(output_rms) - linear_to_db(input_rms)).abs()
+    );
 
     // RMS should be within 1dB
     let diff_db = (linear_to_db(output_rms) - linear_to_db(input_rms)).abs();
-    assert!(diff_db < 1.0, "Quiet signal below threshold should pass through mostly unchanged");
+    assert!(
+        diff_db < 1.0,
+        "Quiet signal below threshold should pass through mostly unchanged"
+    );
 }
 
 #[test]
@@ -210,9 +270,9 @@ fn test_compressor_ratio() {
     let mut compressor = Compressor::with_settings(CompressorSettings {
         threshold_db: -12.0,
         ratio: 4.0,
-        attack_ms: 0.1, // Extremely fast attack
+        attack_ms: 0.1,     // Extremely fast attack
         release_ms: 1000.0, // Slow release to maintain steady compression
-        knee_db: 0.0, // Hard knee for accurate ratio measurement
+        knee_db: 0.0,       // Hard knee for accurate ratio measurement
         makeup_gain_db: 0.0,
     });
 
@@ -250,10 +310,16 @@ fn test_compressor_ratio() {
     let output_peak_db = input_peak_db - gain_reduction; // -10.505 dB
     let expected_output_rms_db = output_peak_db - 3.0; // -13.505 dB (peak - 3 dB for sine RMS)
 
-    println!("  Peak tracking: input {:.2} dB -> output {:.2} dB", input_peak_db, output_peak_db);
+    println!(
+        "  Peak tracking: input {:.2} dB -> output {:.2} dB",
+        input_peak_db, output_peak_db
+    );
     println!("  Expected output RMS: {:.2} dB", expected_output_rms_db);
     println!("  Actual output RMS: {:.2} dB", output_rms_db);
-    println!("  Difference: {:.2} dB", (output_rms_db - expected_output_rms_db).abs());
+    println!(
+        "  Difference: {:.2} dB",
+        (output_rms_db - expected_output_rms_db).abs()
+    );
 
     // Verify output is within 0.5 dB of expected (compressor is very accurate with hard knee)
     let output_diff = (output_rms_db - expected_output_rms_db).abs();
@@ -287,12 +353,26 @@ fn test_compressor_with_makeup_gain() {
     let output_rms = calculate_rms(&output_mono);
 
     println!("Compressor Makeup Gain Test:");
-    println!("  Input RMS: {:.4} ({:.2} dB)", input_rms, linear_to_db(input_rms));
-    println!("  Output RMS: {:.4} ({:.2} dB)", output_rms, linear_to_db(output_rms));
-    println!("  Gain change: {:.2} dB", linear_to_db(output_rms / input_rms));
+    println!(
+        "  Input RMS: {:.4} ({:.2} dB)",
+        input_rms,
+        linear_to_db(input_rms)
+    );
+    println!(
+        "  Output RMS: {:.4} ({:.2} dB)",
+        output_rms,
+        linear_to_db(output_rms)
+    );
+    println!(
+        "  Gain change: {:.2} dB",
+        linear_to_db(output_rms / input_rms)
+    );
 
     // Should be significantly louder (+12dB ≈ 4x amplitude)
-    assert!(output_rms > input_rms * 3.0, "Makeup gain should increase overall level by ~12dB (4x)");
+    assert!(
+        output_rms > input_rms * 3.0,
+        "Makeup gain should increase overall level by ~12dB (4x)"
+    );
 }
 
 // ===== LIMITER TESTS =====
@@ -307,7 +387,11 @@ fn test_limiter_prevents_clipping() {
     assert!(input_peak > 1.0, "Test signal should exceed 1.0");
 
     println!("Limiter Clipping Prevention Test:");
-    println!("  Input peak: {:.4} ({:.2} dB)", input_peak, linear_to_db(input_peak));
+    println!(
+        "  Input peak: {:.4} ({:.2} dB)",
+        input_peak,
+        linear_to_db(input_peak)
+    );
 
     // Apply limiter
     let mut limiter = Limiter::with_settings(LimiterSettings {
@@ -319,7 +403,11 @@ fn test_limiter_prevents_clipping() {
 
     // Verify no clipping
     let output_peak = calculate_peak(&input);
-    println!("  Output peak: {:.4} ({:.2} dB)", output_peak, linear_to_db(output_peak));
+    println!(
+        "  Output peak: {:.4} ({:.2} dB)",
+        output_peak,
+        linear_to_db(output_peak)
+    );
 
     assert!(output_peak <= 1.0, "Limiter should prevent clipping");
     assert!(output_peak > 0.95, "Limiter should get close to threshold");
@@ -344,7 +432,10 @@ fn test_limiter_preserves_quiet_signals() {
 
     println!("Limiter Quiet Signal Test - Max difference: {:.6}", diff);
 
-    assert!(diff < 0.01, "Quiet signal below threshold should pass through unchanged");
+    assert!(
+        diff < 0.01,
+        "Quiet signal below threshold should pass through unchanged"
+    );
 }
 
 #[test]
@@ -371,7 +462,10 @@ fn test_limiter_brickwall_behavior() {
     println!("  Samples exceeding 0 dBFS: {}", exceeded_count);
     println!("  Total samples: {}", input.len());
 
-    assert_eq!(exceeded_count, 0, "Brickwall limiter should never allow clipping");
+    assert_eq!(
+        exceeded_count, 0,
+        "Brickwall limiter should never allow clipping"
+    );
 }
 
 // ===== EFFECT CHAIN TESTS =====
@@ -390,11 +484,15 @@ fn test_effect_chain_order_matters() {
         EqBand::new(10000.0, 0.0, 1.0),
     ]);
     chain1.add_effect(Box::new(eq1));
-    chain1.add_effect(Box::new(Compressor::with_settings(CompressorSettings::moderate())));
+    chain1.add_effect(Box::new(Compressor::with_settings(
+        CompressorSettings::moderate(),
+    )));
 
     // Chain 2: Compressor -> EQ
     let mut chain2 = EffectChain::new();
-    chain2.add_effect(Box::new(Compressor::with_settings(CompressorSettings::moderate())));
+    chain2.add_effect(Box::new(Compressor::with_settings(
+        CompressorSettings::moderate(),
+    )));
     let mut eq2 = ParametricEq::new();
     eq2.set_bands(vec![
         EqBand::new(100.0, 0.0, 1.0),
@@ -415,7 +513,10 @@ fn test_effect_chain_order_matters() {
 
     println!("Effect Chain Order Test - Difference: {:.6}", diff);
 
-    assert!(diff > 0.01, "Different effect orders should produce different results");
+    assert!(
+        diff > 0.01,
+        "Different effect orders should produce different results"
+    );
 }
 
 #[test]
@@ -433,7 +534,10 @@ fn test_empty_effect_chain_is_transparent() {
 
     println!("Empty Chain Transparency Test - Difference: {:.6}", diff);
 
-    assert!(diff < 0.000001, "Empty chain should be perfectly transparent");
+    assert!(
+        diff < 0.000001,
+        "Empty chain should be perfectly transparent"
+    );
 }
 
 // ===== AUDIO QUALITY TESTS =====
@@ -445,7 +549,9 @@ fn test_effects_dont_add_excessive_thd() {
 
     // Apply moderate processing
     let mut chain = EffectChain::new();
-    chain.add_effect(Box::new(Compressor::with_settings(CompressorSettings::gentle())));
+    chain.add_effect(Box::new(Compressor::with_settings(
+        CompressorSettings::gentle(),
+    )));
     chain.add_effect(Box::new(Limiter::with_settings(LimiterSettings::soft())));
 
     let mut output = input.clone();
@@ -457,8 +563,15 @@ fn test_effects_dont_add_excessive_thd() {
 
     println!("THD Test - THD: {:.2}%", thd);
 
-    // THD should be low (< 5% for moderate processing)
-    assert!(thd < 5.0, "Effects should not add excessive harmonic distortion");
+    // THD should be low (< 2% for gentle processing with soft limiter)
+    // Professional equipment targets < 0.1%, but DFT-based measurement has spectral leakage
+    // and dynamics processing inherently adds harmonics. 2% is a realistic target.
+    // (Previously was 5% which was too loose)
+    assert!(
+        thd < 2.0,
+        "Effects should not add excessive harmonic distortion (THD: {:.2}%, max: 2%)",
+        thd
+    );
 }
 
 #[test]
@@ -475,11 +588,16 @@ fn test_effects_preserve_silence() {
         EqBand::new(10000.0, 0.0, 1.0),
     ]);
     chain.add_effect(Box::new(eq));
-    chain.add_effect(Box::new(Compressor::with_settings(CompressorSettings::aggressive())));
+    chain.add_effect(Box::new(Compressor::with_settings(
+        CompressorSettings::aggressive(),
+    )));
 
     let mut output = input.clone();
     chain.process(&mut output, 44100);
 
     // Should still be silent
-    assert!(is_silent(&output, -80.0), "Silence should remain silent after processing");
+    assert!(
+        is_silent(&output, -80.0),
+        "Silence should remain silent after processing"
+    );
 }

@@ -1,0 +1,38 @@
+[package]
+name = "soul-server-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "HTTP client for Soul Player Server API"
+
+[dependencies]
+# Core
+soul-core = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
+
+# Utilities
+tracing = { workspace = true }
+chrono = { workspace = true }
+url = { workspace = true }
+
+# For file uploads
+tokio-util = { version = "0.7", features = ["io"] }
+futures-util = "0.3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+mockall = { workspace = true }
+wiremock = "0.5"
+tempfile = "3"
+
+[lints]
+workspace = true

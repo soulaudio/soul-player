@@ -14,6 +14,11 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
 
+/// Setting key for volume leveling mode persistence
+const SETTING_VOLUME_LEVELING_MODE: &str = "audio.volume_leveling_mode";
+const SETTING_VOLUME_LEVELING_PREAMP: &str = "audio.volume_leveling_preamp";
+const SETTING_VOLUME_LEVELING_PREVENT_CLIPPING: &str = "audio.volume_leveling_prevent_clipping";
+
 /// Loudness info for frontend consumption
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -179,9 +184,14 @@ pub async fn analyze_track(
     };
 
     // Store results
-    soul_storage::loudness::update_track_loudness(&state.pool, track_id, &track_loudness, ANALYSIS_VERSION)
-        .await
-        .map_err(|e| e.to_string())?;
+    soul_storage::loudness::update_track_loudness(
+        &state.pool,
+        track_id,
+        &track_loudness,
+        ANALYSIS_VERSION,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     // Emit event for UI update
     let _ = app.emit("loudness-analysis-complete", track_id);
@@ -277,6 +287,7 @@ pub async fn get_analysis_worker_status(
 pub async fn set_volume_leveling_mode(
     mode: String,
     playback: State<'_, PlaybackManager>,
+    state: State<'_, AppState>,
 ) -> Result<(), String> {
     let normalization_mode = match mode.as_str() {
         "disabled" => NormalizationMode::Disabled,
@@ -287,8 +298,78 @@ pub async fn set_volume_leveling_mode(
         _ => return Err(format!("Invalid volume leveling mode: {}", mode)),
     };
 
+    // Set the mode on the playback manager (runtime)
     playback.set_volume_leveling_mode(normalization_mode);
-    eprintln!("[set_volume_leveling_mode] Mode set to: {:?}", normalization_mode);
+    eprintln!(
+        "[set_volume_leveling_mode] Mode set to: {:?}",
+        normalization_mode
+    );
+
+    // Persist to database for restoration on app restart
+    soul_storage::settings::set_setting(
+        &state.pool,
+        &state.user_id,
+        SETTING_VOLUME_LEVELING_MODE,
+        &serde_json::json!(mode),
+    )
+    .await
+    .map_err(|e| format!("Failed to save volume leveling mode: {}", e))?;
+
+    eprintln!("[set_volume_leveling_mode] Mode persisted to database");
+    Ok(())
+}
+
+/// Set pre-amp gain for volume leveling (-12 to +12 dB)
+#[tauri::command]
+pub async fn set_volume_leveling_preamp(
+    preamp_db: f64,
+    playback: State<'_, PlaybackManager>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Clamp preamp to valid range
+    let clamped = preamp_db.clamp(-12.0, 12.0);
+
+    // Set on playback manager (runtime)
+    playback.set_loudness_preamp(clamped);
+    eprintln!("[set_volume_leveling_preamp] Pre-amp set to: {} dB", clamped);
+
+    // Persist to database
+    soul_storage::settings::set_setting(
+        &state.pool,
+        &state.user_id,
+        SETTING_VOLUME_LEVELING_PREAMP,
+        &serde_json::json!(clamped),
+    )
+    .await
+    .map_err(|e| format!("Failed to save preamp setting: {}", e))?;
+
+    Ok(())
+}
+
+/// Set whether to prevent clipping during volume leveling
+#[tauri::command]
+pub async fn set_volume_leveling_prevent_clipping(
+    prevent: bool,
+    playback: State<'_, PlaybackManager>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Set on playback manager (runtime)
+    playback.set_prevent_clipping(prevent);
+    eprintln!(
+        "[set_volume_leveling_prevent_clipping] Prevent clipping set to: {}",
+        prevent
+    );
+
+    // Persist to database
+    soul_storage::settings::set_setting(
+        &state.pool,
+        &state.user_id,
+        SETTING_VOLUME_LEVELING_PREVENT_CLIPPING,
+        &serde_json::json!(prevent),
+    )
+    .await
+    .map_err(|e| format!("Failed to save prevent clipping setting: {}", e))?;
+
     Ok(())
 }
 
@@ -322,8 +403,8 @@ async fn analyze_audio_file(file_path: &str) -> Result<LoudnessInfo, String> {
         use symphonia::core::probe::Hint;
 
         // Open file
-        let file = std::fs::File::open(&file_path)
-            .map_err(|e| format!("Failed to open file: {}", e))?;
+        let file =
+            std::fs::File::open(&file_path).map_err(|e| format!("Failed to open file: {}", e))?;
 
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
@@ -412,7 +493,9 @@ async fn analyze_audio_file(file_path: &str) -> Result<LoudnessInfo, String> {
         }
 
         // Finalize analysis
-        analyzer.finalize().map_err(|e| format!("Analysis failed: {}", e))
+        analyzer
+            .finalize()
+            .map_err(|e| format!("Analysis failed: {}", e))
     })
     .await
     .map_err(|e| format!("Task error: {}", e))?
@@ -467,11 +550,14 @@ async fn run_analysis_worker(
         let track = match soul_storage::tracks::get_by_id(&pool, track_id_str).await {
             Ok(Some(t)) => t,
             Ok(None) => {
-                let _ = soul_storage::loudness::mark_queue_failed(&pool, item.id, "Track not found").await;
+                let _ =
+                    soul_storage::loudness::mark_queue_failed(&pool, item.id, "Track not found")
+                        .await;
                 continue;
             }
             Err(e) => {
-                let _ = soul_storage::loudness::mark_queue_failed(&pool, item.id, &e.to_string()).await;
+                let _ =
+                    soul_storage::loudness::mark_queue_failed(&pool, item.id, &e.to_string()).await;
                 continue;
             }
         };
@@ -490,7 +576,8 @@ async fn run_analysis_worker(
         });
 
         let Some(file_path) = file_path else {
-            let _ = soul_storage::loudness::mark_queue_failed(&pool, item.id, "No local file").await;
+            let _ =
+                soul_storage::loudness::mark_queue_failed(&pool, item.id, "No local file").await;
             continue;
         };
 
@@ -529,7 +616,9 @@ async fn run_analysis_worker(
                 .await
                 {
                     eprintln!("[analysis_worker] Failed to store results: {}", e);
-                    let _ = soul_storage::loudness::mark_queue_failed(&pool, item.id, &e.to_string()).await;
+                    let _ =
+                        soul_storage::loudness::mark_queue_failed(&pool, item.id, &e.to_string())
+                            .await;
                     continue;
                 }
 
@@ -543,12 +632,15 @@ async fn run_analysis_worker(
                 }
 
                 // Emit progress event
-                let _ = app.emit("loudness-analysis-progress", serde_json::json!({
-                    "trackId": item.track_id,
-                    "trackTitle": track.title,
-                    "lufsIntegrated": loudness_info.integrated_lufs,
-                    "replaygainGain": track_gain.gain_db,
-                }));
+                let _ = app.emit(
+                    "loudness-analysis-progress",
+                    serde_json::json!({
+                        "trackId": item.track_id,
+                        "trackTitle": track.title,
+                        "lufsIntegrated": loudness_info.integrated_lufs,
+                        "replaygainGain": track_gain.gain_db,
+                    }),
+                );
 
                 eprintln!(
                     "[analysis_worker] Track {} analyzed: {:.1} LUFS, {:.2} dB gain",
@@ -556,7 +648,10 @@ async fn run_analysis_worker(
                 );
             }
             Err(e) => {
-                eprintln!("[analysis_worker] Analysis failed for track {}: {}", item.track_id, e);
+                eprintln!(
+                    "[analysis_worker] Analysis failed for track {}: {}",
+                    item.track_id, e
+                );
                 let _ = soul_storage::loudness::mark_queue_failed(&pool, item.id, &e).await;
             }
         }
@@ -564,4 +659,86 @@ async fn run_analysis_worker(
         // Small delay between tracks to avoid overloading
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
+}
+
+/// Initialize volume leveling settings from saved settings
+///
+/// Called on app startup to restore the previously selected volume leveling mode,
+/// pre-amp gain, and prevent clipping setting.
+pub async fn initialize_volume_leveling_mode(
+    playback: &PlaybackManager,
+    app_state: &AppState,
+) -> Result<(), String> {
+    eprintln!("[loudness] Initializing volume leveling settings from database...");
+
+    // Restore volume leveling mode
+    let saved_mode = soul_storage::settings::get_setting(
+        &app_state.pool,
+        &app_state.user_id,
+        SETTING_VOLUME_LEVELING_MODE,
+    )
+    .await
+    .map_err(|e| format!("Failed to load volume leveling mode setting: {}", e))?;
+
+    if let Some(mode_value) = saved_mode {
+        if let Some(mode_str) = mode_value.as_str() {
+            let normalization_mode = match mode_str {
+                "disabled" => NormalizationMode::Disabled,
+                "replaygain_track" => NormalizationMode::ReplayGainTrack,
+                "replaygain_album" => NormalizationMode::ReplayGainAlbum,
+                "ebu_r128" => NormalizationMode::EbuR128Broadcast,
+                "streaming" => NormalizationMode::EbuR128Streaming,
+                _ => {
+                    eprintln!(
+                        "[loudness] Unknown saved mode '{}', using default (Disabled)",
+                        mode_str
+                    );
+                    NormalizationMode::Disabled
+                }
+            };
+
+            playback.set_volume_leveling_mode(normalization_mode);
+            eprintln!(
+                "[loudness] Volume leveling mode restored to: {:?}",
+                normalization_mode
+            );
+        }
+    } else {
+        eprintln!("[loudness] No saved volume leveling mode found, using default (Disabled)");
+    }
+
+    // Restore pre-amp gain
+    let saved_preamp = soul_storage::settings::get_setting(
+        &app_state.pool,
+        &app_state.user_id,
+        SETTING_VOLUME_LEVELING_PREAMP,
+    )
+    .await
+    .map_err(|e| format!("Failed to load preamp setting: {}", e))?;
+
+    if let Some(preamp_value) = saved_preamp {
+        if let Some(preamp_db) = preamp_value.as_f64() {
+            let clamped = preamp_db.clamp(-12.0, 12.0);
+            playback.set_loudness_preamp(clamped);
+            eprintln!("[loudness] Pre-amp restored to: {} dB", clamped);
+        }
+    }
+
+    // Restore prevent clipping setting
+    let saved_prevent_clipping = soul_storage::settings::get_setting(
+        &app_state.pool,
+        &app_state.user_id,
+        SETTING_VOLUME_LEVELING_PREVENT_CLIPPING,
+    )
+    .await
+    .map_err(|e| format!("Failed to load prevent clipping setting: {}", e))?;
+
+    if let Some(prevent_value) = saved_prevent_clipping {
+        if let Some(prevent) = prevent_value.as_bool() {
+            playback.set_prevent_clipping(prevent);
+            eprintln!("[loudness] Prevent clipping restored to: {}", prevent);
+        }
+    }
+
+    Ok(())
 }

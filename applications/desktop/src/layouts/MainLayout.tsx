@@ -4,6 +4,7 @@
 import { ReactNode, useState } from 'react';
 import { MainLayout as SharedMainLayout } from '@soul-player/shared';
 import { ImportDialog } from '../components/ImportDialog';
+import { ScanProgressIndicator } from '../components/ScanProgressIndicator';
 import { useSettings } from '../contexts/SettingsContext';
 
 interface MainLayoutProps {
@@ -25,6 +26,9 @@ export function MainLayout({ children }: MainLayoutProps) {
 
       {/* Desktop-specific ImportDialog */}
       <ImportDialog open={showImportDialog} onClose={() => setShowImportDialog(false)} />
+
+      {/* Scan progress indicator (shows when scanning library sources) */}
+      <ScanProgressIndicator position="footer" />
     </div>
   );
 }

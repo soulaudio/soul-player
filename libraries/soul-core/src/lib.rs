@@ -39,7 +39,7 @@ pub mod types;
 // Re-export commonly used types
 pub use error::{Result, SoulError};
 pub use storage::StorageContext;
-pub use traits::{AudioDecoder, AudioEffect, AudioOutput, MetadataReader, Storage};
+pub use traits::{AudioDecoder, AudioEffect, AudioMetadata, AudioOutput, MetadataReader, Storage};
 
 // Export all types
 pub use types::{

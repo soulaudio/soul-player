@@ -1,4 +1,10 @@
 //! Metadata extraction from audio files
+//!
+//! This module provides two extraction backends:
+//! - `extract_metadata`: Uses lofty (default, more comprehensive tag support)
+//! - `extract_metadata_symphonia`: Uses Symphonia (better for audio properties)
+//!
+//! Both return the same `ExtractedMetadata` struct for compatibility.
 
 use crate::{ImportError, Result};
 use lofty::{Accessor, AudioFile, Probe, TaggedFileExt};
@@ -45,6 +51,15 @@ pub struct ExtractedMetadata {
 
     /// File format (extension)
     pub file_format: String,
+
+    /// MusicBrainz Recording ID
+    pub musicbrainz_recording_id: Option<String>,
+
+    /// Composer
+    pub composer: Option<String>,
+
+    /// Embedded album art (raw data and MIME type)
+    pub album_art: Option<(Vec<u8>, String)>,
 }
 
 impl ExtractedMetadata {
@@ -123,6 +138,27 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         .map(|ext| ext.to_lowercase())
         .unwrap_or_else(|| "unknown".to_string());
 
+    // Extract MusicBrainz Recording ID
+    let musicbrainz_recording_id = tag.and_then(|t| {
+        t.get_string(&lofty::ItemKey::MusicBrainzRecordingId)
+            .map(|s| s.to_string())
+    });
+
+    // Extract composer
+    let composer = tag.and_then(|t| {
+        t.get_string(&lofty::ItemKey::Composer)
+            .map(|s| s.to_string())
+    });
+
+    // Extract album art
+    let album_art = tag.and_then(|t| {
+        t.pictures().first().map(|pic| {
+            let mime = pic.mime_type().map(|m| m.as_str().to_string())
+                .unwrap_or_else(|| "image/jpeg".to_string());
+            (pic.data().to_vec(), mime)
+        })
+    });
+
     Ok(ExtractedMetadata {
         title,
         artist,
@@ -137,6 +173,9 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         sample_rate,
         channels,
         file_format,
+        musicbrainz_recording_id,
+        composer,
+        album_art,
     })
 }
 
@@ -162,6 +201,100 @@ pub fn calculate_file_hash(path: &Path) -> Result<String> {
     Ok(hex::encode(hash))
 }
 
+/// Extract metadata from an audio file using Symphonia
+///
+/// This provides an alternative to the lofty-based extraction.
+/// Symphonia is the same decoder used for audio playback, so it may
+/// provide more accurate audio property information for some formats.
+///
+/// # Arguments
+/// * `path` - Path to the audio file
+///
+/// # Returns
+/// * `ExtractedMetadata` with all available metadata
+pub fn extract_metadata_symphonia(path: &Path) -> Result<ExtractedMetadata> {
+    let audio_metadata = soul_audio::extract_metadata(path)
+        .map_err(|e| ImportError::Metadata(e.to_string()))?;
+
+    // Convert genre from single string to vec
+    let genres = audio_metadata
+        .genre
+        .map(|g| {
+            g.split(&[',', ';', '/'][..])
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<String>>()
+        })
+        .unwrap_or_default();
+
+    // Get file format from extension
+    let file_format = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_lowercase())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Convert album art
+    let album_art = audio_metadata.album_art.map(|art| {
+        (art.data, art.mime_type)
+    });
+
+    Ok(ExtractedMetadata {
+        title: audio_metadata.title,
+        artist: audio_metadata.artist,
+        album: audio_metadata.album,
+        album_artist: audio_metadata.album_artist,
+        track_number: audio_metadata.track_number,
+        disc_number: audio_metadata.disc_number,
+        year: audio_metadata.year,
+        genres,
+        duration_seconds: audio_metadata.duration_seconds,
+        bitrate: audio_metadata.bitrate,
+        sample_rate: audio_metadata.sample_rate,
+        channels: audio_metadata.channels,
+        file_format,
+        musicbrainz_recording_id: audio_metadata.musicbrainz_recording_id,
+        composer: audio_metadata.composer,
+        album_art,
+    })
+}
+
+/// Convert soul-audio AudioMetadata to ExtractedMetadata
+impl From<soul_audio::AudioMetadata> for ExtractedMetadata {
+    fn from(meta: soul_audio::AudioMetadata) -> Self {
+        let genres = meta
+            .genre
+            .map(|g| {
+                g.split(&[',', ';', '/'][..])
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+
+        let album_art = meta.album_art.map(|art| (art.data, art.mime_type));
+
+        Self {
+            title: meta.title,
+            artist: meta.artist,
+            album: meta.album,
+            album_artist: meta.album_artist,
+            track_number: meta.track_number,
+            disc_number: meta.disc_number,
+            year: meta.year,
+            genres,
+            duration_seconds: meta.duration_seconds,
+            bitrate: meta.bitrate,
+            sample_rate: meta.sample_rate,
+            channels: meta.channels,
+            file_format: "unknown".to_string(), // Would need path to determine
+            musicbrainz_recording_id: meta.musicbrainz_recording_id,
+            composer: meta.composer,
+            album_art,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +315,9 @@ mod tests {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art: None,
         };
 
         assert!(sparse.is_sparse());
@@ -200,6 +336,9 @@ mod tests {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art: None,
         };
 
         assert!(!not_sparse.is_sparse());

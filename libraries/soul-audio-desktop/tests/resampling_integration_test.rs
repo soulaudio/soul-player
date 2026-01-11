@@ -112,12 +112,7 @@ fn test_common_sample_rate_conversions() {
         let source =
             LocalAudioSource::new(&wav_path, target_rate).expect("Failed to create source");
 
-        assert_eq!(
-            source.sample_rate(),
-            target_rate,
-            "{} failed",
-            description
-        );
+        assert_eq!(source.sample_rate(), target_rate, "{} failed", description);
 
         eprintln!("✅ {}: {}Hz→{}Hz", description, source_rate, target_rate);
     }
@@ -138,7 +133,10 @@ fn test_resampled_duration_accuracy() {
     let duration = source.duration();
     let duration_secs = duration.as_secs_f64();
 
-    eprintln!("Expected: {:.3}s, Got: {:.3}s", expected_duration, duration_secs);
+    eprintln!(
+        "Expected: {:.3}s, Got: {:.3}s",
+        expected_duration, duration_secs
+    );
 
     // Allow 5% tolerance for resampling and encoder/decoder overhead
     let tolerance = expected_duration * 0.05;
@@ -150,7 +148,10 @@ fn test_resampled_duration_accuracy() {
         duration_secs
     );
 
-    eprintln!("✅ Resampled audio duration accurate within {:.1}%", tolerance * 100.0);
+    eprintln!(
+        "✅ Resampled audio duration accurate within {:.1}%",
+        tolerance * 100.0
+    );
 }
 
 /// Test: Resampled audio can be read and played
@@ -167,7 +168,9 @@ fn test_resampled_audio_playback() {
 
     // Read samples - should be resampled to 96kHz
     let mut buffer = vec![0.0f32; 96000 * 2]; // 1 second at 96kHz stereo
-    let samples_read = source.read_samples(&mut buffer).expect("Failed to read samples");
+    let samples_read = source
+        .read_samples(&mut buffer)
+        .expect("Failed to read samples");
 
     assert!(samples_read > 0, "Should read resampled samples");
 
@@ -185,7 +188,10 @@ fn test_resampled_audio_playback() {
     );
 
     eprintln!("✅ Resampled audio readable and normalized");
-    eprintln!("   Read {} samples, max amplitude: {:.6}", samples_read, max_sample);
+    eprintln!(
+        "   Read {} samples, max amplitude: {:.6}",
+        samples_read, max_sample
+    );
 }
 
 /// Test: Resampling quality (frequency preservation)
@@ -204,17 +210,15 @@ fn test_resampling_frequency_preservation() {
 
     // Read a chunk
     let mut buffer = vec![0.0f32; 9600]; // 0.05 seconds at 96kHz stereo
-    let samples_read = source.read_samples(&mut buffer).expect("Failed to read samples");
+    let samples_read = source
+        .read_samples(&mut buffer)
+        .expect("Failed to read samples");
 
     // Verify we got reasonable output
     assert!(samples_read > 1000, "Should read substantial chunk");
 
     // Calculate RMS to verify signal is present
-    let rms: f32 = buffer[..samples_read]
-        .iter()
-        .map(|&s| s * s)
-        .sum::<f32>()
-        / samples_read as f32;
+    let rms: f32 = buffer[..samples_read].iter().map(|&s| s * s).sum::<f32>() / samples_read as f32;
     let rms = rms.sqrt();
 
     eprintln!("Resampled signal RMS: {:.6}", rms);
@@ -245,9 +249,7 @@ fn test_resampling_timing_accuracy() {
     let mut original_source =
         LocalAudioSource::new(&wav_path, 44100).expect("Failed to create source");
     let mut original_buffer = vec![0.0f32; 88200]; // 1 second stereo
-    let orig_samples = original_source
-        .read_samples(&mut original_buffer)
-        .unwrap();
+    let orig_samples = original_source.read_samples(&mut original_buffer).unwrap();
 
     // Read resampled
     let mut resampled_source =
@@ -395,7 +397,10 @@ fn test_extreme_upsampling() {
     let mut buffer = vec![0.0f32; 19200]; // 0.05s
     let samples = source.read_samples(&mut buffer).unwrap();
 
-    assert!(samples > 0, "Should read samples even with extreme upsampling");
+    assert!(
+        samples > 0,
+        "Should read samples even with extreme upsampling"
+    );
 
     eprintln!("✅ Extreme upsampling (44.1→192kHz) works");
 }

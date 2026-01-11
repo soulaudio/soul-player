@@ -114,8 +114,9 @@ fn test_decode_mono_wav() {
         .expect("Failed to decode mono WAV");
 
     // Verify properties
+    // Note: Decoder always outputs stereo - mono files are duplicated to both channels
     assert_eq!(buffer.format.sample_rate.0, 48000);
-    assert_eq!(buffer.format.channels, 1);
+    assert_eq!(buffer.format.channels, 2);
 
     // Verify sample count (mono files are converted to stereo by duplicating)
     // Expected: 48000 * 0.5 = 24000 samples per channel -> 48000 interleaved
@@ -166,23 +167,94 @@ fn test_decode_nonexistent_file() {
     let mut decoder = SymphoniaDecoder::new();
     let result = decoder.decode(&PathBuf::from("/nonexistent/file.wav"));
 
-    assert!(result.is_err());
+    assert!(result.is_err(), "Expected error for nonexistent file");
+
+    // Verify the error is specifically about the file not being found/accessible
+    let err = result.unwrap_err();
+    let err_string = format!("{:?}", err);
+    // The error should indicate a file access issue, not a format issue
+    assert!(
+        err_string.contains("Io") || err_string.contains("not found") || err_string.contains("open"),
+        "Expected IO/file error, got: {}",
+        err_string
+    );
 }
 
 #[test]
-fn test_decode_invalid_file() {
+fn test_decode_invalid_file_returns_format_error() {
     // Create a file with invalid content
     let temp_dir = tempfile::tempdir().unwrap();
-    let invalid_path = temp_dir.path().join("invalid.wav");
+    let invalid_path = temp_dir.path().join("garbage.wav");
 
     let mut file = File::create(&invalid_path).unwrap();
-    file.write_all(b"This is not a valid WAV file").unwrap();
+    file.write_all(b"This is not a valid WAV file at all").unwrap();
     drop(file);
 
     let mut decoder = SymphoniaDecoder::new();
     let result = decoder.decode(&invalid_path);
 
-    assert!(result.is_err());
+    assert!(result.is_err(), "Expected error for invalid file format");
+
+    // This should be a format/decode error, not an IO error
+    let err = result.unwrap_err();
+    let err_string = format!("{:?}", err);
+    // Accept various format-related error messages from symphonia
+    assert!(
+        err_string.contains("Decode")
+            || err_string.contains("Format")
+            || err_string.contains("Unsupported")
+            || err_string.contains("unsupported")
+            || err_string.contains("probe")
+            || err_string.contains("no suitable"),
+        "Expected format/decode error, got: {}",
+        err_string
+    );
+}
+
+#[test]
+fn test_decode_truncated_wav_file() {
+    // Create a truncated WAV file (valid header but incomplete data)
+    let temp_dir = tempfile::tempdir().unwrap();
+    let truncated_path = temp_dir.path().join("truncated.wav");
+
+    let mut file = File::create(&truncated_path).unwrap();
+    // Write a minimal WAV header but with data_size claiming more data than we provide
+    file.write_all(b"RIFF").unwrap();
+    file.write_all(&1000u32.to_le_bytes()).unwrap(); // Chunk size (too big)
+    file.write_all(b"WAVE").unwrap();
+    file.write_all(b"fmt ").unwrap();
+    file.write_all(&16u32.to_le_bytes()).unwrap();
+    file.write_all(&1u16.to_le_bytes()).unwrap(); // PCM
+    file.write_all(&2u16.to_le_bytes()).unwrap(); // Channels
+    file.write_all(&44100u32.to_le_bytes()).unwrap(); // Sample rate
+    file.write_all(&176400u32.to_le_bytes()).unwrap(); // Byte rate
+    file.write_all(&4u16.to_le_bytes()).unwrap(); // Block align
+    file.write_all(&16u16.to_le_bytes()).unwrap(); // Bits per sample
+    file.write_all(b"data").unwrap();
+    file.write_all(&500u32.to_le_bytes()).unwrap(); // Claims 500 bytes of data
+    // But we only write 8 bytes
+    file.write_all(&[0u8; 8]).unwrap();
+    drop(file);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&truncated_path);
+
+    // Decoder should either error or return partial data
+    // Either way, it should handle gracefully without panic
+    match result {
+        Ok(buffer) => {
+            // If it succeeds, it should have some samples
+            assert!(buffer.samples.len() < 500 / 4, "Should not have full claimed data");
+        }
+        Err(e) => {
+            // Error is also acceptable for truncated file
+            let err_string = format!("{:?}", e);
+            assert!(
+                !err_string.is_empty(),
+                "Error should have meaningful message"
+            );
+        }
+    }
 }
 
 #[test]

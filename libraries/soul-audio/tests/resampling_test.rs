@@ -13,7 +13,12 @@ use soul_audio::resampling::{Resampler, ResamplerBackend, ResamplingQuality};
 use std::f32::consts::PI;
 
 /// Generate a pure sine wave at given frequency
-fn generate_sine_wave(frequency: f32, sample_rate: u32, duration_secs: f32, channels: usize) -> Vec<f32> {
+fn generate_sine_wave(
+    frequency: f32,
+    sample_rate: u32,
+    duration_secs: f32,
+    channels: usize,
+) -> Vec<f32> {
     let num_samples = (sample_rate as f32 * duration_secs) as usize;
     let mut samples = Vec::with_capacity(num_samples * channels);
 
@@ -76,27 +81,40 @@ fn test_upsampling_44k_to_96k() {
     let expected_output_frames = (input.len() / channels) as f32 * expected_ratio;
     let actual_output_frames = output.len() / channels;
 
-    // Allow 50% tolerance for chunk-based processing and internal buffering
-    // Rubato resamplers have internal buffers that affect output size
+    // Allow 15% tolerance for chunk-based processing and internal buffering
+    // This accounts for resampler latency while still catching real bugs
     assert!(
-        (actual_output_frames as f32 - expected_output_frames).abs() / expected_output_frames < 0.5,
-        "Output size mismatch: expected ~{}, got {}",
+        (actual_output_frames as f32 - expected_output_frames).abs() / expected_output_frames < 0.15,
+        "Output size mismatch: expected ~{} frames, got {} frames (ratio: {:.2})",
         expected_output_frames,
-        actual_output_frames
+        actual_output_frames,
+        actual_output_frames as f32 / expected_output_frames
     );
 
-    // Verify amplitude is preserved (within 30% due to buffering effects)
-    // Rubato resamplers have latency that affects amplitude in one-shot processing
+    // Verify amplitude is preserved (within 10%)
+    // Skip initial transient samples where resampler is settling
+    let skip_samples = output.len() / 10;
+    let output_stable = &output[skip_samples..];
     let input_rms = calculate_rms(&input);
-    let output_rms = calculate_rms(&output);
+    let output_rms = calculate_rms(output_stable);
     let amplitude_ratio = output_rms / input_rms;
 
     assert!(
-        (amplitude_ratio - 1.0).abs() < 0.3,
-        "Amplitude not preserved: input RMS = {}, output RMS = {}, ratio = {}",
+        (amplitude_ratio - 1.0).abs() < 0.1,
+        "Amplitude not preserved: input RMS = {:.4}, output RMS = {:.4}, ratio = {:.3} (expected 0.9-1.1)",
         input_rms,
         output_rms,
         amplitude_ratio
+    );
+
+    // Verify peak amplitude is reasonable (no clipping or severe attenuation)
+    let output_peak = output_stable.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+    let input_peak = input.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+    assert!(
+        output_peak > input_peak * 0.8 && output_peak < input_peak * 1.2,
+        "Peak amplitude changed unexpectedly: input peak = {:.4}, output peak = {:.4}",
+        input_peak,
+        output_peak
     );
 }
 
@@ -126,22 +144,26 @@ fn test_downsampling_96k_to_44k() {
     let expected_output_frames = (input.len() / channels) as f32 * expected_ratio;
     let actual_output_frames = output.len() / channels;
 
-    // Allow 50% tolerance for buffering
+    // Allow 15% tolerance for buffering
     assert!(
-        (actual_output_frames as f32 - expected_output_frames).abs() / expected_output_frames < 0.5,
-        "Output size mismatch: expected ~{}, got {}",
+        (actual_output_frames as f32 - expected_output_frames).abs() / expected_output_frames < 0.15,
+        "Output size mismatch: expected ~{} frames, got {} frames (ratio: {:.2})",
         expected_output_frames,
-        actual_output_frames
+        actual_output_frames,
+        actual_output_frames as f32 / expected_output_frames
     );
 
-    // Verify amplitude is preserved (within 30%)
+    // Verify amplitude is preserved (within 10%)
+    // Skip initial transient for settled measurement
+    let skip_samples = output.len() / 10;
+    let output_stable = &output[skip_samples..];
     let input_rms = calculate_rms(&input);
-    let output_rms = calculate_rms(&output);
+    let output_rms = calculate_rms(output_stable);
     let amplitude_ratio = output_rms / input_rms;
 
     assert!(
-        (amplitude_ratio - 1.0).abs() < 0.3,
-        "Amplitude not preserved: input RMS = {}, output RMS = {}, ratio = {}",
+        (amplitude_ratio - 1.0).abs() < 0.1,
+        "Amplitude not preserved: input RMS = {:.4}, output RMS = {:.4}, ratio = {:.3}",
         input_rms,
         output_rms,
         amplitude_ratio
@@ -161,27 +183,41 @@ fn test_quality_presets() {
         ResamplingQuality::High,
         ResamplingQuality::Maximum,
     ] {
-        let mut resampler =
-            Resampler::new(ResamplerBackend::Auto, input_rate, output_rate, channels, quality)
-                .unwrap();
+        let mut resampler = Resampler::new(
+            ResamplerBackend::Auto,
+            input_rate,
+            output_rate,
+            channels,
+            quality,
+        )
+        .unwrap();
 
-        let input = generate_sine_wave(1000.0, input_rate, 0.05, channels);
-        let output = resampler.process(&input).unwrap();
+        // Use longer input to ensure we get output even with high-quality settings
+        // that may have larger internal buffer requirements
+        let input = generate_sine_wave(1000.0, input_rate, 0.2, channels);
+
+        // Process multiple chunks to overcome latency
+        let mut all_output = Vec::new();
+        all_output.extend(resampler.process(&input).unwrap());
+        all_output.extend(resampler.process(&input).unwrap());
 
         assert!(
-            !output.is_empty(),
+            !all_output.is_empty(),
             "Quality preset {:?} produced empty output",
             quality
         );
 
-        // Verify amplitude is roughly preserved (30% tolerance for buffering)
+        // Verify amplitude is preserved (10% tolerance)
+        // Skip initial transient for accurate measurement
+        let skip = all_output.len() / 10;
+        let stable_output = &all_output[skip..];
         let input_rms = calculate_rms(&input);
-        let output_rms = calculate_rms(&output);
+        let output_rms = calculate_rms(stable_output);
         let amplitude_ratio = output_rms / input_rms;
 
         assert!(
-            (amplitude_ratio - 1.0).abs() < 0.3,
-            "Quality preset {:?}: amplitude ratio = {}",
+            (amplitude_ratio - 1.0).abs() < 0.15,
+            "Quality preset {:?}: amplitude ratio = {:.3} (expected 0.85-1.15)",
             quality,
             amplitude_ratio
         );
@@ -209,13 +245,16 @@ fn test_rubato_backend() {
 
     assert!(!output.is_empty(), "Rubato backend produced empty output");
 
+    // Skip transient for stable measurement
+    let skip = output.len() / 10;
+    let stable_output = &output[skip..];
     let input_rms = calculate_rms(&input);
-    let output_rms = calculate_rms(&output);
+    let output_rms = calculate_rms(stable_output);
     let amplitude_ratio = output_rms / input_rms;
 
     assert!(
-        (amplitude_ratio - 1.0).abs() < 0.3,
-        "Rubato: amplitude ratio = {}",
+        (amplitude_ratio - 1.0).abs() < 0.15,
+        "Rubato: amplitude ratio = {:.3} (expected 0.85-1.15)",
         amplitude_ratio
     );
 }
@@ -265,7 +304,10 @@ fn test_r8brain_feature_disabled() {
         ResamplingQuality::High,
     );
 
-    assert!(result.is_err(), "r8brain should error when feature disabled");
+    assert!(
+        result.is_err(),
+        "r8brain should error when feature disabled"
+    );
 }
 
 /// Test mono resampling
@@ -289,13 +331,16 @@ fn test_mono_resampling() {
 
     assert!(!output.is_empty(), "Mono resampling produced empty output");
 
+    // Skip transient for stable measurement
+    let skip = output.len() / 10;
+    let stable_output = &output[skip..];
     let input_rms = calculate_rms(&input);
-    let output_rms = calculate_rms(&output);
+    let output_rms = calculate_rms(stable_output);
     let amplitude_ratio = output_rms / input_rms;
 
     assert!(
-        (amplitude_ratio - 1.0).abs() < 0.3,
-        "Mono: amplitude ratio = {}",
+        (amplitude_ratio - 1.0).abs() < 0.15,
+        "Mono: amplitude ratio = {:.3} (expected 0.85-1.15)",
         amplitude_ratio
     );
 }
@@ -338,18 +383,23 @@ fn test_stereo_channel_independence() {
     let left_out = extract_mono(&output, 0, 2);
     let right_out = extract_mono(&output, 1, 2);
 
-    // Verify amplitudes preserved independently (30% tolerance)
-    let left_ratio = calculate_rms(&left_out) / calculate_rms(&left_in);
-    let right_ratio = calculate_rms(&right_out) / calculate_rms(&right_in);
+    // Skip transient samples for stable measurement
+    let skip_out = left_out.len() / 10;
+    let left_out_stable = &left_out[skip_out..];
+    let right_out_stable = &right_out[skip_out..];
+
+    // Verify amplitudes preserved independently (10% tolerance)
+    let left_ratio = calculate_rms(left_out_stable) / calculate_rms(&left_in);
+    let right_ratio = calculate_rms(right_out_stable) / calculate_rms(&right_in);
 
     assert!(
-        (left_ratio - 1.0).abs() < 0.3,
-        "Left channel amplitude ratio = {}",
+        (left_ratio - 1.0).abs() < 0.15,
+        "Left channel amplitude ratio = {:.3} (expected 0.85-1.15)",
         left_ratio
     );
     assert!(
-        (right_ratio - 1.0).abs() < 0.3,
-        "Right channel amplitude ratio = {}",
+        (right_ratio - 1.0).abs() < 0.15,
+        "Right channel amplitude ratio = {:.3} (expected 0.85-1.15)",
         right_ratio
     );
 }
@@ -379,11 +429,7 @@ fn test_reset() {
     resampler.reset();
     let output2 = resampler.process(&input).unwrap();
 
-    assert_eq!(
-        output1.len(),
-        output2.len(),
-        "Reset changed output size"
-    );
+    assert_eq!(output1.len(), output2.len(), "Reset changed output size");
 
     // Verify outputs are similar (within 1% tolerance)
     let rms1 = calculate_rms(&output1);
@@ -401,15 +447,15 @@ fn test_reset() {
 #[test]
 fn test_audiophile_sample_rates() {
     let test_cases = vec![
-        (44100, 48000),   // CD → 48kHz
-        (44100, 88200),   // CD → 2x CD
-        (44100, 96000),   // CD → 96kHz
-        (44100, 176400),  // CD → 4x CD
-        (44100, 192000),  // CD → 192kHz
-        (48000, 96000),   // 48kHz → 96kHz
-        (96000, 192000),  // 96kHz → 192kHz
-        (192000, 96000),  // 192kHz → 96kHz (downsampling)
-        (96000, 44100),   // 96kHz → CD (downsampling)
+        (44100, 48000),  // CD → 48kHz
+        (44100, 88200),  // CD → 2x CD
+        (44100, 96000),  // CD → 96kHz
+        (44100, 176400), // CD → 4x CD
+        (44100, 192000), // CD → 192kHz
+        (48000, 96000),  // 48kHz → 96kHz
+        (96000, 192000), // 96kHz → 192kHz
+        (192000, 96000), // 192kHz → 96kHz (downsampling)
+        (96000, 44100),  // 96kHz → CD (downsampling)
     ];
 
     for (input_rate, output_rate) in test_cases {
@@ -432,14 +478,17 @@ fn test_audiophile_sample_rates() {
             output_rate
         );
 
-        // Verify amplitude preserved (30% tolerance)
+        // Verify amplitude preserved (15% tolerance)
+        // Skip transient for accurate measurement
+        let skip = output.len() / 10;
+        let stable_output = &output[skip..];
         let input_rms = calculate_rms(&input);
-        let output_rms = calculate_rms(&output);
+        let output_rms = calculate_rms(stable_output);
         let ratio = output_rms / input_rms;
 
         assert!(
-            (ratio - 1.0).abs() < 0.3,
-            "{}Hz → {}Hz: amplitude ratio = {}",
+            (ratio - 1.0).abs() < 0.15,
+            "{}Hz → {}Hz: amplitude ratio = {:.3} (expected 0.85-1.15)",
             input_rate,
             output_rate,
             ratio
@@ -463,10 +512,7 @@ fn test_output_size_calculation() {
     let input_samples = 2048;
     let expected = (input_samples as f64 * (96000.0 / 44100.0)).ceil() as usize;
 
-    assert_eq!(
-        resampler.calculate_output_size(input_samples),
-        expected
-    );
+    assert_eq!(resampler.calculate_output_size(input_samples), expected);
 }
 
 // =============================================================================
@@ -553,8 +599,8 @@ fn calculate_thd_n(samples: &[f32], fundamental_freq: f32, sample_rate: u32) -> 
 
     // Calculate fundamental power (use a small window around the fundamental)
     let fund_window = 3;
-    let fundamental_power: f32 = buffer
-        [fundamental_bin.saturating_sub(fund_window)..=(fundamental_bin + fund_window).min(fft_size / 2 - 1)]
+    let fundamental_power: f32 = buffer[fundamental_bin.saturating_sub(fund_window)
+        ..=(fundamental_bin + fund_window).min(fft_size / 2 - 1)]
         .iter()
         .map(|c| c.norm_sqr())
         .sum();
@@ -712,9 +758,7 @@ fn test_quality_preset_thd_comparison() {
     //
     // The important validation here is that ALL presets meet minimum quality
     // requirements, not their relative ordering in one-shot tests.
-    eprintln!(
-        "Note: Quality ordering may vary in one-shot tests due to filter latency"
-    );
+    eprintln!("Note: Quality ordering may vary in one-shot tests due to filter latency");
 }
 
 /// Test: Frequency response in passband (should be flat)
@@ -872,7 +916,10 @@ fn test_null_test_round_trip() {
     let rms_ratio = output_rms / input_rms;
     let rms_error_db = 20.0 * (rms_ratio).log10();
 
-    eprintln!("Round-trip RMS ratio: {:.4} ({:.2} dB)", rms_ratio, rms_error_db);
+    eprintln!(
+        "Round-trip RMS ratio: {:.4} ({:.2} dB)",
+        rms_ratio, rms_error_db
+    );
 
     // Should be within +/- 1 dB
     assert!(
@@ -940,7 +987,10 @@ fn test_multitone_imd() {
     let mag_2_5k = find_magnitude_at(2500.0);
 
     eprintln!("1kHz: {:.1} dB, 1.5kHz: {:.1} dB", mag_1k, mag_1_5k);
-    eprintln!("IMD at 500Hz: {:.1} dB, 2.5kHz: {:.1} dB", mag_500, mag_2_5k);
+    eprintln!(
+        "IMD at 500Hz: {:.1} dB, 2.5kHz: {:.1} dB",
+        mag_500, mag_2_5k
+    );
 
     // IMD products should be at least 40 dB below the fundamentals
     let fundamental_level = (mag_1k + mag_1_5k) / 2.0;

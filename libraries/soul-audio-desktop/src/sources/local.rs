@@ -33,6 +33,9 @@
 //! - Easy to add new formats (just add match arm with normalization function)
 //! - Compile-time type safety for all conversions
 
+use rubato::{
+    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+};
 use soul_playback::{AudioSource, PlaybackError, Result};
 use std::collections::VecDeque;
 use std::fs::File;
@@ -45,9 +48,6 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::units::TimeBase;
-use rubato::{
-    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
-};
 
 /// Size of ring buffer in seconds
 const BUFFER_SIZE_SECONDS: usize = 5;
@@ -151,19 +151,32 @@ impl LocalAudioSource {
         eprintln!("  - Source sample rate: {} Hz", sample_rate);
         eprintln!("  - Target sample rate: {} Hz", target_sample_rate);
         eprintln!("  - Channels: {}", channels);
-        eprintln!("  - Needs resampling: {}", sample_rate != target_sample_rate);
+        eprintln!(
+            "  - Needs resampling: {}",
+            sample_rate != target_sample_rate
+        );
         if sample_rate != target_sample_rate {
             let resample_ratio = target_sample_rate as f64 / sample_rate as f64;
-            eprintln!("  - Resample ratio: {:.6} ({}x)", resample_ratio,
-                if resample_ratio > 1.0 { "upsampling" } else { "downsampling" });
+            eprintln!(
+                "  - Resample ratio: {:.6} ({}x)",
+                resample_ratio,
+                if resample_ratio > 1.0 {
+                    "upsampling"
+                } else {
+                    "downsampling"
+                }
+            );
         }
 
         // Calculate total duration if available
+        // If n_frames is unknown, use Duration::MAX to indicate unknown duration.
+        // This is more honest than an arbitrary 180s default and allows UI to
+        // display "unknown" instead of a misleading progress bar.
         let total_duration = track
             .codec_params
             .n_frames
             .map(|frames| Duration::from_secs_f64(frames as f64 / sample_rate as f64))
-            .unwrap_or(Duration::from_secs(180)); // Default to 3 minutes if unknown
+            .unwrap_or(Duration::MAX);
 
         // Create decoder for this track
         let decoder = symphonia::default::get_codecs()
@@ -413,7 +426,8 @@ impl LocalAudioSource {
 
         // Only take the valid output frames (proportional to input)
         let output_frames = resampled[0].len();
-        let valid_output_frames = (remaining_frames as f64 / chunk_frames as f64 * output_frames as f64) as usize;
+        let valid_output_frames =
+            (remaining_frames as f64 / chunk_frames as f64 * output_frames as f64) as usize;
 
         for frame_idx in 0..valid_output_frames {
             for ch in 0..channels {
@@ -471,22 +485,25 @@ impl LocalAudioSource {
         _target_channels: u16,
     ) -> Result<Vec<f32>> {
         let output = match decoded {
-            // Float formats - already normalized
-            AudioBufferRef::F32(buf) => Self::interleave_to_stereo_f32(&buf, |s| s),
-            AudioBufferRef::F64(buf) => Self::interleave_to_stereo_f32(&buf, |s| s as f32),
-
-            // Signed integer formats - normalize by dividing by MAX
-            AudioBufferRef::S8(buf) => {
-                Self::interleave_to_stereo_f32(&buf, |s| s as f32 / i8::MAX as f32)
+            // Float formats - clamp to [-1.0, 1.0] to handle intersample peaks
+            AudioBufferRef::F32(buf) => {
+                Self::interleave_to_stereo_f32(&buf, |s| s.clamp(-1.0, 1.0))
             }
+            AudioBufferRef::F64(buf) => {
+                Self::interleave_to_stereo_f32(&buf, |s| (s as f32).clamp(-1.0, 1.0))
+            }
+
+            // Signed integer formats - use symmetric scaling (divide by 2^(N-1))
+            // This ensures -1.0 to 1.0 range is symmetric
+            AudioBufferRef::S8(buf) => Self::interleave_to_stereo_f32(&buf, |s| s as f32 / 128.0),
             AudioBufferRef::S16(buf) => {
-                Self::interleave_to_stereo_f32(&buf, |s| s as f32 / i16::MAX as f32)
+                Self::interleave_to_stereo_f32(&buf, |s| s as f32 / 32768.0)
             }
             AudioBufferRef::S24(buf) => {
-                Self::interleave_to_stereo_f32(&buf, |s| s.inner() as f32 / 8388607.0)
+                Self::interleave_to_stereo_f32(&buf, |s| s.inner() as f32 / 8388608.0)
             }
             AudioBufferRef::S32(buf) => {
-                Self::interleave_to_stereo_f32(&buf, |s| s as f32 / i32::MAX as f32)
+                Self::interleave_to_stereo_f32(&buf, |s| s as f32 / 2147483648.0)
             }
 
             // Unsigned integer formats - normalize and center around 0
@@ -497,7 +514,10 @@ impl LocalAudioSource {
                 Self::interleave_to_stereo_f32(&buf, |s| (s as f32 / u16::MAX as f32) * 2.0 - 1.0)
             }
             AudioBufferRef::U24(buf) => {
-                Self::interleave_to_stereo_f32(&buf, |s| (s.inner() as f32 / 8388607.0) * 2.0 - 1.0)
+                // U24 range: 0 to 16777215 (2^24 - 1)
+                Self::interleave_to_stereo_f32(&buf, |s| {
+                    (s.inner() as f32 / 16777215.0) * 2.0 - 1.0
+                })
             }
             AudioBufferRef::U32(buf) => {
                 Self::interleave_to_stereo_f32(&buf, |s| (s as f32 / u32::MAX as f32) * 2.0 - 1.0)
@@ -591,10 +611,15 @@ impl AudioSource for LocalAudioSource {
         // Clear both buffers and reset position tracking
         self.input_buffer.clear();
         self.output_buffer.clear();
-        self.samples_read =
-            (position.as_secs_f64() * self.target_sample_rate as f64 * self.channels as f64)
-                as usize;
-        self.samples_decoded = self.samples_read;
+        // samples_read is at TARGET sample rate (output)
+        self.samples_read = (position.as_secs_f64()
+            * self.target_sample_rate as f64
+            * self.channels as f64) as usize;
+        // samples_decoded is at SOURCE sample rate (input from decoder)
+        // This is different from samples_read when resampling is active
+        self.samples_decoded = (position.as_secs_f64()
+            * self.source_sample_rate as f64
+            * self.channels as f64) as usize;
         self.is_eof = false;
 
         // Reset resampler if needed
@@ -814,8 +839,10 @@ mod tests {
         }
 
         // Create sources with different target sample rates
-        let mut source_44100 = LocalAudioSource::new(&path, 44100).expect("Failed to load at 44.1kHz");
-        let mut source_48000 = LocalAudioSource::new(&path, 48000).expect("Failed to load at 48kHz");
+        let mut source_44100 =
+            LocalAudioSource::new(&path, 44100).expect("Failed to load at 44.1kHz");
+        let mut source_48000 =
+            LocalAudioSource::new(&path, 48000).expect("Failed to load at 48kHz");
 
         // Both should report the same duration (in seconds)
         let duration_44100 = source_44100.duration();
@@ -843,8 +870,14 @@ mod tests {
             .expect("Failed to read at 48kHz");
 
         // Should have read the full buffers (1 second worth)
-        assert_eq!(read_44100, samples_44100_per_sec, "Should read 1 second at 44.1kHz");
-        assert_eq!(read_48000, samples_48000_per_sec, "Should read 1 second at 48kHz");
+        assert_eq!(
+            read_44100, samples_44100_per_sec,
+            "Should read 1 second at 44.1kHz"
+        );
+        assert_eq!(
+            read_48000, samples_48000_per_sec,
+            "Should read 1 second at 48kHz"
+        );
 
         // Position should be approximately 1 second for both
         let pos_44100 = source_44100.position().as_secs_f64();

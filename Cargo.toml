@@ -17,6 +17,7 @@ members = [
     "libraries/soul-sync",
     "libraries/soul-discovery",
     "libraries/soul-loudness",
+    "libraries/soul-server-client",
 
     # Applications
     "applications/desktop/src-tauri",
@@ -64,6 +65,7 @@ biquad = "0.4" # Filters (EQ, highpass, lowpass)
 # Audio - Analysis
 ebur128 = "0.1" # EBU R128 loudness measurement & ReplayGain
 rustfft = "6.2" # FFT for frequency analysis in tests
+rusty-chromaprint = "0.2" # Audio fingerprinting (AcoustID compatible)
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
@@ -89,7 +91,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.6", features = ["v4", "serde"] }
 config = "0.14"
 base64 = "0.22"
-lru = "0.12"
+lru = "0.16"
 
 # Desktop/Mobile (Tauri)
 tauri = { version = "2.0.0", features = ["protocol-asset"] }
@@ -128,6 +130,7 @@ soul-discovery = { path = "libraries/soul-discovery" }
 soul-sync = { path = "libraries/soul-sync" }
 soul-artwork = { path = "libraries/soul-artwork" }
 soul-loudness = { path = "libraries/soul-loudness" }
+soul-server-client = { path = "libraries/soul-server-client" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

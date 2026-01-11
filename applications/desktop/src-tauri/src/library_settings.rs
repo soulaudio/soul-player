@@ -49,7 +49,7 @@ pub struct FrontendManagedLibrarySettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FrontendExternalFileSettings {
-    pub default_action: String, // "ask", "play", or "import"
+    pub default_action: String,     // "ask", "play", or "import"
     pub import_destination: String, // "managed" or "watched"
     pub import_to_source_id: Option<i64>,
     pub show_import_notification: bool,
@@ -203,9 +203,10 @@ pub async fn get_managed_library_settings(
 ) -> Result<Option<FrontendManagedLibrarySettings>, String> {
     let device_id = get_device_id();
 
-    let settings = soul_storage::managed_library_settings::get(&state.pool, &state.user_id, &device_id)
-        .await
-        .map_err(|e| format!("Failed to get managed library settings: {}", e))?;
+    let settings =
+        soul_storage::managed_library_settings::get(&state.pool, &state.user_id, &device_id)
+            .await
+            .map_err(|e| format!("Failed to get managed library settings: {}", e))?;
 
     Ok(settings.map(|s| FrontendManagedLibrarySettings {
         library_path: s.library_path,
@@ -315,14 +316,9 @@ pub async fn set_external_file_settings(
         show_import_notification,
     };
 
-    soul_storage::external_file_settings::upsert(
-        &state.pool,
-        &state.user_id,
-        &device_id,
-        &update,
-    )
-    .await
-    .map_err(|e| format!("Failed to save external file settings: {}", e))?;
+    soul_storage::external_file_settings::upsert(&state.pool, &state.user_id, &device_id, &update)
+        .await
+        .map_err(|e| format!("Failed to save external file settings: {}", e))?;
 
     Ok(())
 }
@@ -376,6 +372,9 @@ pub fn preview_path_template(template: String) -> String {
         sample_rate: Some(44100),
         channels: Some(2),
         file_format: "flac".to_string(),
+        musicbrainz_recording_id: None,
+        composer: Some("Roger Waters".to_string()),
+        album_art: None,
     };
 
     let source_path = std::path::Path::new("/example/source.flac");
@@ -395,4 +394,183 @@ pub async fn pick_folder() -> Result<Option<String>, String> {
     // For now, return an error indicating manual input is needed
     // In the future, we can use tauri-plugin-dialog or native-dialog
     Err("Folder picker not yet implemented - please enter the path manually".to_string())
+}
+
+// ============================================================================
+// Onboarding
+// ============================================================================
+
+/// Check if onboarding is needed (first run or empty library)
+#[tauri::command]
+pub async fn check_onboarding_needed(state: State<'_, AppState>) -> Result<bool, String> {
+    let device_id = get_device_id();
+
+    // Check if user has any library sources configured
+    let sources =
+        soul_storage::library_sources::get_by_user_device(&state.pool, &state.user_id, &device_id)
+            .await
+            .map_err(|e| format!("Failed to check library sources: {}", e))?;
+
+    // Check if managed library is configured
+    let managed =
+        soul_storage::managed_library_settings::get(&state.pool, &state.user_id, &device_id)
+            .await
+            .map_err(|e| format!("Failed to check managed settings: {}", e))?;
+
+    // Onboarding needed if no sources AND no managed library configured
+    Ok(sources.is_empty() && managed.is_none())
+}
+
+/// Mark onboarding as complete (by setting up minimal config)
+#[tauri::command]
+pub async fn complete_onboarding(
+    setup_type: String, // "watched", "managed", or "both"
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    use soul_core::types::UpdateManagedLibrarySettings;
+
+    let device_id = get_device_id();
+
+    // If managed library was selected, set up default managed library settings
+    if setup_type == "managed" || setup_type == "both" {
+        let default_path = state.library_path.to_string_lossy().to_string();
+        let update = UpdateManagedLibrarySettings::default();
+
+        soul_storage::managed_library_settings::upsert(
+            &state.pool,
+            &state.user_id,
+            &device_id,
+            &UpdateManagedLibrarySettings {
+                library_path: default_path,
+                ..update
+            },
+        )
+        .await
+        .map_err(|e| format!("Failed to set up managed library: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// Get default library path suggestion
+#[tauri::command]
+pub fn get_default_library_path(state: State<'_, AppState>) -> String {
+    state.library_path.to_string_lossy().to_string()
+}
+
+// ============================================================================
+// Scan Progress
+// ============================================================================
+
+/// Scan progress for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontendScanProgress {
+    pub id: i64,
+    pub library_source_id: i64,
+    pub library_source_name: Option<String>,
+    pub started_at: i64,
+    pub completed_at: Option<i64>,
+    pub total_files: Option<i64>,
+    pub processed_files: i64,
+    pub new_files: i64,
+    pub updated_files: i64,
+    pub removed_files: i64,
+    pub errors: i64,
+    pub status: String,
+    pub error_message: Option<String>,
+    /// Percentage (0-100)
+    pub percentage: f32,
+}
+
+/// Get all currently running scans
+#[tauri::command]
+pub async fn get_running_scans(
+    state: State<'_, AppState>,
+) -> Result<Vec<FrontendScanProgress>, String> {
+    let device_id = get_device_id();
+
+    // Get all sources for this user/device
+    let sources =
+        soul_storage::library_sources::get_by_user_device(&state.pool, &state.user_id, &device_id)
+            .await
+            .map_err(|e| format!("Failed to get library sources: {}", e))?;
+
+    let mut running_scans = Vec::new();
+
+    for source in sources {
+        if let Some(progress) = soul_storage::scan_progress::get_running(&state.pool, source.id)
+            .await
+            .map_err(|e| format!("Failed to get scan progress: {}", e))?
+        {
+            let percentage = if let Some(total) = progress.total_files {
+                if total > 0 {
+                    (progress.processed_files as f32 / total as f32) * 100.0
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            };
+
+            running_scans.push(FrontendScanProgress {
+                id: progress.id,
+                library_source_id: progress.library_source_id,
+                library_source_name: Some(source.name.clone()),
+                started_at: progress.started_at,
+                completed_at: progress.completed_at,
+                total_files: progress.total_files,
+                processed_files: progress.processed_files,
+                new_files: progress.new_files,
+                updated_files: progress.updated_files,
+                removed_files: progress.removed_files,
+                errors: progress.errors,
+                status: progress.status.as_str().to_string(),
+                error_message: progress.error_message,
+                percentage,
+            });
+        }
+    }
+
+    Ok(running_scans)
+}
+
+/// Get the latest scan for a specific source
+#[tauri::command]
+pub async fn get_latest_scan(
+    source_id: i64,
+    state: State<'_, AppState>,
+) -> Result<Option<FrontendScanProgress>, String> {
+    let progress = soul_storage::scan_progress::get_latest(&state.pool, source_id)
+        .await
+        .map_err(|e| format!("Failed to get scan progress: {}", e))?;
+
+    Ok(progress.map(|p| {
+        let percentage = if let Some(total) = p.total_files {
+            if total > 0 {
+                (p.processed_files as f32 / total as f32) * 100.0
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+
+        FrontendScanProgress {
+            id: p.id,
+            library_source_id: p.library_source_id,
+            library_source_name: None,
+            started_at: p.started_at,
+            completed_at: p.completed_at,
+            total_files: p.total_files,
+            processed_files: p.processed_files,
+            new_files: p.new_files,
+            updated_files: p.updated_files,
+            removed_files: p.removed_files,
+            errors: p.errors,
+            status: p.status.as_str().to_string(),
+            error_message: p.error_message,
+            percentage,
+        }
+    }))
 }

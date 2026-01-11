@@ -5,3 +5,5 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc b344876675f592a6b2fecd7371c193daf09d4e7955148c56f7e79d87cf836819 # shrinks to track_gain = 22.649229555810805, peak_dbfs = -40.18169325839905, preamp = 11.408046276102223
+cc 9b602ccc2d03f2329f93c53692cd73d7968567773043a40cd1a074e9e5605a2f # shrinks to threshold_db = -19.95851, gain_db = 2.4964507
+cc 68a477cf795d7129368984e9f1bf861851cefb502fd1ba30b3da28ac4e567181 # shrinks to threshold_db = -18.816982, gain_db = 17.299917

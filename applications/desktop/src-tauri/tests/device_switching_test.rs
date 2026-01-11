@@ -37,18 +37,29 @@ fn test_list_available_devices() {
 
         match device::list_devices(backend_info.backend) {
             Ok(devices) => {
-                eprintln!("[test] Found {} devices for {:?}", devices.len(), backend_info.backend);
+                eprintln!(
+                    "[test] Found {} devices for {:?}",
+                    devices.len(),
+                    backend_info.backend
+                );
 
-                assert!(!devices.is_empty(), "Available backend should have at least one device");
+                assert!(
+                    !devices.is_empty(),
+                    "Available backend should have at least one device"
+                );
 
                 // Verify device info structure
                 for dev in &devices {
                     assert!(!dev.name.is_empty(), "Device should have a name");
                     assert!(dev.sample_rate > 0, "Device should have valid sample rate");
                     assert!(dev.channels > 0, "Device should have valid channel count");
-                    assert!(dev.backend == backend_info.backend, "Device backend should match");
+                    assert!(
+                        dev.backend == backend_info.backend,
+                        "Device backend should match"
+                    );
 
-                    eprintln!("[test]   - {}: {}Hz, {}ch{}",
+                    eprintln!(
+                        "[test]   - {}: {}Hz, {}ch{}",
                         dev.name,
                         dev.sample_rate,
                         dev.channels,
@@ -63,7 +74,10 @@ fn test_list_available_devices() {
                 );
             }
             Err(e) => {
-                panic!("Failed to list devices for available backend {:?}: {}", backend_info.backend, e);
+                panic!(
+                    "Failed to list devices for available backend {:?}: {}",
+                    backend_info.backend, e
+                );
             }
         }
     }
@@ -78,16 +92,23 @@ fn test_get_default_device() {
 
     // Get default device
     let backend = AudioBackend::Default;
-    let device = device::get_default_device(backend)
-        .expect("Should be able to get default device");
+    let device = device::get_default_device(backend).expect("Should be able to get default device");
 
-    eprintln!("[test] Default device: {} ({}Hz, {}ch)",
-        device.name, device.sample_rate, device.channels);
+    eprintln!(
+        "[test] Default device: {} ({}Hz, {}ch)",
+        device.name, device.sample_rate, device.channels
+    );
 
     // Verify device info
     assert!(!device.name.is_empty(), "Device should have a name");
-    assert!(device.sample_rate > 0, "Device should have valid sample rate");
-    assert!(device.channels > 0, "Device should have valid channel count");
+    assert!(
+        device.sample_rate > 0,
+        "Device should have valid sample rate"
+    );
+    assert!(
+        device.channels > 0,
+        "Device should have valid channel count"
+    );
     assert!(device.is_default, "Should be marked as default");
     assert_eq!(device.backend, backend, "Backend should match");
 }
@@ -102,24 +123,32 @@ fn test_find_device_by_name() {
     let backend = AudioBackend::Default;
 
     // Get default device name
-    let default_device = device::get_default_device(backend)
-        .expect("Should be able to get default device");
+    let default_device =
+        device::get_default_device(backend).expect("Should be able to get default device");
     let device_name = default_device.name.clone();
 
     eprintln!("[test] Searching for device: {}", device_name);
 
     // Find device by name
-    let found_device = device::find_device_by_name(backend, &device_name)
-        .expect("Should find device by name");
+    let found_device =
+        device::find_device_by_name(backend, &device_name).expect("Should find device by name");
 
     // Verify match
     assert_eq!(found_device.name, device_name, "Device names should match");
     assert_eq!(found_device.backend, backend, "Backends should match");
-    assert_eq!(found_device.sample_rate, default_device.sample_rate, "Sample rates should match");
-    assert_eq!(found_device.channels, default_device.channels, "Channels should match");
+    assert_eq!(
+        found_device.sample_rate, default_device.sample_rate,
+        "Sample rates should match"
+    );
+    assert_eq!(
+        found_device.channels, default_device.channels,
+        "Channels should match"
+    );
 
-    eprintln!("[test] Successfully found device: {} ({}Hz, {}ch)",
-        found_device.name, found_device.sample_rate, found_device.channels);
+    eprintln!(
+        "[test] Successfully found device: {} ({}Hz, {}ch)",
+        found_device.name, found_device.sample_rate, found_device.channels
+    );
 }
 
 #[test]
@@ -139,7 +168,10 @@ fn test_find_nonexistent_device() {
 
     // Should fail
     assert!(result.is_err(), "Should fail to find non-existent device");
-    eprintln!("[test] Correctly failed to find device: {:?}", result.unwrap_err());
+    eprintln!(
+        "[test] Correctly failed to find device: {:?}",
+        result.unwrap_err()
+    );
 }
 
 #[test]
@@ -152,10 +184,12 @@ fn test_device_sample_rate_ranges() {
     let backends = backend::get_backend_info();
 
     for backend_info in backends.iter().filter(|b| b.available) {
-        let devices = device::list_devices(backend_info.backend)
-            .expect("Should list devices");
+        let devices = device::list_devices(backend_info.backend).expect("Should list devices");
 
-        eprintln!("[test] Checking sample rate ranges for {:?}", backend_info.backend);
+        eprintln!(
+            "[test] Checking sample rate ranges for {:?}",
+            backend_info.backend
+        );
 
         for dev in devices {
             // Common sample rates
@@ -163,15 +197,22 @@ fn test_device_sample_rate_ranges() {
 
             if dev.sample_rate_range.is_some() {
                 let (min, max) = dev.sample_rate_range.unwrap();
-                eprintln!("[test]   - {}: {}Hz-{}Hz (current: {}Hz)",
-                    dev.name, min, max, dev.sample_rate);
+                eprintln!(
+                    "[test]   - {}: {}Hz-{}Hz (current: {}Hz)",
+                    dev.name, min, max, dev.sample_rate
+                );
 
                 assert!(min > 0, "Min sample rate should be positive");
                 assert!(max >= min, "Max should be >= min");
-                assert!(dev.sample_rate >= min && dev.sample_rate <= max,
-                    "Current sample rate should be within range");
+                assert!(
+                    dev.sample_rate >= min && dev.sample_rate <= max,
+                    "Current sample rate should be within range"
+                );
             } else {
-                eprintln!("[test]   - {}: {}Hz (no range info)", dev.name, dev.sample_rate);
+                eprintln!(
+                    "[test]   - {}: {}Hz (no range info)",
+                    dev.name, dev.sample_rate
+                );
             }
 
             // Verify sample rate is reasonable
@@ -190,7 +231,8 @@ fn test_backend_availability() {
     eprintln!("[test] Checking backend availability:");
 
     for backend_info in &backends {
-        eprintln!("[test]   - {:?}: available={}, devices={}, default={}",
+        eprintln!(
+            "[test]   - {:?}: available={}, devices={}, default={}",
             backend_info.backend,
             backend_info.available,
             backend_info.device_count,
@@ -199,13 +241,22 @@ fn test_backend_availability() {
 
         // Default backend should always be available
         if backend_info.backend == AudioBackend::Default {
-            assert!(backend_info.available, "Default backend should always be available");
-            assert!(backend_info.device_count > 0, "Default backend should have at least one device");
+            assert!(
+                backend_info.available,
+                "Default backend should always be available"
+            );
+            assert!(
+                backend_info.device_count > 0,
+                "Default backend should have at least one device"
+            );
         }
 
         // Verify consistency
         if backend_info.available {
-            assert!(backend_info.device_count > 0, "Available backend should have devices");
+            assert!(
+                backend_info.device_count > 0,
+                "Available backend should have devices"
+            );
         }
     }
 
@@ -222,8 +273,7 @@ fn test_device_channel_counts() {
     }
 
     let backend = AudioBackend::Default;
-    let devices = device::list_devices(backend)
-        .expect("Should list devices");
+    let devices = device::list_devices(backend).expect("Should list devices");
 
     eprintln!("[test] Checking device channel counts:");
 
@@ -232,7 +282,10 @@ fn test_device_channel_counts() {
 
         // Verify reasonable channel count
         assert!(dev.channels >= 1, "Device should have at least 1 channel");
-        assert!(dev.channels <= 32, "Device should have reasonable max channels");
+        assert!(
+            dev.channels <= 32,
+            "Device should have reasonable max channels"
+        );
 
         // Most common: 1 (mono), 2 (stereo), 6 (5.1), 8 (7.1)
         let common_channels = [1, 2, 6, 8];
@@ -247,12 +300,12 @@ mod integration {
     use super::*;
     use soul_audio_desktop::playback::DesktopPlayback;
     use soul_audio_desktop::sources::local::LocalAudioSource;
-    use soul_playback::{PlaybackManager as CoreManager, types::TrackInfo};
+    use soul_playback::{types::TrackInfo, PlaybackManager as CoreManager};
     use std::path::PathBuf;
 
     // Helper to create test audio file
     fn create_test_wav(sample_rate: u32, duration_secs: u32) -> PathBuf {
-        use hound::{WavWriter, WavSpec};
+        use hound::{WavSpec, WavWriter};
 
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join(format!("test_{}hz.wav", sample_rate));
@@ -265,8 +318,7 @@ mod integration {
             sample_format: hound::SampleFormat::Int,
         };
 
-        let mut writer = WavWriter::create(&file_path, spec)
-            .expect("Failed to create WAV file");
+        let mut writer = WavWriter::create(&file_path, spec).expect("Failed to create WAV file");
 
         // Generate 440 Hz sine wave
         let samples_per_channel = (sample_rate * duration_secs) as usize;
@@ -295,11 +347,12 @@ mod integration {
 
         // Get default device
         let backend = AudioBackend::Default;
-        let device = device::get_default_device(backend)
-            .expect("Should get default device");
+        let device = device::get_default_device(backend).expect("Should get default device");
 
-        eprintln!("[test] Testing playback with device: {} ({}Hz)",
-            device.name, device.sample_rate);
+        eprintln!(
+            "[test] Testing playback with device: {} ({}Hz)",
+            device.name, device.sample_rate
+        );
 
         // Create test audio file matching device sample rate
         let test_file = create_test_wav(device.sample_rate, 3);
@@ -332,8 +385,11 @@ mod integration {
         eprintln!("[test] Playback position after 1s: {:.2}s", position);
 
         // Position should be approximately 1 second (±0.2s tolerance)
-        assert!((0.8..=1.2).contains(&position),
-            "Position should be ~1 second, got {:.2}s", position);
+        assert!(
+            (0.8..=1.2).contains(&position),
+            "Position should be ~1 second, got {:.2}s",
+            position
+        );
 
         eprintln!("[test] ✓ Playback successful with device selection");
 
@@ -350,13 +406,16 @@ mod integration {
 
         // Get device
         let backend = AudioBackend::Default;
-        let device = device::get_default_device(backend)
-            .expect("Should get default device");
+        let device = device::get_default_device(backend).expect("Should get default device");
 
         eprintln!("[test] Device sample rate: {}Hz", device.sample_rate);
 
         // Create audio file with DIFFERENT sample rate (simulate mismatch)
-        let file_sample_rate = if device.sample_rate == 44100 { 48000 } else { 44100 };
+        let file_sample_rate = if device.sample_rate == 44100 {
+            48000
+        } else {
+            44100
+        };
         let test_file = create_test_wav(file_sample_rate, 3);
 
         eprintln!("[test] File sample rate: {}Hz (mismatch)", file_sample_rate);

@@ -138,8 +138,8 @@ fn test_effect_chain_order_matters() {
     // Verify that EQ → Compressor ≠ Compressor → EQ
     let sample_rate = 44100;
 
-    // Use a low frequency signal that will be boosted by EQ
-    let signal = generate_sine(100.0, 0.1, sample_rate);
+    // Use a longer signal so compressor has time to fully engage
+    let signal = generate_sine(100.0, 0.5, sample_rate);
 
     // Chain 1: EQ (boost) → Compressor
     // EQ makes signal louder, then compressor reduces it
@@ -148,10 +148,14 @@ fn test_effect_chain_order_matters() {
     eq1.set_low_band(EqBand::low_shelf(200.0, 12.0)); // Large boost
     chain1.add_effect(Box::new(eq1));
 
-    let mut comp1 = Compressor::new();
-    comp1.set_threshold(-20.0);
-    comp1.set_ratio(10.0); // Heavy compression
-    comp1.set_makeup_gain(0.0);
+    let comp1 = Compressor::with_settings(CompressorSettings {
+        threshold_db: -20.0,
+        ratio: 10.0,
+        attack_ms: 1.0, // Fast attack to engage quickly
+        release_ms: 100.0,
+        makeup_gain_db: 0.0,
+        knee_db: 0.0,
+    });
     chain1.add_effect(Box::new(comp1));
 
     let mut buffer1 = signal.clone();
@@ -161,10 +165,14 @@ fn test_effect_chain_order_matters() {
     // Compressor first (less effect on moderate signal), then EQ boost
     let mut chain2 = EffectChain::new();
 
-    let mut comp2 = Compressor::new();
-    comp2.set_threshold(-20.0);
-    comp2.set_ratio(10.0);
-    comp2.set_makeup_gain(0.0);
+    let comp2 = Compressor::with_settings(CompressorSettings {
+        threshold_db: -20.0,
+        ratio: 10.0,
+        attack_ms: 1.0,
+        release_ms: 100.0,
+        makeup_gain_db: 0.0,
+        knee_db: 0.0,
+    });
     chain2.add_effect(Box::new(comp2));
 
     let mut eq2 = ParametricEq::new();
@@ -174,16 +182,17 @@ fn test_effect_chain_order_matters() {
     let mut buffer2 = signal.clone();
     chain2.process(&mut buffer2, sample_rate);
 
-    // Results should be significantly different
-    let peak1 = calculate_peak(&buffer1);
-    let peak2 = calculate_peak(&buffer2);
+    // Compare RMS levels - more representative of compression effects than peak
+    let rms1 = calculate_rms(&buffer1);
+    let rms2 = calculate_rms(&buffer2);
 
-    // EQ after compression should result in higher peaks
+    // Chain 1 (EQ→Comp): Signal is boosted then compressed - should have lower RMS
+    // Chain 2 (Comp→EQ): Compressed first (at lower level), then boosted - should have higher RMS
     assert!(
-        (peak1 - peak2).abs() > 0.1,
-        "Effect chain order should matter significantly, Peak1: {}, Peak2: {}",
-        peak1,
-        peak2
+        (rms1 - rms2).abs() > 0.05,
+        "Effect chain order should matter significantly, RMS1: {:.3}, RMS2: {:.3}",
+        rms1,
+        rms2
     );
 }
 
@@ -206,74 +215,12 @@ fn test_disabled_effect_is_bit_perfect() {
     );
 }
 
-#[test]
-fn test_empty_buffer_handling() {
-    // Verify effects handle edge case of empty buffer
-    let mut chain = EffectChain::new();
-    chain.add_effect(Box::new(ParametricEq::new()));
-    chain.add_effect(Box::new(Compressor::new()));
-
-    let mut buffer = Vec::new(); // Empty
-
-    // Should not panic
-    chain.process(&mut buffer, 44100);
-
-    assert!(buffer.is_empty());
-}
-
-#[test]
-fn test_zero_signal_handling() {
-    // Verify effects handle silent input correctly
-    let mut comp = Compressor::new();
-
-    let mut buffer = vec![0.0; 1000]; // Silent
-
-    // Should not panic or introduce artifacts
-    comp.process(&mut buffer, 44100);
-
-    // Should remain silent
-    let peak = calculate_peak(&buffer);
-    assert_eq!(peak, 0.0, "Silent input should remain silent");
-}
-
-#[test]
-fn test_eq_at_extreme_parameters() {
-    // Verify EQ is stable at extreme (but valid) settings
-    let mut eq = ParametricEq::new();
-
-    // Max boost on all bands
-    eq.set_low_band(EqBand::low_shelf(20.0, 12.0));
-    eq.set_mid_band(EqBand::peaking(1000.0, 12.0, 10.0)); // Max Q
-    eq.set_high_band(EqBand::high_shelf(20000.0, 12.0));
-
-    let mut buffer = generate_sine(1000.0, 0.1, 44100);
-
-    // Should not panic or produce NaN/Inf
-    eq.process(&mut buffer, 44100);
-
-    for sample in &buffer {
-        assert!(sample.is_finite(), "EQ should not produce NaN/Inf");
-    }
-}
-
-#[test]
-fn test_compressor_with_very_fast_attack() {
-    // Verify compressor is stable with extreme settings
-    let mut comp = Compressor::new();
-    comp.set_threshold(-10.0);
-    comp.set_ratio(10.0);
-    comp.set_attack(0.1); // Minimum attack
-    comp.set_release(10.0); // Minimum release
-
-    let mut buffer = vec![0.8; 1000]; // Loud signal
-
-    // Should not panic or produce artifacts
-    comp.process(&mut buffer, 44100);
-
-    for sample in &buffer {
-        assert!(sample.is_finite(), "Compressor should not produce NaN/Inf");
-    }
-}
+// NOTE: Removed shallow tests that only checked is_finite() or trivial conditions:
+// - test_empty_buffer_handling (trivial - just checks empty stays empty)
+// - test_zero_signal_handling (covered by bit_perfect_test.rs)
+// - test_eq_at_extreme_parameters (only checked is_finite, no frequency verification)
+// - test_compressor_with_very_fast_attack (only checked is_finite, no attack verification)
+// These behaviors are tested more thoroughly in regression_test.rs and *_precision_test.rs
 
 #[test]
 fn test_multiple_effect_resets() {
@@ -318,11 +265,11 @@ fn test_sample_rate_change_handling() {
     let rms1 = calculate_rms(&buffer1);
     let rms2 = calculate_rms(&buffer2);
 
-    // RMS should be in similar range (within 20%)
+    // RMS should be in similar range (within 10% - tighter tolerance)
     let ratio = (rms1 / rms2).max(rms2 / rms1);
     assert!(
-        ratio < 1.5,
-        "Sample rate change should not drastically change processing, ratio: {}",
+        ratio < 1.1,
+        "Sample rate change should not significantly change processing, ratio: {}",
         ratio
     );
 }

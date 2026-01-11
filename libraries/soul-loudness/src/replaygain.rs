@@ -189,7 +189,11 @@ impl Default for ReplayGainCalculator {
 mod tests {
     use super::*;
 
-    fn make_loudness_info(integrated_lufs: f64, true_peak_dbfs: f64, duration: f64) -> LoudnessInfo {
+    fn make_loudness_info(
+        integrated_lufs: f64,
+        true_peak_dbfs: f64,
+        duration: f64,
+    ) -> LoudnessInfo {
         LoudnessInfo {
             integrated_lufs,
             loudness_range_lu: 5.0,

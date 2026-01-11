@@ -3,8 +3,8 @@
 //! Provides test signal generation and analysis tools for verifying
 //! audio processing algorithms.
 
-pub mod signals;
 pub mod analysis;
+pub mod signals;
 
-pub use signals::*;
 pub use analysis::*;
+pub use signals::*;

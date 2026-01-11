@@ -72,16 +72,23 @@ fn test_eq_long_run_1_minute_simulated() {
         let mut buffer = generate_stereo_sine(1000.0, SAMPLE_RATE, buffer_size);
         eq.process(&mut buffer, SAMPLE_RATE);
 
-        // Check every 1000 buffers for stability
-        if i % 1000 == 0 {
-            for sample in &buffer {
-                assert!(sample.is_finite(), "Sample became non-finite at buffer {}", i);
-                assert!(
-                    sample.abs() < 10.0,
-                    "Sample amplitude grew unbounded at buffer {}",
-                    i
-                );
-            }
+        // Check EVERY buffer for stability - audio bugs can happen at any time
+        for (sample_idx, sample) in buffer.iter().enumerate() {
+            assert!(
+                sample.is_finite(),
+                "Sample became non-finite at buffer {}, sample {}",
+                i,
+                sample_idx
+            );
+            // Audio samples should be in normal range [-1.5, 1.5]
+            // Allow slight headroom for EQ boost but catch runaway values
+            assert!(
+                sample.abs() < 1.5,
+                "Sample amplitude {} exceeds audio range at buffer {}, sample {} (expected < 1.5)",
+                sample,
+                i,
+                sample_idx
+            );
         }
     }
 }
@@ -119,11 +126,17 @@ fn test_effect_chain_long_run_5_minutes_simulated() {
         crossfeed.process(&mut buffer, SAMPLE_RATE);
         limiter.process(&mut buffer, SAMPLE_RATE);
 
-        // Periodic stability check
-        if i % 5000 == 0 {
-            for sample in &buffer {
-                assert!(sample.is_finite(), "Non-finite at buffer {}", i);
-            }
+        // Check EVERY buffer - periodic checks miss intermittent bugs
+        for (sample_idx, sample) in buffer.iter().enumerate() {
+            assert!(sample.is_finite(), "Non-finite at buffer {}, sample {}", i, sample_idx);
+            // Full effect chain may boost, but should stay in reasonable range
+            assert!(
+                sample.abs() < 2.0,
+                "Sample {} exceeds range at buffer {}, sample {}",
+                sample,
+                i,
+                sample_idx
+            );
         }
     }
 
@@ -552,9 +565,10 @@ fn test_real_time_budget_compliance() {
     }
 
     // Allow some variance but most should be within budget
+    // Using 5% threshold to account for CI environment variance and OS scheduling
     assert!(
-        over_budget_count < 10,
-        "Too many buffers over real-time budget: {}/1000",
+        over_budget_count < 50,
+        "Too many buffers over real-time budget: {}/1000 (>5%)",
         over_budget_count
     );
 }

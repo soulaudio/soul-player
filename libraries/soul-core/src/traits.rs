@@ -8,9 +8,13 @@ use std::path::Path;
 
 /// Audio decoder trait
 ///
-/// Implementers decode audio files into `AudioBuffer` format
+/// Implementers decode audio files into `AudioBuffer` format.
+///
+/// This trait supports two modes of operation:
+/// 1. **Full decode**: Use `decode()` to load the entire file into memory
+/// 2. **Streaming decode**: Use `open()`, `decode_chunk()`, `seek()`, etc. for streaming
 pub trait AudioDecoder: Send {
-    /// Decode an audio file from the given path
+    /// Decode an audio file from the given path (loads entire file)
     ///
     /// # Errors
     /// Returns an error if the file cannot be read or decoded
@@ -18,6 +22,83 @@ pub trait AudioDecoder: Send {
 
     /// Check if the decoder supports the given file format
     fn supports_format(&self, path: &Path) -> bool;
+
+    // === Streaming decode API ===
+
+    /// Open a file for streaming decode
+    ///
+    /// After opening, use `decode_chunk()` to read samples and `seek()` to navigate.
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be opened or probed
+    fn open(&mut self, path: &Path) -> Result<AudioMetadata> {
+        // Default implementation falls back to full decode
+        let _ = path;
+        Err(crate::error::SoulError::audio(
+            "Streaming decode not supported".to_string(),
+        ))
+    }
+
+    /// Decode a chunk of audio samples
+    ///
+    /// Returns `None` when end of file is reached.
+    /// The returned buffer may contain fewer samples than `max_frames` at end of file.
+    ///
+    /// # Arguments
+    /// * `max_frames` - Maximum number of audio frames (samples per channel) to decode
+    ///
+    /// # Errors
+    /// Returns an error if no file is open or decoding fails
+    fn decode_chunk(&mut self, max_frames: usize) -> Result<Option<AudioBuffer>> {
+        let _ = max_frames;
+        Err(crate::error::SoulError::audio(
+            "Streaming decode not supported".to_string(),
+        ))
+    }
+
+    /// Seek to a position in the currently open file
+    ///
+    /// Returns the actual position after seeking (may differ from requested due to
+    /// frame boundaries in compressed formats like MP3/AAC).
+    ///
+    /// # Arguments
+    /// * `position` - Target position from start of track
+    ///
+    /// # Errors
+    /// Returns an error if no file is open, position is invalid, or format doesn't support seeking
+    fn seek(&mut self, position: std::time::Duration) -> Result<std::time::Duration> {
+        let _ = position;
+        Err(crate::error::SoulError::audio(
+            "Seeking not supported".to_string(),
+        ))
+    }
+
+    /// Get the duration of the currently open file
+    ///
+    /// Returns `None` if no file is open or duration cannot be determined
+    fn duration(&self) -> Option<std::time::Duration> {
+        None
+    }
+
+    /// Get the current playback position in the open file
+    ///
+    /// Returns `Duration::ZERO` if no file is open
+    fn position(&self) -> std::time::Duration {
+        std::time::Duration::ZERO
+    }
+}
+
+/// Metadata returned when opening a file for streaming decode
+#[derive(Debug, Clone)]
+pub struct AudioMetadata {
+    /// Sample rate in Hz
+    pub sample_rate: u32,
+    /// Number of channels
+    pub channels: u16,
+    /// Total duration (if known)
+    pub duration: Option<std::time::Duration>,
+    /// Bits per sample (if known)
+    pub bits_per_sample: Option<u16>,
 }
 
 /// Audio output trait

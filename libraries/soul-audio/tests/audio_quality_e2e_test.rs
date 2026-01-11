@@ -72,7 +72,12 @@ fn test_snr_pure_sine_wave() {
     println!("Pure Sine SNR: {:.1} dB", snr);
 
     // Simple DFT limits SNR measurement to ~20-30 dB due to spectral leakage
-    assert!(snr > MIN_SNR_DB, "Pure sine wave should have SNR > {} dB, got {:.1} dB", MIN_SNR_DB, snr);
+    assert!(
+        snr > MIN_SNR_DB,
+        "Pure sine wave should have SNR > {} dB, got {:.1} dB",
+        MIN_SNR_DB,
+        snr
+    );
 }
 
 #[test]
@@ -99,7 +104,12 @@ fn test_snr_after_eq_processing() {
     println!("EQ Processing SNR: {:.1} dB", snr);
 
     // Neutral EQ should maintain high SNR (>90 dB)
-    assert!(snr > MIN_SNR_DB, "Neutral EQ should maintain SNR > {} dB, got {:.1} dB", MIN_SNR_DB, snr);
+    assert!(
+        snr > MIN_SNR_DB,
+        "Neutral EQ should maintain SNR > {} dB, got {:.1} dB",
+        MIN_SNR_DB,
+        snr
+    );
 }
 
 #[test]
@@ -121,7 +131,11 @@ fn test_snr_after_compression() {
 
     // Even gentle compression has envelope tracking that affects SNR
     // Just verify we get a reasonable measurement
-    assert!(snr > 0.0, "Compression SNR measurement should be positive, got {:.1} dB", snr);
+    assert!(
+        snr > 0.0,
+        "Compression SNR measurement should be positive, got {:.1} dB",
+        snr
+    );
 }
 
 // =============================================================================
@@ -140,7 +154,12 @@ fn test_thd_pure_sine_wave() {
     println!("Pure Sine THD: {:.4}%", thd);
 
     // Simple DFT spectral leakage limits THD measurement to ~1%
-    assert!(thd < MAX_THD_PERCENT, "Pure sine wave should have THD < {}%, got {:.4}%", MAX_THD_PERCENT, thd);
+    assert!(
+        thd < MAX_THD_PERCENT,
+        "Pure sine wave should have THD < {}%, got {:.4}%",
+        MAX_THD_PERCENT,
+        thd
+    );
 }
 
 #[test]
@@ -152,14 +171,19 @@ fn test_thd_measurement_accuracy() {
 
     let measured_thd = calculate_thd(&mono, 1000.0, 44100);
 
-    println!("Target THD: {:.1}%, Measured THD: {:.1}%", thd_target, measured_thd);
+    println!(
+        "Target THD: {:.1}%, Measured THD: {:.1}%",
+        thd_target, measured_thd
+    );
 
     // Measurement should be within 50% of target (THD measurement is inherently noisy)
     let tolerance = thd_target * 0.5;
     assert!(
         (measured_thd - thd_target).abs() < tolerance,
         "THD measurement should be within {}% of target {}%, got {:.1}%",
-        tolerance, thd_target, measured_thd
+        tolerance,
+        thd_target,
+        measured_thd
     );
 }
 
@@ -170,7 +194,9 @@ fn test_thd_after_transparent_processing() {
 
     // Apply transparent effect chain
     let mut chain = EffectChain::new();
-    chain.add_effect(Box::new(Compressor::with_settings(CompressorSettings::gentle())));
+    chain.add_effect(Box::new(Compressor::with_settings(
+        CompressorSettings::gentle(),
+    )));
     chain.add_effect(Box::new(Limiter::with_settings(LimiterSettings::soft())));
 
     let mut output = input.clone();
@@ -181,7 +207,12 @@ fn test_thd_after_transparent_processing() {
 
     println!("THD after transparent processing: {:.4}%", thd);
 
-    assert!(thd < MAX_THD_PERCENT, "Transparent processing should have THD < {}%, got {:.4}%", MAX_THD_PERCENT, thd);
+    assert!(
+        thd < MAX_THD_PERCENT,
+        "Transparent processing should have THD < {}%, got {:.4}%",
+        MAX_THD_PERCENT,
+        thd
+    );
 }
 
 // =============================================================================
@@ -196,11 +227,24 @@ fn test_thd_plus_n_pure_signal() {
     let thd_plus_n = calculate_thd_plus_n(&mono, 1000.0, 44100);
     let sinad = calculate_sinad(&mono, 1000.0, 44100);
 
-    println!("Pure Signal THD+N: {:.4}%, SINAD: {:.1} dB", thd_plus_n, sinad);
+    println!(
+        "Pure Signal THD+N: {:.4}%, SINAD: {:.1} dB",
+        thd_plus_n, sinad
+    );
 
     // Note: Simple DFT spectral leakage adds apparent noise
-    assert!(thd_plus_n < MAX_THD_PLUS_N_PERCENT, "Pure signal should have THD+N < {}%, got {:.4}%", MAX_THD_PLUS_N_PERCENT, thd_plus_n);
-    assert!(sinad > MIN_SINAD_DB, "Pure signal should have SINAD > {} dB, got {:.1} dB", MIN_SINAD_DB, sinad);
+    assert!(
+        thd_plus_n < MAX_THD_PLUS_N_PERCENT,
+        "Pure signal should have THD+N < {}%, got {:.4}%",
+        MAX_THD_PLUS_N_PERCENT,
+        thd_plus_n
+    );
+    assert!(
+        sinad > MIN_SINAD_DB,
+        "Pure signal should have SINAD > {} dB, got {:.1} dB",
+        MIN_SINAD_DB,
+        sinad
+    );
 }
 
 #[test]
@@ -223,7 +267,12 @@ fn test_thd_plus_n_after_eq_boost() {
 
     println!("THD+N after +6dB EQ boost: {:.4}%", thd_plus_n);
 
-    assert!(thd_plus_n < MAX_THD_PLUS_N_PERCENT * 2.0, "THD+N after EQ boost should be < {}%, got {:.4}%", MAX_THD_PLUS_N_PERCENT * 2.0, thd_plus_n);
+    assert!(
+        thd_plus_n < MAX_THD_PLUS_N_PERCENT * 2.0,
+        "THD+N after EQ boost should be < {}%, got {:.4}%",
+        MAX_THD_PLUS_N_PERCENT * 2.0,
+        thd_plus_n
+    );
 }
 
 // =============================================================================
@@ -241,8 +290,18 @@ fn test_sinad_calculation() {
     println!("SINAD: {:.1} dB, ENOB: {:.1} bits", sinad, enob);
 
     // Pure digital signal should have excellent SINAD
-    assert!(sinad > MIN_SINAD_DB, "Pure signal should have SINAD > {} dB, got {:.1} dB", MIN_SINAD_DB, sinad);
-    assert!(enob > MIN_ENOB, "Effective resolution should be > {} bits, got {:.1} bits", MIN_ENOB, enob);
+    assert!(
+        sinad > MIN_SINAD_DB,
+        "Pure signal should have SINAD > {} dB, got {:.1} dB",
+        MIN_SINAD_DB,
+        sinad
+    );
+    assert!(
+        enob > MIN_ENOB,
+        "Effective resolution should be > {} bits, got {:.1} bits",
+        MIN_ENOB,
+        enob
+    );
 }
 
 #[test]
@@ -258,7 +317,11 @@ fn test_enob_relationship() {
     println!("For SINAD={:.1} dB, ENOB={:.1} bits", sinad_16bit, enob);
 
     // Should be close to 16 bits
-    assert!((enob - 16.0).abs() < 1.0, "98 dB SINAD should give ~16 bit ENOB, got {:.1}", enob);
+    assert!(
+        (enob - 16.0).abs() < 1.0,
+        "98 dB SINAD should give ~16 bit ENOB, got {:.1}",
+        enob
+    );
 }
 
 // =============================================================================
@@ -276,7 +339,12 @@ fn test_imd_smpte_pure_signal() {
     println!("SMPTE IMD (pure signal): {:.4}%", imd);
 
     // Pure generated signal should have very low IMD
-    assert!(imd < MAX_IMD_PERCENT * 10.0, "Pure SMPTE signal should have IMD < {}%, got {:.4}%", MAX_IMD_PERCENT * 10.0, imd);
+    assert!(
+        imd < MAX_IMD_PERCENT * 10.0,
+        "Pure SMPTE signal should have IMD < {}%, got {:.4}%",
+        MAX_IMD_PERCENT * 10.0,
+        imd
+    );
 }
 
 #[test]
@@ -290,7 +358,12 @@ fn test_imd_ccif_pure_signal() {
     println!("CCIF IMD (pure signal): {:.4}%", imd);
 
     // Pure generated signal should have very low IMD
-    assert!(imd < MAX_IMD_PERCENT * 10.0, "Pure CCIF signal should have IMD < {}%, got {:.4}%", MAX_IMD_PERCENT * 10.0, imd);
+    assert!(
+        imd < MAX_IMD_PERCENT * 10.0,
+        "Pure CCIF signal should have IMD < {}%, got {:.4}%",
+        MAX_IMD_PERCENT * 10.0,
+        imd
+    );
 }
 
 #[test]
@@ -310,7 +383,11 @@ fn test_imd_after_limiting() {
 
     // Limiting introduces non-linearity, so IMD will be higher
     // Simple DFT also adds measurement artifacts
-    assert!(imd < 20.0, "IMD after limiting should be < 20%, got {:.4}%", imd);
+    assert!(
+        imd < 20.0,
+        "IMD after limiting should be < 20%, got {:.4}%",
+        imd
+    );
 }
 
 // =============================================================================
@@ -322,24 +399,29 @@ fn test_a_weighting_curve() {
     // Verify A-weighting values at key frequencies
     // Reference: IEC 61672-1
     let test_points = [
-        (1000.0, 0.0),    // 0 dB at 1 kHz (reference)
-        (20.0, -50.5),    // ~-50 dB at 20 Hz
-        (100.0, -19.1),   // ~-19 dB at 100 Hz
-        (500.0, -3.2),    // ~-3 dB at 500 Hz
-        (2000.0, 1.2),    // ~+1.2 dB at 2 kHz
-        (4000.0, 1.0),    // ~+1.0 dB at 4 kHz
-        (10000.0, -2.5),  // ~-2.5 dB at 10 kHz
+        (1000.0, 0.0),   // 0 dB at 1 kHz (reference)
+        (20.0, -50.5),   // ~-50 dB at 20 Hz
+        (100.0, -19.1),  // ~-19 dB at 100 Hz
+        (500.0, -3.2),   // ~-3 dB at 500 Hz
+        (2000.0, 1.2),   // ~+1.2 dB at 2 kHz
+        (4000.0, 1.0),   // ~+1.0 dB at 4 kHz
+        (10000.0, -2.5), // ~-2.5 dB at 10 kHz
     ];
 
     for (freq, expected) in test_points {
         let weight = a_weighting_db(freq);
-        println!("A-weight at {} Hz: {:.1} dB (expected: {:.1} dB)", freq, weight, expected);
+        println!(
+            "A-weight at {} Hz: {:.1} dB (expected: {:.1} dB)",
+            freq, weight, expected
+        );
 
         // Allow ±3 dB tolerance (A-weighting formula approximation)
         assert!(
             (weight - expected).abs() < 3.0,
             "A-weight at {} Hz should be ~{:.1} dB, got {:.1} dB",
-            freq, expected, weight
+            freq,
+            expected,
+            weight
         );
     }
 }
@@ -355,7 +437,11 @@ fn test_a_weighted_noise_pure_signal() {
 
     // Pure 1kHz sine has 0 dB A-weight, so noise level reflects signal
     // The measurement integrates all spectral energy
-    assert!(a_weighted > -40.0, "A-weighted level should be reasonable, got {:.1} dBFS", a_weighted);
+    assert!(
+        a_weighted > -40.0,
+        "A-weighted level should be reasonable, got {:.1} dBFS",
+        a_weighted
+    );
 }
 
 // =============================================================================
@@ -374,7 +460,11 @@ fn test_dynamic_range_measurement() {
 
     // Expected DR: 20*log10(0.9/0.01) ≈ 39 dB
     // But measurement considers noise floor estimation, which may differ
-    assert!(dr > 20.0, "Dynamic range should be > 20 dB, got {:.1} dB", dr);
+    assert!(
+        dr > 20.0,
+        "Dynamic range should be > 20 dB, got {:.1} dB",
+        dr
+    );
 }
 
 #[test]
@@ -391,7 +481,10 @@ fn test_dynamic_range_after_compression() {
     let output_mono = extract_mono(&output, 0);
     let output_dr = calculate_dynamic_range(&output_mono);
 
-    println!("Input DR: {:.1} dB, Output DR: {:.1} dB", input_dr, output_dr);
+    println!(
+        "Input DR: {:.1} dB, Output DR: {:.1} dB",
+        input_dr, output_dr
+    );
 
     // Aggressive compression should reduce dynamic range
     // Note: Might not always reduce DR depending on signal and threshold
@@ -413,7 +506,12 @@ fn test_channel_separation_digital() {
     println!("Digital Channel Separation: {:.1} dB", separation);
 
     // Digital signal should have essentially infinite separation (120 dB max)
-    assert!(separation >= MIN_CHANNEL_SEPARATION_DB, "Digital channel separation should be >= {} dB, got {:.1} dB", MIN_CHANNEL_SEPARATION_DB, separation);
+    assert!(
+        separation >= MIN_CHANNEL_SEPARATION_DB,
+        "Digital channel separation should be >= {} dB, got {:.1} dB",
+        MIN_CHANNEL_SEPARATION_DB,
+        separation
+    );
 }
 
 #[test]
@@ -439,7 +537,12 @@ fn test_channel_separation_after_processing() {
     println!("Channel Separation after EQ: {:.1} dB", separation);
 
     // Should maintain good separation (stereo EQ processes channels equally)
-    assert!(separation >= MIN_CHANNEL_SEPARATION_DB, "Channel separation after processing should be >= {} dB, got {:.1} dB", MIN_CHANNEL_SEPARATION_DB, separation);
+    assert!(
+        separation >= MIN_CHANNEL_SEPARATION_DB,
+        "Channel separation after processing should be >= {} dB, got {:.1} dB",
+        MIN_CHANNEL_SEPARATION_DB,
+        separation
+    );
 }
 
 // =============================================================================
@@ -471,9 +574,14 @@ fn test_frequency_response_sweep() {
     assert!(
         (peak.0 - test_freq).abs() < 50.0,
         "Peak should be at ~{} Hz, got {:.0} Hz",
-        test_freq, peak.0
+        test_freq,
+        peak.0
     );
-    assert!(peak.1 > -20.0, "Peak should be > -20 dB, got {:.1} dB", peak.1);
+    assert!(
+        peak.1 > -20.0,
+        "Peak should be > -20 dB, got {:.1} dB",
+        peak.1
+    );
 }
 
 #[test]
@@ -492,8 +600,10 @@ fn test_frequency_response_after_eq() {
     eq.process(&mut output, 44100);
 
     let test_frequencies = [100.0, 1000.0, 10000.0];
-    let input_response = measure_frequency_response(&extract_mono(&signal, 0), &test_frequencies, 44100);
-    let output_response = measure_frequency_response(&extract_mono(&output, 0), &test_frequencies, 44100);
+    let input_response =
+        measure_frequency_response(&extract_mono(&signal, 0), &test_frequencies, 44100);
+    let output_response =
+        measure_frequency_response(&extract_mono(&output, 0), &test_frequencies, 44100);
 
     println!("EQ Frequency Response:");
     for ((freq, in_mag), (_, out_mag)) in input_response.iter().zip(output_response.iter()) {
@@ -530,7 +640,11 @@ fn test_phase_through_transparent_chain() {
     println!("Phase difference at 1kHz: {:.1}°", phase_diff);
 
     // Transparent processing should have minimal phase shift
-    assert!(phase_diff.abs() < 30.0, "Transparent processing should have < 30° phase shift, got {:.1}°", phase_diff);
+    assert!(
+        phase_diff.abs() < 30.0,
+        "Transparent processing should have < 30° phase shift, got {:.1}°",
+        phase_diff
+    );
 }
 
 // =============================================================================
@@ -544,10 +658,16 @@ fn test_audio_quality_report_pure_signal() {
     let report = AudioQualityReport::analyze(&signal, 1000.0, 44100);
 
     println!("{}", report.format());
-    println!("Meets professional standards: {}", report.meets_professional_standards());
+    println!(
+        "Meets professional standards: {}",
+        report.meets_professional_standards()
+    );
 
     // Pure signal should meet professional standards
-    assert!(report.meets_professional_standards(), "Pure signal should meet professional standards");
+    assert!(
+        report.meets_professional_standards(),
+        "Pure signal should meet professional standards"
+    );
 }
 
 #[test]
@@ -564,7 +684,9 @@ fn test_audio_quality_report_after_processing() {
         EqBand::new(10000.0, 0.0, 1.0),
     ]);
     chain.add_effect(Box::new(eq));
-    chain.add_effect(Box::new(Compressor::with_settings(CompressorSettings::gentle())));
+    chain.add_effect(Box::new(Compressor::with_settings(
+        CompressorSettings::gentle(),
+    )));
     chain.add_effect(Box::new(Limiter::with_settings(LimiterSettings::soft())));
 
     let mut output = input.clone();
@@ -576,7 +698,11 @@ fn test_audio_quality_report_after_processing() {
     println!("{}", report.format());
 
     // Gentle processing should still have good quality
-    assert!(report.thd_percent < 5.0, "THD should be < 5% after gentle processing, got {:.4}%", report.thd_percent);
+    assert!(
+        report.thd_percent < 5.0,
+        "THD should be < 5% after gentle processing, got {:.4}%",
+        report.thd_percent
+    );
 }
 
 // =============================================================================
@@ -597,7 +723,11 @@ fn test_bit_perfect_bypass() {
 
     println!("Bit-perfect test - max difference: {:.10}", diff);
 
-    assert!(diff < 1e-9, "Empty chain should be bit-perfect, max diff: {:.10}", diff);
+    assert!(
+        diff < 1e-9,
+        "Empty chain should be bit-perfect, max diff: {:.10}",
+        diff
+    );
 }
 
 #[test]
@@ -633,7 +763,11 @@ fn test_dsp_numerical_stability() {
     println!("  RMS difference: {:.4}%", rms_diff);
 
     // RMS should be consistent throughout (< 1% variation)
-    assert!(rms_diff < 1.0, "RMS should be consistent throughout signal, got {:.4}% variation", rms_diff);
+    assert!(
+        rms_diff < 1.0,
+        "RMS should be consistent throughout signal, got {:.4}% variation",
+        rms_diff
+    );
 }
 
 // =============================================================================
@@ -653,7 +787,9 @@ fn test_silence_quality() {
         EqBand::new(10000.0, 0.0, 1.0),
     ]);
     chain.add_effect(Box::new(eq));
-    chain.add_effect(Box::new(Compressor::with_settings(CompressorSettings::aggressive())));
+    chain.add_effect(Box::new(Compressor::with_settings(
+        CompressorSettings::aggressive(),
+    )));
 
     let mut output = input.clone();
     chain.process(&mut output, 44100);
@@ -694,7 +830,11 @@ fn test_near_zero_signal_quality() {
     println!("  Ratio: {:.4}", rms_ratio);
 
     // Signal should be preserved (within 10%)
-    assert!((rms_ratio - 1.0).abs() < 0.1, "Quiet signal should be preserved, got ratio {:.4}", rms_ratio);
+    assert!(
+        (rms_ratio - 1.0).abs() < 0.1,
+        "Quiet signal should be preserved, got ratio {:.4}",
+        rms_ratio
+    );
 }
 
 #[test]
@@ -714,8 +854,16 @@ fn test_full_scale_signal_quality() {
 
     let peak = calculate_peak(&output);
 
-    println!("Full-scale signal peak after processing: {:.4} ({:.2} dB)", peak, linear_to_db(peak));
+    println!(
+        "Full-scale signal peak after processing: {:.4} ({:.2} dB)",
+        peak,
+        linear_to_db(peak)
+    );
 
     // Should not clip (peak <= 1.0)
-    assert!(peak <= 1.0, "Full-scale signal should not clip, got peak {:.4}", peak);
+    assert!(
+        peak <= 1.0,
+        "Full-scale signal should not clip, got peak {:.4}",
+        peak
+    );
 }

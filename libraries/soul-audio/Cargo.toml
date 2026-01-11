@@ -13,16 +13,22 @@ symphonia = { workspace = true, features = ["mp3", "isomp4", "flac", "vorbis", "
 cpal = { workspace = true, optional = true }
 thiserror.workspace = true
 rand = { version = "0.8", optional = true }
+hound = "3.5"  # WAV file reading for convolution IR loading
+rustfft.workspace = true  # FFT for convolution engine
 
 # Resampling
 rubato.workspace = true
 r8brain-rs = { workspace = true, optional = true }
+
+# Fingerprinting
+rusty-chromaprint = { workspace = true, optional = true }
 
 [features]
 default = []
 desktop = ["cpal"]
 test-utils = ["rand"]
 r8brain = ["dep:r8brain-rs"] # Optional high-quality resampler (requires CMake)
+fingerprint = ["dep:rusty-chromaprint"] # Audio fingerprinting (AcoustID compatible)
 
 [dev-dependencies]
 proptest.workspace = true
@@ -34,6 +40,10 @@ criterion.workspace = true
 [[bench]]
 name = "resampling_benchmark"
 harness = false
+
+[[test]]
+name = "pipeline_quality_test"
+required-features = ["test-utils"]
 
 [lints]
 workspace = true

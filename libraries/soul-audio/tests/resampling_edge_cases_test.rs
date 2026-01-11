@@ -38,12 +38,19 @@ fn calculate_rms(samples: &[f32]) -> f32 {
 #[test]
 fn test_44100_to_48000() {
     // Common rate conversion
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 44100, 48000, 2, ResamplingQuality::Balanced)
-            .unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 44100, 4410); // 0.1 sec
-    let output = resampler.process(&input).unwrap();
+    let mut output = resampler.process(&input).unwrap();
+    // Flush any remaining buffered samples
+    output.extend(resampler.flush().unwrap());
 
     // Upsampling: output should be larger than input
     assert!(
@@ -60,9 +67,14 @@ fn test_44100_to_48000() {
 #[test]
 fn test_48000_to_44100() {
     // Downsampling
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 48000, 44100, 2, ResamplingQuality::Balanced)
-            .unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        48000,
+        44100,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 48000, 4800);
     let output = resampler.process(&input).unwrap();
@@ -76,9 +88,14 @@ fn test_48000_to_44100() {
 #[test]
 fn test_44100_to_88200() {
     // 2x upsampling (integer ratio)
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 44100, 88200, 2, ResamplingQuality::Balanced)
-            .unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        88200,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 44100, 4410);
     let output = resampler.process(&input).unwrap();
@@ -94,9 +111,14 @@ fn test_44100_to_88200() {
 #[test]
 fn test_96000_to_44100() {
     // Large downsampling ratio
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 96000, 44100, 2, ResamplingQuality::Balanced)
-            .unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        96000,
+        44100,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 96000, 9600);
     let output = resampler.process(&input).unwrap();
@@ -109,7 +131,14 @@ fn test_96000_to_44100() {
 #[test]
 fn test_22050_to_48000() {
     // Uncommon upsampling
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,22050, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        22050,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 22050, 2205);
     let output = resampler.process(&input).unwrap();
@@ -120,7 +149,14 @@ fn test_22050_to_48000() {
 #[test]
 fn test_48000_to_22050() {
     // Uncommon downsampling
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,48000, 22050, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        48000,
+        22050,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 48000, 4800);
     let output = resampler.process(&input).unwrap();
@@ -132,10 +168,19 @@ fn test_48000_to_22050() {
 #[test]
 fn test_8000_to_44100() {
     // Telephone rate to CD rate
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,8000, 44100, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        8000,
+        44100,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 8000, 800);
-    let output = resampler.process(&input).unwrap();
+    let mut output = resampler.process(&input).unwrap();
+    // Flush any remaining buffered samples
+    output.extend(resampler.flush().unwrap());
 
     // Large upsampling ratio
     assert!(output.len() > input.len() * 4);
@@ -144,7 +189,14 @@ fn test_8000_to_44100() {
 #[test]
 fn test_192000_to_44100() {
     // High-res to CD rate
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,192000, 44100, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        192000,
+        44100,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 192000, 19200);
     let output = resampler.process(&input).unwrap();
@@ -155,9 +207,14 @@ fn test_192000_to_44100() {
 #[test]
 fn test_same_rate_passthrough() {
     // 44100 to 44100 (should be passthrough or near-passthrough)
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 44100, 44100, 2, ResamplingQuality::Balanced)
-            .unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        44100,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 44100, 4410);
     let output = resampler.process(&input).unwrap();
@@ -174,7 +231,14 @@ fn test_same_rate_passthrough() {
 #[test]
 fn test_non_standard_rates() {
     // 37800 to 44100 (non-standard source rate)
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,37800, 44100, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        37800,
+        44100,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 37800, 3780);
     let output = resampler.process(&input).unwrap();
@@ -186,7 +250,14 @@ fn test_non_standard_rates() {
 #[test]
 fn test_prime_number_rates() {
     // Using prime numbers for interesting ratios
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44101, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44101,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 44101, 4410);
     let output = resampler.process(&input).unwrap();
@@ -200,45 +271,94 @@ fn test_prime_number_rates() {
 
 #[test]
 fn test_single_frame_buffer() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     // Single stereo frame
     let input = vec![0.5, 0.5];
-    let output = resampler.process(&input).unwrap();
+    let mut output = resampler.process(&input).unwrap();
+    // Flush to get any buffered samples
+    output.extend(resampler.flush().unwrap());
 
-    // Should produce some output (at least 1 frame)
+    // Should produce some output (at least 1 frame) after flush
     assert!(output.len() >= 2);
 }
 
 #[test]
 fn test_very_small_buffers() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    // Note: With buffered resampling, small inputs are accumulated until there's
+    // enough for a complete chunk. This test verifies the resampler handles small
+    // inputs without panicking and eventually produces output.
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
+    let mut total_output = 0;
     for size in [2, 4, 8, 16, 32, 64] {
         let input = generate_stereo_sine(1000.0, 44100, size);
         let output = resampler.process(&input).unwrap();
-
-        // Should not panic and produce some output
-        assert!(output.len() > 0, "Size {} should produce output", size);
+        total_output += output.len();
     }
+    // Flush remaining samples
+    total_output += resampler.flush().unwrap().len();
+
+    // Should produce output after all inputs and flush
+    assert!(
+        total_output > 0,
+        "Should produce output after accumulating small buffers and flushing"
+    );
 }
 
 #[test]
 fn test_odd_sample_counts() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    // Note: With buffered resampling, small inputs are accumulated. This test
+    // verifies odd frame counts work correctly by accumulating and flushing.
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
+    let mut total_output = 0;
     // Odd number of frames (not a problem, but edge case)
     for frames in [1, 3, 5, 7, 13, 17, 31, 127] {
         let input = generate_stereo_sine(1000.0, 44100, frames);
         let output = resampler.process(&input).unwrap();
-
-        assert!(output.len() > 0, "Odd frame count {} should work", frames);
+        total_output += output.len();
     }
+    // Flush remaining samples
+    total_output += resampler.flush().unwrap().len();
+
+    assert!(
+        total_output > 0,
+        "Odd frame counts should work after accumulating and flushing"
+    );
 }
 
 #[test]
 fn test_empty_buffer() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input: Vec<f32> = vec![];
     let output = resampler.process(&input).unwrap();
@@ -252,9 +372,14 @@ fn test_empty_buffer() {
 
 #[test]
 fn test_many_consecutive_buffers() {
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 44100, 48000, 2, ResamplingQuality::Balanced)
-            .unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let mut total_output_samples = 0;
     let mut all_outputs_valid = true;
@@ -283,7 +408,14 @@ fn test_many_consecutive_buffers() {
 
 #[test]
 fn test_long_duration_single_buffer() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     // 10 seconds of audio
     let input = generate_stereo_sine(1000.0, 44100, 441000);
@@ -302,7 +434,14 @@ fn test_long_duration_single_buffer() {
 
 #[test]
 fn test_reset_during_long_run() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     // Process some buffers
     for _ in 0..100 {
@@ -313,13 +452,15 @@ fn test_reset_during_long_run() {
     // Reset
     resampler.reset();
 
-    // Continue processing - should work fine
+    // Continue processing - use enough frames (2048) to exceed chunk size and produce output
+    let mut total_output = 0;
     for _ in 0..100 {
-        let input = generate_stereo_sine(1000.0, 44100, 512);
+        let input = generate_stereo_sine(1000.0, 44100, 2048);
         let output = resampler.process(&input).unwrap();
-
-        assert!(output.len() > 0);
+        total_output += output.len();
     }
+
+    assert!(total_output > 0, "Should produce output after reset");
 }
 
 // ============================================================================
@@ -336,7 +477,8 @@ fn test_all_quality_presets() {
     ];
 
     for quality in qualities {
-        let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, quality).unwrap();
+        let mut resampler =
+            Resampler::new(ResamplerBackend::Auto, 44100, 48000, 2, quality).unwrap();
 
         let input = generate_stereo_sine(1000.0, 44100, 4410);
         let output = resampler.process(&input).unwrap();
@@ -352,18 +494,44 @@ fn test_all_quality_presets() {
 
 #[test]
 fn test_quality_affects_latency() {
-    // Higher quality typically means more latency
-    let mut fast_resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Fast).unwrap();
-    let mut high_resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::High).unwrap();
+    // Higher quality typically means more latency and different chunk sizes
+    let mut fast_resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Fast,
+    )
+    .unwrap();
+    let mut high_resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::High,
+    )
+    .unwrap();
 
-    let input = generate_stereo_sine(1000.0, 44100, 256);
+    // Use larger input to ensure output is produced (chunk sizes vary by quality)
+    let input = generate_stereo_sine(1000.0, 44100, 4096);
 
-    let fast_output = fast_resampler.process(&input).unwrap();
-    let high_output = high_resampler.process(&input).unwrap();
+    let mut fast_output = fast_resampler.process(&input).unwrap();
+    let mut high_output = high_resampler.process(&input).unwrap();
+
+    // Flush remaining samples
+    fast_output.extend(fast_resampler.flush().unwrap());
+    high_output.extend(high_resampler.flush().unwrap());
 
     // Both should produce valid output
-    assert!(fast_output.len() > 0);
-    assert!(high_output.len() > 0);
+    assert!(fast_output.len() > 0, "Fast quality should produce output");
+    assert!(high_output.len() > 0, "High quality should produce output");
+
+    // Verify latency API is available
+    let fast_latency = fast_resampler.latency();
+    let high_latency = high_resampler.latency();
+    // Just verify it returns something (latency values depend on implementation)
+    assert!(fast_latency >= 0);
+    assert!(high_latency >= 0);
 }
 
 // ============================================================================
@@ -372,21 +540,41 @@ fn test_quality_affects_latency() {
 
 #[test]
 fn test_mono_resampling() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 1, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        1,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     // Mono signal
     let input: Vec<f32> = (0..4410)
         .map(|i| (2.0 * PI * 1000.0 * i as f32 / 44100.0).sin())
         .collect();
 
-    let output = resampler.process(&input).unwrap();
+    let mut output = resampler.process(&input).unwrap();
+    // Flush remaining samples
+    output.extend(resampler.flush().unwrap());
 
-    assert!(output.len() > 4500); // Should be upsampled
+    assert!(
+        output.len() > 4500,
+        "Mono signal should be upsampled, got {} samples",
+        output.len()
+    );
 }
 
 #[test]
 fn test_stereo_channel_independence() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     // Different frequencies in each channel
     let mut input = Vec::with_capacity(4410 * 2);
@@ -427,18 +615,39 @@ fn test_stereo_channel_independence() {
 #[test]
 fn test_very_low_source_rate() {
     // 4000 Hz (very low)
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,4000, 44100, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        4000,
+        44100,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(500.0, 4000, 400); // 500 Hz tone
-    let output = resampler.process(&input).unwrap();
+    let mut output = resampler.process(&input).unwrap();
+    // Flush remaining samples
+    output.extend(resampler.flush().unwrap());
 
-    assert!(output.len() > input.len() * 8); // Large upsampling
+    assert!(
+        output.len() > input.len() * 8,
+        "Large upsampling should work, got {} samples vs {} input",
+        output.len(),
+        input.len()
+    );
 }
 
 #[test]
 fn test_very_high_source_rate() {
     // 384000 Hz (very high)
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,384000, 44100, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        384000,
+        44100,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 384000, 38400);
     let output = resampler.process(&input).unwrap();
@@ -452,7 +661,14 @@ fn test_very_high_source_rate() {
 
 #[test]
 fn test_dc_offset_preservation() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     // DC signal
     let input = vec![0.5; 8820]; // 2205 stereo frames of DC
@@ -469,7 +685,14 @@ fn test_dc_offset_preservation() {
 
 #[test]
 fn test_silence_stays_silent() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = vec![0.0; 8820];
     let output = resampler.process(&input).unwrap();
@@ -481,7 +704,14 @@ fn test_silence_stays_silent() {
 
 #[test]
 fn test_no_nan_or_inf() {
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     // Various input signals
     let test_signals = [
@@ -511,7 +741,14 @@ fn test_no_nan_or_inf() {
 fn test_processing_time_consistency() {
     use std::time::Instant;
 
-    let mut resampler = Resampler::new(ResamplerBackend::Auto,44100, 48000, 2, ResamplingQuality::Balanced).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::Balanced,
+    )
+    .unwrap();
 
     let input = generate_stereo_sine(1000.0, 44100, 4096);
     let mut times = Vec::new();

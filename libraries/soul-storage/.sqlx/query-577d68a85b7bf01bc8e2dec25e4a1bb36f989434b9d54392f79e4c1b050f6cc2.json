@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO sources (name, source_type, server_url, user_id, is_online)\n         VALUES (?, 'server', ?, ?, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "577d68a85b7bf01bc8e2dec25e4a1bb36f989434b9d54392f79e4c1b050f6cc2"
+}

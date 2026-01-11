@@ -374,8 +374,10 @@ impl LibraryScanner {
             .map_err(|_| ImportError::Unknown(format!("Invalid track ID: {}", track.id)))?;
 
         // Update library-specific fields
-        soul_storage::tracks::set_library_source(&self.pool, track_id, source_id, file_size, file_mtime)
-            .await?;
+        soul_storage::tracks::set_library_source(
+            &self.pool, track_id, source_id, file_size, file_mtime,
+        )
+        .await?;
 
         Ok(())
     }

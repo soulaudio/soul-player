@@ -8,14 +8,18 @@
 //! 5. Effect parameters can be updated
 //! 6. Multiple effects work together in chain
 
-use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode};
 use soul_audio_desktop::DesktopPlayback;
+use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode};
 use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
 
 /// Helper to create a test WAV file
-fn create_test_wav(path: &std::path::Path, duration_secs: f32, frequency: f32) -> std::io::Result<()> {
+fn create_test_wav(
+    path: &std::path::Path,
+    duration_secs: f32,
+    frequency: f32,
+) -> std::io::Result<()> {
     use hound::{WavSpec, WavWriter};
 
     let spec = WavSpec {
@@ -84,7 +88,7 @@ fn test_add_effect_to_slot() {
 #[test]
 #[cfg(feature = "effects")]
 fn test_effect_processes_audio() {
-    use soul_audio::effects::{ParametricEq, EqBand};
+    use soul_audio::effects::{EqBand, ParametricEq};
 
     let config = PlaybackConfig::default();
 
@@ -142,7 +146,7 @@ fn test_effect_processes_audio() {
 #[test]
 #[cfg(feature = "effects")]
 fn test_toggle_effect() {
-    use soul_audio::effects::{ParametricEq, EqBand};
+    use soul_audio::effects::{EqBand, ParametricEq};
 
     let config = PlaybackConfig::default();
 
@@ -196,7 +200,7 @@ fn test_toggle_effect() {
 #[test]
 #[cfg(feature = "effects")]
 fn test_remove_effect() {
-    use soul_audio::effects::{ParametricEq, EqBand};
+    use soul_audio::effects::{EqBand, ParametricEq};
 
     let config = PlaybackConfig::default();
 
@@ -234,7 +238,7 @@ fn test_remove_effect() {
 #[test]
 #[cfg(feature = "effects")]
 fn test_multiple_effects_chain() {
-    use soul_audio::effects::{ParametricEq, EqBand, Compressor, CompressorSettings};
+    use soul_audio::effects::{Compressor, CompressorSettings, EqBand, ParametricEq};
 
     let config = PlaybackConfig::default();
 
@@ -265,10 +269,7 @@ fn test_multiple_effects_chain() {
         eprintln!("Final RMS after EQ+Compressor: {:.6}", final_rms);
 
         // Signal should be modified by both effects
-        assert!(
-            (final_rms - 0.5).abs() > 0.01,
-            "Chain should modify audio"
-        );
+        assert!((final_rms - 0.5).abs() > 0.01, "Chain should modify audio");
     });
 
     eprintln!("✅ Multiple effects chain verified");
@@ -287,8 +288,10 @@ fn test_effect_presets() {
 
     assert!(gentle.ratio < moderate.ratio);
     assert!(moderate.ratio < aggressive.ratio);
-    eprintln!("✅ Compressor presets: gentle={:.1}, moderate={:.1}, aggressive={:.1}",
-        gentle.ratio, moderate.ratio, aggressive.ratio);
+    eprintln!(
+        "✅ Compressor presets: gentle={:.1}, moderate={:.1}, aggressive={:.1}",
+        gentle.ratio, moderate.ratio, aggressive.ratio
+    );
 
     // Test limiter presets
     let soft = LimiterSettings::soft();
@@ -297,8 +300,10 @@ fn test_effect_presets() {
 
     assert!(soft.threshold_db > default.threshold_db);
     assert!(default.threshold_db > brickwall.threshold_db);
-    eprintln!("✅ Limiter presets: soft={:.1}dB, default={:.1}dB, brickwall={:.1}dB",
-        soft.threshold_db, default.threshold_db, brickwall.threshold_db);
+    eprintln!(
+        "✅ Limiter presets: soft={:.1}dB, default={:.1}dB, brickwall={:.1}dB",
+        soft.threshold_db, default.threshold_db, brickwall.threshold_db
+    );
 }
 
 /// Helper function to calculate RMS (Root Mean Square) of audio buffer

@@ -48,12 +48,14 @@ coverage/
 !.env.example
 !.env.server
 
-# SQLx test database
-libraries/soul-storage/.tmp/
-
-# Development databases
+# Databases (development, test, temp)
+# All .db files are ignored - use system temp or .tmp/ directories for test DBs
 *.db
 *.db-shm
 *.db-wal
-!test.db
+
+# SQLx compile-time check databases
+libraries/soul-storage/.tmp/
+.sqlx-check.db
+
 # Note: .sqlx/ is NOT ignored - it contains query metadata for offline compilation

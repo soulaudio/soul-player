@@ -43,10 +43,7 @@ pub enum ImportResult {
         reason: SkipReason,
     },
     /// Import failed
-    Failed {
-        source_path: PathBuf,
-        error: String,
-    },
+    Failed { source_path: PathBuf, error: String },
 }
 
 /// Reason for skipping a file

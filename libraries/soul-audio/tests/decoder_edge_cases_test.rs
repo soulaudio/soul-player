@@ -205,7 +205,10 @@ fn test_corrupted_sample_data() {
 
     // This should succeed - the data is "valid" format-wise
     // but the audio will sound like garbage
-    assert!(result.is_ok(), "Corrupted (but valid format) samples should decode");
+    assert!(
+        result.is_ok(),
+        "Corrupted (but valid format) samples should decode"
+    );
 
     let buffer = result.unwrap();
     // Verify all samples are in valid range
@@ -340,7 +343,8 @@ fn test_single_sample_file() {
     file.write_all(&1u16.to_le_bytes()).unwrap();
     file.write_all(&channels.to_le_bytes()).unwrap();
     file.write_all(&sample_rate.to_le_bytes()).unwrap();
-    file.write_all(&(sample_rate * channels as u32 * 2).to_le_bytes()).unwrap();
+    file.write_all(&(sample_rate * channels as u32 * 2).to_le_bytes())
+        .unwrap();
     file.write_all(&(channels * 2).to_le_bytes()).unwrap();
     file.write_all(&16u16.to_le_bytes()).unwrap();
     file.write_all(b"data").unwrap();
@@ -471,7 +475,9 @@ fn test_directory_instead_of_file() {
 #[test]
 fn test_unicode_filename() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().join("test_\u{4E2D}\u{6587}_\u{65E5}\u{672C}\u{8A9E}.wav");
+    let path = temp_dir
+        .path()
+        .join("test_\u{4E2D}\u{6587}_\u{65E5}\u{672C}\u{8A9E}.wav");
 
     create_test_wav(&path, 44100, 0.1, 2);
 
@@ -603,10 +609,6 @@ fn test_sequential_decode_many_files() {
         create_test_wav(&path, 44100, 0.1, 2);
 
         let result = decoder.decode(&path);
-        assert!(
-            result.is_ok(),
-            "Sequential decode {} should succeed",
-            i
-        );
+        assert!(result.is_ok(), "Sequential decode {} should succeed", i);
     }
 }

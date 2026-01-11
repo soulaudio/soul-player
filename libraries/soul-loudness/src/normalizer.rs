@@ -254,10 +254,7 @@ impl LoudnessNormalizer {
                     .album_gain_db
                     .or(self.track_gain_db)
                     .unwrap_or(self.fallback_gain_db);
-                let peak = self
-                    .album_peak_dbfs
-                    .or(self.track_peak_dbfs)
-                    .unwrap_or(0.0);
+                let peak = self.album_peak_dbfs.or(self.track_peak_dbfs).unwrap_or(0.0);
                 (gain, peak)
             }
             NormalizationMode::EbuR128Broadcast | NormalizationMode::EbuR128Streaming => {
@@ -266,10 +263,7 @@ impl LoudnessNormalizer {
                 let reference = self.mode.reference_lufs().unwrap_or(-18.0);
                 let adjustment = reference - REPLAYGAIN_REFERENCE_LUFS; // e.g., -23 - (-18) = -5
                 let base_gain = self.track_gain_db.unwrap_or(self.fallback_gain_db);
-                (
-                    base_gain + adjustment,
-                    self.track_peak_dbfs.unwrap_or(0.0),
-                )
+                (base_gain + adjustment, self.track_peak_dbfs.unwrap_or(0.0))
             }
         };
 
@@ -412,11 +406,7 @@ mod tests {
         }
 
         for &sample in &samples {
-            assert!(
-                sample.abs() <= 1.001,
-                "Sample {} exceeds threshold",
-                sample
-            );
+            assert!(sample.abs() <= 1.001, "Sample {} exceeds threshold", sample);
         }
     }
 

@@ -15,8 +15,10 @@ fn create_test_audio_file(path: &std::path::Path, filename: &str) -> std::path::
     let mut file = fs::File::create(&file_path).expect("Failed to create test file");
 
     // Write a fake FLAC header (fLaC magic bytes + minimal metadata)
-    file.write_all(b"fLaC\x00\x00\x00\x22").expect("Failed to write header");
-    file.write_all(&[0u8; 1000]).expect("Failed to write padding");
+    file.write_all(b"fLaC\x00\x00\x00\x22")
+        .expect("Failed to write header");
+    file.write_all(&[0u8; 1000])
+        .expect("Failed to write padding");
     file.flush().expect("Failed to flush");
 
     file_path
@@ -62,8 +64,7 @@ async fn test_watcher_with_config() {
         max_batch_size: 50,
     };
 
-    let watcher = LibraryWatcher::new(pool.clone(), "user1", "device1")
-        .with_config(config);
+    let watcher = LibraryWatcher::new(pool.clone(), "user1", "device1").with_config(config);
 
     assert_eq!(watcher.watcher_count().await, 0);
 }
@@ -88,7 +89,10 @@ async fn test_watch_source() {
     let watcher = LibraryWatcher::new(pool.clone(), "user1", "device1");
 
     // Start watching
-    watcher.watch_source(&source).await.expect("watch_source should succeed");
+    watcher
+        .watch_source(&source)
+        .await
+        .expect("watch_source should succeed");
 
     assert_eq!(watcher.watcher_count().await, 1);
     assert!(watcher.is_watching(source.id).await);
@@ -114,11 +118,17 @@ async fn test_unwatch_source() {
     let watcher = LibraryWatcher::new(pool.clone(), "user1", "device1");
 
     // Start watching
-    watcher.watch_source(&source).await.expect("watch_source should succeed");
+    watcher
+        .watch_source(&source)
+        .await
+        .expect("watch_source should succeed");
     assert_eq!(watcher.watcher_count().await, 1);
 
     // Stop watching
-    watcher.unwatch_source(source.id).await.expect("unwatch_source should succeed");
+    watcher
+        .unwatch_source(source.id)
+        .await
+        .expect("unwatch_source should succeed");
     assert_eq!(watcher.watcher_count().await, 0);
     assert!(!watcher.is_watching(source.id).await);
 }
@@ -153,12 +163,21 @@ async fn test_stop_watching() {
     let watcher = LibraryWatcher::new(pool.clone(), "user1", "device1");
 
     // Start watching both
-    watcher.watch_source(&source1).await.expect("watch_source 1 should succeed");
-    watcher.watch_source(&source2).await.expect("watch_source 2 should succeed");
+    watcher
+        .watch_source(&source1)
+        .await
+        .expect("watch_source 1 should succeed");
+    watcher
+        .watch_source(&source2)
+        .await
+        .expect("watch_source 2 should succeed");
     assert_eq!(watcher.watcher_count().await, 2);
 
     // Stop all
-    watcher.stop_watching().await.expect("stop_watching should succeed");
+    watcher
+        .stop_watching()
+        .await
+        .expect("stop_watching should succeed");
     assert_eq!(watcher.watcher_count().await, 0);
 }
 
@@ -192,7 +211,10 @@ async fn test_start_watching_all_enabled() {
     let watcher = LibraryWatcher::new(pool.clone(), "user1", "device1");
 
     // Start watching all enabled sources
-    watcher.start_watching().await.expect("start_watching should succeed");
+    watcher
+        .start_watching()
+        .await
+        .expect("start_watching should succeed");
     assert_eq!(watcher.watcher_count().await, 2);
 }
 
@@ -213,7 +235,10 @@ async fn test_watcher_ignores_nonexistent_path() {
     let watcher = LibraryWatcher::new(pool.clone(), "user1", "device1");
 
     // Should not fail, just skip the non-existent path
-    watcher.watch_source(&source).await.expect("watch_source should succeed (silently skip)");
+    watcher
+        .watch_source(&source)
+        .await
+        .expect("watch_source should succeed (silently skip)");
     assert_eq!(watcher.watcher_count().await, 0);
 }
 
@@ -279,11 +304,17 @@ async fn test_user_device_isolation() {
 
     // Watcher for user1/device1 should only see user1's source
     let watcher1 = LibraryWatcher::new(pool.clone(), "user1", "device1");
-    watcher1.start_watching().await.expect("start_watching should succeed");
+    watcher1
+        .start_watching()
+        .await
+        .expect("start_watching should succeed");
     assert_eq!(watcher1.watcher_count().await, 1);
 
     // Watcher for user2/device2 should only see user2's source
     let watcher2 = LibraryWatcher::new(pool.clone(), "user2", "device2");
-    watcher2.start_watching().await.expect("start_watching should succeed");
+    watcher2
+        .start_watching()
+        .await
+        .expect("start_watching should succeed");
     assert_eq!(watcher2.watcher_count().await, 1);
 }

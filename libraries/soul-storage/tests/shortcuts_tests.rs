@@ -142,7 +142,8 @@ async fn test_reset_shortcuts_to_defaults() {
         .find(|s| s.action == ShortcutAction::PlayPause)
         .unwrap();
 
-    assert_eq!(play_pause.accelerator, "MediaPlayPause");
+    // Default is CommandOrControl+Space (app-level shortcut, not media key)
+    assert_eq!(play_pause.accelerator, "CommandOrControl+Space");
 }
 
 #[tokio::test]
@@ -264,10 +265,11 @@ async fn test_all_shortcut_actions() {
 async fn test_default_shortcuts_structure() {
     let defaults = shortcuts::default_shortcuts();
 
-    // Verify all defaults use media keys
+    // Verify defaults use app-level keyboard shortcuts (CommandOrControl modifier)
+    // Note: We use app-level shortcuts, not OS media keys, for cross-platform consistency
     assert!(defaults
         .iter()
-        .any(|s| s.accelerator.starts_with("Media") || s.accelerator.starts_with("Volume")));
+        .any(|s| s.accelerator.starts_with("CommandOrControl")));
 
     // All should be enabled
     assert!(defaults.iter().all(|s| s.enabled));

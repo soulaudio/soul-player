@@ -107,6 +107,11 @@ impl ResamplerImpl for R8BrainResampler {
             )));
         }
 
+        // 1:1 passthrough optimization - avoid resampling overhead when rates match
+        if self.input_rate == self.output_rate {
+            return Ok(input.to_vec());
+        }
+
         // Deinterleave input
         let input_channels = self.deinterleave(input);
 
@@ -114,16 +119,27 @@ impl ResamplerImpl for R8BrainResampler {
         let mut output_channels = Vec::with_capacity(self.channels);
 
         for (ch_idx, channel_data) in input_channels.iter().enumerate() {
-            let output = self.resamplers[ch_idx]
-                .process(channel_data)
-                .map_err(|e| {
-                    ResamplingError::ProcessingFailed(format!(
-                        "r8brain processing failed on channel {}: {:?}",
-                        ch_idx, e
-                    ))
-                })?;
+            let output = self.resamplers[ch_idx].process(channel_data).map_err(|e| {
+                ResamplingError::ProcessingFailed(format!(
+                    "r8brain processing failed on channel {}: {:?}",
+                    ch_idx, e
+                ))
+            })?;
 
             output_channels.push(output);
+        }
+
+        // Verify all channels have the same output length to prevent panics in interleave
+        if output_channels.len() > 1 {
+            let first_len = output_channels[0].len();
+            for (ch_idx, ch) in output_channels.iter().enumerate().skip(1) {
+                if ch.len() != first_len {
+                    return Err(ResamplingError::ProcessingFailed(format!(
+                        "Channel output length mismatch: channel 0 has {} frames, channel {} has {} frames",
+                        first_len, ch_idx, ch.len()
+                    )));
+                }
+            }
         }
 
         // Interleave output
@@ -147,6 +163,50 @@ impl ResamplerImpl for R8BrainResampler {
             resampler.clear();
         }
     }
+
+    fn latency(&self) -> usize {
+        // r8brain's latency depends on the quality setting
+        // We use the first channel's resampler to query latency
+        // (all channels should have the same latency)
+        if self.resamplers.is_empty() {
+            0
+        } else {
+            // r8brain-rs provides latency via the latency() method
+            self.resamplers[0].latency()
+        }
+    }
+
+    fn flush(&mut self) -> Result<Vec<f32>> {
+        // r8brain doesn't use internal buffering in the same way as rubato,
+        // but we should flush any remaining samples
+        // For r8brain, calling process with None input flushes
+        let mut output_channels = Vec::with_capacity(self.channels);
+
+        for (ch_idx, resampler) in self.resamplers.iter_mut().enumerate() {
+            let output = resampler.flush().map_err(|e| {
+                ResamplingError::ProcessingFailed(format!(
+                    "r8brain flush failed on channel {}: {:?}",
+                    ch_idx, e
+                ))
+            })?;
+            output_channels.push(output);
+        }
+
+        // Verify all channels have the same output length
+        if output_channels.len() > 1 {
+            let first_len = output_channels[0].len();
+            for (ch_idx, ch) in output_channels.iter().enumerate().skip(1) {
+                if ch.len() != first_len {
+                    return Err(ResamplingError::ProcessingFailed(format!(
+                        "Channel output length mismatch during flush: channel 0 has {} frames, channel {} has {} frames",
+                        first_len, ch_idx, ch.len()
+                    )));
+                }
+            }
+        }
+
+        Ok(self.interleave(output_channels))
+    }
 }
 
 #[cfg(test)]
@@ -155,8 +215,7 @@ mod tests {
 
     #[test]
     fn test_r8brain_creation() {
-        let resampler =
-            R8BrainResampler::new(44100, 96000, 2, ResamplingQuality::High).unwrap();
+        let resampler = R8BrainResampler::new(44100, 96000, 2, ResamplingQuality::High).unwrap();
         assert_eq!(resampler.input_rate(), 44100);
         assert_eq!(resampler.output_rate(), 96000);
         assert_eq!(resampler.channels(), 2);
@@ -184,8 +243,7 @@ mod tests {
 
     #[test]
     fn test_deinterleave_interleave() {
-        let resampler =
-            R8BrainResampler::new(44100, 48000, 2, ResamplingQuality::Fast).unwrap();
+        let resampler = R8BrainResampler::new(44100, 48000, 2, ResamplingQuality::Fast).unwrap();
 
         // Test data: [L0, R0, L1, R1, ...]
         let interleaved = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];

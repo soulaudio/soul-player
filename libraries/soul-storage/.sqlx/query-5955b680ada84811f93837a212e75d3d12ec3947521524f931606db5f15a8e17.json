@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE source_sync_state\n        SET sync_status = 'error',\n            error_message = ?,\n            updated_at = datetime('now')\n        WHERE source_id = ? AND user_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "5955b680ada84811f93837a212e75d3d12ec3947521524f931606db5f15a8e17"
+}

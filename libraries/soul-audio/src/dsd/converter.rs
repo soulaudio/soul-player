@@ -190,11 +190,7 @@ impl DsdConverter {
                 let last_sample = self.interp_last[ch];
 
                 // Generate oversampling_ratio DSD bits per PCM sample
-                let dsd_bytes = self.convert_sample_to_dsd(
-                    last_sample,
-                    current_sample,
-                    ch,
-                );
+                let dsd_bytes = self.convert_sample_to_dsd(last_sample, current_sample, ch);
 
                 output.extend_from_slice(&dsd_bytes);
 

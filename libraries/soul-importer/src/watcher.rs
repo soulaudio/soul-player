@@ -87,11 +87,7 @@ struct WatcherHandle {
 
 impl LibraryWatcher {
     /// Create a new library watcher
-    pub fn new(
-        pool: SqlitePool,
-        user_id: impl Into<String>,
-        device_id: impl Into<String>,
-    ) -> Self {
+    pub fn new(pool: SqlitePool, user_id: impl Into<String>, device_id: impl Into<String>) -> Self {
         let (event_tx, event_rx) = mpsc::channel(1000);
 
         Self {
@@ -234,11 +230,7 @@ pub struct EventProcessor {
 
 impl EventProcessor {
     /// Create a new event processor
-    pub fn new(
-        pool: SqlitePool,
-        user_id: impl Into<String>,
-        device_id: impl Into<String>,
-    ) -> Self {
+    pub fn new(pool: SqlitePool, user_id: impl Into<String>, device_id: impl Into<String>) -> Self {
         Self {
             pool,
             user_id: user_id.into(),
@@ -278,11 +270,7 @@ impl EventProcessor {
                 return Ok(());
             }
 
-            info!(
-                "Flushing {} events for source {}",
-                events.len(),
-                source_id
-            );
+            info!("Flushing {} events for source {}", events.len(), source_id);
 
             // Get the source
             let source = soul_storage::library_sources::get_by_id(&self.pool, source_id).await?;
@@ -380,15 +368,9 @@ fn convert_event(event: &Event) -> Option<WatcherEvent> {
     let paths = &event.paths;
 
     match &event.kind {
-        EventKind::Create(_) => {
-            paths.first().map(|p| WatcherEvent::Created(p.clone()))
-        }
-        EventKind::Modify(_) => {
-            paths.first().map(|p| WatcherEvent::Modified(p.clone()))
-        }
-        EventKind::Remove(_) => {
-            paths.first().map(|p| WatcherEvent::Removed(p.clone()))
-        }
+        EventKind::Create(_) => paths.first().map(|p| WatcherEvent::Created(p.clone())),
+        EventKind::Modify(_) => paths.first().map(|p| WatcherEvent::Modified(p.clone())),
+        EventKind::Remove(_) => paths.first().map(|p| WatcherEvent::Removed(p.clone())),
         EventKind::Other => {
             // Handle rename events which sometimes come as Other
             if paths.len() == 2 {

@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { ThemePicker } from '@soul-player/shared/theme';
 import { useSettings } from '../contexts/SettingsContext';
 import { Kbd } from '@soul-player/shared';
-import { AudioSettingsPage } from '@soul-player/shared/settings';
+import { AudioSettingsPage, LibrarySettingsPage, SourcesSettingsPage } from '@soul-player/shared/settings';
 import { ShortcutsSettings } from '../components/ShortcutsSettings';
 import {
   Settings,
@@ -12,9 +12,11 @@ import {
   Keyboard,
   Info,
   ChevronDown,
+  FolderOpen,
+  Cloud,
 } from 'lucide-react';
 
-type SettingsTab = 'general' | 'audio' | 'shortcuts' | 'about';
+type SettingsTab = 'general' | 'library' | 'sources' | 'audio' | 'shortcuts' | 'about';
 
 interface NavItem {
   id: SettingsTab;
@@ -24,6 +26,8 @@ interface NavItem {
 
 const navigationItems: NavItem[] = [
   { id: 'general', labelKey: 'settings.general', icon: Settings },
+  { id: 'library', labelKey: 'settings.library', icon: FolderOpen },
+  { id: 'sources', labelKey: 'sources.title', icon: Cloud },
   { id: 'audio', labelKey: 'settings.audio', icon: Volume2 },
   { id: 'shortcuts', labelKey: 'settings.shortcuts', icon: Keyboard },
   { id: 'about', labelKey: 'settings.about', icon: Info },
@@ -218,6 +222,8 @@ export function SettingsPage() {
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-4 md:p-8">
           {activeTab === 'general' && <GeneralSettings />}
+          {activeTab === 'library' && <LibrarySettingsPage />}
+          {activeTab === 'sources' && <SourcesSettingsPage />}
           {activeTab === 'audio' && <AudioSettingsPage />}
           {activeTab === 'shortcuts' && <ShortcutsSettings />}
           {activeTab === 'about' && <AboutSettings />}

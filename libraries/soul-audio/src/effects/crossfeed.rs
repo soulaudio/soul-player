@@ -110,9 +110,12 @@ impl LowPassFilter {
     }
 
     fn set_cutoff(&mut self, cutoff_hz: f32, sample_rate: f32) {
-        // Single-pole IIR low-pass filter coefficient
-        let omega = 2.0 * PI * cutoff_hz / sample_rate;
-        self.coefficient = omega / (omega + 1.0);
+        // Single-pole IIR low-pass filter coefficient using correct bilinear transform
+        // The previous formula (omega / (omega + 1.0) where omega = 2*PI*fc/fs) was an
+        // approximation that introduced ~90% error at typical crossfeed frequencies.
+        // The correct formula uses tan() for the bilinear transform pre-warp.
+        let omega_d = (PI * cutoff_hz / sample_rate).tan();
+        self.coefficient = omega_d / (1.0 + omega_d);
     }
 
     #[inline]
@@ -244,25 +247,37 @@ impl AudioEffect for Crossfeed {
 
         self.update_parameters();
 
+        // Pre-calculate gain compensation based on crossfeed level.
+        // When we add crossfeed from the opposite channel, the total energy increases.
+        // For a mono signal: output = signal * (1 + level) when crossfeed adds constructively.
+        // To maintain unity gain, we compensate by dividing by (1 + level).
+        let compensation = 1.0 / (1.0 + self.level);
+
         // Process interleaved stereo buffer
         for chunk in buffer.chunks_exact_mut(2) {
             let left = chunk[0];
             let right = chunk[1];
 
             // Apply low-pass filtering to crossfeed signals
+            // The LPF simulates the frequency-dependent attenuation of sound
+            // traveling around the head (higher frequencies are more attenuated)
             let crossfeed_to_right = self.lpf_l_to_r.process(left);
             let crossfeed_to_left = self.lpf_r_to_l.process(right);
 
-            // Mix original with crossfeed
-            // The crossfeed signal is inverted (negative phase) to simulate
-            // the delay and cancellation effects of speaker listening
-            let new_left = left - self.level * crossfeed_to_left;
-            let new_right = right - self.level * crossfeed_to_right;
+            // Mix original with crossfeed using addition (not subtraction)
+            // This models how sound from speakers actually reaches both ears:
+            // - The signal from the left speaker reaches the right ear slightly delayed
+            //   and attenuated (modeled by the low-pass filter)
+            // - This ADDS to the signal at the right ear, it doesn't subtract
+            //
+            // Note: The previous implementation used subtraction which inverted the phase
+            // of the crossfeed component. While this created a different stereo effect,
+            // it didn't accurately model real speaker acoustics where the delayed signal
+            // adds constructively at low frequencies.
+            let new_left = left + self.level * crossfeed_to_left;
+            let new_right = right + self.level * crossfeed_to_right;
 
-            // Apply gain compensation to maintain overall level
-            // When mixing in crossfeed, we need to normalize
-            let compensation = 1.0 / (1.0 + self.level * 0.5);
-
+            // Apply gain compensation to maintain overall perceived loudness
             chunk[0] = new_left * compensation;
             chunk[1] = new_right * compensation;
         }
@@ -334,10 +349,14 @@ mod tests {
 
         crossfeed.process(&mut buffer, 44100);
 
-        // After crossfeed, right channel should have some signal
-        // (crossfeed from left)
+        // After crossfeed, right channel should have some positive signal
+        // (crossfeed from left is added, not subtracted, to model real speaker acoustics)
         let processed_right = buffer[7]; // Last right sample
-        assert!(processed_right.abs() > 0.01, "Crossfeed should add signal to silent channel");
+        assert!(
+            processed_right > 0.01,
+            "Crossfeed should add positive signal to silent channel, got {}",
+            processed_right
+        );
     }
 
     #[test]

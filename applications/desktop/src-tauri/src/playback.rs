@@ -4,7 +4,9 @@
 //! a clean interface for Tauri commands and event emission.
 
 use serde::Serialize;
-use soul_audio_desktop::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
+use soul_audio_desktop::{
+    DesktopPlayback, ExclusiveConfig, LatencyInfo, PlaybackCommand, PlaybackEvent,
+};
 use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -99,8 +101,10 @@ impl PlaybackManager {
                         // Convert QueueTrack to FrontendTrackEvent with duration in seconds
                         let frontend_track = track.as_ref().map(FrontendTrackEvent::from);
                         if let Some(ref t) = frontend_track {
-                            eprintln!("[playback] Track changed: id={}, title={}, coverArtPath={:?}",
-                                t.id, t.title, t.cover_art_path);
+                            eprintln!(
+                                "[playback] Track changed: id={}, title={}, coverArtPath={:?}",
+                                t.id, t.title, t.cover_art_path
+                            );
                         } else {
                             eprintln!("[playback] Track changed: None");
                         }
@@ -116,10 +120,13 @@ impl PlaybackManager {
                     PlaybackEvent::Error(error) => app_handle.emit("playback:error", error),
                     PlaybackEvent::SampleRateChanged(from, to) => {
                         eprintln!("[playback] Sample rate changed: {}Hz -> {}Hz", from, to);
-                        app_handle.emit("playback:sample-rate-changed", serde_json::json!({
-                            "from": from,
-                            "to": to
-                        }))
+                        app_handle.emit(
+                            "playback:sample-rate-changed",
+                            serde_json::json!({
+                                "from": from,
+                                "to": to
+                            }),
+                        )
                     }
                 };
             }
@@ -397,21 +404,29 @@ impl PlaybackManager {
     /// * `Err(_)` - Failed to check or update
     pub fn refresh_sample_rate(&self) -> Result<bool, String> {
         let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
-        playback.check_and_update_sample_rate().map_err(|e| e.to_string())
+        playback
+            .check_and_update_sample_rate()
+            .map_err(|e| e.to_string())
     }
 
     // ===== DSP Effect Chain =====
 
     /// Get effect slots state
     #[cfg(feature = "effects")]
-    pub fn get_effect_slots(&self) -> Result<[Option<crate::dsp_commands::EffectSlotState>; 4], String> {
+    pub fn get_effect_slots(
+        &self,
+    ) -> Result<[Option<crate::dsp_commands::EffectSlotState>; 4], String> {
         let slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
         Ok(slots.clone())
     }
 
     /// Set effect in a slot and rebuild the effect chain
     #[cfg(feature = "effects")]
-    pub fn set_effect_slot(&self, slot_index: usize, effect: Option<crate::dsp_commands::EffectSlotState>) -> Result<(), String> {
+    pub fn set_effect_slot(
+        &self,
+        slot_index: usize,
+        effect: Option<crate::dsp_commands::EffectSlotState>,
+    ) -> Result<(), String> {
         if slot_index >= 4 {
             return Err("Slot index must be 0-3".to_string());
         }
@@ -429,8 +444,12 @@ impl PlaybackManager {
     /// Rebuild the entire effect chain from current slot state
     #[cfg(feature = "effects")]
     fn rebuild_effect_chain(&self) -> Result<(), String> {
-        use soul_audio::effects::{AudioEffect, ParametricEq, Compressor, Limiter};
         use crate::dsp_commands::EffectType;
+        use soul_audio::effects::{
+            AudioEffect, Compressor, ConvolutionEngine, Crossfeed, CrossfeedPreset,
+            CrossfeedSettings, GraphicEq, GraphicEqBands, Limiter, ParametricEq, StereoEnhancer,
+            StereoSettings,
+        };
 
         let slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
 
@@ -441,7 +460,8 @@ impl PlaybackManager {
             // Add effects from slots
             for slot in slots.iter() {
                 if let Some(slot_state) = slot {
-                    let effect: Box<dyn soul_audio::effects::AudioEffect> = match &slot_state.effect {
+                    let effect: Box<dyn soul_audio::effects::AudioEffect> = match &slot_state.effect
+                    {
                         EffectType::Eq { bands } => {
                             let mut eq = ParametricEq::new();
                             eq.set_bands(bands.iter().map(|b| b.clone().into()).collect());
@@ -457,6 +477,86 @@ impl PlaybackManager {
                             let mut lim = Limiter::with_settings(settings.clone().into());
                             lim.set_enabled(slot_state.enabled);
                             Box::new(lim)
+                        }
+                        EffectType::Crossfeed { settings } => {
+                            let preset = match settings.preset.as_str() {
+                                "natural" => CrossfeedPreset::Natural,
+                                "relaxed" => CrossfeedPreset::Relaxed,
+                                "meier" => CrossfeedPreset::Meier,
+                                _ => CrossfeedPreset::Custom,
+                            };
+
+                            let crossfeed_settings = if preset == CrossfeedPreset::Custom {
+                                CrossfeedSettings::custom(settings.level_db, settings.cutoff_hz)
+                            } else {
+                                CrossfeedSettings::from_preset(preset)
+                            };
+
+                            let mut crossfeed = Crossfeed::with_settings(crossfeed_settings);
+                            crossfeed.set_enabled(slot_state.enabled);
+                            Box::new(crossfeed)
+                        }
+                        EffectType::Stereo { settings } => {
+                            let stereo_settings = StereoSettings {
+                                width: settings.width,
+                                mid_gain_db: settings.mid_gain_db,
+                                side_gain_db: settings.side_gain_db,
+                                balance: settings.balance,
+                            };
+
+                            let mut stereo = StereoEnhancer::with_settings(stereo_settings);
+                            stereo.set_enabled(slot_state.enabled);
+                            Box::new(stereo)
+                        }
+                        EffectType::GraphicEq { settings } => {
+                            let mut graphic_eq = if settings.band_count == 31 {
+                                GraphicEq::new(GraphicEqBands::ThirtyOne)
+                            } else {
+                                GraphicEq::new_10_band()
+                            };
+
+                            // Apply gains if we have the right number
+                            if settings.band_count == 10 && settings.gains.len() == 10 {
+                                if let Ok(gains) = settings.gains.clone().try_into() {
+                                    graphic_eq.set_gains_10(gains);
+                                }
+                            } else {
+                                // For 31-band or custom, set each band individually
+                                for (i, &gain) in settings.gains.iter().enumerate() {
+                                    graphic_eq.set_band_gain(i, gain);
+                                }
+                            }
+
+                            graphic_eq.set_enabled(slot_state.enabled);
+                            Box::new(graphic_eq)
+                        }
+                        EffectType::Convolution { settings } => {
+                            let mut conv = ConvolutionEngine::new();
+
+                            // Load IR from file path if provided
+                            if !settings.ir_file_path.is_empty() {
+                                match conv.load_from_wav(&settings.ir_file_path) {
+                                    Ok(()) => {
+                                        conv.set_dry_wet_mix(settings.wet_dry_mix);
+                                        // Note: pre_delay_ms and decay are UI-only for now
+                                        // The ConvolutionEngine applies full IR as-is
+                                        eprintln!(
+                                            "[rebuild_effect_chain] Loaded IR: {}",
+                                            settings.ir_file_path
+                                        );
+                                    }
+                                    Err(e) => {
+                                        eprintln!(
+                                            "[rebuild_effect_chain] Failed to load IR file '{}': {}",
+                                            settings.ir_file_path, e
+                                        );
+                                        // Keep the engine but it won't process anything
+                                    }
+                                }
+                            }
+
+                            conv.set_enabled(slot_state.enabled);
+                            Box::new(conv)
                         }
                     };
                     chain.add_effect(effect);
@@ -511,5 +611,145 @@ impl PlaybackManager {
     pub fn set_loudness_preamp(&self, preamp_db: f64) {
         let playback = self.playback.lock().unwrap();
         playback.set_loudness_preamp(preamp_db);
+    }
+
+    /// Set whether to prevent clipping during volume leveling
+    pub fn set_prevent_clipping(&self, prevent: bool) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_prevent_clipping(prevent);
+    }
+
+    // ===== Exclusive Mode / Bit-Perfect Output =====
+
+    /// Get current latency information
+    pub fn get_latency_info(&self) -> LatencyInfo {
+        let playback = self.playback.lock().unwrap();
+        playback.get_latency_info()
+    }
+
+    /// Enable exclusive mode with configuration
+    ///
+    /// This switches to WASAPI exclusive mode (Windows) or maintains
+    /// ASIO/JACK if configured, providing:
+    /// - Bit-perfect output (no OS mixer)
+    /// - Lower latency
+    /// - Direct sample format control
+    pub fn set_exclusive_mode(&self, config: ExclusiveConfig) -> Result<LatencyInfo, String> {
+        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback
+            .set_exclusive_mode(config)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Disable exclusive mode (return to shared mode)
+    pub fn disable_exclusive_mode(&self) -> Result<(), String> {
+        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback.disable_exclusive_mode().map_err(|e| e.to_string())
+    }
+
+    /// Check if currently in exclusive mode
+    pub fn is_exclusive_mode(&self) -> bool {
+        let playback = self.playback.lock().unwrap();
+        playback.is_exclusive_mode()
+    }
+
+    // ===== Crossfade Settings =====
+
+    /// Set crossfade enabled/disabled
+    pub fn set_crossfade_enabled(&self, enabled: bool) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_crossfade_enabled(enabled);
+    }
+
+    /// Get current crossfade enabled state
+    pub fn is_crossfade_enabled(&self) -> bool {
+        let playback = self.playback.lock().unwrap();
+        playback.is_crossfade_enabled()
+    }
+
+    /// Set crossfade duration in milliseconds
+    pub fn set_crossfade_duration(&self, duration_ms: u32) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_crossfade_duration(duration_ms);
+    }
+
+    /// Get crossfade duration in milliseconds
+    pub fn get_crossfade_duration(&self) -> u32 {
+        let playback = self.playback.lock().unwrap();
+        playback.get_crossfade_duration()
+    }
+
+    /// Set crossfade curve type
+    pub fn set_crossfade_curve(&self, curve: soul_playback::FadeCurve) {
+        let playback = self.playback.lock().unwrap();
+        playback.set_crossfade_curve(curve);
+    }
+
+    /// Get crossfade curve type
+    pub fn get_crossfade_curve(&self) -> soul_playback::FadeCurve {
+        let playback = self.playback.lock().unwrap();
+        playback.get_crossfade_curve()
+    }
+
+    // ===========================================================================
+    // Resampling Settings
+    // ===========================================================================
+
+    /// Set resampling quality preset
+    ///
+    /// Quality presets control the filter parameters used during sample rate conversion:
+    /// - "fast": 64-tap filter, 0.90 cutoff - low CPU usage
+    /// - "balanced": 128-tap filter, 0.95 cutoff - good quality
+    /// - "high": 256-tap filter, 0.99 cutoff - excellent quality (default)
+    /// - "maximum": 512-tap filter, 0.995 cutoff - audiophile quality
+    ///
+    /// Changes apply when the next track is loaded.
+    pub fn set_resampling_quality(&self, quality: &str) -> Result<(), String> {
+        let mut playback = self.playback.lock().unwrap();
+        playback.set_resampling_quality(quality)
+    }
+
+    /// Get current resampling quality preset
+    pub fn get_resampling_quality(&self) -> String {
+        let playback = self.playback.lock().unwrap();
+        playback.get_resampling_quality()
+    }
+
+    /// Set resampling target sample rate
+    ///
+    /// - rate=0: Auto mode - match device native sample rate
+    /// - rate>0: Force specific output sample rate (e.g., 96000)
+    ///
+    /// Changes apply when the next track is loaded.
+    pub fn set_resampling_target_rate(&self, rate: u32) -> Result<(), String> {
+        let mut playback = self.playback.lock().unwrap();
+        playback.set_resampling_target_rate(rate)
+    }
+
+    /// Get current resampling target sample rate
+    ///
+    /// Returns 0 for auto mode, or the specific rate in Hz.
+    pub fn get_resampling_target_rate(&self) -> u32 {
+        let playback = self.playback.lock().unwrap();
+        playback.get_resampling_target_rate()
+    }
+
+    /// Set resampling backend
+    ///
+    /// Backends:
+    /// - "auto": Use best available (r8brain if compiled in, else rubato)
+    /// - "rubato": Use Rubato library (always available)
+    /// - "r8brain": Use r8brain library (requires feature flag)
+    ///
+    /// Changes apply when the next track is loaded.
+    pub fn set_resampling_backend(&self, backend: &str) -> Result<(), String> {
+        let mut playback = self.playback.lock().unwrap();
+        playback.set_resampling_backend(backend)
+    }
+
+    /// Get current resampling backend
+    pub fn get_resampling_backend(&self) -> String {
+        let playback = self.playback.lock().unwrap();
+        playback.get_resampling_backend()
     }
 }

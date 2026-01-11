@@ -15,9 +15,11 @@ fn create_test_audio_file(path: &std::path::Path, filename: &str) -> std::path::
 
     // Write a fake FLAC header (fLaC magic bytes + minimal metadata)
     // This won't be a valid audio file but will have the right extension
-    file.write_all(b"fLaC\x00\x00\x00\x22").expect("Failed to write header");
+    file.write_all(b"fLaC\x00\x00\x00\x22")
+        .expect("Failed to write header");
     // Write some padding to make it a reasonable file size
-    file.write_all(&[0u8; 1000]).expect("Failed to write padding");
+    file.write_all(&[0u8; 1000])
+        .expect("Failed to write padding");
     file.flush().expect("Failed to flush");
 
     file_path
@@ -127,7 +129,10 @@ async fn test_scan_source_empty_directory() {
     .await;
 
     let scanner = LibraryScanner::new(pool.clone(), "user1", "device1");
-    let stats = scanner.scan_source(&source).await.expect("scan should succeed");
+    let stats = scanner
+        .scan_source(&source)
+        .await
+        .expect("scan should succeed");
 
     assert_eq!(stats.total_files, 0);
     assert_eq!(stats.processed, 0);
@@ -153,9 +158,11 @@ async fn test_scan_source_with_files() {
     )
     .await;
 
-    let scanner = LibraryScanner::new(pool.clone(), "user1", "device1")
-        .compute_hashes(true);
-    let stats = scanner.scan_source(&source).await.expect("scan should succeed");
+    let scanner = LibraryScanner::new(pool.clone(), "user1", "device1").compute_hashes(true);
+    let stats = scanner
+        .scan_source(&source)
+        .await
+        .expect("scan should succeed");
 
     // Should have found 3 files
     assert_eq!(stats.total_files, 3);
@@ -299,7 +306,10 @@ async fn test_scan_progress_tracking() {
     .await;
 
     let scanner = LibraryScanner::new(pool.clone(), "user1", "device1");
-    let _stats = scanner.scan_source(&source).await.expect("scan should succeed");
+    let _stats = scanner
+        .scan_source(&source)
+        .await
+        .expect("scan should succeed");
 
     // Check that scan progress was recorded
     let latest = soul_storage::scan_progress::get_latest(&pool, source.id)
@@ -331,9 +341,11 @@ async fn test_scanner_without_hashes() {
     .await;
 
     // Scanner without hash computation (faster but no relocation detection)
-    let scanner = LibraryScanner::new(pool.clone(), "user1", "device1")
-        .compute_hashes(false);
-    let stats = scanner.scan_source(&source).await.expect("scan should succeed");
+    let scanner = LibraryScanner::new(pool.clone(), "user1", "device1").compute_hashes(false);
+    let stats = scanner
+        .scan_source(&source)
+        .await
+        .expect("scan should succeed");
 
     assert_eq!(stats.total_files, 2);
 }
@@ -363,16 +375,24 @@ async fn test_progress_callback() {
     let callback_count = Arc::new(AtomicI64::new(0));
     let callback_count_clone = Arc::clone(&callback_count);
 
-    let scanner = LibraryScanner::new(pool.clone(), "user1", "device1")
-        .on_progress(Box::new(move |_stats| {
+    let scanner = LibraryScanner::new(pool.clone(), "user1", "device1").on_progress(Box::new(
+        move |_stats| {
             callback_count_clone.fetch_add(1, Ordering::SeqCst);
-        }));
+        },
+    ));
 
-    let _stats = scanner.scan_source(&source).await.expect("scan should succeed");
+    let _stats = scanner
+        .scan_source(&source)
+        .await
+        .expect("scan should succeed");
 
     // Callback should have been invoked at least once per file
     let count = callback_count.load(Ordering::SeqCst);
-    assert!(count >= 3, "callback should be invoked at least 3 times, got {}", count);
+    assert!(
+        count >= 3,
+        "callback should be invoked at least 3 times, got {}",
+        count
+    );
 }
 
 #[tokio::test]
@@ -397,7 +417,10 @@ async fn test_source_status_updates() {
     assert_eq!(source.scan_status, ScanStatus::Idle);
 
     let scanner = LibraryScanner::new(pool.clone(), "user1", "device1");
-    let _stats = scanner.scan_source(&source).await.expect("scan should succeed");
+    let _stats = scanner
+        .scan_source(&source)
+        .await
+        .expect("scan should succeed");
 
     // After scan, check last_scan_at is updated
     let updated_source = soul_storage::library_sources::get_by_id(&pool, source.id)
@@ -405,5 +428,8 @@ async fn test_source_status_updates() {
         .expect("get_by_id should succeed")
         .expect("source should exist");
 
-    assert!(updated_source.last_scan_at.is_some(), "last_scan_at should be set");
+    assert!(
+        updated_source.last_scan_at.is_some(),
+        "last_scan_at should be set"
+    );
 }

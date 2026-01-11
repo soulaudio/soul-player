@@ -6,11 +6,13 @@ mod artwork;
 mod audio_settings;
 mod deep_link;
 mod dsp_commands;
+mod fingerprint;
 mod import;
 mod library_settings;
 mod loudness;
 mod playback;
 mod shortcuts;
+mod sources;
 mod splash;
 mod sync;
 // mod tray; // Temporarily disabled - Tauri 2.0 API change
@@ -88,6 +90,44 @@ impl From<soul_core::types::Album> for FrontendAlbum {
             cover_art_path: album.cover_art_path,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FrontendArtist {
+    id: i64,
+    name: String,
+    sort_name: Option<String>,
+    track_count: i32,
+    album_count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FrontendGenre {
+    id: i64,
+    name: String,
+    track_count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FrontendPlaylist {
+    id: String,
+    name: String,
+    description: Option<String>,
+    owner_id: String,
+    is_public: bool,
+    is_favorite: bool,
+    track_count: i32,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FrontendPlaylistTrack {
+    track_id: String,
+    position: i32,
+    title: Option<String>,
+    artist_name: Option<String>,
+    duration_seconds: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,7 +238,10 @@ async fn play_queue(
         .map(|track_data| track_data.to_queue_track())
         .collect();
 
-    eprintln!("[play_queue] Loading {} tracks as playlist (source queue)", tracks.len());
+    eprintln!(
+        "[play_queue] Loading {} tracks as playlist (source queue)",
+        tracks.len()
+    );
 
     // Stop current playback
     eprintln!("[play_queue] Calling stop()...");
@@ -208,7 +251,10 @@ async fn play_queue(
 
     // Load playlist as source queue (Spotify-style context)
     // This replaces the source queue tier, keeping explicit queue separate
-    eprintln!("[play_queue] Calling load_playlist() with {} tracks...", tracks.len());
+    eprintln!(
+        "[play_queue] Calling load_playlist() with {} tracks...",
+        tracks.len()
+    );
     let load_result = playback.load_playlist(tracks);
     eprintln!("[play_queue] load_playlist() returned: {:?}", load_result);
     load_result?;
@@ -339,9 +385,7 @@ async fn get_playback_capabilities(
 
 /// Get current playback state (for syncing UI with audio layer)
 #[tauri::command]
-async fn get_playback_state(
-    playback: State<'_, PlaybackManager>,
-) -> Result<String, String> {
+async fn get_playback_state(playback: State<'_, PlaybackManager>) -> Result<String, String> {
     let state = playback.get_state();
     // Return state as string matching what's emitted in events
     let state_str = match state {
@@ -545,37 +589,374 @@ async fn get_all_albums(state: State<'_, AppState>) -> Result<Vec<FrontendAlbum>
     Ok(albums.into_iter().map(FrontendAlbum::from).collect())
 }
 
+// ============================================================================
+// Artist commands
+// ============================================================================
+
 #[tauri::command]
-async fn get_all_playlists() -> Result<Vec<Playlist>, String> {
-    // TODO: Integrate with soul-storage
-    Ok(vec![Playlist {
-        id: 1,
-        name: "My Playlist".to_string(),
-        description: Some("A sample playlist".to_string()),
-        owner_id: 1,
-        created_at: "2024-01-01T00:00:00Z".to_string(),
-        updated_at: "2024-01-01T00:00:00Z".to_string(),
-    }])
+async fn get_all_artists(state: State<'_, AppState>) -> Result<Vec<FrontendArtist>, String> {
+    let artists = soul_storage::artists::get_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut frontend_artists = Vec::new();
+    for artist in artists {
+        // Count tracks for this artist
+        let tracks = soul_storage::tracks::get_by_artist(&state.pool, artist.id)
+            .await
+            .map_err(|e| e.to_string())?;
+        let track_count = tracks.len() as i32;
+
+        // Count albums for this artist
+        let albums = soul_storage::albums::get_by_artist(&state.pool, artist.id)
+            .await
+            .map_err(|e| e.to_string())?;
+        let album_count = albums.len() as i32;
+
+        frontend_artists.push(FrontendArtist {
+            id: artist.id,
+            name: artist.name,
+            sort_name: artist.sort_name,
+            track_count,
+            album_count,
+        });
+    }
+
+    Ok(frontend_artists)
 }
 
 #[tauri::command]
-async fn create_playlist(name: String, description: Option<String>) -> Result<Playlist, String> {
-    // TODO: Integrate with soul-storage
-    Ok(Playlist {
-        id: 1,
+async fn get_artist_by_id(
+    id: i64,
+    state: State<'_, AppState>,
+) -> Result<Option<FrontendArtist>, String> {
+    let artist = soul_storage::artists::get_by_id(&state.pool, id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match artist {
+        Some(artist) => {
+            let tracks = soul_storage::tracks::get_by_artist(&state.pool, artist.id)
+                .await
+                .map_err(|e| e.to_string())?;
+            let albums = soul_storage::albums::get_by_artist(&state.pool, artist.id)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            Ok(Some(FrontendArtist {
+                id: artist.id,
+                name: artist.name,
+                sort_name: artist.sort_name,
+                track_count: tracks.len() as i32,
+                album_count: albums.len() as i32,
+            }))
+        }
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+async fn get_artist_albums(
+    artist_id: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<FrontendAlbum>, String> {
+    let albums = soul_storage::albums::get_by_artist(&state.pool, artist_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(albums.into_iter().map(FrontendAlbum::from).collect())
+}
+
+#[tauri::command]
+async fn get_artist_tracks(
+    artist_id: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<FrontendTrack>, String> {
+    let tracks = soul_storage::tracks::get_by_artist(&state.pool, artist_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(tracks.into_iter().map(FrontendTrack::from).collect())
+}
+
+// ============================================================================
+// Album commands
+// ============================================================================
+
+#[tauri::command]
+async fn get_album_by_id(
+    id: i64,
+    state: State<'_, AppState>,
+) -> Result<Option<FrontendAlbum>, String> {
+    let album = soul_storage::albums::get_by_id(&state.pool, id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(album.map(FrontendAlbum::from))
+}
+
+#[tauri::command]
+async fn get_album_tracks(
+    album_id: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<FrontendTrack>, String> {
+    let tracks = soul_storage::tracks::get_by_album(&state.pool, album_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(tracks.into_iter().map(FrontendTrack::from).collect())
+}
+
+// ============================================================================
+// Genre commands
+// ============================================================================
+
+#[tauri::command]
+async fn get_all_genres(state: State<'_, AppState>) -> Result<Vec<FrontendGenre>, String> {
+    let genres = soul_storage::genres::get_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut frontend_genres = Vec::new();
+    for genre in genres {
+        // Count tracks for this genre
+        let tracks = soul_storage::tracks::get_by_genre(&state.pool, genre.id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        frontend_genres.push(FrontendGenre {
+            id: genre.id,
+            name: genre.name,
+            track_count: tracks.len() as i32,
+        });
+    }
+
+    Ok(frontend_genres)
+}
+
+#[tauri::command]
+async fn get_genre_by_id(
+    id: i64,
+    state: State<'_, AppState>,
+) -> Result<Option<FrontendGenre>, String> {
+    let genre = soul_storage::genres::get_by_id(&state.pool, id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match genre {
+        Some(genre) => {
+            let tracks = soul_storage::tracks::get_by_genre(&state.pool, genre.id)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            Ok(Some(FrontendGenre {
+                id: genre.id,
+                name: genre.name,
+                track_count: tracks.len() as i32,
+            }))
+        }
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+async fn get_genre_tracks(
+    genre_id: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<FrontendTrack>, String> {
+    let tracks = soul_storage::tracks::get_by_genre(&state.pool, genre_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(tracks.into_iter().map(FrontendTrack::from).collect())
+}
+
+// ============================================================================
+// Playlist commands
+// ============================================================================
+
+#[tauri::command]
+async fn get_all_playlists(state: State<'_, AppState>) -> Result<Vec<FrontendPlaylist>, String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let playlists = soul_storage::playlists::get_user_playlists(&state.pool, user_id.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut frontend_playlists = Vec::new();
+    for playlist in playlists {
+        // Get track count
+        let with_tracks = soul_storage::playlists::get_with_tracks(
+            &state.pool,
+            playlist.id.clone(),
+            user_id.clone(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        let track_count = with_tracks
+            .and_then(|p| p.tracks.map(|t| t.len()))
+            .unwrap_or(0) as i32;
+
+        frontend_playlists.push(FrontendPlaylist {
+            id: playlist.id.as_str().to_string(),
+            name: playlist.name,
+            description: playlist.description,
+            owner_id: playlist.owner_id.as_str().to_string(),
+            is_public: playlist.is_public,
+            is_favorite: playlist.is_favorite,
+            track_count,
+            created_at: playlist.created_at,
+            updated_at: playlist.updated_at,
+        });
+    }
+
+    Ok(frontend_playlists)
+}
+
+#[tauri::command]
+async fn get_playlist_by_id(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<FrontendPlaylist>, String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let playlist_id = soul_core::types::PlaylistId::new(id);
+
+    let playlist = soul_storage::playlists::get_with_tracks(&state.pool, playlist_id, user_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(playlist.map(|p| {
+        let track_count = p.tracks.as_ref().map(|t| t.len()).unwrap_or(0) as i32;
+        FrontendPlaylist {
+            id: p.id.as_str().to_string(),
+            name: p.name,
+            description: p.description,
+            owner_id: p.owner_id.as_str().to_string(),
+            is_public: p.is_public,
+            is_favorite: p.is_favorite,
+            track_count,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+        }
+    }))
+}
+
+#[tauri::command]
+async fn get_playlist_tracks(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<FrontendPlaylistTrack>, String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let playlist_id = soul_core::types::PlaylistId::new(id);
+
+    let playlist = soul_storage::playlists::get_with_tracks(&state.pool, playlist_id, user_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match playlist {
+        Some(p) => {
+            let tracks = p.tracks.unwrap_or_default();
+            Ok(tracks
+                .into_iter()
+                .map(|t| FrontendPlaylistTrack {
+                    track_id: t.track_id.as_str().to_string(),
+                    position: t.position,
+                    title: t.title,
+                    artist_name: t.artist_name,
+                    duration_seconds: t.duration_seconds,
+                })
+                .collect())
+        }
+        None => Ok(vec![]),
+    }
+}
+
+#[tauri::command]
+async fn create_playlist(
+    name: String,
+    description: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<FrontendPlaylist, String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+
+    let create_playlist = soul_core::types::CreatePlaylist {
         name,
         description,
-        owner_id: 1,
-        created_at: "2024-01-01T00:00:00Z".to_string(),
-        updated_at: "2024-01-01T00:00:00Z".to_string(),
+        owner_id: user_id.clone(),
+        is_favorite: false,
+    };
+
+    let playlist = soul_storage::playlists::create(&state.pool, create_playlist)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(FrontendPlaylist {
+        id: playlist.id.as_str().to_string(),
+        name: playlist.name,
+        description: playlist.description,
+        owner_id: playlist.owner_id.as_str().to_string(),
+        is_public: playlist.is_public,
+        is_favorite: playlist.is_favorite,
+        track_count: 0,
+        created_at: playlist.created_at,
+        updated_at: playlist.updated_at,
     })
 }
 
 #[tauri::command]
-async fn add_track_to_playlist(playlist_id: i64, track_id: i64) -> Result<(), String> {
-    // TODO: Integrate with soul-storage
-    println!("Adding track {} to playlist {}", track_id, playlist_id);
-    Ok(())
+async fn delete_playlist(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let playlist_id = soul_core::types::PlaylistId::new(id);
+
+    soul_storage::playlists::delete(&state.pool, playlist_id, user_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn add_track_to_playlist(
+    playlist_id: String,
+    track_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let playlist_id = soul_core::types::PlaylistId::new(playlist_id);
+    let track_id = soul_core::types::TrackId::new(track_id);
+
+    soul_storage::playlists::add_track(&state.pool, playlist_id, track_id, user_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn remove_track_from_playlist(
+    playlist_id: String,
+    track_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let playlist_id = soul_core::types::PlaylistId::new(playlist_id);
+    let track_id = soul_core::types::TrackId::new(track_id);
+
+    soul_storage::playlists::remove_track(&state.pool, playlist_id, track_id, user_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn reorder_playlist_track(
+    playlist_id: String,
+    track_id: String,
+    new_position: i32,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let playlist_id = soul_core::types::PlaylistId::new(playlist_id);
+    let track_id = soul_core::types::TrackId::new(track_id);
+
+    soul_storage::playlists::reorder_tracks(
+        &state.pool,
+        playlist_id,
+        track_id,
+        new_position,
+        user_id,
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -675,10 +1056,15 @@ async fn get_track_artwork(
 ) -> Result<Option<String>, String> {
     let track_id_parsed = soul_core::types::TrackId::new(track_id);
 
-    match state.artwork_manager.get_track_artwork_with_mime(track_id_parsed).await {
+    match state
+        .artwork_manager
+        .get_track_artwork_with_mime(track_id_parsed)
+        .await
+    {
         Ok(Some((data, mime_type))) => {
             // Convert to base64 data URL
-            let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
             let data_url = format!("data:{};base64,{}", mime_type, base64_data);
             Ok(Some(data_url))
         }
@@ -696,10 +1082,15 @@ async fn get_album_artwork(
     album_id: i64,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, String> {
-    match state.artwork_manager.get_album_artwork_with_mime(album_id).await {
+    match state
+        .artwork_manager
+        .get_album_artwork_with_mime(album_id)
+        .await
+    {
         Ok(Some((data, mime_type))) => {
             // Convert to base64 data URL
-            let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
             let data_url = format!("data:{};base64,{}", mime_type, base64_data);
             Ok(Some(data_url))
         }
@@ -717,7 +1108,10 @@ async fn test_artwork_extraction(
     track_id: i64,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
-    eprintln!("[test_artwork_extraction] Testing artwork for track {}", track_id);
+    eprintln!(
+        "[test_artwork_extraction] Testing artwork for track {}",
+        track_id
+    );
 
     let track_id_str = soul_core::types::TrackId::new(track_id.to_string());
 
@@ -731,12 +1125,17 @@ async fn test_artwork_extraction(
     };
 
     eprintln!("[test_artwork_extraction] Track title: {}", track.title);
-    eprintln!("[test_artwork_extraction] Availability count: {}", track.availability.len());
+    eprintln!(
+        "[test_artwork_extraction] Availability count: {}",
+        track.availability.len()
+    );
 
     // Find file path
     let file_path = track.availability.iter().find_map(|avail| {
-        eprintln!("[test_artwork_extraction] Checking availability: status={:?}, path={:?}",
-            avail.status, avail.local_file_path);
+        eprintln!(
+            "[test_artwork_extraction] Checking availability: status={:?}, path={:?}",
+            avail.status, avail.local_file_path
+        );
         if matches!(
             avail.status,
             soul_core::types::AvailabilityStatus::LocalFile
@@ -763,11 +1162,18 @@ async fn test_artwork_extraction(
     eprintln!("[test_artwork_extraction] File exists, extracting artwork...");
 
     // Try to extract artwork
-    match state.artwork_manager.get_track_artwork_with_mime(track_id_str).await {
+    match state
+        .artwork_manager
+        .get_track_artwork_with_mime(track_id_str)
+        .await
+    {
         Ok(Some((data, mime_type))) => {
             let msg = format!(
                 "SUCCESS: Found artwork for '{}'\nFile: {}\nSize: {} bytes\nType: {}",
-                track.title, file_path, data.len(), mime_type
+                track.title,
+                file_path,
+                data.len(),
+                mime_type
             );
             eprintln!("[test_artwork_extraction] {}", msg);
             Ok(msg)
@@ -794,6 +1200,32 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Called when a second instance is launched
+            // Focus the main window
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+                let _ = window.unminimize();
+            }
+
+            // Handle file arguments passed to the second instance
+            let files: Vec<PathBuf> = args
+                .iter()
+                .skip(1) // Skip the executable path
+                .filter(|arg| !arg.starts_with('-'))
+                .filter_map(|arg| {
+                    if let Ok(url) = url::Url::parse(arg) {
+                        url.to_file_path().ok()
+                    } else {
+                        Some(PathBuf::from(arg))
+                    }
+                })
+                .collect();
+
+            if !files.is_empty() {
+                handle_file_associations(app.clone(), files);
+            }
+        }))
         .register_asynchronous_uri_scheme_protocol("artwork", |app, request, responder| {
             let uri = request.uri().to_string();
             eprintln!("[artwork protocol] Request: {}", uri);
@@ -902,9 +1334,38 @@ fn main() {
                 // Restore saved audio device (if any)
                 {
                     let app_state_for_init = app_handle.state::<AppState>();
-                    if let Err(e) = audio_settings::initialize_audio_device(&playback_manager, &app_state_for_init).await {
+                    if let Err(e) = audio_settings::initialize_audio_device(
+                        &playback_manager,
+                        &app_state_for_init,
+                    )
+                    .await
+                    {
                         eprintln!("[main] Warning: Failed to restore audio device: {}", e);
                     }
+                }
+
+                // Restore saved volume leveling mode (if any)
+                {
+                    let app_state_for_init = app_handle.state::<AppState>();
+                    if let Err(e) = loudness::initialize_volume_leveling_mode(
+                        &playback_manager,
+                        &app_state_for_init,
+                    )
+                    .await
+                    {
+                        eprintln!("[main] Warning: Failed to restore volume leveling mode: {}", e);
+                    }
+                }
+
+                // Restore saved DSP effect chain
+                {
+                    let app_state_for_init = app_handle.state::<AppState>();
+                    dsp_commands::restore_dsp_chain_from_database(
+                        &playback_manager,
+                        &app_state_for_init.pool,
+                        &app_state_for_init.user_id,
+                    )
+                    .await;
                 }
 
                 app_handle.manage(playback_manager);
@@ -912,9 +1373,8 @@ fn main() {
                 emit_init_progress(&app_handle, "Initializing loudness analyzer...", 55).await;
 
                 // Initialize loudness analysis worker
-                let analysis_worker = std::sync::Arc::new(tokio::sync::Mutex::new(
-                    loudness::AnalysisWorker::new(),
-                ));
+                let analysis_worker =
+                    std::sync::Arc::new(tokio::sync::Mutex::new(loudness::AnalysisWorker::new()));
                 app_handle.manage(analysis_worker);
 
                 emit_init_progress(&app_handle, "Configuring import system...", 60).await;
@@ -952,6 +1412,12 @@ fn main() {
                         });
                     }
                 }
+
+                emit_init_progress(&app_handle, "Initializing fingerprint worker...", 68).await;
+
+                // Initialize fingerprint worker
+                let fingerprint_worker = std::sync::Arc::new(fingerprint::FingerprintWorker::new());
+                app_handle.manage(fingerprint_worker);
 
                 emit_init_progress(&app_handle, "Setting up system tray...", 70).await;
 
@@ -1040,6 +1506,31 @@ fn main() {
             audio_settings::set_audio_device,
             audio_settings::refresh_sample_rate,
             audio_settings::is_r8brain_available,
+            // Exclusive mode / Latency
+            audio_settings::get_latency_info,
+            audio_settings::set_exclusive_mode,
+            audio_settings::disable_exclusive_mode,
+            audio_settings::is_exclusive_mode,
+            audio_settings::get_available_buffer_sizes,
+            audio_settings::get_exclusive_preset,
+            // Crossfade settings
+            audio_settings::set_crossfade_enabled,
+            audio_settings::is_crossfade_enabled,
+            audio_settings::set_crossfade_duration,
+            audio_settings::get_crossfade_duration,
+            audio_settings::set_crossfade_curve,
+            audio_settings::get_crossfade_curve,
+            audio_settings::set_crossfade_settings,
+            audio_settings::get_crossfade_settings,
+            // Resampling settings
+            audio_settings::set_resampling_quality,
+            audio_settings::get_resampling_quality,
+            audio_settings::set_resampling_target_rate,
+            audio_settings::get_resampling_target_rate,
+            audio_settings::set_resampling_backend,
+            audio_settings::get_resampling_backend,
+            audio_settings::set_resampling_settings,
+            audio_settings::get_resampling_settings,
             // DSP effects chain
             dsp_commands::get_available_effects,
             dsp_commands::get_dsp_chain,
@@ -1063,10 +1554,28 @@ fn main() {
             get_track_by_id,
             delete_track,
             check_database_health,
+            // Albums
             get_all_albums,
+            get_album_by_id,
+            get_album_tracks,
+            // Artists
+            get_all_artists,
+            get_artist_by_id,
+            get_artist_albums,
+            get_artist_tracks,
+            // Genres
+            get_all_genres,
+            get_genre_by_id,
+            get_genre_tracks,
+            // Playlists
             get_all_playlists,
+            get_playlist_by_id,
+            get_playlist_tracks,
             create_playlist,
+            delete_playlist,
             add_track_to_playlist,
+            remove_track_from_playlist,
+            reorder_playlist_track,
             scan_library,
             // Library settings
             library_settings::get_library_sources,
@@ -1082,6 +1591,11 @@ fn main() {
             library_settings::get_path_template_presets,
             library_settings::preview_path_template,
             library_settings::pick_folder,
+            library_settings::check_onboarding_needed,
+            library_settings::complete_onboarding,
+            library_settings::get_default_library_path,
+            library_settings::get_running_scans,
+            library_settings::get_latest_scan,
             // Import management
             import::import_files,
             import::import_directory,
@@ -1094,11 +1608,20 @@ fn main() {
             import::open_file_dialog,
             import::open_folder_dialog,
             import::is_directory,
+            import::scan_directory_for_audio,
             // Sync/doctor
             sync::start_sync,
             sync::get_sync_status,
             sync::cancel_sync,
             sync::get_sync_errors,
+            // Fingerprinting
+            fingerprint::get_fingerprint_status,
+            fingerprint::start_fingerprinting,
+            fingerprint::stop_fingerprinting,
+            fingerprint::retry_failed_fingerprints,
+            fingerprint::clear_failed_fingerprints,
+            fingerprint::compare_fingerprints,
+            fingerprint::find_duplicates,
             // Settings
             get_user_settings,
             set_user_setting,
@@ -1128,7 +1651,21 @@ fn main() {
             loudness::stop_analysis_worker,
             loudness::get_analysis_worker_status,
             loudness::set_volume_leveling_mode,
+            loudness::set_volume_leveling_preamp,
+            loudness::set_volume_leveling_prevent_clipping,
             loudness::clear_completed_analysis,
+            // Server sources
+            sources::get_sources,
+            sources::get_server_sources,
+            sources::add_server_source,
+            sources::remove_source,
+            sources::test_server_connection,
+            sources::authenticate_source,
+            sources::logout_source,
+            sources::get_source_auth_status,
+            sources::get_active_source,
+            sources::sync_from_server,
+            sources::upload_to_server,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

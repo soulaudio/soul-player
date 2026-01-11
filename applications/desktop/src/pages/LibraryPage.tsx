@@ -1,15 +1,42 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { TrackList, type Track, type QueueTrack } from '@soul-player/shared';
+import { TrackList, type Track, type QueueTrack, type SourceType } from '@soul-player/shared';
 import { useSyncStore } from '@soul-player/shared/stores/sync';
 import { AlbumGrid, Album } from '../components/AlbumGrid';
 import { TrackMenu } from '../components/TrackMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Music, Disc3, ListMusic, Users, Guitar } from 'lucide-react';
+import { Music, Disc3, ListMusic, Users, Guitar, Filter, X, Plus, Play } from 'lucide-react';
 
 type TabId = 'tracks' | 'albums' | 'playlists' | 'artists' | 'genres';
+
+interface Artist {
+  id: number;
+  name: string;
+  sort_name?: string;
+  track_count: number;
+  album_count: number;
+}
+
+interface Genre {
+  id: number;
+  name: string;
+  track_count: number;
+}
+
+interface Playlist {
+  id: string;
+  name: string;
+  description?: string;
+  owner_id: number;
+  is_public: boolean;
+  is_favorite: boolean;
+  track_count: number;
+  created_at: string;
+  updated_at: string;
+}
 
 interface Tab {
   id: TabId;
@@ -39,15 +66,36 @@ interface DesktopTrack extends Track {
   duration_seconds?: number;
   file_path?: string;
   year?: number;
+  // Audio format info
+  file_format?: string;
+  bit_rate?: number;
+  sample_rate?: number;
+  channels?: number;
+  // Source info
+  source_id?: number;
+  source_name?: string;
+  source_type?: SourceType;
+  source_online?: boolean;
+}
+
+// Filter state interface
+interface LibraryFilters {
+  sourceType: SourceType | 'all';
+  format: string | 'all';
 }
 
 export function LibraryPage() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as TabId | null;
   const [activeTab, setActiveTab] = useState<TabId>(tabParam || 'tracks');
 
+  const navigate = useNavigate();
   const [tracks, setTracks] = useState<DesktopTrack[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [healthWarning, setHealthWarning] = useState<string | null>(null);
@@ -55,6 +103,54 @@ export function LibraryPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const { setSyncRequired } = useSyncStore();
+
+  // Filters state
+  const [filters, setFilters] = useState<LibraryFilters>({
+    sourceType: 'all',
+    format: 'all',
+  });
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Compute unique formats and sources for filter dropdowns
+  const availableFormats = useMemo(() => {
+    const formats = new Set<string>();
+    tracks.forEach(t => {
+      if (t.file_format) formats.add(t.file_format.toUpperCase());
+    });
+    return Array.from(formats).sort();
+  }, [tracks]);
+
+  const availableSources = useMemo(() => {
+    const sources = new Map<string, { type: SourceType; name: string }>();
+    tracks.forEach(t => {
+      if (t.source_type && t.source_name) {
+        sources.set(t.source_name, { type: t.source_type, name: t.source_name });
+      }
+    });
+    return Array.from(sources.values());
+  }, [tracks]);
+
+  // Filter tracks based on current filters
+  const filteredTracks = useMemo(() => {
+    return tracks.filter(track => {
+      // Filter by source type
+      if (filters.sourceType !== 'all' && track.source_type !== filters.sourceType) {
+        return false;
+      }
+      // Filter by format
+      if (filters.format !== 'all' && track.file_format?.toUpperCase() !== filters.format) {
+        return false;
+      }
+      return true;
+    });
+  }, [tracks, filters]);
+
+  // Check if any filters are active
+  const hasActiveFilters = filters.sourceType !== 'all' || filters.format !== 'all';
+
+  const clearFilters = () => {
+    setFilters({ sourceType: 'all', format: 'all' });
+  };
 
   // Update active tab when URL param changes
   useEffect(() => {
@@ -92,14 +188,20 @@ export function LibraryPage() {
     setError(null);
     setHealthWarning(null);
     try {
-      const [tracksData, albumsData, health] = await Promise.all([
+      const [tracksData, albumsData, artistsData, genresData, playlistsData, health] = await Promise.all([
         invoke<DesktopTrack[]>('get_all_tracks'),
         invoke<Album[]>('get_all_albums'),
+        invoke<Artist[]>('get_all_artists'),
+        invoke<Genre[]>('get_all_genres'),
+        invoke<Playlist[]>('get_all_playlists'),
         invoke<DatabaseHealth>('check_database_health'),
       ]);
 
       setTracks(tracksData);
       setAlbums(albumsData);
+      setArtists(artistsData);
+      setGenres(genresData);
+      setPlaylists(playlistsData);
 
       // Check for issues
       console.log('[LibraryPage] Database health:', health);
@@ -134,11 +236,11 @@ export function LibraryPage() {
   const buildQueue = useCallback((_allTracks: Track[], clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
     console.log('[LibraryPage] buildQueue called:', {
       clickedTrack: clickedTrack.title,
-      totalTracks: tracks.length,
+      totalTracks: filteredTracks.length,
     });
 
-    // Get desktop tracks to access file_path
-    const desktopTracks = tracks;
+    // Get desktop tracks to access file_path (use filtered tracks)
+    const desktopTracks = filteredTracks;
 
     // Filter out tracks without file paths
     const validTracks = desktopTracks.filter((t) => t.file_path);
@@ -167,7 +269,7 @@ export function LibraryPage() {
 
     console.log('[LibraryPage] Built queue with', queue.length, 'tracks');
     return queue;
-  }, [tracks]);
+  }, [filteredTracks]);
 
   const handleTrackPlay = (track: Track) => {
     // Playback state will be updated via backend events
@@ -207,12 +309,6 @@ export function LibraryPage() {
       setIsDeleting(false);
     }
   };
-
-  // Get unique artists from tracks
-  const artists = [...new Set(tracks.map(t => t.artist_name).filter(Boolean))] as string[];
-
-  // Get unique genres from tracks (assuming tracks have genre field)
-  const genres = [...new Set(tracks.map(t => (t as any).genre).filter(Boolean))] as string[];
 
   if (loading) {
     return (
@@ -266,13 +362,115 @@ export function LibraryPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Library</h1>
+          <h1 className="text-3xl font-bold">{t('nav.library')}</h1>
           <p className="text-muted-foreground mt-1">
-            {tracks.length} track{tracks.length !== 1 ? 's' : ''} • {albums.length} album
-            {albums.length !== 1 ? 's' : ''} • {artists.length} artist{artists.length !== 1 ? 's' : ''}
+            {hasActiveFilters ? (
+              <>
+                {filteredTracks.length} of {tracks.length} track{tracks.length !== 1 ? 's' : ''}
+              </>
+            ) : (
+              <>
+                {tracks.length} track{tracks.length !== 1 ? 's' : ''} • {albums.length} album
+                {albums.length !== 1 ? 's' : ''} • {artists.length} artist{artists.length !== 1 ? 's' : ''}
+              </>
+            )}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+              showFilters || hasActiveFilters
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted hover:bg-muted/80'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            <span className="text-sm">{t('common.filters', 'Filters')}</span>
+            {hasActiveFilters && (
+              <span className="ml-1 px-1.5 py-0.5 bg-primary-foreground/20 rounded text-xs">
+                {(filters.sourceType !== 'all' ? 1 : 0) + (filters.format !== 'all' ? 1 : 0)}
+              </span>
+            )}
+          </button>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="p-2 rounded-lg hover:bg-muted transition-colors"
+              title={t('common.clearFilters', 'Clear filters')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Filters Panel */}
+      {showFilters && (
+        <div className="mb-6 p-4 bg-muted/50 rounded-lg border">
+          <div className="flex flex-wrap gap-4">
+            {/* Source Filter */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                {t('library.source', 'Source')}
+              </label>
+              <select
+                value={filters.sourceType}
+                onChange={(e) => setFilters({ ...filters, sourceType: e.target.value as SourceType | 'all' })}
+                className="px-3 py-2 rounded-md bg-background border text-sm min-w-[140px]"
+              >
+                <option value="all">{t('common.all', 'All')}</option>
+                <option value="local">{t('sources.localSource', 'Local Files')}</option>
+                <option value="server">{t('sources.serverSources', 'Server')}</option>
+                <option value="cached">{t('library.cached', 'Cached')}</option>
+              </select>
+            </div>
+
+            {/* Format Filter */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                {t('library.format', 'Format')}
+              </label>
+              <select
+                value={filters.format}
+                onChange={(e) => setFilters({ ...filters, format: e.target.value })}
+                className="px-3 py-2 rounded-md bg-background border text-sm min-w-[140px]"
+              >
+                <option value="all">{t('common.all', 'All')}</option>
+                {availableFormats.map((format) => (
+                  <option key={format} value={format}>
+                    {format}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Available Sources as quick filters */}
+            {availableSources.length > 1 && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {t('library.quickFilter', 'Quick Filter')}
+                </label>
+                <div className="flex gap-2">
+                  {availableSources.map((source) => (
+                    <button
+                      key={source.name}
+                      onClick={() => setFilters({ ...filters, sourceType: source.type })}
+                      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                        filters.sourceType === source.type
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-background border hover:bg-muted'
+                      }`}
+                    >
+                      {source.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="flex items-center gap-1 bg-muted rounded-lg p-1 mb-6 w-fit">
@@ -297,13 +495,23 @@ export function LibraryPage() {
       <div className="flex-1 overflow-auto">
         {activeTab === 'tracks' && (
           <TrackList
-            tracks={tracks.map(t => ({
+            tracks={filteredTracks.map(t => ({
               id: t.id,
               title: String(t.title || 'Unknown'),
               artist: t.artist_name,
               album: t.album_title,
               duration: t.duration_seconds,
               trackNumber: t.trackNumber,
+              isAvailable: !!t.file_path,
+              // Format info
+              format: t.file_format,
+              bitrate: t.bit_rate,
+              sampleRate: t.sample_rate,
+              channels: t.channels,
+              // Source info
+              sourceType: t.source_type || 'local',
+              sourceName: t.source_name,
+              sourceOnline: t.source_online,
             }))}
             buildQueue={buildQueue}
             onTrackAction={handleTrackPlay}
@@ -322,14 +530,52 @@ export function LibraryPage() {
         )}
 
         {activeTab === 'playlists' && (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-            <ListMusic className="w-12 h-12 mb-4 opacity-50" />
-            <p className="font-medium">No playlists yet</p>
-            <p className="text-sm mt-1">Create a playlist to organize your music</p>
-            <button className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90">
-              Create Playlist
-            </button>
-          </div>
+          playlists.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {playlists.map((playlist) => (
+                <div
+                  key={playlist.id}
+                  onClick={() => navigate(`/playlists/${playlist.id}`)}
+                  className="p-4 rounded-xl bg-card border hover:bg-accent hover:border-primary transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      <ListMusic className="w-8 h-8" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium truncate">{playlist.name}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {playlist.track_count} {t('library.tracks', 'tracks')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <ListMusic className="w-12 h-12 mb-4 opacity-50" />
+              <p className="font-medium">{t('playlist.noPlaylists', 'No playlists yet')}</p>
+              <p className="text-sm mt-1">{t('playlist.createHint', 'Create a playlist to organize your music')}</p>
+              <button
+                onClick={async () => {
+                  try {
+                    const newPlaylist = await invoke<Playlist>('create_playlist', {
+                      name: t('playlist.newPlaylistName', 'New Playlist'),
+                      description: null,
+                    });
+                    navigate(`/playlists/${newPlaylist.id}`);
+                  } catch (err) {
+                    console.error('Failed to create playlist:', err);
+                  }
+                }}
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+              >
+                <Plus className="w-4 h-4" />
+                {t('playlist.create', 'Create Playlist')}
+              </button>
+            </div>
+          )
         )}
 
         {activeTab === 'artists' && (
@@ -337,18 +583,24 @@ export function LibraryPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {artists.map((artist) => (
                 <div
-                  key={artist}
+                  key={artist.id}
+                  onClick={() => navigate(`/artists/${artist.id}`)}
                   className="group cursor-pointer"
                 >
-                  <div className="relative aspect-square mb-3 bg-muted rounded-full overflow-hidden shadow-md hover:shadow-xl transition-shadow flex items-center justify-center">
-                    <Users className="w-12 h-12 text-muted-foreground" />
+                  <div className="relative aspect-square mb-3 bg-muted rounded-full overflow-hidden shadow-md hover:shadow-xl transition-shadow flex items-center justify-center group-hover:bg-primary/10">
+                    <Users className="w-12 h-12 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                        <Play className="w-5 h-5 text-primary-foreground ml-0.5" fill="currentColor" />
+                      </div>
+                    </div>
                   </div>
                   <div className="text-center">
-                    <h3 className="font-medium truncate" title={artist}>
-                      {artist}
+                    <h3 className="font-medium truncate" title={artist.name}>
+                      {artist.name}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {tracks.filter(t => t.artist_name === artist).length} tracks
+                      {artist.album_count} {t('library.albums', 'albums')} • {artist.track_count} {t('library.tracks', 'tracks')}
                     </p>
                   </div>
                 </div>
@@ -357,8 +609,8 @@ export function LibraryPage() {
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <Users className="w-12 h-12 mb-4 opacity-50" />
-              <p className="font-medium">No artists found</p>
-              <p className="text-sm mt-1">Import music to see your artists</p>
+              <p className="font-medium">{t('artist.noArtists', 'No artists found')}</p>
+              <p className="text-sm mt-1">{t('artist.noArtistsHint', 'Import music to see your artists')}</p>
             </div>
           )
         )}
@@ -368,17 +620,18 @@ export function LibraryPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {genres.map((genre) => (
                 <div
-                  key={genre}
-                  className="p-4 rounded-xl bg-card border hover:bg-accent hover:border-primary transition-all cursor-pointer"
+                  key={genre.id}
+                  onClick={() => navigate(`/genres/${genre.id}`)}
+                  className="p-4 rounded-xl bg-card border hover:bg-accent hover:border-primary transition-all cursor-pointer group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                       <Guitar className="w-6 h-6" />
                     </div>
-                    <div>
-                      <h3 className="font-medium">{genre}</h3>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium truncate">{genre.name}</h3>
                       <p className="text-xs text-muted-foreground">
-                        {tracks.filter(t => (t as any).genre === genre).length} tracks
+                        {genre.track_count} {t('library.tracks', 'tracks')}
                       </p>
                     </div>
                   </div>
@@ -388,8 +641,8 @@ export function LibraryPage() {
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <Guitar className="w-12 h-12 mb-4 opacity-50" />
-              <p className="font-medium">No genres found</p>
-              <p className="text-sm mt-1">Genre information is extracted from your music files</p>
+              <p className="font-medium">{t('genre.noGenres', 'No genres found')}</p>
+              <p className="text-sm mt-1">{t('genre.noGenresHint', 'Genre information is extracted from your music files')}</p>
             </div>
           )
         )}

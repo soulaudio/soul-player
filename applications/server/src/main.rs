@@ -214,7 +214,10 @@ fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router 
         .route("/playback/seek", post(api::playback::seek))
         .route("/playback/volume", post(api::playback::set_volume))
         .route("/playback/skip/next", post(api::playback::skip_next))
-        .route("/playback/skip/previous", post(api::playback::skip_previous))
+        .route(
+            "/playback/skip/previous",
+            post(api::playback::skip_previous),
+        )
         .route("/playback/transfer", post(api::playback::transfer))
         // Admin
         .route("/admin/users", post(api::admin::create_user))
@@ -222,15 +225,26 @@ fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router 
         .route("/admin/users/:id", delete(api::admin::delete_user))
         .route("/admin/scan", post(api::admin::trigger_scan))
         .route("/admin/scan/status", get(api::admin::scan_status))
+        // Library Sources
+        .route("/sources", get(api::sources::list_sources))
+        .route("/sources", post(api::sources::create_source))
+        .route("/sources/scan/active", get(api::sources::get_active_scans))
+        .route("/sources/:id", get(api::sources::get_source))
+        .route("/sources/:id", put(api::sources::update_source))
+        .route("/sources/:id", delete(api::sources::delete_source))
+        .route("/sources/:id/scan", post(api::sources::trigger_source_scan))
+        .route(
+            "/sources/:id/scan/progress",
+            get(api::sources::get_scan_progress),
+        )
         .layer(axum_middleware::from_fn_with_state(
             Arc::clone(&auth_service),
             middleware::auth_middleware,
         ));
 
     // Static file serving for web UI (SPA with fallback to index.html)
-    let web_dir = PathBuf::from(
-        std::env::var("SOUL_WEB_DIR").unwrap_or_else(|_| "/app/web".to_string()),
-    );
+    let web_dir =
+        PathBuf::from(std::env::var("SOUL_WEB_DIR").unwrap_or_else(|_| "/app/web".to_string()));
 
     let spa_fallback = move |req: Request<Body>| {
         let web_dir = web_dir.clone();
@@ -241,10 +255,7 @@ fn create_router(app_state: AppState, auth_service: Arc<AuthService>) -> Router 
 
             if file_path.exists() && file_path.is_file() {
                 // Serve the actual file
-                match ServeDir::new(&web_dir)
-                    .oneshot(req)
-                    .await
-                {
+                match ServeDir::new(&web_dir).oneshot(req).await {
                     Ok(res) => res.into_response(),
                     Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
                 }

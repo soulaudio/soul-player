@@ -63,6 +63,10 @@ pub struct PlaybackManager {
     outgoing_buffer: Vec<f32>,
     incoming_buffer: Vec<f32>,
 
+    // Pre-allocated buffer for stereo conversion (mono/multichannel output)
+    // Avoids heap allocation in audio callback - see CLAUDE.md rule #4
+    stereo_conversion_buffer: Vec<f32>,
+
     // Sample rate (for effects processing)
     sample_rate: u32,
 
@@ -73,8 +77,13 @@ pub struct PlaybackManager {
     is_manual_skip: bool,
 }
 
-/// Default buffer size for crossfade (10 seconds at 48kHz stereo)
-const CROSSFADE_BUFFER_SIZE: usize = 10 * 48000 * 2;
+/// Default buffer size for crossfade (10 seconds at max supported sample rate 192kHz stereo)
+/// This ensures crossfade works correctly at all sample rates up to 192kHz
+const CROSSFADE_BUFFER_SIZE: usize = 10 * 192000 * 2;
+
+/// Maximum stereo buffer size for channel conversion (8192 frames * 2 channels)
+/// This covers typical audio callback buffer sizes (256-4096 frames)
+const MAX_STEREO_BUFFER_SIZE: usize = 8192 * 2;
 
 impl PlaybackManager {
     /// Create new playback manager
@@ -98,8 +107,9 @@ impl PlaybackManager {
             crossfade: CrossfadeEngine::with_settings(config.crossfade),
             outgoing_buffer: vec![0.0; CROSSFADE_BUFFER_SIZE],
             incoming_buffer: vec![0.0; CROSSFADE_BUFFER_SIZE],
-            sample_rate: 44100,    // Default, will be updated by platform
-            output_channels: 2,     // Default stereo, will be updated by platform
+            stereo_conversion_buffer: vec![0.0; MAX_STEREO_BUFFER_SIZE],
+            sample_rate: 44100, // Default, will be updated by platform
+            output_channels: 2, // Default stereo, will be updated by platform
             is_manual_skip: false,
         }
     }
@@ -381,28 +391,25 @@ impl PlaybackManager {
 
     /// Skip to track at index in queue
     ///
-    /// Skips to the track at the specified index, adding all skipped tracks to history
-    /// so they can be navigated back to using the previous button.
+    /// Skips to the track at the specified index. Only the currently playing track
+    /// (if any) is added to history - skipped-over tracks are NOT added since they
+    /// were never actually played.
     pub fn skip_to_queue_index(&mut self, index: usize) -> Result<()> {
         if index >= self.queue.len() {
             return Err(PlaybackError::QueueEmpty);
         }
 
-        // Save current track to history (if any)
+        // Save current track to history (if any) - only actually-played tracks
         if let Some(track) = self.current_track.take() {
             self.history.push(track);
         }
 
-        // Skip to target index and get all skipped tracks
-        let skipped_tracks = self
+        // Skip to target index - we intentionally discard the skipped tracks
+        // because they were never played and shouldn't appear in history
+        let _skipped_tracks = self
             .queue
             .skip_to_index(index)
             .ok_or(PlaybackError::QueueEmpty)?;
-
-        // Add all skipped tracks to history (in order)
-        for track in skipped_tracks {
-            self.history.push(track);
-        }
 
         // Play the next track (now at index 0)
         self.play_next_in_queue()
@@ -469,7 +476,18 @@ impl PlaybackManager {
     }
 
     /// Get current playback position
+    ///
+    /// During crossfade, returns the incoming track's position to avoid
+    /// a jarring position jump when the transition completes.
     pub fn get_position(&self) -> Duration {
+        // During crossfade, report incoming track position
+        if self.crossfade.is_active() {
+            if let Some(ref next_source) = self.next_source {
+                return next_source.position();
+            }
+        }
+
+        // Normal playback - report current source position
         self.audio_source
             .as_ref()
             .map(|s| s.position())
@@ -477,7 +495,18 @@ impl PlaybackManager {
     }
 
     /// Get current track duration
+    ///
+    /// During crossfade, returns the incoming track's duration to match
+    /// the position reporting.
     pub fn get_duration(&self) -> Option<Duration> {
+        // During crossfade, report incoming track duration
+        if self.crossfade.is_active() {
+            if let Some(ref next_source) = self.next_source {
+                return Some(next_source.duration());
+            }
+        }
+
+        // Normal playback
         self.audio_source.as_ref().map(|s| s.duration())
     }
 
@@ -544,10 +573,11 @@ impl PlaybackManager {
         // If device is mono, we need to convert
         if self.output_channels == 1 {
             // Mono output - read stereo, convert to mono
-            let stereo_samples = output.len() * 2; // Need 2x samples for stereo
-            let mut stereo_buffer = vec![0.0f32; stereo_samples];
+            // Use pre-allocated buffer to avoid heap allocation in audio callback
+            let stereo_samples = (output.len() * 2).min(self.stereo_conversion_buffer.len());
 
-            let samples_read = source.read_samples(&mut stereo_buffer)?;
+            let samples_read =
+                source.read_samples(&mut self.stereo_conversion_buffer[..stereo_samples])?;
 
             if samples_read == 0 {
                 // Track finished
@@ -557,19 +587,21 @@ impl PlaybackManager {
 
             // Apply loudness normalization to stereo buffer (before channel conversion)
             #[cfg(feature = "volume-leveling")]
-            self.loudness_normalizer.process(&mut stereo_buffer[..samples_read]);
+            self.loudness_normalizer
+                .process(&mut self.stereo_conversion_buffer[..samples_read]);
 
             // Convert stereo to mono by averaging L and R channels
             let frames = samples_read / 2;
             for i in 0..frames {
-                let left = stereo_buffer[i * 2];
-                let right = stereo_buffer[i * 2 + 1];
+                let left = self.stereo_conversion_buffer[i * 2];
+                let right = self.stereo_conversion_buffer[i * 2 + 1];
                 output[i] = (left + right) * 0.5; // Average and write to mono output
             }
 
             // Apply effects (if feature enabled)
             #[cfg(feature = "effects")]
-            self.effect_chain.process(&mut output[..frames], self.sample_rate);
+            self.effect_chain
+                .process(&mut output[..frames], self.sample_rate);
 
             // Apply volume
             self.volume.apply(&mut output[..frames]);
@@ -587,11 +619,13 @@ impl PlaybackManager {
 
             // Apply loudness normalization
             #[cfg(feature = "volume-leveling")]
-            self.loudness_normalizer.process(&mut output[..samples_read]);
+            self.loudness_normalizer
+                .process(&mut output[..samples_read]);
 
             // Apply effects (if feature enabled)
             #[cfg(feature = "effects")]
-            self.effect_chain.process(&mut output[..samples_read], self.sample_rate);
+            self.effect_chain
+                .process(&mut output[..samples_read], self.sample_rate);
 
             // Apply volume
             self.volume.apply(&mut output[..samples_read]);
@@ -600,11 +634,12 @@ impl PlaybackManager {
         } else {
             // Multi-channel output (e.g., ASIO with 6 channels)
             // Read stereo, then upmix to fill all output channels
+            // Use pre-allocated buffer to avoid heap allocation in audio callback
             let frames = output.len() / self.output_channels as usize;
-            let stereo_samples = frames * 2;
-            let mut stereo_buffer = vec![0.0f32; stereo_samples];
+            let stereo_samples = (frames * 2).min(self.stereo_conversion_buffer.len());
 
-            let samples_read = source.read_samples(&mut stereo_buffer)?;
+            let samples_read =
+                source.read_samples(&mut self.stereo_conversion_buffer[..stereo_samples])?;
 
             if samples_read == 0 {
                 // Track finished
@@ -616,19 +651,24 @@ impl PlaybackManager {
 
             // Apply loudness normalization to stereo buffer
             #[cfg(feature = "volume-leveling")]
-            self.loudness_normalizer.process(&mut stereo_buffer[..samples_read]);
+            self.loudness_normalizer
+                .process(&mut self.stereo_conversion_buffer[..samples_read]);
 
             // Apply effects to stereo buffer (if feature enabled)
             #[cfg(feature = "effects")]
-            self.effect_chain.process(&mut stereo_buffer[..samples_read], self.sample_rate);
+            self.effect_chain.process(
+                &mut self.stereo_conversion_buffer[..samples_read],
+                self.sample_rate,
+            );
 
             // Apply volume to stereo buffer
-            self.volume.apply(&mut stereo_buffer[..samples_read]);
+            self.volume
+                .apply(&mut self.stereo_conversion_buffer[..samples_read]);
 
             // Upmix stereo to multi-channel: put L/R in first two channels, silence in rest
             for frame in 0..frames_read {
-                let left = stereo_buffer[frame * 2];
-                let right = stereo_buffer[frame * 2 + 1];
+                let left = self.stereo_conversion_buffer[frame * 2];
+                let right = self.stereo_conversion_buffer[frame * 2 + 1];
                 let out_offset = frame * self.output_channels as usize;
 
                 // First two channels get stereo audio
@@ -659,7 +699,10 @@ impl PlaybackManager {
         }
 
         // Normal playback - check if we should start crossfade
-        let source = self.audio_source.as_mut().ok_or(PlaybackError::NoTrackLoaded)?;
+        let source = self
+            .audio_source
+            .as_mut()
+            .ok_or(PlaybackError::NoTrackLoaded)?;
 
         // Check if we're approaching the crossfade window
         let position = source.position();
@@ -712,7 +755,9 @@ impl PlaybackManager {
         // Read from outgoing (current) track
         let outgoing_samples = if let Some(ref mut source) = self.audio_source {
             let len = buffer_len.min(self.outgoing_buffer.len());
-            source.read_samples(&mut self.outgoing_buffer[..len]).unwrap_or(0)
+            source
+                .read_samples(&mut self.outgoing_buffer[..len])
+                .unwrap_or(0)
         } else {
             // Fill with silence if no outgoing source
             self.outgoing_buffer[..buffer_len].fill(0.0);
@@ -722,7 +767,9 @@ impl PlaybackManager {
         // Read from incoming (next) track
         let incoming_samples = if let Some(ref mut source) = self.next_source {
             let len = buffer_len.min(self.incoming_buffer.len());
-            source.read_samples(&mut self.incoming_buffer[..len]).unwrap_or(0)
+            source
+                .read_samples(&mut self.incoming_buffer[..len])
+                .unwrap_or(0)
         } else {
             // Fill with silence if no incoming source
             self.incoming_buffer[..buffer_len].fill(0.0);
@@ -981,7 +1028,8 @@ impl PlaybackManager {
         let source = self.audio_source.as_ref()?;
         let position = source.position();
         let duration = source.duration();
-        let crossfade_duration = Duration::from_millis(self.crossfade.settings().duration_ms as u64);
+        let crossfade_duration =
+            Duration::from_millis(self.crossfade.settings().duration_ms as u64);
 
         // Crossfade starts when: remaining_time <= crossfade_duration
         let remaining = duration.saturating_sub(position);

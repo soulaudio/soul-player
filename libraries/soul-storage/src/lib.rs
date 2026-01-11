@@ -55,6 +55,9 @@ pub mod window_state;
 pub mod library_sources;
 pub mod scan_progress;
 
+// Background processing
+pub mod fingerprint_queue;
+
 // Multi-device sync
 pub mod devices;
 pub mod playback_state;

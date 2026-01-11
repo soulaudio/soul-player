@@ -7,6 +7,7 @@
 //! - Mono compatibility checking
 
 use super::chain::AudioEffect;
+use std::f32::consts::PI;
 
 /// Stereo enhancer settings
 #[derive(Debug, Clone)]
@@ -196,14 +197,28 @@ impl StereoEnhancer {
         let mut new_left = processed_mid + processed_side;
         let mut new_right = processed_mid - processed_side;
 
-        // Apply balance
+        // Prevent clipping when width > 1.0 causes output to exceed [-1, 1]
+        // This can happen with wide stereo content at high width settings
+        let max_sample = new_left.abs().max(new_right.abs());
+        if max_sample > 1.0 {
+            let scale = 1.0 / max_sample;
+            new_left *= scale;
+            new_right *= scale;
+        }
+
+        // Apply balance using constant-power panning to preserve perceived loudness
+        // Linear pan causes ~3dB drop at hard pan positions
         let balance = self.settings.balance;
-        if balance < 0.0 {
-            // Pan left - reduce right channel
-            new_right *= 1.0 + balance;
-        } else if balance > 0.0 {
-            // Pan right - reduce left channel
-            new_left *= 1.0 - balance;
+        if balance.abs() > 0.001 {
+            // Map balance [-1, 1] to angle [0, PI/2]
+            // At balance=0: angle=PI/4 (equal power to both channels)
+            // At balance=-1: angle=0 (full left)
+            // At balance=1: angle=PI/2 (full right)
+            let pan_angle = (balance + 1.0) * 0.5 * (PI * 0.5);
+            let left_gain = pan_angle.cos();
+            let right_gain = pan_angle.sin();
+            new_left *= left_gain;
+            new_right *= right_gain;
         }
 
         (new_left, new_right)
@@ -389,10 +404,19 @@ mod tests {
         let mut buffer = vec![0.5, 0.5, 0.5, 0.5];
         enhancer.process(&mut buffer, 44100);
 
+        // With constant-power panning at hard left (balance=-1.0):
+        // pan_angle = 0, left_gain = cos(0) = 1.0, right_gain = sin(0) = 0.0
         // Right channel should be silent
         assert!(
             buffer[1].abs() < 0.001,
-            "Full left balance should silence right channel"
+            "Full left balance should silence right channel, got {}",
+            buffer[1]
+        );
+        // Left channel should have full signal
+        assert!(
+            buffer[0].abs() > 0.4,
+            "Full left balance should preserve left channel, got {}",
+            buffer[0]
         );
     }
 
@@ -404,10 +428,19 @@ mod tests {
         let mut buffer = vec![0.5, 0.5, 0.5, 0.5];
         enhancer.process(&mut buffer, 44100);
 
+        // With constant-power panning at hard right (balance=1.0):
+        // pan_angle = PI/2, left_gain = cos(PI/2) = 0.0, right_gain = sin(PI/2) = 1.0
         // Left channel should be silent
         assert!(
             buffer[0].abs() < 0.001,
-            "Full right balance should silence left channel"
+            "Full right balance should silence left channel, got {}",
+            buffer[0]
+        );
+        // Right channel should have full signal
+        assert!(
+            buffer[1].abs() > 0.4,
+            "Full right balance should preserve right channel, got {}",
+            buffer[1]
         );
     }
 

@@ -166,12 +166,18 @@ pub async fn handle_artwork_request(
 
     let parts: Vec<&str> = path.split('/').collect();
     if parts.len() != 2 {
-        eprintln!("[artwork] ERROR: Invalid URI format, expected 2 parts, got {}", parts.len());
+        eprintln!(
+            "[artwork] ERROR: Invalid URI format, expected 2 parts, got {}",
+            parts.len()
+        );
         return Err("Invalid artwork URI format".into());
     }
 
     let (entity_type, id_str) = (parts[0], parts[1]);
-    eprintln!("[artwork] Entity type: {}, ID string: {}", entity_type, id_str);
+    eprintln!(
+        "[artwork] Entity type: {}, ID string: {}",
+        entity_type, id_str
+    );
 
     let id: i64 = id_str.parse().map_err(|e| {
         eprintln!("[artwork] ERROR: Failed to parse ID '{}': {:?}", id_str, e);
@@ -190,7 +196,14 @@ pub async fn handle_artwork_request(
             let result = manager
                 .get_track_artwork_with_mime(TrackId::new(id.to_string()))
                 .await?;
-            eprintln!("[artwork] Track artwork result: {}", if result.is_some() { "found" } else { "not found" });
+            eprintln!(
+                "[artwork] Track artwork result: {}",
+                if result.is_some() {
+                    "found"
+                } else {
+                    "not found"
+                }
+            );
             result
         }
         _ => {
@@ -200,7 +213,11 @@ pub async fn handle_artwork_request(
     };
 
     if let Some((data, mime_type)) = artwork {
-        eprintln!("[artwork] SUCCESS: Returning {} bytes of {}", data.len(), mime_type);
+        eprintln!(
+            "[artwork] SUCCESS: Returning {} bytes of {}",
+            data.len(),
+            mime_type
+        );
         // Return image with proper MIME type and caching headers
         Response::builder()
             .status(200)

@@ -1,9 +1,20 @@
 // Enhanced DSP effects chain configurator with backend integration
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Plus, X, Check, AlertCircle, Headphones, SlidersHorizontal, Volume2, Activity, Gauge, Waves } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Plus, X, Check, AlertCircle, Headphones, SlidersHorizontal, Volume2, Activity, Gauge, Waves, Settings2, ChevronUp, AudioWaveform } from 'lucide-react';
 import { ConfirmDialog } from '../../ui/Dialog';
+import {
+  ParametricEqEditor,
+  GraphicEqEditor,
+  CompressorEditor,
+  LimiterEditor,
+  CrossfeedEditor,
+  StereoEnhancerEditor,
+  ConvolutionEditor,
+  defaultConvolutionSettings,
+} from './effects';
 
 // Types matching backend
 export interface EffectSlot {
@@ -18,7 +29,8 @@ export type EffectType =
   | { type: 'limiter'; settings: LimiterSettings }
   | { type: 'crossfeed'; settings: CrossfeedSettings }
   | { type: 'stereo'; settings: StereoSettings }
-  | { type: 'graphic_eq'; settings: GraphicEqSettings };
+  | { type: 'graphic_eq'; settings: GraphicEqSettings }
+  | { type: 'convolution'; settings: ConvolutionSettings };
 
 export interface EqBand {
   frequency: number;
@@ -59,11 +71,18 @@ export interface GraphicEqSettings {
   gains: number[];
 }
 
+export interface ConvolutionSettings {
+  irFilePath: string;
+  wetDryMix: number;
+  preDelayMs: number;
+  decay: number;
+}
+
 interface DspConfigProps {
   onChainChange?: () => void;
 }
 
-type EffectTypeKey = 'eq' | 'graphic_eq' | 'compressor' | 'limiter' | 'crossfeed' | 'stereo';
+type EffectTypeKey = 'eq' | 'graphic_eq' | 'compressor' | 'limiter' | 'crossfeed' | 'stereo' | 'convolution';
 
 interface EffectInfo {
   key: EffectTypeKey;
@@ -116,12 +135,21 @@ const EFFECT_INFO: EffectInfo[] = [
     icon: <Waves className="w-5 h-5" />,
     category: 'spatial',
   },
+  {
+    key: 'convolution',
+    name: 'Convolution Reverb',
+    description: 'IR-based reverb using impulse response files',
+    icon: <AudioWaveform className="w-5 h-5" />,
+    category: 'spatial',
+  },
 ];
 
 export function DspConfig({ onChainChange }: DspConfigProps) {
+  const { t } = useTranslation();
   const [chain, setChain] = useState<EffectSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedSlot, setExpandedSlot] = useState<number | null>(null);
+  const [editingSlot, setEditingSlot] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showClearDialog, setShowClearDialog] = useState(false);
 
@@ -223,6 +251,17 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
             },
           };
           break;
+        case 'convolution':
+          effect = {
+            type: 'convolution',
+            settings: {
+              irFilePath: defaultConvolutionSettings.irFilePath,
+              wetDryMix: defaultConvolutionSettings.wetDryMix,
+              preDelayMs: defaultConvolutionSettings.preDelayMs,
+              decay: defaultConvolutionSettings.decay,
+            },
+          };
+          break;
       }
 
       await invoke('add_effect_to_chain', { slotIndex, effect });
@@ -275,6 +314,96 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
     setShowClearDialog(false);
   };
 
+  // Handle effect parameter updates from editors
+  // IMPORTANT: We update local state immediately and send to backend without reloading
+  // This prevents re-renders that would interrupt drag operations
+  const handleEffectChange = useCallback(async (slotIndex: number, params: EffectType) => {
+    // Update local state immediately without reloading from backend
+    setChain(prevChain => prevChain.map(slot =>
+      slot.index === slotIndex
+        ? { ...slot, effect: params }
+        : slot
+    ));
+
+    // Send to backend (fire and forget for smooth UX, errors logged)
+    try {
+      await invoke('update_effect_parameters', {
+        slotIndex,
+        effect: params,
+      });
+      onChainChange?.();
+    } catch (error) {
+      console.error('Failed to update effect parameters:', error);
+      // Don't show notification for parameter updates to avoid interrupting UX
+    }
+  }, [onChainChange]);
+
+  // Render the appropriate effect editor based on effect type
+  const renderEffectEditor = (slot: EffectSlot) => {
+    if (!slot.effect) return null;
+
+    switch (slot.effect.type) {
+      case 'eq':
+        return (
+          <ParametricEqEditor
+            bands={slot.effect.bands}
+            onBandsChange={(bands) => handleEffectChange(slot.index, { type: 'eq', bands })}
+            slotIndex={slot.index}
+          />
+        );
+      case 'graphic_eq':
+        return (
+          <GraphicEqEditor
+            settings={slot.effect.settings}
+            onSettingsChange={(settings) => handleEffectChange(slot.index, { type: 'graphic_eq', settings })}
+            slotIndex={slot.index}
+          />
+        );
+      case 'compressor':
+        return (
+          <CompressorEditor
+            settings={slot.effect.settings}
+            onSettingsChange={(settings) => handleEffectChange(slot.index, { type: 'compressor', settings })}
+            slotIndex={slot.index}
+          />
+        );
+      case 'limiter':
+        return (
+          <LimiterEditor
+            settings={slot.effect.settings}
+            onSettingsChange={(settings) => handleEffectChange(slot.index, { type: 'limiter', settings })}
+            slotIndex={slot.index}
+          />
+        );
+      case 'crossfeed':
+        return (
+          <CrossfeedEditor
+            settings={slot.effect.settings}
+            onSettingsChange={(settings) => handleEffectChange(slot.index, { type: 'crossfeed', settings })}
+            slotIndex={slot.index}
+          />
+        );
+      case 'stereo':
+        return (
+          <StereoEnhancerEditor
+            settings={slot.effect.settings}
+            onSettingsChange={(settings) => handleEffectChange(slot.index, { type: 'stereo', settings })}
+            slotIndex={slot.index}
+          />
+        );
+      case 'convolution':
+        return (
+          <ConvolutionEditor
+            settings={slot.effect.settings}
+            onSettingsChange={(settings) => handleEffectChange(slot.index, { type: 'convolution', settings })}
+            slotIndex={slot.index}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-center text-muted-foreground py-4">Loading DSP chain...</div>
@@ -288,7 +417,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div data-testid="dsp-config" className="space-y-4">
       {/* Notification Toast */}
       {notification && (
         <div
@@ -314,6 +443,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
       {chain.some(slot => slot.effect !== null) && (
         <div className="flex items-center justify-end">
           <button
+            data-testid="clear-all-btn"
             onClick={() => setShowClearDialog(true)}
             className="text-sm px-3 py-1.5 border border-border rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
           >
@@ -336,7 +466,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
       {/* Effect Slots */}
       <div className="space-y-3">
         {chain.map((slot) => (
-          <div key={slot.index} className="border border-border rounded-lg p-4">
+          <div key={slot.index} data-testid={`effect-slot-${slot.index}`} className="border border-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
                 <div className="text-sm font-medium">Slot {slot.index + 1}</div>
@@ -354,6 +484,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
               </div>
               {slot.effect && (
                 <button
+                  data-testid={`remove-effect-btn-${slot.index}`}
                   onClick={() => removeEffect(slot.index)}
                   className="text-xs px-2 py-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
                   title="Remove effect"
@@ -365,30 +496,66 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
 
             {slot.effect === null ? (
               <button
+                data-testid={`add-effect-btn-${slot.index}`}
                 onClick={() => setExpandedSlot(expandedSlot === slot.index ? null : slot.index)}
                 className="w-full p-3 border border-dashed rounded-lg text-sm text-muted-foreground hover:bg-muted/30 hover:border-primary/50 transition-all flex items-center justify-center gap-2"
               >
                 <Plus className="w-4 h-4" />
-                Add Effect
+                {t('dsp.addEffect', 'Add Effect')}
               </button>
             ) : (
-              <div className={`p-3 rounded ${slot.enabled ? 'bg-primary/10' : 'bg-muted/30'}`}>
-                <div className="flex items-center gap-2">
-                  {getEffectIcon(slot.effect.type)}
-                  <div className="font-medium text-sm">
-                    {getEffectName(slot.effect.type)}
-                    {!slot.enabled && <span className="text-muted-foreground ml-2">(Disabled)</span>}
+              <div className={`rounded ${slot.enabled ? 'bg-primary/10' : 'bg-muted/30'}`}>
+                <div className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {getEffectIcon(slot.effect.type)}
+                      <div className="font-medium text-sm">
+                        {getEffectName(slot.effect.type)}
+                        {!slot.enabled && <span className="text-muted-foreground ml-2">({t('common.disabled', 'Disabled')})</span>}
+                      </div>
+                    </div>
+                    <button
+                      data-testid={`edit-effect-btn-${slot.index}`}
+                      onClick={() => setEditingSlot(editingSlot === slot.index ? null : slot.index)}
+                      className={`
+                        flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border transition-colors
+                        ${editingSlot === slot.index
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-border hover:bg-muted hover:border-primary/50'
+                        }
+                      `}
+                      title={editingSlot === slot.index ? t('common.done', 'Done') : t('common.edit', 'Edit')}
+                    >
+                      {editingSlot === slot.index ? (
+                        <>
+                          <ChevronUp className="w-3.5 h-3.5" />
+                          {t('common.done', 'Done')}
+                        </>
+                      ) : (
+                        <>
+                          <Settings2 className="w-3.5 h-3.5" />
+                          {t('common.edit', 'Edit')}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {getEffectDescription(slot.effect)}
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {getEffectDescription(slot.effect)}
-                </div>
+
+                {/* Effect Editor Panel */}
+                {editingSlot === slot.index && (
+                  <div className="border-t border-border/50 p-4 bg-background/50">
+                    {renderEffectEditor(slot)}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Effect Picker Dropdown */}
             {expandedSlot === slot.index && (
-              <div className="mt-3 border-t pt-3 space-y-4">
+              <div data-testid={`effect-picker-${slot.index}`} className="mt-3 border-t pt-3 space-y-4">
                 <div className="text-xs font-medium text-muted-foreground">
                   Select Effect:
                 </div>
@@ -503,5 +670,11 @@ function getEffectDescription(effect: EffectType): string {
       return `${effect.settings.preset} preset, ${effect.settings.levelDb}dB level`;
     case 'stereo':
       return `${Math.round(effect.settings.width * 100)}% width, ${effect.settings.balance === 0 ? 'centered' : `${effect.settings.balance > 0 ? 'R' : 'L'} ${Math.abs(effect.settings.balance * 100).toFixed(0)}%`}`;
+    case 'convolution':
+      if (effect.settings.irFilePath) {
+        const fileName = effect.settings.irFilePath.split(/[\\/]/).pop() || effect.settings.irFilePath;
+        return `${Math.round(effect.settings.wetDryMix * 100)}% wet, ${fileName}`;
+      }
+      return 'No IR loaded';
   }
 }

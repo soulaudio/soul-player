@@ -10,9 +10,9 @@
 ///! - **Limiter**: Brick-wall limiter
 ///! - **Crossfeed**: Bauer stereophonic-to-binaural DSP for headphones
 ///! - **StereoEnhancer**: Width control, mid/side processing, balance
-
 mod chain;
 mod compressor;
+mod convolution;
 mod crossfeed;
 mod eq;
 mod graphic_eq;
@@ -21,11 +21,14 @@ mod stereo;
 
 pub use chain::{AudioEffect, EffectChain};
 pub use compressor::{Compressor, CompressorSettings};
+pub use convolution::{ConvolutionEngine, ConvolutionError};
 pub use crossfeed::{Crossfeed, CrossfeedPreset, CrossfeedSettings};
 pub use eq::{EqBand, ParametricEq};
-pub use graphic_eq::{GraphicEq, GraphicEqBands, GraphicEqPreset, ISO_10_BAND_FREQUENCIES, ISO_31_BAND_FREQUENCIES};
+pub use graphic_eq::{
+    GraphicEq, GraphicEqBands, GraphicEqPreset, ISO_10_BAND_FREQUENCIES, ISO_31_BAND_FREQUENCIES,
+};
 pub use limiter::{Limiter, LimiterSettings};
-pub use stereo::{StereoEnhancer, StereoSettings, mono_compatibility};
+pub use stereo::{mono_compatibility, StereoEnhancer, StereoSettings};
 
 #[cfg(test)]
 mod tests {

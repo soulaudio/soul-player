@@ -242,10 +242,7 @@ pub fn is_silent(samples: &[f32], threshold_db: f32) -> bool {
 /// * `stereo` - Stereo interleaved samples (L, R, L, R, ...)
 /// * `channel` - 0 for left, 1 for right
 pub fn extract_mono(stereo: &[f32], channel: usize) -> Vec<f32> {
-    stereo
-        .chunks_exact(2)
-        .map(|chunk| chunk[channel])
-        .collect()
+    stereo.chunks_exact(2).map(|chunk| chunk[channel]).collect()
 }
 
 // =============================================================================
@@ -424,7 +421,10 @@ pub fn calculate_thd_plus_n(samples: &[f32], fundamental_freq: f32, sample_rate:
     }
 
     // Calculate total power (all frequencies)
-    let total_power: f32 = spectrum.iter().map(|(_, mag)| db_to_linear(*mag).powi(2)).sum();
+    let total_power: f32 = spectrum
+        .iter()
+        .map(|(_, mag)| db_to_linear(*mag).powi(2))
+        .sum();
 
     // THD+N = sqrt((total - fundamental) / total) * 100
     let distortion_plus_noise_power = (total_power - fundamental_power).max(0.0);
@@ -650,7 +650,9 @@ pub fn measure_frequency_response(
             // Find closest frequency bin
             let mag = spectrum
                 .iter()
-                .filter(|(f, _)| (*f - target_freq).abs() < (sample_rate as f32 / samples.len() as f32) * 2.0)
+                .filter(|(f, _)| {
+                    (*f - target_freq).abs() < (sample_rate as f32 / samples.len() as f32) * 2.0
+                })
                 .map(|(_, m)| *m)
                 .max_by(|a, b| a.partial_cmp(b).unwrap())
                 .unwrap_or(-100.0);
@@ -790,9 +792,7 @@ impl AudioQualityReport {
         // - SNR > 15 dB (simple DFT leakage limits this severely)
         // - THD < 5% (instead of 0.1% with precision equipment)
         // - SINAD > 15 dB (instead of 80 dB)
-        self.snr_db > 15.0
-            && self.thd_percent < 5.0
-            && self.sinad_db > 15.0
+        self.snr_db > 15.0 && self.thd_percent < 5.0 && self.sinad_db > 15.0
     }
 
     /// Check if the report meets professional standards with precision equipment
@@ -889,7 +889,11 @@ mod tests {
         println!("THD of pure sine: {:.2}%", thd);
 
         // Simple DFT has some numerical error, allow up to 5% THD
-        assert!(thd < 5.0, "THD should be low for pure sine (got {:.2}%)", thd);
+        assert!(
+            thd < 5.0,
+            "THD should be low for pure sine (got {:.2}%)",
+            thd
+        );
     }
 
     #[test]

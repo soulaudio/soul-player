@@ -39,8 +39,10 @@ export { DeviceSelector } from './components/player/DeviceSelector';
 export { QueueSidebar } from './components/QueueSidebar';
 export { SourcesDialog } from './components/SourcesDialog';
 export { TrackList } from './components/TrackList';
-export type { Track } from './components/TrackList';
+export type { Track, SourceType } from './components/TrackList';
 export { ArtworkImage } from './components/ArtworkImage';
+export { TrackQualityBadge } from './components/TrackQualityBadge';
+export { SourceIndicator } from './components/SourceIndicator';
 
 // UI components
 export { Kbd, KbdGroup } from './components/ui/Kbd';

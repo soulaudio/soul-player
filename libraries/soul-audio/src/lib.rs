@@ -52,12 +52,18 @@ mod decoder;
 pub mod dsd;
 pub mod effects;
 mod error;
+pub mod metadata;
 pub mod resampling;
+
+// Audio fingerprinting (optional feature)
+#[cfg(feature = "fingerprint")]
+pub mod fingerprint;
 
 // Test utilities available in dev/test builds
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 
 pub use decoder::SymphoniaDecoder;
-pub use dsd::{DsdConverter, DsdFormat, DsdSettings, DoP, DopEncoder, DopDecoder};
+pub use dsd::{DoP, DopDecoder, DopEncoder, DsdConverter, DsdFormat, DsdSettings};
 pub use error::{AudioError, Result};
+pub use metadata::{extract_metadata, AlbumArt, AlbumArtType, AudioMetadata};

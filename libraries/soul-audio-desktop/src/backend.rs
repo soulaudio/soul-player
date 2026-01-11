@@ -37,7 +37,11 @@ impl AudioBackend {
                 #[cfg(target_os = "linux")]
                 return "ALSA";
 
-                #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+                #[cfg(not(any(
+                    target_os = "windows",
+                    target_os = "macos",
+                    target_os = "linux"
+                )))]
                 return "Default";
             }
 
@@ -62,7 +66,11 @@ impl AudioBackend {
                 #[cfg(target_os = "linux")]
                 return "Advanced Linux Sound Architecture (direct hardware access)";
 
-                #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+                #[cfg(not(any(
+                    target_os = "windows",
+                    target_os = "macos",
+                    target_os = "linux"
+                )))]
                 return "System default audio backend";
             }
 
@@ -228,7 +236,10 @@ mod tests {
     #[test]
     fn test_default_backend_available() {
         let backend = AudioBackend::Default;
-        assert!(backend.is_available(), "Default backend should always be available");
+        assert!(
+            backend.is_available(),
+            "Default backend should always be available"
+        );
     }
 
     #[test]
@@ -248,7 +259,10 @@ mod tests {
     #[test]
     fn test_list_available_backends() {
         let backends = list_available_backends();
-        assert!(!backends.is_empty(), "At least one backend should be available");
+        assert!(
+            !backends.is_empty(),
+            "At least one backend should be available"
+        );
         assert!(
             backends.contains(&AudioBackend::Default),
             "Default backend should always be in list"
@@ -279,7 +293,10 @@ mod tests {
     fn test_to_cpal_host() {
         let backend = AudioBackend::Default;
         let host = backend.to_cpal_host();
-        assert!(host.is_ok(), "Should be able to get CPAL host for default backend");
+        assert!(
+            host.is_ok(),
+            "Should be able to get CPAL host for default backend"
+        );
     }
 
     #[cfg(all(target_os = "windows", feature = "asio"))]

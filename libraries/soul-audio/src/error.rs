@@ -27,6 +27,14 @@ pub enum AudioError {
     #[error("Invalid audio buffer: {0}")]
     InvalidBuffer(String),
 
+    /// Seek error
+    #[error("Seek error: {0}")]
+    SeekError(String),
+
+    /// No file is currently open
+    #[error("No file open for streaming decode")]
+    NoFileOpen,
+
     /// I/O error
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -34,6 +42,10 @@ pub enum AudioError {
     /// Symphonia error
     #[error("Symphonia error: {0}")]
     Symphonia(String),
+
+    /// Fingerprinting error
+    #[error("Fingerprint error: {0}")]
+    Fingerprint(String),
 }
 
 impl From<AudioError> for soul_core::SoulError {

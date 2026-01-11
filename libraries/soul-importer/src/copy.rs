@@ -192,6 +192,9 @@ mod tests {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art: None,
         };
 
         let source = Path::new("/path/to/song.mp3");
@@ -215,6 +218,9 @@ mod tests {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art: None,
         };
 
         let source = Path::new("/path/to/song.mp3");
@@ -238,6 +244,9 @@ mod tests {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art: None,
         };
 
         let source = Path::new("/path/to/original_song.mp3");
@@ -271,6 +280,9 @@ mod tests {
             sample_rate: None,
             channels: None,
             file_format: "mp3".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art: None,
         };
 
         let dest_path = copy_to_library(&source_file, &library_dir, &metadata).unwrap();

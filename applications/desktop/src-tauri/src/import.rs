@@ -609,6 +609,17 @@ pub async fn is_directory(path: String) -> Result<bool, String> {
     Ok(p.is_dir())
 }
 
+/// Scan a directory for audio files (for play-without-import feature)
+#[tauri::command]
+pub async fn scan_directory_for_audio(path: String) -> Result<Vec<String>, String> {
+    let scanner = soul_importer::scanner::FileScanner::new();
+    let files = scanner
+        .scan_directory(&std::path::PathBuf::from(&path))
+        .map_err(|e| e.to_string())?;
+
+    Ok(files.into_iter().map(|p| p.display().to_string()).collect())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DialogFilter {
     pub name: String,

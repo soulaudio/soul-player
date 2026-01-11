@@ -42,7 +42,10 @@ fn test_device_switch_preserves_state() {
             }
         }
         Err(e) => {
-            eprintln!("Note: Audio device not available in test environment: {}", e);
+            eprintln!(
+                "Note: Audio device not available in test environment: {}",
+                e
+            );
         }
     }
 }
@@ -89,7 +92,10 @@ fn test_switch_to_specific_device() {
             }
         }
         Err(e) => {
-            eprintln!("Note: Audio device not available in test environment: {}", e);
+            eprintln!(
+                "Note: Audio device not available in test environment: {}",
+                e
+            );
         }
     }
 }
@@ -124,7 +130,10 @@ fn test_multiple_device_switches() {
             }
         }
         Err(e) => {
-            eprintln!("Note: Audio device not available in test environment: {}", e);
+            eprintln!(
+                "Note: Audio device not available in test environment: {}",
+                e
+            );
         }
     }
 }
@@ -150,8 +159,7 @@ fn test_switch_invalid_device_name() {
             if let Err(e) = switch_result {
                 eprintln!("Expected error for invalid device: {}", e);
                 assert!(
-                    e.to_string().contains("not found")
-                        || e.to_string().contains("Device error"),
+                    e.to_string().contains("not found") || e.to_string().contains("Device error"),
                     "Error message should indicate device not found"
                 );
             }
@@ -162,7 +170,10 @@ fn test_switch_invalid_device_name() {
             assert_ne!(current_device, invalid_name);
         }
         Err(e) => {
-            eprintln!("Note: Audio device not available in test environment: {}", e);
+            eprintln!(
+                "Note: Audio device not available in test environment: {}",
+                e
+            );
         }
     }
 }
@@ -181,25 +192,21 @@ fn test_device_info_after_creation() {
             eprintln!("Device: {}", device);
 
             // Backend should be Default (since we used `new()`)
-            assert_eq!(
-                backend,
-                AudioBackend::Default,
-                "Should use default backend"
-            );
+            assert_eq!(backend, AudioBackend::Default, "Should use default backend");
 
             // Device name should not be empty
             assert!(!device.is_empty(), "Device name should not be empty");
 
             // Device name should not be "Unknown Device" (unless that's actually the device name)
             if device != "Unknown Device" {
-                assert_ne!(
-                    device, "Unknown Device",
-                    "Device name should be resolved"
-                );
+                assert_ne!(device, "Unknown Device", "Device name should be resolved");
             }
         }
         Err(e) => {
-            eprintln!("Note: Audio device not available in test environment: {}", e);
+            eprintln!(
+                "Note: Audio device not available in test environment: {}",
+                e
+            );
         }
     }
 }
@@ -207,11 +214,8 @@ fn test_device_info_after_creation() {
 /// Test creating playback with specific backend
 #[test]
 fn test_create_with_specific_backend() {
-    let result = DesktopPlayback::new_with_device(
-        PlaybackConfig::default(),
-        AudioBackend::Default,
-        None,
-    );
+    let result =
+        DesktopPlayback::new_with_device(PlaybackConfig::default(), AudioBackend::Default, None);
 
     match result {
         Ok(playback) => {
@@ -219,7 +223,10 @@ fn test_create_with_specific_backend() {
             assert!(!playback.get_current_device().is_empty());
         }
         Err(e) => {
-            eprintln!("Note: Audio device not available in test environment: {}", e);
+            eprintln!(
+                "Note: Audio device not available in test environment: {}",
+                e
+            );
         }
     }
 }
@@ -267,7 +274,10 @@ fn test_rapid_device_switches() {
             assert!(!final_device.is_empty());
         }
         Err(e) => {
-            eprintln!("Note: Audio device not available in test environment: {}", e);
+            eprintln!(
+                "Note: Audio device not available in test environment: {}",
+                e
+            );
         }
     }
 }
@@ -311,7 +321,10 @@ fn test_switch_between_backends() {
                 }
             }
             Err(e) => {
-                eprintln!("Note: Audio device not available in test environment: {}", e);
+                eprintln!(
+                    "Note: Audio device not available in test environment: {}",
+                    e
+                );
             }
         }
     } else {

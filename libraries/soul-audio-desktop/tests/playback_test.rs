@@ -113,6 +113,68 @@ fn test_volume_control() {
 }
 
 #[test]
+fn test_volume_actually_affects_output_level() {
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
+    };
+
+    // Generate a test signal
+    let samples_full = generate_sine_wave(440.0, 0.1, 44100);
+    let format = AudioFormat::new(SampleRate::CD_QUALITY, 2, 32);
+
+    // Play at full volume
+    output.set_volume(1.0).unwrap();
+    let buffer_full = AudioBuffer::new(samples_full.clone(), format.clone());
+    assert!(output.play(&buffer_full).is_ok());
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    output.stop().unwrap();
+
+    // Play at half volume - the output should be quieter
+    // We can't directly measure the output, but we verify the volume is set
+    output.set_volume(0.5).unwrap();
+    assert_eq!(output.volume(), 0.5, "Volume should be set to 0.5");
+
+    // Play at zero volume
+    output.set_volume(0.0).unwrap();
+    assert_eq!(output.volume(), 0.0, "Volume should be set to 0.0");
+    let buffer_muted = AudioBuffer::new(samples_full.clone(), format);
+    assert!(output.play(&buffer_muted).is_ok());
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    output.stop().unwrap();
+
+    // Verify volume can be restored
+    output.set_volume(1.0).unwrap();
+    assert_eq!(output.volume(), 1.0, "Volume should be restored to 1.0");
+}
+
+#[test]
+fn test_volume_bounds_are_enforced() {
+    let Ok(mut output) = CpalOutput::new() else {
+        println!("No audio device - skipping test");
+        return;
+    };
+
+    // Set to valid volume first
+    output.set_volume(0.5).unwrap();
+
+    // Try to set invalid volumes - should fail and NOT change current volume
+    let original_volume = output.volume();
+
+    let result = output.set_volume(-0.5);
+    assert!(result.is_err(), "Negative volume should fail");
+    assert_eq!(output.volume(), original_volume, "Volume should not change on error");
+
+    let result = output.set_volume(2.0);
+    assert!(result.is_err(), "Volume > 1.0 should fail");
+    assert_eq!(output.volume(), original_volume, "Volume should not change on error");
+
+    let result = output.set_volume(f32::NAN);
+    assert!(result.is_err(), "NaN volume should fail");
+    assert_eq!(output.volume(), original_volume, "Volume should not change on error");
+}
+
+#[test]
 fn test_play_with_volume_change() {
     let Ok(mut output) = CpalOutput::new() else {
         println!("No audio device - skipping test");

@@ -46,6 +46,8 @@ export interface AudioSettings {
   resampling_target_rate: 'auto' | number;
   resampling_backend: 'auto' | 'rubato' | 'r8brain';
   volume_leveling_mode: 'disabled' | 'replaygain_track' | 'replaygain_album' | 'ebu_r128';
+  volume_leveling_preamp_db: number;
+  volume_leveling_prevent_clipping: boolean;
   preload_enabled: boolean;
   buffer_size: 'auto' | number;
   crossfade_enabled: boolean;
@@ -67,6 +69,8 @@ export function AudioSettingsPage() {
     resampling_target_rate: 'auto',
     resampling_backend: 'auto',
     volume_leveling_mode: 'disabled',
+    volume_leveling_preamp_db: 0,
+    volume_leveling_prevent_clipping: true,
     preload_enabled: true,
     buffer_size: 'auto',
     crossfade_enabled: false,
@@ -127,6 +131,8 @@ export function AudioSettingsPage() {
             resampling_target_rate: parsed.resampling_target_rate ?? parsed.upsampling_target_rate ?? 'auto',
             resampling_backend: parsed.resampling_backend ?? 'auto',
             volume_leveling_mode: parsed.volume_leveling_mode ?? 'disabled',
+            volume_leveling_preamp_db: parsed.volume_leveling_preamp_db ?? 0,
+            volume_leveling_prevent_clipping: parsed.volume_leveling_prevent_clipping ?? true,
             preload_enabled: parsed.preload_enabled ?? true,
             buffer_size: parsed.buffer_size ?? 'auto',
             crossfade_enabled: parsed.crossfade_enabled ?? false,
@@ -217,7 +223,7 @@ export function AudioSettingsPage() {
     loadDspChainCount();
   }, []);
 
-  const resetToDefaults = () => {
+  const resetToDefaults = async () => {
     updateSettings({
       backend: 'default',
       device_name: null,
@@ -227,12 +233,28 @@ export function AudioSettingsPage() {
       resampling_target_rate: 'auto',
       resampling_backend: 'auto',
       volume_leveling_mode: 'disabled',
+      volume_leveling_preamp_db: 0,
+      volume_leveling_prevent_clipping: true,
       preload_enabled: true,
       buffer_size: 'auto',
       crossfade_enabled: false,
       crossfade_duration_ms: 3000,
       crossfade_curve: 'equal_power',
     });
+    // Also reset the backend settings via Tauri commands
+    try {
+      await invoke('set_volume_leveling_mode', { mode: 'disabled' });
+      await invoke('set_volume_leveling_preamp', { preampDb: 0 });
+      await invoke('set_volume_leveling_prevent_clipping', { prevent: true });
+      // Reset crossfade settings to defaults
+      await invoke('set_crossfade_settings', {
+        enabled: false,
+        durationMs: 3000,
+        curve: 'equal_power',
+      });
+    } catch (error) {
+      console.error('Failed to reset audio settings:', error);
+    }
     setShowResetDialog(false);
   };
 
@@ -249,6 +271,107 @@ export function AudioSettingsPage() {
       case 'replaygain_album': return 'RG Album';
       case 'ebu_r128': return 'EBU R128';
       default: return 'Off';
+    }
+  };
+
+  // Handle preamp change
+  const handlePreampChange = async (preampDb: number) => {
+    updateSettings({ volume_leveling_preamp_db: preampDb });
+    try {
+      await invoke('set_volume_leveling_preamp', { preampDb });
+    } catch (error) {
+      console.error('Failed to set preamp:', error);
+    }
+  };
+
+  // Handle prevent clipping change
+  const handlePreventClippingChange = async (prevent: boolean) => {
+    updateSettings({ volume_leveling_prevent_clipping: prevent });
+    try {
+      await invoke('set_volume_leveling_prevent_clipping', { prevent });
+    } catch (error) {
+      console.error('Failed to set prevent clipping:', error);
+    }
+  };
+
+  // Handle crossfade changes with runtime application
+  const handleCrossfadeChange = async (crossfade: {
+    enabled: boolean;
+    durationMs: number;
+    curve: 'linear' | 'logarithmic' | 's_curve' | 'equal_power';
+  }) => {
+    // Update local state and persist to JSON settings
+    updateSettings({
+      crossfade_enabled: crossfade.enabled,
+      crossfade_duration_ms: crossfade.durationMs,
+      crossfade_curve: crossfade.curve,
+    });
+
+    // Apply settings to audio engine immediately (no restart required)
+    try {
+      // Map frontend curve names to backend curve names
+      const curveMapping: Record<string, string> = {
+        'linear': 'linear',
+        'logarithmic': 'square_root', // Backend uses square_root for this
+        's_curve': 's_curve',
+        'equal_power': 'equal_power',
+      };
+
+      await invoke('set_crossfade_settings', {
+        enabled: crossfade.enabled,
+        durationMs: crossfade.durationMs,
+        curve: curveMapping[crossfade.curve] || 'equal_power',
+      });
+    } catch (error) {
+      console.error('Failed to apply crossfade settings:', error);
+      showNotification('error', 'Failed to apply crossfade settings');
+    }
+  };
+
+  // Handle resampling quality change
+  const handleResamplingQualityChange = async (quality: 'fast' | 'balanced' | 'high' | 'maximum') => {
+    // Update local state and persist to JSON
+    updateSettings({ resampling_quality: quality });
+
+    // Apply to audio engine (takes effect on next track)
+    try {
+      await invoke('set_resampling_quality', { quality });
+      showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
+    } catch (error) {
+      console.error('Failed to apply resampling quality:', error);
+      showNotification('error', 'Failed to apply resampling quality');
+    }
+  };
+
+  // Handle resampling target rate change
+  const handleResamplingTargetRateChange = async (rate: 'auto' | number) => {
+    // Update local state and persist to JSON
+    updateSettings({ resampling_target_rate: rate });
+
+    // Apply to audio engine (takes effect on next track)
+    try {
+      // Convert 'auto' to 0 for backend
+      const targetRate = rate === 'auto' ? 0 : rate;
+      await invoke('set_resampling_target_rate', { rate: targetRate });
+      showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
+    } catch (error) {
+      console.error('Failed to apply resampling target rate:', error);
+      showNotification('error', 'Failed to apply resampling target rate');
+    }
+  };
+
+  // Handle resampling backend change
+  const handleResamplingBackendChange = async (backend: 'auto' | 'rubato' | 'r8brain') => {
+    // Update local state and persist to JSON
+    updateSettings({ resampling_backend: backend });
+
+    // Apply to audio engine (takes effect on next track)
+    try {
+      await invoke('set_resampling_backend', { backend });
+      showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
+    } catch (error) {
+      console.error('Failed to apply resampling backend:', error);
+      showNotification('error', 'Failed to apply resampling backend');
     }
   };
 
@@ -334,9 +457,9 @@ export function AudioSettingsPage() {
             targetRate={settings.resampling_target_rate}
             backend={settings.resampling_backend}
             r8brainAvailable={r8brainAvailable}
-            onQualityChange={(quality) => updateSettings({ resampling_quality: quality })}
-            onTargetRateChange={(rate) => updateSettings({ resampling_target_rate: rate })}
-            onBackendChange={(backend) => updateSettings({ resampling_backend: backend })}
+            onQualityChange={handleResamplingQualityChange}
+            onTargetRateChange={handleResamplingTargetRateChange}
+            onBackendChange={handleResamplingBackendChange}
           />
         </PipelineStage>
 
@@ -365,7 +488,20 @@ export function AudioSettingsPage() {
         >
           <VolumeLevelingSettings
             mode={settings.volume_leveling_mode}
-            onModeChange={(mode) => updateSettings({ volume_leveling_mode: mode })}
+            preampDb={settings.volume_leveling_preamp_db}
+            preventClipping={settings.volume_leveling_prevent_clipping}
+            onModeChange={async (mode) => {
+              // First apply to audio engine immediately
+              try {
+                await invoke('set_volume_leveling_mode', { mode });
+              } catch (error) {
+                console.error('Failed to set volume leveling mode:', error);
+              }
+              // Then persist to settings
+              updateSettings({ volume_leveling_mode: mode });
+            }}
+            onPreampChange={handlePreampChange}
+            onPreventClippingChange={handlePreventClippingChange}
           />
         </PipelineStage>
 
@@ -388,11 +524,7 @@ export function AudioSettingsPage() {
             }}
             onBufferSizeChange={(size) => updateSettings({ buffer_size: size })}
             onPreloadChange={(enabled) => updateSettings({ preload_enabled: enabled })}
-            onCrossfadeChange={(crossfade) => updateSettings({
-              crossfade_enabled: crossfade.enabled,
-              crossfade_duration_ms: crossfade.durationMs,
-              crossfade_curve: crossfade.curve,
-            })}
+            onCrossfadeChange={handleCrossfadeChange}
           />
         </PipelineStage>
 

@@ -1,10 +1,10 @@
 //! WASM-compatible type definitions
 
-use wasm_bindgen::prelude::*;
-use serde::{Deserialize, Serialize};
 use crate::{QueueTrack, TrackSource};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
+use wasm_bindgen::prelude::*;
 
 /// WASM-compatible queue track
 ///

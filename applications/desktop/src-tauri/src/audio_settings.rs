@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use soul_audio_desktop::{
     backend, device, AudioBackend, AudioDeviceInfo, BackendInfo, DeviceCapabilities,
-    SupportedBitDepth,
+    ExclusiveConfig, LatencyInfo, SupportedBitDepth,
 };
 use tauri::State;
 
@@ -117,7 +117,11 @@ impl From<DeviceCapabilities> for FrontendDeviceCapabilities {
 
         Self {
             sample_rates: caps.sample_rates,
-            bit_depths: caps.bit_depths.into_iter().map(FrontendBitDepth::from).collect(),
+            bit_depths: caps
+                .bit_depths
+                .into_iter()
+                .map(FrontendBitDepth::from)
+                .collect(),
             max_channels: caps.max_channels,
             supports_exclusive: caps.supports_exclusive,
             supports_dsd: caps.supports_dsd,
@@ -188,10 +192,15 @@ pub async fn get_audio_backends() -> Result<Vec<FrontendBackendInfo>, String> {
     eprintln!("[audio_settings] Getting available backends");
 
     let backends = backend::get_backend_info();
-    let frontend_backends: Vec<FrontendBackendInfo> =
-        backends.into_iter().map(FrontendBackendInfo::from).collect();
+    let frontend_backends: Vec<FrontendBackendInfo> = backends
+        .into_iter()
+        .map(FrontendBackendInfo::from)
+        .collect();
 
-    eprintln!("[audio_settings] Found {} backends", frontend_backends.len());
+    eprintln!(
+        "[audio_settings] Found {} backends",
+        frontend_backends.len()
+    );
     for b in &frontend_backends {
         eprintln!(
             "  - {} ({}): available={}, devices={}",
@@ -205,7 +214,10 @@ pub async fn get_audio_backends() -> Result<Vec<FrontendBackendInfo>, String> {
 /// Get all audio devices for a specific backend
 #[tauri::command]
 pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDeviceInfo>, String> {
-    eprintln!("[audio_settings] Getting devices for backend: {}", backend_str);
+    eprintln!(
+        "[audio_settings] Getting devices for backend: {}",
+        backend_str
+    );
 
     let backend = parse_backend(&backend_str)?;
     let devices = device::list_devices(backend).map_err(|e| e.to_string())?;
@@ -222,15 +234,18 @@ pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDevice
         eprintln!(
             "  - {}: {}Hz, {}ch{}",
             d.name,
-            d.sample_rate.map(|r| r.to_string()).unwrap_or_else(|| "?".to_string()),
-            d.channels.map(|c| c.to_string()).unwrap_or_else(|| "?".to_string()),
+            d.sample_rate
+                .map(|r| r.to_string())
+                .unwrap_or_else(|| "?".to_string()),
+            d.channels
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "?".to_string()),
             if d.is_default { " [DEFAULT]" } else { "" }
         );
     }
 
     Ok(frontend_devices)
 }
-
 
 /// Set the audio output device
 ///
@@ -275,15 +290,15 @@ pub async fn set_audio_device(
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, key) DO UPDATE SET
             value = excluded.value,
-            updated_at = excluded.updated_at"
+            updated_at = excluded.updated_at",
     )
-        .bind(user_id)
-        .bind("audio.output_device")
-        .bind(settings.to_string())
-        .bind(now)
-        .execute(&*app_state.pool)
-        .await
-        .map_err(|e| format!("Failed to save device setting: {}", e))?;
+    .bind(user_id)
+    .bind("audio.output_device")
+    .bind(settings.to_string())
+    .bind(now)
+    .execute(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to save device setting: {}", e))?;
 
     eprintln!("[audio_settings] Device setting saved to database");
 
@@ -301,13 +316,13 @@ pub async fn initialize_audio_device(
 
     // Try to load saved device setting
     let saved_setting = sqlx::query_as::<_, (String,)>(
-        "SELECT value FROM user_settings WHERE user_id = ? AND key = ?"
+        "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
     )
-        .bind(&app_state.user_id)
-        .bind("audio.output_device")
-        .fetch_optional(&*app_state.pool)
-        .await
-        .map_err(|e| format!("Failed to load device setting: {}", e))?;
+    .bind(&app_state.user_id)
+    .bind("audio.output_device")
+    .fetch_optional(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to load device setting: {}", e))?;
 
     if let Some((value,)) = saved_setting {
         // Parse saved settings
@@ -366,16 +381,18 @@ pub async fn get_current_audio_device(
 
     // Try to get device info by listing all devices and finding the matching one
     let (channels, is_default) = match device::list_devices(backend) {
-        Ok(devices) => {
-            devices.into_iter()
-                .find(|d| d.name == device_name)
-                .map(|d| (Some(d.channels), d.is_default))
-                .unwrap_or((None, false))
-        }
+        Ok(devices) => devices
+            .into_iter()
+            .find(|d| d.name == device_name)
+            .map(|d| (Some(d.channels), d.is_default))
+            .unwrap_or((None, false)),
         Err(_) => (None, false),
     };
 
-    eprintln!("[audio_settings] Current device: {} ({}) at {} Hz", device_name, backend_str, active_sample_rate);
+    eprintln!(
+        "[audio_settings] Current device: {} ({}) at {} Hz",
+        device_name, backend_str, active_sample_rate
+    );
 
     Ok(FrontendDeviceInfo {
         name: device_name,
@@ -394,9 +411,7 @@ pub async fn get_current_audio_device(
 /// This is useful when the user knows they've changed device settings
 /// (e.g., via ASIO control panel) and wants to immediately update.
 #[tauri::command]
-pub async fn refresh_sample_rate(
-    playback: State<'_, PlaybackManager>,
-) -> Result<bool, String> {
+pub async fn refresh_sample_rate(playback: State<'_, PlaybackManager>) -> Result<bool, String> {
     eprintln!("[audio_settings] Refreshing sample rate...");
     let result = playback.refresh_sample_rate()?;
     if result {
@@ -436,8 +451,7 @@ pub async fn get_device_capabilities(
     );
 
     let backend = parse_backend(&backend_str)?;
-    let caps =
-        device::get_device_capabilities(backend, &device_name).map_err(|e| e.to_string())?;
+    let caps = device::get_device_capabilities(backend, &device_name).map_err(|e| e.to_string())?;
 
     let frontend_caps = FrontendDeviceCapabilities::from(caps);
 
@@ -538,4 +552,849 @@ mod tests {
 
     // Note: test_get_current_device requires PlaybackManager state which isn't available in unit tests
     // This would need to be an integration test with proper Tauri state setup
+}
+
+// ==============================================================================
+// Exclusive Mode and Latency Monitoring
+// ==============================================================================
+
+/// Frontend-compatible latency information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontendLatencyInfo {
+    /// Buffer latency in samples
+    pub buffer_samples: u32,
+    /// Buffer latency in milliseconds
+    pub buffer_ms: f32,
+    /// Total estimated output latency in milliseconds (includes DAC)
+    pub total_ms: f32,
+    /// Whether running in exclusive mode
+    pub exclusive: bool,
+}
+
+impl From<LatencyInfo> for FrontendLatencyInfo {
+    fn from(info: LatencyInfo) -> Self {
+        Self {
+            buffer_samples: info.buffer_samples,
+            buffer_ms: info.buffer_ms,
+            total_ms: info.total_ms,
+            exclusive: info.exclusive,
+        }
+    }
+}
+
+/// Frontend-compatible exclusive mode configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontendExclusiveConfig {
+    /// Target sample rate (Hz) - 0 for device native
+    pub sample_rate: u32,
+    /// Target bit depth: "int16", "int24", "int32", "float32", "float64"
+    pub bit_depth: String,
+    /// Buffer size in frames (smaller = lower latency)
+    pub buffer_frames: Option<u32>,
+    /// Enable exclusive mode
+    pub exclusive_mode: bool,
+    /// Device name (None for default device)
+    pub device_name: Option<String>,
+    /// Backend: "default", "asio", "jack"
+    pub backend: String,
+}
+
+impl Default for FrontendExclusiveConfig {
+    fn default() -> Self {
+        Self {
+            sample_rate: 0,
+            bit_depth: "float32".to_string(),
+            buffer_frames: None,
+            exclusive_mode: true,
+            device_name: None,
+            backend: "default".to_string(),
+        }
+    }
+}
+
+impl TryFrom<FrontendExclusiveConfig> for ExclusiveConfig {
+    type Error = String;
+
+    fn try_from(config: FrontendExclusiveConfig) -> Result<Self, Self::Error> {
+        let bit_depth = match config.bit_depth.as_str() {
+            "int16" => SupportedBitDepth::Int16,
+            "int24" => SupportedBitDepth::Int24,
+            "int32" => SupportedBitDepth::Int32,
+            "float32" => SupportedBitDepth::Float32,
+            "float64" => SupportedBitDepth::Float64,
+            other => return Err(format!("Unknown bit depth: {}", other)),
+        };
+
+        let backend = parse_backend(&config.backend)?;
+
+        Ok(ExclusiveConfig {
+            sample_rate: config.sample_rate,
+            bit_depth,
+            buffer_frames: config.buffer_frames,
+            exclusive_mode: config.exclusive_mode,
+            device_name: config.device_name,
+            backend,
+        })
+    }
+}
+
+/// Get current latency information from the playback system
+#[tauri::command]
+pub async fn get_latency_info(
+    playback: State<'_, PlaybackManager>,
+) -> Result<FrontendLatencyInfo, String> {
+    eprintln!("[audio_settings] Getting latency info");
+
+    let latency = playback.get_latency_info();
+
+    let info = FrontendLatencyInfo::from(latency);
+    eprintln!(
+        "[audio_settings] Latency: {} samples, {:.2}ms buffer, {:.2}ms total, exclusive={}",
+        info.buffer_samples, info.buffer_ms, info.total_ms, info.exclusive
+    );
+
+    Ok(info)
+}
+
+/// Set exclusive mode configuration
+///
+/// Switches to exclusive mode output for bit-perfect playback and lower latency
+#[tauri::command]
+pub async fn set_exclusive_mode(
+    config: FrontendExclusiveConfig,
+    playback: State<'_, PlaybackManager>,
+    app_state: State<'_, AppState>,
+) -> Result<FrontendLatencyInfo, String> {
+    eprintln!("[audio_settings] Setting exclusive mode: {:?}", config);
+
+    let exclusive_config: ExclusiveConfig = config.clone().try_into()?;
+
+    // Enable exclusive mode in playback manager
+    let latency = playback
+        .set_exclusive_mode(exclusive_config)
+        .map_err(|e| format!("Failed to set exclusive mode: {}", e))?;
+
+    // Save settings to database
+    let user_id = &app_state.user_id;
+    let settings = serde_json::json!({
+        "sample_rate": config.sample_rate,
+        "bit_depth": config.bit_depth,
+        "buffer_frames": config.buffer_frames,
+        "exclusive_mode": config.exclusive_mode,
+        "device_name": config.device_name,
+        "backend": config.backend,
+    });
+
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        "INSERT INTO user_settings (user_id, key, value, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind("audio.exclusive_mode")
+    .bind(settings.to_string())
+    .bind(now)
+    .execute(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to save exclusive mode setting: {}", e))?;
+
+    eprintln!("[audio_settings] Exclusive mode configured successfully");
+
+    Ok(FrontendLatencyInfo::from(latency))
+}
+
+/// Disable exclusive mode (return to shared mode)
+#[tauri::command]
+pub async fn disable_exclusive_mode(
+    playback: State<'_, PlaybackManager>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    eprintln!("[audio_settings] Disabling exclusive mode");
+
+    playback
+        .disable_exclusive_mode()
+        .map_err(|e| format!("Failed to disable exclusive mode: {}", e))?;
+
+    // Update settings in database
+    let user_id = &app_state.user_id;
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        "INSERT INTO user_settings (user_id, key, value, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind("audio.exclusive_mode")
+    .bind("{\"exclusive_mode\": false}")
+    .bind(now)
+    .execute(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to save exclusive mode setting: {}", e))?;
+
+    eprintln!("[audio_settings] Exclusive mode disabled");
+    Ok(())
+}
+
+/// Check if currently in exclusive mode
+#[tauri::command]
+pub async fn is_exclusive_mode(playback: State<'_, PlaybackManager>) -> Result<bool, String> {
+    Ok(playback.is_exclusive_mode())
+}
+
+/// Get available buffer sizes for a device
+///
+/// Returns common buffer sizes and whether they're supported by the device
+#[tauri::command]
+pub async fn get_available_buffer_sizes(
+    backend_str: String,
+    device_name: String,
+) -> Result<Vec<BufferSizeOption>, String> {
+    eprintln!(
+        "[audio_settings] Getting buffer sizes for {} ({})",
+        device_name, backend_str
+    );
+
+    let backend = parse_backend(&backend_str)?;
+    let caps = device::get_device_capabilities(backend, &device_name).map_err(|e| e.to_string())?;
+
+    // Standard buffer sizes in frames
+    let standard_sizes = [32, 64, 128, 256, 512, 1024, 2048, 4096];
+
+    let options: Vec<BufferSizeOption> = standard_sizes
+        .iter()
+        .map(|&frames| {
+            let supported = match (caps.min_buffer_frames, caps.max_buffer_frames) {
+                (Some(min), Some(max)) => frames >= min && frames <= max,
+                _ => true, // If unknown, assume supported
+            };
+
+            // Calculate latency at common sample rates
+            let latency_ms_44100 = frames as f32 / 44100.0 * 1000.0;
+            let latency_ms_48000 = frames as f32 / 48000.0 * 1000.0;
+
+            BufferSizeOption {
+                frames,
+                supported,
+                latency_ms_44100,
+                latency_ms_48000,
+            }
+        })
+        .collect();
+
+    eprintln!(
+        "[audio_settings] Found {} buffer size options",
+        options.len()
+    );
+
+    Ok(options)
+}
+
+/// Buffer size option for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BufferSizeOption {
+    /// Buffer size in frames
+    pub frames: u32,
+    /// Whether this size is supported by the device
+    pub supported: bool,
+    /// Latency in ms at 44.1kHz
+    pub latency_ms_44100: f32,
+    /// Latency in ms at 48kHz
+    pub latency_ms_48000: f32,
+}
+
+/// Get recommended exclusive mode preset for a use case
+#[tauri::command]
+pub async fn get_exclusive_preset(
+    preset: String,
+    backend_str: Option<String>,
+    device_name: Option<String>,
+) -> Result<FrontendExclusiveConfig, String> {
+    eprintln!("[audio_settings] Getting exclusive preset: {}", preset);
+
+    let backend = backend_str.unwrap_or_else(|| "default".to_string());
+
+    let config = match preset.as_str() {
+        "bit_perfect_16" => FrontendExclusiveConfig {
+            bit_depth: "int16".to_string(),
+            exclusive_mode: true,
+            backend,
+            device_name,
+            ..Default::default()
+        },
+        "bit_perfect_24" => FrontendExclusiveConfig {
+            bit_depth: "int24".to_string(),
+            exclusive_mode: true,
+            backend,
+            device_name,
+            ..Default::default()
+        },
+        "bit_perfect_32" => FrontendExclusiveConfig {
+            bit_depth: "int32".to_string(),
+            exclusive_mode: true,
+            backend,
+            device_name,
+            ..Default::default()
+        },
+        "low_latency" => FrontendExclusiveConfig {
+            buffer_frames: Some(128),
+            exclusive_mode: true,
+            backend,
+            device_name,
+            ..Default::default()
+        },
+        "ultra_low_latency" => FrontendExclusiveConfig {
+            buffer_frames: Some(64),
+            exclusive_mode: true,
+            backend,
+            device_name,
+            ..Default::default()
+        },
+        "balanced" => FrontendExclusiveConfig {
+            buffer_frames: Some(256),
+            exclusive_mode: true,
+            backend,
+            device_name,
+            ..Default::default()
+        },
+        _ => return Err(format!("Unknown preset: {}", preset)),
+    };
+
+    Ok(config)
+}
+
+// ==============================================================================
+// Crossfade Settings
+// ==============================================================================
+
+/// Set crossfade enabled/disabled
+///
+/// Applies immediately without requiring app restart.
+/// When enabled, tracks will blend into each other during transitions.
+/// When disabled, gapless playback is used.
+#[tauri::command]
+pub async fn set_crossfade_enabled(
+    enabled: bool,
+    playback: State<'_, PlaybackManager>,
+) -> Result<(), String> {
+    eprintln!("[audio_settings] Setting crossfade enabled: {}", enabled);
+    playback.set_crossfade_enabled(enabled);
+    Ok(())
+}
+
+/// Get current crossfade enabled state
+#[tauri::command]
+pub async fn is_crossfade_enabled(
+    playback: State<'_, PlaybackManager>,
+) -> Result<bool, String> {
+    Ok(playback.is_crossfade_enabled())
+}
+
+/// Set crossfade duration in milliseconds
+///
+/// Applies immediately without requiring app restart.
+/// Duration is capped at 10000ms (10 seconds).
+/// A duration of 0 means gapless playback (no crossfade).
+#[tauri::command]
+pub async fn set_crossfade_duration(
+    duration_ms: u32,
+    playback: State<'_, PlaybackManager>,
+) -> Result<(), String> {
+    eprintln!(
+        "[audio_settings] Setting crossfade duration: {}ms",
+        duration_ms
+    );
+    playback.set_crossfade_duration(duration_ms);
+    Ok(())
+}
+
+/// Get crossfade duration in milliseconds
+#[tauri::command]
+pub async fn get_crossfade_duration(
+    playback: State<'_, PlaybackManager>,
+) -> Result<u32, String> {
+    Ok(playback.get_crossfade_duration())
+}
+
+/// Set crossfade curve type
+///
+/// Applies immediately without requiring app restart.
+/// Available curves:
+/// - "linear": Simple linear fade
+/// - "square_root": Natural-sounding transitions
+/// - "s_curve": Smooth acceleration at start/end
+/// - "equal_power": Constant perceived loudness (recommended)
+#[tauri::command]
+pub async fn set_crossfade_curve(
+    curve: String,
+    playback: State<'_, PlaybackManager>,
+) -> Result<(), String> {
+    eprintln!("[audio_settings] Setting crossfade curve: {}", curve);
+
+    let fade_curve = match curve.as_str() {
+        "linear" => soul_playback::FadeCurve::Linear,
+        "square_root" | "logarithmic" => soul_playback::FadeCurve::SquareRoot,
+        "s_curve" => soul_playback::FadeCurve::SCurve,
+        "equal_power" => soul_playback::FadeCurve::EqualPower,
+        other => return Err(format!("Unknown crossfade curve: {}", other)),
+    };
+
+    playback.set_crossfade_curve(fade_curve);
+    Ok(())
+}
+
+/// Get crossfade curve type as string
+#[tauri::command]
+pub async fn get_crossfade_curve(
+    playback: State<'_, PlaybackManager>,
+) -> Result<String, String> {
+    let curve = playback.get_crossfade_curve();
+    let curve_str = match curve {
+        soul_playback::FadeCurve::Linear => "linear",
+        soul_playback::FadeCurve::SquareRoot => "square_root",
+        #[allow(deprecated)]
+        soul_playback::FadeCurve::Logarithmic => "square_root",
+        soul_playback::FadeCurve::SCurve => "s_curve",
+        soul_playback::FadeCurve::EqualPower => "equal_power",
+    };
+    Ok(curve_str.to_string())
+}
+
+/// Set all crossfade settings at once
+///
+/// This is a convenience command that updates enabled, duration, and curve
+/// in a single call, avoiding multiple round-trips. All settings apply immediately.
+#[tauri::command]
+pub async fn set_crossfade_settings(
+    enabled: bool,
+    duration_ms: u32,
+    curve: String,
+    playback: State<'_, PlaybackManager>,
+) -> Result<(), String> {
+    eprintln!(
+        "[audio_settings] Setting crossfade settings: enabled={}, duration={}ms, curve={}",
+        enabled, duration_ms, curve
+    );
+
+    // Set curve first
+    let fade_curve = match curve.as_str() {
+        "linear" => soul_playback::FadeCurve::Linear,
+        "square_root" | "logarithmic" => soul_playback::FadeCurve::SquareRoot,
+        "s_curve" => soul_playback::FadeCurve::SCurve,
+        "equal_power" => soul_playback::FadeCurve::EqualPower,
+        other => return Err(format!("Unknown crossfade curve: {}", other)),
+    };
+
+    playback.set_crossfade_curve(fade_curve);
+    playback.set_crossfade_duration(duration_ms);
+    playback.set_crossfade_enabled(enabled);
+
+    eprintln!("[audio_settings] Crossfade settings applied successfully");
+    Ok(())
+}
+
+/// Get all crossfade settings at once
+#[tauri::command]
+pub async fn get_crossfade_settings(
+    playback: State<'_, PlaybackManager>,
+) -> Result<CrossfadeSettingsInfo, String> {
+    let enabled = playback.is_crossfade_enabled();
+    let duration_ms = playback.get_crossfade_duration();
+    let curve = playback.get_crossfade_curve();
+
+    let curve_str = match curve {
+        soul_playback::FadeCurve::Linear => "linear",
+        soul_playback::FadeCurve::SquareRoot => "square_root",
+        #[allow(deprecated)]
+        soul_playback::FadeCurve::Logarithmic => "square_root",
+        soul_playback::FadeCurve::SCurve => "s_curve",
+        soul_playback::FadeCurve::EqualPower => "equal_power",
+    };
+
+    Ok(CrossfadeSettingsInfo {
+        enabled,
+        duration_ms,
+        curve: curve_str.to_string(),
+    })
+}
+
+/// Crossfade settings info for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrossfadeSettingsInfo {
+    /// Whether crossfade is enabled
+    pub enabled: bool,
+    /// Crossfade duration in milliseconds
+    pub duration_ms: u32,
+    /// Crossfade curve type: "linear", "square_root", "s_curve", "equal_power"
+    pub curve: String,
+}
+
+// ==============================================================================
+// Resampling Settings
+// ==============================================================================
+
+/// Resampling settings info for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResamplingSettingsInfo {
+    /// Quality preset: "fast", "balanced", "high", "maximum"
+    pub quality: String,
+    /// Target sample rate: 0 = auto (match device), or specific rate like 96000
+    pub target_rate: u32,
+    /// Backend: "auto", "rubato", "r8brain"
+    pub backend: String,
+}
+
+/// Set resampling quality preset
+///
+/// Quality presets:
+/// - "fast": Low CPU, 64-tap filter, good for older hardware
+/// - "balanced": Moderate CPU, 128-tap filter, good quality
+/// - "high": Higher CPU, 256-tap filter, excellent quality (default)
+/// - "maximum": Highest CPU, 512-tap filter, audiophile quality
+///
+/// Note: Changes apply to newly loaded tracks. The current track will continue
+/// playing with its existing resampler settings until the next track loads.
+#[tauri::command]
+pub async fn set_resampling_quality(
+    quality: String,
+    playback: State<'_, PlaybackManager>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    eprintln!("[audio_settings] Setting resampling quality: {}", quality);
+
+    // Validate quality value
+    let valid_qualities = ["fast", "balanced", "high", "maximum"];
+    if !valid_qualities.contains(&quality.as_str()) {
+        return Err(format!(
+            "Invalid quality '{}'. Must be one of: {}",
+            quality,
+            valid_qualities.join(", ")
+        ));
+    }
+
+    // Apply to playback manager
+    playback.set_resampling_quality(&quality)?;
+
+    // Persist to database
+    let user_id = &app_state.user_id;
+    let now = chrono::Utc::now().timestamp();
+
+    // Load existing settings
+    let existing = sqlx::query_as::<_, (String,)>(
+        "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
+    )
+    .bind(user_id)
+    .bind("audio.resampling")
+    .fetch_optional(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to load existing settings: {}", e))?;
+
+    let mut settings: serde_json::Value = existing
+        .and_then(|(v,)| serde_json::from_str(&v).ok())
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "quality": "high",
+                "target_rate": 0,
+                "backend": "auto"
+            })
+        });
+
+    settings["quality"] = serde_json::Value::String(quality.clone());
+
+    sqlx::query(
+        "INSERT INTO user_settings (user_id, key, value, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind("audio.resampling")
+    .bind(settings.to_string())
+    .bind(now)
+    .execute(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to save resampling quality: {}", e))?;
+
+    eprintln!("[audio_settings] Resampling quality set to '{}'. Will apply to next track.", quality);
+    Ok(())
+}
+
+/// Get current resampling quality preset
+#[tauri::command]
+pub async fn get_resampling_quality(
+    playback: State<'_, PlaybackManager>,
+) -> Result<String, String> {
+    Ok(playback.get_resampling_quality())
+}
+
+/// Set resampling target sample rate
+///
+/// Arguments:
+/// - rate: Target sample rate in Hz. Use 0 for "auto" (match device native rate)
+///   Common values: 44100, 48000, 88200, 96000, 176400, 192000
+///
+/// Note: Changes apply to newly loaded tracks.
+#[tauri::command]
+pub async fn set_resampling_target_rate(
+    rate: u32,
+    playback: State<'_, PlaybackManager>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    eprintln!("[audio_settings] Setting resampling target rate: {} (0=auto)", rate);
+
+    // Validate rate (0 = auto, otherwise must be a reasonable sample rate)
+    if rate != 0 && (rate < 8000 || rate > 384000) {
+        return Err(format!(
+            "Invalid target rate {}. Must be 0 (auto) or between 8000 and 384000 Hz",
+            rate
+        ));
+    }
+
+    // Apply to playback manager
+    playback.set_resampling_target_rate(rate)?;
+
+    // Persist to database
+    let user_id = &app_state.user_id;
+    let now = chrono::Utc::now().timestamp();
+
+    // Load existing settings
+    let existing = sqlx::query_as::<_, (String,)>(
+        "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
+    )
+    .bind(user_id)
+    .bind("audio.resampling")
+    .fetch_optional(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to load existing settings: {}", e))?;
+
+    let mut settings: serde_json::Value = existing
+        .and_then(|(v,)| serde_json::from_str(&v).ok())
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "quality": "high",
+                "target_rate": 0,
+                "backend": "auto"
+            })
+        });
+
+    settings["target_rate"] = serde_json::Value::Number(rate.into());
+
+    sqlx::query(
+        "INSERT INTO user_settings (user_id, key, value, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind("audio.resampling")
+    .bind(settings.to_string())
+    .bind(now)
+    .execute(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to save resampling target rate: {}", e))?;
+
+    eprintln!("[audio_settings] Resampling target rate set. Will apply to next track.");
+    Ok(())
+}
+
+/// Get current resampling target sample rate
+///
+/// Returns 0 for "auto" mode, otherwise the specific target rate in Hz
+#[tauri::command]
+pub async fn get_resampling_target_rate(
+    playback: State<'_, PlaybackManager>,
+) -> Result<u32, String> {
+    Ok(playback.get_resampling_target_rate())
+}
+
+/// Set resampling backend
+///
+/// Backends:
+/// - "auto": Use r8brain if available, otherwise rubato
+/// - "rubato": Fast, portable Sinc resampler (always available)
+/// - "r8brain": Audiophile-grade resampler (requires r8brain feature)
+///
+/// Note: Changes apply to newly loaded tracks.
+#[tauri::command]
+pub async fn set_resampling_backend(
+    backend: String,
+    playback: State<'_, PlaybackManager>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    eprintln!("[audio_settings] Setting resampling backend: {}", backend);
+
+    // Validate backend value
+    let valid_backends = ["auto", "rubato", "r8brain"];
+    if !valid_backends.contains(&backend.as_str()) {
+        return Err(format!(
+            "Invalid backend '{}'. Must be one of: {}",
+            backend,
+            valid_backends.join(", ")
+        ));
+    }
+
+    // Check if r8brain is available when explicitly requested
+    if backend == "r8brain" {
+        #[cfg(not(feature = "r8brain"))]
+        {
+            return Err("r8brain backend is not available in this build".to_string());
+        }
+    }
+
+    // Apply to playback manager
+    playback.set_resampling_backend(&backend)?;
+
+    // Persist to database
+    let user_id = &app_state.user_id;
+    let now = chrono::Utc::now().timestamp();
+
+    // Load existing settings
+    let existing = sqlx::query_as::<_, (String,)>(
+        "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
+    )
+    .bind(user_id)
+    .bind("audio.resampling")
+    .fetch_optional(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to load existing settings: {}", e))?;
+
+    let mut settings: serde_json::Value = existing
+        .and_then(|(v,)| serde_json::from_str(&v).ok())
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "quality": "high",
+                "target_rate": 0,
+                "backend": "auto"
+            })
+        });
+
+    settings["backend"] = serde_json::Value::String(backend);
+
+    sqlx::query(
+        "INSERT INTO user_settings (user_id, key, value, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind("audio.resampling")
+    .bind(settings.to_string())
+    .bind(now)
+    .execute(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to save resampling backend: {}", e))?;
+
+    eprintln!("[audio_settings] Resampling backend set. Will apply to next track.");
+    Ok(())
+}
+
+/// Get current resampling backend
+#[tauri::command]
+pub async fn get_resampling_backend(
+    playback: State<'_, PlaybackManager>,
+) -> Result<String, String> {
+    Ok(playback.get_resampling_backend())
+}
+
+/// Set all resampling settings at once
+///
+/// This is a convenience command that updates quality, target rate, and backend
+/// in a single call. All settings apply to newly loaded tracks.
+#[tauri::command]
+pub async fn set_resampling_settings(
+    quality: String,
+    target_rate: u32,
+    backend: String,
+    playback: State<'_, PlaybackManager>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    eprintln!(
+        "[audio_settings] Setting resampling settings: quality={}, target_rate={}, backend={}",
+        quality, target_rate, backend
+    );
+
+    // Validate all values
+    let valid_qualities = ["fast", "balanced", "high", "maximum"];
+    if !valid_qualities.contains(&quality.as_str()) {
+        return Err(format!(
+            "Invalid quality '{}'. Must be one of: {}",
+            quality,
+            valid_qualities.join(", ")
+        ));
+    }
+
+    if target_rate != 0 && (target_rate < 8000 || target_rate > 384000) {
+        return Err(format!(
+            "Invalid target rate {}. Must be 0 (auto) or between 8000 and 384000 Hz",
+            target_rate
+        ));
+    }
+
+    let valid_backends = ["auto", "rubato", "r8brain"];
+    if !valid_backends.contains(&backend.as_str()) {
+        return Err(format!(
+            "Invalid backend '{}'. Must be one of: {}",
+            backend,
+            valid_backends.join(", ")
+        ));
+    }
+
+    // Apply to playback manager
+    playback.set_resampling_quality(&quality)?;
+    playback.set_resampling_target_rate(target_rate)?;
+    playback.set_resampling_backend(&backend)?;
+
+    // Persist to database
+    let user_id = &app_state.user_id;
+    let settings = serde_json::json!({
+        "quality": quality,
+        "target_rate": target_rate,
+        "backend": backend,
+    });
+
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        "INSERT INTO user_settings (user_id, key, value, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at",
+    )
+    .bind(user_id)
+    .bind("audio.resampling")
+    .bind(settings.to_string())
+    .bind(now)
+    .execute(&*app_state.pool)
+    .await
+    .map_err(|e| format!("Failed to save resampling settings: {}", e))?;
+
+    eprintln!("[audio_settings] Resampling settings saved. Will apply to next track.");
+    Ok(())
+}
+
+/// Get all resampling settings at once
+#[tauri::command]
+pub async fn get_resampling_settings(
+    playback: State<'_, PlaybackManager>,
+) -> Result<ResamplingSettingsInfo, String> {
+    Ok(ResamplingSettingsInfo {
+        quality: playback.get_resampling_quality(),
+        target_rate: playback.get_resampling_target_rate(),
+        backend: playback.get_resampling_backend(),
+    })
 }

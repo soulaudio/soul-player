@@ -19,6 +19,7 @@ path = "src/main.rs"
 # Internal workspace crates
 soul-core.workspace = true
 soul-storage.workspace = true
+soul-importer.workspace = true
 soul-metadata = { path = "../../libraries/soul-metadata" }
 
 # Web framework

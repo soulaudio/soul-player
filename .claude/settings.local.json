@@ -124,7 +124,48 @@
       "Bash(DATABASE_URL=\"sqlite:test_offline.db\" sqlx migrate run:*)",
       "Bash(DATABASE_URL=\"sqlite:test_offline.db\" cargo sqlx prepare:*)",
       "Bash(DATABASE_URL=\"sqlite:D:/dev/soulaudio/soul-player/libraries/soul-storage/test_offline.db\" cargo sqlx prepare:*)",
-      "Bash(cargo install:*)"
+      "Bash(cargo install:*)",
+      "Bash(timeout:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(set:*)",
+      "Bash($env:SQLX_OFFLINE=\"true\")",
+      "WebFetch(domain:crates.io)",
+      "Bash(yarn:*)",
+      "Bash(if not exist \".claude\\\\hooks\" mkdir \".claude\\\\hooks\")",
+      "Bash(findstr:*)",
+      "Bash($env:SQLX_OFFLINE='true')",
+      "Bash(cargo add:*)",
+      "Bash(done)",
+      "Bash(git mv:*)",
+      "Bash(cargo fix:*)",
+      "Bash(Get-Content \"D:\\\\dev\\\\soulaudio\\\\soul-player\\\\applications\\\\desktop\\\\src-tauri\\\\src\\\\audio_settings.rs\")",
+      "Bash(Select-Object -Index 1112)",
+      "Bash(npx vitest:*)",
+      "Bash(docker:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/rust-format-clippy.sh\"",
+            "timeout": 300
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/security-audit.sh\"",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   }
 }

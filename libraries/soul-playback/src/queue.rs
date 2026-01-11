@@ -51,14 +51,18 @@ impl Queue {
         }
     }
 
-    /// Add track to explicit queue (next to play)
+    /// Add track to play next (at the front of explicit queue)
     ///
-    /// Track will play after current track, before source queue
+    /// Track will play immediately after current track, before other explicit
+    /// queue tracks and before source queue tracks.
     pub fn add_next(&mut self, track: QueueTrack) {
-        self.explicit.push(track);
+        self.explicit.insert(0, track);
     }
 
     /// Add track to end of explicit queue
+    ///
+    /// Track will play after all other explicit queue tracks but before
+    /// source queue tracks.
     pub fn add_to_end(&mut self, track: QueueTrack) {
         self.explicit.push(track);
     }
@@ -183,12 +187,16 @@ impl Queue {
     }
 
     /// Peek at next track without removing
+    ///
+    /// Returns the next track that would be played: first from explicit queue,
+    /// then from source queue at the current source_index position.
     #[allow(dead_code)]
     pub fn peek_next(&self) -> Option<&QueueTrack> {
-        if self.explicit.is_empty() {
-            self.source.first()
-        } else {
+        if !self.explicit.is_empty() {
             self.explicit.first()
+        } else {
+            // Use source_index to get the correct next track
+            self.source.get(self.source_index)
         }
     }
 
@@ -221,14 +229,19 @@ impl Queue {
         }
     }
 
-    /// Total number of tracks in queue
+    /// Total number of remaining tracks in queue
+    ///
+    /// Returns the count of tracks that will still be played, consistent with `get_all()`.
+    /// This includes all explicit queue tracks plus remaining source queue tracks
+    /// (from source_index onwards).
     pub fn len(&self) -> usize {
-        self.explicit.len() + self.source.len()
+        let remaining_source = self.source.len().saturating_sub(self.source_index);
+        self.explicit.len() + remaining_source
     }
 
-    /// Check if queue is empty
+    /// Check if queue is empty (no remaining tracks to play)
     pub fn is_empty(&self) -> bool {
-        self.explicit.is_empty() && self.source.is_empty()
+        self.explicit.is_empty() && self.source_index >= self.source.len()
     }
 
     /// Check if source queue is shuffled
@@ -485,9 +498,10 @@ mod tests {
     #[test]
     fn remove_from_queue() {
         let mut queue = Queue::new();
-        queue.add_next(create_test_track("1", "Track 1"));
-        queue.add_next(create_test_track("2", "Track 2"));
-        queue.add_next(create_test_track("3", "Track 3"));
+        // Use add_to_end to maintain FIFO order for this test
+        queue.add_to_end(create_test_track("1", "Track 1"));
+        queue.add_to_end(create_test_track("2", "Track 2"));
+        queue.add_to_end(create_test_track("3", "Track 3"));
 
         let removed = queue.remove(1).unwrap();
         assert_eq!(removed.id, "2");
@@ -501,15 +515,33 @@ mod tests {
     #[test]
     fn reorder_within_explicit() {
         let mut queue = Queue::new();
-        queue.add_next(create_test_track("1", "Track 1"));
-        queue.add_next(create_test_track("2", "Track 2"));
-        queue.add_next(create_test_track("3", "Track 3"));
+        // Use add_to_end to maintain FIFO order for this test
+        queue.add_to_end(create_test_track("1", "Track 1"));
+        queue.add_to_end(create_test_track("2", "Track 2"));
+        queue.add_to_end(create_test_track("3", "Track 3"));
 
         queue.reorder(0, 2).unwrap(); // Move first to last
 
         assert_eq!(queue.get(0).unwrap().id, "2");
         assert_eq!(queue.get(1).unwrap().id, "3");
         assert_eq!(queue.get(2).unwrap().id, "1");
+    }
+
+    #[test]
+    fn add_next_inserts_at_front() {
+        let mut queue = Queue::new();
+        queue.add_next(create_test_track("1", "Track 1"));
+        queue.add_next(create_test_track("2", "Track 2"));
+        queue.add_next(create_test_track("3", "Track 3"));
+
+        // add_next inserts at front, so order should be 3, 2, 1
+        assert_eq!(queue.get(0).unwrap().id, "3");
+        assert_eq!(queue.get(1).unwrap().id, "2");
+        assert_eq!(queue.get(2).unwrap().id, "1");
+
+        // First pop should be track 3 (most recently added with add_next)
+        let next = queue.pop_next().unwrap();
+        assert_eq!(next.id, "3");
     }
 
     #[test]
@@ -546,8 +578,9 @@ mod tests {
     #[test]
     fn get_all_returns_ordered() {
         let mut queue = Queue::new();
-        queue.add_next(create_test_track("e1", "Explicit 1"));
-        queue.add_next(create_test_track("e2", "Explicit 2"));
+        // Use add_to_end for predictable FIFO ordering
+        queue.add_to_end(create_test_track("e1", "Explicit 1"));
+        queue.add_to_end(create_test_track("e2", "Explicit 2"));
         queue.set_source(vec![
             create_test_track("s1", "Source 1"),
             create_test_track("s2", "Source 2"),
@@ -559,6 +592,60 @@ mod tests {
         assert_eq!(all[1].id, "e2");
         assert_eq!(all[2].id, "s1");
         assert_eq!(all[3].id, "s2");
+    }
+
+    #[test]
+    fn peek_next_respects_source_index() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+            create_test_track("s3", "Source 3"),
+        ]);
+
+        // Initially peek should return s1
+        assert_eq!(queue.peek_next().unwrap().id, "s1");
+
+        // Pop s1, now source_index = 1
+        let _ = queue.pop_next();
+        assert_eq!(queue.peek_next().unwrap().id, "s2");
+
+        // Pop s2, now source_index = 2
+        let _ = queue.pop_next();
+        assert_eq!(queue.peek_next().unwrap().id, "s3");
+
+        // Pop s3, queue should be empty
+        let _ = queue.pop_next();
+        assert!(queue.peek_next().is_none());
+    }
+
+    #[test]
+    fn len_returns_remaining_tracks() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+            create_test_track("s3", "Source 3"),
+        ]);
+
+        // Initial length is 3
+        assert_eq!(queue.len(), 3);
+        assert_eq!(queue.get_all().len(), 3);
+
+        // Pop one track, length should be 2
+        let _ = queue.pop_next();
+        assert_eq!(queue.len(), 2);
+        assert_eq!(queue.get_all().len(), 2);
+
+        // Pop another, length should be 1
+        let _ = queue.pop_next();
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue.get_all().len(), 1);
+
+        // Pop last track, length should be 0
+        let _ = queue.pop_next();
+        assert_eq!(queue.len(), 0);
+        assert!(queue.is_empty());
     }
 
     #[test]

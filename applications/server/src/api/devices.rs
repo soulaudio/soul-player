@@ -134,7 +134,9 @@ pub async fn activate_device(
 
     // TODO: Broadcast to WebSocket connections
 
-    Ok(Json(serde_json::json!({ "success": true, "active_device_id": device_id })))
+    Ok(Json(
+        serde_json::json!({ "success": true, "active_device_id": device_id }),
+    ))
 }
 
 /// POST /api/devices/:id/heartbeat - Update device last seen time

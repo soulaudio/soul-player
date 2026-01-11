@@ -143,6 +143,20 @@ pub trait ResamplerImpl: Send {
 
     /// Reset internal state
     fn reset(&mut self);
+
+    /// Get the latency introduced by the resampler in output frames
+    ///
+    /// This represents the number of output frames that will be delayed
+    /// relative to the input. This is useful for synchronization and
+    /// latency compensation.
+    fn latency(&self) -> usize;
+
+    /// Flush any remaining buffered samples
+    ///
+    /// Call this at the end of a stream to retrieve any samples that were
+    /// buffered but not yet processed. This is important for resamplers
+    /// that use internal buffering to ensure all input samples are converted.
+    fn flush(&mut self) -> Result<Vec<f32>>;
 }
 
 /// High-level resampler interface
@@ -179,14 +193,12 @@ impl Resampler {
 
         let backend_impl: Box<dyn ResamplerImpl> = match backend {
             #[cfg(feature = "r8brain")]
-            ResamplerBackend::R8Brain => {
-                Box::new(R8BrainResampler::new(
-                    input_rate,
-                    output_rate,
-                    channels,
-                    quality,
-                )?)
-            }
+            ResamplerBackend::R8Brain => Box::new(R8BrainResampler::new(
+                input_rate,
+                output_rate,
+                channels,
+                quality,
+            )?),
             #[cfg(not(feature = "r8brain"))]
             ResamplerBackend::R8Brain => {
                 return Err(ResamplingError::InitializationFailed(
@@ -252,12 +264,62 @@ impl Resampler {
         self.backend.reset();
     }
 
+    /// Flush any remaining buffered samples
+    ///
+    /// Call this at the end of a stream to retrieve any samples that were
+    /// buffered but not yet processed. This is important for resamplers
+    /// that use internal buffering to ensure all input samples are converted.
+    pub fn flush(&mut self) -> Result<Vec<f32>> {
+        self.backend.flush()
+    }
+
+    /// Get the latency introduced by the resampler in output frames
+    ///
+    /// This represents the number of output frames that will be delayed
+    /// relative to the input. Useful for synchronization and latency compensation.
+    pub fn latency(&self) -> usize {
+        self.backend.latency()
+    }
+
     /// Calculate expected output size for given input size
     ///
-    /// Useful for pre-allocating buffers
+    /// Returns a range (min, max) to account for:
+    /// - Internal buffering: The resampler may buffer input samples, so actual
+    ///   output may be less than calculated on small inputs
+    /// - Latency: Initial calls may produce less output due to filter warm-up
+    /// - Rounding: Output size may vary by +/- 1 sample due to resampling math
+    ///
+    /// For pre-allocation, use the max value. For correctness checks, allow
+    /// output to fall within the range.
+    ///
+    /// The single-value version uses the theoretical output size (mid-point estimate).
     pub fn calculate_output_size(&self, input_samples: usize) -> usize {
         let ratio = self.output_rate() as f64 / self.input_rate() as f64;
         (input_samples as f64 * ratio).ceil() as usize
+    }
+
+    /// Calculate expected output size range for given input size
+    ///
+    /// Returns (min_output, max_output) to account for internal buffering,
+    /// latency, and rounding. For pre-allocation, use the max value.
+    pub fn calculate_output_size_range(&self, input_samples: usize) -> (usize, usize) {
+        let ratio = self.output_rate() as f64 / self.input_rate() as f64;
+        let theoretical = input_samples as f64 * ratio;
+
+        // Account for latency (converted to output samples) - this affects minimum
+        let latency_samples = (self.latency() as f64 * ratio) as usize;
+
+        // Min: theoretical minus latency (but not below 0), accounting for buffering
+        let min = if theoretical as usize > latency_samples {
+            ((theoretical - latency_samples as f64).floor() as usize).saturating_sub(1)
+        } else {
+            0
+        };
+
+        // Max: theoretical plus margin for rounding
+        let max = (theoretical.ceil() as usize) + 1;
+
+        (min, max)
     }
 }
 
@@ -267,22 +329,28 @@ mod tests {
 
     #[test]
     fn test_quality_presets() {
-        assert!(ResamplingQuality::Fast.transition_band() > ResamplingQuality::Balanced.transition_band());
-        assert!(ResamplingQuality::Balanced.transition_band() > ResamplingQuality::High.transition_band());
-        assert!(ResamplingQuality::High.transition_band() > ResamplingQuality::Maximum.transition_band());
+        assert!(
+            ResamplingQuality::Fast.transition_band()
+                > ResamplingQuality::Balanced.transition_band()
+        );
+        assert!(
+            ResamplingQuality::Balanced.transition_band()
+                > ResamplingQuality::High.transition_band()
+        );
+        assert!(
+            ResamplingQuality::High.transition_band()
+                > ResamplingQuality::Maximum.transition_band()
+        );
 
-        assert!(ResamplingQuality::Fast.stopband_attenuation_db() < ResamplingQuality::Maximum.stopband_attenuation_db());
+        assert!(
+            ResamplingQuality::Fast.stopband_attenuation_db()
+                < ResamplingQuality::Maximum.stopband_attenuation_db()
+        );
     }
 
     #[test]
     fn test_invalid_sample_rates() {
-        let result = Resampler::new(
-            ResamplerBackend::Auto,
-            0,
-            96000,
-            2,
-            ResamplingQuality::High,
-        );
+        let result = Resampler::new(ResamplerBackend::Auto, 0, 96000, 2, ResamplingQuality::High);
         assert!(matches!(result, Err(ResamplingError::InvalidSampleRate(0))));
 
         let result = Resampler::new(
@@ -339,6 +407,9 @@ mod tests {
 
         let input_samples = 2048; // stereo interleaved
         let expected_output = (2048.0f64 * (96000.0f64 / 44100.0f64)).ceil() as usize;
-        assert_eq!(resampler.calculate_output_size(input_samples), expected_output);
+        assert_eq!(
+            resampler.calculate_output_size(input_samples),
+            expected_output
+        );
     }
 }

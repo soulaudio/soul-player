@@ -2,14 +2,21 @@
 //!
 //! Provides Tauri commands for configuring and managing the DSP effect chain
 //! during playback. Effects are processed in series before upsampling.
+//!
+//! The DSP chain is persisted to the database and restored on app startup.
 
+use crate::app_state::AppState;
 use crate::playback::PlaybackManager;
 use serde::{Deserialize, Serialize};
 use soul_audio::effects::{
     CompressorSettings, CrossfeedPreset, CrossfeedSettings, EqBand, GraphicEqPreset,
     LimiterSettings, StereoSettings,
 };
+use sqlx::SqlitePool;
 use tauri::State;
+
+/// Setting key for DSP chain persistence
+pub const DSP_CHAIN_SETTING_KEY: &str = "audio.dsp_chain";
 
 /// Effect type identifier
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +34,8 @@ pub enum EffectType {
     Stereo { settings: StereoData },
     #[serde(rename = "graphic_eq")]
     GraphicEq { settings: GraphicEqData },
+    #[serde(rename = "convolution")]
+    Convolution { settings: ConvolutionData },
 }
 
 /// EQ band data for frontend
@@ -42,8 +51,8 @@ impl From<EqBand> for EqBandData {
     fn from(band: EqBand) -> Self {
         Self {
             frequency: band.frequency,
-            gain: band.gain_db,
-            q: band.q,
+            gain: band.gain_db(),
+            q: band.q(),
         }
     }
 }
@@ -227,6 +236,31 @@ impl GraphicEqData {
     }
 }
 
+/// Convolution reverb settings for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConvolutionData {
+    /// Path to impulse response file (WAV/FLAC)
+    pub ir_file_path: String,
+    /// Wet/dry mix: 0.0 (fully dry) to 1.0 (fully wet)
+    pub wet_dry_mix: f32,
+    /// Pre-delay in milliseconds (0-100ms)
+    pub pre_delay_ms: f32,
+    /// Decay/length multiplier (0.5-2.0)
+    pub decay: f32,
+}
+
+impl Default for ConvolutionData {
+    fn default() -> Self {
+        Self {
+            ir_file_path: String::new(),
+            wet_dry_mix: 0.3,
+            pre_delay_ms: 0.0,
+            decay: 1.0,
+        }
+    }
+}
+
 /// Effect slot data for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -243,6 +277,165 @@ pub struct EffectSlotState {
     pub enabled: bool,
 }
 
+/// Persisted DSP chain data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedDspChain {
+    /// Effect slots (up to 4)
+    pub slots: Vec<PersistedEffectSlot>,
+}
+
+/// Persisted effect slot
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedEffectSlot {
+    pub index: usize,
+    pub effect: Option<EffectType>,
+    pub enabled: bool,
+}
+
+// ===== DSP Chain Persistence Functions =====
+
+/// Save the current DSP chain to the database
+async fn persist_dsp_chain(pool: &SqlitePool, user_id: &str, slots: &[Option<EffectSlotState>; 4]) {
+    let persisted_slots: Vec<PersistedEffectSlot> = slots
+        .iter()
+        .enumerate()
+        .map(|(index, slot)| PersistedEffectSlot {
+            index,
+            effect: slot.as_ref().map(|s| s.effect.clone()),
+            enabled: slot.as_ref().is_some_and(|s| s.enabled),
+        })
+        .collect();
+
+    let chain = PersistedDspChain {
+        slots: persisted_slots,
+    };
+
+    match serde_json::to_value(&chain) {
+        Ok(value) => {
+            if let Err(e) =
+                soul_storage::settings::set_setting(pool, user_id, DSP_CHAIN_SETTING_KEY, &value)
+                    .await
+            {
+                eprintln!("[persist_dsp_chain] Failed to save DSP chain: {}", e);
+            } else {
+                eprintln!("[persist_dsp_chain] DSP chain saved successfully");
+            }
+        }
+        Err(e) => {
+            eprintln!("[persist_dsp_chain] Failed to serialize DSP chain: {}", e);
+        }
+    }
+}
+
+/// Load the DSP chain from the database
+async fn load_persisted_dsp_chain(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Option<[Option<EffectSlotState>; 4]> {
+    match soul_storage::settings::get_setting(pool, user_id, DSP_CHAIN_SETTING_KEY).await {
+        Ok(Some(value)) => {
+            match serde_json::from_value::<PersistedDspChain>(value) {
+                Ok(chain) => {
+                    let mut slots: [Option<EffectSlotState>; 4] = Default::default();
+
+                    for persisted_slot in chain.slots {
+                        if persisted_slot.index < 4 {
+                            if let Some(effect) = persisted_slot.effect {
+                                slots[persisted_slot.index] = Some(EffectSlotState {
+                                    effect,
+                                    enabled: persisted_slot.enabled,
+                                });
+                            }
+                        }
+                    }
+
+                    eprintln!("[load_persisted_dsp_chain] DSP chain loaded successfully");
+                    Some(slots)
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[load_persisted_dsp_chain] Failed to deserialize DSP chain: {}",
+                        e
+                    );
+                    None
+                }
+            }
+        }
+        Ok(None) => {
+            eprintln!("[load_persisted_dsp_chain] No saved DSP chain found");
+            None
+        }
+        Err(e) => {
+            eprintln!(
+                "[load_persisted_dsp_chain] Failed to load DSP chain setting: {}",
+                e
+            );
+            None
+        }
+    }
+}
+
+/// Restore the DSP chain from database on startup
+///
+/// This function should be called during app initialization after the
+/// PlaybackManager is created.
+pub async fn restore_dsp_chain_from_database(
+    playback: &PlaybackManager,
+    pool: &SqlitePool,
+    user_id: &str,
+) {
+    #[cfg(feature = "effects")]
+    {
+        if let Some(slots) = load_persisted_dsp_chain(pool, user_id).await {
+            let mut restored_count = 0;
+            for (index, slot) in slots.into_iter().enumerate() {
+                if let Some(slot_state) = slot {
+                    if let Err(e) = playback.set_effect_slot(index, Some(slot_state)) {
+                        eprintln!(
+                            "[restore_dsp_chain_from_database] Failed to restore slot {}: {}",
+                            index, e
+                        );
+                    } else {
+                        restored_count += 1;
+                    }
+                }
+            }
+            eprintln!(
+                "[restore_dsp_chain_from_database] Restored {} effect slots",
+                restored_count
+            );
+        }
+    }
+
+    #[cfg(not(feature = "effects"))]
+    {
+        let _ = (playback, pool, user_id);
+        eprintln!("[restore_dsp_chain_from_database] Effects feature not enabled");
+    }
+}
+
+/// Helper to persist DSP chain after modification using PlaybackManager and AppState
+async fn persist_current_chain(playback: &PlaybackManager, app_state: &AppState) {
+    #[cfg(feature = "effects")]
+    {
+        match playback.get_effect_slots() {
+            Ok(slots) => {
+                persist_dsp_chain(&app_state.pool, &app_state.user_id, &slots).await;
+            }
+            Err(e) => {
+                eprintln!("[persist_current_chain] Failed to get effect slots: {}", e);
+            }
+        }
+    }
+
+    #[cfg(not(feature = "effects"))]
+    {
+        let _ = (playback, app_state);
+    }
+}
+
 /// Get available effect types
 #[tauri::command]
 pub async fn get_available_effects() -> Result<Vec<String>, String> {
@@ -253,6 +446,7 @@ pub async fn get_available_effects() -> Result<Vec<String>, String> {
         "limiter".to_string(),
         "crossfeed".to_string(),
         "stereo".to_string(),
+        "convolution".to_string(),
     ])
 }
 
@@ -305,6 +499,7 @@ pub async fn get_dsp_chain(
 #[tauri::command]
 pub async fn add_effect_to_chain(
     #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
     #[allow(unused_variables)] effect: EffectType,
 ) -> Result<(), String> {
@@ -323,6 +518,9 @@ pub async fn add_effect_to_chain(
             }),
         )?;
         eprintln!("[add_effect_to_chain] Slot {}: effect added", slot_index);
+
+        // Persist the updated chain
+        persist_current_chain(&playback, &app_state).await;
     }
 
     #[cfg(not(feature = "effects"))]
@@ -337,6 +535,7 @@ pub async fn add_effect_to_chain(
 #[tauri::command]
 pub async fn remove_effect_from_chain(
     #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
 ) -> Result<(), String> {
     // Validate slot index
@@ -347,7 +546,13 @@ pub async fn remove_effect_from_chain(
     #[cfg(feature = "effects")]
     {
         playback.set_effect_slot(slot_index, None)?;
-        eprintln!("[remove_effect_from_chain] Slot {}: effect removed", slot_index);
+        eprintln!(
+            "[remove_effect_from_chain] Slot {}: effect removed",
+            slot_index
+        );
+
+        // Persist the updated chain
+        persist_current_chain(&playback, &app_state).await;
     }
 
     #[cfg(not(feature = "effects"))]
@@ -362,6 +567,7 @@ pub async fn remove_effect_from_chain(
 #[tauri::command]
 pub async fn toggle_effect(
     #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
     #[allow(unused_variables)] enabled: bool,
 ) -> Result<(), String> {
@@ -381,6 +587,9 @@ pub async fn toggle_effect(
                 slot_index,
                 if enabled { "enabled" } else { "disabled" }
             );
+
+            // Persist the updated chain
+            persist_current_chain(&playback, &app_state).await;
         } else {
             return Err(format!("No effect at slot {}", slot_index));
         }
@@ -398,6 +607,7 @@ pub async fn toggle_effect(
 #[tauri::command]
 pub async fn update_effect_parameters(
     #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
     #[allow(unused_variables)] effect: EffectType,
 ) -> Result<(), String> {
@@ -417,7 +627,13 @@ pub async fn update_effect_parameters(
                     enabled: slot_state.enabled,
                 }),
             )?;
-            eprintln!("[update_effect_parameters] Slot {}: parameters updated", slot_index);
+            eprintln!(
+                "[update_effect_parameters] Slot {}: parameters updated",
+                slot_index
+            );
+
+            // Persist the updated chain
+            persist_current_chain(&playback, &app_state).await;
         } else {
             return Err(format!("No effect at slot {}", slot_index));
         }
@@ -435,6 +651,7 @@ pub async fn update_effect_parameters(
 #[tauri::command]
 pub async fn clear_dsp_chain(
     #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] app_state: State<'_, AppState>,
 ) -> Result<(), String> {
     #[cfg(feature = "effects")]
     {
@@ -442,6 +659,9 @@ pub async fn clear_dsp_chain(
             playback.set_effect_slot(i, None)?;
         }
         eprintln!("[clear_dsp_chain] All effects cleared");
+
+        // Persist the cleared chain
+        persist_current_chain(&playback, &app_state).await;
     }
 
     #[cfg(not(feature = "effects"))]
@@ -523,10 +743,7 @@ pub async fn get_eq_presets() -> Result<Vec<(String, Vec<EqBandData>)>, String> 
 #[tauri::command]
 pub async fn get_compressor_presets() -> Result<Vec<(String, CompressorData)>, String> {
     Ok(vec![
-        (
-            "Gentle".to_string(),
-            CompressorSettings::gentle().into(),
-        ),
+        ("Gentle".to_string(), CompressorSettings::gentle().into()),
         (
             "Moderate".to_string(),
             CompressorSettings::moderate().into(),
@@ -544,10 +761,7 @@ pub async fn get_limiter_presets() -> Result<Vec<(String, LimiterData)>, String>
     Ok(vec![
         ("Soft".to_string(), LimiterSettings::soft().into()),
         ("Default".to_string(), LimiterSettings::default().into()),
-        (
-            "Brickwall".to_string(),
-            LimiterSettings::brickwall().into(),
-        ),
+        ("Brickwall".to_string(), LimiterSettings::brickwall().into()),
     ])
 }
 
@@ -577,7 +791,10 @@ pub async fn get_stereo_presets() -> Result<Vec<(String, StereoData)>, String> {
         ("Normal".to_string(), StereoSettings::default().into()),
         ("Mono".to_string(), StereoSettings::mono().into()),
         ("Wide".to_string(), StereoSettings::wide().into()),
-        ("Extra Wide".to_string(), StereoSettings::extra_wide().into()),
+        (
+            "Extra Wide".to_string(),
+            StereoSettings::extra_wide().into(),
+        ),
     ])
 }
 
@@ -585,14 +802,38 @@ pub async fn get_stereo_presets() -> Result<Vec<(String, StereoData)>, String> {
 #[tauri::command]
 pub async fn get_graphic_eq_presets() -> Result<Vec<(String, GraphicEqData)>, String> {
     Ok(vec![
-        ("Flat".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Flat)),
-        ("Bass Boost".to_string(), GraphicEqData::from_preset(GraphicEqPreset::BassBoost)),
-        ("Treble Boost".to_string(), GraphicEqData::from_preset(GraphicEqPreset::TrebleBoost)),
-        ("V-Shape".to_string(), GraphicEqData::from_preset(GraphicEqPreset::VShape)),
-        ("Vocal".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Vocal)),
-        ("Rock".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Rock)),
-        ("Electronic".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Electronic)),
-        ("Acoustic".to_string(), GraphicEqData::from_preset(GraphicEqPreset::Acoustic)),
+        (
+            "Flat".to_string(),
+            GraphicEqData::from_preset(GraphicEqPreset::Flat),
+        ),
+        (
+            "Bass Boost".to_string(),
+            GraphicEqData::from_preset(GraphicEqPreset::BassBoost),
+        ),
+        (
+            "Treble Boost".to_string(),
+            GraphicEqData::from_preset(GraphicEqPreset::TrebleBoost),
+        ),
+        (
+            "V-Shape".to_string(),
+            GraphicEqData::from_preset(GraphicEqPreset::VShape),
+        ),
+        (
+            "Vocal".to_string(),
+            GraphicEqData::from_preset(GraphicEqPreset::Vocal),
+        ),
+        (
+            "Rock".to_string(),
+            GraphicEqData::from_preset(GraphicEqPreset::Rock),
+        ),
+        (
+            "Electronic".to_string(),
+            GraphicEqData::from_preset(GraphicEqPreset::Electronic),
+        ),
+        (
+            "Acoustic".to_string(),
+            GraphicEqData::from_preset(GraphicEqPreset::Acoustic),
+        ),
     ])
 }
 
@@ -764,12 +1005,13 @@ pub async fn load_dsp_chain_preset(
     let effect_chain: Vec<EffectType> = serde_json::from_str(&preset.effect_chain)
         .map_err(|e| format!("Failed to parse effect chain: {}", e))?;
 
-    // Clear existing chain
-    clear_dsp_chain(playback.clone()).await?;
+    // Clear existing chain (pass app_state for persistence)
+    clear_dsp_chain(playback.clone(), app_state.clone()).await?;
 
-    // Add each effect to its slot
+    // Add each effect to its slot (already persists after each add)
     for (slot_index, effect) in effect_chain.iter().enumerate() {
-        add_effect_to_chain(playback.clone(), slot_index, effect.clone()).await?;
+        add_effect_to_chain(playback.clone(), app_state.clone(), slot_index, effect.clone())
+            .await?;
     }
 
     Ok(())

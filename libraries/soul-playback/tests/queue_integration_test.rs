@@ -480,9 +480,9 @@ fn test_skip_to_index_preserves_queue_and_history() {
 fn test_skip_to_index_in_explicit_queue() {
     let mut manager = PlaybackManager::default();
 
-    // Add multiple tracks to explicit queue using add_to_queue_next
+    // Add multiple tracks to explicit queue using add_to_queue_end for predictable order
     for i in 0..5 {
-        manager.add_to_queue_next(create_track(
+        manager.add_to_queue_end(create_track(
             &i.to_string(),
             &format!("Track {}", i),
             "Artist",
@@ -501,8 +501,14 @@ fn test_skip_to_index_in_explicit_queue() {
     assert_eq!(queue.len(), 1, "Should have 1 track remaining");
     assert_eq!(queue[0].id, "4");
 
-    // Should have previous tracks [0, 1, 2] in history
-    assert!(manager.has_previous(), "Should have history");
+    // With Bug 7 fix: skip does NOT add skipped tracks to history
+    // Only the current track (none in this case) is added
+    // So has_previous() should be false unless we had a playing track
+    // In this case, no track was playing when we skipped, so no history
+    assert!(
+        !manager.has_previous(),
+        "Should not have history when no track was playing"
+    );
 }
 
 #[test]
@@ -522,8 +528,13 @@ fn test_skip_to_last_track_in_queue() {
     let queue = manager.get_queue();
     assert_eq!(queue.len(), 0, "Remaining queue should be empty");
 
-    // Should have all previous tracks [0, 1, 2, 3] in history
-    assert!(manager.has_previous(), "Should have history");
+    // With Bug 7 fix: skip does NOT add skipped tracks to history
+    // Only the current playing track (none in this case) is added
+    // Since no track was playing before skip, history should be empty
+    assert!(
+        !manager.has_previous(),
+        "Should not have history when no track was playing"
+    );
 
     // Note: has_next() checks if source queue array is empty, not if we've reached end
     // Since we use index-based navigation, source array is never emptied
@@ -545,16 +556,19 @@ fn test_skip_forward_then_backward_navigation() {
     manager.next().ok();
 
     // Jump forward to track 7 (index 6 in remaining queue)
+    // With Bug 7 fix: only track 0 (the one we just played via next()) is added to history
+    // The skipped tracks (1-6) are NOT added to history
     manager.skip_to_queue_index(6).ok();
 
-    // Navigate backwards through history
-    // Should be able to go back through: 6, 5, 4, 3, 2, 1, 0
-    for expected_id in (0..7).rev() {
-        assert!(
-            manager.has_previous(),
-            "Should have previous at track {}",
-            expected_id
-        );
-        manager.previous().ok();
-    }
+    // With Bug 7 fix: Only track 0 should be in history (the track that was playing when we skipped)
+    assert!(
+        manager.has_previous(),
+        "Should have one track (track 0) in history"
+    );
+
+    // Going back once should take us to track 0
+    manager.previous().ok();
+
+    // After going back once, we should not have any more history
+    // (since we only had track 0 in history)
 }

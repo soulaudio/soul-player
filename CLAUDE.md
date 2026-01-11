@@ -140,7 +140,20 @@ display.text("Play");
 ```bash
 corepack enable              # Enable Yarn 4.x (run in root)
 yarn                         # Install all dependencies (run in root)
-./scripts/setup-sqlx.sh      # Setup SQLx offline mode
+```
+
+**SQLx Setup (Windows PowerShell):**
+```powershell
+cargo install sqlx-cli --no-default-features --features sqlite
+copy .env.example .env
+mkdir libraries\soul-storage\.tmp
+sqlx database create
+sqlx migrate run --source libraries/soul-storage/migrations
+```
+
+**SQLx Setup (Unix/Linux/macOS):**
+```bash
+./scripts/setup-sqlx.sh      # Handles everything automatically
 ```
 
 ### Development
@@ -155,9 +168,41 @@ cargo run -p soul-server     # Run server
 ```
 
 ### Database Migrations
+
+**Prerequisites**: Ensure `.env` exists with `DATABASE_URL` set (copy from `.env.example`).
+
+**Creating a new migration:**
+```bash
+cd libraries/soul-storage
+sqlx migrate add your_migration_name
+# Edit the generated file in migrations/
+```
+
+**Applying migrations:**
 ```bash
 sqlx migrate run --source libraries/soul-storage/migrations
-cd libraries/soul-storage && cargo sqlx prepare -- --lib
+```
+
+**Updating SQLx offline data (required after schema changes):**
+```bash
+cd libraries/soul-storage
+cargo sqlx prepare -- --lib
+git add .sqlx/
+```
+
+**Standard SQLx Commands** (these are pre-approved in CI allowlist):
+```bash
+# Database commands
+sqlx database create
+sqlx database drop
+sqlx migrate run --source libraries/soul-storage/migrations
+
+# SQLx prepare (from libraries/soul-storage directory)
+cargo sqlx prepare -- --lib
+
+# Build/check with SQLX_OFFLINE
+SQLX_OFFLINE=true cargo build --all
+SQLX_OFFLINE=true cargo check -p soul-storage
 ```
 
 ### WASM Development (Marketing Demo)
@@ -258,12 +303,26 @@ The desktop app supports customizable keyboard shortcuts with these characterist
 4. Add case to `executeAction()` in `useKeyboardShortcuts.ts`
 5. Add translation key in `i18n/*.json` files
 
+### Running Tests
+
+Tests use isolated databases in system temp directories:
+```bash
+cargo test --all                    # Run all tests
+cargo test -p soul-storage          # Run tests for specific crate
+cargo test --test integration_test  # Run specific test file
+```
+
+**Test Database Strategy:**
+- Tests create temporary databases automatically (cleaned up after)
+- Compile-time verification uses `libraries/soul-storage/.tmp/dev.db`
+- All `*.db` files are gitignored - never commit database files
+
 ### Before Committing
 ```bash
 cargo fmt --all --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all
-DATABASE_URL="sqlite:test.db" cargo check
+cargo check -p soul-storage         # Verify compile-time queries
 ```
 
 ---
@@ -281,6 +340,6 @@ DATABASE_URL="sqlite:test.db" cargo check
 
 ---
 
-**Last Updated**: 2026-01-10
+**Last Updated**: 2026-01-11
 **Rust Edition**: 2021
 **Platforms**: Windows, macOS, Linux, ESP32-S3

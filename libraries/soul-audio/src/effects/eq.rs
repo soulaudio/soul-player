@@ -9,10 +9,10 @@ use super::chain::AudioEffect;
 pub struct EqBand {
     /// Center frequency in Hz
     pub frequency: f32,
-    /// Gain in dB (-12 to +12)
-    pub gain_db: f32,
-    /// Q factor (0.1 to 10.0), controls bandwidth
-    pub q: f32,
+    /// Gain in dB (-12 to +12) - Bug fix: Made private to enforce validation
+    gain_db: f32,
+    /// Q factor (0.1 to 10.0), controls bandwidth - Bug fix: Made private to enforce validation
+    q: f32,
 }
 
 impl EqBand {
@@ -23,6 +23,28 @@ impl EqBand {
             gain_db: gain_db.clamp(-12.0, 12.0),
             q: q.clamp(0.1, 10.0),
         }
+    }
+
+    /// Get the gain in dB
+    pub fn gain_db(&self) -> f32 {
+        self.gain_db
+    }
+
+    /// Set the gain in dB (clamped to -12 to +12)
+    /// Bug fix: Validated setter to prevent bypass of clamping
+    pub fn set_gain_db(&mut self, gain_db: f32) {
+        self.gain_db = gain_db.clamp(-12.0, 12.0);
+    }
+
+    /// Get the Q factor
+    pub fn q(&self) -> f32 {
+        self.q
+    }
+
+    /// Set the Q factor (clamped to 0.1 to 10.0)
+    /// Bug fix: Validated setter to prevent bypass of clamping
+    pub fn set_q(&mut self, q: f32) {
+        self.q = q.clamp(0.1, 10.0);
     }
 
     /// Create a low shelf filter (boosts/cuts below frequency)
@@ -86,8 +108,15 @@ impl BiquadFilter {
 
     /// Configure as peaking EQ filter
     fn set_peaking(&mut self, sample_rate: f32, frequency: f32, q: f32, gain_db: f32) {
+        // Bug fix: Early return if sample rate is invalid to prevent division by zero
+        if sample_rate < 1.0 {
+            return;
+        }
+
         let a = 10.0_f32.powf(gain_db / 40.0); // Amplitude
-        let omega = 2.0 * std::f32::consts::PI * frequency / sample_rate;
+                                               // Bug fix: Clamp frequency to 45% of sample rate to prevent near-Nyquist instability
+        let clamped_freq = frequency.min(sample_rate * 0.45);
+        let omega = 2.0 * std::f32::consts::PI * clamped_freq / sample_rate;
         let sin_omega = omega.sin();
         let cos_omega = omega.cos();
         let alpha = sin_omega / (2.0 * q);
@@ -108,12 +137,20 @@ impl BiquadFilter {
     }
 
     /// Configure as low shelf filter
-    fn set_low_shelf(&mut self, sample_rate: f32, frequency: f32, gain_db: f32) {
+    fn set_low_shelf(&mut self, sample_rate: f32, frequency: f32, q: f32, gain_db: f32) {
+        // Bug fix: Early return if sample rate is invalid to prevent division by zero
+        if sample_rate < 1.0 {
+            return;
+        }
+
         let a = 10.0_f32.powf(gain_db / 40.0);
-        let omega = 2.0 * std::f32::consts::PI * frequency / sample_rate;
+        // Bug fix: Clamp frequency to 45% of sample rate to prevent near-Nyquist instability
+        let clamped_freq = frequency.min(sample_rate * 0.45);
+        let omega = 2.0 * std::f32::consts::PI * clamped_freq / sample_rate;
         let sin_omega = omega.sin();
         let cos_omega = omega.cos();
-        let alpha = sin_omega / 2.0 * ((a + 1.0 / a) * (1.0 / 0.707 - 1.0) + 2.0).sqrt();
+        // Bug fix: Use q parameter instead of hardcoded 0.707
+        let alpha = sin_omega / 2.0 * ((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0).sqrt();
         let beta = 2.0 * a.sqrt() * alpha;
 
         let b0 = a * ((a + 1.0) - (a - 1.0) * cos_omega + beta);
@@ -132,12 +169,20 @@ impl BiquadFilter {
     }
 
     /// Configure as high shelf filter
-    fn set_high_shelf(&mut self, sample_rate: f32, frequency: f32, gain_db: f32) {
+    fn set_high_shelf(&mut self, sample_rate: f32, frequency: f32, q: f32, gain_db: f32) {
+        // Bug fix: Early return if sample rate is invalid to prevent division by zero
+        if sample_rate < 1.0 {
+            return;
+        }
+
         let a = 10.0_f32.powf(gain_db / 40.0);
-        let omega = 2.0 * std::f32::consts::PI * frequency / sample_rate;
+        // Bug fix: Clamp frequency to 45% of sample rate to prevent near-Nyquist instability
+        let clamped_freq = frequency.min(sample_rate * 0.45);
+        let omega = 2.0 * std::f32::consts::PI * clamped_freq / sample_rate;
         let sin_omega = omega.sin();
         let cos_omega = omega.cos();
-        let alpha = sin_omega / 2.0 * ((a + 1.0 / a) * (1.0 / 0.707 - 1.0) + 2.0).sqrt();
+        // Bug fix: Use q parameter instead of hardcoded 0.707
+        let alpha = sin_omega / 2.0 * ((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0).sqrt();
         let beta = 2.0 * a.sqrt() * alpha;
 
         let b0 = a * ((a + 1.0) + (a - 1.0) * cos_omega + beta);
@@ -159,9 +204,14 @@ impl BiquadFilter {
     #[inline]
     fn process_sample(&mut self, left: f32, right: f32) -> (f32, f32) {
         // Process left channel
-        let out_l = self.b0 * left + self.b1 * self.x1_l + self.b2 * self.x2_l
+        let mut out_l = self.b0 * left + self.b1 * self.x1_l + self.b2 * self.x2_l
             - self.a1 * self.y1_l
             - self.a2 * self.y2_l;
+
+        // Bug fix: Flush denormal numbers to zero to prevent CPU performance issues
+        if out_l.abs() < 1e-15 {
+            out_l = 0.0;
+        }
 
         self.x2_l = self.x1_l;
         self.x1_l = left;
@@ -169,9 +219,14 @@ impl BiquadFilter {
         self.y1_l = out_l;
 
         // Process right channel
-        let out_r = self.b0 * right + self.b1 * self.x1_r + self.b2 * self.x2_r
+        let mut out_r = self.b0 * right + self.b1 * self.x1_r + self.b2 * self.x2_r
             - self.a1 * self.y1_r
             - self.a2 * self.y2_r;
+
+        // Bug fix: Flush denormal numbers to zero to prevent CPU performance issues
+        if out_r.abs() < 1e-15 {
+            out_r = 0.0;
+        }
 
         self.x2_r = self.x1_r;
         self.x1_r = right;
@@ -236,18 +291,24 @@ impl ParametricEq {
     /// Set low band parameters
     pub fn set_low_band(&mut self, band: EqBand) {
         self.low_band = band;
+        // Bug fix: Reset filter state on parameter change to prevent clicks
+        self.low_filter.reset();
         self.needs_update = true;
     }
 
     /// Set mid band parameters
     pub fn set_mid_band(&mut self, band: EqBand) {
         self.mid_band = band;
+        // Bug fix: Reset filter state on parameter change to prevent clicks
+        self.mid_filter.reset();
         self.needs_update = true;
     }
 
     /// Set high band parameters
     pub fn set_high_band(&mut self, band: EqBand) {
         self.high_band = band;
+        // Bug fix: Reset filter state on parameter change to prevent clicks
+        self.high_filter.reset();
         self.needs_update = true;
     }
 
@@ -263,6 +324,10 @@ impl ParametricEq {
         self.low_band = bands[0];
         self.mid_band = bands[1];
         self.high_band = bands[2];
+        // Bug fix: Reset filter states on parameter change to prevent clicks
+        self.low_filter.reset();
+        self.mid_filter.reset();
+        self.high_filter.reset();
         self.needs_update = true;
     }
 
@@ -286,8 +351,13 @@ impl ParametricEq {
         if self.needs_update {
             let sr = self.sample_rate as f32;
 
-            self.low_filter
-                .set_low_shelf(sr, self.low_band.frequency, self.low_band.gain_db);
+            // Bug fix: Pass Q parameter to shelf filters instead of ignoring it
+            self.low_filter.set_low_shelf(
+                sr,
+                self.low_band.frequency,
+                self.low_band.q,
+                self.low_band.gain_db,
+            );
 
             self.mid_filter.set_peaking(
                 sr,
@@ -296,8 +366,12 @@ impl ParametricEq {
                 self.mid_band.gain_db,
             );
 
-            self.high_filter
-                .set_high_shelf(sr, self.high_band.frequency, self.high_band.gain_db);
+            self.high_filter.set_high_shelf(
+                sr,
+                self.high_band.frequency,
+                self.high_band.q,
+                self.high_band.gain_db,
+            );
 
             self.needs_update = false;
         }
@@ -320,6 +394,10 @@ impl AudioEffect for ParametricEq {
         // Update sample rate if changed
         if self.sample_rate != sample_rate {
             self.sample_rate = sample_rate;
+            // Bug fix: Reset filter state when sample rate changes to prevent transients
+            self.low_filter.reset();
+            self.mid_filter.reset();
+            self.high_filter.reset();
             self.needs_update = true;
         }
 
@@ -374,8 +452,8 @@ mod tests {
     #[test]
     fn eq_band_clamping() {
         let band = EqBand::new(1000.0, 20.0, 0.01); // Out of range
-        assert!(band.gain_db <= 12.0);
-        assert!(band.q >= 0.1);
+        assert!(band.gain_db() <= 12.0);
+        assert!(band.q() >= 0.1);
     }
 
     #[test]
@@ -447,11 +525,11 @@ mod tests {
     fn eq_band_helpers() {
         let low = EqBand::low_shelf(80.0, 3.0);
         assert_eq!(low.frequency, 80.0);
-        assert_eq!(low.gain_db, 3.0);
+        assert_eq!(low.gain_db(), 3.0);
 
         let mid = EqBand::peaking(1000.0, -2.0, 2.0);
         assert_eq!(mid.frequency, 1000.0);
-        assert_eq!(mid.q, 2.0);
+        assert_eq!(mid.q(), 2.0);
 
         let high = EqBand::high_shelf(10000.0, 4.0);
         assert_eq!(high.frequency, 10000.0);

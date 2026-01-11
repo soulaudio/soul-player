@@ -1,10 +1,30 @@
 // Volume leveling (ReplayGain / EBU R128) settings component
 
-import { Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { Info, Play, Square, RefreshCw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+
+interface QueueStats {
+  total: number;
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+}
+
+interface WorkerStatus {
+  isRunning: boolean;
+  tracksAnalyzed: number;
+}
 
 interface VolumeLevelingSettingsProps {
   mode: 'disabled' | 'replaygain_track' | 'replaygain_album' | 'ebu_r128';
+  preampDb?: number;
+  preventClipping?: boolean;
   onModeChange: (mode: 'disabled' | 'replaygain_track' | 'replaygain_album' | 'ebu_r128') => void;
+  onPreampChange?: (preampDb: number) => void;
+  onPreventClippingChange?: (prevent: boolean) => void;
 }
 
 const modes = [
@@ -36,8 +56,150 @@ const modes = [
 
 export function VolumeLevelingSettings({
   mode,
+  preampDb = 0,
+  preventClipping = true,
   onModeChange,
+  onPreampChange,
+  onPreventClippingChange,
 }: VolumeLevelingSettingsProps) {
+  const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
+  const [workerStatus, setWorkerStatus] = useState<WorkerStatus>({ isRunning: false, tracksAnalyzed: 0 });
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastAnalyzedTrack, setLastAnalyzedTrack] = useState<string | null>(null);
+
+  // Local state for preamp slider to show current value during drag
+  const [localPreampDb, setLocalPreampDb] = useState(preampDb);
+
+  // Sync local state when prop changes
+  useEffect(() => {
+    setLocalPreampDb(preampDb);
+  }, [preampDb]);
+
+  // Debounced preamp change handler
+  const handlePreampChange = async (value: number) => {
+    setLocalPreampDb(value);
+    if (onPreampChange) {
+      onPreampChange(value);
+    } else {
+      // Fallback: directly invoke Tauri command if no callback provided
+      try {
+        await invoke('set_volume_leveling_preamp', { preampDb: value });
+      } catch (error) {
+        console.error('Failed to set preamp:', error);
+      }
+    }
+  };
+
+  // Prevent clipping change handler
+  const handlePreventClippingChange = async (checked: boolean) => {
+    if (onPreventClippingChange) {
+      onPreventClippingChange(checked);
+    } else {
+      // Fallback: directly invoke Tauri command if no callback provided
+      try {
+        await invoke('set_volume_leveling_prevent_clipping', { prevent: checked });
+      } catch (error) {
+        console.error('Failed to set prevent clipping:', error);
+      }
+    }
+  };
+
+  // Load initial stats
+  useEffect(() => {
+    loadQueueStats();
+    loadWorkerStatus();
+  }, []);
+
+  // Listen for analysis events
+  useEffect(() => {
+    const unlistenProgress = listen<{ trackId: number; trackTitle: string }>('loudness-analysis-progress', (event) => {
+      setLastAnalyzedTrack(event.payload.trackTitle);
+      loadQueueStats();
+      loadWorkerStatus();
+    });
+
+    const unlistenComplete = listen('analysis-worker-complete', () => {
+      setWorkerStatus({ isRunning: false, tracksAnalyzed: workerStatus.tracksAnalyzed });
+      loadQueueStats();
+    });
+
+    const unlistenStopped = listen('analysis-worker-stopped', () => {
+      setWorkerStatus({ isRunning: false, tracksAnalyzed: workerStatus.tracksAnalyzed });
+    });
+
+    return () => {
+      unlistenProgress.then(f => f());
+      unlistenComplete.then(f => f());
+      unlistenStopped.then(f => f());
+    };
+  }, [workerStatus.tracksAnalyzed]);
+
+  const loadQueueStats = async () => {
+    try {
+      const stats = await invoke<QueueStats>('get_analysis_queue_stats');
+      setQueueStats(stats);
+    } catch (error) {
+      console.error('Failed to load queue stats:', error);
+    }
+  };
+
+  const loadWorkerStatus = async () => {
+    try {
+      const status = await invoke<WorkerStatus>('get_analysis_worker_status');
+      setWorkerStatus(status);
+    } catch (error) {
+      console.error('Failed to load worker status:', error);
+    }
+  };
+
+  const handleStartAnalysis = async () => {
+    setIsLoading(true);
+    try {
+      await invoke('start_analysis_worker');
+      setWorkerStatus({ ...workerStatus, isRunning: true });
+    } catch (error) {
+      console.error('Failed to start analysis:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStopAnalysis = async () => {
+    setIsLoading(true);
+    try {
+      await invoke('stop_analysis_worker');
+    } catch (error) {
+      console.error('Failed to stop analysis:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleQueueAllUnanalyzed = async () => {
+    setIsLoading(true);
+    try {
+      const count = await invoke<number>('queue_all_unanalyzed');
+      await loadQueueStats();
+      if (count > 0) {
+        // Auto-start worker if items were queued
+        await handleStartAnalysis();
+      }
+    } catch (error) {
+      console.error('Failed to queue tracks:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClearCompleted = async () => {
+    try {
+      await invoke('clear_completed_analysis');
+      await loadQueueStats();
+    } catch (error) {
+      console.error('Failed to clear completed:', error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Mode Selection */}
@@ -100,14 +262,20 @@ export function VolumeLevelingSettings({
           </label>
 
           <div className="space-y-2">
-            <input
-              type="range"
-              min="-12"
-              max="12"
-              step="0.5"
-              defaultValue="0"
-              className="w-full"
-            />
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="-12"
+                max="12"
+                step="0.5"
+                value={localPreampDb}
+                onChange={(e) => handlePreampChange(parseFloat(e.target.value))}
+                className="w-full"
+              />
+              <span className="text-sm font-mono w-16 text-right">
+                {localPreampDb >= 0 ? '+' : ''}{localPreampDb.toFixed(1)} dB
+              </span>
+            </div>
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>-12 dB</span>
               <span className="font-medium text-foreground">0 dB</span>
@@ -127,7 +295,8 @@ export function VolumeLevelingSettings({
           <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
             <input
               type="checkbox"
-              defaultChecked={true}
+              checked={preventClipping}
+              onChange={(e) => handlePreventClippingChange(e.target.checked)}
               className="w-4 h-4 mt-0.5"
             />
             <div className="flex-1">
@@ -191,6 +360,114 @@ export function VolumeLevelingSettings({
           </div>
         )}
       </div>
+
+      {/* Library Analysis Section */}
+      {mode !== 'disabled' && (
+        <div className="space-y-4 pt-4 border-t">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">Library Analysis</h3>
+            <button
+              onClick={loadQueueStats}
+              className="p-1 hover:bg-muted rounded transition-colors"
+              title="Refresh stats"
+            >
+              <RefreshCw className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </div>
+
+          {/* Queue Stats */}
+          {queueStats && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold">{queueStats.pending}</div>
+                <div className="text-xs text-muted-foreground">Pending</div>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-blue-500">{queueStats.processing}</div>
+                <div className="text-xs text-muted-foreground">Processing</div>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-green-500">{queueStats.completed}</div>
+                <div className="text-xs text-muted-foreground">Completed</div>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-red-500">{queueStats.failed}</div>
+                <div className="text-xs text-muted-foreground">Failed</div>
+              </div>
+            </div>
+          )}
+
+          {/* Worker Status */}
+          {workerStatus.isRunning && (
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                <span className="text-sm font-medium">Analyzing library...</span>
+              </div>
+              {lastAnalyzedTrack && (
+                <p className="text-xs text-muted-foreground mt-1 truncate">
+                  Current: {lastAnalyzedTrack}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                {workerStatus.tracksAnalyzed} tracks analyzed this session
+              </p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2">
+            {workerStatus.isRunning ? (
+              <button
+                onClick={handleStopAnalysis}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+              >
+                <Square className="w-4 h-4" />
+                Stop Analysis
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleQueueAllUnanalyzed}
+                  disabled={isLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                  Analyze All Tracks
+                </button>
+                {queueStats && queueStats.pending > 0 && (
+                  <button
+                    onClick={handleStartAnalysis}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                  >
+                    Resume ({queueStats.pending} pending)
+                  </button>
+                )}
+              </>
+            )}
+            {queueStats && queueStats.completed > 0 && (
+              <button
+                onClick={handleClearCompleted}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Clear Completed
+              </button>
+            )}
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Analysis scans your library to calculate loudness values for volume normalization.
+            This runs in the background and doesn't affect playback.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

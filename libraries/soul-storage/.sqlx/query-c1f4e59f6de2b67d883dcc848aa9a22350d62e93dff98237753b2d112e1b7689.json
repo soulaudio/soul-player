@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE source_sync_state\n        SET current_operation = ?,\n            current_item = ?,\n            processed_items = ?,\n            updated_at = datetime('now')\n        WHERE source_id = ? AND user_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "c1f4e59f6de2b67d883dcc848aa9a22350d62e93dff98237753b2d112e1b7689"
+}

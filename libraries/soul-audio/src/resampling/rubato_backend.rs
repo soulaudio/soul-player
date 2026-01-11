@@ -5,9 +5,10 @@
 
 use super::{ResamplerImpl, ResamplingError, ResamplingQuality, Result};
 use rubato::{
-    FastFixedIn, FastFixedOut, Resampler as RubatoResamplerTrait,
-    SincFixedIn, SincFixedOut, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+    FastFixedIn, FastFixedOut, Resampler as RubatoResamplerTrait, SincFixedIn, SincFixedOut,
+    SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
+use std::collections::VecDeque;
 
 /// Enum to hold different rubato resampler types
 enum RubatoResamplerType {
@@ -23,6 +24,10 @@ pub struct RubatoResampler {
     input_rate: u32,
     output_rate: u32,
     channels: usize,
+    /// Buffer for accumulating input samples when they don't fill a complete chunk
+    input_buffer: VecDeque<f32>,
+    /// Chunk size the resampler was configured with
+    chunk_size: usize,
 }
 
 impl RubatoResampler {
@@ -35,6 +40,14 @@ impl RubatoResampler {
     ) -> Result<Self> {
         let ratio = output_rate as f64 / input_rate as f64;
 
+        // Determine chunk size based on quality
+        let chunk_size = match quality {
+            ResamplingQuality::Fast => 1024,
+            ResamplingQuality::Balanced => 1024,
+            ResamplingQuality::High => 2048,
+            ResamplingQuality::Maximum => 4096,
+        };
+
         // Choose resampler based on quality and ratio
         let resampler = match quality {
             ResamplingQuality::Fast => {
@@ -43,9 +56,9 @@ impl RubatoResampler {
                     RubatoResamplerType::FastIn(
                         FastFixedIn::new(
                             ratio,
-                            2.0,      // max_resample_ratio_relative
+                            2.0, // max_resample_ratio_relative
                             rubato::PolynomialDegree::Linear,
-                            1024,     // chunk_size
+                            chunk_size,
                             channels,
                         )
                         .map_err(|e| {
@@ -59,9 +72,9 @@ impl RubatoResampler {
                     RubatoResamplerType::FastOut(
                         FastFixedOut::new(
                             ratio,
-                            2.0,      // max_resample_ratio_relative
+                            2.0, // max_resample_ratio_relative
                             rubato::PolynomialDegree::Linear,
-                            1024,     // chunk_size
+                            chunk_size,
                             channels,
                         )
                         .map_err(|e| {
@@ -76,21 +89,12 @@ impl RubatoResampler {
             _ => {
                 // Use Sinc for balanced/high/maximum quality
                 let params = Self::quality_to_params(quality);
-                let chunk_size = match quality {
-                    ResamplingQuality::Balanced => 1024,
-                    ResamplingQuality::High => 2048,
-                    ResamplingQuality::Maximum => 4096,
-                    _ => 1024,
-                };
 
                 if ratio >= 1.0 {
                     RubatoResamplerType::SincIn(
                         SincFixedIn::<f32>::new(
-                            ratio,
-                            2.0, // max_resample_ratio_relative
-                            params,
-                            chunk_size,
-                            channels,
+                            ratio, 2.0, // max_resample_ratio_relative
+                            params, chunk_size, channels,
                         )
                         .map_err(|e| {
                             ResamplingError::InitializationFailed(format!(
@@ -102,11 +106,8 @@ impl RubatoResampler {
                 } else {
                     RubatoResamplerType::SincOut(
                         SincFixedOut::<f32>::new(
-                            ratio,
-                            2.0, // max_resample_ratio_relative
-                            params,
-                            chunk_size,
-                            channels,
+                            ratio, 2.0, // max_resample_ratio_relative
+                            params, chunk_size, channels,
                         )
                         .map_err(|e| {
                             ResamplingError::InitializationFailed(format!(
@@ -124,6 +125,8 @@ impl RubatoResampler {
             input_rate,
             output_rate,
             channels,
+            input_buffer: VecDeque::new(),
+            chunk_size,
         })
     }
 
@@ -161,13 +164,33 @@ impl RubatoResampler {
         }
     }
 
-    /// Get expected input frame count
+    /// Get expected input frame count for the next process call
     fn input_frames_next(&self) -> usize {
         match &self.resampler {
             RubatoResamplerType::FastIn(r) => r.input_frames_next(),
             RubatoResamplerType::FastOut(r) => r.input_frames_next(),
             RubatoResamplerType::SincIn(r) => r.input_frames_next(),
             RubatoResamplerType::SincOut(r) => r.input_frames_next(),
+        }
+    }
+
+    /// Get maximum output frames for the configured chunk size
+    fn output_frames_max(&self) -> usize {
+        match &self.resampler {
+            RubatoResamplerType::FastIn(r) => r.output_frames_max(),
+            RubatoResamplerType::FastOut(r) => r.output_frames_max(),
+            RubatoResamplerType::SincIn(r) => r.output_frames_max(),
+            RubatoResamplerType::SincOut(r) => r.output_frames_max(),
+        }
+    }
+
+    /// Get the latency in input frames
+    pub fn latency(&self) -> usize {
+        match &self.resampler {
+            RubatoResamplerType::FastIn(r) => r.output_delay(),
+            RubatoResamplerType::FastOut(r) => r.output_delay(),
+            RubatoResamplerType::SincIn(r) => r.output_delay(),
+            RubatoResamplerType::SincOut(r) => r.output_delay(),
         }
     }
 
@@ -201,6 +224,56 @@ impl RubatoResampler {
 
         interleaved
     }
+
+    /// Flush any remaining buffered samples using partial processing
+    ///
+    /// Call this at the end of a stream to retrieve any samples that were
+    /// buffered but not yet processed (because they didn't fill a complete chunk).
+    pub fn flush(&mut self) -> Result<Vec<f32>> {
+        // 1:1 passthrough - just drain the buffer
+        if self.input_rate == self.output_rate {
+            return Ok(self.input_buffer.drain(..).collect());
+        }
+
+        if self.input_buffer.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Process remaining buffered samples using process_partial
+        let remaining_samples: Vec<f32> = self.input_buffer.drain(..).collect();
+        let frames = remaining_samples.len() / self.channels;
+
+        if frames == 0 {
+            return Ok(Vec::new());
+        }
+
+        let input_channels = self.deinterleave(&remaining_samples, frames);
+
+        let output_channels = match &mut self.resampler {
+            RubatoResamplerType::FastIn(r) => r
+                .process_partial(Some(&input_channels), None)
+                .map_err(|e| {
+                    ResamplingError::ProcessingFailed(format!("FastIn flush failed: {}", e))
+                })?,
+            RubatoResamplerType::FastOut(r) => r
+                .process_partial(Some(&input_channels), None)
+                .map_err(|e| {
+                    ResamplingError::ProcessingFailed(format!("FastOut flush failed: {}", e))
+                })?,
+            RubatoResamplerType::SincIn(r) => r
+                .process_partial(Some(&input_channels), None)
+                .map_err(|e| {
+                    ResamplingError::ProcessingFailed(format!("SincIn flush failed: {}", e))
+                })?,
+            RubatoResamplerType::SincOut(r) => r
+                .process_partial(Some(&input_channels), None)
+                .map_err(|e| {
+                    ResamplingError::ProcessingFailed(format!("SincOut flush failed: {}", e))
+                })?,
+        };
+
+        Ok(self.interleave(output_channels))
+    }
 }
 
 impl ResamplerImpl for RubatoResampler {
@@ -217,109 +290,71 @@ impl ResamplerImpl for RubatoResampler {
             )));
         }
 
-        let input_frames = input.len() / self.channels;
+        // 1:1 passthrough optimization - avoid resampling overhead when rates match
+        if self.input_rate == self.output_rate {
+            return Ok(input.to_vec());
+        }
+
+        // Add all input to the buffer
+        self.input_buffer.extend(input.iter().copied());
+
         let mut output = Vec::new();
-        let mut processed_frames = 0;
 
-        // Process in chunks matching what the resampler expects
-        while processed_frames < input_frames {
+        // Process complete chunks only - this fixes the accumulated output ratio bug
+        // by only calling process() when we have exactly the expected number of input frames
+        loop {
             let needed_frames = self.input_frames_next();
-            let available_frames = input_frames - processed_frames;
-            let frames_to_process = available_frames.min(needed_frames);
+            let needed_samples = needed_frames * self.channels;
 
-            if frames_to_process == 0 {
+            if self.input_buffer.len() < needed_samples {
+                // Not enough samples for a complete chunk, wait for more input
                 break;
             }
 
-            // Extract chunk
-            let start_sample = processed_frames * self.channels;
-            let end_sample = (processed_frames + frames_to_process) * self.channels;
-            let chunk = &input[start_sample..end_sample];
+            // Extract exactly the needed samples from the buffer
+            let chunk: Vec<f32> = self.input_buffer.drain(..needed_samples).collect();
 
             // Deinterleave chunk
-            let input_channels = self.deinterleave(chunk, frames_to_process);
+            let input_channels = self.deinterleave(&chunk, needed_frames);
 
-            // Process chunk
+            // Process the complete chunk (always use process(), never process_partial for normal operation)
             let output_channels = match &mut self.resampler {
                 RubatoResamplerType::FastIn(r) => {
-                    if frames_to_process == needed_frames {
-                        r.process(&input_channels, None).map_err(|e| {
-                            ResamplingError::ProcessingFailed(format!(
-                                "FastIn resampling failed: {}",
-                                e
-                            ))
-                        })?
-                    } else {
-                        // Partial processing for last chunk
-                        r.process_partial(Some(&input_channels), None)
-                            .map_err(|e| {
-                                ResamplingError::ProcessingFailed(format!(
-                                    "FastIn partial resampling failed: {}",
-                                    e
-                                ))
-                            })?
-                    }
+                    r.process(&input_channels, None).map_err(|e| {
+                        ResamplingError::ProcessingFailed(format!(
+                            "FastIn resampling failed: {}",
+                            e
+                        ))
+                    })?
                 }
                 RubatoResamplerType::FastOut(r) => {
-                    if frames_to_process == needed_frames {
-                        r.process(&input_channels, None).map_err(|e| {
-                            ResamplingError::ProcessingFailed(format!(
-                                "FastOut resampling failed: {}",
-                                e
-                            ))
-                        })?
-                    } else {
-                        r.process_partial(Some(&input_channels), None)
-                            .map_err(|e| {
-                                ResamplingError::ProcessingFailed(format!(
-                                    "FastOut partial resampling failed: {}",
-                                    e
-                                ))
-                            })?
-                    }
+                    r.process(&input_channels, None).map_err(|e| {
+                        ResamplingError::ProcessingFailed(format!(
+                            "FastOut resampling failed: {}",
+                            e
+                        ))
+                    })?
                 }
                 RubatoResamplerType::SincIn(r) => {
-                    if frames_to_process == needed_frames {
-                        r.process(&input_channels, None).map_err(|e| {
-                            ResamplingError::ProcessingFailed(format!(
-                                "SincIn resampling failed: {}",
-                                e
-                            ))
-                        })?
-                    } else {
-                        r.process_partial(Some(&input_channels), None)
-                            .map_err(|e| {
-                                ResamplingError::ProcessingFailed(format!(
-                                    "SincIn partial resampling failed: {}",
-                                    e
-                                ))
-                            })?
-                    }
+                    r.process(&input_channels, None).map_err(|e| {
+                        ResamplingError::ProcessingFailed(format!(
+                            "SincIn resampling failed: {}",
+                            e
+                        ))
+                    })?
                 }
                 RubatoResamplerType::SincOut(r) => {
-                    if frames_to_process == needed_frames {
-                        r.process(&input_channels, None).map_err(|e| {
-                            ResamplingError::ProcessingFailed(format!(
-                                "SincOut resampling failed: {}",
-                                e
-                            ))
-                        })?
-                    } else {
-                        r.process_partial(Some(&input_channels), None)
-                            .map_err(|e| {
-                                ResamplingError::ProcessingFailed(format!(
-                                    "SincOut partial resampling failed: {}",
-                                    e
-                                ))
-                            })?
-                    }
+                    r.process(&input_channels, None).map_err(|e| {
+                        ResamplingError::ProcessingFailed(format!(
+                            "SincOut resampling failed: {}",
+                            e
+                        ))
+                    })?
                 }
             };
 
             // Interleave and append to output
             output.extend(self.interleave(output_channels));
-
-            processed_frames += frames_to_process;
         }
 
         Ok(output)
@@ -338,12 +373,24 @@ impl ResamplerImpl for RubatoResampler {
     }
 
     fn reset(&mut self) {
+        // Clear the input buffer to remove any leftover samples
+        self.input_buffer.clear();
+
+        // Reset the underlying resampler's filter state
         match &mut self.resampler {
             RubatoResamplerType::FastIn(r) => r.reset(),
             RubatoResamplerType::FastOut(r) => r.reset(),
             RubatoResamplerType::SincIn(r) => r.reset(),
             RubatoResamplerType::SincOut(r) => r.reset(),
         }
+    }
+
+    fn latency(&self) -> usize {
+        self.latency()
+    }
+
+    fn flush(&mut self) -> Result<Vec<f32>> {
+        self.flush()
     }
 }
 
@@ -353,8 +400,7 @@ mod tests {
 
     #[test]
     fn test_rubato_creation() {
-        let resampler =
-            RubatoResampler::new(44100, 96000, 2, ResamplingQuality::Balanced).unwrap();
+        let resampler = RubatoResampler::new(44100, 96000, 2, ResamplingQuality::Balanced).unwrap();
         assert_eq!(resampler.input_rate(), 44100);
         assert_eq!(resampler.output_rate(), 96000);
         assert_eq!(resampler.channels(), 2);
@@ -362,8 +408,7 @@ mod tests {
 
     #[test]
     fn test_deinterleave_interleave() {
-        let resampler =
-            RubatoResampler::new(44100, 48000, 2, ResamplingQuality::Fast).unwrap();
+        let resampler = RubatoResampler::new(44100, 48000, 2, ResamplingQuality::Fast).unwrap();
 
         // Test data: [L0, R0, L1, R1, ...]
         let interleaved = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
@@ -379,16 +424,14 @@ mod tests {
 
     #[test]
     fn test_process_empty() {
-        let mut resampler =
-            RubatoResampler::new(44100, 96000, 2, ResamplingQuality::Fast).unwrap();
+        let mut resampler = RubatoResampler::new(44100, 96000, 2, ResamplingQuality::Fast).unwrap();
         let output = resampler.process(&[]).unwrap();
         assert!(output.is_empty());
     }
 
     #[test]
     fn test_process_invalid_size() {
-        let mut resampler =
-            RubatoResampler::new(44100, 96000, 2, ResamplingQuality::Fast).unwrap();
+        let mut resampler = RubatoResampler::new(44100, 96000, 2, ResamplingQuality::Fast).unwrap();
         // Odd number of samples for stereo (should fail)
         let result = resampler.process(&[1.0, 2.0, 3.0]);
         assert!(result.is_err());

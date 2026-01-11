@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Test artifacts
+screenshots/
+allure-results/
+allure-report/
+
+# wdio logs
+wdio-*.log
+
+# Coverage
+coverage/
+
+# Lock files (use project root lock file)
+package-lock.json
+yarn.lock
