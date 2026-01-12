@@ -3,6 +3,12 @@
     "title": "Soul Player",
     "loading": "Wird geladen..."
   },
+  "titleBar": {
+    "minimize": "Minimieren",
+    "maximize": "Maximieren",
+    "restore": "Wiederherstellen",
+    "close": "Schließen"
+  },
   "home": {
     "welcome": "Willkommen bei Soul Player",
     "welcomeSubtitle": "Wählen Sie einen Titel aus Ihrer Bibliothek aus",
@@ -146,6 +152,35 @@
       "duplicatePath": "Dieser Ordner ist bereits in Ihrer Bibliothek vorhanden"
     }
   },
+  "artwork": {
+    "edit": {
+      "title": "Artwork bearbeiten",
+      "selectImage": "Bild auswählen",
+      "remove": "Artwork entfernen",
+      "dropHint": "Bild hier ablegen oder klicken zum Durchsuchen",
+      "crop": "Zuschneiden & Speichern",
+      "cropTitle": "Bild zuschneiden",
+      "zoomIn": "Vergrößern",
+      "zoomOut": "Verkleinern",
+      "resetZoom": "Zurücksetzen",
+      "dragToReposition": "Ziehen zum Verschieben"
+    },
+    "writeChoice": {
+      "title": "Artwork speichern",
+      "description": "Wie möchten Sie dieses Artwork speichern?",
+      "editMetadata": "Datei-Metadaten bearbeiten",
+      "editMetadataDesc": "Schreibt das Artwork in alle Audiodateien dieses Albums",
+      "soulPlayerOnly": "Nur Soul Player",
+      "soulPlayerOnlyDesc": "Speichert das Artwork ohne Ihre Audiodateien zu ändern"
+    },
+    "errors": {
+      "invalidFileType": "Bitte wählen Sie eine Bilddatei",
+      "fileTooLarge": "Bild muss kleiner als 10MB sein",
+      "readFailed": "Bilddatei konnte nicht gelesen werden",
+      "saveFailed": "Artwork konnte nicht gespeichert werden",
+      "removeFailed": "Artwork konnte nicht entfernt werden"
+    }
+  },
   "common": {
     "save": "Speichern",
     "cancel": "Abbrechen",
@@ -166,5 +201,10 @@
     "loading": "Wird geladen...",
     "retry": "Erneut versuchen",
     "error": "Fehler"
+  },
+  "trackMenu": {
+    "showInExplorer": "Im Datei-Explorer anzeigen",
+    "removeFromManagedLibrary": "Aus verwalteter Bibliothek entfernen",
+    "removeFromLibrary": "Aus Bibliothek entfernen"
   }
 }

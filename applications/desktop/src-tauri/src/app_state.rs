@@ -129,8 +129,16 @@ impl AppState {
 
         eprintln!("Library path: {}", library_path.display());
 
+        // Calculate artwork storage path
+        let artwork_storage_path = db_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("artwork");
+
+        eprintln!("Artwork storage path: {}", artwork_storage_path.display());
+
         // Create artwork manager with cache for 100 images (~50-100MB)
-        let artwork_manager = ArtworkManager::new(pool.clone(), 100);
+        let artwork_manager = ArtworkManager::new(pool.clone(), 100, artwork_storage_path);
 
         Ok(Self {
             pool: Arc::new(pool),

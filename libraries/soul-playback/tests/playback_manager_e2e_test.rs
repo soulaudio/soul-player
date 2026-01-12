@@ -567,14 +567,22 @@ mod playback_state {
         )));
 
         manager.pause();
+
+        // The pause triggers a stop fade (~15ms at 44.1kHz = ~1323 stereo samples)
+        // Process enough audio for the stop fade to complete first
+        let stop_fade_samples = (44100.0 * 0.015 * 2.0) as usize + 512; // 15ms + buffer margin
+        let mut fade_buffer = vec![0.0f32; stop_fade_samples];
+        manager.process_audio(&mut fade_buffer).unwrap();
+
+        // Now that stop fade is complete, position should not advance further
         let position_before = manager.get_position();
 
-        // Process audio while paused
+        // Process more audio while paused (after fade complete)
         let mut buffer = vec![0.0f32; 4096];
         manager.process_audio(&mut buffer).unwrap();
 
         let position_after = manager.get_position();
-        assert_eq!(position_before, position_after);
+        assert_eq!(position_before, position_after, "Position should not advance after stop fade completes");
     }
 
     #[test]
@@ -585,9 +593,12 @@ mod playback_state {
         let mut buffer = vec![1.0f32; 1024];
         manager.process_audio(&mut buffer).unwrap();
 
+        // Should output near-silence (DAC keepalive noise at ~-96dB is acceptable)
+        let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
         assert!(
-            buffer.iter().all(|&s| s == 0.0),
-            "Stopped state should output silence"
+            buffer.iter().all(|&s| s.abs() < dac_keepalive_threshold),
+            "Stopped state should output near-silence, max value: {:.6}",
+            buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
         );
     }
 }

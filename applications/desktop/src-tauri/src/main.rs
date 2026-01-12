@@ -46,6 +46,8 @@ struct FrontendTrack {
     bit_rate: Option<i32>,
     sample_rate: Option<i32>,
     channels: Option<i32>,
+    // Whether the track is in the managed library (vs watched folder)
+    is_in_managed_library: bool,
 }
 
 impl From<soul_core::types::Track> for FrontendTrack {
@@ -77,7 +79,27 @@ impl From<soul_core::types::Track> for FrontendTrack {
             bit_rate: track.bitrate,
             sample_rate: track.sample_rate,
             channels: track.channels,
+            // Default to false - will be set correctly when library path is available
+            is_in_managed_library: false,
         }
+    }
+}
+
+impl FrontendTrack {
+    /// Create from a Track with library path context to determine if in managed library
+    fn from_track_with_library_path(
+        track: soul_core::types::Track,
+        library_path: &std::path::Path,
+    ) -> Self {
+        let mut frontend_track = Self::from(track);
+
+        // Check if track's file path is inside the managed library
+        if let Some(ref path) = frontend_track.file_path {
+            let track_path = std::path::Path::new(path);
+            frontend_track.is_in_managed_library = track_path.starts_with(library_path);
+        }
+
+        frontend_track
     }
 }
 
@@ -159,6 +181,7 @@ struct TrackData {
     title: String,
     artist: String,
     album: Option<String>,
+    album_id: Option<i64>,
     file_path: String,
     duration_seconds: Option<f64>,
     track_number: Option<u32>,
@@ -168,6 +191,16 @@ struct TrackData {
 impl TrackData {
     fn to_queue_track(&self) -> soul_playback::QueueTrack {
         use std::time::Duration;
+
+        // Set source based on album_id if available
+        let source = if let Some(album_id) = self.album_id {
+            soul_playback::TrackSource::Album {
+                id: album_id.to_string(),
+                name: self.album.clone().unwrap_or_default(),
+            }
+        } else {
+            soul_playback::TrackSource::Single
+        };
 
         soul_playback::QueueTrack {
             id: self.track_id.clone(),
@@ -180,7 +213,7 @@ impl TrackData {
                 .map(|s| Duration::from_secs_f64(s))
                 .unwrap_or(Duration::from_secs(0)),
             track_number: self.track_number,
-            source: soul_playback::TrackSource::Single,
+            source,
         }
     }
 }
@@ -220,7 +253,7 @@ async fn play_queue(
     start_index: usize,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    eprintln!(
+    tracing::info!(
         "[play_queue] Called with {} tracks, start_index: {}",
         queue.len(),
         start_index
@@ -236,7 +269,7 @@ async fn play_queue(
 
     // Debug: print first track info
     if let Some(first) = queue.first() {
-        eprintln!(
+        tracing::info!(
             "[play_queue] First track: {}, path: {}",
             first.title, first.file_path
         );
@@ -248,33 +281,33 @@ async fn play_queue(
         .map(|track_data| track_data.to_queue_track())
         .collect();
 
-    eprintln!(
+    tracing::info!(
         "[play_queue] Loading {} tracks as playlist (source queue)",
         tracks.len()
     );
 
     // Stop current playback
-    eprintln!("[play_queue] Calling stop()...");
+    tracing::debug!("[play_queue] Calling stop()...");
     let stop_result = playback.stop();
-    eprintln!("[play_queue] stop() returned: {:?}", stop_result);
+    tracing::debug!("[play_queue] stop() returned: {:?}", stop_result);
     stop_result?;
 
     // Load playlist as source queue (Spotify-style context)
     // This replaces the source queue tier, keeping explicit queue separate
-    eprintln!(
+    tracing::debug!(
         "[play_queue] Calling load_playlist() with {} tracks...",
         tracks.len()
     );
     let load_result = playback.load_playlist(tracks);
-    eprintln!("[play_queue] load_playlist() returned: {:?}", load_result);
+    tracing::debug!("[play_queue] load_playlist() returned: {:?}", load_result);
     load_result?;
 
     // Start playback (will play first track in source queue)
-    eprintln!("[play_queue] Calling play()...");
+    tracing::debug!("[play_queue] Calling play()...");
     let play_result = playback.play();
-    eprintln!("[play_queue] play() returned: {:?}", play_result);
+    tracing::debug!("[play_queue] play() returned: {:?}", play_result);
     play_result?;
-    eprintln!("[play_queue] All commands sent successfully");
+    tracing::info!("[play_queue] All commands sent successfully");
 
     Ok(())
 }
@@ -358,18 +391,32 @@ async fn clear_queue(playback: State<'_, PlaybackManager>) -> Result<(), String>
 
 #[tauri::command]
 async fn get_queue(playback: State<'_, PlaybackManager>) -> Result<Vec<TrackData>, String> {
+    use soul_playback::TrackSource;
+
     let queue = playback.get_queue();
     let queue_data = queue
         .iter()
-        .map(|track| TrackData {
-            track_id: track.id.clone(),
-            title: track.title.clone(),
-            artist: track.artist.clone(),
-            album: track.album.clone(),
-            file_path: track.path.to_string_lossy().to_string(),
-            duration_seconds: Some(track.duration.as_secs_f64()),
-            track_number: track.track_number,
-            cover_art_path: Some(format!("artwork://track/{}", track.id)),
+        .map(|track| {
+            // Extract album_id and cover_art_path from source
+            let (album_id, cover_art_path) = match &track.source {
+                TrackSource::Album { id, .. } => {
+                    let album_id = id.parse::<i64>().ok();
+                    (album_id, Some(format!("artwork://album/{}", id)))
+                }
+                _ => (None, Some(format!("artwork://track/{}", track.id))),
+            };
+
+            TrackData {
+                track_id: track.id.clone(),
+                title: track.title.clone(),
+                artist: track.artist.clone(),
+                album: track.album.clone(),
+                album_id,
+                file_path: track.path.to_string_lossy().to_string(),
+                duration_seconds: Some(track.duration.as_secs_f64()),
+                track_number: track.track_number,
+                cover_art_path,
+            }
         })
         .collect();
     Ok(queue_data)
@@ -412,7 +459,10 @@ async fn get_all_tracks(state: State<'_, AppState>) -> Result<Vec<FrontendTrack>
     let tracks = soul_storage::tracks::get_all(&state.pool)
         .await
         .map_err(|e| e.to_string())?;
-    let frontend_tracks: Vec<FrontendTrack> = tracks.into_iter().map(FrontendTrack::from).collect();
+    let frontend_tracks: Vec<FrontendTrack> = tracks
+        .into_iter()
+        .map(|t| FrontendTrack::from_track_with_library_path(t, &state.library_path))
+        .collect();
 
     // Debug: Log tracks without file paths
     let tracks_without_paths = frontend_tracks
@@ -420,13 +470,13 @@ async fn get_all_tracks(state: State<'_, AppState>) -> Result<Vec<FrontendTrack>
         .filter(|t| t.file_path.is_none())
         .count();
     if tracks_without_paths > 0 {
-        eprintln!(
+        tracing::warn!(
             "[get_all_tracks] WARNING: {} out of {} tracks have no file path",
             tracks_without_paths,
             frontend_tracks.len()
         );
     } else {
-        eprintln!(
+        tracing::debug!(
             "[get_all_tracks] All {} tracks have file paths",
             frontend_tracks.len()
         );
@@ -551,6 +601,57 @@ async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String>
     }
 
     eprintln!("[delete_track] Track deletion completed successfully");
+    Ok(())
+}
+
+/// Show a file in the system file explorer
+#[tauri::command]
+async fn show_in_file_explorer(path: String) -> Result<(), String> {
+    use std::process::Command;
+
+    let path = std::path::Path::new(&path);
+
+    if !path.exists() {
+        return Err(format!("File not found: {}", path.display()));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .args(["/select,", &path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .args(["-R", &path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("Failed to open Finder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Try different file managers in order of preference
+        let parent = path.parent().unwrap_or(path);
+        let file_managers = [
+            ("xdg-open", vec![parent.to_string_lossy().to_string()]),
+            ("nautilus", vec!["--select".to_string(), path.to_string_lossy().to_string()]),
+            ("dolphin", vec!["--select".to_string(), path.to_string_lossy().to_string()]),
+            ("nemo", vec![path.to_string_lossy().to_string()]),
+            ("thunar", vec![parent.to_string_lossy().to_string()]),
+        ];
+
+        for (cmd, args) in file_managers {
+            if Command::new(cmd).args(&args).spawn().is_ok() {
+                return Ok(());
+            }
+        }
+
+        return Err("No supported file manager found".to_string());
+    }
+
     Ok(())
 }
 
@@ -1131,6 +1232,239 @@ async fn get_album_artwork(
     }
 }
 
+/// Response structure for artwork with source info
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArtworkResponse {
+    data_url: String,
+    is_custom: bool,
+}
+
+/// Get artwork with source info for an album (for edit dialog)
+#[tauri::command]
+async fn get_album_artwork_with_source(
+    album_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<ArtworkResponse>, String> {
+    match state
+        .artwork_manager
+        .get_album_artwork_with_source(album_id)
+        .await
+    {
+        Ok(Some((data, mime_type, is_custom))) => {
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+            Ok(Some(ArtworkResponse {
+                data_url,
+                is_custom,
+            }))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            eprintln!("[get_album_artwork_with_source] Error: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Get artwork for an artist
+#[tauri::command]
+async fn get_artist_artwork(
+    artist_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    match state
+        .artwork_manager
+        .get_artist_artwork_with_mime(artist_id)
+        .await
+    {
+        Ok(Some((data, mime_type))) => {
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+            Ok(Some(data_url))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            eprintln!("[get_artist_artwork] Error: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Get artwork with source info for an artist (for edit dialog)
+#[tauri::command]
+async fn get_artist_artwork_with_source(
+    artist_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<ArtworkResponse>, String> {
+    match state
+        .artwork_manager
+        .get_artist_artwork_with_source(artist_id)
+        .await
+    {
+        Ok(Some((data, mime_type, is_custom))) => {
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+            Ok(Some(ArtworkResponse {
+                data_url,
+                is_custom,
+            }))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            eprintln!("[get_artist_artwork_with_source] Error: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Get artwork for a playlist
+#[tauri::command]
+async fn get_playlist_artwork(
+    playlist_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let playlist_id = soul_core::types::PlaylistId::new(playlist_id);
+    match state
+        .artwork_manager
+        .get_playlist_artwork_with_mime(&playlist_id)
+        .await
+    {
+        Ok(Some((data, mime_type))) => {
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+            Ok(Some(data_url))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            eprintln!("[get_playlist_artwork] Error: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Get artwork with source info for a playlist (for edit dialog)
+#[tauri::command]
+async fn get_playlist_artwork_with_source(
+    playlist_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<ArtworkResponse>, String> {
+    let playlist_id = soul_core::types::PlaylistId::new(playlist_id);
+    match state
+        .artwork_manager
+        .get_playlist_artwork_with_source(&playlist_id)
+        .await
+    {
+        Ok(Some((data, mime_type, is_custom))) => {
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+            Ok(Some(ArtworkResponse {
+                data_url,
+                is_custom,
+            }))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            eprintln!("[get_playlist_artwork_with_source] Error: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Request structure for setting artwork
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetArtworkRequest {
+    entity_type: String,
+    entity_id: String,
+    artwork_base64: String,
+    mime_type: String,
+    write_to_files: Option<bool>,
+}
+
+/// Set artwork for an entity (album, artist, or playlist)
+#[tauri::command]
+async fn set_artwork(
+    request: SetArtworkRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    use base64::Engine;
+
+    let artwork_data = base64::engine::general_purpose::STANDARD
+        .decode(&request.artwork_base64)
+        .map_err(|e| format!("Invalid base64 data: {}", e))?;
+
+    match request.entity_type.as_str() {
+        "album" => {
+            let album_id: i64 = request
+                .entity_id
+                .parse()
+                .map_err(|_| "Invalid album ID")?;
+            state
+                .artwork_manager
+                .set_album_artwork(
+                    album_id,
+                    artwork_data,
+                    &request.mime_type,
+                    request.write_to_files.unwrap_or(false),
+                )
+                .await
+        }
+        "artist" => {
+            let artist_id: i64 = request
+                .entity_id
+                .parse()
+                .map_err(|_| "Invalid artist ID")?;
+            state
+                .artwork_manager
+                .set_artist_artwork(artist_id, artwork_data, &request.mime_type)
+                .await
+        }
+        "playlist" => {
+            let playlist_id = soul_core::types::PlaylistId::new(request.entity_id);
+            let user_id = soul_core::types::UserId::new(state.user_id.clone());
+            state
+                .artwork_manager
+                .set_playlist_artwork(&user_id, &playlist_id, artwork_data, &request.mime_type)
+                .await
+        }
+        _ => Err(format!("Invalid entity type: {}", request.entity_type)),
+    }
+}
+
+/// Remove artwork from an entity
+#[tauri::command]
+async fn remove_artwork(
+    entity_type: String,
+    entity_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    match entity_type.as_str() {
+        "album" => {
+            let album_id: i64 = entity_id.parse().map_err(|_| "Invalid album ID")?;
+            state.artwork_manager.remove_album_artwork(album_id).await
+        }
+        "artist" => {
+            let artist_id: i64 = entity_id.parse().map_err(|_| "Invalid artist ID")?;
+            state.artwork_manager.remove_artist_artwork(artist_id).await
+        }
+        "playlist" => {
+            let playlist_id = soul_core::types::PlaylistId::new(entity_id);
+            let user_id = soul_core::types::UserId::new(state.user_id.clone());
+            state
+                .artwork_manager
+                .remove_playlist_artwork(&user_id, &playlist_id)
+                .await
+        }
+        _ => Err(format!("Invalid entity type: {}", entity_type)),
+    }
+}
+
 /// Debug command to test artwork extraction for a specific track
 #[tauri::command]
 async fn test_artwork_extraction(
@@ -1223,7 +1557,86 @@ async fn test_artwork_extraction(
     }
 }
 
+/// Initialize logging system with optional file output
+fn init_logging(enable_file_logging: bool) {
+    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+    if enable_file_logging {
+        // Get app data directory for logs
+        let app_data_dir = if cfg!(target_os = "windows") {
+            let roaming = std::env::var("APPDATA").expect("APPDATA environment variable not found");
+            std::path::PathBuf::from(roaming).join("Soul Player")
+        } else if cfg!(target_os = "macos") {
+            let home = std::env::var("HOME").expect("HOME environment variable not found");
+            std::path::PathBuf::from(home)
+                .join("Library")
+                .join("Application Support")
+                .join("soul-player")
+        } else {
+            let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+                std::path::PathBuf::from(xdg_config)
+            } else {
+                let home = std::env::var("HOME").expect("HOME environment variable not found");
+                std::path::PathBuf::from(home).join(".config")
+            };
+            config_dir.join("soul-player")
+        };
+
+        let logs_dir = app_data_dir.join("logs");
+
+        // Create logs directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&logs_dir) {
+            eprintln!("Failed to create logs directory: {}", e);
+            // Fall back to console-only logging
+            init_console_logging();
+            return;
+        }
+
+        // Set up file appender with daily rotation
+        let file_appender = tracing_appender::rolling::daily(logs_dir.clone(), "soul-player.log");
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+        // Keep the guard alive for the lifetime of the program
+        // This is necessary to ensure logs are flushed to disk
+        std::mem::forget(guard);
+
+        // Set up layers: console + file
+        let env_filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("info,soul_importer=debug"));
+
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer().with_writer(std::io::stderr)) // Console output
+            .with(fmt::layer().with_writer(non_blocking).with_ansi(false)) // File output (no colors)
+            .init();
+
+        eprintln!("[LOGGING] File logging enabled: {}", logs_dir.display());
+        eprintln!("[LOGGING] Log files are saved as: soul-player.log.YYYY-MM-DD");
+    } else {
+        init_console_logging();
+    }
+}
+
+/// Initialize console-only logging
+fn init_console_logging() {
+    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,soul_importer=debug"));
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt::layer().with_writer(std::io::stderr))
+        .init();
+}
+
 fn main() {
+    // Check for --logs flag in command line arguments
+    let enable_file_logging = std::env::args().any(|arg| arg == "--logs");
+
+    // Initialize logging system
+    init_logging(enable_file_logging);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1588,6 +2001,7 @@ fn main() {
             get_all_tracks,
             get_track_by_id,
             delete_track,
+            show_in_file_explorer,
             check_database_health,
             // Albums
             get_all_albums,
@@ -1665,6 +2079,13 @@ fn main() {
             // Artwork
             get_track_artwork,
             get_album_artwork,
+            get_album_artwork_with_source,
+            get_artist_artwork,
+            get_artist_artwork_with_source,
+            get_playlist_artwork,
+            get_playlist_artwork_with_source,
+            set_artwork,
+            remove_artwork,
             // Debug/Testing
             test_artwork_extraction,
             // Global shortcuts

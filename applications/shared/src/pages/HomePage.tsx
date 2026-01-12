@@ -6,164 +6,38 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Play, Pause, SkipBack, SkipForward, Music, ListMusic, Users, Guitar, Library } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, Music } from 'lucide-react'
 import { ArtworkImage } from '../components/ArtworkImage'
-import { AlbumCard } from '../components/AlbumCard'
+import { MediaCard, type MediaType } from '../components/MediaCard'
 import { usePlayerStore } from '../stores/player'
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
 import { useBackend, type PlaybackContext } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
-import { getDeduplicatedTracks } from '../utils/trackGrouping'
 
-type ContextType = 'album' | 'artist' | 'playlist' | 'genre' | 'tracks'
-
-/** Get icon for context type */
-function getContextIcon(contextType: ContextType) {
+/** Get subtitle for context type */
+function getContextSubtitle(contextType: string, t: (key: string, fallback?: string) => string): string {
   switch (contextType) {
     case 'playlist':
-      return ListMusic
+      return t('library.playlist', 'Playlist')
     case 'artist':
-      return Users
+      return t('library.artist', 'Artist')
     case 'genre':
-      return Guitar
+      return t('library.genre', 'Genre')
     case 'tracks':
-      return Library
+      return t('library.allTracks', 'All Tracks')
+    case 'album':
+      return t('library.album', 'Album')
     default:
-      return Music
+      return ''
   }
 }
 
-/** Get route for context */
-function getContextRoute(context: PlaybackContext): string {
-  switch (context.contextType) {
-    case 'playlist':
-      return `/playlists/${context.contextId}`
-    case 'artist':
-      return `/artists/${context.contextId}`
-    case 'genre':
-      return `/genres/${context.contextId}`
-    case 'tracks':
-      return '/library'
-    default:
-      return '/library'
+/** Convert context type to MediaType */
+function toMediaType(contextType: string): MediaType | null {
+  if (contextType === 'album' || contextType === 'artist' || contextType === 'playlist') {
+    return contextType as MediaType
   }
-}
-
-interface ContextCardProps {
-  context: PlaybackContext
-}
-
-/** Card for non-album contexts (playlist, artist, genre, tracks) */
-function ContextCard({ context }: ContextCardProps) {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  const backend = useBackend()
-  const Icon = getContextIcon(context.contextType)
-
-  /** Get context type label */
-  const getContextTypeLabel = (contextType: ContextType): string => {
-    switch (contextType) {
-      case 'playlist':
-        return t('library.playlist', 'Playlist')
-      case 'artist':
-        return t('library.artist', 'Artist')
-      case 'genre':
-        return t('library.genre', 'Genre')
-      case 'tracks':
-        return t('library.allTracks', 'All Tracks')
-      default:
-        return ''
-    }
-  }
-
-  /** Play all tracks from this context */
-  const handlePlay = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-
-    try {
-      let tracks: Awaited<ReturnType<typeof backend.getAllTracks>> = []
-
-      switch (context.contextType) {
-        case 'playlist':
-          if (context.contextId) {
-            tracks = await backend.getPlaylistTracks(context.contextId)
-          }
-          break
-        case 'artist':
-          if (context.contextId) {
-            tracks = await backend.getArtistTracks(parseInt(context.contextId, 10))
-          }
-          break
-        case 'genre':
-          if (context.contextId) {
-            tracks = await backend.getGenreTracks(parseInt(context.contextId, 10))
-          }
-          break
-        case 'tracks':
-          tracks = await backend.getAllTracks()
-          break
-      }
-
-      // Deduplicate tracks
-      const deduplicatedTracks = getDeduplicatedTracks(tracks.filter((t) => t.file_path))
-      if (deduplicatedTracks.length === 0) return
-
-      const queue = deduplicatedTracks.map((t) => ({
-        trackId: String(t.id),
-        title: t.title || 'Unknown',
-        artist: t.artist_name || 'Unknown Artist',
-        album: t.album_title || null,
-        filePath: t.file_path!,
-        durationSeconds: t.duration_seconds || null,
-        trackNumber: t.track_number || null,
-      }))
-
-      await backend.recordContext({
-        contextType: context.contextType,
-        contextId: context.contextId,
-        contextName: context.contextName,
-        contextArtworkPath: context.contextArtworkPath,
-      })
-
-      await backend.playQueue(queue, 0)
-    } catch (err) {
-      console.error('Failed to play context:', err)
-    }
-  }
-
-  const handleClick = () => {
-    navigate(getContextRoute(context))
-  }
-
-  return (
-    <div className="flex-shrink-0 w-40 cursor-pointer group">
-      <div
-        className="w-40 h-40 rounded-lg overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer"
-        onClick={handleClick}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-      >
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 group-hover:from-primary/30 group-hover:to-primary/10 transition-colors">
-          <Icon className="w-16 h-16 text-primary/60" />
-        </div>
-        {/* Play button */}
-        <button
-          onClick={handlePlay}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200"
-          aria-label={t('playback.play')}
-        >
-          <Play className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" />
-        </button>
-      </div>
-      <p className="font-medium truncate group-hover:text-primary transition-colors" onClick={handleClick}>
-        {context.contextName || t('common.unknown', 'Unknown')}
-      </p>
-      <p className="text-sm text-muted-foreground truncate" onClick={handleClick}>
-        {getContextTypeLabel(context.contextType)}
-      </p>
-    </div>
-  )
+  return null
 }
 
 export function HomePage() {
@@ -195,6 +69,11 @@ export function HomePage() {
       await resumePlayback()
     }
   }
+
+  // Filter contexts to only those that MediaCard supports
+  const supportedContexts = recentContexts.filter(
+    (ctx) => ctx.contextId && toMediaType(ctx.contextType) !== null
+  )
 
   return (
     <div className="h-full flex flex-col">
@@ -285,26 +164,27 @@ export function HomePage() {
       </section>
 
       {/* Jump Back Into Section */}
-      {recentContexts.length > 0 && (
+      {supportedContexts.length > 0 && (
         <section>
           <h2 className="text-xl font-bold mb-4">{t('home.jumpBackInto')}</h2>
           <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-            {recentContexts.map((context) =>
-              context.contextType === 'album' && context.contextId ? (
-                <AlbumCard
+            {supportedContexts.map((context) => {
+              const mediaType = toMediaType(context.contextType)!
+              const id = mediaType === 'playlist'
+                ? context.contextId!
+                : parseInt(context.contextId!, 10)
+
+              return (
+                <MediaCard
                   key={context.id}
-                  album={{
-                    id: parseInt(context.contextId, 10),
-                    title: context.contextName || 'Unknown Album',
-                    artist_name: undefined,
-                    cover_art_path: context.contextArtworkPath ?? undefined,
-                  }}
-                  showArtist={false}
+                  type={mediaType}
+                  id={id}
+                  title={context.contextName || t('common.unknown', 'Unknown')}
+                  subtitle={getContextSubtitle(context.contextType, t)}
+                  coverUrl={context.contextArtworkPath ?? undefined}
                 />
-              ) : (
-                <ContextCard key={context.id} context={context} />
               )
-            )}
+            })}
           </div>
         </section>
       )}

@@ -45,6 +45,18 @@ pub trait AudioSource: Send {
     /// Returns true when no more samples are available
     fn is_finished(&self) -> bool;
 
+    /// Check if source is ready for glitch-free playback
+    ///
+    /// Sources with background decoding should return true only when
+    /// sufficient samples are buffered to prevent underrun. This is
+    /// critical for preventing audio artifacts at playback start.
+    ///
+    /// Default implementation returns true (sources without buffering
+    /// are always ready).
+    fn is_ready(&self) -> bool {
+        true
+    }
+
     /// Reset to beginning of track
     ///
     /// Equivalent to `seek(Duration::ZERO)`

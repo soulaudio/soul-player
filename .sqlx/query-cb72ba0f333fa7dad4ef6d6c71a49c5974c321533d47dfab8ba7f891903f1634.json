@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name, sort_name, musicbrainz_id, created_at, updated_at\n         FROM artists\n         WHERE name = ?",
+  "query": "SELECT id, name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at\n         FROM artists\n         WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -24,13 +24,18 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "cover_art_path",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "created_at",
         "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 6,
         "type_info": "Text"
       }
     ],
@@ -38,13 +43,14 @@
       "Right": 1
     },
     "nullable": [
-      true,
       false,
+      false,
+      true,
       true,
       true,
       false,
       false
     ]
   },
-  "hash": "b7af0d8c38b181ac6c1c67facaedfd2351ee3de497c8daccbabf57f950b4329a"
+  "hash": "cb72ba0f333fa7dad4ef6d6c71a49c5974c321533d47dfab8ba7f891903f1634"
 }

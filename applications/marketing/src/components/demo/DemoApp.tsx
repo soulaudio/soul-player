@@ -8,6 +8,10 @@ import {
   PlatformProvider,
   HomePage,
   LibraryPage,
+  AlbumsPage,
+  ArtistsPage,
+  PlaylistsPage,
+  TracksPage,
   AlbumPage,
   ArtistPage,
   PlaylistPage,
@@ -118,9 +122,13 @@ export function DemoApp() {
                       <Routes>
                         <Route path="/" element={<HomePage />} />
                         <Route path="/library" element={<LibraryPage />} />
+                        <Route path="/albums" element={<AlbumsPage />} />
                         <Route path="/albums/:id" element={<AlbumPage />} />
+                        <Route path="/artists" element={<ArtistsPage />} />
                         <Route path="/artists/:id" element={<ArtistPage />} />
+                        <Route path="/playlists" element={<PlaylistsPage />} />
                         <Route path="/playlists/:id" element={<PlaylistPage />} />
+                        <Route path="/tracks" element={<TracksPage />} />
                         <Route path="/now-playing" element={<NowPlayingPage />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/search" element={<div className="text-center py-20 text-muted-foreground">Search Page (Demo)</div>} />

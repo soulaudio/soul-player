@@ -49,7 +49,7 @@ pub fn copy_to_library(
 pub fn generate_filename(source_path: &Path, metadata: &ExtractedMetadata) -> Result<String> {
     let extension = source_path
         .extension()
-        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_string_lossy().into_owned())
         .ok_or_else(|| ImportError::InvalidPath("File has no extension".to_string()))?;
 
     // Get artist (prefer album_artist, fall back to artist)
@@ -74,9 +74,8 @@ pub fn generate_filename(source_path: &Path, metadata: &ExtractedMetadata) -> Re
             // No metadata - use original filename
             source_path
                 .file_name()
-                .and_then(|n| n.to_str())
+                .map(|n| n.to_string_lossy().into_owned())
                 .ok_or_else(|| ImportError::InvalidPath("Invalid source filename".to_string()))?
-                .to_string()
         }
     };
 
@@ -108,9 +107,9 @@ fn resolve_filename_conflict(library_path: &Path, original_filename: &str) -> Re
     let path = Path::new(original_filename);
     let stem = path
         .file_stem()
-        .and_then(|s| s.to_str())
+        .map(|s| s.to_string_lossy().into_owned())
         .ok_or_else(|| ImportError::InvalidPath("Invalid filename".to_string()))?;
-    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+    let extension = path.extension().map(|ext| ext.to_string_lossy().into_owned()).unwrap_or_default();
 
     // Try appending -1, -2, -3, etc. until we find an available name
     for counter in 1..1000 {

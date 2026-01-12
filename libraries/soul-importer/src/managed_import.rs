@@ -255,10 +255,10 @@ impl ManagedImporter {
     fn resolve_conflict(&self, dest_path: &Path) -> Result<PathBuf> {
         let stem = dest_path
             .file_stem()
-            .and_then(|s| s.to_str())
+            .map(|s| s.to_string_lossy().into_owned())
             .ok_or_else(|| ImportError::InvalidPath("Invalid filename".to_string()))?;
 
-        let extension = dest_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let extension = dest_path.extension().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
 
         let parent = dest_path.parent().unwrap_or(Path::new(""));
 
@@ -350,8 +350,10 @@ fn is_audio_file(path: &Path) -> bool {
     ];
 
     path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| audio_extensions.contains(&ext.to_lowercase().as_str()))
+        .map(|ext| {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            audio_extensions.contains(&ext_str.as_str())
+        })
         .unwrap_or(false)
 }
 

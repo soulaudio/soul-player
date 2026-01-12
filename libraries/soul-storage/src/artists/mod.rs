@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Artist>> {
     let rows = sqlx::query!(
-        "SELECT id, name, sort_name, musicbrainz_id, created_at, updated_at
+        "SELECT id, name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
          FROM artists
          ORDER BY sort_name, name"
     )
@@ -17,6 +17,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Artist>> {
             name: row.name,
             sort_name: row.sort_name,
             musicbrainz_id: row.musicbrainz_id,
+            cover_art_path: row.cover_art_path,
             created_at: row.created_at,
             updated_at: row.updated_at,
         })
@@ -25,7 +26,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Artist>> {
 
 pub async fn get_by_id(pool: &SqlitePool, id: ArtistId) -> Result<Option<Artist>> {
     let row = sqlx::query!(
-        "SELECT id, name, sort_name, musicbrainz_id, created_at, updated_at
+        "SELECT id, name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
          FROM artists
          WHERE id = ?",
         id
@@ -38,6 +39,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: ArtistId) -> Result<Option<Artist>
         name: row.name,
         sort_name: row.sort_name,
         musicbrainz_id: row.musicbrainz_id,
+        cover_art_path: row.cover_art_path,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }))
@@ -45,7 +47,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: ArtistId) -> Result<Option<Artist>
 
 pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Artist>> {
     let row = sqlx::query!(
-        "SELECT id, name, sort_name, musicbrainz_id, created_at, updated_at
+        "SELECT id, name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
          FROM artists
          WHERE name = ?",
         name
@@ -58,6 +60,7 @@ pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Artist
         name: row.name,
         sort_name: row.sort_name,
         musicbrainz_id: row.musicbrainz_id,
+        cover_art_path: row.cover_art_path,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }))
@@ -79,4 +82,20 @@ pub async fn create(pool: &SqlitePool, artist: CreateArtist) -> Result<Artist> {
     get_by_id(pool, id).await?.ok_or_else(|| {
         soul_core::SoulError::Storage("Failed to retrieve created artist".to_string())
     })
+}
+
+/// Update artist cover art path
+pub async fn update_cover_art_path(
+    pool: &SqlitePool,
+    artist_id: ArtistId,
+    cover_art_path: Option<&str>,
+) -> Result<()> {
+    sqlx::query!(
+        "UPDATE artists SET cover_art_path = ?, updated_at = datetime('now') WHERE id = ?",
+        cover_art_path,
+        artist_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }

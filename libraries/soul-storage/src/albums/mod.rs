@@ -100,3 +100,19 @@ pub async fn create(pool: &SqlitePool, album: CreateAlbum) -> Result<Album> {
         soul_core::SoulError::Storage("Failed to retrieve created album".to_string())
     })
 }
+
+/// Update album cover art path
+pub async fn update_cover_art_path(
+    pool: &SqlitePool,
+    album_id: AlbumId,
+    cover_art_path: Option<&str>,
+) -> Result<()> {
+    sqlx::query!(
+        "UPDATE albums SET cover_art_path = ?, updated_at = datetime('now') WHERE id = ?",
+        cover_art_path,
+        album_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}

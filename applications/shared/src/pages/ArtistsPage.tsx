@@ -3,48 +3,15 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Users, Search, X, Play } from 'lucide-react'
+import { Users, Search, X } from 'lucide-react'
+import { ArtistCard } from '../components/ArtistCard'
 import { FeatureGate } from '../contexts/PlatformContext'
 import { useBackend, type BackendArtist } from '../contexts/BackendContext'
 import { useGridScale } from '../hooks/useGridScale'
 
-// Artist Card Component
-function ArtistCard({
-  artist,
-  onClick,
-}: {
-  artist: BackendArtist
-  onClick: () => void
-}) {
-  const { t } = useTranslation()
-
-  return (
-    <div className="group cursor-pointer" onClick={onClick}>
-      <div className="relative aspect-square mb-3 bg-muted rounded-full overflow-hidden shadow-md hover:shadow-xl transition-shadow flex items-center justify-center group-hover:bg-primary/10">
-        <Users className="w-12 h-12 text-muted-foreground group-hover:text-primary transition-colors" />
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-            <Play className="w-5 h-5 text-primary-foreground ml-0.5" fill="currentColor" />
-          </div>
-        </div>
-      </div>
-      <div className="text-center">
-        <h3 className="font-medium truncate" title={artist.name}>
-          {artist.name}
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          {artist.album_count} {t('library.albums')} • {artist.track_count} {t('library.tracks')}
-        </p>
-      </div>
-    </div>
-  )
-}
-
 export function ArtistsPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const backend = useBackend()
   const { scale, scaleUp, scaleDown } = useGridScale()
 
@@ -212,7 +179,6 @@ export function ArtistsPage() {
               <ArtistCard
                 key={artist.id}
                 artist={artist}
-                onClick={() => navigate(`/artists/${artist.id}`)}
               />
             ))}
           </div>

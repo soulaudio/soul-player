@@ -29,6 +29,8 @@ export interface BackendTrack {
   source_name?: string
   source_online?: boolean
   cover_art_path?: string
+  // Whether the track is in the managed library (vs watched folder)
+  is_in_managed_library?: boolean
 }
 
 export interface BackendAlbum {
@@ -47,6 +49,7 @@ export interface BackendArtist {
   sort_name?: string
   track_count: number
   album_count: number
+  cover_art_path?: string
 }
 
 export interface BackendPlaylist {
@@ -59,6 +62,7 @@ export interface BackendPlaylist {
   track_count: number
   created_at: string
   updated_at: string
+  cover_art_path?: string
 }
 
 export interface BackendGenre {
@@ -91,6 +95,14 @@ export interface QueueTrack {
   filePath: string
   durationSeconds: number | null
   trackNumber: number | null
+}
+
+export interface SetArtworkParams {
+  entityType: 'album' | 'artist' | 'playlist'
+  entityId: string
+  artworkBase64: string
+  mimeType: string
+  writeToFiles?: boolean // Only for albums
 }
 
 // =============================================================================
@@ -131,12 +143,16 @@ export interface BackendInterface {
 
   // Track operations
   deleteTrack: (id: number) => Promise<void>
-
-  // Queue/playback
-  playQueue: (queue: QueueTrack[], startIndex: number) => Promise<void>
+  showInFileExplorer: (path: string) => Promise<void>
 
   // Onboarding (desktop only, can be no-op for web)
   checkOnboardingNeeded: () => Promise<boolean>
+
+  // Artwork editing
+  setArtwork: (params: SetArtworkParams) => Promise<void>
+  removeArtwork: (entityType: 'album' | 'artist' | 'playlist', entityId: string) => Promise<void>
+  getArtistArtwork: (artistId: number) => Promise<string | null>
+  getPlaylistArtwork: (playlistId: string) => Promise<string | null>
 }
 
 // =============================================================================

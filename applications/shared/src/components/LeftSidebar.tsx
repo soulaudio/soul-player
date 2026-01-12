@@ -483,7 +483,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
       <div className="mt-auto flex flex-col">
         <LayoutGroup>
           {displayQueue.length > 0 && (
-            <div className="flex flex-col max-h-[40vh] group/queue">
+            <div className="flex flex-col max-h-36 group/queue">
               <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 {t('sidebar.queue')}
               </div>

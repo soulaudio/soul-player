@@ -31,6 +31,7 @@ export type {
   BackendGenre,
   DatabaseHealth,
   PlaybackContext as BackendPlaybackContext,
+  SetArtworkParams,
 } from './contexts/BackendContext';
 
 // Utils
@@ -62,9 +63,12 @@ export { DeviceSelector } from './components/player/DeviceSelector';
 export { QueueSidebar } from './components/QueueSidebar';
 export { TrackList } from './components/TrackList';
 export type { Track, SourceType } from './components/TrackList';
-export { ArtworkImage } from './components/ArtworkImage';
+export { TrackMenu } from './components/TrackMenu';
+export { ArtworkImage, clearArtworkCache, clearAllArtworkCache } from './components/ArtworkImage';
 export { TrackQualityBadge } from './components/TrackQualityBadge';
 export { SourceIndicator } from './components/SourceIndicator';
+export { EditArtworkDialog, type ArtworkEntityType } from './components/EditArtworkDialog';
+export { ImageCropper } from './components/ImageCropper';
 
 // UI components
 export { Kbd, KbdGroup } from './components/ui/Kbd';

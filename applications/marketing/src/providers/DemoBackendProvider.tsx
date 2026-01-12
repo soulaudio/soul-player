@@ -120,10 +120,11 @@ function toBackendTrack(dt: DemoTrack, index?: number): BackendTrack {
 }
 
 // Convert DemoAlbum to BackendAlbum
-function toBackendAlbum(da: DemoAlbum, index?: number): BackendAlbum {
+function toBackendAlbum(da: DemoAlbum, index?: number, artistIdMap?: Map<string, number>): BackendAlbum {
   return {
     id: parseInt(da.id, 10) || index || 0,
     title: da.title,
+    artist_id: artistIdMap?.get(da.artist),
     artist_name: da.artist,
     year: da.year,
     track_count: da.trackIds.length,
@@ -151,31 +152,48 @@ export function DemoBackendProvider({ children }: DemoBackendProviderProps) {
     return mockPlaylistsRef.current
   }, [storage])
 
-  // Extract unique artists from tracks
-  const getArtistsFromTracks = useCallback((): BackendArtist[] => {
-    const tracks = storage.getAllTracks()
-    const artistMap = new Map<string, { trackCount: number; albumTitles: Set<string> }>()
+  // Extract unique artists from tracks (cached for consistent IDs)
+  const artistsRef = useRef<{ artists: BackendArtist[]; idMap: Map<string, number> } | null>(null)
+  const getArtistsData = useCallback(() => {
+    if (!artistsRef.current) {
+      const tracks = storage.getAllTracks()
+      const artistMap = new Map<string, { trackCount: number; albumTitles: Set<string> }>()
 
-    tracks.forEach(track => {
-      const existing = artistMap.get(track.artist)
-      if (existing) {
-        existing.trackCount++
-        if (track.album) existing.albumTitles.add(track.album)
-      } else {
-        artistMap.set(track.artist, {
-          trackCount: 1,
-          albumTitles: track.album ? new Set([track.album]) : new Set(),
-        })
-      }
-    })
+      tracks.forEach(track => {
+        const existing = artistMap.get(track.artist)
+        if (existing) {
+          existing.trackCount++
+          if (track.album) existing.albumTitles.add(track.album)
+        } else {
+          artistMap.set(track.artist, {
+            trackCount: 1,
+            albumTitles: track.album ? new Set([track.album]) : new Set(),
+          })
+        }
+      })
 
-    return Array.from(artistMap.entries()).map(([name, data], index) => ({
-      id: index + 1,
-      name,
-      track_count: data.trackCount,
-      album_count: data.albumTitles.size,
-    }))
+      const artists = Array.from(artistMap.entries()).map(([name, data], index) => ({
+        id: index + 1,
+        name,
+        track_count: data.trackCount,
+        album_count: data.albumTitles.size,
+      }))
+
+      const idMap = new Map<string, number>()
+      artists.forEach(a => idMap.set(a.name, a.id))
+
+      artistsRef.current = { artists, idMap }
+    }
+    return artistsRef.current
   }, [storage])
+
+  const getArtistsFromTracks = useCallback((): BackendArtist[] => {
+    return getArtistsData().artists
+  }, [getArtistsData])
+
+  const getArtistIdMap = useCallback((): Map<string, number> => {
+    return getArtistsData().idMap
+  }, [getArtistsData])
 
   const backend = useMemo<BackendInterface>(() => ({
     // Library data
@@ -184,7 +202,8 @@ export function DemoBackendProvider({ children }: DemoBackendProviderProps) {
     },
 
     async getAllAlbums() {
-      return storage.getAllAlbums().map((a, i) => toBackendAlbum(a, i))
+      const artistIdMap = getArtistIdMap()
+      return storage.getAllAlbums().map((a, i) => toBackendAlbum(a, i, artistIdMap))
     },
 
     async getAllArtists() {
@@ -215,7 +234,7 @@ export function DemoBackendProvider({ children }: DemoBackendProviderProps) {
     async getAlbumById(id: number) {
       const albums = storage.getAllAlbums()
       const album = albums.find(a => parseInt(a.id, 10) === id || a.id === String(id))
-      return album ? toBackendAlbum(album) : null
+      return album ? toBackendAlbum(album, undefined, getArtistIdMap()) : null
     },
 
     async getArtistById(id: number) {
@@ -265,9 +284,10 @@ export function DemoBackendProvider({ children }: DemoBackendProviderProps) {
       const artist = artists.find(a => a.id === artistId)
       if (!artist) return []
 
+      const artistIdMap = getArtistIdMap()
       return storage.getAllAlbums()
         .filter(a => a.artist === artist.name)
-        .map((a, i) => toBackendAlbum(a, i))
+        .map((a, i) => toBackendAlbum(a, i, artistIdMap))
     },
 
     async getPlaylistTracks(playlistId: string): Promise<BackendTrack[]> {
@@ -356,24 +376,33 @@ export function DemoBackendProvider({ children }: DemoBackendProviderProps) {
       throw new Error('Track deletion not supported in demo')
     },
 
-    // Queue/playback - delegate to PlayerCommands
-    async playQueue(queue, startIndex) {
-      await commands.playQueue(queue.map(t => ({
-        trackId: t.trackId,
-        title: t.title,
-        artist: t.artist,
-        album: t.album,
-        filePath: t.filePath,
-        durationSeconds: t.durationSeconds,
-        trackNumber: t.trackNumber,
-      })), startIndex)
+    async showInFileExplorer(_path: string) {
+      // Not supported in demo - no-op
+      console.log('[DemoBackend] showInFileExplorer not supported in demo')
     },
 
     // Onboarding - not needed for demo
     async checkOnboardingNeeded() {
       return false
     },
-  }), [storage, getArtistsFromTracks, getMockPlaylists, commands])
+
+    // Artwork editing - not supported in demo
+    async setArtwork() {
+      console.log('[Demo] Artwork editing not supported')
+    },
+
+    async removeArtwork() {
+      console.log('[Demo] Artwork removal not supported')
+    },
+
+    async getArtistArtwork() {
+      return null
+    },
+
+    async getPlaylistArtwork() {
+      return null
+    },
+  }), [storage, getArtistsFromTracks, getArtistIdMap, getMockPlaylists, commands])
 
   return (
     <BackendProvider value={backend}>

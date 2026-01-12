@@ -6,10 +6,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Music, Disc3, ListMusic, Users, Play, Search, X, Plus } from 'lucide-react'
+import { Music, Disc3, ListMusic, Users, Search, X, Plus } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
+import { TrackMenu } from '../components/TrackMenu'
 import { AlbumCard } from '../components/AlbumCard'
 import { PlaylistCard } from '../components/PlaylistCard'
+import { ArtistCard } from '../components/ArtistCard'
 import { FeatureGate } from '../contexts/PlatformContext'
 import { useBackend, type BackendAlbum, type BackendArtist, type BackendTrack, type BackendPlaylist } from '../contexts/BackendContext'
 import { type QueueTrack } from '../contexts/PlayerCommandsContext'
@@ -29,38 +31,6 @@ const TABS: Tab[] = [
   { id: 'artists', labelKey: 'library.tab.artists', icon: <Users className="w-4 h-4" /> },
   { id: 'tracks', labelKey: 'library.tab.tracks', icon: <Music className="w-4 h-4" /> },
 ]
-
-// Artist Card Component
-function ArtistCard({
-  artist,
-  onClick,
-}: {
-  artist: BackendArtist
-  onClick: () => void
-}) {
-  const { t } = useTranslation()
-
-  return (
-    <div className="group cursor-pointer" onClick={onClick}>
-      <div className="relative aspect-square mb-3 bg-muted rounded-full overflow-hidden shadow-md hover:shadow-xl transition-shadow flex items-center justify-center group-hover:bg-primary/10">
-        <Users className="w-12 h-12 text-muted-foreground group-hover:text-primary transition-colors" />
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-            <Play className="w-5 h-5 text-primary-foreground ml-0.5" fill="currentColor" />
-          </div>
-        </div>
-      </div>
-      <div className="text-center">
-        <h3 className="font-medium truncate" title={artist.name}>
-          {artist.name}
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          {artist.album_count} {t('library.albums')} • {artist.track_count} {t('library.tracks')}
-        </p>
-      </div>
-    </div>
-  )
-}
 
 export function LibraryPage() {
   const { t } = useTranslation()
@@ -184,6 +154,7 @@ export function LibraryPage() {
       title: t.title || 'Unknown',
       artist: t.artist_name || 'Unknown Artist',
       album: t.album_title || null,
+      albumId: t.album_id,
       filePath: t.file_path || '',
       durationSeconds: t.duration_seconds || null,
       trackNumber: t.track_number || null,
@@ -202,11 +173,6 @@ export function LibraryPage() {
     },
     [buildQueueFromTracks, filteredTracks]
   )
-
-  // Navigation handlers
-  const handleArtistClick = (artist: BackendArtist) => {
-    navigate(`/artists/${artist.id}`)
-  }
 
   const handleCreatePlaylist = async () => {
     try {
@@ -415,7 +381,6 @@ export function LibraryPage() {
                 <ArtistCard
                   key={artist.id}
                   artist={artist}
-                  onClick={() => handleArtistClick(artist)}
                 />
               ))}
             </div>
@@ -450,6 +415,19 @@ export function LibraryPage() {
                 channels: t.channels,
               }))}
               buildQueue={buildQueue}
+              renderMenu={(track) => {
+                const backendTrack = filteredTracks.find(t => t.id === track.id)
+                if (!backendTrack) return null
+                return (
+                  <TrackMenu
+                    track={backendTrack}
+                    onDelete={async () => {
+                      await backend.deleteTrack(backendTrack.id)
+                      loadLibrary()
+                    }}
+                  />
+                )
+              }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">

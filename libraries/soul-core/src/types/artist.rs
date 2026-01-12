@@ -11,6 +11,7 @@ pub struct Artist {
     pub name: String,
     pub sort_name: Option<String>,
     pub musicbrainz_id: Option<String>,
+    pub cover_art_path: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

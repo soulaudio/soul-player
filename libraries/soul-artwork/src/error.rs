@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use thiserror::Error;
 
-/// Errors that can occur during artwork extraction
+/// Errors that can occur during artwork operations
 #[derive(Debug, Error)]
 pub enum ArtworkError {
     /// File not found
@@ -23,6 +23,14 @@ pub enum ArtworkError {
     /// Artwork too large
     #[error("Artwork too large: {0} bytes (max {1} bytes)")]
     TooLarge(usize, usize),
+
+    /// No tag found in file (for writing)
+    #[error("No tag found in file to write artwork")]
+    NoTag,
+
+    /// Failed to save artwork to file
+    #[error("Failed to save artwork: {0}")]
+    SaveFailed(String),
 }
 
 /// Result type for artwork operations

@@ -162,12 +162,40 @@ impl TrackLoader {
                     let result = match LocalAudioSource::new(&request.path, request.target_sample_rate)
                     {
                         Ok(source) => {
-                            let duration = start.elapsed();
+                            let load_duration = start.elapsed();
                             eprintln!(
-                                "[TrackLoader] Loaded '{}' in {}ms",
+                                "[TrackLoader] Source created for '{}' in {}ms, waiting for buffer...",
                                 request.track.title,
-                                duration.as_millis()
+                                load_duration.as_millis()
                             );
+
+                            // Wait for buffer to be ready (critical for preventing playback artifacts)
+                            // This blocks until the decoder thread has filled ~500ms of audio
+                            let wait_start = std::time::Instant::now();
+                            let max_wait = std::time::Duration::from_secs(5); // Safety timeout
+
+                            while !source.is_ready() && wait_start.elapsed() < max_wait {
+                                std::thread::sleep(std::time::Duration::from_millis(10));
+                            }
+
+                            let buffer_duration = wait_start.elapsed();
+                            let total_duration = start.elapsed();
+
+                            if source.is_ready() {
+                                eprintln!(
+                                    "[TrackLoader] Buffer ready for '{}' (waited {}ms, total {}ms)",
+                                    request.track.title,
+                                    buffer_duration.as_millis(),
+                                    total_duration.as_millis()
+                                );
+                            } else {
+                                eprintln!(
+                                    "[TrackLoader] Warning: Buffer timeout for '{}' after {}ms",
+                                    request.track.title,
+                                    buffer_duration.as_millis()
+                                );
+                            }
+
                             LoadResult {
                                 source: Some(Box::new(source)),
                                 track: request.track,

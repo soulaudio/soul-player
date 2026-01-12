@@ -15,6 +15,7 @@ import {
   type BackendGenre,
   type DatabaseHealth,
   type BackendPlaybackContext,
+  type SetArtworkParams,
 } from '@soul-player/shared'
 
 interface TauriBackendProviderProps {
@@ -110,21 +111,30 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
       await invoke('delete_track', { id })
     },
 
-    // Queue/playback
-    async playQueue(queue, startIndex) {
-      console.log('[TauriBackendProvider] playQueue called:', { queueLength: queue.length, startIndex, firstTrack: queue[0] })
-      try {
-        await invoke('play_queue', { queue, startIndex })
-        console.log('[TauriBackendProvider] playQueue invoke completed')
-      } catch (err) {
-        console.error('[TauriBackendProvider] playQueue invoke failed:', err)
-        throw err
-      }
+    async showInFileExplorer(path: string) {
+      await invoke('show_in_file_explorer', { path })
     },
 
     // Onboarding
     async checkOnboardingNeeded() {
       return invoke<boolean>('check_onboarding_needed')
+    },
+
+    // Artwork editing
+    async setArtwork(params: SetArtworkParams) {
+      await invoke('set_artwork', { request: params })
+    },
+
+    async removeArtwork(entityType: 'album' | 'artist' | 'playlist', entityId: string) {
+      await invoke('remove_artwork', { entityType, entityId })
+    },
+
+    async getArtistArtwork(artistId: number) {
+      return invoke<string | null>('get_artist_artwork', { artistId })
+    },
+
+    async getPlaylistArtwork(playlistId: string) {
+      return invoke<string | null>('get_playlist_artwork', { playlistId })
     },
   }), [])
 

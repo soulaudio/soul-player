@@ -60,9 +60,16 @@ use symphonia::core::units::TimeBase;
 /// Size of ring buffer in seconds
 const BUFFER_SIZE_SECONDS: usize = 5;
 
-/// Minimum buffer level (in samples) before we consider buffer "low"
-/// At stereo 48kHz, 4800 samples = 50ms of audio
-const MIN_BUFFER_SAMPLES: usize = 4800;
+/// Minimum buffer level (in samples) before source is considered ready for playback
+/// At stereo 48kHz, 48000 samples = 500ms of audio (foobar2000 uses 1000ms default)
+///
+/// This MUST be filled BEFORE playback starts to prevent buffer underrun.
+/// The user reported jitter on first play but not on "previous track" because:
+/// - First play: file not cached → slow disk I/O → buffer underrun
+/// - Previous track: file cached → fast I/O → no underrun
+///
+/// Industry standard: prebuffer 500ms-1000ms before playback starts
+const MIN_BUFFER_SAMPLES: usize = 48000;
 
 /// Commands sent to the decoder thread
 #[derive(Debug)]
@@ -216,19 +223,33 @@ impl LocalAudioSource {
 
         eprintln!("[LocalAudioSource] Background decoder thread started");
 
-        // Wait for buffer to have some initial data (up to 500ms)
-        // This ensures the source is immediately playable
+        // Wait for buffer to have sufficient data (up to 1 second)
+        // This ensures the source is immediately playable without underrun
+        // 200ms buffer (MIN_BUFFER_SAMPLES) prevents jitter on first play
         let min_initial_samples = MIN_BUFFER_SAMPLES;
-        for _ in 0..50 {
+        let mut buffer_filled = false;
+        for _ in 0..100 {
             let buffer_len = {
                 let state = shared.lock().unwrap();
                 state.output_buffer.len()
             };
             if buffer_len >= min_initial_samples {
-                eprintln!("[LocalAudioSource] Initial buffer filled: {} samples", buffer_len);
+                eprintln!("[LocalAudioSource] Initial buffer filled: {} samples (~{}ms)",
+                    buffer_len,
+                    buffer_len * 1000 / (target_sample_rate as usize * channels as usize)
+                );
+                buffer_filled = true;
                 break;
             }
             thread::sleep(Duration::from_millis(10));
+        }
+
+        if !buffer_filled {
+            let buffer_len = shared.lock().unwrap().output_buffer.len();
+            eprintln!(
+                "[LocalAudioSource] WARNING: Initial buffer not fully filled ({} samples, wanted {}). May cause jitter.",
+                buffer_len, min_initial_samples
+            );
         }
 
         Ok(Self {
@@ -243,6 +264,13 @@ impl LocalAudioSource {
             total_duration,
             needs_resampling,
         })
+    }
+
+    /// Check if this source requires resampling
+    ///
+    /// Returns true if the source sample rate differs from the target sample rate.
+    pub fn needs_resampling(&self) -> bool {
+        self.needs_resampling
     }
 
     /// Background decoder thread main function
@@ -332,11 +360,9 @@ impl LocalAudioSource {
                 channels as usize,
             ) {
                 Ok(r) => {
-                    let delay = r.output_delay();
                     eprintln!(
-                        "[DecoderThread] Resampler created with output delay: {} frames ({} samples)",
-                        delay,
-                        delay * channels as usize
+                        "[DecoderThread] Resampler created (output_delay: {} frames)",
+                        r.output_delay()
                     );
                     Some(r)
                 }
@@ -349,17 +375,22 @@ impl LocalAudioSource {
             None
         };
 
-        // Track resampler output delay - skip this many samples at start and after seeks
-        // This prevents resampler startup artifacts from reaching the output
-        let resampler_delay_samples = resampler
-            .as_ref()
-            .map(|r| r.output_delay() * channels as usize)
-            .unwrap_or(0);
-        let mut samples_to_skip = resampler_delay_samples;
-
         // Input buffer for accumulating samples before resampling
         let mut input_buffer: VecDeque<f32> = VecDeque::with_capacity(resampler_chunk_frames * channels as usize * 4);
         let mut is_eof = false;
+
+        // Track resampler output delay to skip initial filter ramp-up
+        // The sinc resampler produces N output_delay frames of "warming up" audio
+        // that contains filter artifacts (amplitude ramp from 0 to full)
+        // Skipping these prevents jitter/artifacts at playback start
+        let resampler_skip_samples = resampler.as_ref().map(|r| {
+            let delay_frames = r.output_delay();
+            let skip_samples = delay_frames * channels as usize;
+            eprintln!("[DecoderThread] Will skip first {} samples ({} frames) for resampler settling",
+                skip_samples, delay_frames);
+            skip_samples
+        }).unwrap_or(0);
+        let mut resampler_samples_skipped: usize = 0;
 
         eprintln!("[DecoderThread] Decoder thread ready, starting decode loop");
 
@@ -388,10 +419,11 @@ impl LocalAudioSource {
                         input_buffer.clear();
                         if let Some(ref mut r) = resampler {
                             r.reset();
-                            // Reset delay skip counter after resampler reset
-                            samples_to_skip = resampler_delay_samples;
                         }
                         is_eof = false;
+
+                        // Reset resampler skip counter - need to skip delay samples again after seek
+                        resampler_samples_skipped = 0;
 
                         // Clear output buffer and update position
                         let mut state = shared.lock().unwrap();
@@ -490,14 +522,16 @@ impl LocalAudioSource {
                     input_buffer.push_back(sample);
                 }
 
-                // Process resampling
-                Self::process_resampling_static(
+                // Process resampling (with initial delay skipping)
+                resampler_samples_skipped = Self::process_resampling_with_skip(
                     &mut input_buffer,
                     &mut resampler,
                     channels as usize,
                     resampler_chunk_frames,
                     output_buffer_capacity,
                     &shared,
+                    resampler_skip_samples,
+                    resampler_samples_skipped,
                 );
             } else {
                 // No resampling - add directly to output buffer
@@ -514,17 +548,27 @@ impl LocalAudioSource {
         eprintln!("[DecoderThread] Decoder thread exiting");
     }
 
-    /// Static version of process_resampling for use in decoder thread
-    fn process_resampling_static(
+    /// Process resampling with initial delay skipping
+    ///
+    /// The sinc resampler produces `output_delay` frames of "warming up" audio
+    /// at the start. These frames contain filter artifacts (amplitude ramp from 0)
+    /// that can cause audible jitter/clicks at playback start.
+    ///
+    /// This function skips the first `skip_samples` of output to avoid these artifacts.
+    ///
+    /// Returns: updated samples_skipped counter
+    fn process_resampling_with_skip(
         input_buffer: &mut VecDeque<f32>,
         resampler: &mut Option<SincFixedIn<f32>>,
         channels: usize,
         chunk_frames: usize,
         output_buffer_capacity: usize,
         shared: &Arc<Mutex<SharedState>>,
-    ) {
+        skip_samples: usize,
+        mut samples_skipped: usize,
+    ) -> usize {
         let Some(ref mut resampler) = resampler else {
-            return;
+            return samples_skipped;
         };
 
         let samples_per_chunk = chunk_frames * channels;
@@ -543,21 +587,51 @@ impl LocalAudioSource {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("[DecoderThread] Resampling error: {}", e);
-                    return;
+                    return samples_skipped;
                 }
             };
 
             let output_frames = resampled[0].len();
+            let output_samples = output_frames * channels;
             let mut state = shared.lock().unwrap();
-            for frame_idx in 0..output_frames {
-                for ch in 0..channels {
-                    state.output_buffer.push_back(resampled[ch][frame_idx]);
-                    if state.output_buffer.len() > output_buffer_capacity {
-                        state.output_buffer.pop_front();
+
+            // Check if we still need to skip samples (resampler settling period)
+            if samples_skipped < skip_samples {
+                let samples_to_skip = (skip_samples - samples_skipped).min(output_samples);
+                let frames_to_skip = samples_to_skip / channels;
+                let start_frame = frames_to_skip;
+
+                if start_frame < output_frames {
+                    // Partial skip - add remaining samples after skip
+                    for frame_idx in start_frame..output_frames {
+                        for ch in 0..channels {
+                            state.output_buffer.push_back(resampled[ch][frame_idx]);
+                            if state.output_buffer.len() > output_buffer_capacity {
+                                state.output_buffer.pop_front();
+                            }
+                        }
+                    }
+                }
+
+                samples_skipped += samples_to_skip;
+
+                if samples_skipped >= skip_samples {
+                    eprintln!("[DecoderThread] Resampler settling complete, skipped {} samples", samples_skipped);
+                }
+            } else {
+                // Normal operation - add all samples to output buffer
+                for frame_idx in 0..output_frames {
+                    for ch in 0..channels {
+                        state.output_buffer.push_back(resampled[ch][frame_idx]);
+                        if state.output_buffer.len() > output_buffer_capacity {
+                            state.output_buffer.pop_front();
+                        }
                     }
                 }
             }
         }
+
+        samples_skipped
     }
 
     /// Static version of flush_resampler for use in decoder thread
@@ -739,8 +813,31 @@ impl AudioSource for LocalAudioSource {
         // Copy from output buffer to output (non-blocking)
         let available = state.output_buffer.len().min(output.len());
 
+        // Log first read and any underruns
+        let is_first_read = state.samples_read == 0;
+        let is_underrun = available < output.len();
+
+        if is_first_read || is_underrun {
+            eprintln!(
+                "[LocalAudioSource::read_samples] {} requested={}, available={}, buffer_remaining={}, samples_read={}",
+                if is_first_read { "FIRST READ:" } else { "UNDERRUN:" },
+                output.len(),
+                available,
+                state.output_buffer.len(),
+                state.samples_read
+            );
+        }
+
         for i in 0..available {
             output[i] = state.output_buffer.pop_front().unwrap();
+        }
+
+        // Log first samples on first read
+        if is_first_read && available >= 8 {
+            eprintln!(
+                "[LocalAudioSource::read_samples] First 8 samples: [{:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}]",
+                output[0], output[1], output[2], output[3], output[4], output[5], output[6], output[7]
+            );
         }
 
         state.samples_read += available;
@@ -786,6 +883,19 @@ impl AudioSource for LocalAudioSource {
     fn is_finished(&self) -> bool {
         let state = self.shared.lock().unwrap();
         state.is_eof && state.output_buffer.is_empty()
+    }
+
+    /// Check if source is ready for glitch-free playback
+    ///
+    /// Returns true when:
+    /// - Buffer contains at least MIN_BUFFER_SAMPLES (500ms of audio)
+    /// - OR we've reached EOF (short files)
+    ///
+    /// This prevents buffer underrun at playback start when disk I/O is slow.
+    fn is_ready(&self) -> bool {
+        let state = self.shared.lock().unwrap();
+        // Ready if we have enough samples OR if we've reached EOF (short files)
+        state.output_buffer.len() >= MIN_BUFFER_SAMPLES || state.is_eof
     }
 }
 

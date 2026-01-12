@@ -33,8 +33,10 @@
 mod error;
 mod extractor;
 mod types;
+mod writer;
 
 // Re-export public API
 pub use error::{ArtworkError, Result};
 pub use extractor::ArtworkExtractor;
 pub use types::ArtworkData;
+pub use writer::ArtworkWriter;

@@ -285,6 +285,8 @@ The desktop app supports customizable keyboard shortcuts with these characterist
 - Do NOT use `tauri-plugin-global-shortcut` - we use app-level React shortcuts instead
 - Do NOT add playback shortcuts to MainLayout - they are handled by useKeyboardShortcuts
 - MainLayout only handles navigation shortcuts (Ctrl+K for search, etc.)
+- **Shortcuts MUST use PlayerCommandsContext** - never call `invoke()` directly for playback commands
+- This ensures shortcuts and UI buttons use the same code path and behave identically
 
 **Default Shortcuts (Windows/Linux use Ctrl, macOS uses Cmd):**
 | Action       | Shortcut              |
@@ -365,6 +367,154 @@ function LibraryPage() {
 4. Implement in `DemoBackendProvider.tsx` using demo storage/WASM
 5. Export new types from `applications/shared/src/index.ts`
 
+### Playback Architecture (CRITICAL)
+
+The playback system has **two separate, non-overlapping contexts** - mixing them causes bugs and duplicate code:
+
+#### **Separation of Concerns:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  BackendContext - Library Data & Context Recording              │
+│  Purpose: Data fetching, NOT playback control                   │
+│  ├── getAllTracks, getAlbumTracks, getPlaylistTracks           │
+│  ├── getAllAlbums, getAllArtists, getAllPlaylists              │
+│  └── recordContext (for "Jump Back In")                         │
+├─────────────────────────────────────────────────────────────────┤
+│  PlayerCommandsContext - Playback Control Only                  │
+│  Purpose: Audio control, NOT data fetching                      │
+│  ├── playQueue, pausePlayback, resumePlayback                   │
+│  ├── skipNext, skipPrevious, seek, setVolume                   │
+│  ├── setShuffle, setRepeatMode, getQueue                        │
+│  └── Event listeners: onStateChange, onTrackChange, etc.        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### **Command Flow:**
+
+```
+UI Component / Keyboard Shortcut
+  ↓ (fetch data)
+BackendContext → useBackend() → TauriBackendProvider → invoke('get_*')
+  ↓ (build queue from data)
+  ↓ (playback control)
+PlayerCommandsContext → usePlayerCommands() → TauriPlayerCommandsProvider → invoke('play_queue')
+  ↓ (event emission)
+Tauri Events → usePlaybackEvents() → Zustand Store → UI Update
+```
+
+**CRITICAL:** Both UI buttons AND keyboard shortcuts MUST use `PlayerCommandsContext`. Never call `invoke()` directly for playback commands.
+
+#### **Critical Rules:**
+
+1. **BackendContext is for DATA ONLY**
+   - ✅ Use for: getAllTracks, getAlbumById, recordContext
+   - ❌ NEVER add: playQueue, pause, skip, setVolume
+
+2. **PlayerCommandsContext is for CONTROL ONLY**
+   - ✅ Use for: playQueue, pause, skip, seek, setVolume
+   - ❌ NEVER add: getAllTracks, getAlbumById, database queries
+
+3. **Playback Pattern (UI → Audio):**
+   ```typescript
+   // Step 1: Fetch data via BackendContext
+   const backend = useBackend()
+   const tracks = await backend.getAlbumTracks(albumId)
+
+   // Step 2: Transform to queue format
+   const queue = tracks.map(t => ({
+     trackId: String(t.id),
+     title: t.title,
+     filePath: t.file_path!,
+     // ...
+   }))
+
+   // Step 3: Record playback context (optional)
+   await backend.recordContext({
+     contextType: 'album',
+     contextId: String(albumId)
+   })
+
+   // Step 4: Control playback via PlayerCommandsContext
+   const commands = usePlayerCommands()
+   await commands.playQueue(queue, 0)
+   ```
+
+4. **NEVER Duplicate Methods Across Contexts**
+   - If a method exists in PlayerCommandsContext, it should NOT be in BackendContext
+   - If a method exists in BackendContext, it should NOT be in PlayerCommandsContext
+   - Duplication leads to inconsistent behavior and maintenance burden
+
+#### **Rust Backend Architecture:**
+
+```
+Tauri Commands (main.rs)
+  ↓
+PlaybackManager (playback.rs) - Wrapper for event emission
+  ↓
+DesktopPlayback (soul-audio-desktop) - Platform integration
+  ↓
+PlaybackManager (soul-playback) - Core orchestration
+  ↓
+AudioSource + Queue + Volume + Crossfade → Audio Output
+```
+
+**Event Emission:** All playback state changes emit Tauri events automatically:
+- `playback:state-changed` - Playing/Paused/Stopped
+- `playback:track-changed` - Current track info
+- `playback:position-updated` - Playback position (every 250ms)
+- `playback:volume-changed` - Volume level (0-100)
+- `playback:queue-updated` - Queue modified
+
+#### **Common Mistakes to Avoid:**
+
+❌ **Adding playQueue to BackendContext**
+```typescript
+// WRONG - playQueue is playback control, not data
+export interface BackendInterface {
+  getAllTracks: () => Promise<Track[]>
+  playQueue: (queue, index) => Promise<void>  // ❌ Don't do this!
+}
+```
+
+❌ **Using backend.playQueue() in UI**
+```typescript
+// WRONG - use commands.playQueue() instead
+await backend.playQueue(queue, 0)  // ❌
+```
+
+✅ **Correct Separation**
+```typescript
+// BackendContext - data only
+export interface BackendInterface {
+  getAllTracks: () => Promise<Track[]>
+  getAlbumTracks: (id) => Promise<Track[]>
+  recordContext: (ctx) => Promise<void>
+}
+
+// PlayerCommandsContext - control only
+export interface PlayerCommandsInterface {
+  playQueue: (queue, index) => Promise<void>
+  pausePlayback: () => Promise<void>
+  setShuffle: (enabled) => Promise<void>
+}
+```
+
+#### **Key Files:**
+
+- `applications/shared/src/contexts/BackendContext.tsx` - **Data interface**
+- `applications/shared/src/contexts/PlayerCommandsContext.tsx` - **Control interface**
+- `applications/desktop/src/providers/TauriBackendProvider.tsx` - Data implementation
+- `applications/desktop/src/providers/TauriPlayerCommandsProvider.tsx` - Control implementation
+- `applications/desktop/src-tauri/src/playback.rs` - Rust playback wrapper
+- `libraries/soul-playback/src/manager.rs` - Core playback logic
+
+**When Adding New Features:**
+1. Ask: "Is this data fetching or playback control?"
+2. Data → BackendContext, Control → PlayerCommandsContext
+3. Update both desktop AND demo implementations
+4. Test on both platforms
+
 ### Running Tests
 
 Tests use isolated databases in system temp directories:
@@ -400,9 +550,10 @@ cargo check -p soul-storage         # Verify compile-time queries
 7. **UI Strings**: Always use localization, never hardcode text
 8. **Keyboard shortcuts**: Add to app-level shortcuts in useKeyboardShortcuts.ts (NOT global/OS-level)
 9. **Shared pages**: Use `useBackend()` hook, never direct `invoke()` calls - ensures desktop/marketing parity
+10. **Playback architecture**: Data fetching → BackendContext, Playback control → PlayerCommandsContext. NEVER mix or duplicate.
 
 ---
 
-**Last Updated**: 2026-01-11
+**Last Updated**: 2026-01-12
 **Rust Edition**: 2021
 **Platforms**: Windows, macOS, Linux, ESP32-S3

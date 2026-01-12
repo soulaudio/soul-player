@@ -3,14 +3,16 @@
  * Shows playlist details with track list
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Play, ListMusic, Clock, Trash2, MoreHorizontal } from 'lucide-react'
+import { ArrowLeft, Play, ListMusic, Clock, Trash2, Pencil } from 'lucide-react'
 import { useBackend, type BackendPlaylist, type BackendTrack } from '../contexts/BackendContext'
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { ConfirmDialog } from '../components/ui/Dialog'
+import { EditArtworkDialog } from '../components/EditArtworkDialog'
+import { TrackMenu } from '../components/TrackMenu'
 
 export function PlaylistPage() {
   const { t } = useTranslation()
@@ -18,18 +20,30 @@ export function PlaylistPage() {
   const navigate = useNavigate()
   const backend = useBackend()
   const commands = usePlayerCommands()
-  const { features } = usePlatform()
+  const { features, isDesktop } = usePlatform()
 
   const [playlist, setPlaylist] = useState<BackendPlaylist | null>(null)
   const [tracks, setTracks] = useState<BackendTrack[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'playlist' | 'track'; trackId?: number } | null>(null)
+  const [editArtworkOpen, setEditArtworkOpen] = useState(false)
+  const [playlistArtworkUrl, setPlaylistArtworkUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
     loadPlaylist(id)
   }, [id])
+
+  // Load playlist artwork
+  const loadPlaylistArtwork = useCallback(async (playlistId: string) => {
+    try {
+      const artwork = await backend.getPlaylistArtwork(playlistId)
+      setPlaylistArtworkUrl(artwork)
+    } catch (err) {
+      console.error('Failed to load playlist artwork:', err)
+    }
+  }, [backend])
 
   const loadPlaylist = async (playlistId: string) => {
     setLoading(true)
@@ -47,6 +61,11 @@ export function PlaylistPage() {
 
       setPlaylist(playlistData)
       setTracks(tracksData)
+
+      // Load playlist artwork if on desktop
+      if (isDesktop) {
+        loadPlaylistArtwork(playlistId)
+      }
     } catch (err) {
       console.error('Failed to load playlist:', err)
       setError(err instanceof Error ? err.message : 'Failed to load playlist')
@@ -65,6 +84,7 @@ export function PlaylistPage() {
         title: t.title || 'Unknown',
         artist: t.artist_name || 'Unknown Artist',
         album: t.album_title || null,
+        albumId: t.album_id,
         filePath: t.file_path || '',
         durationSeconds: t.duration_seconds || null,
         trackNumber: t.track_number || null,
@@ -158,9 +178,26 @@ export function PlaylistPage() {
         </button>
 
         <div className="flex items-start gap-6">
-          {/* Playlist Icon */}
-          <div className="w-48 h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0">
-            <ListMusic className="w-24 h-24 text-primary" />
+          {/* Playlist Cover */}
+          <div className="group relative w-48 h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+            {playlistArtworkUrl ? (
+              <img
+                src={playlistArtworkUrl}
+                alt={playlist.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <ListMusic className="w-24 h-24 text-primary" />
+            )}
+            {/* Edit button overlay */}
+            {isDesktop && (
+              <button
+                onClick={() => setEditArtworkOpen(true)}
+                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Pencil className="w-8 h-8 text-white" />
+              </button>
+            )}
           </div>
 
           {/* Playlist Info */}
@@ -217,7 +254,7 @@ export function PlaylistPage() {
                 <th className="pb-2">{t('common.title', 'Title')}</th>
                 <th className="pb-2">{t('common.artist', 'Artist')}</th>
                 <th className="pb-2 w-20 text-right">{t('common.duration', 'Duration')}</th>
-                {features.canCreatePlaylists && <th className="pb-2 w-12"></th>}
+                <th className="pb-2 w-12"></th>
               </tr>
             </thead>
             <tbody>
@@ -239,21 +276,17 @@ export function PlaylistPage() {
                   <td className="py-3 text-right text-muted-foreground">
                     {formatTrackDuration(track.duration_seconds)}
                   </td>
-                  {features.canCreatePlaylists && (
-                    <td className="py-3">
-                      <div className="relative">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setDeleteConfirm({ type: 'track', trackId: track.id })
-                          }}
-                          className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                  <td className="py-3">
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <TrackMenu
+                        track={track}
+                        onDelete={async () => {
+                          await backend.deleteTrack(track.id)
+                          if (id) loadPlaylist(id)
+                        }}
+                      />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -283,6 +316,17 @@ export function PlaylistPage() {
           setDeleteConfirm(null)
         }}
         onClose={() => setDeleteConfirm(null)}
+      />
+
+      {/* Edit Artwork Dialog */}
+      <EditArtworkDialog
+        open={editArtworkOpen}
+        onClose={() => setEditArtworkOpen(false)}
+        entityType="playlist"
+        entityId={playlist.id}
+        entityName={playlist.name}
+        currentArtworkUrl={playlistArtworkUrl}
+        onArtworkChanged={() => loadPlaylistArtwork(playlist.id)}
       />
     </div>
   )

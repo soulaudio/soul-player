@@ -376,15 +376,18 @@ fn test_gapless_transition_buffer_safety() {
 
     let result = manager.process_audio(&mut buffer);
 
-    // Should output silence (zeros) when no audio available
+    // Should output near-silence (DAC keepalive noise at ~-96dB is acceptable)
     assert!(result.is_ok());
-    assert_eq!(
-        buffer[0], 0.0,
-        "Buffer should be zeroed when no audio available"
+    let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
+    assert!(
+        buffer[0].abs() < dac_keepalive_threshold,
+        "Buffer should be near-zero when no audio available, got {}",
+        buffer[0]
     );
-    assert_eq!(
-        buffer[1023], 0.0,
-        "Entire buffer should be zeroed when no audio available"
+    assert!(
+        buffer[1023].abs() < dac_keepalive_threshold,
+        "Entire buffer should be near-zero when no audio available, got {}",
+        buffer[1023]
     );
 }
 

@@ -293,8 +293,8 @@ pub fn extract_metadata(path: &Path) -> Result<AudioMetadata> {
 
     // Create hint from extension
     let mut hint = Hint::new();
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        hint.with_extension(ext);
+    if let Some(ext) = path.extension() {
+        hint.with_extension(&ext.to_string_lossy());
     }
 
     // Probe the media source with metadata enabled
@@ -346,8 +346,7 @@ pub fn extract_metadata(path: &Path) -> Result<AudioMetadata> {
     if metadata.title.is_none() {
         metadata.title = path
             .file_stem()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string());
+            .map(|s| s.to_string_lossy().into_owned());
     }
 
     Ok(metadata)

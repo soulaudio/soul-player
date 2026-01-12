@@ -12,6 +12,7 @@ pub struct Playlist {
     pub owner_id: UserId,
     pub is_public: bool,
     pub is_favorite: bool,
+    pub cover_art_path: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 

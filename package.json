@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "dev:desktop": "yarn workspace soul-player-desktop tauri:dev",
+    "dev:desktop:logs": "yarn workspace soul-player-desktop tauri:dev:logs",
     "dev:mobile": "yarn workspace soul-player-mobile tauri:dev",
     "dev:marketing": "yarn workspace @soul-player/marketing dev",
     "dev:web": "yarn workspace @soul-player/web dev",

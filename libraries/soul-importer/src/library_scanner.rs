@@ -311,7 +311,21 @@ impl LibraryScanner {
 
         // File is new - check if it's a relocated file (by hash)
         let content_hash = if self.compute_hashes {
-            Some(metadata::calculate_file_hash(file_path)?)
+            tracing::debug!("[SCAN] Computing hash: {}", file_path.display());
+            let file_path_owned = file_path.to_path_buf();
+            let file_path_for_log = file_path.to_path_buf();
+            let hash_task = tokio::task::spawn_blocking(move || {
+                metadata::calculate_file_hash(&file_path_owned)
+            });
+
+            let hash = tokio::time::timeout(std::time::Duration::from_secs(60), hash_task)
+                .await
+                .map_err(|_| {
+                    tracing::error!("[SCAN] TIMEOUT computing hash: {}", file_path_for_log.display());
+                    ImportError::Metadata(format!("Hash calculation timeout (60s) for: {}", file_path.display()))
+                })?
+                .map_err(|e| ImportError::Metadata(format!("Hash calculation task failed: {}", e)))??;
+            Some(hash)
         } else {
             None
         };
@@ -349,8 +363,23 @@ impl LibraryScanner {
         file_mtime: i64,
         content_hash: Option<String>,
     ) -> Result<()> {
-        // Extract metadata
-        let meta = metadata::extract_metadata(file_path)?;
+        // Extract metadata with timeout to prevent hanging on problematic files
+        tracing::info!("[SCAN] Processing: {}", file_path.display());
+
+        let file_path_owned = file_path.to_path_buf();
+        let file_path_for_log = file_path.to_path_buf();
+        let meta_task = tokio::task::spawn_blocking(move || {
+            metadata::extract_metadata(&file_path_owned)
+        });
+
+        let meta = tokio::time::timeout(std::time::Duration::from_secs(30), meta_task)
+            .await
+            .map_err(|_| {
+                tracing::error!("[SCAN] TIMEOUT on file: {}", file_path_for_log.display());
+                ImportError::Metadata(format!("Metadata extraction timeout (30s) for: {}", file_path.display()))
+            })?
+            .map_err(|e| ImportError::Metadata(format!("Metadata extraction task failed: {}", e)))??;
+
         tracing::info!(
             "import_new_file: file={}, artist={:?}, album={:?}",
             file_path.display(),
@@ -401,9 +430,8 @@ impl LibraryScanner {
             title: meta.title.clone().unwrap_or_else(|| {
                 file_path
                     .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("Unknown")
-                    .to_string()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Unknown".to_string())
             }),
             artist_id,
             album_id,
@@ -459,16 +487,45 @@ impl LibraryScanner {
         file_size: i64,
         file_mtime: i64,
     ) -> Result<()> {
-        // Re-extract metadata
-        let meta = metadata::extract_metadata(file_path)?;
+        // Re-extract metadata with timeout
+        tracing::info!("[SCAN] Updating: {}", file_path.display());
+
+        let file_path_owned = file_path.to_path_buf();
+        let file_path_for_log = file_path.to_path_buf();
+        let meta_task = tokio::task::spawn_blocking(move || {
+            metadata::extract_metadata(&file_path_owned)
+        });
+
+        let meta = tokio::time::timeout(std::time::Duration::from_secs(30), meta_task)
+            .await
+            .map_err(|_| {
+                tracing::error!("[SCAN] TIMEOUT updating: {}", file_path_for_log.display());
+                ImportError::Metadata(format!("Metadata extraction timeout (30s) for: {}", file_path.display()))
+            })?
+            .map_err(|e| ImportError::Metadata(format!("Metadata extraction task failed: {}", e)))??;
+
         tracing::info!(
             "update_track_metadata: file={}, artist={:?}, album={:?}",
             file_path.display(),
             meta.artist,
             meta.album
         );
+
         let content_hash = if self.compute_hashes {
-            Some(metadata::calculate_file_hash(file_path)?)
+            let file_path_owned = file_path.to_path_buf();
+            let file_path_for_log = file_path.to_path_buf();
+            let hash_task = tokio::task::spawn_blocking(move || {
+                metadata::calculate_file_hash(&file_path_owned)
+            });
+
+            let hash = tokio::time::timeout(std::time::Duration::from_secs(60), hash_task)
+                .await
+                .map_err(|_| {
+                    tracing::error!("[SCAN] TIMEOUT computing hash for update: {}", file_path_for_log.display());
+                    ImportError::Metadata(format!("Hash calculation timeout (60s) for: {}", file_path.display()))
+                })?
+                .map_err(|e| ImportError::Metadata(format!("Hash calculation task failed: {}", e)))??;
+            Some(hash)
         } else {
             None
         };

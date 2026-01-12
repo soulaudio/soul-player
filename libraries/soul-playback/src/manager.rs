@@ -59,14 +59,22 @@ struct StartFadeEnvelope {
 
     /// Maximum wait time before forcing fade start (in samples)
     max_wait_samples: usize,
+
+    /// Simple noise state for DAC keep-alive during wait phase
+    /// Alternating low-level noise prevents DAC from entering power-save mode
+    noise_state: u32,
 }
 
 /// Default fade-in duration in milliseconds
 const START_FADE_DURATION_MS: u32 = 30;
 
+/// Default fade-out duration in milliseconds (shorter for snappy response)
+const STOP_FADE_DURATION_MS: u32 = 15;
+
 /// Audio detection threshold - amplitude above this triggers fade start
-/// Set to -34dB (0.02) to catch real musical content, not encoder delay junk
-const AUDIO_DETECT_THRESHOLD: f32 = 0.02;
+/// Set to -50dB (0.003) to catch quiet intros while filtering encoder noise
+/// Previous value of 0.02 (-34dB) was too high and missed quiet musical content
+const AUDIO_DETECT_THRESHOLD: f32 = 0.003;
 
 /// Maximum wait time for audio detection (ms) before forcing fade start
 /// Handles edge case of tracks that start with genuine silence
@@ -74,6 +82,139 @@ const MAX_WAIT_MS: u32 = 200;
 
 /// DC blocker coefficient (0.995-0.9999, higher = less bass removal but slower response)
 const DC_BLOCKER_COEFF: f32 = 0.9975;
+
+/// Low-level noise amplitude for DAC keep-alive during wait phase
+/// -96dB (0.000016) is inaudible but keeps DAC circuitry active
+const DAC_KEEPALIVE_NOISE: f32 = 0.000016;
+
+/// Stop/transition fade envelope for click-free playback transitions
+///
+/// Applies a short fade-out when playback stops or transitions to prevent
+/// audible clicks from sudden amplitude drops.
+///
+/// This is the INVERSE of StartFadeEnvelope and works symmetrically.
+struct StopFadeEnvelope {
+    /// Whether fade-out is currently active
+    active: bool,
+
+    /// Current position in the fade (in stereo samples)
+    position_samples: usize,
+
+    /// Total duration of fade (in stereo samples)
+    duration_samples: usize,
+
+    /// Sample rate for duration calculations
+    sample_rate: u32,
+
+    /// Callback to execute when fade completes (deferred action)
+    /// This allows us to finish the fade before changing state
+    fade_complete_action: FadeCompleteAction,
+}
+
+/// Action to perform when stop fade completes
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum FadeCompleteAction {
+    /// No action needed
+    None,
+    /// Transition to next track after fade
+    TransitionToNext,
+    /// Stop playback completely
+    Stop,
+    /// Pause playback
+    Pause,
+}
+
+impl StopFadeEnvelope {
+    /// Create a new stop fade envelope
+    fn new(sample_rate: u32) -> Self {
+        Self {
+            active: false,
+            position_samples: 0,
+            duration_samples: Self::calculate_duration_samples(sample_rate, STOP_FADE_DURATION_MS),
+            sample_rate,
+            fade_complete_action: FadeCompleteAction::None,
+        }
+    }
+
+    /// Calculate duration in stereo samples from milliseconds
+    #[inline]
+    fn calculate_duration_samples(sample_rate: u32, duration_ms: u32) -> usize {
+        ((sample_rate as u64 * duration_ms as u64 * 2) / 1000) as usize
+    }
+
+    /// Start a fade-out with specified completion action
+    #[inline]
+    fn start(&mut self, action: FadeCompleteAction) {
+        self.active = true;
+        self.position_samples = 0;
+        self.fade_complete_action = action;
+    }
+
+    /// Reset the envelope (cancel any active fade)
+    #[inline]
+    fn reset(&mut self) {
+        self.active = false;
+        self.position_samples = 0;
+        self.fade_complete_action = FadeCompleteAction::None;
+    }
+
+    /// Update sample rate and recalculate duration
+    fn set_sample_rate(&mut self, sample_rate: u32) {
+        if self.sample_rate != sample_rate {
+            self.sample_rate = sample_rate;
+            self.duration_samples =
+                Self::calculate_duration_samples(sample_rate, STOP_FADE_DURATION_MS);
+        }
+    }
+
+    /// Check if fade is currently active
+    #[inline]
+    fn is_active(&self) -> bool {
+        self.active
+    }
+
+    /// Apply fade-out envelope to audio buffer (in-place)
+    ///
+    /// Returns the FadeCompleteAction when fade finishes, None if still fading
+    #[inline]
+    fn process(&mut self, buffer: &mut [f32]) -> Option<FadeCompleteAction> {
+        if !self.active {
+            return None;
+        }
+
+        // Process stereo frames (2 samples per frame)
+        let frames = buffer.len() / 2;
+
+        for frame in 0..frames {
+            let left_idx = frame * 2;
+            let right_idx = frame * 2 + 1;
+
+            let progress = self.position_samples as f32 / self.duration_samples as f32;
+
+            if progress >= 1.0 {
+                // Fade complete - output silence
+                buffer[left_idx] = 0.0;
+                buffer[right_idx] = 0.0;
+            } else {
+                // Inverse S-curve: starts at 1.0, ends at 0.0
+                let gain = (1.0 + (std::f32::consts::PI * progress).cos()) * 0.5;
+                buffer[left_idx] *= gain;
+                buffer[right_idx] *= gain;
+                self.position_samples += 2;
+            }
+        }
+
+        // Check if fade completed
+        if self.position_samples >= self.duration_samples {
+            self.active = false;
+            let action = self.fade_complete_action;
+            self.fade_complete_action = FadeCompleteAction::None;
+            return Some(action);
+        }
+
+        None
+    }
+}
 
 impl StartFadeEnvelope {
     /// Create a new start fade envelope
@@ -90,6 +231,7 @@ impl StartFadeEnvelope {
             dc_blocker_prev_output_r: 0.0,
             wait_samples: 0,
             max_wait_samples: Self::calculate_duration_samples(sample_rate, MAX_WAIT_MS),
+            noise_state: 0xACE1,
         }
     }
 
@@ -164,6 +306,25 @@ impl StartFadeEnvelope {
         left.abs() > AUDIO_DETECT_THRESHOLD || right.abs() > AUDIO_DETECT_THRESHOLD
     }
 
+    /// Generate low-level noise for DAC keep-alive
+    /// Uses simple LFSR for uncorrelated L/R noise
+    #[inline]
+    fn keepalive_noise(&mut self) -> (f32, f32) {
+        // Simple LFSR for pseudo-random noise
+        self.noise_state ^= self.noise_state << 13;
+        self.noise_state ^= self.noise_state >> 17;
+        self.noise_state ^= self.noise_state << 5;
+
+        // Convert to bipolar noise in range [-1, 1] then scale to keep-alive level
+        let noise_l = ((self.noise_state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE_NOISE;
+        self.noise_state ^= self.noise_state << 13;
+        self.noise_state ^= self.noise_state >> 17;
+        self.noise_state ^= self.noise_state << 5;
+        let noise_r = ((self.noise_state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE_NOISE;
+
+        (noise_l, noise_r)
+    }
+
     /// Apply fade envelope to audio buffer (in-place)
     ///
     /// AMPLITUDE-TRIGGERED fade:
@@ -183,7 +344,7 @@ impl StartFadeEnvelope {
             return buffer.len();
         }
 
-        // Debug: log first process call
+        // Debug: log first process call with detailed sample analysis
         if self.wait_samples == 0 && self.position_samples == 0 {
             eprintln!(
                 "[StartFade] Starting amplitude-triggered fade: fade duration {} samples ({:.1}ms), threshold {:.6}",
@@ -191,11 +352,24 @@ impl StartFadeEnvelope {
                 self.duration_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0,
                 AUDIO_DETECT_THRESHOLD
             );
-            if buffer.len() >= 4 {
-                eprintln!(
-                    "[StartFade] Input samples: [{:.6}, {:.6}, {:.6}, {:.6}]",
-                    buffer[0], buffer[1], buffer[2], buffer[3]
-                );
+
+            // Log first 20 samples to see resampler ramp-up pattern
+            let samples_to_log = buffer.len().min(40);
+            if samples_to_log >= 4 {
+                eprintln!("[StartFade] First {} input samples:", samples_to_log);
+                for i in (0..samples_to_log).step_by(4) {
+                    if i + 3 < buffer.len() {
+                        eprintln!(
+                            "  [{:3}..{:3}]: L={:+.6} R={:+.6} | L={:+.6} R={:+.6}",
+                            i, i + 3, buffer[i], buffer[i + 1], buffer[i + 2], buffer[i + 3]
+                        );
+                    }
+                }
+
+                // Find max amplitude in first callback
+                let max_amp = buffer.iter().take(samples_to_log).map(|s| s.abs()).fold(0.0f32, f32::max);
+                eprintln!("[StartFade] Max amplitude in first {} samples: {:.6} (threshold: {:.6})",
+                    samples_to_log, max_amp, AUDIO_DETECT_THRESHOLD);
             }
         }
 
@@ -233,14 +407,16 @@ impl StartFadeEnvelope {
                             self.wait_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0
                         );
                     }
-                    // Apply fade gain = 0 for first sample
+                    // Apply fade gain = 0 for first sample (true zero for clean fade start)
                     buffer[left_idx] = 0.0;
                     buffer[right_idx] = 0.0;
                     self.position_samples = 2; // Next frame starts at position 2
                 } else {
-                    // Still waiting - output silence
-                    buffer[left_idx] = 0.0;
-                    buffer[right_idx] = 0.0;
+                    // Still waiting - output low-level noise to keep DAC active
+                    // This prevents DAC power-save mode which causes pops on wake
+                    let (noise_l, noise_r) = self.keepalive_noise();
+                    buffer[left_idx] = noise_l;
+                    buffer[right_idx] = noise_r;
                     self.wait_samples += 2;
                 }
             } else {
@@ -355,6 +531,25 @@ pub struct PlaybackManager {
 
     // Start fade envelope for click-free playback start/resume
     start_fade: StartFadeEnvelope,
+
+    // Stop fade envelope for click-free playback stop/transitions
+    stop_fade: StopFadeEnvelope,
+
+    // Pending source to be set after stop fade completes
+    // This prevents race conditions during source transitions
+    pending_source: Option<Box<dyn AudioSource>>,
+
+    // Noise state for buffer underrun handling (DAC keep-alive)
+    underrun_noise_state: u32,
+
+    // Flag to track if source readiness has been verified for current track
+    // When false, we wait for source.is_ready() before starting actual playback
+    // This prevents clicks from playing a not-yet-buffered source
+    source_ready_verified: bool,
+
+    // Count of samples we've waited for source to become ready
+    // Used for logging/debugging startup issues
+    source_ready_wait_samples: usize,
 }
 
 /// Default buffer size for crossfade (10 seconds at max supported sample rate 192kHz stereo)
@@ -405,6 +600,56 @@ impl PlaybackManager {
             pending_events: Vec::new(),
             crossfade_progress: CrossfadeProgressTracker::new(),
             start_fade: StartFadeEnvelope::new(44100), // Will be updated by set_sample_rate
+            stop_fade: StopFadeEnvelope::new(44100),   // Will be updated by set_sample_rate
+            pending_source: None,
+            underrun_noise_state: 0xDEAD_BEEF, // Seed for LFSR noise generator
+            source_ready_verified: false,
+            source_ready_wait_samples: 0,
+        }
+    }
+
+    /// Fill buffer with DAC keep-alive noise to prevent power-save mode pops
+    ///
+    /// When buffer underrun occurs, we need to output SOMETHING to keep the DAC
+    /// active. Pure zeros can cause some DACs to enter power-save mode, which
+    /// creates an audible pop when audio resumes.
+    ///
+    /// This fills the buffer with -96dB noise (inaudible) that keeps the DAC active.
+    #[inline]
+    fn fill_underrun_buffer(&mut self, buffer: &mut [f32]) {
+        for sample in buffer.iter_mut() {
+            // Simple LFSR for pseudo-random noise
+            self.underrun_noise_state ^= self.underrun_noise_state << 13;
+            self.underrun_noise_state ^= self.underrun_noise_state >> 17;
+            self.underrun_noise_state ^= self.underrun_noise_state << 5;
+
+            // Convert to bipolar noise in range [-1, 1] then scale to keep-alive level
+            *sample =
+                ((self.underrun_noise_state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE_NOISE;
+        }
+    }
+
+    /// Handle the action when a stop fade completes
+    fn handle_fade_complete_action(&mut self, action: FadeCompleteAction) -> Result<()> {
+        match action {
+            FadeCompleteAction::None => Ok(()),
+            FadeCompleteAction::Stop => {
+                self.state = PlaybackState::Stopped;
+                self.audio_source = None;
+                self.emit_state_changed(PlaybackState::Stopped);
+                Ok(())
+            }
+            FadeCompleteAction::Pause => {
+                // State should already be Paused, just confirm
+                self.state = PlaybackState::Paused;
+                Ok(())
+            }
+            FadeCompleteAction::TransitionToNext => {
+                // Transition handled by pending_source mechanism
+                // Just clear the old source
+                self.audio_source = None;
+                Ok(())
+            }
         }
     }
 
@@ -435,6 +680,10 @@ impl PlaybackManager {
     /// Pause playback
     pub fn pause(&mut self) {
         if self.state == PlaybackState::Playing {
+            // Start smooth fade-out before pausing
+            if self.audio_source.is_some() && !self.stop_fade.is_active() {
+                self.stop_fade.start(FadeCompleteAction::Pause);
+            }
             self.state = PlaybackState::Paused;
             self.emit_state_changed(PlaybackState::Paused);
         }
@@ -442,13 +691,24 @@ impl PlaybackManager {
 
     /// Stop playback
     ///
-    /// Stops playback and clears current track (but not queue)
+    /// Stops playback and clears current track (but not queue).
+    /// Uses smooth fade-out to prevent clicks.
     pub fn stop(&mut self) {
+        // Start smooth fade-out if currently playing
+        if self.state == PlaybackState::Playing && self.audio_source.is_some() && !self.stop_fade.is_active() {
+            self.stop_fade.start(FadeCompleteAction::Stop);
+        }
+
         self.state = PlaybackState::Stopped;
         self.current_track = None;
-        self.audio_source = None;
+        // Note: audio_source cleared after fade completes (in handle_fade_complete_action)
+        // If no fade was started, clear immediately
+        if !self.stop_fade.is_active() {
+            self.audio_source = None;
+        }
         self.next_source = None;
         self.next_track = None;
+        self.pending_source = None;
         self.crossfade.reset();
         self.crossfade_progress.reset();
         self.is_manual_skip = false;
@@ -887,15 +1147,122 @@ impl PlaybackManager {
             eprintln!("  - Sample rate: {} Hz", self.sample_rate);
         }
 
-        if self.state != PlaybackState::Playing {
-            // Not playing - output silence
-            output.fill(0.0);
-            return Ok(output.len());
+        // === PHASE 1: Handle stop fade and pending source activation ===
+        // Check if we have a pending source to activate after stop fade
+        if self.pending_source.is_some() && !self.stop_fade.is_active() {
+            // Stop fade completed (or wasn't needed), activate pending source
+            self.audio_source = self.pending_source.take();
+            self.state = PlaybackState::Playing;
+            // Don't start fade yet - wait for source to be ready first
+            self.source_ready_verified = false;
+            self.source_ready_wait_samples = 0;
+            eprintln!("[process_audio] Activated pending source, waiting for ready");
         }
 
+        // === PHASE 2: State-based processing ===
+        match self.state {
+            PlaybackState::Stopped => {
+                // Stopped: output DAC keepalive noise (not raw silence)
+                self.fill_underrun_buffer(output);
+                return Ok(output.len());
+            }
+            PlaybackState::Paused => {
+                // Paused: if stop_fade is active, process it to fade out gracefully
+                if self.stop_fade.is_active() {
+                    if let Some(ref mut source) = self.audio_source {
+                        // Read audio and apply stop fade
+                        let samples_read = source.read_samples(output)?;
+                        if samples_read > 0 {
+                            if let Some(action) = self.stop_fade.process(&mut output[..samples_read]) {
+                                self.handle_fade_complete_action(action)?;
+                            }
+                        }
+                        // Fill remainder with keepalive noise
+                        if samples_read < output.len() {
+                            self.fill_underrun_buffer(&mut output[samples_read..]);
+                        }
+                        return Ok(output.len());
+                    }
+                }
+                // No active fade, output keepalive noise
+                self.fill_underrun_buffer(output);
+                return Ok(output.len());
+            }
+            PlaybackState::Loading => {
+                // Loading: if stop_fade is active, process it to fade out gracefully
+                if self.stop_fade.is_active() {
+                    if let Some(ref mut source) = self.audio_source {
+                        // Read audio and apply stop fade
+                        let samples_read = source.read_samples(output)?;
+                        if samples_read > 0 {
+                            if let Some(action) = self.stop_fade.process(&mut output[..samples_read]) {
+                                self.handle_fade_complete_action(action)?;
+                            }
+                        }
+                        // Fill remainder with keepalive noise
+                        if samples_read < output.len() {
+                            self.fill_underrun_buffer(&mut output[samples_read..]);
+                        }
+                        return Ok(output.len());
+                    }
+                }
+                // No source or no active fade - output keepalive noise
+                self.fill_underrun_buffer(output);
+                return Ok(output.len());
+            }
+            PlaybackState::Playing => {
+                // Fall through to normal processing below
+            }
+        }
+
+        // === PHASE 2.5: Source readiness check (only for new sources) ===
+        // Wait for source to report ready before starting actual playback
+        // This prevents clicks from playing a not-yet-buffered source
+        if !self.source_ready_verified {
+            if let Some(ref source) = self.audio_source {
+                if source.is_ready() {
+                    // Source is ready - start the fade and proceed
+                    self.source_ready_verified = true;
+                    self.start_fade.start();
+                    let wait_ms = (self.source_ready_wait_samples as f64 / self.sample_rate as f64) * 1000.0;
+                    eprintln!(
+                        "[process_audio] Source ready after {} samples ({:.1}ms wait), starting playback",
+                        self.source_ready_wait_samples, wait_ms
+                    );
+                } else {
+                    // Source not ready yet - output keepalive noise and wait
+                    self.source_ready_wait_samples += output.len();
+
+                    // Log periodically (every ~500ms worth of samples)
+                    let log_interval = self.sample_rate as usize; // ~1 second
+                    if self.source_ready_wait_samples % log_interval < output.len() {
+                        let wait_ms = (self.source_ready_wait_samples as f64 / self.sample_rate as f64) * 1000.0;
+                        eprintln!(
+                            "[process_audio] Waiting for source ready... ({:.0}ms elapsed)",
+                            wait_ms
+                        );
+                    }
+
+                    // Timeout after 2 seconds - proceed anyway with warning
+                    let timeout_samples = self.sample_rate as usize * 2; // 2 seconds
+                    if self.source_ready_wait_samples >= timeout_samples {
+                        eprintln!(
+                            "[process_audio] WARNING: Source ready timeout after 2 seconds, proceeding anyway"
+                        );
+                        self.source_ready_verified = true;
+                        self.start_fade.start();
+                    } else {
+                        self.fill_underrun_buffer(output);
+                        return Ok(output.len());
+                    }
+                }
+            }
+        }
+
+        // === PHASE 3: Normal playback processing (state == Playing) ===
         let Some(ref mut source) = self.audio_source else {
-            // No audio source - output silence
-            output.fill(0.0);
+            // No audio source - output keepalive noise instead of raw silence
+            self.fill_underrun_buffer(output);
             return Ok(output.len());
         };
 
@@ -950,6 +1317,11 @@ impl PlaybackManager {
             #[cfg(feature = "volume-leveling")]
             self.output_limiter.process(&mut output[..frames]);
 
+            // Handle buffer underrun: fill remainder with DAC keep-alive noise
+            if frames < output.len() {
+                self.fill_underrun_buffer(&mut output[frames..]);
+            }
+
             Ok(frames)
         } else if self.output_channels == 2 {
             // Stereo output - with crossfade support
@@ -988,6 +1360,12 @@ impl PlaybackManager {
             // This is the correct DSP chain order for preventing clipping
             #[cfg(feature = "volume-leveling")]
             self.output_limiter.process(&mut output[..samples_read]);
+
+            // Handle buffer underrun: fill remainder with DAC keep-alive noise
+            // This prevents DAC power-save mode pops when audio resumes
+            if samples_read < output.len() {
+                self.fill_underrun_buffer(&mut output[samples_read..]);
+            }
 
             Ok(samples_read)
         } else {
@@ -1055,7 +1433,13 @@ impl PlaybackManager {
                 }
             }
 
-            Ok(frames_read * self.output_channels as usize)
+            // Handle buffer underrun: fill remainder with DAC keep-alive noise
+            let samples_written = frames_read * self.output_channels as usize;
+            if samples_written < output.len() {
+                self.fill_underrun_buffer(&mut output[samples_written..]);
+            }
+
+            Ok(samples_written)
         }
     }
 
@@ -1260,6 +1644,7 @@ impl PlaybackManager {
         self.sample_rate = sample_rate;
         self.crossfade.set_sample_rate(sample_rate);
         self.start_fade.set_sample_rate(sample_rate);
+        self.stop_fade.set_sample_rate(sample_rate);
     }
 
     /// Get sample rate
@@ -1480,15 +1865,37 @@ impl PlaybackManager {
     }
 
     /// Set audio source (called by platform after loading track)
+    ///
+    /// Uses pending source pattern for smooth transitions:
+    /// - If currently playing: fades out current audio, then fades in new source
+    /// - If not playing: directly sets the source with fade-in
     pub fn set_audio_source(&mut self, source: Box<dyn AudioSource>) {
         let previous_track_id = self.current_track.as_ref().map(|t| t.id.clone());
 
-        // IMPORTANT: Start fade BEFORE setting audio source to prevent race condition
-        // where audio callback reads samples before fade is active
-        self.start_fade.start();
+        // Check if we need to fade out current audio before switching
+        let has_active_audio = self.audio_source.is_some() && self.state == PlaybackState::Playing;
 
-        self.audio_source = Some(source);
-        self.state = PlaybackState::Playing;
+        if has_active_audio && !self.stop_fade.is_active() {
+            // Currently playing - use pending source pattern for smooth transition
+            // 1. Start stop fade to fade out current audio
+            // 2. Set new source as pending (will be activated when fade completes)
+            eprintln!("[set_audio_source] Using pending source pattern for smooth transition");
+            self.pending_source = Some(source);
+            self.stop_fade.start(FadeCompleteAction::TransitionToNext);
+            // State stays Playing during the fade-out, then becomes Playing again after fade-in
+        } else {
+            // Not currently playing or already transitioning - directly set the source
+            eprintln!("[set_audio_source] Direct source set (no active audio or already transitioning)");
+            self.pending_source = None; // Clear any pending source
+            self.audio_source = Some(source);
+            self.state = PlaybackState::Playing;
+            // Don't start fade yet - wait for source to be ready first
+            // This prevents clicks from playing audio before buffer is filled
+            self.source_ready_verified = false;
+            self.source_ready_wait_samples = 0;
+            self.stop_fade.reset(); // Cancel any active stop fade
+        }
+
         self.is_manual_skip = false;
 
         // Emit track changed event (for non-crossfade transitions)
@@ -1881,9 +2288,18 @@ mod tests {
         let result = manager.process_audio(&mut buffer);
         assert!(result.is_ok());
 
-        // Should output silence
-        assert_eq!(buffer[0], 0.0);
-        assert_eq!(buffer[1023], 0.0);
+        // Should output near-silence (DAC keepalive noise at ~-96dB is acceptable)
+        let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
+        assert!(
+            buffer[0].abs() < dac_keepalive_threshold,
+            "Expected near-silence, got {}",
+            buffer[0]
+        );
+        assert!(
+            buffer[1023].abs() < dac_keepalive_threshold,
+            "Expected near-silence, got {}",
+            buffer[1023]
+        );
     }
 
     #[test]

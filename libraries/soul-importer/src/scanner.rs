@@ -111,16 +111,17 @@ impl FileScanner {
 /// Check if a file is a supported audio file
 pub fn is_audio_file(path: &Path) -> bool {
     path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| SUPPORTED_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+        .map(|ext| {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            SUPPORTED_EXTENSIONS.contains(&ext_str.as_str())
+        })
         .unwrap_or(false)
 }
 
 /// Get the audio file extension from a path
 pub fn get_audio_extension(path: &Path) -> Option<String> {
     path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_lowercase())
+        .map(|ext| ext.to_string_lossy().to_lowercase())
         .filter(|ext| SUPPORTED_EXTENSIONS.contains(&ext.as_str()))
 }
 

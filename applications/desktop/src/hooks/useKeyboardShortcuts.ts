@@ -11,7 +11,7 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { usePlayerStore } from '@soul-player/shared';
+import { usePlayerStore, usePlayerCommands } from '@soul-player/shared';
 
 interface GlobalShortcut {
   action: string;
@@ -110,6 +110,7 @@ function matchesAccelerator(event: KeyboardEvent, accelerator: string): boolean 
 
 export function useKeyboardShortcuts() {
   const [shortcuts, setShortcuts] = useState<GlobalShortcut[]>([]);
+  const commands = usePlayerCommands();
 
   // Load shortcuts from database
   useEffect(() => {
@@ -132,30 +133,43 @@ export function useKeyboardShortcuts() {
     try {
       switch (action) {
         case 'play_pause':
+          // Use PlayerCommandsContext for consistency with UI buttons
           if (isPlaying) {
-            await invoke('pause_playback');
+            await commands.pausePlayback();
           } else {
-            await invoke('resume_playback');
+            await commands.resumePlayback();
           }
           break;
 
-        case 'next':
-          await invoke('next_track');
+        case 'next': {
+          // Check capability before skipping (same as UI buttons)
+          const caps = await commands.getPlaybackCapabilities();
+          if (caps.hasNext) {
+            await commands.skipNext();
+          }
           break;
+        }
 
-        case 'previous':
-          await invoke('previous_track');
+        case 'previous': {
+          // Check capability before skipping (same as UI buttons)
+          const caps = await commands.getPlaybackCapabilities();
+          if (caps.hasPrevious) {
+            await commands.skipPrevious();
+          }
           break;
+        }
 
         case 'volume_up': {
-          const newVolume = Math.min(100, Math.round(volume * 100) + 5);
-          await invoke('set_volume', { volume: newVolume });
+          // Convert to 0-1 scale for commands.setVolume
+          const newVolume = Math.min(1.0, volume + 0.05);
+          await commands.setVolume(newVolume);
           break;
         }
 
         case 'volume_down': {
-          const newVolume = Math.max(0, Math.round(volume * 100) - 5);
-          await invoke('set_volume', { volume: newVolume });
+          // Convert to 0-1 scale for commands.setVolume
+          const newVolume = Math.max(0, volume - 0.05);
+          await commands.setVolume(newVolume);
           break;
         }
 
@@ -163,9 +177,9 @@ export function useKeyboardShortcuts() {
           const { previousVolume } = usePlayerStore.getState();
           if (volume > 0) {
             usePlayerStore.setState({ previousVolume: volume });
-            await invoke('set_volume', { volume: 0 });
+            await commands.setVolume(0);
           } else {
-            await invoke('set_volume', { volume: Math.round((previousVolume || 0.5) * 100) });
+            await commands.setVolume(previousVolume || 0.5);
           }
           break;
         }
@@ -183,7 +197,7 @@ export function useKeyboardShortcuts() {
     } catch (error) {
       console.error('[useKeyboardShortcuts] Failed to execute action:', action, error);
     }
-  }, []);
+  }, [commands]);
 
   // Handle keyboard events
   useEffect(() => {

@@ -38,6 +38,8 @@ dotenvy = "0.15"
 rfd = "0.15"
 base64 = "0.22"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 soul-audio-desktop = { workspace = true, features = ["effects", "asio"] }

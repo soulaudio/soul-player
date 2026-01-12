@@ -260,9 +260,12 @@ proptest! {
         let mut buffer = samples;
         manager.process_audio(&mut buffer).ok();
 
+        // Output should be near-silence (DAC keepalive noise at ~-96dB is acceptable)
+        let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
         prop_assert!(
-            buffer.iter().all(|s| *s == 0.0),
-            "Mute did not silence output"
+            buffer.iter().all(|s| s.abs() < dac_keepalive_threshold),
+            "Mute did not silence output, max value: {:.6}",
+            buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
         );
     }
 
@@ -410,7 +413,7 @@ proptest! {
         );
     }
 
-    /// Property: Processing audio with no source outputs silence
+    /// Property: Processing audio with no source outputs near-silence
     #[test]
     fn no_source_outputs_silence(buffer_size in 100usize..2000) {
         let mut manager = PlaybackManager::default();
@@ -418,6 +421,12 @@ proptest! {
         let mut buffer = vec![1.0f32; buffer_size];
         manager.process_audio(&mut buffer).ok();
 
-        prop_assert!(buffer.iter().all(|s| *s == 0.0), "No source didn't output silence");
+        // Output should be near-silence (DAC keepalive noise at ~-96dB is acceptable)
+        let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
+        prop_assert!(
+            buffer.iter().all(|s| s.abs() < dac_keepalive_threshold),
+            "No source didn't output near-silence, max value: {:.6}",
+            buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
+        );
     }
 }

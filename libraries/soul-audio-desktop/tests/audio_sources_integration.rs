@@ -10,6 +10,19 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
 
+/// Helper to wait for an async seek to complete by polling position
+/// Returns true if position reached target within timeout, false otherwise
+fn wait_for_seek_complete(source: &dyn AudioSource, target_secs: f64, tolerance: f64) -> bool {
+    for _ in 0..100 {
+        let pos = source.position().as_secs_f64();
+        if (pos - target_secs).abs() < tolerance {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    false
+}
+
 /// Helper function to assert a type implements `AudioSource` trait
 fn assert_is_audio_source<T: AudioSource>(_: &T) {}
 
@@ -145,15 +158,14 @@ fn test_local_source_seeking() {
     let pos_before_seek = source.position();
     assert!(pos_before_seek > Duration::ZERO);
 
-    // Seek to 1.0 seconds
+    // Seek to 1.0 seconds (async operation - need to wait for completion)
     source.seek(Duration::from_secs(1)).unwrap();
-    let pos_after_seek = source.position();
 
-    // Verify position is approximately 1 second
+    // Wait for seek to complete (decoder thread processes asynchronously)
     assert!(
-        (pos_after_seek.as_secs_f64() - 1.0).abs() < 0.01,
-        "Position should be ~1.0s, got {}",
-        pos_after_seek.as_secs_f64()
+        wait_for_seek_complete(&source, 1.0, 0.1),
+        "Position should be ~1.0s after seek, got {}",
+        source.position().as_secs_f64()
     );
 
     // Verify we can continue reading from new position
@@ -163,7 +175,7 @@ fn test_local_source_seeking() {
     // Seek to beginning
     source.seek(Duration::ZERO).unwrap();
     assert!(
-        source.position().as_secs_f64() < 0.01,
+        wait_for_seek_complete(&source, 0.0, 0.1),
         "Should be at beginning after seeking to zero"
     );
 }
@@ -280,12 +292,12 @@ fn test_local_source_reset_functionality() {
     source.read_samples(&mut buffer).unwrap();
     assert!(source.position() > Duration::ZERO);
 
-    // Reset (seek to zero)
+    // Reset (seek to zero) - async operation
     source.reset().unwrap();
 
-    // Verify position is back to zero
+    // Wait for reset to complete (decoder thread processes asynchronously)
     assert!(
-        source.position().as_secs_f64() < 0.01,
+        wait_for_seek_complete(&source, 0.0, 0.1),
         "Should reset to beginning"
     );
     assert!(!source.is_finished(), "Should not be finished after reset");

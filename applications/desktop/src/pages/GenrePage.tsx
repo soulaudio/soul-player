@@ -2,8 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks } from '@soul-player/shared';
-import { TrackMenu } from '../components/TrackMenu';
+import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack } from '@soul-player/shared';
 import { ArrowLeft, Play, Guitar, Clock } from 'lucide-react';
 import { usePlaybackContext } from '../hooks/usePlaybackContext';
 
@@ -13,17 +12,9 @@ interface Genre {
   track_count: number;
 }
 
-interface DesktopTrack extends Track {
-  artist_name?: string;
-  album_title?: string;
-  duration_seconds?: number;
-  file_path?: string;
-  year?: number;
-  // Audio format info
-  file_format?: string;
-  bit_rate?: number;
-  sample_rate?: number;
-  channels?: number;
+// Extend BackendTrack for full track data from Tauri
+interface DesktopTrack extends BackendTrack {
+  // Track interface fields mapped from backend
 }
 
 export function GenrePage() {
@@ -102,7 +93,7 @@ export function GenrePage() {
         album: desktopTrack.album_title || null,
         filePath: desktopTrack.file_path!,
         durationSeconds: desktopTrack.duration_seconds || null,
-        trackNumber: desktopTrack.trackNumber || null,
+        trackNumber: desktopTrack.track_number || null,
       };
     });
   }, [tracks, genre, recordContext]);
@@ -119,7 +110,7 @@ export function GenrePage() {
       album: t.album_title || null,
       filePath: t.file_path!,
       durationSeconds: t.duration_seconds || null,
-      trackNumber: t.trackNumber || null,
+      trackNumber: t.track_number || null,
     }));
 
     try {
@@ -226,7 +217,7 @@ export function GenrePage() {
             artist: t.artist_name,
             album: t.album_title,
             duration: t.duration_seconds,
-            trackNumber: t.trackNumber,
+            trackNumber: t.track_number,
             isAvailable: !!t.file_path,
             format: t.file_format,
             bitrate: t.bit_rate,
@@ -235,13 +226,19 @@ export function GenrePage() {
           }))}
           buildQueue={buildQueue}
           onTrackAction={() => {}}
-          renderMenu={(track) => (
-            <TrackMenu
-              trackId={Number(track.id)}
-              trackTitle={track.title}
-              onDelete={() => {}}
-            />
-          )}
+          renderMenu={(track) => {
+            const desktopTrack = tracks.find(t => t.id === track.id);
+            if (!desktopTrack) return null;
+            return (
+              <TrackMenu
+                track={desktopTrack}
+                onDelete={async () => {
+                  await invoke('delete_track', { id: desktopTrack.id });
+                  if (id) loadGenre(parseInt(id, 10));
+                }}
+              />
+            );
+          }}
         />
       </div>
     </div>

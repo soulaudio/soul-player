@@ -27,13 +27,22 @@ struct FrontendTrackEvent {
 
 impl From<&QueueTrack> for FrontendTrackEvent {
     fn from(track: &QueueTrack) -> Self {
+        use soul_playback::TrackSource;
+
+        // Prefer album artwork if available (to pick up custom artwork)
+        // Otherwise fall back to track artwork
+        let cover_art_path = match &track.source {
+            TrackSource::Album { id, .. } => Some(format!("artwork://album/{}", id)),
+            _ => Some(format!("artwork://track/{}", track.id)),
+        };
+
         Self {
             id: track.id.clone(),
             title: track.title.clone(),
             artist: track.artist.clone(),
             album: track.album.clone(),
             duration: track.duration.as_secs_f64(),
-            cover_art_path: Some(format!("artwork://track/{}", track.id)),
+            cover_art_path,
         }
     }
 }

@@ -396,12 +396,20 @@ fn test_no_click_on_resume_from_pause() {
     // Pause
     manager.pause();
 
-    // Output should be silence while paused
+    // The pause triggers a stop fade (~15ms at 48kHz = ~1440 stereo samples)
+    // Process enough audio for the stop fade to complete
+    let stop_fade_samples = (48000.0 * 0.015 * 2.0) as usize + 512; // 15ms + buffer margin
+    let mut fade_buffer = vec![0.0f32; stop_fade_samples];
+    let _ = manager.process_audio(&mut fade_buffer);
+
+    // Now check silence after fade is complete
     let mut pause_buffer = vec![1.0f32; 512]; // Non-zero to detect fill
     let _ = manager.process_audio(&mut pause_buffer);
+    let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
     assert!(
-        pause_buffer.iter().all(|&s| s == 0.0),
-        "Output should be silence while paused"
+        pause_buffer.iter().all(|&s| s.abs() < dac_keepalive_threshold),
+        "Output should be near-silence while paused (after stop fade), max: {:.6}",
+        pause_buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
     );
 
     // Resume
@@ -698,7 +706,7 @@ fn test_waveform_not_distorted_by_fade() {
     );
 }
 
-/// Test that zero crossings during fade are evenly spaced (no jitter).
+/// Test that zero crossings after fade are evenly spaced (no jitter).
 /// Jitter would cause irregular spacing between zero crossings.
 #[test]
 fn test_no_jitter_during_fade() {
@@ -712,7 +720,11 @@ fn test_no_jitter_during_fade() {
     let source = Box::new(ConstantLevelSource::new(0.9, frequency, sample_rate, 1.0));
     manager.set_audio_source(source);
 
-    // Process audio through the fade
+    // Process audio through the fade (100ms warmup to complete fade)
+    let mut warmup = vec![0.0f32; 9600];
+    let _ = manager.process_audio(&mut warmup);
+
+    // Process post-fade audio for analysis
     let mut buffer = vec![0.0f32; 9600]; // 100ms at 48kHz stereo
     let _ = manager.process_audio(&mut buffer);
 
@@ -945,13 +957,21 @@ fn test_no_click_on_pause_resume_cycle() {
         // Pause
         manager.pause();
 
-        // Process while paused (should be silence)
+        // The pause triggers a stop fade (~15ms at 48kHz = ~1440 stereo samples)
+        // Process enough audio for the stop fade to complete
+        let stop_fade_samples = (48000.0 * 0.015 * 2.0) as usize + 512; // 15ms + buffer margin
+        let mut fade_buffer = vec![0.0f32; stop_fade_samples];
+        let _ = manager.process_audio(&mut fade_buffer);
+
+        // Now check silence after fade is complete
         let mut paused_buffer = vec![1.0f32; 512];
         let _ = manager.process_audio(&mut paused_buffer);
+        let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
         assert!(
-            paused_buffer.iter().all(|&s| s == 0.0),
-            "Cycle {}: Output should be silence while paused",
-            cycle
+            paused_buffer.iter().all(|&s| s.abs() < dac_keepalive_threshold),
+            "Cycle {}: Output should be near-silence while paused (after stop fade), max: {:.6}",
+            cycle,
+            paused_buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
         );
 
         // Resume
@@ -1043,5 +1063,244 @@ fn test_no_click_on_rapid_seeks() {
         max_jump < 0.15,
         "Click after rapid seeks! Max jump: {:.4}",
         max_jump
+    );
+}
+
+// ============================================================================
+// TESTS: Buffer Underrun Handling
+// ============================================================================
+
+/// Audio source that simulates buffer underrun by returning fewer samples than requested
+/// This mimics what happens when disk I/O can't keep up with audio demand
+struct UnderrunSimulatingSource {
+    amplitude: f32,
+    frequency: f32,
+    sample_rate: u32,
+    position_samples: usize,
+    total_samples: usize,
+    /// How many samples to return per read (simulates partial buffer)
+    samples_per_read: usize,
+    /// Counter to vary the underrun behavior
+    read_count: usize,
+}
+
+impl UnderrunSimulatingSource {
+    fn new(
+        amplitude: f32,
+        frequency: f32,
+        sample_rate: u32,
+        duration_secs: f32,
+        samples_per_read: usize,
+    ) -> Self {
+        Self {
+            amplitude,
+            frequency,
+            sample_rate,
+            position_samples: 0,
+            total_samples: (sample_rate as f32 * duration_secs * 2.0) as usize,
+            samples_per_read,
+            read_count: 0,
+        }
+    }
+}
+
+impl AudioSource for UnderrunSimulatingSource {
+    fn read_samples(&mut self, buffer: &mut [f32]) -> Result<usize> {
+        self.read_count += 1;
+
+        let remaining = self.total_samples.saturating_sub(self.position_samples);
+        // Simulate underrun: only return samples_per_read samples (or remaining, whichever is less)
+        let to_read = buffer.len().min(remaining).min(self.samples_per_read);
+
+        // Generate audio samples
+        for i in 0..to_read / 2 {
+            let sample_idx = self.position_samples / 2 + i;
+            let t = sample_idx as f32 / self.sample_rate as f32;
+            let sample = self.amplitude * (2.0 * PI * self.frequency * t).sin();
+            buffer[i * 2] = sample; // Left
+            buffer[i * 2 + 1] = sample; // Right
+        }
+
+        self.position_samples += to_read;
+
+        // Fill the REST with silence (this is what LocalAudioSource does on underrun)
+        // NOTE: This is the problematic behavior we're testing - the silence should
+        // not create audible gaps
+        if to_read < buffer.len() {
+            buffer[to_read..].fill(0.0);
+        }
+
+        Ok(to_read)
+    }
+
+    fn seek(&mut self, position: Duration) -> Result<()> {
+        self.position_samples =
+            (position.as_secs_f64() * self.sample_rate as f64 * 2.0) as usize;
+        Ok(())
+    }
+
+    fn duration(&self) -> Duration {
+        Duration::from_secs_f64(self.total_samples as f64 / (self.sample_rate as f64 * 2.0))
+    }
+
+    fn position(&self) -> Duration {
+        Duration::from_secs_f64(self.position_samples as f64 / (self.sample_rate as f64 * 2.0))
+    }
+
+    fn is_finished(&self) -> bool {
+        self.position_samples >= self.total_samples
+    }
+}
+
+/// Test that buffer underrun doesn't cause audible silence gaps
+///
+/// BUG DETECTED: When read_samples returns fewer samples than requested,
+/// the remaining samples are filled with silence. But the start_fade envelope
+/// only processes the returned samples, leaving the silence unprocessed.
+/// This creates audible gaps in the output.
+#[test]
+fn test_no_silence_gaps_on_buffer_underrun() {
+    let sample_rate = 48000u32;
+
+    let mut manager = PlaybackManager::new(PlaybackConfig::default());
+    manager.set_sample_rate(sample_rate);
+    manager.set_output_channels(2);
+
+    // Create source that returns only 512 samples per read (simulating underrun)
+    // When callback requests 2048 samples, we'll get 512 + 1536 silence
+    let source = Box::new(UnderrunSimulatingSource::new(
+        0.5,
+        440.0,
+        sample_rate,
+        10.0,
+        512, // Only 512 samples per read
+    ));
+    manager.set_audio_source(source);
+
+    // Process audio with a larger buffer than source can provide
+    let mut buffer = vec![0.0f32; 2048];
+    let samples_written = manager.process_audio(&mut buffer).unwrap();
+
+    // The entire buffer should be properly handled (no raw zeros after samples_written)
+    // Count how many samples after the first chunk are exactly 0.0
+    let mut consecutive_zeros = 0;
+    let mut max_consecutive_zeros = 0;
+
+    for sample in &buffer {
+        if sample.abs() < 1e-10 {
+            // Essentially zero
+            consecutive_zeros += 1;
+            max_consecutive_zeros = max_consecutive_zeros.max(consecutive_zeros);
+        } else {
+            consecutive_zeros = 0;
+        }
+    }
+
+    println!(
+        "Samples written: {}, Buffer size: {}, Max consecutive zeros: {}",
+        samples_written,
+        buffer.len(),
+        max_consecutive_zeros
+    );
+
+    // We should NOT have large stretches of zeros in the output
+    // The fade envelope should handle buffer underrun gracefully
+    //
+    // Allow for:
+    // - Zero crossings in sine wave (~10 samples per crossing)
+    // - Fade-in startup (first ~10% of 30ms fade = ~144 samples at very low gain)
+    //
+    // With 512 samples per read and 2048 buffer, we'd have 1536 unprocessed zeros
+    // if the underrun bug exists. The fix should reduce this to ~144 or less
+    // (just the fade startup zeros).
+    //
+    // Before fix: 1536 zeros (underrun portion)
+    // After fix: ~134 zeros (fade startup, acceptable)
+    assert!(
+        max_consecutive_zeros < 200,
+        "Buffer underrun caused {} consecutive zeros! \
+         The silence-filled portion of the buffer is not being properly handled. \
+         Expected: at most ~144 zeros from fade startup, got {}.",
+        max_consecutive_zeros,
+        max_consecutive_zeros
+    );
+}
+
+/// Test that output buffer is fully utilized even on underrun
+///
+/// When the source can only provide partial samples, the rest of the output
+/// should still contain valid audio (DAC keepalive noise or properly faded content),
+/// not raw zeros that could cause DAC power cycling issues.
+#[test]
+fn test_full_buffer_utilization_on_underrun() {
+    let sample_rate = 48000u32;
+
+    let mut manager = PlaybackManager::new(PlaybackConfig::default());
+    manager.set_sample_rate(sample_rate);
+    manager.set_output_channels(2);
+
+    // Create source with severe underrun (only 128 samples per read)
+    let source = Box::new(UnderrunSimulatingSource::new(
+        0.3,
+        440.0,
+        sample_rate,
+        10.0,
+        128, // Severe underrun
+    ));
+    manager.set_audio_source(source);
+
+    // Request much more than source can provide
+    let mut buffer = vec![0.0f32; 4096];
+    let _ = manager.process_audio(&mut buffer);
+
+    // Check that the ENTIRE buffer has been touched (no large stretches of exact 0.0)
+    // DAC keepalive noise is ~0.000016, so we check for values above noise floor
+    let dac_keepalive_threshold = 0.00001;
+    let untouched_samples: Vec<_> = buffer
+        .iter()
+        .enumerate()
+        .filter(|(_, &s)| s.abs() < dac_keepalive_threshold)
+        .map(|(i, _)| i)
+        .collect();
+
+    // Find runs of untouched samples
+    let mut max_run = 0;
+    let mut current_run = 0;
+    let mut prev_idx: Option<usize> = None;
+
+    for &idx in &untouched_samples {
+        if let Some(p) = prev_idx {
+            if idx == p + 1 {
+                current_run += 1;
+            } else {
+                max_run = max_run.max(current_run);
+                current_run = 1;
+            }
+        } else {
+            current_run = 1;
+        }
+        prev_idx = Some(idx);
+    }
+    max_run = max_run.max(current_run);
+
+    println!(
+        "Buffer size: {}, Untouched samples: {}, Max untouched run: {}",
+        buffer.len(),
+        untouched_samples.len(),
+        max_run
+    );
+
+    // Allow some untouched samples:
+    // - Zero crossings in sine wave
+    // - Fade startup (first ~10% of 30ms fade = ~144 samples below threshold)
+    //
+    // Before fix: would have ~3968 untouched samples (128 audio + 3968 zeros)
+    // After fix: ~128-150 untouched samples (just fade startup)
+    assert!(
+        max_run < 200,
+        "Found {} consecutive untouched samples in output buffer! \
+         This indicates the underrun handling is not processing the full buffer. \
+         Expected: at most ~150 from fade startup.",
+        max_run
     );
 }

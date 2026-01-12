@@ -3,6 +3,12 @@
     "title": "Soul Player",
     "loading": "Loading..."
   },
+  "titleBar": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
   "home": {
     "welcome": "Welcome to Soul Player",
     "welcomeSubtitle": "Select a track from your library to start listening",
@@ -371,6 +377,11 @@
     "retry": "Retry",
     "error": "Error"
   },
+  "trackMenu": {
+    "showInExplorer": "Show in File Explorer",
+    "removeFromManagedLibrary": "Remove from Managed Library",
+    "removeFromLibrary": "Remove from Library"
+  },
   "crossfeed": {
     "title": "Crossfeed",
     "subtitle": "Headphone soundstage enhancement",
@@ -607,5 +618,34 @@
     "organizationStyle": "Organization style",
     "allSet": "You're All Set!",
     "allSetDescription": "Your library is being set up. This may take a moment..."
+  },
+  "artwork": {
+    "edit": {
+      "title": "Edit Artwork",
+      "selectImage": "Select Image",
+      "remove": "Remove Artwork",
+      "dropHint": "Drop an image here or click to browse",
+      "crop": "Crop & Save",
+      "cropTitle": "Crop Image",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
+      "resetZoom": "Reset",
+      "dragToReposition": "Drag to reposition"
+    },
+    "writeChoice": {
+      "title": "Save Artwork",
+      "description": "How would you like to save this artwork?",
+      "editMetadata": "Edit file metadata",
+      "editMetadataDesc": "Writes artwork to all audio files in this album",
+      "soulPlayerOnly": "Soul Player only",
+      "soulPlayerOnlyDesc": "Stores artwork without modifying your audio files"
+    },
+    "errors": {
+      "invalidFileType": "Please select an image file",
+      "fileTooLarge": "Image must be less than 10MB",
+      "readFailed": "Failed to read image file",
+      "saveFailed": "Failed to save artwork",
+      "removeFailed": "Failed to remove artwork"
+    }
   }
 }

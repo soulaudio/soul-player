@@ -557,8 +557,13 @@ fn test_process_audio_when_stopped_outputs_silence() {
     let mut buffer = vec![1.0f32; 1024];
     manager.process_audio(&mut buffer).ok();
 
-    // Should output silence
-    assert!(buffer.iter().all(|s| *s == 0.0));
+    // Should output near-silence (DAC keepalive noise at ~-96dB is acceptable)
+    let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
+    assert!(
+        buffer.iter().all(|s| s.abs() < dac_keepalive_threshold),
+        "Expected near-silence, max value: {:.6}",
+        buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
+    );
 }
 
 #[test]

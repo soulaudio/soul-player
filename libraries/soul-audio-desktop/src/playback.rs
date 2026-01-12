@@ -581,6 +581,9 @@ impl DesktopPlayback {
                 let stream_id = std::time::Instant::now();
                 // Create stream start envelope for click-free startup (30ms fade)
                 let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
+                // Track if we've already requested a load for the current Loading state
+                // This prevents flooding the track loader with duplicate requests
+                let mut load_requested = false;
                 eprintln!(
                     "[CPAL] Creating F32 stream callback (stream_id: {:?})",
                     stream_id
@@ -597,6 +600,7 @@ impl DesktopPlayback {
                             &track_loader_clone,
                             callback_count,
                             stream_id,
+                            &mut load_requested,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process(data);
@@ -616,6 +620,9 @@ impl DesktopPlayback {
                 let stream_id = std::time::Instant::now();
                 // Create stream start envelope for click-free startup (30ms fade)
                 let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
+                // Track if we've already requested a load for the current Loading state
+                // This prevents flooding the track loader with duplicate requests
+                let mut load_requested = false;
                 eprintln!(
                     "[CPAL] Creating I32 stream callback (stream_id: {:?})",
                     stream_id
@@ -649,6 +656,7 @@ impl DesktopPlayback {
                             &mut dither,
                             callback_count,
                             stream_id,
+                            &mut load_requested,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i32(data);
@@ -673,6 +681,9 @@ impl DesktopPlayback {
                 let stream_id = std::time::Instant::now();
                 // Create stream start envelope for click-free startup (30ms fade)
                 let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
+                // Track if we've already requested a load for the current Loading state
+                // This prevents flooding the track loader with duplicate requests
+                let mut load_requested = false;
                 eprintln!(
                     "[CPAL] Creating I16 stream callback (stream_id: {:?})",
                     stream_id
@@ -695,6 +706,7 @@ impl DesktopPlayback {
                             &mut dither,
                             callback_count,
                             stream_id,
+                            &mut load_requested,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i16(data);
@@ -970,6 +982,7 @@ impl DesktopPlayback {
         track_loader: &Arc<crate::track_loader::TrackLoader>,
         callback_count: u32,
         stream_id: std::time::Instant,
+        load_requested: &mut bool,
     ) {
         // Debug: log callback invocation with per-stream counter
         if callback_count == 1 {
@@ -1021,8 +1034,16 @@ impl DesktopPlayback {
                 Self::forward_manager_events(&mut mgr, event_tx);
 
                 // Check if track finished and next track is ready to load
-                if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    Self::load_next_track(&mut mgr, track_loader, event_tx);
+                // Only request load ONCE per Loading state to prevent duplicate requests
+                let state = mgr.get_state();
+                if state == soul_playback::PlaybackState::Loading {
+                    if !*load_requested {
+                        Self::load_next_track(&mut mgr, track_loader, event_tx);
+                        *load_requested = true;
+                    }
+                } else {
+                    // Reset flag when not in Loading state
+                    *load_requested = false;
                 }
             }
             Err(e) => {
@@ -1050,6 +1071,7 @@ impl DesktopPlayback {
         dither: &mut soul_audio::dither::StereoDither,
         callback_count: u32,
         stream_id: std::time::Instant,
+        load_requested: &mut bool,
     ) {
         // Update global counter for diagnostics
         let global_count = GLOBAL_I32_CALLBACK_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -1128,8 +1150,16 @@ impl DesktopPlayback {
                 Self::forward_manager_events(&mut mgr, event_tx);
 
                 // Check if track finished and next track is ready to load
-                if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    Self::load_next_track(&mut mgr, track_loader, event_tx);
+                // Only request load ONCE per Loading state to prevent duplicate requests
+                let state = mgr.get_state();
+                if state == soul_playback::PlaybackState::Loading {
+                    if !*load_requested {
+                        Self::load_next_track(&mut mgr, track_loader, event_tx);
+                        *load_requested = true;
+                    }
+                } else {
+                    // Reset flag when not in Loading state
+                    *load_requested = false;
                 }
 
                 // Convert f32 [-1.0, 1.0] to i32 with TPDF dithering
@@ -1161,6 +1191,7 @@ impl DesktopPlayback {
         dither: &mut soul_audio::dither::StereoDither,
         callback_count: u32,
         stream_id: std::time::Instant,
+        load_requested: &mut bool,
     ) {
         // Debug: log callback invocation with per-stream counter
         if callback_count == 1 {
@@ -1219,8 +1250,16 @@ impl DesktopPlayback {
                 Self::forward_manager_events(&mut mgr, event_tx);
 
                 // Check if track finished and next track is ready to load
-                if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    Self::load_next_track(&mut mgr, track_loader, event_tx);
+                // Only request load ONCE per Loading state to prevent duplicate requests
+                let state = mgr.get_state();
+                if state == soul_playback::PlaybackState::Loading {
+                    if !*load_requested {
+                        Self::load_next_track(&mut mgr, track_loader, event_tx);
+                        *load_requested = true;
+                    }
+                } else {
+                    // Reset flag when not in Loading state
+                    *load_requested = false;
                 }
 
                 // Convert f32 [-1.0, 1.0] to i16 with TPDF dithering

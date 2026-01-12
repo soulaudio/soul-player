@@ -390,8 +390,10 @@ fn is_audio_file(path: &Path) -> bool {
     ];
 
     path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| audio_extensions.contains(&ext.to_lowercase().as_str()))
+        .map(|ext| {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            audio_extensions.contains(&ext_str.as_str())
+        })
         .unwrap_or(false)
 }
 

@@ -144,7 +144,9 @@
       "Bash(docker:*)",
       "Bash(npx playwright:*)",
       "Bash(curl:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(netstat:*)",
+      "Bash(cargo run:*)"
     ]
   },
   "hooks": {

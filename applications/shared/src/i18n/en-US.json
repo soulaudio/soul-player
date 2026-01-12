@@ -368,7 +368,43 @@
     "disabled": "Disabled",
     "enabled": "Enabled",
     "retry": "Retry",
-    "error": "Error"
+    "error": "Error",
+    "saving": "Saving..."
+  },
+  "trackMenu": {
+    "showInExplorer": "Show in File Explorer",
+    "removeFromManagedLibrary": "Remove from Managed Library",
+    "removeFromLibrary": "Remove from Library"
+  },
+  "artwork": {
+    "edit": {
+      "title": "Edit Artwork",
+      "selectImage": "Select Image",
+      "remove": "Remove Artwork",
+      "dropHint": "Drop an image here or click to browse",
+      "previewHint": "Click Save to apply this artwork",
+      "crop": "Crop & Save",
+      "cropTitle": "Crop Image",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
+      "resetZoom": "Reset",
+      "dragToReposition": "Drag to reposition"
+    },
+    "writeChoice": {
+      "title": "Save Artwork",
+      "description": "How would you like to save this artwork?",
+      "editMetadata": "Edit file metadata",
+      "editMetadataDesc": "Writes artwork to all audio files in this album",
+      "soulPlayerOnly": "Soul Player only",
+      "soulPlayerOnlyDesc": "Stores artwork without modifying your audio files"
+    },
+    "errors": {
+      "invalidFileType": "Please select an image file",
+      "fileTooLarge": "Image must be less than 10MB",
+      "readFailed": "Failed to read image file",
+      "saveFailed": "Failed to save artwork",
+      "removeFailed": "Failed to remove artwork"
+    }
   },
   "crossfeed": {
     "title": "Crossfeed",

@@ -90,8 +90,8 @@ impl PathTemplate {
     pub fn resolve(&self, metadata: &ExtractedMetadata, source_path: &Path) -> PathBuf {
         let extension = source_path
             .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("flac");
+            .map(|ext| ext.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "flac".to_string());
 
         // Detect if this is a multi-disc album
         let is_multi_disc =
@@ -187,9 +187,8 @@ impl PathTemplate {
             .unwrap_or_else(|| {
                 source_path
                     .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("Unknown")
-                    .to_string()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Unknown".to_string())
             })
     }
 

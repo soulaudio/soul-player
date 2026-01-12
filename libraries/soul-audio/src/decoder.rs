@@ -68,8 +68,8 @@ impl SymphoniaDecoder {
 
         // Create a hint to help the format registry guess the format
         let mut hint = Hint::new();
-        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            hint.with_extension(ext);
+        if let Some(ext) = path.extension() {
+            hint.with_extension(&ext.to_string_lossy());
         }
 
         // Probe the media source
@@ -393,8 +393,8 @@ impl AudioDecoderTrait for SymphoniaDecoder {
 
         // Create a hint to help the format registry guess the format
         let mut hint = Hint::new();
-        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            hint.with_extension(ext);
+        if let Some(ext) = path.extension() {
+            hint.with_extension(&ext.to_string_lossy());
         }
 
         // Probe the media source

@@ -7,7 +7,7 @@ pub async fn get_user_playlists(pool: &SqlitePool, user_id: UserId) -> Result<Ve
         r#"
         SELECT DISTINCT
             p.id, p.name, p.description, p.owner_id, p.is_public, p.is_favorite,
-            p.created_at, p.updated_at
+            p.cover_art_path, p.created_at, p.updated_at
         FROM playlists p
         LEFT JOIN playlist_shares ps ON p.id = ps.playlist_id
         WHERE p.owner_id = ? OR ps.shared_with_user_id = ?
@@ -37,6 +37,7 @@ pub async fn get_user_playlists(pool: &SqlitePool, user_id: UserId) -> Result<Ve
                 owner_id: UserId::new(row.owner_id),
                 is_public: row.is_public != 0,
                 is_favorite: row.is_favorite != 0,
+                cover_art_path: row.cover_art_path,
                 created_at,
                 updated_at,
                 tracks: None,
@@ -54,7 +55,7 @@ pub async fn get_by_id(
     let row = sqlx::query!(
         r#"
         SELECT p.id, p.name, p.description, p.owner_id, p.is_public, p.is_favorite,
-               p.created_at, p.updated_at
+               p.cover_art_path, p.created_at, p.updated_at
         FROM playlists p
         LEFT JOIN playlist_shares ps ON p.id = ps.playlist_id
         WHERE p.id = ? AND (p.owner_id = ? OR ps.shared_with_user_id = ? OR p.is_public = 1)
@@ -83,6 +84,7 @@ pub async fn get_by_id(
             owner_id: UserId::new(row.owner_id),
             is_public: row.is_public != 0,
             is_favorite: row.is_favorite != 0,
+            cover_art_path: row.cover_art_path,
             created_at,
             updated_at,
             tracks: None,
@@ -508,4 +510,27 @@ async fn check_write_permission(
     .await?;
 
     Ok(row.map(|r| r.has_permission == Some(1)).unwrap_or(false))
+}
+
+/// Update playlist cover art path
+pub async fn update_cover_art_path(
+    pool: &SqlitePool,
+    playlist_id: PlaylistId,
+    user_id: UserId,
+    cover_art_path: Option<&str>,
+) -> Result<()> {
+    // Check permission (must be owner or have write permission)
+    let has_permission = check_write_permission(pool, playlist_id.clone(), user_id).await?;
+    if !has_permission {
+        return Err(soul_core::SoulError::PermissionDenied);
+    }
+
+    sqlx::query!(
+        "UPDATE playlists SET cover_art_path = ?, updated_at = strftime('%s', 'now') WHERE id = ?",
+        cover_art_path,
+        playlist_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }

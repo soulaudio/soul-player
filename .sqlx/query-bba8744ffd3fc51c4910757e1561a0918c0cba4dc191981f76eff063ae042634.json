@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n        SELECT p.id, p.name, p.description, p.owner_id, p.is_public, p.is_favorite,\n               p.created_at, p.updated_at\n        FROM playlists p\n        LEFT JOIN playlist_shares ps ON p.id = ps.playlist_id\n        WHERE p.id = ? AND (p.owner_id = ? OR ps.shared_with_user_id = ? OR p.is_public = 1)\n        LIMIT 1\n        ",
+  "query": "\n        SELECT DISTINCT\n            p.id, p.name, p.description, p.owner_id, p.is_public, p.is_favorite,\n            p.cover_art_path, p.created_at, p.updated_at\n        FROM playlists p\n        LEFT JOIN playlist_shares ps ON p.id = ps.playlist_id\n        WHERE p.owner_id = ? OR ps.shared_with_user_id = ?\n        ORDER BY p.is_favorite DESC, p.updated_at DESC\n        ",
   "describe": {
     "columns": [
       {
@@ -34,18 +34,23 @@
         "type_info": "Integer"
       },
       {
-        "name": "created_at",
+        "name": "cover_art_path",
         "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 7,
         "type_info": "Integer"
       },
       {
         "name": "updated_at",
-        "ordinal": 7,
+        "ordinal": 8,
         "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 2
     },
     "nullable": [
       false,
@@ -54,9 +59,10 @@
       false,
       false,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "0850d08bc3e1a9d96477382aa50f01c767af196694c7b84e1cea8d2e28200a03"
+  "hash": "bba8744ffd3fc51c4910757e1561a0918c0cba4dc191981f76eff063ae042634"
 }

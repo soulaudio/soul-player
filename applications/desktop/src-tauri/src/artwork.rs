@@ -2,17 +2,21 @@
 //!
 //! Provides on-demand artwork extraction from audio files using the soul-artwork library.
 //! Implements artwork:// protocol for efficient image serving with built-in LRU caching.
+//! Supports custom artwork storage that overrides embedded artwork.
 
-use soul_artwork::ArtworkExtractor;
-use soul_core::types::{AlbumId, TrackId};
+use soul_artwork::{ArtworkData, ArtworkExtractor, ArtworkWriter};
+use soul_core::types::{AlbumId, ArtistId, PlaylistId, TrackId, UserId};
 use sqlx::SqlitePool;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::http::Response;
 
-/// Manages artwork extraction with caching
+/// Manages artwork extraction and custom artwork storage
 pub struct ArtworkManager {
     extractor: Arc<ArtworkExtractor>,
     pool: SqlitePool,
+    /// Base directory for storing custom artwork
+    artwork_storage_path: PathBuf,
 }
 
 impl ArtworkManager {
@@ -21,21 +25,103 @@ impl ArtworkManager {
     /// # Arguments
     /// * `pool` - Database connection pool
     /// * `cache_size` - Number of images to cache in memory (default: 100)
-    pub fn new(pool: SqlitePool, cache_size: usize) -> Self {
+    /// * `artwork_storage_path` - Base directory for custom artwork storage
+    pub fn new(pool: SqlitePool, cache_size: usize, artwork_storage_path: PathBuf) -> Self {
         Self {
             extractor: Arc::new(ArtworkExtractor::new(cache_size)),
             pool,
+            artwork_storage_path,
         }
+    }
+
+    /// Get the custom artwork directory for a specific entity type
+    fn get_artwork_dir(&self, entity_type: &str) -> PathBuf {
+        self.artwork_storage_path.join(entity_type)
+    }
+
+    /// Find custom artwork file for an entity
+    fn find_custom_artwork(&self, entity_type: &str, id: &str) -> Option<PathBuf> {
+        let dir = self.get_artwork_dir(entity_type);
+        for ext in ["jpg", "jpeg", "png", "webp"] {
+            let path = dir.join(format!("{}.{}", id, ext));
+            if path.exists() {
+                return Some(path);
+            }
+        }
+        None
+    }
+
+    /// Read custom artwork from file
+    fn read_custom_artwork(&self, path: &Path) -> Result<Option<(Vec<u8>, String)>, String> {
+        let data = std::fs::read(path).map_err(|e| e.to_string())?;
+
+        // Detect MIME type from extension
+        let mime_type = match path.extension().and_then(|e| e.to_str()) {
+            Some("png") => "image/png",
+            Some("webp") => "image/webp",
+            Some("gif") => "image/gif",
+            _ => "image/jpeg",
+        };
+
+        Ok(Some((data, mime_type.to_string())))
+    }
+
+    /// Save custom artwork for an entity
+    async fn save_custom_artwork(
+        &self,
+        entity_type: &str,
+        id: &str,
+        data: &[u8],
+        mime_type: &str,
+    ) -> Result<PathBuf, String> {
+        let dir = self.get_artwork_dir(entity_type);
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create artwork dir: {}", e))?;
+
+        // Determine extension from MIME type
+        let ext = match mime_type {
+            "image/png" => "png",
+            "image/webp" => "webp",
+            "image/gif" => "gif",
+            _ => "jpg",
+        };
+
+        // Remove any existing artwork for this entity
+        self.remove_custom_artwork_files(entity_type, id)?;
+
+        let path = dir.join(format!("{}.{}", id, ext));
+        std::fs::write(&path, data).map_err(|e| format!("Failed to write artwork: {}", e))?;
+
+        Ok(path)
+    }
+
+    /// Remove custom artwork files for an entity
+    fn remove_custom_artwork_files(&self, entity_type: &str, id: &str) -> Result<(), String> {
+        let dir = self.get_artwork_dir(entity_type);
+        for ext in ["jpg", "jpeg", "png", "webp", "gif"] {
+            let path = dir.join(format!("{}.{}", id, ext));
+            if path.exists() {
+                std::fs::remove_file(&path)
+                    .map_err(|e| format!("Failed to remove old artwork: {}", e))?;
+            }
+        }
+        Ok(())
     }
 
     /// Get artwork for an album
     ///
-    /// Finds any track from the album and extracts its embedded artwork.
+    /// First checks for custom artwork, then falls back to embedded artwork from tracks.
     ///
     /// # Arguments
     /// * `album_id` - Album ID
     pub async fn get_album_artwork(&self, album_id: AlbumId) -> Result<Option<Vec<u8>>, String> {
-        // Get any track from this album
+        // Check for custom artwork first (overrides embedded)
+        if let Some(custom_path) = self.find_custom_artwork("albums", &album_id.to_string()) {
+            if let Ok(Some((data, _))) = self.read_custom_artwork(&custom_path) {
+                return Ok(Some(data));
+            }
+        }
+
+        // Fall back to embedded artwork from tracks
         let track = self.get_track_from_album(album_id).await?;
 
         if let Some(track_id) = track {
@@ -75,6 +161,14 @@ impl ArtworkManager {
         &self,
         album_id: AlbumId,
     ) -> Result<Option<(Vec<u8>, String)>, String> {
+        // Check for custom artwork first (overrides embedded)
+        if let Some(custom_path) = self.find_custom_artwork("albums", &album_id.to_string()) {
+            if let Ok(Some(result)) = self.read_custom_artwork(&custom_path) {
+                return Ok(Some(result));
+            }
+        }
+
+        // Fall back to embedded artwork
         let track = self.get_track_from_album(album_id).await?;
 
         if let Some(track_id) = track {
@@ -82,6 +176,32 @@ impl ArtworkManager {
         } else {
             Ok(None)
         }
+    }
+
+    /// Get artwork with MIME type and source info (custom vs embedded)
+    ///
+    /// Returns (data, mime_type, is_custom) where is_custom=true means from Soul Player storage
+    pub async fn get_album_artwork_with_source(
+        &self,
+        album_id: AlbumId,
+    ) -> Result<Option<(Vec<u8>, String, bool)>, String> {
+        // Check for custom artwork first (overrides embedded)
+        if let Some(custom_path) = self.find_custom_artwork("albums", &album_id.to_string()) {
+            if let Ok(Some((data, mime_type))) = self.read_custom_artwork(&custom_path) {
+                return Ok(Some((data, mime_type, true)));
+            }
+        }
+
+        // Fall back to embedded artwork
+        let track = self.get_track_from_album(album_id).await?;
+
+        if let Some(track_id) = track {
+            if let Some((data, mime_type)) = self.get_track_artwork_with_mime(track_id).await? {
+                return Ok(Some((data, mime_type, false)));
+            }
+        }
+
+        Ok(None)
     }
 
     /// Get artwork with MIME type for a specific track
@@ -144,6 +264,214 @@ impl ArtworkManager {
             Ok(None)
         }
     }
+
+    /// Get all track file paths for an album
+    async fn get_all_album_track_paths(&self, album_id: AlbumId) -> Result<Vec<PathBuf>, String> {
+        let rows = sqlx::query("SELECT id FROM tracks WHERE album_id = ?")
+            .bind(album_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e: sqlx::Error| e.to_string())?;
+
+        let mut paths = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let id: i64 = row.get("id");
+            let track_id = TrackId::new(id.to_string());
+            if let Some(path) = self.get_track_file_path(track_id).await? {
+                paths.push(path);
+            }
+        }
+        Ok(paths)
+    }
+
+    // =========================================================================
+    // Artwork Setting/Removal Methods
+    // =========================================================================
+
+    /// Set artwork for an album
+    ///
+    /// # Arguments
+    /// * `album_id` - Album ID
+    /// * `data` - Image data bytes
+    /// * `mime_type` - MIME type (e.g., "image/jpeg")
+    /// * `write_to_files` - If true, also write to embedded metadata in all album tracks
+    pub async fn set_album_artwork(
+        &self,
+        album_id: AlbumId,
+        data: Vec<u8>,
+        mime_type: &str,
+        write_to_files: bool,
+    ) -> Result<(), String> {
+        // Save custom artwork file
+        let artwork_path = self
+            .save_custom_artwork("albums", &album_id.to_string(), &data, mime_type)
+            .await?;
+
+        // Update database with path
+        soul_storage::albums::update_cover_art_path(
+            &self.pool,
+            album_id,
+            Some(&artwork_path.to_string_lossy()),
+        )
+        .await
+        .map_err(|e| format!("Failed to update database: {}", e))?;
+
+        // Optionally write to audio files
+        if write_to_files {
+            let artwork = ArtworkData::new(data, mime_type.to_string());
+            let track_paths = self.get_all_album_track_paths(album_id).await?;
+
+            for path in track_paths {
+                if let Err(e) = ArtworkWriter::write_to_file(&path, &artwork) {
+                    eprintln!("Warning: Failed to write artwork to {}: {}", path.display(), e);
+                    // Continue with other files even if one fails
+                }
+            }
+        }
+
+        // Clear cache to pick up new artwork
+        self.extractor.clear_cache();
+
+        Ok(())
+    }
+
+    /// Remove custom artwork from an album
+    pub async fn remove_album_artwork(&self, album_id: AlbumId) -> Result<(), String> {
+        self.remove_custom_artwork_files("albums", &album_id.to_string())?;
+
+        soul_storage::albums::update_cover_art_path(&self.pool, album_id, None)
+            .await
+            .map_err(|e| format!("Failed to update database: {}", e))?;
+
+        self.extractor.clear_cache();
+        Ok(())
+    }
+
+    /// Get artwork for an artist
+    pub async fn get_artist_artwork_with_mime(
+        &self,
+        artist_id: ArtistId,
+    ) -> Result<Option<(Vec<u8>, String)>, String> {
+        if let Some(custom_path) = self.find_custom_artwork("artists", &artist_id.to_string()) {
+            return self.read_custom_artwork(&custom_path);
+        }
+        Ok(None)
+    }
+
+    /// Get artwork for an artist with source info
+    pub async fn get_artist_artwork_with_source(
+        &self,
+        artist_id: ArtistId,
+    ) -> Result<Option<(Vec<u8>, String, bool)>, String> {
+        if let Some(custom_path) = self.find_custom_artwork("artists", &artist_id.to_string()) {
+            if let Ok(Some((data, mime_type))) = self.read_custom_artwork(&custom_path) {
+                return Ok(Some((data, mime_type, true)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Set artwork for an artist
+    pub async fn set_artist_artwork(
+        &self,
+        artist_id: ArtistId,
+        data: Vec<u8>,
+        mime_type: &str,
+    ) -> Result<(), String> {
+        let artwork_path = self
+            .save_custom_artwork("artists", &artist_id.to_string(), &data, mime_type)
+            .await?;
+
+        soul_storage::artists::update_cover_art_path(
+            &self.pool,
+            artist_id,
+            Some(&artwork_path.to_string_lossy()),
+        )
+        .await
+        .map_err(|e| format!("Failed to update database: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Remove artwork from an artist
+    pub async fn remove_artist_artwork(&self, artist_id: ArtistId) -> Result<(), String> {
+        self.remove_custom_artwork_files("artists", &artist_id.to_string())?;
+
+        soul_storage::artists::update_cover_art_path(&self.pool, artist_id, None)
+            .await
+            .map_err(|e| format!("Failed to update database: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Get artwork for a playlist
+    pub async fn get_playlist_artwork_with_mime(
+        &self,
+        playlist_id: &PlaylistId,
+    ) -> Result<Option<(Vec<u8>, String)>, String> {
+        if let Some(custom_path) = self.find_custom_artwork("playlists", playlist_id.as_str()) {
+            return self.read_custom_artwork(&custom_path);
+        }
+        Ok(None)
+    }
+
+    /// Get artwork for a playlist with source info
+    pub async fn get_playlist_artwork_with_source(
+        &self,
+        playlist_id: &PlaylistId,
+    ) -> Result<Option<(Vec<u8>, String, bool)>, String> {
+        if let Some(custom_path) = self.find_custom_artwork("playlists", playlist_id.as_str()) {
+            if let Ok(Some((data, mime_type))) = self.read_custom_artwork(&custom_path) {
+                return Ok(Some((data, mime_type, true)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Set artwork for a playlist
+    pub async fn set_playlist_artwork(
+        &self,
+        user_id: &UserId,
+        playlist_id: &PlaylistId,
+        data: Vec<u8>,
+        mime_type: &str,
+    ) -> Result<(), String> {
+        let artwork_path = self
+            .save_custom_artwork("playlists", playlist_id.as_str(), &data, mime_type)
+            .await?;
+
+        soul_storage::playlists::update_cover_art_path(
+            &self.pool,
+            playlist_id.clone(),
+            user_id.clone(),
+            Some(&artwork_path.to_string_lossy()),
+        )
+        .await
+        .map_err(|e| format!("Failed to update database: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Remove artwork from a playlist
+    pub async fn remove_playlist_artwork(
+        &self,
+        user_id: &UserId,
+        playlist_id: &PlaylistId,
+    ) -> Result<(), String> {
+        self.remove_custom_artwork_files("playlists", playlist_id.as_str())?;
+
+        soul_storage::playlists::update_cover_art_path(
+            &self.pool,
+            playlist_id.clone(),
+            user_id.clone(),
+            None,
+        )
+        .await
+        .map_err(|e| format!("Failed to update database: {}", e))?;
+
+        Ok(())
+    }
 }
 
 /// Handle artwork:// protocol requests
@@ -179,19 +507,20 @@ pub async fn handle_artwork_request(
         entity_type, id_str
     );
 
-    let id: i64 = id_str.parse().map_err(|e| {
-        eprintln!("[artwork] ERROR: Failed to parse ID '{}': {:?}", id_str, e);
-        "Invalid ID"
-    })?;
-
-    eprintln!("[artwork] Parsed ID: {}", id);
-
     let artwork = match entity_type {
         "album" => {
+            let id: i64 = id_str.parse().map_err(|e| {
+                eprintln!("[artwork] ERROR: Failed to parse album ID '{}': {:?}", id_str, e);
+                "Invalid album ID"
+            })?;
             eprintln!("[artwork] Fetching artwork for album {}", id);
             manager.get_album_artwork_with_mime(id).await?
         }
         "track" => {
+            let id: i64 = id_str.parse().map_err(|e| {
+                eprintln!("[artwork] ERROR: Failed to parse track ID '{}': {:?}", id_str, e);
+                "Invalid track ID"
+            })?;
             eprintln!("[artwork] Fetching artwork for track {}", id);
             let result = manager
                 .get_track_artwork_with_mime(TrackId::new(id.to_string()))
@@ -205,6 +534,21 @@ pub async fn handle_artwork_request(
                 }
             );
             result
+        }
+        "artist" => {
+            let id: i64 = id_str.parse().map_err(|e| {
+                eprintln!("[artwork] ERROR: Failed to parse artist ID '{}': {:?}", id_str, e);
+                "Invalid artist ID"
+            })?;
+            eprintln!("[artwork] Fetching artwork for artist {}", id);
+            manager.get_artist_artwork_with_mime(id).await?
+        }
+        "playlist" => {
+            // Playlist IDs are UUIDs, not numeric
+            eprintln!("[artwork] Fetching artwork for playlist {}", id_str);
+            manager
+                .get_playlist_artwork_with_mime(&PlaylistId::new(id_str.to_string()))
+                .await?
         }
         _ => {
             eprintln!("[artwork] ERROR: Unknown entity type: {}", entity_type);
@@ -226,7 +570,7 @@ pub async fn handle_artwork_request(
             .body(data)
             .map_err(|e| e.into())
     } else {
-        eprintln!("[artwork] No artwork found for {} {}", entity_type, id);
+        eprintln!("[artwork] No artwork found for {} {}", entity_type, id_str);
         // No artwork found - return 404
         Response::builder()
             .status(404)

@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
+    "tauri:dev:logs": "tauri dev -- -- --logs",
     "tauri:build": "tauri build",
     "lint": "eslint src --ext .ts,.tsx",
     "type-check": "tsc --noEmit"

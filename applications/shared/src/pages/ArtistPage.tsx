@@ -6,10 +6,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Play, Users, Disc3, Music } from 'lucide-react'
+import { ArrowLeft, Play, Users, Disc3, Music, Pencil } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
+import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
+import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { useBackend, type BackendTrack, type BackendAlbum, type BackendArtist, type QueueTrack } from '../contexts/BackendContext'
+import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 
@@ -65,6 +68,7 @@ export function ArtistPage() {
   const navigate = useNavigate()
   const { isDesktop } = usePlatform()
   const backend = useBackend()
+  const commands = usePlayerCommands()
 
   const [artist, setArtist] = useState<BackendArtist | null>(null)
   const [albums, setAlbums] = useState<BackendAlbum[]>([])
@@ -72,11 +76,23 @@ export function ArtistPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'albums' | 'tracks'>('albums')
+  const [editArtworkOpen, setEditArtworkOpen] = useState(false)
+  const [artistArtworkUrl, setArtistArtworkUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
     loadArtist(parseInt(id, 10))
   }, [id])
+
+  // Load artist artwork
+  const loadArtistArtwork = useCallback(async (artistId: number) => {
+    try {
+      const artwork = await backend.getArtistArtwork(artistId)
+      setArtistArtworkUrl(artwork)
+    } catch (err) {
+      console.error('Failed to load artist artwork:', err)
+    }
+  }, [backend])
 
   const loadArtist = async (artistId: number) => {
     setLoading(true)
@@ -97,6 +113,11 @@ export function ArtistPage() {
 
       setTracks(artistTracks)
       setAlbums(artistAlbums)
+
+      // Load artist artwork if on desktop
+      if (isDesktop) {
+        loadArtistArtwork(artistId)
+      }
     } catch (err) {
       console.error('Failed to load artist:', err)
       setError(err instanceof Error ? err.message : 'Failed to load artist')
@@ -117,6 +138,7 @@ export function ArtistPage() {
         title: t.title || 'Unknown',
         artist: t.artist_name || 'Unknown Artist',
         album: t.album_title || null,
+        albumId: t.album_id,
         filePath: t.file_path!,
         durationSeconds: t.duration_seconds || null,
         trackNumber: t.track_number || null,
@@ -157,7 +179,7 @@ export function ArtistPage() {
         })
       }
 
-      await backend.playQueue(queue, 0)
+      await commands.playQueue(queue, 0)
     } catch (err) {
       console.error('Failed to play all tracks:', err)
     }
@@ -211,8 +233,25 @@ export function ArtistPage() {
 
         <div className="flex items-start gap-6">
           {/* Artist Avatar */}
-          <div className="w-32 h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
-            <Users className="w-16 h-16 text-muted-foreground" />
+          <div className="group relative w-32 h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+            {artistArtworkUrl ? (
+              <img
+                src={artistArtworkUrl}
+                alt={artist.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Users className="w-16 h-16 text-muted-foreground" />
+            )}
+            {/* Edit button overlay */}
+            {isDesktop && (
+              <button
+                onClick={() => setEditArtworkOpen(true)}
+                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-full"
+              >
+                <Pencil className="w-6 h-6 text-white" />
+              </button>
+            )}
           </div>
 
           {/* Artist Info */}
@@ -300,6 +339,19 @@ export function ArtistPage() {
                 channels: t.channels,
               }))}
               buildQueue={buildQueue}
+              renderMenu={(track) => {
+                const backendTrack = tracks.find(t => t.id === track.id)
+                if (!backendTrack) return null
+                return (
+                  <TrackMenu
+                    track={backendTrack}
+                    onDelete={async () => {
+                      await backend.deleteTrack(backendTrack.id)
+                      if (id) loadArtist(parseInt(id, 10))
+                    }}
+                  />
+                )
+              }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -309,6 +361,17 @@ export function ArtistPage() {
           )
         )}
       </div>
+
+      {/* Edit Artwork Dialog */}
+      <EditArtworkDialog
+        open={editArtworkOpen}
+        onClose={() => setEditArtworkOpen(false)}
+        entityType="artist"
+        entityId={String(artist.id)}
+        entityName={artist.name}
+        currentArtworkUrl={artistArtworkUrl}
+        onArtworkChanged={() => loadArtistArtwork(artist.id)}
+      />
     </div>
   )
 }

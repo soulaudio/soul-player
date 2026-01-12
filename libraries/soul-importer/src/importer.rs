@@ -227,9 +227,8 @@ impl MusicImporter {
             title: metadata.title.clone().unwrap_or_else(|| {
                 file_path
                     .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("Unknown")
-                    .to_string()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Unknown".to_string())
             }),
             artist_id: artist_match.as_ref().map(|m| m.entity.id),
             album_id: album_match.as_ref().map(|m| m.entity.id),
@@ -247,9 +246,8 @@ impl MusicImporter {
             channels: metadata.channels.map(|c| c as i32),
             file_format: library_path
                 .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("unknown")
-                .to_uppercase(),
+                .map(|e| e.to_string_lossy().to_uppercase())
+                .unwrap_or_else(|| "UNKNOWN".to_string()),
             file_hash: Some(file_hash.clone()),
             origin_source_id: 1, // Default local source
             local_file_path: Some(library_path.display().to_string()),

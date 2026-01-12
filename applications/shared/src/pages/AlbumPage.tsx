@@ -6,10 +6,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Play, Clock, Disc3 } from 'lucide-react'
+import { ArrowLeft, Play, Clock, Disc3, Pencil } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
+import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
+import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { useBackend, type BackendTrack, type BackendAlbum, type QueueTrack } from '../contexts/BackendContext'
+import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 
@@ -19,11 +22,14 @@ export function AlbumPage() {
   const navigate = useNavigate()
   const { isDesktop } = usePlatform()
   const backend = useBackend()
+  const commands = usePlayerCommands()
 
   const [album, setAlbum] = useState<BackendAlbum | null>(null)
   const [tracks, setTracks] = useState<BackendTrack[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editArtworkOpen, setEditArtworkOpen] = useState(false)
+  const [artworkVersion, setArtworkVersion] = useState(0)
 
   useEffect(() => {
     if (!id) return
@@ -63,12 +69,13 @@ export function AlbumPage() {
         title: t.title || 'Unknown',
         artist: t.artist_name || 'Unknown Artist',
         album: t.album_title || null,
+        albumId: album?.id,
         filePath: t.file_path!,
         durationSeconds: t.duration_seconds || null,
         trackNumber: t.track_number || null,
       }))
     },
-    []
+    [album?.id]
   )
 
   // Build queue callback for TrackList
@@ -103,7 +110,7 @@ export function AlbumPage() {
         })
       }
 
-      await backend.playQueue(queue, 0)
+      await commands.playQueue(queue, 0)
     } catch (err) {
       console.error('Failed to play all tracks:', err)
     }
@@ -178,9 +185,10 @@ export function AlbumPage() {
 
         <div className="flex items-start gap-6">
           {/* Album Cover */}
-          <div className="w-48 h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center">
+          <div className="group relative w-48 h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center">
             {hasDesktopArtwork ? (
               <ArtworkImage
+                key={artworkVersion}
                 albumId={album.id}
                 alt={album.title}
                 className="w-full h-full object-cover"
@@ -194,6 +202,15 @@ export function AlbumPage() {
               />
             ) : (
               <Disc3 className="w-16 h-16 text-muted-foreground" />
+            )}
+            {/* Edit button overlay */}
+            {isDesktop && (
+              <button
+                onClick={() => setEditArtworkOpen(true)}
+                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Pencil className="w-8 h-8 text-white" />
+              </button>
             )}
           </div>
 
@@ -249,8 +266,32 @@ export function AlbumPage() {
             channels: t.channels,
           }))}
           buildQueue={buildQueue}
+          renderMenu={(track) => {
+            const backendTrack = tracks.find(t => t.id === track.id)
+            if (!backendTrack) return null
+            return (
+              <TrackMenu
+                track={backendTrack}
+                onDelete={async () => {
+                  await backend.deleteTrack(backendTrack.id)
+                  if (id) loadAlbum(parseInt(id, 10))
+                }}
+              />
+            )
+          }}
         />
       </div>
+
+      {/* Edit Artwork Dialog */}
+      <EditArtworkDialog
+        open={editArtworkOpen}
+        onClose={() => setEditArtworkOpen(false)}
+        entityType="album"
+        entityId={String(album.id)}
+        entityName={album.title}
+        currentArtworkUrl={coverUrl}
+        onArtworkChanged={() => setArtworkVersion(v => v + 1)}
+      />
     </div>
   )
 }

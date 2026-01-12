@@ -275,25 +275,56 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     // Fallback: Use filename as title if no title in tags
     let title: Option<String> = title.or_else(|| {
         path.file_stem()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string())
+            .map(|s| s.to_string_lossy().into_owned())
     });
 
-    // Fallback: Parse parent folder name for artist/album if missing from tags
-    let folder_meta = if artist.is_none() || album.is_none() {
-        let folder_name = path.parent()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str());
+    // Check if metadata contains corrupted characters (indicates wrong encoding in tags)
+    let has_corrupted_data = artist.as_ref().map(|s| s.contains('?')).unwrap_or(false)
+        || album.as_ref().map(|s| s.contains('?')).unwrap_or(false)
+        || title.as_ref().map(|s| s.contains('?')).unwrap_or(false);
+
+    // Fallback: Parse parent folder name for artist/album if:
+    // 1. Missing from tags, OR
+    // 2. Tags contain '?' (indicates encoding corruption from non-Latin characters)
+    let folder_meta = if artist.is_none() || album.is_none() || has_corrupted_data {
+        let parent = path.parent();
+        let folder_name = parent.and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
 
         if let Some(name) = folder_name {
-            let parsed = parse_folder_name(name);
-            eprintln!(
-                "[metadata] Folder fallback for {:?}: folder='{}' -> artist={:?}, album={:?}",
-                path.file_name(),
-                name,
-                parsed.artist,
-                parsed.album
-            );
+            let mut parsed = parse_folder_name(&name);
+
+            // If folder parsing didn't extract artist/album (e.g., just "Album Name"),
+            // try the grandparent folder for artist name
+            if parsed.artist.is_none() && parsed.album.is_none() {
+                // Treat immediate parent as album name
+                parsed.album = Some(name.clone());
+
+                // Try grandparent for artist
+                if let Some(grandparent) = parent.and_then(|p| p.parent()) {
+                    if let Some(grandparent_name) = grandparent.file_name() {
+                        let gp_str = grandparent_name.to_string_lossy();
+                        parsed.artist = Some(gp_str.to_string());
+                    }
+                }
+            }
+
+            if has_corrupted_data {
+                eprintln!(
+                    "[metadata] Corrupted encoding detected (contains '?') for {:?}, using folder fallback: folder='{}' -> artist={:?}, album={:?}",
+                    path.file_name(),
+                    name,
+                    parsed.artist,
+                    parsed.album
+                );
+            } else {
+                eprintln!(
+                    "[metadata] Folder fallback for {:?}: folder='{}' -> artist={:?}, album={:?}",
+                    path.file_name(),
+                    name,
+                    parsed.artist,
+                    parsed.album
+                );
+            }
             Some(parsed)
         } else {
             None
@@ -308,15 +339,25 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         None
     };
 
-    let artist = artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()));
-    let album = album.or_else(|| folder_meta.as_ref().and_then(|m| m.album.clone()));
+    // Prefer folder metadata if we detected corrupted data, otherwise use tag data as fallback
+    let artist = if has_corrupted_data {
+        folder_meta.as_ref().and_then(|m| m.artist.clone()).or(artist)
+    } else {
+        artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()))
+    };
+
+    let album = if has_corrupted_data {
+        folder_meta.as_ref().and_then(|m| m.album.clone()).or(album)
+    } else {
+        album.or_else(|| folder_meta.as_ref().and_then(|m| m.album.clone()))
+    };
+
     let year = year.or_else(|| folder_meta.as_ref().and_then(|m| m.year));
 
     // Get file format from extension
     let file_format = path
         .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_lowercase())
+        .map(|ext| ext.to_string_lossy().to_lowercase())
         .unwrap_or_else(|| "unknown".to_string());
 
     // Extract MusicBrainz Recording ID
@@ -411,8 +452,7 @@ pub fn extract_metadata_symphonia(path: &Path) -> Result<ExtractedMetadata> {
     // Get file format from extension
     let file_format = path
         .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_lowercase())
+        .map(|ext| ext.to_string_lossy().to_lowercase())
         .unwrap_or_else(|| "unknown".to_string());
 
     // Convert album art
