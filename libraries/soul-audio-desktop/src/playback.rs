@@ -14,7 +14,7 @@ use crate::error::Result;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Global counter for I32 (ASIO) callbacks - used for diagnostics
-/// This is updated by audio_callback_i32 and read by send_command for debugging
+/// This is updated by `audio_callback_i32` and read by `send_command` for debugging
 static GLOBAL_I32_CALLBACK_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Stream-level fade envelope to prevent clicks/pops at audio stream start
@@ -23,7 +23,7 @@ static GLOBAL_I32_CALLBACK_COUNTER: AtomicU64 = AtomicU64::new(0);
 /// Jumping directly to audio output can cause a hardware-level pop.
 /// This envelope applies a 30ms fade at stream start to let the DAC settle.
 ///
-/// See: https://www.kernel.org/doc/html/v4.13/sound/soc/pops-clicks.html
+/// See: <https://www.kernel.org/doc/html/v4.13/sound/soc/pops-clicks.html>
 struct StreamStartEnvelope {
     /// Current position in the fade (in stereo samples)
     position: usize,
@@ -40,7 +40,8 @@ impl StreamStartEnvelope {
     /// Create a new stream start envelope for the given sample rate
     fn new(sample_rate: u32, channels: u16) -> Self {
         // Calculate duration in samples: sample_rate * duration_ms / 1000 * channels
-        let duration = ((sample_rate as u64 * STREAM_START_FADE_MS as u64 * channels as u64) / 1000) as usize;
+        let duration =
+            ((sample_rate as u64 * STREAM_START_FADE_MS as u64 * channels as u64) / 1000) as usize;
         Self {
             position: 0,
             duration,
@@ -89,7 +90,10 @@ impl StreamStartEnvelope {
 
         if self.position >= self.duration {
             self.completed = true;
-            eprintln!("[StreamEnvelope] Fade COMPLETED after {} samples", self.position);
+            eprintln!(
+                "[StreamEnvelope] Fade COMPLETED after {} samples",
+                self.position
+            );
         }
 
         !self.completed
@@ -196,14 +200,26 @@ pub enum PlaybackCommand {
     /// Unmute audio
     Unmute,
 
-    /// Add track to queue
+    /// Add track to queue (legacy - maps to AddToQueueEnd)
     AddToQueue(QueueTrack),
+
+    /// Add track to Play Next queue (highest priority, plays after current track)
+    AddPlayNext(QueueTrack),
+
+    /// Add track to end of Add to Queue (lowest priority, plays after source exhausts)
+    AddToQueueEnd(QueueTrack),
 
     /// Remove track from queue
     RemoveFromQueue(usize),
 
-    /// Clear queue
+    /// Clear entire queue (all three tiers)
     ClearQueue,
+
+    /// Clear Play Next queue only
+    ClearPlayNext,
+
+    /// Clear Add to Queue only
+    ClearAddToQueue,
 
     /// Skip to track at queue index
     SkipToQueueIndex(usize),
@@ -214,11 +230,14 @@ pub enum PlaybackCommand {
     /// Set shuffle mode
     SetShuffle(soul_playback::ShuffleMode),
 
+    /// Cycle shuffle mode (Off → Random → Smart → Off)
+    CycleShuffle,
+
     /// Set repeat mode
     SetRepeat(soul_playback::RepeatMode),
 
     /// Switch audio output device
-    /// Arguments: (backend, device_name)
+    /// Arguments: (backend, `device_name`)
     SwitchDevice(crate::AudioBackend, String),
 }
 
@@ -240,7 +259,7 @@ pub enum PlaybackEvent {
     /// Queue updated
     QueueUpdated,
 
-    /// Device sample rate changed (old_rate, new_rate)
+    /// Device sample rate changed (`old_rate`, `new_rate`)
     SampleRateChanged(u32, u32),
 
     /// Crossfade started between two tracks
@@ -277,7 +296,7 @@ pub enum SampleRateMode {
     MatchDevice,
     /// Switch device sample rate to match track's native rate when possible
     /// Requires exclusive mode for most audio APIs
-    /// Falls back to MatchDevice if rate switching fails
+    /// Falls back to `MatchDevice` if rate switching fails
     MatchTrack,
     /// No resampling - send audio at native rate (requires exclusive mode)
     /// Only works if device supports the track's sample rate
@@ -361,10 +380,10 @@ impl SampleRateMode {
 pub struct ResamplingSettings {
     /// Quality preset: "fast", "balanced", "high", "maximum"
     pub quality: String,
-    /// Sample rate mode (replaces target_rate)
+    /// Sample rate mode (replaces `target_rate`)
     pub sample_rate_mode: SampleRateMode,
     /// Target sample rate override. 0 = auto (use device rate)
-    /// Deprecated: Use sample_rate_mode instead
+    /// Deprecated: Use `sample_rate_mode` instead
     pub target_rate: u32,
     /// Backend: "auto", "rubato", "r8brain"
     pub backend: String,
@@ -530,7 +549,7 @@ impl DesktopPlayback {
 
     /// Create CPAL audio stream
     ///
-    /// Returns (Stream, device_name, sample_rate)
+    /// Returns (Stream, `device_name`, `sample_rate`)
     fn create_audio_stream(
         manager: Arc<Mutex<PlaybackManager>>,
         command_rx: Receiver<PlaybackCommand>,
@@ -554,8 +573,10 @@ impl DesktopPlayback {
         };
 
         let actual_device_name = device
-            .name()
-            .unwrap_or_else(|_| "Unknown Device".to_string());
+            .description()
+            .ok()
+            .map(|desc| desc.name().to_string())
+            .unwrap_or_else(|| "Unknown Device".to_string());
 
         let (config, sample_format) = Self::get_stream_config(&device)?;
         let sample_rate = config.sample_rate;
@@ -723,8 +744,7 @@ impl DesktopPlayback {
                 return Err(crate::error::AudioError::DeviceError(format!(
                     "Unsupported sample format: {:?}",
                     sample_format
-                ))
-                .into());
+                )));
             }
         };
 
@@ -759,13 +779,13 @@ impl DesktopPlayback {
     }
 
     /// Get stream configuration
-    /// Returns (StreamConfig, SampleFormat)
+    /// Returns (`StreamConfig`, `SampleFormat`)
     ///
     /// IMPORTANT: Always uses the device's ACTUAL configured sample rate from
     /// `default_output_config()`. We don't try to request a different rate because:
     /// - ASIO: Sample rate is fixed by the driver control panel
     /// - WASAPI Shared: Sample rate is fixed by Windows sound settings
-    /// - WASAPI Exclusive: Can change rate, but default_output_config gives us the current one
+    /// - WASAPI Exclusive: Can change rate, but `default_output_config` gives us the current one
     ///
     /// If we request a different rate than what the device is actually running at,
     /// the audio will play at the wrong speed (e.g., requesting 96kHz when device
@@ -835,7 +855,7 @@ impl DesktopPlayback {
 
         let config = if let Some(cfg) = matching_config {
             // Use the config with the device's ACTUAL sample rate
-            cfg.clone().with_sample_rate(actual_sample_rate)
+            (*cfg).with_sample_rate(actual_sample_rate)
         } else {
             // Fall back to default config (which already has the actual sample rate)
             eprintln!("[CPAL] No matching config found, using default");
@@ -959,9 +979,8 @@ impl DesktopPlayback {
             } else {
                 eprintln!("[load_next_track] Load request queue full");
                 // Queue full - emit error and stop
-                let _ = event_tx.try_send(PlaybackEvent::Error(
-                    "Track load queue full".to_string(),
-                ));
+                let _ =
+                    event_tx.try_send(PlaybackEvent::Error("Track load queue full".to_string()));
                 mgr.stop();
                 let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
             }
@@ -973,7 +992,7 @@ impl DesktopPlayback {
         }
     }
 
-    /// Audio callback for f32 sample format (WASAPI, CoreAudio, etc.)
+    /// Audio callback for f32 sample format (WASAPI, `CoreAudio`, etc.)
     fn audio_callback_f32(
         data: &mut [f32],
         manager: Arc<Mutex<PlaybackManager>>,
@@ -1011,7 +1030,8 @@ impl DesktopPlayback {
 
         // Process any pending commands
         while let Ok(command) = command_rx.try_recv() {
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader) {
+            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
+            {
                 let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
             }
         }
@@ -1107,7 +1127,7 @@ impl DesktopPlayback {
                 stream_id,
                 global_count + 1
             );
-        } else if callback_count % 1000 == 0 {
+        } else if callback_count.is_multiple_of(1000) {
             // Log every 1000 callbacks to show the stream is still alive
             eprintln!(
                 "[audio_callback_i32] Stream {:?} still alive: {} callbacks (global #{})",
@@ -1120,7 +1140,8 @@ impl DesktopPlayback {
         // Process any pending commands
         while let Ok(command) = command_rx.try_recv() {
             eprintln!("[audio_callback_i32] Received command: {:?}", command);
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader) {
+            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
+            {
                 let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
             }
         }
@@ -1220,7 +1241,8 @@ impl DesktopPlayback {
 
         // Process any pending commands
         while let Ok(command) = command_rx.try_recv() {
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader) {
+            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
+            {
                 let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
             }
         }
@@ -1277,10 +1299,10 @@ impl DesktopPlayback {
         }
     }
 
-    /// Forward events from PlaybackManager to the desktop event channel
+    /// Forward events from `PlaybackManager` to the desktop event channel
     ///
     /// This drains events from the manager (e.g., crossfade progress, track changes at 50%)
-    /// and converts them to desktop PlaybackEvent format.
+    /// and converts them to desktop `PlaybackEvent` format.
     fn forward_manager_events(mgr: &mut PlaybackManager, event_tx: &Sender<PlaybackEvent>) {
         for event in mgr.drain_events() {
             let desktop_event = match event {
@@ -1392,11 +1414,10 @@ impl DesktopPlayback {
                     mgr.set_next_source(source, result.track);
                 } else {
                     // Current track loaded (initial load or track change)
-                    eprintln!(
-                        "[poll_track_loader] Track loaded: {}",
-                        result.track.title
-                    );
+                    eprintln!("[poll_track_loader] Track loaded: {}", result.track.title);
+                    eprintln!("[poll_track_loader] State BEFORE set_audio_source: {:?}", mgr.get_state());
                     mgr.set_audio_source(source);
+                    eprintln!("[poll_track_loader] State AFTER set_audio_source: {:?}", mgr.get_state());
                     let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
                     let _ = event_tx.try_send(PlaybackEvent::TrackChanged(Some(result.track)));
                     let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
@@ -1474,7 +1495,9 @@ impl DesktopPlayback {
                 }
             }
             PlaybackCommand::Pause => {
+                eprintln!("[PlaybackCommand::Pause] Received, current state: {:?}", mgr.get_state());
                 mgr.pause();
+                eprintln!("[PlaybackCommand::Pause] After pause(), state: {:?}", mgr.get_state());
                 event_tx
                     .send(PlaybackEvent::StateChanged(mgr.get_state()))
                     .ok();
@@ -1562,6 +1585,15 @@ impl DesktopPlayback {
                     .ok();
             }
             PlaybackCommand::AddToQueue(track) => {
+                // Legacy command - maps to AddToQueueEnd
+                mgr.add_to_queue_end(track);
+                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+            }
+            PlaybackCommand::AddPlayNext(track) => {
+                mgr.add_to_queue_next(track);
+                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+            }
+            PlaybackCommand::AddToQueueEnd(track) => {
                 mgr.add_to_queue_end(track);
                 event_tx.send(PlaybackEvent::QueueUpdated).ok();
             }
@@ -1571,6 +1603,14 @@ impl DesktopPlayback {
             }
             PlaybackCommand::ClearQueue => {
                 mgr.clear_queue();
+                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+            }
+            PlaybackCommand::ClearPlayNext => {
+                mgr.clear_play_next();
+                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+            }
+            PlaybackCommand::ClearAddToQueue => {
+                mgr.clear_add_to_queue();
                 event_tx.send(PlaybackEvent::QueueUpdated).ok();
             }
             PlaybackCommand::SkipToQueueIndex(index) => {
@@ -1587,7 +1627,9 @@ impl DesktopPlayback {
                             is_preload: false,
                         };
                         if !track_loader.request_load(request) {
-                            eprintln!("[PlaybackCommand::SkipToQueueIndex] Load request queue full");
+                            eprintln!(
+                                "[PlaybackCommand::SkipToQueueIndex] Load request queue full"
+                            );
                         }
                         // Result will be handled by poll_track_loader in next callback
                     }
@@ -1601,6 +1643,10 @@ impl DesktopPlayback {
             }
             PlaybackCommand::SetShuffle(mode) => {
                 mgr.set_shuffle(mode);
+                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+            }
+            PlaybackCommand::CycleShuffle => {
+                let _ = mgr.cycle_shuffle();
                 event_tx.send(PlaybackEvent::QueueUpdated).ok();
             }
             PlaybackCommand::SetRepeat(mode) => {
@@ -1620,7 +1666,7 @@ impl DesktopPlayback {
 
     /// Send command to playback thread
     ///
-    /// Uses try_send to avoid blocking if the channel is full (e.g., when
+    /// Uses `try_send` to avoid blocking if the channel is full (e.g., when
     /// audio callbacks aren't running). Commands may be dropped if the
     /// channel is full - this prevents deadlocks when switching audio devices.
     pub fn send_command(&self, command: PlaybackCommand) -> Result<()> {
@@ -1686,8 +1732,7 @@ impl DesktopPlayback {
 
                 Err(crate::error::AudioError::PlaybackError(
                     "Command channel disconnected - stream may have been terminated".into(),
-                )
-                .into())
+                ))
             }
         }
     }
@@ -1741,6 +1786,26 @@ impl DesktopPlayback {
     /// Get current volume
     pub fn get_volume(&self) -> u8 {
         self.manager.lock().unwrap().get_volume()
+    }
+
+    /// Get current shuffle mode
+    pub fn get_shuffle_mode(&self) -> soul_playback::ShuffleMode {
+        self.manager.lock().unwrap().get_shuffle_mode()
+    }
+
+    /// Get current repeat mode
+    pub fn get_repeat_mode(&self) -> soul_playback::RepeatMode {
+        self.manager.lock().unwrap().get_repeat()
+    }
+
+    /// Get mutable reference to PlaybackManager
+    pub fn get_manager_mut(&self) -> std::sync::MutexGuard<'_, soul_playback::PlaybackManager> {
+        self.manager.lock().unwrap()
+    }
+
+    /// Emit queue updated event
+    pub fn emit_queue_updated(&self) {
+        let _ = self.event_tx.try_send(PlaybackEvent::QueueUpdated);
     }
 
     /// Switch to a different audio output device
@@ -2105,7 +2170,7 @@ impl DesktopPlayback {
     /// Get mutable reference to effect chain (for configuring DSP effects)
     ///
     /// # Returns
-    /// Returns the effect chain from the underlying PlaybackManager.
+    /// Returns the effect chain from the underlying `PlaybackManager`.
     /// Effects are applied in order before volume control.
     ///
     /// # Example
@@ -2131,7 +2196,7 @@ impl DesktopPlayback {
 
     // ===== Volume Leveling =====
 
-    /// Set volume leveling mode (ReplayGain track/album, EBU R128, etc.)
+    /// Set volume leveling mode (`ReplayGain` track/album, EBU R128, etc.)
     pub fn set_volume_leveling_mode(&self, mode: soul_playback::NormalizationMode) {
         let mut manager = self.manager.lock().unwrap();
         manager.set_volume_leveling_mode(mode);
@@ -2146,7 +2211,7 @@ impl DesktopPlayback {
     /// Set track gain for current track (called when loading track)
     ///
     /// # Arguments
-    /// * `gain_db` - ReplayGain value in dB
+    /// * `gain_db` - `ReplayGain` value in dB
     /// * `peak_dbfs` - Peak value in dBFS (for clipping prevention)
     pub fn set_track_gain(&self, gain_db: f64, peak_dbfs: f64) {
         let mut manager = self.manager.lock().unwrap();
@@ -2156,7 +2221,7 @@ impl DesktopPlayback {
     /// Set album gain for current track (called when loading track)
     ///
     /// # Arguments
-    /// * `gain_db` - Album ReplayGain value in dB
+    /// * `gain_db` - Album `ReplayGain` value in dB
     /// * `peak_dbfs` - Album peak value in dBFS
     pub fn set_album_gain(&self, gain_db: f64, peak_dbfs: f64) {
         let mut manager = self.manager.lock().unwrap();
@@ -2311,9 +2376,9 @@ impl DesktopPlayback {
     ///
     /// See `FadeCurve` for available curve types:
     /// - Linear: Simple linear fade
-    /// - SquareRoot: Natural-sounding transitions
-    /// - SCurve: Smooth acceleration at start/end
-    /// - EqualPower: Constant perceived loudness (recommended)
+    /// - `SquareRoot`: Natural-sounding transitions
+    /// - `SCurve`: Smooth acceleration at start/end
+    /// - `EqualPower`: Constant perceived loudness (recommended)
     pub fn set_crossfade_curve(&self, curve: soul_playback::FadeCurve) {
         let mut manager = self.manager.lock().unwrap();
         manager.set_crossfade_curve(curve);
@@ -2360,8 +2425,12 @@ impl DesktopPlayback {
 
         let mut settings = self.resampling_settings.lock().unwrap();
         settings.quality = quality.to_string();
-        eprintln!("[DesktopPlayback] Resampling quality set to '{}' (sinc_len={}, f_cutoff={})",
-            quality, settings.sinc_len(), settings.f_cutoff());
+        eprintln!(
+            "[DesktopPlayback] Resampling quality set to '{}' (sinc_len={}, f_cutoff={})",
+            quality,
+            settings.sinc_len(),
+            settings.f_cutoff()
+        );
         Ok(())
     }
 
@@ -2378,7 +2447,7 @@ impl DesktopPlayback {
     ///
     /// Note: Changes take effect when the next track is loaded.
     pub fn set_resampling_target_rate(&mut self, rate: u32) -> std::result::Result<(), String> {
-        if rate != 0 && (rate < 8000 || rate > 384000) {
+        if rate != 0 && !(8000..=384000).contains(&rate) {
             return Err(format!(
                 "Invalid target rate {}. Must be 0 (auto) or between 8000 and 384000 Hz",
                 rate
@@ -2387,7 +2456,10 @@ impl DesktopPlayback {
 
         let mut settings = self.resampling_settings.lock().unwrap();
         settings.target_rate = rate;
-        eprintln!("[DesktopPlayback] Resampling target rate set to {} (0=auto)", rate);
+        eprintln!(
+            "[DesktopPlayback] Resampling target rate set to {} (0=auto)",
+            rate
+        );
         Ok(())
     }
 
@@ -2422,7 +2494,8 @@ impl DesktopPlayback {
             #[cfg(not(feature = "r8brain"))]
             {
                 return Err("r8brain backend is not available in this build. \
-                    Use 'auto' or 'rubato' instead.".to_string());
+                    Use 'auto' or 'rubato' instead."
+                    .to_string());
             }
         }
 
@@ -2454,7 +2527,7 @@ impl DesktopPlayback {
     /// Set headroom management mode
     ///
     /// Modes:
-    /// - Auto: Calculate from ReplayGain + EQ boost
+    /// - Auto: Calculate from `ReplayGain` + EQ boost
     /// - Manual(dB): Fixed headroom reserve
     /// - Disabled: No headroom attenuation
     #[cfg(feature = "volume-leveling")]

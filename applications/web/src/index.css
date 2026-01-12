@@ -67,6 +67,9 @@
     --gradient-player: linear-gradient(to bottom, hsl(222.2 84% 4.9%) 0%, hsl(217.2 32.6% 17.5%) 100%);
     --gradient-sidebar: linear-gradient(to right, hsl(217.2 32.6% 17.5%) 0%, hsl(222.2 84% 4.9%) 100%);
     --gradient-waveform: linear-gradient(90deg, hsl(210 40% 98%) 0%, hsl(217.2 32.6% 17.5%) 100%);
+
+    /* Typography */
+    --font-sans: Inter, system-ui, sans-serif;
   }
 
   /* Ocean theme */
@@ -96,6 +99,9 @@
     --gradient-player: linear-gradient(to bottom, hsl(210 100% 97%) 0%, hsl(200 80% 92%) 100%);
     --gradient-sidebar: linear-gradient(to right, hsl(200 40% 92%) 0%, hsl(210 100% 97%) 100%);
     --gradient-waveform: linear-gradient(90deg, hsl(200 90% 50%) 0%, hsl(180 85% 55%) 50%, hsl(200 90% 50%) 100%);
+
+    /* Typography */
+    --font-sans: Inter, system-ui, sans-serif;
   }
 }
 
@@ -107,16 +113,25 @@
     @apply bg-background text-foreground;
   }
 
-  /* Modern themed scrollbars */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  /* WebKit/Blink scrollbar styling */
+  /* Note: Do NOT use scrollbar-width/scrollbar-color as they override webkit pseudo-elements */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
   }
 
-  /* WebKit/Blink scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  /* Remove scrollbar arrow buttons */
+  ::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  ::-webkit-scrollbar-button:start:decrement,
+  ::-webkit-scrollbar-button:end:increment {
+    display: block;
+    width: 0;
+    height: 0;
   }
 
   ::-webkit-scrollbar-track {
@@ -134,5 +149,9 @@
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.5);
     background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }

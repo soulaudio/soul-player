@@ -129,6 +129,7 @@ impl ResamplerBackend {
     }
 
     /// Get the actual backend that will be used (resolving Auto)
+    #[must_use]
     pub fn resolved(&self) -> Self {
         match self {
             Self::Auto => {

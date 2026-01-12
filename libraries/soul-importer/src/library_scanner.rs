@@ -7,7 +7,7 @@ use crate::{fuzzy::FuzzyMatcher, metadata, scanner::FileScanner, ImportError, Re
 use soul_core::types::{CreateTrack, LibrarySource, ScanStatus};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Statistics from a library scan
@@ -234,13 +234,23 @@ impl LibraryScanner {
         let scan_time = chrono::Utc::now().timestamp();
         soul_storage::library_sources::set_last_scan_at(&self.pool, source.id, scan_time).await?;
 
+        // Set scan status back to Idle
+        soul_storage::library_sources::set_scan_status(
+            &self.pool,
+            source.id,
+            ScanStatus::Idle,
+            None,
+        )
+        .await?;
+
         tracing::info!(
-            "Scan completed for {} in {:?}: {} new, {} updated, {} removed",
+            "Scan completed for {} in {:?}: {} new, {} updated, {} removed, {} errors",
             source.name,
             start_time.elapsed(),
             stats.new_files,
             stats.updated_files,
-            stats.removed_files
+            stats.removed_files,
+            stats.errors
         );
 
         Ok(stats)
@@ -321,10 +331,18 @@ impl LibraryScanner {
             let hash = tokio::time::timeout(std::time::Duration::from_secs(60), hash_task)
                 .await
                 .map_err(|_| {
-                    tracing::error!("[SCAN] TIMEOUT computing hash: {}", file_path_for_log.display());
-                    ImportError::Metadata(format!("Hash calculation timeout (60s) for: {}", file_path.display()))
+                    tracing::error!(
+                        "[SCAN] TIMEOUT computing hash: {}",
+                        file_path_for_log.display()
+                    );
+                    ImportError::Metadata(format!(
+                        "Hash calculation timeout (60s) for: {}",
+                        file_path.display()
+                    ))
                 })?
-                .map_err(|e| ImportError::Metadata(format!("Hash calculation task failed: {}", e)))??;
+                .map_err(|e| {
+                    ImportError::Metadata(format!("Hash calculation task failed: {}", e))
+                })??;
             Some(hash)
         } else {
             None
@@ -368,17 +386,21 @@ impl LibraryScanner {
 
         let file_path_owned = file_path.to_path_buf();
         let file_path_for_log = file_path.to_path_buf();
-        let meta_task = tokio::task::spawn_blocking(move || {
-            metadata::extract_metadata(&file_path_owned)
-        });
+        let meta_task =
+            tokio::task::spawn_blocking(move || metadata::extract_metadata(&file_path_owned));
 
         let meta = tokio::time::timeout(std::time::Duration::from_secs(30), meta_task)
             .await
             .map_err(|_| {
                 tracing::error!("[SCAN] TIMEOUT on file: {}", file_path_for_log.display());
-                ImportError::Metadata(format!("Metadata extraction timeout (30s) for: {}", file_path.display()))
+                ImportError::Metadata(format!(
+                    "Metadata extraction timeout (30s) for: {}",
+                    file_path.display()
+                ))
             })?
-            .map_err(|e| ImportError::Metadata(format!("Metadata extraction task failed: {}", e)))??;
+            .map_err(|e| {
+                ImportError::Metadata(format!("Metadata extraction task failed: {}", e))
+            })??;
 
         tracing::info!(
             "import_new_file: file={}, artist={:?}, album={:?}",
@@ -473,10 +495,51 @@ impl LibraryScanner {
                 .fuzzy_matcher
                 .find_or_create_genre(&self.pool, genre_name)
                 .await?;
-            soul_storage::genres::add_to_track(&self.pool, track_id_typed.clone(), genre_match.entity.id).await?;
+            soul_storage::genres::add_to_track(
+                &self.pool,
+                track_id_typed.clone(),
+                genre_match.entity.id,
+            )
+            .await?;
+        }
+
+        // Discover folder artwork if album exists
+        if let Some(album_id) = album_id {
+            if let Some(folder_path) = file_path.parent() {
+                if let Some(artwork_path) = Self::discover_folder_artwork(folder_path) {
+                    // Record in database that this album has folder artwork
+                    soul_storage::albums::set_artwork_source(
+                        &self.pool,
+                        album_id,
+                        "folder",
+                        &artwork_path.to_string_lossy(),
+                    )
+                    .await
+                    .ok(); // Ignore errors - artwork is optional
+                }
+            }
         }
 
         Ok(())
+    }
+
+    /// Discover folder artwork in a directory
+    ///
+    /// Looks for common artwork filenames: cover, folder, front, album, artwork
+    /// Supports extensions: jpg, jpeg, png, webp, gif, bmp
+    fn discover_folder_artwork(folder: &Path) -> Option<PathBuf> {
+        const FILENAMES: &[&str] = &["cover", "folder", "front", "album", "artwork"];
+        const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp"];
+
+        for name in FILENAMES {
+            for ext in EXTENSIONS {
+                let path = folder.join(format!("{}.{}", name, ext));
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+        None
     }
 
     /// Update track metadata after file change
@@ -492,17 +555,21 @@ impl LibraryScanner {
 
         let file_path_owned = file_path.to_path_buf();
         let file_path_for_log = file_path.to_path_buf();
-        let meta_task = tokio::task::spawn_blocking(move || {
-            metadata::extract_metadata(&file_path_owned)
-        });
+        let meta_task =
+            tokio::task::spawn_blocking(move || metadata::extract_metadata(&file_path_owned));
 
         let meta = tokio::time::timeout(std::time::Duration::from_secs(30), meta_task)
             .await
             .map_err(|_| {
                 tracing::error!("[SCAN] TIMEOUT updating: {}", file_path_for_log.display());
-                ImportError::Metadata(format!("Metadata extraction timeout (30s) for: {}", file_path.display()))
+                ImportError::Metadata(format!(
+                    "Metadata extraction timeout (30s) for: {}",
+                    file_path.display()
+                ))
             })?
-            .map_err(|e| ImportError::Metadata(format!("Metadata extraction task failed: {}", e)))??;
+            .map_err(|e| {
+                ImportError::Metadata(format!("Metadata extraction task failed: {}", e))
+            })??;
 
         tracing::info!(
             "update_track_metadata: file={}, artist={:?}, album={:?}",
@@ -521,10 +588,18 @@ impl LibraryScanner {
             let hash = tokio::time::timeout(std::time::Duration::from_secs(60), hash_task)
                 .await
                 .map_err(|_| {
-                    tracing::error!("[SCAN] TIMEOUT computing hash for update: {}", file_path_for_log.display());
-                    ImportError::Metadata(format!("Hash calculation timeout (60s) for: {}", file_path.display()))
+                    tracing::error!(
+                        "[SCAN] TIMEOUT computing hash for update: {}",
+                        file_path_for_log.display()
+                    );
+                    ImportError::Metadata(format!(
+                        "Hash calculation timeout (60s) for: {}",
+                        file_path.display()
+                    ))
                 })?
-                .map_err(|e| ImportError::Metadata(format!("Hash calculation task failed: {}", e)))??;
+                .map_err(|e| {
+                    ImportError::Metadata(format!("Hash calculation task failed: {}", e))
+                })??;
             Some(hash)
         } else {
             None
@@ -573,13 +648,25 @@ impl LibraryScanner {
 
         // Update artist/album relationships if we have them
         if artist_id.is_some() || album_id.is_some() {
-            soul_storage::tracks::update_artist_album(
-                &self.pool,
-                track_id,
-                artist_id,
-                album_id,
-            )
-            .await?;
+            soul_storage::tracks::update_artist_album(&self.pool, track_id, artist_id, album_id)
+                .await?;
+        }
+
+        // Discover folder artwork if album exists (same as on import)
+        if let Some(album_id) = album_id {
+            if let Some(folder_path) = file_path.parent() {
+                if let Some(artwork_path) = Self::discover_folder_artwork(folder_path) {
+                    // Record in database that this album has folder artwork
+                    soul_storage::albums::set_artwork_source(
+                        &self.pool,
+                        album_id,
+                        "folder",
+                        &artwork_path.to_string_lossy(),
+                    )
+                    .await
+                    .ok(); // Ignore errors - artwork is optional
+                }
+            }
         }
 
         Ok(())

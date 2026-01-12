@@ -71,6 +71,13 @@ impl FileScanner {
                 continue;
             }
 
+            // Skip macOS metadata files (._*)
+            if let Some(filename) = path.file_name() {
+                if filename.to_string_lossy().starts_with("._") {
+                    continue;
+                }
+            }
+
             // Check if file has supported extension
             if is_audio_file(path) {
                 audio_files.push(path.to_path_buf());

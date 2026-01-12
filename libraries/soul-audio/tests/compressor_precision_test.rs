@@ -27,7 +27,7 @@
 //!
 //! This test suite uses the 63% (1x RC) definition, which is common in the industry.
 
-use soul_audio::effects::{Compressor, CompressorSettings, AudioEffect};
+use soul_audio::effects::{AudioEffect, Compressor, CompressorSettings};
 use std::f32::consts::PI;
 
 const SAMPLE_RATE: u32 = 48000;
@@ -85,7 +85,13 @@ fn generate_sine_wave(frequency: f32, sample_rate: u32, duration: f32, amplitude
 }
 
 /// Generate a logarithmic sine sweep
-fn generate_sine_sweep(start_freq: f32, end_freq: f32, sample_rate: u32, duration: f32, amplitude: f32) -> Vec<f32> {
+fn generate_sine_sweep(
+    start_freq: f32,
+    end_freq: f32,
+    sample_rate: u32,
+    duration: f32,
+    amplitude: f32,
+) -> Vec<f32> {
     let num_samples = (sample_rate as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples * 2);
 
@@ -225,7 +231,11 @@ fn generate_step_signal(sample_rate: u32, duration_secs: f32, step_at_secs: f32)
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let amplitude = if i < step_sample { quiet_amplitude } else { loud_amplitude };
+        let amplitude = if i < step_sample {
+            quiet_amplitude
+        } else {
+            loud_amplitude
+        };
         let sample = (2.0 * PI * frequency * t).sin() * amplitude;
         samples.push(sample); // Left
         samples.push(sample); // Right
@@ -235,7 +245,11 @@ fn generate_step_signal(sample_rate: u32, duration_secs: f32, step_at_secs: f32)
 }
 
 /// Generate a release test signal (loud then quiet)
-fn generate_release_step_signal(sample_rate: u32, duration_secs: f32, step_at_secs: f32) -> Vec<f32> {
+fn generate_release_step_signal(
+    sample_rate: u32,
+    duration_secs: f32,
+    step_at_secs: f32,
+) -> Vec<f32> {
     let num_samples = (sample_rate as f32 * duration_secs) as usize;
     let step_sample = (sample_rate as f32 * step_at_secs) as usize;
 
@@ -247,7 +261,11 @@ fn generate_release_step_signal(sample_rate: u32, duration_secs: f32, step_at_se
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let amplitude = if i < step_sample { loud_amplitude } else { quiet_amplitude };
+        let amplitude = if i < step_sample {
+            loud_amplitude
+        } else {
+            quiet_amplitude
+        };
         let sample = (2.0 * PI * frequency * t).sin() * amplitude;
         samples.push(sample);
         samples.push(sample);
@@ -261,7 +279,7 @@ fn generate_asymmetric_stereo(sample_rate: u32, duration_secs: f32) -> Vec<f32> 
     let num_samples = (sample_rate as f32 * duration_secs) as usize;
     let frequency = 1000.0;
 
-    let left_amplitude = db_to_linear(-6.0);  // Loud left channel
+    let left_amplitude = db_to_linear(-6.0); // Loud left channel
     let right_amplitude = db_to_linear(-30.0); // Quiet right channel
 
     let mut samples = Vec::with_capacity(num_samples * 2);
@@ -269,7 +287,7 @@ fn generate_asymmetric_stereo(sample_rate: u32, duration_secs: f32) -> Vec<f32> 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
         let base = (2.0 * PI * frequency * t).sin();
-        samples.push(base * left_amplitude);  // Left
+        samples.push(base * left_amplitude); // Left
         samples.push(base * right_amplitude); // Right
     }
 
@@ -296,7 +314,7 @@ fn generate_drum_like_signal(sample_rate: u32, duration_secs: f32, bpm: f32) -> 
         // Position within beat
         let beat_pos = i % beat_samples;
         let attack_samples = (sample_rate as f32 * 0.002) as usize; // 2ms attack
-        let decay_samples = (sample_rate as f32 * 0.05) as usize;   // 50ms decay
+        let decay_samples = (sample_rate as f32 * 0.05) as usize; // 50ms decay
 
         // Transient envelope
         let transient = if beat_pos < attack_samples {
@@ -336,12 +354,7 @@ fn measure_envelope(samples: &[f32], sample_rate: u32, window_ms: f32) -> Vec<f3
 
 /// Measure attack time: time for gain reduction to reach 63% of final value
 /// Returns time in milliseconds
-fn measure_attack_time(
-    input: &[f32],
-    output: &[f32],
-    sample_rate: u32,
-    step_sample: usize,
-) -> f32 {
+fn measure_attack_time(input: &[f32], output: &[f32], sample_rate: u32, step_sample: usize) -> f32 {
     let input_mono = extract_mono(input, 0);
     let output_mono = extract_mono(output, 0);
 
@@ -349,7 +362,11 @@ fn measure_attack_time(
     let pre_window = 1000.min(step_sample);
     let pre_input_rms = calculate_rms(&input_mono[step_sample - pre_window..step_sample]);
     let pre_output_rms = calculate_rms(&output_mono[step_sample - pre_window..step_sample]);
-    let initial_gain = if pre_input_rms > 0.0 { pre_output_rms / pre_input_rms } else { 1.0 };
+    let initial_gain = if pre_input_rms > 0.0 {
+        pre_output_rms / pre_input_rms
+    } else {
+        1.0
+    };
 
     // Calculate steady-state gain after compression settles
     // Use window well after attack should have completed
@@ -357,7 +374,11 @@ fn measure_attack_time(
     let settle_start = (step_sample + settle_window).min(input_mono.len() - 1000);
     let post_input_rms = calculate_rms(&input_mono[settle_start..settle_start + 1000]);
     let post_output_rms = calculate_rms(&output_mono[settle_start..settle_start + 1000]);
-    let final_gain = if post_input_rms > 0.0 { post_output_rms / post_input_rms } else { 1.0 };
+    let final_gain = if post_input_rms > 0.0 {
+        post_output_rms / post_input_rms
+    } else {
+        1.0
+    };
 
     // Target gain at 63% of transition (1 time constant)
     let target_gain = initial_gain + (final_gain - initial_gain) * 0.632;
@@ -368,11 +389,16 @@ fn measure_attack_time(
     for i in (step_sample..input_mono.len() - window_samples).step_by(window_samples / 2) {
         let input_rms = calculate_rms(&input_mono[i..i + window_samples]);
         let output_rms = calculate_rms(&output_mono[i..i + window_samples]);
-        let current_gain = if input_rms > 0.0 { output_rms / input_rms } else { 1.0 };
+        let current_gain = if input_rms > 0.0 {
+            output_rms / input_rms
+        } else {
+            1.0
+        };
 
         // Check if we've reached 63% of the way to final gain
-        if (initial_gain > final_gain && current_gain <= target_gain) ||
-           (initial_gain < final_gain && current_gain >= target_gain) {
+        if (initial_gain > final_gain && current_gain <= target_gain)
+            || (initial_gain < final_gain && current_gain >= target_gain)
+        {
             return ((i - step_sample) as f32 / sample_rate as f32) * 1000.0;
         }
     }
@@ -395,14 +421,22 @@ fn measure_release_time(
     let pre_window = 1000.min(step_sample);
     let pre_input_rms = calculate_rms(&input_mono[step_sample - pre_window..step_sample]);
     let pre_output_rms = calculate_rms(&output_mono[step_sample - pre_window..step_sample]);
-    let compressed_gain = if pre_input_rms > 0.0 { pre_output_rms / pre_input_rms } else { 1.0 };
+    let compressed_gain = if pre_input_rms > 0.0 {
+        pre_output_rms / pre_input_rms
+    } else {
+        1.0
+    };
 
     // Calculate final gain after release settles (should return toward unity)
     let settle_window = (sample_rate as f32 * 0.5) as usize; // 500ms after step
     let settle_start = (step_sample + settle_window).min(input_mono.len() - 1000);
     let post_input_rms = calculate_rms(&input_mono[settle_start..settle_start + 1000]);
     let post_output_rms = calculate_rms(&output_mono[settle_start..settle_start + 1000]);
-    let final_gain = if post_input_rms > 0.0 { post_output_rms / post_input_rms } else { 1.0 };
+    let final_gain = if post_input_rms > 0.0 {
+        post_output_rms / post_input_rms
+    } else {
+        1.0
+    };
 
     // Target gain at 63% recovery
     let target_gain = compressed_gain + (final_gain - compressed_gain) * 0.632;
@@ -412,7 +446,11 @@ fn measure_release_time(
     for i in (step_sample..input_mono.len() - window_samples).step_by(window_samples / 2) {
         let input_rms = calculate_rms(&input_mono[i..i + window_samples]);
         let output_rms = calculate_rms(&output_mono[i..i + window_samples]);
-        let current_gain = if input_rms > 0.0 { output_rms / input_rms } else { 1.0 };
+        let current_gain = if input_rms > 0.0 {
+            output_rms / input_rms
+        } else {
+            1.0
+        };
 
         // Check if we've recovered 63% toward final gain
         if current_gain >= target_gain {
@@ -460,7 +498,9 @@ fn measure_compression_ratio(
     let n = input_above_threshold.len() as f32;
     let sum_x: f32 = input_above_threshold.iter().sum();
     let sum_y: f32 = output_levels.iter().sum();
-    let sum_xy: f32 = input_above_threshold.iter().zip(output_levels.iter())
+    let sum_xy: f32 = input_above_threshold
+        .iter()
+        .zip(output_levels.iter())
         .map(|(x, y)| x * y)
         .sum();
     let sum_x2: f32 = input_above_threshold.iter().map(|x| x * x).sum();
@@ -558,8 +598,8 @@ fn measure_knee_behavior(
         if knee_start.is_some() && knee_end.is_none() {
             // Check if we're in linear compression region (constant slope)
             if i >= 2 {
-                let prev_slope = gain_curve[i-1].1 - gain_curve[i-2].1;
-                let curr_slope = gain - gain_curve[i-1].1;
+                let prev_slope = gain_curve[i - 1].1 - gain_curve[i - 2].1;
+                let curr_slope = gain - gain_curve[i - 1].1;
                 if (curr_slope - prev_slope).abs() < 0.1 && input_offset > 0.0 {
                     knee_end = Some(input_offset);
                 }
@@ -588,14 +628,19 @@ fn measure_knee_behavior(
 
             // At knee_progress=0 (start), gain=0; at knee_progress=1 (end), gain=full compression
             // Quadratic: gain = progress^2 * max_reduction
-            let expected_reduction = knee_progress * knee_progress *
-                (input_offset.max(0.0) / compressor.settings().ratio);
+            let expected_reduction = knee_progress
+                * knee_progress
+                * (input_offset.max(0.0) / compressor.settings().ratio);
 
             total_error += (actual_gain + expected_reduction).abs();
         }
     }
 
-    let avg_error = if error_count > 0 { total_error / error_count as f32 } else { 0.0 };
+    let avg_error = if error_count > 0 {
+        total_error / error_count as f32
+    } else {
+        0.0
+    };
 
     (measured_knee, avg_error)
 }
@@ -640,26 +685,21 @@ fn measure_pumping(input: &[f32], output: &[f32], sample_rate: u32) -> (f32, f32
     }
 
     // Calculate gain envelope
-    let gain_envelope: Vec<f32> = input_envelope.iter()
+    let gain_envelope: Vec<f32> = input_envelope
+        .iter()
         .zip(output_envelope.iter())
-        .map(|(inp, out)| {
-            if *inp > 0.001 {
-                out / inp
-            } else {
-                1.0
-            }
-        })
+        .map(|(inp, out)| if *inp > 0.001 { out / inp } else { 1.0 })
         .collect();
 
     // Measure gain variation (pumping amount)
-    let gain_db: Vec<f32> = gain_envelope.iter()
-        .map(|g| linear_to_db(*g))
-        .collect();
+    let gain_db: Vec<f32> = gain_envelope.iter().map(|g| linear_to_db(*g)).collect();
 
     let mean_gain_db: f32 = gain_db.iter().sum::<f32>() / gain_db.len() as f32;
-    let variance: f32 = gain_db.iter()
+    let variance: f32 = gain_db
+        .iter()
         .map(|g| (g - mean_gain_db).powi(2))
-        .sum::<f32>() / gain_db.len() as f32;
+        .sum::<f32>()
+        / gain_db.len() as f32;
 
     let pumping_amount_db = variance.sqrt() * 2.0; // ~95% of variation
 
@@ -669,7 +709,7 @@ fn measure_pumping(input: &[f32], output: &[f32], sample_rate: u32) -> (f32, f32
     let dc_removed: Vec<f32> = gain_db.iter().map(|g| g - mean_gain_db).collect();
 
     for i in 1..dc_removed.len() {
-        if (dc_removed[i] >= 0.0) != (dc_removed[i-1] >= 0.0) {
+        if (dc_removed[i] >= 0.0) != (dc_removed[i - 1] >= 0.0) {
             zero_crossings += 1;
         }
     }
@@ -720,7 +760,9 @@ fn test_attack_time_accuracy_fast() {
     assert!(
         measured_attack >= min_expected && measured_attack <= max_expected,
         "Attack time {:.2}ms outside expected range [{:.1}, {:.1}]ms",
-        measured_attack, min_expected, max_expected
+        measured_attack,
+        min_expected,
+        max_expected
     );
 }
 
@@ -760,7 +802,9 @@ fn test_attack_time_accuracy_slow() {
     assert!(
         measured_attack >= min_expected && measured_attack <= max_expected,
         "Attack time {:.2}ms outside expected range [{:.1}, {:.1}]ms",
-        measured_attack, min_expected, max_expected
+        measured_attack,
+        min_expected,
+        max_expected
     );
 }
 
@@ -806,7 +850,9 @@ fn test_release_time_accuracy_fast() {
     assert!(
         measured_release >= min_expected && measured_release <= max_expected,
         "Release time {:.2}ms outside expected range [{:.1}, {:.1}]ms",
-        measured_release, min_expected, max_expected
+        measured_release,
+        min_expected,
+        max_expected
     );
 }
 
@@ -844,7 +890,9 @@ fn test_release_time_accuracy_slow() {
     assert!(
         measured_release >= min_expected && measured_release <= max_expected,
         "Release time {:.2}ms outside expected range [{:.1}, {:.1}]ms",
-        measured_release, min_expected, max_expected
+        measured_release,
+        min_expected,
+        max_expected
     );
 }
 
@@ -881,7 +929,9 @@ fn test_ratio_accuracy_2_to_1() {
     assert!(
         measured_ratio >= min_ratio && measured_ratio <= max_ratio,
         "Ratio {:.2}:1 outside expected range [{:.1}, {:.1}]:1",
-        measured_ratio, min_ratio, max_ratio
+        measured_ratio,
+        min_ratio,
+        max_ratio
     );
 }
 
@@ -913,7 +963,9 @@ fn test_ratio_accuracy_4_to_1() {
     assert!(
         measured_ratio >= min_ratio && measured_ratio <= max_ratio,
         "Ratio {:.2}:1 outside expected range [{:.1}, {:.1}]:1",
-        measured_ratio, min_ratio, max_ratio
+        measured_ratio,
+        min_ratio,
+        max_ratio
     );
 }
 
@@ -946,7 +998,9 @@ fn test_ratio_accuracy_10_to_1_limiting() {
     assert!(
         measured_ratio >= min_ratio && measured_ratio <= max_ratio,
         "Ratio {:.2}:1 outside expected range [{:.1}, {:.1}]:1",
-        measured_ratio, min_ratio, max_ratio
+        measured_ratio,
+        min_ratio,
+        max_ratio
     );
 }
 
@@ -981,7 +1035,8 @@ fn test_threshold_accuracy() {
     assert!(
         error <= tolerance_db,
         "Threshold error {:.1}dB exceeds tolerance of {:.1}dB",
-        error, tolerance_db
+        error,
+        tolerance_db
     );
 }
 
@@ -1011,7 +1066,8 @@ fn test_threshold_accuracy_low() {
     assert!(
         error <= tolerance_db,
         "Threshold error {:.1}dB exceeds tolerance of {:.1}dB",
-        error, tolerance_db
+        error,
+        tolerance_db
     );
 }
 
@@ -1031,12 +1087,8 @@ fn test_hard_knee_behavior() {
     };
 
     let mut compressor = Compressor::with_settings(settings);
-    let (measured_knee, curve_error) = measure_knee_behavior(
-        &mut compressor,
-        SAMPLE_RATE,
-        -20.0,
-        0.0
-    );
+    let (measured_knee, curve_error) =
+        measure_knee_behavior(&mut compressor, SAMPLE_RATE, -20.0, 0.0);
 
     println!("Hard Knee Test:");
     println!("  Expected knee width: 0.0 dB (hard)");
@@ -1065,12 +1117,8 @@ fn test_soft_knee_behavior() {
     };
 
     let mut compressor = Compressor::with_settings(settings);
-    let (measured_knee, curve_error) = measure_knee_behavior(
-        &mut compressor,
-        SAMPLE_RATE,
-        -20.0,
-        expected_knee
-    );
+    let (measured_knee, curve_error) =
+        measure_knee_behavior(&mut compressor, SAMPLE_RATE, -20.0, expected_knee);
 
     println!("Soft Knee Test:");
     println!("  Expected knee width: {:.1} dB", expected_knee);
@@ -1086,7 +1134,8 @@ fn test_soft_knee_behavior() {
     assert!(
         error <= tolerance,
         "Knee width error {:.1}dB exceeds tolerance of {:.1}dB",
-        error, tolerance
+        error,
+        tolerance
     );
 }
 
@@ -1194,7 +1243,10 @@ fn test_stereo_linking_equal_compression() {
     println!("  Right input RMS: {:.2} dB", linear_to_db(right_input_rms));
     println!("  Left gain: {:.2} dB", left_gain_db);
     println!("  Right gain: {:.2} dB", right_gain_db);
-    println!("  Gain difference: {:.3} dB", (left_gain_db - right_gain_db).abs());
+    println!(
+        "  Gain difference: {:.3} dB",
+        (left_gain_db - right_gain_db).abs()
+    );
 
     // With proper stereo linking, both channels should have the same gain
     // (determined by the louder channel)
@@ -1246,7 +1298,10 @@ fn test_stereo_image_preservation() {
     println!("Stereo Image Preservation Test:");
     println!("  Input L/R balance: {:.2}", input_balance);
     println!("  Output L/R balance: {:.2}", output_balance);
-    println!("  Balance change: {:.2}%", (output_balance / input_balance - 1.0) * 100.0);
+    println!(
+        "  Balance change: {:.2}%",
+        (output_balance / input_balance - 1.0) * 100.0
+    );
 
     // Stereo balance should be preserved (within 10%)
     let balance_change = (output_balance / input_balance - 1.0).abs();
@@ -1288,7 +1343,10 @@ fn test_thd_during_light_compression() {
 
     println!("THD+N During Light Compression:");
     println!("  THD+N: {:.3}%", thd_plus_n);
-    println!("  THD+N: {:.1} dB", -20.0 * (100.0_f32 / thd_plus_n).log10());
+    println!(
+        "  THD+N: {:.1} dB",
+        -20.0 * (100.0_f32 / thd_plus_n).log10()
+    );
 
     // Light compression should add minimal distortion
     // Allow up to 5% THD+N (due to simple DFT measurement limitations)
@@ -1324,7 +1382,10 @@ fn test_thd_during_heavy_compression() {
 
     println!("THD+N During Heavy Compression:");
     println!("  THD+N: {:.3}%", thd_plus_n);
-    println!("  THD+N: {:.1} dB", -20.0 * (100.0_f32 / thd_plus_n).log10());
+    println!(
+        "  THD+N: {:.1} dB",
+        -20.0 * (100.0_f32 / thd_plus_n).log10()
+    );
 
     // Heavy compression will add more distortion, but should still be reasonable
     // Allow up to 10% THD+N for heavy compression
@@ -1361,11 +1422,7 @@ fn test_thd_with_swept_sine() {
     println!("  Output peak: {:.2} dB", linear_to_db(peak));
 
     // Should not clip
-    assert!(
-        peak < 1.0,
-        "Output clipping detected (peak {:.3})",
-        peak
-    );
+    assert!(peak < 1.0, "Output clipping detected (peak {:.3})", peak);
 }
 
 // =============================================================================
@@ -1510,7 +1567,8 @@ fn test_extreme_ratio_20_to_1() {
     assert!(
         (output_db - expected_output_rms_db).abs() < tolerance,
         "Extreme ratio output {:.1}dB differs from expected {:.1}dB",
-        output_db, expected_output_rms_db
+        output_db,
+        expected_output_rms_db
     );
 }
 
@@ -1622,8 +1680,14 @@ fn test_sample_rate_independence() {
     }
 
     // Gains should be consistent across sample rates (within 1dB)
-    let max_gain = results.iter().map(|(_, g)| *g).fold(f32::NEG_INFINITY, f32::max);
-    let min_gain = results.iter().map(|(_, g)| *g).fold(f32::INFINITY, f32::min);
+    let max_gain = results
+        .iter()
+        .map(|(_, g)| *g)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let min_gain = results
+        .iter()
+        .map(|(_, g)| *g)
+        .fold(f32::INFINITY, f32::min);
     let variation = max_gain - min_gain;
 
     assert!(
@@ -1768,8 +1832,8 @@ fn comprehensive_compressor_validation() {
         compressor.process(&mut signal, SAMPLE_RATE);
 
         let skip = (SAMPLE_RATE as f32 * 0.1) as usize;
-        let left = extract_mono(&signal[skip*2..], 0);
-        let right = extract_mono(&signal[skip*2..], 1);
+        let left = extract_mono(&signal[skip * 2..], 0);
+        let right = extract_mono(&signal[skip * 2..], 1);
 
         let left_rms = calculate_rms(&left);
         let right_rms = calculate_rms(&right);
@@ -1817,10 +1881,7 @@ fn comprehensive_compressor_validation() {
                 error
             ));
         } else if error.abs() > 0.5 {
-            warnings.push(format!(
-                "Makeup gain: {:.2}dB error",
-                error
-            ));
+            warnings.push(format!("Makeup gain: {:.2}dB error", error));
         }
     }
 

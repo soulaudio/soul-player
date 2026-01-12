@@ -224,7 +224,7 @@ impl DsdConverter {
             let shaped = self.noise_shaper.process(sample, channel);
 
             // 1-bit quantization
-            let bit = if shaped >= 0.0 { 1u8 } else { 0u8 };
+            let bit = u8::from(shaped >= 0.0);
 
             // Feedback quantization error
             // Error is (quantized - input) so positive error pushes integrators negative

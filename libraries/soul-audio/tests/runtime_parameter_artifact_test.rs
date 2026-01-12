@@ -15,8 +15,8 @@
 //! 3. **RMS level tracking**: Sudden RMS changes indicate discontinuities.
 
 use soul_audio::effects::{
-    AudioEffect, Compressor, Crossfeed, CrossfeedPreset, EqBand, GraphicEq,
-    Limiter, LimiterSettings, ParametricEq, StereoEnhancer,
+    AudioEffect, Compressor, Crossfeed, CrossfeedPreset, EqBand, GraphicEq, Limiter,
+    LimiterSettings, ParametricEq, StereoEnhancer,
 };
 use std::f32::consts::PI;
 

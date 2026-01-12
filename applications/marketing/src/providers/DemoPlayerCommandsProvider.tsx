@@ -72,9 +72,46 @@ export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }
         getManagerOrThrow().setVolume(volumePercent);
       },
 
-      async setShuffle(enabled: boolean) {
+      async setShuffle(mode: 'off' | 'random' | 'smart') {
         const ShuffleMode = (await import('@/lib/demo/types')).ShuffleMode;
-        getManagerOrThrow().setShuffle(enabled ? ShuffleMode.Random : ShuffleMode.Off);
+        const modeMap = {
+          off: ShuffleMode.Off,
+          random: ShuffleMode.Random,
+          smart: ShuffleMode.Smart,
+        };
+        getManagerOrThrow().setShuffle(modeMap[mode]);
+      },
+
+      async cycleShuffle() {
+        const ShuffleMode = (await import('@/lib/demo/types')).ShuffleMode;
+        const currentMode = getManagerOrThrow().getShuffleMode();
+
+        // Cycle: Off → Random → Smart → Off
+        const nextMode = currentMode === ShuffleMode.Off
+          ? ShuffleMode.Random
+          : currentMode === ShuffleMode.Random
+          ? ShuffleMode.Smart
+          : ShuffleMode.Off;
+
+        getManagerOrThrow().setShuffle(nextMode);
+
+        // Return string representation
+        return nextMode === ShuffleMode.Off
+          ? 'off'
+          : nextMode === ShuffleMode.Random
+          ? 'random'
+          : 'smart';
+      },
+
+      async getShuffle() {
+        const ShuffleMode = (await import('@/lib/demo/types')).ShuffleMode;
+        const currentMode = getManagerOrThrow().getShuffleMode();
+
+        return currentMode === ShuffleMode.Off
+          ? 'off'
+          : currentMode === ShuffleMode.Random
+          ? 'random'
+          : 'smart';
       },
 
       async setRepeatMode(mode: 'off' | 'all' | 'one') {
@@ -172,6 +209,33 @@ export function DemoPlayerCommandsProvider({ children }: { children: ReactNode }
       async skipToQueueIndex(index: number) {
         // Use the manager's built-in method that maintains history
         await getManagerOrThrow().skipToQueueIndex(index);
+      },
+
+      // Three-tier queue operations
+      async addPlayNext(track) {
+        const storage = (await import('@/lib/demo/storage')).getDemoStorage();
+        const demoTrack = storage.getTrackById(track.trackId);
+        if (!demoTrack) throw new Error(`Track ${track.trackId} not found`);
+
+        const queueTrack = storage.toQueueTrack(demoTrack);
+        getManagerOrThrow().addToQueueNext(queueTrack);
+      },
+
+      async addToQueueEnd(track) {
+        const storage = (await import('@/lib/demo/storage')).getDemoStorage();
+        const demoTrack = storage.getTrackById(track.trackId);
+        if (!demoTrack) throw new Error(`Track ${track.trackId} not found`);
+
+        const queueTrack = storage.toQueueTrack(demoTrack);
+        getManagerOrThrow().addToQueueEnd(queueTrack);
+      },
+
+      async clearPlayNext() {
+        getManagerOrThrow().clearPlayNext();
+      },
+
+      async clearAddToQueue() {
+        getManagerOrThrow().clearAddToQueue();
       },
 
       async getAllSources() {

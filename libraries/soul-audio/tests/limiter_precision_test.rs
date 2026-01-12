@@ -33,7 +33,12 @@ const SAMPLE_RATE: u32 = 44100;
 // =============================================================================
 
 /// Generate a stereo sine wave at the given frequency and amplitude
-fn generate_sine_wave(frequency: f32, sample_rate: u32, num_samples: usize, amplitude: f32) -> Vec<f32> {
+fn generate_sine_wave(
+    frequency: f32,
+    sample_rate: u32,
+    num_samples: usize,
+    amplitude: f32,
+) -> Vec<f32> {
     let mut buffer = Vec::with_capacity(num_samples * 2);
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
@@ -49,14 +54,18 @@ fn generate_sine_wave(frequency: f32, sample_rate: u32, num_samples: usize, ampl
 fn generate_impulse(num_samples: usize, impulse_position: usize, amplitude: f32) -> Vec<f32> {
     let mut buffer = vec![0.0_f32; num_samples * 2];
     if impulse_position < num_samples {
-        buffer[impulse_position * 2] = amplitude;     // Left
+        buffer[impulse_position * 2] = amplitude; // Left
         buffer[impulse_position * 2 + 1] = amplitude; // Right
     }
     buffer
 }
 
 /// Generate multiple random impulses at various levels
-fn generate_random_impulses(num_samples: usize, num_impulses: usize, max_amplitude: f32) -> Vec<f32> {
+fn generate_random_impulses(
+    num_samples: usize,
+    num_impulses: usize,
+    max_amplitude: f32,
+) -> Vec<f32> {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -81,7 +90,13 @@ fn generate_random_impulses(num_samples: usize, num_impulses: usize, max_amplitu
 }
 
 /// Generate a clipped (hard-limited) sine wave - tests limiter with already-distorted input
-fn generate_clipped_sine(frequency: f32, sample_rate: u32, num_samples: usize, amplitude: f32, clip_level: f32) -> Vec<f32> {
+fn generate_clipped_sine(
+    frequency: f32,
+    sample_rate: u32,
+    num_samples: usize,
+    amplitude: f32,
+    clip_level: f32,
+) -> Vec<f32> {
     let mut buffer = Vec::with_capacity(num_samples * 2);
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
@@ -122,7 +137,11 @@ fn generate_intersample_peak_signal(sample_rate: u32, num_samples: usize) -> Vec
 
 /// Generate a worst-case intersample peak signal that's normalized to a target sample peak
 /// The true peak will be sqrt(2) times higher than the sample peak
-fn generate_normalized_isp_signal(sample_rate: u32, num_samples: usize, target_sample_peak: f32) -> Vec<f32> {
+fn generate_normalized_isp_signal(
+    sample_rate: u32,
+    num_samples: usize,
+    target_sample_peak: f32,
+) -> Vec<f32> {
     // Scale so sample values hit target_sample_peak
     // True peak will be target_sample_peak / 0.707 = target_sample_peak * sqrt(2)
     let frequency = sample_rate as f32 / 4.0;
@@ -140,7 +159,12 @@ fn generate_normalized_isp_signal(sample_rate: u32, num_samples: usize, target_s
 }
 
 /// Generate a square wave (maximum harmonic content, tests limiter with rich harmonics)
-fn generate_square_wave(frequency: f32, sample_rate: u32, num_samples: usize, amplitude: f32) -> Vec<f32> {
+fn generate_square_wave(
+    frequency: f32,
+    sample_rate: u32,
+    num_samples: usize,
+    amplitude: f32,
+) -> Vec<f32> {
     let mut buffer = Vec::with_capacity(num_samples * 2);
     let period = sample_rate as f32 / frequency;
 
@@ -265,12 +289,11 @@ fn estimate_true_peak_4x(buffer: &[f32]) -> f32 {
                 let t3 = t2 * t;
 
                 // Catmull-Rom spline formula
-                let interpolated = 0.5 * (
-                    (2.0 * p1) +
-                    (-p0 + p2) * t +
-                    (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 +
-                    (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
-                );
+                let interpolated = 0.5
+                    * ((2.0 * p1)
+                        + (-p0 + p2) * t
+                        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+                        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3);
                 max_peak = max_peak.max(interpolated.abs());
             }
         }
@@ -552,10 +575,25 @@ mod intersample_peak_tests {
         let theoretical_isp_db = linear_to_db(theoretical_true_peak) - linear_to_db(sample_peak);
 
         println!("True peak estimator validation:");
-        println!("  Sample peak: {:.4} ({:.2} dB)", sample_peak, linear_to_db(sample_peak));
-        println!("  Estimated true peak: {:.4} ({:.2} dB)", true_peak, linear_to_db(true_peak));
-        println!("  Theoretical true peak: {:.4} ({:.2} dB)", theoretical_true_peak, linear_to_db(theoretical_true_peak));
-        println!("  Detected ISP: {:.2} dB (theoretical: {:.2} dB)", isp_db, theoretical_isp_db);
+        println!(
+            "  Sample peak: {:.4} ({:.2} dB)",
+            sample_peak,
+            linear_to_db(sample_peak)
+        );
+        println!(
+            "  Estimated true peak: {:.4} ({:.2} dB)",
+            true_peak,
+            linear_to_db(true_peak)
+        );
+        println!(
+            "  Theoretical true peak: {:.4} ({:.2} dB)",
+            theoretical_true_peak,
+            linear_to_db(theoretical_true_peak)
+        );
+        println!(
+            "  Detected ISP: {:.2} dB (theoretical: {:.2} dB)",
+            isp_db, theoretical_isp_db
+        );
 
         // The estimator should detect at least 1 dB of ISP (theoretical is ~3 dB)
         // This validates the estimator is working, even if not perfectly accurate
@@ -585,14 +623,21 @@ mod intersample_peak_tests {
         let input_true_peak = estimate_true_peak_4x(&buffer);
         let true_peak_excess_db = linear_to_db(input_true_peak) - linear_to_db(input_sample_peak);
 
+        println!("Intersample test signal characteristics:");
         println!(
-            "Intersample test signal characteristics:");
+            "  Sample peak: {:.3} ({:.1} dB)",
+            input_sample_peak,
+            linear_to_db(input_sample_peak)
+        );
         println!(
-            "  Sample peak: {:.3} ({:.1} dB)", input_sample_peak, linear_to_db(input_sample_peak));
+            "  True peak: {:.3} ({:.1} dB)",
+            input_true_peak,
+            linear_to_db(input_true_peak)
+        );
         println!(
-            "  True peak: {:.3} ({:.1} dB)", input_true_peak, linear_to_db(input_true_peak));
-        println!(
-            "  ISP excess: {:.1} dB (expected ~3 dB)", true_peak_excess_db);
+            "  ISP excess: {:.1} dB (expected ~3 dB)",
+            true_peak_excess_db
+        );
 
         // Apply limiter with threshold at -1 dB
         // A sample-peak limiter will see 0.707 (-3 dB) and won't limit
@@ -609,12 +654,17 @@ mod intersample_peak_tests {
         let output_true_peak = estimate_true_peak_4x(&limited_buffer);
         let threshold_linear = db_to_linear(-1.0);
 
+        println!("After limiting (threshold -1 dB):");
         println!(
-            "After limiting (threshold -1 dB):");
+            "  Output sample peak: {:.3} ({:.1} dB)",
+            output_sample_peak,
+            linear_to_db(output_sample_peak)
+        );
         println!(
-            "  Output sample peak: {:.3} ({:.1} dB)", output_sample_peak, linear_to_db(output_sample_peak));
-        println!(
-            "  Output true peak: {:.3} ({:.1} dB)", output_true_peak, linear_to_db(output_true_peak));
+            "  Output true peak: {:.3} ({:.1} dB)",
+            output_true_peak,
+            linear_to_db(output_true_peak)
+        );
 
         // For a proper true-peak limiter, the TRUE PEAK should be at or below threshold
         let true_peak_exceeds = output_true_peak > threshold_linear + 0.02;
@@ -698,8 +748,10 @@ mod intersample_peak_tests {
             let true_peak = estimate_true_peak_4x(&buffer);
             let isp_db = linear_to_db(true_peak) - linear_to_db(sample_peak);
 
-            println!("{}: sample_peak={:.3}, true_peak={:.3}, ISP potential = {:.2} dB",
-                     description, sample_peak, true_peak, isp_db);
+            println!(
+                "{}: sample_peak={:.3}, true_peak={:.3}, ISP potential = {:.2} dB",
+                description, sample_peak, true_peak, isp_db
+            );
         }
     }
 
@@ -722,11 +774,24 @@ mod intersample_peak_tests {
         let input_true_peak = estimate_true_peak_4x(&buffer);
 
         println!("Normalized ISP test:");
-        println!("  Threshold: {:.3} ({:.1} dB)", threshold_linear, threshold_db);
-        println!("  Input sample peak: {:.3} ({:.1} dB)", input_sample_peak, linear_to_db(input_sample_peak));
-        println!("  Input true peak: {:.3} ({:.1} dB)", input_true_peak, linear_to_db(input_true_peak));
-        println!("  ISP excess over threshold: {:.1} dB",
-                 linear_to_db(input_true_peak) - threshold_db);
+        println!(
+            "  Threshold: {:.3} ({:.1} dB)",
+            threshold_linear, threshold_db
+        );
+        println!(
+            "  Input sample peak: {:.3} ({:.1} dB)",
+            input_sample_peak,
+            linear_to_db(input_sample_peak)
+        );
+        println!(
+            "  Input true peak: {:.3} ({:.1} dB)",
+            input_true_peak,
+            linear_to_db(input_true_peak)
+        );
+        println!(
+            "  ISP excess over threshold: {:.1} dB",
+            linear_to_db(input_true_peak) - threshold_db
+        );
 
         // Apply limiter
         let mut limiter = Limiter::with_settings(LimiterSettings {
@@ -740,8 +805,16 @@ mod intersample_peak_tests {
         let output_true_peak = estimate_true_peak_4x(&buffer);
 
         println!("After limiting:");
-        println!("  Output sample peak: {:.3} ({:.1} dB)", output_sample_peak, linear_to_db(output_sample_peak));
-        println!("  Output true peak: {:.3} ({:.1} dB)", output_true_peak, linear_to_db(output_true_peak));
+        println!(
+            "  Output sample peak: {:.3} ({:.1} dB)",
+            output_sample_peak,
+            linear_to_db(output_sample_peak)
+        );
+        println!(
+            "  Output true peak: {:.3} ({:.1} dB)",
+            output_true_peak,
+            linear_to_db(output_true_peak)
+        );
 
         // BUG DETECTION: If output true peak > threshold, this limiter doesn't handle ISP
         let isp_bug_detected = output_true_peak > threshold_linear * 1.02; // 0.2 dB tolerance
@@ -750,8 +823,10 @@ mod intersample_peak_tests {
             println!("\n  BUG DETECTED: Intersample peaks not handled!");
             println!("  The limiter uses sample-peak detection, not true-peak detection.");
             println!("  Per ITU-R BS.1770, broadcast limiters require 4x oversampling.");
-            println!("  True peak exceeds threshold by {:.1} dB",
-                     linear_to_db(output_true_peak) - threshold_db);
+            println!(
+                "  True peak exceeds threshold by {:.1} dB",
+                linear_to_db(output_true_peak) - threshold_db
+            );
         }
 
         // Document the issue but don't necessarily fail
@@ -775,9 +850,20 @@ mod intersample_peak_tests {
         let input_true_peak = estimate_true_peak_4x(&buffer);
 
         println!("ISP at boundary test:");
-        println!("  Threshold: {:.3} ({:.1} dB)", threshold_linear, threshold_db);
-        println!("  Input sample peak: {:.3} ({:.1} dB) - BELOW threshold", input_sample_peak, linear_to_db(input_sample_peak));
-        println!("  Input true peak: {:.3} ({:.1} dB) - AT threshold", input_true_peak, linear_to_db(input_true_peak));
+        println!(
+            "  Threshold: {:.3} ({:.1} dB)",
+            threshold_linear, threshold_db
+        );
+        println!(
+            "  Input sample peak: {:.3} ({:.1} dB) - BELOW threshold",
+            input_sample_peak,
+            linear_to_db(input_sample_peak)
+        );
+        println!(
+            "  Input true peak: {:.3} ({:.1} dB) - AT threshold",
+            input_true_peak,
+            linear_to_db(input_true_peak)
+        );
 
         // Apply limiter
         let mut limiter = Limiter::with_settings(LimiterSettings {
@@ -791,8 +877,16 @@ mod intersample_peak_tests {
         let output_true_peak = estimate_true_peak_4x(&buffer);
 
         println!("After limiting:");
-        println!("  Output sample peak: {:.3} ({:.1} dB)", output_sample_peak, linear_to_db(output_sample_peak));
-        println!("  Output true peak: {:.3} ({:.1} dB)", output_true_peak, linear_to_db(output_true_peak));
+        println!(
+            "  Output sample peak: {:.3} ({:.1} dB)",
+            output_sample_peak,
+            linear_to_db(output_sample_peak)
+        );
+        println!(
+            "  Output true peak: {:.3} ({:.1} dB)",
+            output_true_peak,
+            linear_to_db(output_true_peak)
+        );
 
         // A sample-peak limiter won't engage at all (sample peak is 3 dB below threshold)
         // A true-peak limiter should just barely engage (true peak at threshold)
@@ -800,8 +894,11 @@ mod intersample_peak_tests {
 
         if !was_limited {
             println!("\n  KNOWN LIMITATION: Sample-peak limiter doesn't engage");
-            println!("  because sample values ({:.1} dB) are below threshold ({:.1} dB).",
-                     linear_to_db(input_sample_peak), threshold_db);
+            println!(
+                "  because sample values ({:.1} dB) are below threshold ({:.1} dB).",
+                linear_to_db(input_sample_peak),
+                threshold_db
+            );
             println!("  A true-peak limiter would need to engage here.");
         }
     }
@@ -827,9 +924,9 @@ mod attack_time_tests {
 
         // Generate a signal that goes from silence to loud instantly
         let mut buffer = vec![0.0_f32; 256]; // 128 stereo samples of silence
-        // Then instant peak
+                                             // Then instant peak
         for i in 64..128 {
-            buffer[i * 2] = 2.0;     // Well above threshold
+            buffer[i * 2] = 2.0; // Well above threshold
             buffer[i * 2 + 1] = 2.0;
         }
 
@@ -899,7 +996,9 @@ mod attack_time_tests {
         let samples_above_threshold: Vec<(usize, f32)> = buffer
             .chunks(2)
             .enumerate()
-            .filter(|(_, chunk)| chunk[0].abs() > threshold_linear || chunk[1].abs() > threshold_linear)
+            .filter(|(_, chunk)| {
+                chunk[0].abs() > threshold_linear || chunk[1].abs() > threshold_linear
+            })
             .map(|(i, chunk)| (i, chunk[0].abs().max(chunk[1].abs())))
             .collect();
 
@@ -918,7 +1017,10 @@ mod attack_time_tests {
             "Found {} samples above threshold. First at sample {}.\n\
              For brickwall limiting, attack must be instant (or use lookahead).",
             samples_above_threshold.len(),
-            samples_above_threshold.first().map(|(i, _)| *i).unwrap_or(0)
+            samples_above_threshold
+                .first()
+                .map(|(i, _)| *i)
+                .unwrap_or(0)
         );
     }
 }
@@ -951,7 +1053,8 @@ mod release_behavior_tests {
 
         // Measure the envelope of the quiet signal (should be recovering)
         let mut gain_readings: Vec<f32> = Vec::new();
-        for chunk in quiet_buffer.chunks(2 * 441) { // Every 10ms
+        for chunk in quiet_buffer.chunks(2 * 441) {
+            // Every 10ms
             let rms = calculate_rms(chunk);
             let apparent_gain = rms / (quiet_amplitude / 2.0_f32.sqrt()); // Normalize to expected RMS
             gain_readings.push(apparent_gain);
@@ -963,9 +1066,7 @@ mod release_behavior_tests {
 
         println!(
             "Release behavior: initial_gain={:.3}, final_gain={:.3}, readings={:?}",
-            initial_gain,
-            final_gain,
-            gain_readings
+            initial_gain, final_gain, gain_readings
         );
 
         // Initial gain should be lower (limiter was engaged)
@@ -1039,11 +1140,11 @@ mod release_behavior_tests {
             let t = i as f32 / SAMPLE_RATE as f32;
             // Sum of multiple frequencies with amplitude modulation
             let envelope = 0.5 + 0.5 * (2.0 * PI * 2.0 * t).sin(); // 2 Hz modulation
-            let sample = envelope * 1.5 * (
-                (2.0 * PI * 200.0 * t).sin() * 0.5 +
-                (2.0 * PI * 400.0 * t).sin() * 0.3 +
-                (2.0 * PI * 800.0 * t).sin() * 0.2
-            );
+            let sample = envelope
+                * 1.5
+                * ((2.0 * PI * 200.0 * t).sin() * 0.5
+                    + (2.0 * PI * 400.0 * t).sin() * 0.3
+                    + (2.0 * PI * 800.0 * t).sin() * 0.2);
             buffer.push(sample);
             buffer.push(sample);
         }
@@ -1054,7 +1155,8 @@ mod release_behavior_tests {
         let mut gain_variations = 0;
         let mut prev_gain = 1.0_f32;
 
-        for chunk in buffer.chunks(441 * 2) { // 10ms chunks
+        for chunk in buffer.chunks(441 * 2) {
+            // 10ms chunks
             let chunk_peak = find_peak(chunk);
             if chunk_peak > 0.01 {
                 let gain = chunk_peak / 1.5; // Rough estimate
@@ -1065,7 +1167,10 @@ mod release_behavior_tests {
             }
         }
 
-        println!("Pumping test: {} significant gain variations", gain_variations);
+        println!(
+            "Pumping test: {} significant gain variations",
+            gain_variations
+        );
 
         // Some variation is expected, but excessive pumping is a problem
         assert!(
@@ -1143,7 +1248,9 @@ mod thd_tests {
         limiter.process(&mut buffer, SAMPLE_RATE);
 
         // Signal should be essentially unchanged
-        let max_diff = buffer.iter().zip(&original)
+        let max_diff = buffer
+            .iter()
+            .zip(&original)
             .map(|(a, b)| (a - b).abs())
             .fold(0.0_f32, f32::max);
 
@@ -1155,8 +1262,7 @@ mod thd_tests {
 
         println!(
             "Below-threshold signal: max_diff={:.6} ({:.1} dB below input)",
-            max_diff,
-            -diff_db
+            max_diff, -diff_db
         );
 
         // Difference should be very small
@@ -1228,7 +1334,9 @@ mod sample_rate_tests {
             // (relative to time, not sample count)
             println!(
                 "Release test at {} Hz: {} samples for {} ms",
-                sr, quiet_samples, release_ms * 3.0
+                sr,
+                quiet_samples,
+                release_ms * 3.0
             );
         }
     }
@@ -1395,7 +1503,10 @@ mod edge_case_tests {
         limiter.process(&mut buffer, SAMPLE_RATE);
 
         for sample in &buffer {
-            assert!(sample.is_finite(), "Denormal input produced non-finite output");
+            assert!(
+                sample.is_finite(),
+                "Denormal input produced non-finite output"
+            );
         }
     }
 

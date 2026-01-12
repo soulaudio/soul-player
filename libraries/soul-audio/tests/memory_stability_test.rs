@@ -256,7 +256,9 @@ fn test_effect_chain_long_run_8_hours_simulated() {
     geq.set_preset(GraphicEqPreset::Rock);
     chain.add_effect(Box::new(geq));
 
-    chain.add_effect(Box::new(StereoEnhancer::with_settings(StereoSettings::wide())));
+    chain.add_effect(Box::new(StereoEnhancer::with_settings(
+        StereoSettings::wide(),
+    )));
 
     let mut crossfeed = Crossfeed::new();
     crossfeed.set_preset(CrossfeedPreset::Natural);
@@ -266,7 +268,9 @@ fn test_effect_chain_long_run_8_hours_simulated() {
     chain.add_effect(Box::new(Compressor::with_settings(
         CompressorSettings::moderate(),
     )));
-    chain.add_effect(Box::new(Limiter::with_settings(LimiterSettings::brickwall())));
+    chain.add_effect(Box::new(Limiter::with_settings(
+        LimiterSettings::brickwall(),
+    )));
 
     chain.set_enabled(true);
 
@@ -651,8 +655,12 @@ fn test_verify_no_accumulation_effect_chains() {
         chain.add_effect(Box::new(Compressor::with_settings(
             CompressorSettings::moderate(),
         )));
-        chain.add_effect(Box::new(Limiter::with_settings(LimiterSettings::brickwall())));
-        chain.add_effect(Box::new(StereoEnhancer::with_settings(StereoSettings::wide())));
+        chain.add_effect(Box::new(Limiter::with_settings(
+            LimiterSettings::brickwall(),
+        )));
+        chain.add_effect(Box::new(StereoEnhancer::with_settings(
+            StereoSettings::wide(),
+        )));
         chain.add_effect(Box::new(Crossfeed::with_preset(CrossfeedPreset::Natural)));
 
         chain.set_enabled(true);
@@ -935,8 +943,14 @@ fn test_stress_all_effects_simultaneously() {
 fn test_resampler_continuous_use_no_leak() {
     // Use resampler continuously and verify no memory leak
 
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 44100, 96000, 2, ResamplingQuality::High).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        96000,
+        2,
+        ResamplingQuality::High,
+    )
+    .unwrap();
 
     let initial_mem = get_process_memory_bytes();
 
@@ -1067,10 +1081,7 @@ fn test_processing_time_stability_over_long_run() {
     // Check that later phases aren't significantly slower
     if let (Some(first), Some(last)) = (phase_times.first(), phase_times.last()) {
         let slowdown = last.as_secs_f64() / first.as_secs_f64();
-        println!(
-            "Slowdown ratio (last/first): {:.2}x",
-            slowdown
-        );
+        println!("Slowdown ratio (last/first): {:.2}x", slowdown);
 
         // Should not slow down significantly (allow 2x for OS scheduling variance)
         assert!(
@@ -1179,7 +1190,9 @@ fn test_extreme_buffer_size_transitions() {
     chain.set_enabled(true);
 
     // Alternate between tiny and huge buffers
-    let sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192];
+    let sizes = [
+        1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192,
+    ];
 
     for cycle in 0..50 {
         for &size in &sizes {

@@ -8,10 +8,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Play, ListMusic, Clock, Trash2, Pencil } from 'lucide-react'
 import { useBackend, type BackendPlaylist, type BackendTrack } from '../contexts/BackendContext'
-import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { ConfirmDialog } from '../components/ui/Dialog'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { TrackMenu } from '../components/TrackMenu'
 
 export function PlaylistPage() {
@@ -28,6 +29,12 @@ export function PlaylistPage() {
   const [error, setError] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'playlist' | 'track'; trackId?: number } | null>(null)
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
+
+  // Add to playlist dialog state
+  const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
+    id: number
+    title: string
+  } | null>(null)
   const [playlistArtworkUrl, setPlaylistArtworkUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -73,6 +80,38 @@ export function PlaylistPage() {
       setLoading(false)
     }
   }
+
+  // Convert BackendTrack to QueueTrack
+  const toQueueTrack = useCallback((track: BackendTrack): QueueTrack => ({
+    trackId: String(track.id),
+    title: track.title || 'Unknown',
+    artist: track.artist_name || 'Unknown Artist',
+    album: track.album_title || null,
+    albumId: track.album_id,
+    filePath: track.file_path || '',
+    durationSeconds: track.duration_seconds || null,
+    trackNumber: track.track_number || null,
+    coverArtPath: track.cover_art_path,
+  }), [])
+
+  // Queue operation handlers
+  const handlePlayNext = useCallback(async (track: BackendTrack) => {
+    try {
+      const queueTrack = toQueueTrack(track)
+      await commands.addPlayNext(queueTrack)
+    } catch (error) {
+      console.error('[PlaylistPage] Failed to add track to play next:', error)
+    }
+  }, [commands, toQueueTrack])
+
+  const handleAddToQueue = useCallback(async (track: BackendTrack) => {
+    try {
+      const queueTrack = toQueueTrack(track)
+      await commands.addToQueueEnd(queueTrack)
+    } catch (error) {
+      console.error('[PlaylistPage] Failed to add track to queue:', error)
+    }
+  }, [commands, toQueueTrack])
 
   const handlePlayAll = async () => {
     if (tracks.length === 0) return
@@ -217,6 +256,7 @@ export function PlaylistPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={handlePlayAll}
+                onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
                 disabled={tracks.length === 0}
                 className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50"
               >
@@ -280,6 +320,14 @@ export function PlaylistPage() {
                     <div onClick={(e) => e.stopPropagation()}>
                       <TrackMenu
                         track={track}
+                        onPlayNext={() => handlePlayNext(track)}
+                        onAddToQueue={() => handleAddToQueue(track)}
+                        onAddToPlaylist={() => {
+                          setSelectedTrackForPlaylist({
+                            id: track.id,
+                            title: track.title,
+                          })
+                        }}
                         onDelete={async () => {
                           await backend.deleteTrack(track.id)
                           if (id) loadPlaylist(id)
@@ -328,6 +376,16 @@ export function PlaylistPage() {
         currentArtworkUrl={playlistArtworkUrl}
         onArtworkChanged={() => loadPlaylistArtwork(playlist.id)}
       />
+
+      {/* Add to Playlist Dialog (Desktop only) */}
+      {features.canCreatePlaylists && selectedTrackForPlaylist && (
+        <AddToPlaylistDialog
+          open={!!selectedTrackForPlaylist}
+          onClose={() => setSelectedTrackForPlaylist(null)}
+          trackId={selectedTrackForPlaylist.id}
+          trackTitle={selectedTrackForPlaylist.title}
+        />
+      )}
     </div>
   )
 }

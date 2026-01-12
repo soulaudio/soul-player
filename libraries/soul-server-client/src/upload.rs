@@ -189,7 +189,7 @@ fn mime_type_for_file(path: &Path) -> &'static str {
         Some("ogg") => "audio/ogg",
         Some("opus") => "audio/opus",
         Some("wav") => "audio/wav",
-        Some("m4a") | Some("aac") => "audio/mp4",
+        Some("m4a" | "aac") => "audio/mp4",
         _ => "application/octet-stream",
     }
 }

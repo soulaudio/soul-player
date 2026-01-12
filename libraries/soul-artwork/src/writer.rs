@@ -30,8 +30,11 @@ impl ArtworkWriter {
             tagged_file.first_tag_mut().ok_or(ArtworkError::NoTag)?
         };
 
-        // Remove existing front cover pictures
-        tag.remove_picture_type(PictureType::CoverFront);
+        // Remove ALL existing pictures (not just CoverFront)
+        // This ensures clean replacement and avoids duplicate/orphaned artwork
+        while let Some(_) = tag.pictures().first() {
+            tag.remove_picture(0);
+        }
 
         // Parse MIME type
         let mime_type = match artwork.mime_type.as_str() {
@@ -67,7 +70,10 @@ impl ArtworkWriter {
     /// # Arguments
     /// * `file_paths` - Paths to audio files
     /// * `artwork` - Artwork data to embed
-    pub fn write_to_files<P: AsRef<Path>>(file_paths: &[P], artwork: &ArtworkData) -> Vec<Result<()>> {
+    pub fn write_to_files<P: AsRef<Path>>(
+        file_paths: &[P],
+        artwork: &ArtworkData,
+    ) -> Vec<Result<()>> {
         file_paths
             .iter()
             .map(|path| Self::write_to_file(path.as_ref(), artwork))

@@ -128,18 +128,23 @@ export function useKeyboardShortcuts() {
 
   // Execute a shortcut action
   const executeAction = useCallback(async (action: ShortcutAction) => {
-    const { isPlaying, volume } = usePlayerStore.getState();
+    const { volume } = usePlayerStore.getState();
 
     try {
       switch (action) {
-        case 'play_pause':
-          // Use PlayerCommandsContext for consistency with UI buttons
+        case 'play_pause': {
+          // Query backend state directly to avoid race conditions
+          // Frontend store is updated via events which can lag by 50ms+
+          const backendState = await commands.getPlaybackState();
+          const isPlaying = backendState === 'Playing';
+
           if (isPlaying) {
             await commands.pausePlayback();
           } else {
             await commands.resumePlayback();
           }
           break;
+        }
 
         case 'next': {
           // Check capability before skipping (same as UI buttons)

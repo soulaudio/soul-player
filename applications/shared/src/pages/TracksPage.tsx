@@ -4,9 +4,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Music, Search, X } from 'lucide-react'
+import { Music } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
-import { FeatureGate } from '../contexts/PlatformContext'
+import { LibraryPageLayout } from '../components/LibraryPageLayout'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
 import { type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { removeConsecutiveDuplicates } from '../utils/queue'
@@ -96,90 +96,36 @@ export function TracksPage() {
     [buildQueueFromTracks, filteredTracks]
   )
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">{t('common.loading')}</p>
-        </div>
+  // Show error in LibraryPageLayout if present
+  const errorContent = error ? (
+    <div className="flex items-center justify-center py-12">
+      <div className="text-center text-destructive">
+        <p className="font-medium mb-2">{t('library.loadFailed')}</p>
+        <p className="text-sm">{error}</p>
+        <button
+          onClick={loadTracks}
+          className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+        >
+          {t('common.retry')}
+        </button>
       </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-destructive">
-          <p className="font-medium mb-2">{t('library.loadFailed')}</p>
-          <p className="text-sm">{error}</p>
-          <button
-            onClick={loadTracks}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-          >
-            {t('common.retry')}
-          </button>
-        </div>
-      </div>
-    )
-  }
+    </div>
+  ) : null
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Health warning */}
-      <FeatureGate feature="hasHealthCheck">
-        {healthWarning && (
-          <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-5 h-5 rounded-full bg-yellow-500/20 flex items-center justify-center mt-0.5">
-                <span className="text-yellow-600 dark:text-yellow-400 text-sm">!</span>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">
-                  {t('library.databaseIssue')}
-                </p>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                  {healthWarning}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </FeatureGate>
-
-      {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-2xl sm:text-3xl font-bold">{t('library.tab.tracks')}</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {tracks.length} {t('library.tracks')}
-        </p>
-      </div>
-
-      {/* Search */}
-      <div className="flex items-center gap-4 mb-4">
-        <div className="relative flex-1 sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('library.search.tracks')}
-            className="w-full pl-10 pr-4 py-2 rounded-lg bg-muted border border-transparent focus:border-primary focus:outline-none text-sm"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto">
-        {filteredTracks.length > 0 ? (
+    <LibraryPageLayout
+      searchQuery={searchQuery}
+      setSearchQuery={setSearchQuery}
+      itemCount={tracks.length}
+      searchPlaceholderKey="library.search.tracksWithCount"
+      healthWarning={healthWarning}
+      isLoading={isLoading}
+      itemType="track"
+      gridClass="grid-cols-1"
+      cacheKey="library-tracks-count"
+    >
+      {errorContent || (filteredTracks.length > 0 ? (
+        <div>
           <TrackList
             tracks={filteredTracks.map(t => ({
               id: t.id,
@@ -196,18 +142,18 @@ export function TracksPage() {
             }))}
             buildQueue={buildQueue}
           />
-        ) : (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-            <Music className="w-12 h-12 mb-4 opacity-50" />
-            <p className="font-medium">
-              {searchQuery ? t('library.noSearchResults') : t('library.noTracks')}
-            </p>
-            <p className="text-sm mt-1">
-              {searchQuery ? t('library.tryDifferentSearch') : t('library.addTracks')}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <Music className="w-12 h-12 mb-4 opacity-50" />
+          <p className="font-medium">
+            {searchQuery ? t('library.noSearchResults') : t('library.noTracks')}
+          </p>
+          <p className="text-sm mt-1">
+            {searchQuery ? t('library.tryDifferentSearch') : t('library.addTracks')}
+          </p>
+        </div>
+      ))}
+    </LibraryPageLayout>
   )
 }

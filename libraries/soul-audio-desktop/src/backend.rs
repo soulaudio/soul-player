@@ -11,7 +11,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AudioBackend {
-    /// System default backend (WASAPI on Windows, CoreAudio on macOS, ALSA on Linux)
+    /// System default backend (WASAPI on Windows, `CoreAudio` on macOS, ALSA on Linux)
     Default,
 
     /// ASIO (Windows only) - Ultra-low latency, exclusive mode, professional audio

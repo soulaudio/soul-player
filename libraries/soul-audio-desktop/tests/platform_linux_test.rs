@@ -205,7 +205,10 @@ mod alsa_direct_tests {
 
         // On Linux, "exclusive mode" means direct ALSA access
         // (bypassing PulseAudio if possible)
-        assert!(config.exclusive_mode, "Exclusive mode should be enabled by default");
+        assert!(
+            config.exclusive_mode,
+            "Exclusive mode should be enabled by default"
+        );
         assert_eq!(config.backend, AudioBackend::Default);
     }
 
@@ -688,7 +691,10 @@ mod device_enumeration_tests {
                     eprintln!("  Max channels: {}", caps.max_channels);
                     eprintln!(
                         "  Bit depths: {:?}",
-                        caps.bit_depths.iter().map(|d| d.display_name()).collect::<Vec<_>>()
+                        caps.bit_depths
+                            .iter()
+                            .map(|d| d.display_name())
+                            .collect::<Vec<_>>()
                     );
                 }
             }

@@ -13,8 +13,8 @@
 //! - https://src.infinitewave.ca/
 
 use soul_audio::effects::{
-    AudioEffect, Compressor, CompressorSettings, Crossfeed, CrossfeedPreset,
-    Limiter, LimiterSettings, ParametricEq, StereoEnhancer,
+    AudioEffect, Compressor, CompressorSettings, Crossfeed, CrossfeedPreset, Limiter,
+    LimiterSettings, ParametricEq, StereoEnhancer,
 };
 use soul_audio::resampling::{Resampler, ResamplerBackend, ResamplingQuality};
 use std::f32::consts::PI;
@@ -192,11 +192,7 @@ const ITU_R_BS1770_REFERENCE_LUFS: f64 = -3.01;
 
 /// Infinite Wave methodology: Measure passband ripple
 /// Should be < 0.1 dB for high-quality resamplers
-fn measure_passband_ripple(
-    resampler: &mut Resampler,
-    input_rate: u32,
-    output_rate: u32,
-) -> f32 {
+fn measure_passband_ripple(resampler: &mut Resampler, input_rate: u32, output_rate: u32) -> f32 {
     let mut max_gain = f32::NEG_INFINITY;
     let mut min_gain = f32::INFINITY;
 
@@ -253,8 +249,14 @@ fn measure_passband_ripple(
 
 #[test]
 fn test_infinite_wave_passband_ripple_44_to_48() {
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 44100, 48000, 2, ResamplingQuality::High).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        48000,
+        2,
+        ResamplingQuality::High,
+    )
+    .unwrap();
 
     let ripple = measure_passband_ripple(&mut resampler, 44100, 48000);
 
@@ -267,8 +269,14 @@ fn test_infinite_wave_passband_ripple_44_to_48() {
 
 #[test]
 fn test_infinite_wave_passband_ripple_48_to_44() {
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 48000, 44100, 2, ResamplingQuality::High).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        48000,
+        44100,
+        2,
+        ResamplingQuality::High,
+    )
+    .unwrap();
 
     let ripple = measure_passband_ripple(&mut resampler, 48000, 44100);
 
@@ -282,8 +290,14 @@ fn test_infinite_wave_passband_ripple_48_to_44() {
 #[test]
 fn test_infinite_wave_snr_measurement() {
     // Infinite Wave methodology: SNR should be > 120dB for high-quality SRC
-    let mut resampler =
-        Resampler::new(ResamplerBackend::Auto, 44100, 96000, 2, ResamplingQuality::Maximum).unwrap();
+    let mut resampler = Resampler::new(
+        ResamplerBackend::Auto,
+        44100,
+        96000,
+        2,
+        ResamplingQuality::Maximum,
+    )
+    .unwrap();
 
     // Generate test signal
     let test_signal = generate_aes17_test_tone(44100, 0.5, -20.0);
@@ -376,7 +390,8 @@ fn test_gapless_sweep_continuity() {
         if idx_before < sweep.len() {
             assert_eq!(
                 concatenated[idx_before], sweep[idx_before],
-                "GAPLESS BUG: Sample mismatch before join at offset -{}", offset
+                "GAPLESS BUG: Sample mismatch before join at offset -{}",
+                offset
             );
         }
         // After join point
@@ -384,7 +399,8 @@ fn test_gapless_sweep_continuity() {
         if idx_after < sweep.len() {
             assert_eq!(
                 concatenated[idx_after], sweep[idx_after],
-                "GAPLESS BUG: Sample mismatch after join at offset +{}", offset
+                "GAPLESS BUG: Sample mismatch after join at offset +{}",
+                offset
             );
         }
     }
@@ -413,7 +429,11 @@ fn test_gapless_sweep_continuity() {
         .sqrt()
         / rms_window as f32;
 
-    let rms_ratio = if rms_before > 0.0 { rms_after / rms_before } else { 1.0 };
+    let rms_ratio = if rms_before > 0.0 {
+        rms_after / rms_before
+    } else {
+        1.0
+    };
 
     // RMS should be within 10% across the join (energy continuity)
     assert!(
@@ -508,9 +528,13 @@ fn test_limiter_never_exceeds_ceiling() {
         // Impulse
         vec![0.0, 0.0, 2.0, 2.0, 0.0, 0.0],
         // Square wave (harsh transients)
-        (0..1000).map(|i| if i % 100 < 50 { 1.5 } else { -1.5 }).collect(),
+        (0..1000)
+            .map(|i| if i % 100 < 50 { 1.5 } else { -1.5 })
+            .collect(),
         // Random peaks
-        (0..1000).map(|i| ((i * 7) % 13) as f32 / 6.5 - 1.0).collect(),
+        (0..1000)
+            .map(|i| ((i * 7) % 13) as f32 / 6.5 - 1.0)
+            .collect(),
     ];
 
     for (idx, signal) in test_signals.iter().enumerate() {

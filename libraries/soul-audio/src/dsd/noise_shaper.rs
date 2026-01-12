@@ -82,9 +82,9 @@ impl NoiseShaper {
 
         // Process through each integrator stage
         // Each stage adds the input to its state and passes to next
-        for i in 0..order {
-            integrators[i] += x;
-            x = integrators[i];
+        for integrator in integrators.iter_mut().take(order) {
+            *integrator += x;
+            x = *integrator;
         }
 
         x

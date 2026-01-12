@@ -163,15 +163,27 @@ fn test_volume_bounds_are_enforced() {
 
     let result = output.set_volume(-0.5);
     assert!(result.is_err(), "Negative volume should fail");
-    assert_eq!(output.volume(), original_volume, "Volume should not change on error");
+    assert_eq!(
+        output.volume(),
+        original_volume,
+        "Volume should not change on error"
+    );
 
     let result = output.set_volume(2.0);
     assert!(result.is_err(), "Volume > 1.0 should fail");
-    assert_eq!(output.volume(), original_volume, "Volume should not change on error");
+    assert_eq!(
+        output.volume(),
+        original_volume,
+        "Volume should not change on error"
+    );
 
     let result = output.set_volume(f32::NAN);
     assert!(result.is_err(), "NaN volume should fail");
-    assert_eq!(output.volume(), original_volume, "Volume should not change on error");
+    assert_eq!(
+        output.volume(),
+        original_volume,
+        "Volume should not change on error"
+    );
 }
 
 #[test]

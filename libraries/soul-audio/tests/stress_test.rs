@@ -128,7 +128,12 @@ fn test_effect_chain_long_run_5_minutes_simulated() {
 
         // Check EVERY buffer - periodic checks miss intermittent bugs
         for (sample_idx, sample) in buffer.iter().enumerate() {
-            assert!(sample.is_finite(), "Non-finite at buffer {}, sample {}", i, sample_idx);
+            assert!(
+                sample.is_finite(),
+                "Non-finite at buffer {}, sample {}",
+                i,
+                sample_idx
+            );
             // Full effect chain may boost, but should stay in reasonable range
             assert!(
                 sample.abs() < 2.0,

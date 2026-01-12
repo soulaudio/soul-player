@@ -9,11 +9,11 @@ import { type BackendPlaylist } from '../contexts/BackendContext'
 
 interface PlaylistCardProps {
   playlist: BackendPlaylist
-  /** Card width class (default: w-40) */
+  /** Card width class (default: w-full for responsive grid) */
   className?: string
 }
 
-export function PlaylistCard({ playlist, className = 'w-40' }: PlaylistCardProps) {
+export function PlaylistCard({ playlist, className = 'w-full' }: PlaylistCardProps) {
   const { t } = useTranslation()
 
   return (

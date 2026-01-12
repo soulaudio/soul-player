@@ -34,11 +34,7 @@ impl HeadroomParams {
     }
 
     /// Create params for auto mode with gain values
-    pub fn auto_with_gains(
-        replaygain_db: f64,
-        preamp_db: f64,
-        eq_max_boost_db: f64,
-    ) -> Self {
+    pub fn auto_with_gains(replaygain_db: f64, preamp_db: f64, eq_max_boost_db: f64) -> Self {
         Self {
             mode: HeadroomMode::Auto,
             replaygain_db: Some(replaygain_db),
@@ -73,15 +69,15 @@ impl HeadroomParams {
 
 impl PipelineComponent for HeadroomManager {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        self.process_with_sample_rate(buffer, sample_rate)
+        self.process_with_sample_rate(buffer, sample_rate);
     }
 
     fn reset(&mut self) {
-        HeadroomManager::reset(self)
+        HeadroomManager::reset(self);
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        HeadroomManager::set_enabled(self, enabled)
+        HeadroomManager::set_enabled(self, enabled);
     }
 
     fn is_enabled(&self) -> bool {

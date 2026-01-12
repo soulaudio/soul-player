@@ -132,6 +132,34 @@ display.text("Play");
 
 **Why**: Enables internationalization from day 1, easier to maintain, professional UX.
 
+### 8. Structured Logging Only
+ALL logging MUST use the `tracing` crate - NEVER use `println!`, `eprintln!`, or `dbg!()`:
+- Desktop/Server: Use `tracing::info!()`, `tracing::warn!()`, `tracing::error!()`, `tracing::debug!()`
+- Logs are captured by the tracing subscriber and written to both console and file (when `--logs` flag is enabled)
+- ONLY exception: `init_logging()` function itself may use `eprintln!` before logging is initialized
+- Use appropriate log levels: `debug!` for verbose details, `info!` for normal operation, `warn!` for recoverable issues, `error!` for failures
+
+```rust
+// ✅ CORRECT
+tracing::info!("[SCAN] Processing: {}", file_path.display());
+tracing::error!("[SCAN] TIMEOUT on file: {}", file_path.display());
+tracing::debug!("[play_queue] Calling stop()...");
+
+// ❌ WRONG
+eprintln!("[SCAN] Processing: {}", file_path.display());
+println!("Processing file: {}", file_path);
+dbg!(file_path);
+```
+
+**Why**: Ensures all logs are captured in log files for debugging, provides consistent log formatting, enables filtering by log level, allows structured logging with key-value pairs.
+
+**Desktop Logging**: Run with `yarn dev:desktop:logs` or `--logs` flag to enable file logging. Logs are saved to:
+- **Windows**: `%APPDATA%\Soul Player\logs\soul-player.log.YYYY-MM-DD`
+- **macOS**: `~/Library/Application Support/soul-player/logs/soul-player.log.YYYY-MM-DD`
+- **Linux**: `~/.config/soul-player/logs/soul-player.log.YYYY-MM-DD`
+
+See [LOGGING.md](./LOGGING.md) for detailed logging documentation.
+
 ---
 
 ## Essential Commands
@@ -481,6 +509,18 @@ export interface BackendInterface {
 ```typescript
 // WRONG - use commands.playQueue() instead
 await backend.playQueue(queue, 0)  // ❌
+```
+
+❌ **Direct invoke() in keyboard shortcuts**
+```typescript
+// WRONG - bypasses PlayerCommandsContext
+await invoke('pause_playback')  // ❌
+await invoke('next_track')       // ❌
+
+// CORRECT - use PlayerCommandsContext
+const commands = usePlayerCommands()
+await commands.pausePlayback()  // ✅
+await commands.skipNext()        // ✅
 ```
 
 ✅ **Correct Separation**

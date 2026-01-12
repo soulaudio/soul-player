@@ -110,6 +110,7 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
         .create_if_missing(true) // Create database file if it doesn't exist
         .journal_mode(SqliteJournalMode::Wal) // Use WAL mode for better concurrency
         .busy_timeout(std::time::Duration::from_secs(30)); // Wait up to 30s for locks
+                                                           // Note: SQLite defaults to UTF-8 encoding on all modern systems
 
     eprintln!("[soul-storage] ✓ Options configured");
 

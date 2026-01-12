@@ -158,7 +158,10 @@ mod bs2b_preset_verification {
         let settings = crossfeed.settings();
 
         // BS2B default is 700Hz/4.5dB
-        assert_eq!(settings.cutoff_hz, 700.0, "Natural cutoff should be 700 Hz (BS2B default)");
+        assert_eq!(
+            settings.cutoff_hz, 700.0,
+            "Natural cutoff should be 700 Hz (BS2B default)"
+        );
         assert_eq!(
             settings.level_db, -4.5,
             "Natural level should be -4.5 dB (BS2B default)"
@@ -303,7 +306,10 @@ mod channel_separation_tests {
             if right_rms > 1e-10 {
                 let separation_db = 20.0 * (left_rms / right_rms).log10();
                 separations.push((freq, separation_db));
-                println!("{:.0} Hz: channel separation = {:.1} dB", freq, separation_db);
+                println!(
+                    "{:.0} Hz: channel separation = {:.1} dB",
+                    freq, separation_db
+                );
             }
         }
 
@@ -367,7 +373,10 @@ mod channel_separation_tests {
         // a preset with lower cutoff (Meier: 550Hz) attenuates 1kHz more than
         // a preset with higher cutoff (Natural: 700Hz), even if the level is higher.
         // This is by design - Meier shapes the frequency more aggressively.
-        assert!(results.len() == 3, "All presets should produce valid results");
+        assert!(
+            results.len() == 3,
+            "All presets should produce valid results"
+        );
 
         // All presets should produce finite separation values
         for (preset, sep) in &results {
@@ -440,7 +449,9 @@ mod lowpass_filter_tests {
         let _crossfeed = Crossfeed::with_settings(CrossfeedSettings::custom(-6.0, 700.0));
 
         // Measure crossfeed strength at different frequencies
-        let test_freqs = [100.0, 200.0, 350.0, 500.0, 700.0, 1000.0, 1400.0, 2000.0, 4000.0];
+        let test_freqs = [
+            100.0, 200.0, 350.0, 500.0, 700.0, 1000.0, 1400.0, 2000.0, 4000.0,
+        ];
         let mut responses: Vec<(f32, f32)> = Vec::new();
 
         for &freq in &test_freqs {
@@ -656,7 +667,9 @@ mod mono_handling_tests {
 
         println!("Mono signal level change: {:.2} dB", level_change_db);
         println!("NOTE: Crossfeed uses compensation = 1.0 / (1.0 + level)");
-        println!("      For Natural preset (level=-4.5dB, linear=0.596), this is 1.0/1.596 = 0.627");
+        println!(
+            "      For Natural preset (level=-4.5dB, linear=0.596), this is 1.0/1.596 = 0.627"
+        );
         println!("      For mono signal, output = input * (1 + level) * compensation = input");
         println!("      But at 1kHz with 700Hz LPF, crossfeed is attenuated, causing level drop");
 
@@ -751,10 +764,7 @@ mod frequency_response_tests {
         // Verify LPF characteristic: response should decrease at higher frequencies
         if responses.len() >= 2 {
             let low_response = responses.iter().find(|(f, _)| *f < 200.0).map(|(_, r)| *r);
-            let high_response = responses
-                .iter()
-                .find(|(f, _)| *f > 4000.0)
-                .map(|(_, r)| *r);
+            let high_response = responses.iter().find(|(f, _)| *f > 4000.0).map(|(_, r)| *r);
 
             if let (Some(low), Some(high)) = (low_response, high_response) {
                 let rolloff = low - high;
@@ -939,7 +949,10 @@ mod stability_tests {
         crossfeed.process(&mut buffer, SAMPLE_RATE);
 
         for sample in &buffer {
-            assert!(sample.is_finite(), "Small signal produced non-finite output");
+            assert!(
+                sample.is_finite(),
+                "Small signal produced non-finite output"
+            );
         }
 
         // Test with signals near clipping
@@ -985,22 +998,16 @@ mod stereo_image_tests {
         }
 
         // Measure original stereo width (difference between channels)
-        let original_diff: f32 = buffer
-            .chunks(2)
-            .map(|c| (c[0] - c[1]).abs())
-            .sum::<f32>()
-            / num_samples as f32;
+        let original_diff: f32 =
+            buffer.chunks(2).map(|c| (c[0] - c[1]).abs()).sum::<f32>() / num_samples as f32;
 
         // Apply crossfeed
         let mut crossfeed = Crossfeed::with_preset(CrossfeedPreset::Natural);
         crossfeed.process(&mut buffer, SAMPLE_RATE);
 
         // Measure new stereo width
-        let new_diff: f32 = buffer
-            .chunks(2)
-            .map(|c| (c[0] - c[1]).abs())
-            .sum::<f32>()
-            / num_samples as f32;
+        let new_diff: f32 =
+            buffer.chunks(2).map(|c| (c[0] - c[1]).abs()).sum::<f32>() / num_samples as f32;
 
         let width_reduction = (original_diff - new_diff) / original_diff * 100.0;
         println!(
@@ -1072,19 +1079,17 @@ mod stereo_image_tests {
 
         // All presets should reduce stereo width
         for (name, reduction) in &width_reductions {
-            assert!(
-                *reduction > 0.0,
-                "{} should reduce stereo width",
-                name
-            );
+            assert!(*reduction > 0.0, "{} should reduce stereo width", name);
         }
 
         // At 200Hz (below LPF cutoffs), preset with higher crossfeed level
         // should reduce width more. Meier has the most aggressive crossfeed.
         // If not, document as finding rather than failure.
         if width_reductions[2].1 <= width_reductions[0].1 {
-            println!("NOTE: Meier ({:.1}%) did not reduce width more than Natural ({:.1}%)",
-                width_reductions[2].1, width_reductions[0].1);
+            println!(
+                "NOTE: Meier ({:.1}%) did not reduce width more than Natural ({:.1}%)",
+                width_reductions[2].1, width_reductions[0].1
+            );
             println!("      This may be due to frequency-dependent gain compensation.");
         }
     }
@@ -1341,5 +1346,9 @@ fn test_crossfeed_implementation_summary() {
     println!("  - IEC 61606: Audio and audiovisual equipment");
     println!("============================================================\n");
 
-    assert_eq!(bugs_found, 0, "Industry standard tests detected {} issues", bugs_found);
+    assert_eq!(
+        bugs_found, 0,
+        "Industry standard tests detected {} issues",
+        bugs_found
+    );
 }

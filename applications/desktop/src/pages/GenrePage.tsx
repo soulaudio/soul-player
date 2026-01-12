@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack } from '@soul-player/shared';
+import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog } from '@soul-player/shared';
 import { ArrowLeft, Play, Guitar, Clock } from 'lucide-react';
 import { usePlaybackContext } from '../hooks/usePlaybackContext';
 
@@ -27,6 +27,12 @@ export function GenrePage() {
   const [tracks, setTracks] = useState<DesktopTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Add to playlist dialog state
+  const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
+    id: number
+    title: string
+  } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -232,6 +238,12 @@ export function GenrePage() {
             return (
               <TrackMenu
                 track={desktopTrack}
+                onAddToPlaylist={() => {
+                  setSelectedTrackForPlaylist({
+                    id: desktopTrack.id,
+                    title: desktopTrack.title,
+                  });
+                }}
                 onDelete={async () => {
                   await invoke('delete_track', { id: desktopTrack.id });
                   if (id) loadGenre(parseInt(id, 10));
@@ -241,6 +253,16 @@ export function GenrePage() {
           }}
         />
       </div>
+
+      {/* Add to Playlist Dialog */}
+      {selectedTrackForPlaylist && (
+        <AddToPlaylistDialog
+          open={!!selectedTrackForPlaylist}
+          onClose={() => setSelectedTrackForPlaylist(null)}
+          trackId={selectedTrackForPlaylist.id}
+          trackTitle={selectedTrackForPlaylist.title}
+        />
+      )}
     </div>
   );
 }

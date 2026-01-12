@@ -182,13 +182,12 @@ pub fn write_replaygain_tags<P: AsRef<Path>>(
 
     // Get or create the primary tag
     let tag_type = tagged_file.primary_tag_type();
-    let tag = match tagged_file.tag_mut(tag_type) {
-        Some(t) => t,
-        None => {
-            // Create a new tag if none exists
-            tagged_file.insert_tag(lofty::Tag::new(tag_type));
-            tagged_file.tag_mut(tag_type).unwrap()
-        }
+    let tag = if let Some(t) = tagged_file.tag_mut(tag_type) {
+        t
+    } else {
+        // Create a new tag if none exists
+        tagged_file.insert_tag(lofty::Tag::new(tag_type));
+        tagged_file.tag_mut(tag_type).unwrap()
     };
 
     // Write track gain tags

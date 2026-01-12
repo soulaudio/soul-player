@@ -13,14 +13,16 @@ export function ProgressBar() {
   const cleanupRef = React.useRef<(() => void) | null>(null);
 
   // Use seek position while dragging, otherwise use store progress
+  // Safety check: prevent division by zero and ensure valid percentage
   const displayProgress = isDragging && seekPosition !== null
-    ? (seekPosition / duration) * 100
+    ? (duration > 0 ? Math.min(100, (seekPosition / duration) * 100) : 0)
     : progress;
 
   // Calculate current time in seconds
   const currentTimeSeconds = isDragging && seekPosition !== null
     ? seekPosition
-    : (progress / 100) * duration;
+    : (duration > 0 ? (progress / 100) * duration : 0);
+
 
   // Cleanup any pending listeners on unmount
   React.useEffect(() => {
@@ -43,8 +45,9 @@ export function ProgressBar() {
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const width = rect.width;
-    const percentage = (clickX / width) * 100;
-    const newPosition = (percentage / 100) * duration;
+    const percentage = Math.max(0, Math.min(100, (clickX / width) * 100));
+    // Clamp to prevent seeking beyond track duration (leave 0.1s buffer to avoid EOF)
+    const newPosition = Math.min((percentage / 100) * duration, Math.max(0, duration - 0.1));
 
     handleSeekStart(newPosition);
 
@@ -53,7 +56,8 @@ export function ProgressBar() {
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const moveX = moveEvent.clientX - rect.left;
       const movePercentage = Math.max(0, Math.min(100, (moveX / width) * 100));
-      const movePosition = (movePercentage / 100) * duration;
+      // Clamp to prevent seeking beyond track duration (leave 0.1s buffer to avoid EOF)
+      const movePosition = Math.min((movePercentage / 100) * duration, Math.max(0, duration - 0.1));
       currentSeekPosition = movePosition;
       handleSeekChange(movePosition);
     };
@@ -83,13 +87,16 @@ export function ProgressBar() {
 
       {/* Progress bar */}
       <div
-        className="relative flex-1 h-2 bg-muted rounded-full cursor-pointer group"
+        className="relative flex-1 h-2 bg-muted rounded-full cursor-pointer group overflow-hidden"
         onMouseDown={handleMouseDown}
       >
         {/* Filled progress */}
         <div
           className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-100"
-          style={{ width: `${Math.max(0, Math.min(100, displayProgress))}%` }}
+          style={{
+            width: `${Math.max(0, Math.min(100, displayProgress))}%`,
+            maxWidth: '100%'
+          }}
         />
 
         {/* Seek handle */}

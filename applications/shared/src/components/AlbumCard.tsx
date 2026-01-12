@@ -16,13 +16,13 @@ export interface AlbumCardAlbum {
 
 interface AlbumCardProps {
   album: AlbumCardAlbum
-  /** Card width class (default: w-40) */
+  /** Card width class (default: w-full for responsive grid) */
   className?: string
   /** Show artist and year below title */
   showArtist?: boolean
 }
 
-export function AlbumCard({ album, className = 'w-40', showArtist = true }: AlbumCardProps) {
+export function AlbumCard({ album, className = 'w-full', showArtist = true }: AlbumCardProps) {
   return (
     <MediaCard
       type="album"

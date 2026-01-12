@@ -67,6 +67,9 @@
     --gradient-player: linear-gradient(to bottom, hsl(222.2 84% 4.9%) 0%, hsl(217.2 32.6% 17.5%) 100%);
     --gradient-sidebar: linear-gradient(to right, hsl(217.2 32.6% 17.5%) 0%, hsl(222.2 84% 4.9%) 100%);
     --gradient-waveform: linear-gradient(90deg, hsl(210 40% 98%) 0%, hsl(217.2 32.6% 17.5%) 100%);
+
+    /* Typography */
+    --font-sans: Inter, system-ui, sans-serif;
   }
 
   /* Ocean theme */
@@ -96,6 +99,9 @@
     --gradient-player: linear-gradient(to bottom, hsl(210 100% 97%) 0%, hsl(200 80% 92%) 100%);
     --gradient-sidebar: linear-gradient(to right, hsl(200 40% 92%) 0%, hsl(210 100% 97%) 100%);
     --gradient-waveform: linear-gradient(90deg, hsl(200 90% 50%) 0%, hsl(180 85% 55%) 50%, hsl(200 90% 50%) 100%);
+
+    /* Typography */
+    --font-sans: Inter, system-ui, sans-serif;
   }
 
   /* Earth theme - Deep evergreen with brown and amber accents */
@@ -139,16 +145,26 @@
     @apply bg-background text-foreground;
   }
 
-  /* Modern themed scrollbars */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  /* WebKit/Blink scrollbar styling (Chrome, Edge, Safari, Tauri) */
+  /* Note: Do NOT use scrollbar-width/scrollbar-color here as they override webkit pseudo-elements */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
   }
 
-  /* WebKit/Blink scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  /* Remove scrollbar arrow buttons globally */
+  ::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* Also target specific button positions to ensure removal */
+  ::-webkit-scrollbar-button:start:decrement,
+  ::-webkit-scrollbar-button:end:increment {
+    display: block;
+    width: 0;
+    height: 0;
   }
 
   ::-webkit-scrollbar-track {
@@ -178,33 +194,32 @@
   }
 
   /* Auto-hide scrollbars until hover */
-  .scrollbar-auto-hide {
-    scrollbar-width: none;
-  }
-
   .scrollbar-auto-hide::-webkit-scrollbar {
     width: 0;
     height: 0;
   }
 
-  .scrollbar-auto-hide:hover {
-    scrollbar-width: thin;
+  .scrollbar-auto-hide::-webkit-scrollbar-button {
+    display: none;
   }
 
   .scrollbar-auto-hide:hover::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 4px;
+    height: 4px;
+  }
+
+  .scrollbar-auto-hide:hover::-webkit-scrollbar-button {
+    display: none;
   }
 
   /* Queue scrollbar - overlay style with theme colors */
-  .queue-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
+  .queue-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    background: transparent;
   }
 
-  .queue-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    background: transparent;
+  .queue-scrollbar::-webkit-scrollbar-button {
+    display: none;
   }
 
   .queue-scrollbar::-webkit-scrollbar-track {
@@ -218,16 +233,48 @@
   }
 
   /* Show scrollbar on hover */
-  .group\/queue:hover .queue-scrollbar {
-    scrollbar-color: hsl(var(--primary) / 0.5) transparent;
-  }
-
   .group\/queue:hover .queue-scrollbar::-webkit-scrollbar-thumb {
     background: hsl(var(--primary) / 0.5);
   }
 
   .group\/queue:hover .queue-scrollbar::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--primary) / 0.7);
+  }
+
+  /* Custom scrollbar for library pages - simple thin bar, no buttons */
+  .scrollbar-custom::-webkit-scrollbar {
+    width: 4px;
+    background: transparent;
+  }
+
+  /* Remove arrow buttons completely */
+  .scrollbar-custom::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 0;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-track-piece {
+    background: transparent;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+    min-height: 30px;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 

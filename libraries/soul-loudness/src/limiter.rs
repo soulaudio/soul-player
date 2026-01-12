@@ -4,11 +4,12 @@
 //! Uses lookahead and soft-knee limiting for transparent operation.
 
 /// Lookahead presets for different use cases
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum LookaheadPreset {
     /// No lookahead (0ms) - instant limiting, may cause distortion on transients
     Instant,
     /// Balanced lookahead (1.5ms) - good tradeoff between latency and transparency
+    #[default]
     Balanced,
     /// Transparent lookahead (5ms) - minimal audible artifacts
     Transparent,
@@ -25,12 +26,6 @@ impl LookaheadPreset {
             Self::Transparent => 5.0,
             Self::Custom(ms) => *ms,
         }
-    }
-}
-
-impl Default for LookaheadPreset {
-    fn default() -> Self {
-        Self::Balanced
     }
 }
 

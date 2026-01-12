@@ -476,7 +476,10 @@ pub async fn get_playlists_containing_track(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().map(|row| PlaylistId::new(row.id)).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| PlaylistId::new(row.id))
+        .collect())
 }
 
 // Helper functions

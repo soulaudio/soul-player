@@ -739,7 +739,10 @@ mod nan_inf_recovery {
         let replaced = AudioSanitizer::sanitize(&mut buffer);
         assert_eq!(replaced, 2, "Should have replaced 2 values");
 
-        assert!(all_finite(&buffer), "Buffer should be fully finite after sanitization");
+        assert!(
+            all_finite(&buffer),
+            "Buffer should be fully finite after sanitization"
+        );
     }
 
     #[test]
@@ -830,7 +833,10 @@ mod nan_inf_recovery {
             "Later replacements should continue to fade"
         );
 
-        assert!(all_finite(&buffer), "Buffer should be finite after fade recovery");
+        assert!(
+            all_finite(&buffer),
+            "Buffer should be finite after fade recovery"
+        );
     }
 
     #[test]
@@ -981,17 +987,16 @@ mod effect_invalid_output {
         assert!(nan_count > 0, "Faulty effect should have produced NaN");
 
         // Verify we can detect the issue
-        assert!(
-            !all_finite(&buffer),
-            "Should detect NaN in buffer"
-        );
+        assert!(!all_finite(&buffer), "Should detect NaN in buffer");
     }
 
     #[test]
     fn test_limiter_clamps_extreme_values() {
         let mut chain = EffectChain::new();
         chain.add_effect(Box::new(FaultyEffect::new(FaultMode::ProduceExtremeValues)));
-        chain.add_effect(Box::new(Limiter::with_settings(LimiterSettings::brickwall())));
+        chain.add_effect(Box::new(Limiter::with_settings(
+            LimiterSettings::brickwall(),
+        )));
 
         let mut buffer = generate_stereo_sine(440.0, SAMPLE_RATE, 500);
         chain.process(&mut buffer, SAMPLE_RATE);
@@ -1042,7 +1047,10 @@ mod effect_invalid_output {
         // Second run should work fine until threshold again
         let mut buffer2 = vec![0.5; 50]; // Less than threshold
         faulty.process(&mut buffer2, SAMPLE_RATE);
-        assert!(all_finite(&buffer2), "After reset, short buffer should be clean");
+        assert!(
+            all_finite(&buffer2),
+            "After reset, short buffer should be clean"
+        );
     }
 
     #[test]
@@ -1101,7 +1109,10 @@ mod graceful_degradation {
         let mut new_eq = ParametricEq::new();
         let mut buffer = vec![0.5; 100];
         new_eq.process(&mut buffer, SAMPLE_RATE);
-        assert!(all_finite(&buffer), "Effect should work after panic handling");
+        assert!(
+            all_finite(&buffer),
+            "Effect should work after panic handling"
+        );
     }
 
     #[test]
@@ -1180,7 +1191,10 @@ mod graceful_degradation {
         let mut buffer3 = generate_stereo_sine(440.0, 44100, 500);
         eq.process(&mut buffer3, 44100);
 
-        assert!(all_finite(&buffer3), "Should handle sample rate restoration");
+        assert!(
+            all_finite(&buffer3),
+            "Should handle sample rate restoration"
+        );
     }
 
     #[test]
@@ -1296,7 +1310,11 @@ mod panic_recovery {
         }));
 
         assert!(result.is_ok(), "Normal processing should not panic");
-        assert_eq!(buffer.len(), original.len(), "Buffer length should be preserved");
+        assert_eq!(
+            buffer.len(),
+            original.len(),
+            "Buffer length should be preserved"
+        );
     }
 
     #[test]
@@ -1331,11 +1349,7 @@ mod panic_recovery {
                 effect.process(&mut buffer, SAMPLE_RATE);
             }));
 
-            assert!(
-                result.is_ok(),
-                "{} panicked on empty buffer",
-                effect.name()
-            );
+            assert!(result.is_ok(), "{} panicked on empty buffer", effect.name());
         }
     }
 
@@ -1368,7 +1382,10 @@ mod panic_recovery {
             let _ = decoder.decode(&PathBuf::from("\0invalid\0path\0"));
         });
 
-        assert!(result.is_ok(), "Decoder should handle invalid path without panic");
+        assert!(
+            result.is_ok(),
+            "Decoder should handle invalid path without panic"
+        );
     }
 }
 
@@ -1419,7 +1436,10 @@ mod stress_recovery {
         }
 
         // We injected 10 corruptions (every 100 iterations, i=50,150,250,...)
-        assert_eq!(corruption_injected, 10, "Should have injected 10 corruptions");
+        assert_eq!(
+            corruption_injected, 10,
+            "Should have injected 10 corruptions"
+        );
 
         // Note: Effects propagate NaN from their internal state (filter history),
         // so more buffers may be affected than just the ones we corrupted.

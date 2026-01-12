@@ -1,30 +1,38 @@
-//! Two-tier queue system
+//! Three-tier queue system
 //!
 //! Implements Spotify-style queue with:
-//! - Explicit queue: User-added tracks that play next
+//! - Play Next queue: User-added tracks that play immediately after current (LIFO)
+//! - Add to Queue: User-added tracks that play at the end (FIFO)
 //! - Source queue: Tracks from playlist/album
 
 use crate::types::QueueTrack;
 
-/// Two-tier queue for playback
+/// Three-tier queue for playback
 ///
 /// Structure:
 /// ```text
 /// Currently Playing: Track A
 /// ─────────────────────────────
-/// Explicit Queue (play next):
-///   - Track B (user added)
+/// Play Next Queue (LIFO, highest priority):
+///   - Track B (user added, plays next)
 ///   - Track C (user added)
 /// ─────────────────────────────
 /// Source Queue (from playlist/album):
 ///   - Track D
 ///   - Track E
 ///   - Track F
+/// ─────────────────────────────
+/// Add to Queue (FIFO, lowest priority):
+///   - Track G (user added)
+///   - Track H (user added)
 /// ```
 #[derive(Debug, Clone)]
 pub struct Queue {
-    /// Tracks explicitly added by user (play next)
-    explicit: Vec<QueueTrack>,
+    /// Tracks explicitly added to play next (LIFO - last added plays first)
+    play_next: Vec<QueueTrack>,
+
+    /// Tracks added to queue end (FIFO - first added plays first)
+    queued_later: Vec<QueueTrack>,
 
     /// Tracks from source (playlist/album)
     source: Vec<QueueTrack>,
@@ -43,7 +51,8 @@ impl Queue {
     /// Create new empty queue
     pub fn new() -> Self {
         Self {
-            explicit: Vec::new(),
+            play_next: Vec::new(),
+            queued_later: Vec::new(),
             source: Vec::new(),
             source_index: 0,
             original_source: Vec::new(),
@@ -51,26 +60,35 @@ impl Queue {
         }
     }
 
-    /// Add track to play next (at the front of explicit queue)
+    /// Add track to play next (highest priority, LIFO)
     ///
-    /// Track will play immediately after current track, before other explicit
-    /// queue tracks and before source queue tracks.
+    /// Track will play immediately after current track.
+    /// Multiple calls result in LIFO order (last added plays first).
     pub fn add_next(&mut self, track: QueueTrack) {
-        self.explicit.insert(0, track);
+        eprintln!("[Queue] add_next: '{}' (Play Next queue now has {} items)", track.title, self.play_next.len() + 1);
+        self.play_next.insert(0, track);
     }
 
-    /// Add track to end of explicit queue
+    /// Add track to queue end (lowest priority, FIFO)
     ///
-    /// Track will play after all other explicit queue tracks but before
-    /// source queue tracks.
+    /// Track will play after all Play Next and Source queue tracks.
+    /// Multiple calls result in FIFO order (first added plays first).
     pub fn add_to_end(&mut self, track: QueueTrack) {
-        self.explicit.push(track);
+        eprintln!("[Queue] add_to_end: '{}' (Add to Queue now has {} items)", track.title, self.queued_later.len() + 1);
+        self.queued_later.push(track);
     }
 
     /// Add tracks from source (playlist/album)
     ///
-    /// Replaces current source queue
+    /// Replaces current source queue.
+    /// Clears Play Next queue (new context), but keeps Add to Queue (Spotify behavior).
     pub fn set_source(&mut self, tracks: Vec<QueueTrack>) {
+        // Clear Play Next on new context (Spotify behavior)
+        self.play_next.clear();
+
+        // Keep Add to Queue (persists across contexts)
+        // This matches Spotify's behavior
+
         self.source.clone_from(&tracks);
         self.original_source = tracks;
         self.source_index = 0;
@@ -83,7 +101,7 @@ impl Queue {
         self.original_source.extend(tracks);
     }
 
-    /// Remove track from queue by index
+    /// Remove track from queue by index (in priority order)
     ///
     /// Returns the removed track if successful
     pub fn remove(&mut self, index: usize) -> Option<QueueTrack> {
@@ -92,26 +110,39 @@ impl Queue {
             return None;
         }
 
-        if index < self.explicit.len() {
-            // Remove from explicit queue
-            Some(self.explicit.remove(index))
-        } else {
+        let play_next_len = self.play_next.len();
+        let remaining_source = self.source.len().saturating_sub(self.source_index);
+
+        if index < play_next_len {
+            // Remove from Play Next queue
+            Some(self.play_next.remove(index))
+        } else if index < play_next_len + remaining_source {
             // Remove from source queue
-            let source_index = index - self.explicit.len();
-            let track = self.source.remove(source_index);
+            let source_idx = self.source_index + (index - play_next_len);
+            let track = self.source.remove(source_idx);
 
             // Also remove from original (to maintain consistency)
             if let Some(pos) = self.original_source.iter().position(|t| t.id == track.id) {
                 self.original_source.remove(pos);
             }
 
+            // Adjust source_index if we removed before current position
+            if source_idx < self.source_index {
+                self.source_index = self.source_index.saturating_sub(1);
+            }
+
             Some(track)
+        } else {
+            // Remove from Add to Queue
+            let queued_later_idx = index - play_next_len - remaining_source;
+            Some(self.queued_later.remove(queued_later_idx))
         }
     }
 
     /// Reorder track in queue
     ///
-    /// Moves track from `from_index` to `to_index`
+    /// Moves track from `from_index` to `to_index`.
+    /// Only allows reordering within the same tier for simplicity.
     pub fn reorder(&mut self, from_index: usize, to_index: usize) -> Result<(), String> {
         let total = self.len();
         if from_index >= total || to_index >= total {
@@ -122,39 +153,56 @@ impl Queue {
             return Ok(());
         }
 
-        // For simplicity, only allow reordering within same tier
-        let explicit_len = self.explicit.len();
+        let play_next_len = self.play_next.len();
+        let remaining_source = self.source.len().saturating_sub(self.source_index);
+        let source_end = play_next_len + remaining_source;
 
-        if from_index < explicit_len && to_index < explicit_len {
-            // Both in explicit queue
-            let track = self.explicit.remove(from_index);
-            self.explicit.insert(to_index, track);
+        if from_index < play_next_len && to_index < play_next_len {
+            // Both in Play Next queue
+            let track = self.play_next.remove(from_index);
+            self.play_next.insert(to_index, track);
             Ok(())
-        } else if from_index >= explicit_len && to_index >= explicit_len {
+        } else if from_index >= play_next_len
+            && from_index < source_end
+            && to_index >= play_next_len
+            && to_index < source_end
+        {
             // Both in source queue
-            let from_source = from_index - explicit_len;
-            let to_source = to_index - explicit_len;
+            let from_source = self.source_index + (from_index - play_next_len);
+            let to_source = self.source_index + (to_index - play_next_len);
             let track = self.source.remove(from_source);
             self.source.insert(to_source, track);
             Ok(())
+        } else if from_index >= source_end && to_index >= source_end {
+            // Both in Add to Queue
+            let from_add = from_index - source_end;
+            let to_add = to_index - source_end;
+            let track = self.queued_later.remove(from_add);
+            self.queued_later.insert(to_add, track);
+            Ok(())
         } else {
-            Err("Cannot move tracks between explicit and source queues".to_string())
+            Err("Cannot move tracks between different queue tiers".to_string())
         }
     }
 
-    /// Clear entire queue
+    /// Clear entire queue (all three tiers)
     pub fn clear(&mut self) {
-        self.explicit.clear();
+        self.play_next.clear();
+        self.queued_later.clear();
         self.source.clear();
         self.source_index = 0;
         self.original_source.clear();
         self.is_shuffled = false;
     }
 
-    /// Clear only explicit queue
-    #[allow(dead_code)]
-    pub fn clear_explicit(&mut self) {
-        self.explicit.clear();
+    /// Clear only Play Next queue
+    pub fn clear_play_next(&mut self) {
+        self.play_next.clear();
+    }
+
+    /// Clear only Add to Queue
+    pub fn clear_queued_later(&mut self) {
+        self.queued_later.clear();
     }
 
     /// Clear only source queue
@@ -166,82 +214,138 @@ impl Queue {
         self.is_shuffled = false;
     }
 
+    /// Clear explicit queues (Play Next + Add to Queue)
+    /// Kept for backwards compatibility
+    #[allow(dead_code)]
+    pub fn clear_explicit(&mut self) {
+        self.play_next.clear();
+        self.queued_later.clear();
+    }
+
     /// Get next track to play
     ///
-    /// Prioritizes explicit queue, then source queue.
-    /// Uses index-based navigation for source queue (non-destructive).
+    /// Priority order:
+    /// 1. Play Next queue (highest priority, destructive)
+    /// 2. Source queue (medium priority, index-based)
+    /// 3. Add to Queue (lowest priority, destructive - plays after source exhausts)
     pub fn pop_next(&mut self) -> Option<QueueTrack> {
-        // Explicit queue still uses remove (destructive by design)
-        if !self.explicit.is_empty() {
-            return Some(self.explicit.remove(0));
+        // Tier 1: Play Next queue (destructive, LIFO)
+        if !self.play_next.is_empty() {
+            return Some(self.play_next.remove(0));
         }
 
-        // Source queue uses index navigation (non-destructive)
+        // Tier 2: Source queue (index-based, non-destructive)
         if self.source_index < self.source.len() {
             let track = self.source[self.source_index].clone();
             self.source_index += 1;
-            Some(track)
+            return Some(track);
+        }
+
+        // Tier 3: Add to Queue (destructive, FIFO - plays at the very end)
+        if !self.queued_later.is_empty() {
+            return Some(self.queued_later.remove(0));
+        }
+
+        // All queues exhausted
+        None
+    }
+
+    /// Get next track while skipping Play Next queue
+    ///
+    /// Used when starting playback - Play Next should play AFTER the first track, not instead of it.
+    /// Priority order: Source → Add to Queue (skips Play Next)
+    pub(crate) fn pop_next_skip_play_next(&mut self) -> Option<QueueTrack> {
+        // Tier 1: Source queue (index-based, non-destructive)
+        if self.source_index < self.source.len() {
+            let track = self.source[self.source_index].clone();
+            self.source_index += 1;
+            return Some(track);
+        }
+
+        // Tier 2: Add to Queue (destructive, FIFO)
+        if !self.queued_later.is_empty() {
+            return Some(self.queued_later.remove(0));
+        }
+
+        // All queues exhausted
+        None
+    }
+
+    /// Peek at next track without removing
+    ///
+    /// Returns the next track that would be played following priority order.
+    #[allow(dead_code)]
+    pub fn peek_next(&self) -> Option<&QueueTrack> {
+        if !self.play_next.is_empty() {
+            self.play_next.first()
+        } else if self.source_index < self.source.len() {
+            self.source.get(self.source_index)
+        } else if !self.queued_later.is_empty() {
+            self.queued_later.first()
         } else {
             None
         }
     }
 
-    /// Peek at next track without removing
-    ///
-    /// Returns the next track that would be played: first from explicit queue,
-    /// then from source queue at the current source_index position.
-    #[allow(dead_code)]
-    pub fn peek_next(&self) -> Option<&QueueTrack> {
-        if !self.explicit.is_empty() {
-            self.explicit.first()
-        } else {
-            // Use source_index to get the correct next track
-            self.source.get(self.source_index)
-        }
-    }
-
     /// Get all tracks in queue order from current position
     ///
-    /// Returns explicit queue followed by remaining source queue tracks.
-    /// Source queue starts from current position (source_index), not from beginning.
+    /// Returns tracks in priority order:
+    /// Play Next → Source (from current position) → Add to Queue
     pub fn get_all(&self) -> Vec<&QueueTrack> {
-        // Explicit queue always shown fully
-        let explicit_iter = self.explicit.iter();
+        let mut tracks = Vec::new();
 
-        // Source queue shows only tracks from current position onward
-        let remaining_source = if self.source_index < self.source.len() {
-            &self.source[self.source_index..]
-        } else {
-            &self.source[0..0] // Empty slice if we've played through all
-        };
+        // Tier 1: Play Next queue
+        tracks.extend(self.play_next.iter());
 
-        explicit_iter.chain(remaining_source.iter()).collect()
+        // Tier 2: Source queue (from current position onward)
+        if self.source_index < self.source.len() {
+            tracks.extend(self.source[self.source_index..].iter());
+        }
+
+        // Tier 3: Add to Queue (plays at the end)
+        tracks.extend(self.queued_later.iter());
+
+        eprintln!("[Queue] get_all(): {} tracks total (Play Next: {}, Source: {}, Add to Queue: {})",
+            tracks.len(),
+            self.play_next.len(),
+            if self.source_index < self.source.len() { self.source.len() - self.source_index } else { 0 },
+            self.queued_later.len()
+        );
+
+        tracks
     }
 
-    /// Get track at index
+    /// Get track at index (in priority order)
     #[allow(dead_code)]
     pub fn get(&self, index: usize) -> Option<&QueueTrack> {
-        let explicit_len = self.explicit.len();
-        if index < explicit_len {
-            self.explicit.get(index)
+        let play_next_len = self.play_next.len();
+        let remaining_source = self.source.len().saturating_sub(self.source_index);
+
+        if index < play_next_len {
+            self.play_next.get(index)
+        } else if index < play_next_len + remaining_source {
+            let source_idx = self.source_index + (index - play_next_len);
+            self.source.get(source_idx)
         } else {
-            self.source.get(index - explicit_len)
+            let queued_later_idx = index - play_next_len - remaining_source;
+            self.queued_later.get(queued_later_idx)
         }
     }
 
     /// Total number of remaining tracks in queue
     ///
-    /// Returns the count of tracks that will still be played, consistent with `get_all()`.
-    /// This includes all explicit queue tracks plus remaining source queue tracks
-    /// (from source_index onwards).
+    /// Returns the count of tracks that will still be played.
+    /// Includes: Play Next + remaining Source + Add to Queue
     pub fn len(&self) -> usize {
         let remaining_source = self.source.len().saturating_sub(self.source_index);
-        self.explicit.len() + remaining_source
+        self.play_next.len() + remaining_source + self.queued_later.len()
     }
 
     /// Check if queue is empty (no remaining tracks to play)
     pub fn is_empty(&self) -> bool {
-        self.explicit.is_empty() && self.source_index >= self.source.len()
+        self.play_next.is_empty()
+            && self.source_index >= self.source.len()
+            && self.queued_later.is_empty()
     }
 
     /// Check if source queue is shuffled
@@ -328,14 +432,9 @@ impl Queue {
     /// Skip to track at index in queue
     ///
     /// Returns all tracks that were skipped over (for adding to history).
-    /// Handles both explicit and source queue navigation properly:
-    /// - If target is in explicit queue: removes tracks before it
-    /// - If target is in source queue: clears explicit queue and updates source_index
-    ///
-    /// This preserves the source queue structure so tracks can be navigated back to
-    /// using the previous button.
     pub fn skip_to_index(&mut self, index: usize) -> Option<Vec<QueueTrack>> {
-        let explicit_len = self.explicit.len();
+        let play_next_len = self.play_next.len();
+        let remaining_source = self.source.len().saturating_sub(self.source_index);
 
         if index >= self.len() {
             return None;
@@ -343,22 +442,21 @@ impl Queue {
 
         let mut skipped = Vec::new();
 
-        if index < explicit_len {
-            // Target is in explicit queue
-            // Remove all explicit tracks before the target
+        if index < play_next_len {
+            // Target is in Play Next queue
             for _ in 0..index {
-                if let Some(track) = self.explicit.first() {
+                if let Some(track) = self.play_next.first() {
                     skipped.push(track.clone());
-                    self.explicit.remove(0);
+                    self.play_next.remove(0);
                 }
             }
-        } else {
+        } else if index < play_next_len + remaining_source {
             // Target is in source queue
-            // First, add all explicit tracks to skipped list
-            skipped.extend(self.explicit.drain(..));
+            // First, add all Play Next tracks to skipped list
+            skipped.append(&mut self.play_next);
 
             // Calculate target position in source queue
-            let target_in_source = index - explicit_len;
+            let target_in_source = index - play_next_len;
 
             // Add source tracks from current position up to (but not including) target
             let start = self.source_index;
@@ -373,8 +471,26 @@ impl Queue {
                 // Update source_index to point to target
                 self.source_index = end;
             } else {
-                // Index out of bounds for source queue
                 return None;
+            }
+        } else {
+            // Target is in Add to Queue
+            // Add all Play Next tracks
+            skipped.append(&mut self.play_next);
+
+            // Add all remaining source tracks
+            for i in self.source_index..self.source.len() {
+                skipped.push(self.source[i].clone());
+            }
+            self.source_index = self.source.len();
+
+            // Add Add to Queue tracks up to target
+            let target_in_queued_later = index - play_next_len - remaining_source;
+            for _ in 0..target_in_queued_later {
+                if let Some(track) = self.queued_later.first() {
+                    skipped.push(track.clone());
+                    self.queued_later.remove(0);
+                }
             }
         }
 
@@ -439,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn add_to_explicit_queue() {
+    fn add_to_play_next_queue() {
         let mut queue = Queue::new();
         queue.add_next(create_test_track("1", "Track 1"));
         queue.add_next(create_test_track("2", "Track 2"));
@@ -462,7 +578,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_queue_has_priority() {
+    fn play_next_queue_has_highest_priority() {
         let mut queue = Queue::new();
 
         // Add to source queue
@@ -471,16 +587,75 @@ mod tests {
             create_test_track("s2", "Source 2"),
         ]);
 
-        // Add to explicit queue
-        queue.add_next(create_test_track("e1", "Explicit 1"));
+        // Add to Play Next queue
+        queue.add_next(create_test_track("n1", "Next 1"));
 
-        // Explicit should be next
+        // Play Next should be next
         let next = queue.pop_next().unwrap();
-        assert_eq!(next.id, "e1");
+        assert_eq!(next.id, "n1");
 
         // Then source
         let next = queue.pop_next().unwrap();
         assert_eq!(next.id, "s1");
+    }
+
+    #[test]
+    fn queued_later_has_lowest_priority() {
+        let mut queue = Queue::new();
+
+        // Add to source queue
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+
+        // Add to Add to Queue
+        queue.add_to_end(create_test_track("q1", "Queue 1"));
+
+        // Source should be first
+        let next = queue.pop_next().unwrap();
+        assert_eq!(next.id, "s1");
+
+        // Then Add to Queue
+        let next = queue.pop_next().unwrap();
+        assert_eq!(next.id, "q1");
+    }
+
+    #[test]
+    fn three_tier_priority_order() {
+        let mut queue = Queue::new();
+
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+        queue.add_to_end(create_test_track("q1", "Queue 1"));
+        queue.add_next(create_test_track("n1", "Next 1"));
+
+        // Priority: Play Next → Source → Add to Queue
+        assert_eq!(queue.pop_next().unwrap().id, "n1");
+        assert_eq!(queue.pop_next().unwrap().id, "s1");
+        assert_eq!(queue.pop_next().unwrap().id, "q1");
+    }
+
+    #[test]
+    fn set_source_clears_play_next() {
+        let mut queue = Queue::new();
+
+        queue.add_next(create_test_track("n1", "Next 1"));
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+
+        // Play Next should be cleared
+        let next = queue.pop_next().unwrap();
+        assert_eq!(next.id, "s1"); // Source plays, not n1
+    }
+
+    #[test]
+    fn set_source_keeps_queued_later() {
+        let mut queue = Queue::new();
+
+        queue.add_to_end(create_test_track("q1", "Queue 1"));
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+
+        // Source plays first
+        assert_eq!(queue.pop_next().unwrap().id, "s1");
+
+        // Add to Queue persists
+        assert_eq!(queue.pop_next().unwrap().id, "q1");
     }
 
     #[test]
@@ -496,35 +671,27 @@ mod tests {
     }
 
     #[test]
-    fn remove_from_queue() {
+    fn clear_play_next_only() {
         let mut queue = Queue::new();
-        // Use add_to_end to maintain FIFO order for this test
-        queue.add_to_end(create_test_track("1", "Track 1"));
-        queue.add_to_end(create_test_track("2", "Track 2"));
-        queue.add_to_end(create_test_track("3", "Track 3"));
+        queue.add_next(create_test_track("n1", "Next 1"));
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+        queue.add_to_end(create_test_track("q1", "Queue 1"));
 
-        let removed = queue.remove(1).unwrap();
-        assert_eq!(removed.id, "2");
-        assert_eq!(queue.len(), 2);
+        queue.clear_play_next();
 
-        // Verify order maintained
-        assert_eq!(queue.get(0).unwrap().id, "1");
-        assert_eq!(queue.get(1).unwrap().id, "3");
+        assert_eq!(queue.len(), 2); // Source + Add to Queue remain
     }
 
     #[test]
-    fn reorder_within_explicit() {
+    fn clear_queued_later_only() {
         let mut queue = Queue::new();
-        // Use add_to_end to maintain FIFO order for this test
-        queue.add_to_end(create_test_track("1", "Track 1"));
-        queue.add_to_end(create_test_track("2", "Track 2"));
-        queue.add_to_end(create_test_track("3", "Track 3"));
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+        queue.add_next(create_test_track("n1", "Next 1")); // Add after set_source
+        queue.add_to_end(create_test_track("q1", "Queue 1"));
 
-        queue.reorder(0, 2).unwrap(); // Move first to last
+        queue.clear_queued_later();
 
-        assert_eq!(queue.get(0).unwrap().id, "2");
-        assert_eq!(queue.get(1).unwrap().id, "3");
-        assert_eq!(queue.get(2).unwrap().id, "1");
+        assert_eq!(queue.len(), 2); // Play Next + Source remain
     }
 
     #[test]
@@ -534,118 +701,40 @@ mod tests {
         queue.add_next(create_test_track("2", "Track 2"));
         queue.add_next(create_test_track("3", "Track 3"));
 
-        // add_next inserts at front, so order should be 3, 2, 1
-        assert_eq!(queue.get(0).unwrap().id, "3");
-        assert_eq!(queue.get(1).unwrap().id, "2");
-        assert_eq!(queue.get(2).unwrap().id, "1");
-
-        // First pop should be track 3 (most recently added with add_next)
-        let next = queue.pop_next().unwrap();
-        assert_eq!(next.id, "3");
+        // add_next inserts at front (LIFO), so order should be 3, 2, 1
+        assert_eq!(queue.pop_next().unwrap().id, "3");
+        assert_eq!(queue.pop_next().unwrap().id, "2");
+        assert_eq!(queue.pop_next().unwrap().id, "1");
     }
 
     #[test]
-    fn cannot_reorder_across_tiers() {
+    fn add_to_end_fifo_order() {
         let mut queue = Queue::new();
-        queue.add_next(create_test_track("e1", "Explicit 1"));
-        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+        // Exhaust source queue first
+        queue.set_source(vec![]);
 
-        let result = queue.reorder(0, 1); // Try to move explicit to source
-        assert!(result.is_err());
-    }
+        queue.add_to_end(create_test_track("1", "Track 1"));
+        queue.add_to_end(create_test_track("2", "Track 2"));
+        queue.add_to_end(create_test_track("3", "Track 3"));
 
-    #[test]
-    fn clear_queue() {
-        let mut queue = Queue::new();
-        queue.add_next(create_test_track("1", "Track 1"));
-        queue.set_source(vec![create_test_track("2", "Track 2")]);
-
-        queue.clear();
-        assert!(queue.is_empty());
-        assert_eq!(queue.len(), 0);
-    }
-
-    #[test]
-    fn clear_explicit_only() {
-        let mut queue = Queue::new();
-        queue.add_next(create_test_track("1", "Track 1"));
-        queue.set_source(vec![create_test_track("2", "Track 2")]);
-
-        queue.clear_explicit();
-        assert_eq!(queue.len(), 1); // Source remains
+        // FIFO order
+        assert_eq!(queue.pop_next().unwrap().id, "1");
+        assert_eq!(queue.pop_next().unwrap().id, "2");
+        assert_eq!(queue.pop_next().unwrap().id, "3");
     }
 
     #[test]
     fn get_all_returns_ordered() {
         let mut queue = Queue::new();
-        // Use add_to_end for predictable FIFO ordering
-        queue.add_to_end(create_test_track("e1", "Explicit 1"));
-        queue.add_to_end(create_test_track("e2", "Explicit 2"));
-        queue.set_source(vec![
-            create_test_track("s1", "Source 1"),
-            create_test_track("s2", "Source 2"),
-        ]);
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+        queue.add_next(create_test_track("n1", "Next 1")); // Add after set_source
+        queue.add_to_end(create_test_track("q1", "Queue 1"));
 
         let all = queue.get_all();
-        assert_eq!(all.len(), 4);
-        assert_eq!(all[0].id, "e1");
-        assert_eq!(all[1].id, "e2");
-        assert_eq!(all[2].id, "s1");
-        assert_eq!(all[3].id, "s2");
-    }
-
-    #[test]
-    fn peek_next_respects_source_index() {
-        let mut queue = Queue::new();
-        queue.set_source(vec![
-            create_test_track("s1", "Source 1"),
-            create_test_track("s2", "Source 2"),
-            create_test_track("s3", "Source 3"),
-        ]);
-
-        // Initially peek should return s1
-        assert_eq!(queue.peek_next().unwrap().id, "s1");
-
-        // Pop s1, now source_index = 1
-        let _ = queue.pop_next();
-        assert_eq!(queue.peek_next().unwrap().id, "s2");
-
-        // Pop s2, now source_index = 2
-        let _ = queue.pop_next();
-        assert_eq!(queue.peek_next().unwrap().id, "s3");
-
-        // Pop s3, queue should be empty
-        let _ = queue.pop_next();
-        assert!(queue.peek_next().is_none());
-    }
-
-    #[test]
-    fn len_returns_remaining_tracks() {
-        let mut queue = Queue::new();
-        queue.set_source(vec![
-            create_test_track("s1", "Source 1"),
-            create_test_track("s2", "Source 2"),
-            create_test_track("s3", "Source 3"),
-        ]);
-
-        // Initial length is 3
-        assert_eq!(queue.len(), 3);
-        assert_eq!(queue.get_all().len(), 3);
-
-        // Pop one track, length should be 2
-        let _ = queue.pop_next();
-        assert_eq!(queue.len(), 2);
-        assert_eq!(queue.get_all().len(), 2);
-
-        // Pop another, length should be 1
-        let _ = queue.pop_next();
-        assert_eq!(queue.len(), 1);
-        assert_eq!(queue.get_all().len(), 1);
-
-        // Pop last track, length should be 0
-        let _ = queue.pop_next();
-        assert_eq!(queue.len(), 0);
-        assert!(queue.is_empty());
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].id, "n1"); // Play Next
+        assert_eq!(all[1].id, "s1"); // Source
+        assert_eq!(all[2].id, "q1"); // Add to Queue
     }
 
     #[test]
@@ -659,7 +748,7 @@ mod tests {
 
         queue.set_source(tracks);
 
-        // Manually shuffle (shuffle algorithm will be tested separately)
+        // Manually shuffle
         queue.source_mut().reverse();
         queue.set_shuffled(true);
 

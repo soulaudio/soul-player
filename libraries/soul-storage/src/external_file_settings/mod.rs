@@ -100,11 +100,7 @@ pub async fn upsert(
     let now = chrono::Utc::now().timestamp();
     let default_action = settings.default_action.as_str();
     let import_destination = settings.import_destination.as_str();
-    let show_notification = if settings.show_import_notification {
-        1
-    } else {
-        0
-    };
+    let show_notification = i32::from(settings.show_import_notification);
 
     sqlx::query!(
         r#"
@@ -204,7 +200,7 @@ pub async fn set_show_import_notification(
     show: bool,
 ) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
-    let show_int = if show { 1 } else { 0 };
+    let show_int = i32::from(show);
 
     // First ensure settings exist
     let _ = get_or_create(pool, user_id, device_id).await?;

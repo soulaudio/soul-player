@@ -34,20 +34,15 @@
 //! ```
 
 /// Headroom mode for clipping prevention
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum HeadroomMode {
     /// Automatic headroom calculation from DSP chain gains
+    #[default]
     Auto,
     /// Fixed manual headroom reserve in dB (typically negative)
     Manual(f64),
     /// No headroom attenuation
     Disabled,
-}
-
-impl Default for HeadroomMode {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 impl HeadroomMode {
@@ -56,7 +51,7 @@ impl HeadroomMode {
         match s.to_lowercase().as_str() {
             "auto" | "automatic" => Some(Self::Auto),
             "disabled" | "off" | "none" => Some(Self::Disabled),
-            s if s.starts_with("manual:") || s.starts_with("-") => {
+            s if s.starts_with("manual:") || s.starts_with('-') => {
                 // Parse "manual:-6" or just "-6"
                 let value_str = s.trim_start_matches("manual:").trim();
                 value_str.parse::<f64>().ok().map(Self::Manual)

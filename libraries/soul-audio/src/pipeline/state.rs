@@ -107,9 +107,10 @@ pub enum PipelineEvent {
 }
 
 /// Pipeline playback states
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PipelineState {
     /// No track loaded, no playback
+    #[default]
     Stopped,
     /// Track is being loaded/decoded
     Loading,
@@ -119,12 +120,6 @@ pub enum PipelineState {
     Paused,
     /// Crossfading between two tracks
     Crossfading,
-}
-
-impl Default for PipelineState {
-    fn default() -> Self {
-        Self::Stopped
-    }
 }
 
 /// Pipeline state machine for managing playback states and transitions
@@ -373,10 +368,8 @@ impl PipelineStateMachine {
 
     /// Emit position update
     pub fn position_update(&mut self, position: Duration, duration: Duration) {
-        self.pending_events.push(PipelineEvent::PositionUpdate {
-            position,
-            duration,
-        });
+        self.pending_events
+            .push(PipelineEvent::PositionUpdate { position, duration });
     }
 
     /// Get the track ID that should be displayed in UI
@@ -457,9 +450,9 @@ mod tests {
 
         // Check TrackChanged event was emitted
         let events = sm.drain_events();
-        let track_changed = events.iter().find(|e| {
-            matches!(e, PipelineEvent::TrackChanged { track_id, .. } if track_id == "track2")
-        });
+        let track_changed = events.iter().find(
+            |e| matches!(e, PipelineEvent::TrackChanged { track_id, .. } if track_id == "track2"),
+        );
         assert!(track_changed.is_some());
     }
 
@@ -488,9 +481,9 @@ mod tests {
         assert_eq!(sm.current_track_id(), Some("track2"));
 
         let events = sm.drain_events();
-        let has_track_changed = events.iter().any(|e| {
-            matches!(e, PipelineEvent::TrackChanged { track_id, .. } if track_id == "track2")
-        });
+        let has_track_changed = events.iter().any(
+            |e| matches!(e, PipelineEvent::TrackChanged { track_id, .. } if track_id == "track2"),
+        );
         assert!(has_track_changed);
     }
 

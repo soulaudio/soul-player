@@ -10,27 +10,29 @@ interface ShuffleRepeatControlsProps {
 
 export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControlsProps) {
   const { t } = useTranslation();
-  const { shuffleEnabled, repeatMode, toggleShuffle, setRepeatMode } = usePlayerStore();
+  const { shuffleMode, repeatMode, setShuffleMode, setRepeatMode } = usePlayerStore();
   const commands = usePlayerCommands();
 
   const handleShuffleToggle = async () => {
-    const newValue = !shuffleEnabled;
-    toggleShuffle();
+    console.log('[ShuffleRepeatControls] Current shuffle mode:', shuffleMode);
     try {
-      await commands.setShuffle(newValue);
+      const newMode = await commands.cycleShuffle();
+      console.log('[ShuffleRepeatControls] New shuffle mode from backend:', newMode);
+      setShuffleMode(newMode);
     } catch (error) {
-      console.error('[ShuffleRepeatControls] Set shuffle failed:', error);
-      // Revert on error
-      toggleShuffle();
+      console.error('[ShuffleRepeatControls] Cycle shuffle failed:', error);
     }
   };
 
   const handleRepeatToggle = async () => {
     // Cycle through: off → all → one → off
+    console.log('[ShuffleRepeatControls] Current repeat mode:', repeatMode);
     const nextMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
+    console.log('[ShuffleRepeatControls] Cycling to:', nextMode);
     setRepeatMode(nextMode);
     try {
       await commands.setRepeatMode(nextMode);
+      console.log('[ShuffleRepeatControls] Repeat mode set successfully');
     } catch (error) {
       console.error('[ShuffleRepeatControls] Set repeat mode failed:', error);
       // Revert on error
@@ -39,20 +41,37 @@ export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControls
     }
   };
 
+  const getShuffleTitle = () => {
+    switch (shuffleMode) {
+      case 'off':
+        return t('playback.shuffleOff', 'Shuffle: Off');
+      case 'random':
+        return t('playback.shuffleRandom', 'Shuffle: Random');
+      case 'smart':
+        return t('playback.shuffleSmart', 'Shuffle: Smart');
+    }
+  };
+
   return (
     <div className="flex items-center gap-1">
       {/* Shuffle button */}
       <button
         onClick={handleShuffleToggle}
-        className={`p-2 rounded-full transition-colors ${
-          shuffleEnabled
+        className={`p-2 rounded-full transition-colors relative ${
+          shuffleMode !== 'off'
             ? 'text-primary hover:bg-accent'
             : 'text-muted-foreground hover:bg-accent hover:text-foreground'
         }`}
-        aria-label={shuffleEnabled ? 'Disable shuffle' : 'Enable shuffle'}
-        title={shuffleEnabled ? 'Shuffle enabled' : 'Shuffle disabled'}
+        aria-label={getShuffleTitle()}
+        title={getShuffleTitle()}
       >
         <Shuffle className="w-4 h-4" />
+        {shuffleMode === 'random' && (
+          <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold text-primary">R</span>
+        )}
+        {shuffleMode === 'smart' && (
+          <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold text-primary">S</span>
+        )}
       </button>
 
       {/* Repeat button */}

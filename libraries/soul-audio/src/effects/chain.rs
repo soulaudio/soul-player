@@ -2,7 +2,6 @@
 ///
 /// This module provides a trait-based architecture for chaining audio effects.
 /// Effects are processed in order, and all operate on f32 samples in [-1.0, 1.0] range.
-
 use std::any::Any;
 
 /// Trait for audio effects that can be chained together
@@ -126,22 +125,23 @@ impl EffectChain {
     ///
     /// Returns the old effect if one was replaced, None otherwise.
     /// This preserves other effects in the chain (doesn't clear everything).
-    pub fn replace_effect(&mut self, index: usize, effect: Box<dyn AudioEffect>) -> Option<Box<dyn AudioEffect>> {
-        if index < self.effects.len() {
-            Some(std::mem::replace(&mut self.effects[index], effect))
-        } else if index == self.effects.len() {
-            self.effects.push(effect);
-            None
-        } else {
-            // Index out of bounds - fill with the effect at the requested slot
-            // This handles sparse slot assignments
-            while self.effects.len() < index {
-                // This shouldn't normally happen in practice
-                self.effects.push(effect.into());
-                return None;
+    pub fn replace_effect(
+        &mut self,
+        index: usize,
+        effect: Box<dyn AudioEffect>,
+    ) -> Option<Box<dyn AudioEffect>> {
+        match index.cmp(&self.effects.len()) {
+            std::cmp::Ordering::Less => Some(std::mem::replace(&mut self.effects[index], effect)),
+            std::cmp::Ordering::Equal => {
+                self.effects.push(effect);
+                None
             }
-            self.effects.push(effect);
-            None
+            std::cmp::Ordering::Greater => {
+                // Index out of bounds - just append the effect
+                // This shouldn't normally happen in practice
+                self.effects.push(effect);
+                None
+            }
         }
     }
 
@@ -154,12 +154,16 @@ impl EffectChain {
     /// }
     /// ```
     pub fn get_effect_as<T: 'static>(&self, index: usize) -> Option<&T> {
-        self.effects.get(index).and_then(|e| e.as_any().downcast_ref::<T>())
+        self.effects
+            .get(index)
+            .and_then(|e| e.as_any().downcast_ref::<T>())
     }
 
     /// Get mutable effect at index, downcasted to specific type
     pub fn get_effect_as_mut<T: 'static>(&mut self, index: usize) -> Option<&mut T> {
-        self.effects.get_mut(index).and_then(|e| e.as_any_mut().downcast_mut::<T>())
+        self.effects
+            .get_mut(index)
+            .and_then(|e| e.as_any_mut().downcast_mut::<T>())
     }
 }
 

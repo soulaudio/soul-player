@@ -190,6 +190,7 @@ mod queue_management {
 
         // Start playing
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist A", 180));
+        manager.play().ok(); // Start playback
         manager.set_audio_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
@@ -219,6 +220,7 @@ mod queue_management {
         manager.add_to_queue_end(create_track("2", "Track 2", "Artist B", 180));
         manager.add_to_queue_end(create_track("3", "Track 3", "Artist C", 180));
 
+        manager.play().ok(); // Start playback
         manager.set_audio_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
@@ -582,7 +584,10 @@ mod playback_state {
         manager.process_audio(&mut buffer).unwrap();
 
         let position_after = manager.get_position();
-        assert_eq!(position_before, position_after, "Position should not advance after stop fade completes");
+        assert_eq!(
+            position_before, position_after,
+            "Position should not advance after stop fade completes"
+        );
     }
 
     #[test]

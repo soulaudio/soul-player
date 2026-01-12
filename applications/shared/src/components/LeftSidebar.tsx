@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, LayoutGroup } from 'framer-motion';
 import {
   Play,
   Pause,
@@ -76,7 +75,7 @@ const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] 
   },
 ];
 
-// Shared track item component with layoutId for animations
+// Shared track item component
 interface TrackItemProps {
   trackId: string | number;
   title: string;
@@ -90,26 +89,14 @@ interface TrackItemProps {
 }
 
 function TrackItem({ trackId, title, artist, coverArtPath, album, isLarge, isPlaying, showEqualizer, onClick }: TrackItemProps) {
-  // Ensure consistent string conversion for layoutId matching
-  const layoutId = `sidebar-track-${String(trackId)}`;
-
   return (
-    <motion.div
-      layoutId={layoutId}
-      layout="position"
+    <div
       className={cn(
         "flex items-center group/track",
         isLarge ? "gap-3" : "gap-2",
         onClick && "cursor-pointer"
       )}
       onClick={onClick}
-      transition={{
-        layout: {
-          type: "tween",
-          duration: 0.25,
-          ease: [0.4, 0, 0.2, 1], // Material Design standard easing
-        },
-      }}
     >
       <div
         className={cn(
@@ -146,7 +133,7 @@ function TrackItem({ trackId, title, artist, coverArtPath, album, isLarge, isPla
           onClick ? "text-muted-foreground/70 group-hover/track:text-muted-foreground" : "text-muted-foreground"
         )}>{artist}</div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -167,9 +154,9 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     progress,
     duration,
     volume,
-    shuffleEnabled,
+    shuffleMode,
     repeatMode,
-    toggleShuffle,
+    setShuffleMode,
     setRepeatMode,
   } = usePlayerStore();
   const commands = usePlayerCommands();
@@ -358,21 +345,24 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   );
 
   const handleShuffleToggle = async () => {
-    const newValue = !shuffleEnabled;
-    toggleShuffle();
+    console.log('[LeftSidebar] Current shuffle mode:', shuffleMode);
     try {
-      await commands.setShuffle(newValue);
+      const newMode = await commands.cycleShuffle();
+      console.log('[LeftSidebar] New shuffle mode from backend:', newMode);
+      setShuffleMode(newMode);
     } catch (error) {
-      console.error('[LeftSidebar] Set shuffle failed:', error);
-      toggleShuffle();
+      console.error('[LeftSidebar] Cycle shuffle failed:', error);
     }
   };
 
   const handleRepeatToggle = async () => {
+    console.log('[LeftSidebar] Current repeat mode:', repeatMode);
     const nextMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
+    console.log('[LeftSidebar] Cycling to:', nextMode);
     setRepeatMode(nextMode);
     try {
       await commands.setRepeatMode(nextMode);
+      console.log('[LeftSidebar] Repeat mode set successfully');
     } catch (error) {
       console.error('[LeftSidebar] Set repeat mode failed:', error);
       const prevMode = nextMode === 'off' ? 'one' : nextMode === 'all' ? 'off' : 'all';
@@ -434,8 +424,10 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const currentTrackId = currentTrack?.id;
 
   // Filter out current track from queue, reverse so items closest to now playing are at bottom
+  // Preserve original indices to handle duplicate tracks correctly
   const displayQueue = queue
-    .filter(t => String(t.trackId) !== String(currentTrackId))
+    .map((track, index) => ({ track, originalIndex: index }))
+    .filter(({ track }) => String(track.trackId) !== String(currentTrackId))
     .reverse();
 
   // progress is already a percentage (0-100) from the store
@@ -453,6 +445,14 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
 
   // Handle mouse wheel for volume control
   const handleVolumeWheel = useCallback((e: React.WheelEvent) => {
+    // Check if the wheel event is coming from within a dropdown menu
+    // Dropdowns are portaled to document.body but events can still bubble in React
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-dropdown-menu]')) {
+      // Don't handle wheel events from dropdown menus
+      return;
+    }
+
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.05 : 0.05; // Scroll down = decrease, scroll up = increase
     applyVolumeChange(volume + delta);
@@ -462,17 +462,25 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     <div className="w-72 bg-card border-r border-border flex flex-col h-full">
       {/* Navigation */}
       <nav className="p-4 pt-6">
-        <ul className="space-y-1">
+        <ul className="space-y-0">
           {navigationItems.map((item) => (
             <li key={item.id}>
               <button
                 onClick={() => navigate(item.path)}
                 className={cn(
-                  "w-full text-left px-3 py-2 text-xl font-bold transition-colors",
+                  "w-full text-left px-3 py-1 text-xl font-semibold tracking-wide transition-colors flex items-center justify-between gap-2",
                   isActive(item.path) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                {t(item.labelKey)}
+                <span>{t(item.labelKey)}</span>
+                <div
+                  className={cn(
+                    "w-2 h-2 rounded-full border transition-all flex-shrink-0",
+                    isActive(item.path)
+                      ? 'bg-primary border-primary'
+                      : 'border-muted-foreground/30'
+                  )}
+                />
               </button>
             </li>
           ))}
@@ -481,238 +489,273 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
 
       {/* Queue Section - can expand/contract */}
       <div className="mt-auto flex flex-col">
-        <LayoutGroup>
-          {displayQueue.length > 0 && (
-            <div className="flex flex-col max-h-36 group/queue">
-              <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {t('sidebar.queue')}
-              </div>
-              {/* Scrollable queue */}
-              <motion.div
-                ref={queueScrollRef}
-                layoutScroll
-                className="flex-1 overflow-y-auto px-4 pb-2 queue-scrollbar"
-              >
-                <div className="flex flex-col justify-end min-h-full gap-1">
-                  {displayQueue.map((track) => {
-                    const originalIndex = queue.findIndex(q => q.trackId === track.trackId);
-                    return (
-                      <TrackItem
-                        key={String(track.trackId)}
-                        trackId={track.trackId}
-                        title={track.title}
-                        artist={track.artist}
-                        coverArtPath={track.coverArtPath}
-                        album={track.album ?? undefined}
-                        onClick={() => handleQueueItemClick(originalIndex)}
-                      />
-                    );
-                  })}
-                </div>
-              </motion.div>
+        {displayQueue.length > 0 && (
+          <div className="flex flex-col max-h-[32rem] group/queue">
+            <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              {t('sidebar.queue')}
             </div>
-          )}
-
-          {/* Now Playing Section - completely static, fixed at bottom */}
-          <div className="p-4">
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-              {t('sidebar.nowPlaying')}
-            </div>
-
-            {/* Fixed height container for track item */}
-            <div className="h-12 flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                {currentTrack ? (
+            {/* Scrollable queue */}
+            <div
+              ref={queueScrollRef}
+              className="flex-1 overflow-y-auto px-4 pb-2 queue-scrollbar"
+            >
+              <div className="flex flex-col justify-end min-h-full gap-1">
+                {displayQueue.map(({ track, originalIndex }) => (
                   <TrackItem
-                    key={String(currentTrack.id)}
-                    trackId={currentTrack.id}
-                    title={currentTrack.title}
-                    artist={currentTrack.artist}
-                    coverArtPath={currentTrack.coverArtPath}
-                    album={currentTrack.album}
-                    isLarge
-                    isPlaying={isPlaying}
-                    showEqualizer
-                    onClick={() => navigate('/now-playing')}
+                    key={`queue-${originalIndex}`}
+                    trackId={track.trackId}
+                    title={track.title}
+                    artist={track.artist}
+                    coverArtPath={track.coverArtPath}
+                    album={track.album ?? undefined}
+                    onClick={() => handleQueueItemClick(originalIndex)}
                   />
-                ) : (
-                  <div className="flex items-center gap-3 text-muted-foreground h-12">
-                    <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-                      <Music className="w-6 h-6 opacity-50" />
-                    </div>
-                    <span className="text-sm">{t('sidebar.noTrackPlaying')}</span>
-                  </div>
-                )}
+                ))}
               </div>
-              <button
-                onClick={onAddToPlaylist}
-                disabled={!currentTrack || !features.canCreatePlaylists}
-                className={cn(
-                  "p-1.5 transition-colors text-muted-foreground flex-shrink-0",
-                  currentTrack && features.canCreatePlaylists ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
-                )}
-                title={features.canCreatePlaylists
-                  ? t('playlist.addToPlaylist', 'Add to Playlist')
-                  : t('settings.demoDisabled', 'Available in desktop app')
-                }
-              >
-                <Heart className="w-4 h-4" />
-              </button>
             </div>
+          </div>
+        )}
 
-            {/* Controls */}
-            <div className="mt-4 space-y-3">
-              {/* Progress */}
-              <div>
+        {/* Now Playing Section - completely static, fixed at bottom */}
+        <div className="p-4">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+            {t('sidebar.nowPlaying')}
+          </div>
+
+          {/* Fixed height container for track item */}
+          <div className="h-12 flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              {currentTrack ? (
+                <TrackItem
+                  key={String(currentTrack.id)}
+                  trackId={currentTrack.id}
+                  title={currentTrack.title}
+                  artist={currentTrack.artist}
+                  coverArtPath={currentTrack.coverArtPath}
+                  album={currentTrack.album}
+                  isLarge
+                  isPlaying={isPlaying}
+                  showEqualizer
+                  onClick={() => navigate('/now-playing')}
+                />
+              ) : (
+                <div className="flex items-center gap-3 text-muted-foreground h-12">
+                  <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                    <Music className="w-6 h-6 opacity-50" />
+                  </div>
+                  <span className="text-sm">{t('sidebar.noTrackPlaying')}</span>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onAddToPlaylist}
+              disabled={!currentTrack || !features.canCreatePlaylists}
+              className={cn(
+                "p-1.5 transition-colors text-muted-foreground flex-shrink-0",
+                currentTrack && features.canCreatePlaylists ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
+              )}
+              title={features.canCreatePlaylists
+                ? t('playlist.addToPlaylist', 'Add to Playlist')
+                : t('settings.demoDisabled', 'Available in desktop app')
+              }
+            >
+              <Heart className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Controls */}
+          <div className="mt-4 space-y-3">
+            {/* Progress */}
+            <div>
+              <div
+                className={cn(
+                  "py-2 -my-2",
+                  currentTrack ? "cursor-pointer" : "cursor-default"
+                )}
+                onClick={currentTrack ? handleSeek : undefined}
+              >
                 <div
                   className={cn(
-                    "py-2 -my-2",
-                    currentTrack ? "cursor-pointer" : "cursor-default"
+                    "h-1.5 bg-muted rounded-full overflow-hidden",
+                    !currentTrack && "opacity-50"
                   )}
-                  onClick={currentTrack ? handleSeek : undefined}
                 >
                   <div
-                    className={cn(
-                      "h-1.5 bg-muted rounded-full overflow-hidden",
-                      !currentTrack && "opacity-50"
-                    )}
-                  >
-                    <div
-                      className="h-full bg-primary rounded-full transition-[width] duration-150"
-                      style={{ width: `${progressPercentage}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-between mt-1 text-[10px] text-muted-foreground font-mono">
-                  <span>{formatTime(currentPositionSeconds)}</span>
-                  <span>{formatTime(duration)}</span>
+                    className="h-full bg-primary rounded-full transition-[width] duration-150"
+                    style={{ width: `${progressPercentage}%` }}
+                  />
                 </div>
               </div>
+              <div className="flex justify-between mt-1 text-[10px] text-muted-foreground font-mono">
+                <span>{formatTime(currentPositionSeconds)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+            </div>
 
-              {/* Playback Controls - Grid layout to keep play/pause centered */}
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
-                {/* Left group */}
-                <div className="flex items-center justify-end gap-1">
-                  <button
-                    onClick={handleShuffleToggle}
-                    disabled={!currentTrack}
-                    className={cn(
-                      "p-1.5 transition-colors",
-                      !currentTrack && "opacity-50 cursor-not-allowed",
-                      shuffleEnabled ? 'text-primary' : 'text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground'
-                    )}
-                  >
-                    <Shuffle className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={handlePrevious}
-                    disabled={!currentTrack}
-                    className={cn(
-                      "p-1.5 text-muted-foreground transition-colors",
-                      currentTrack ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    <SkipBack className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Center - Play/Pause */}
+            {/* Playback Controls - Grid layout to keep play/pause centered */}
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
+              {/* Left group */}
+              <div className="flex items-center justify-end gap-1">
                 <button
-                  onClick={handlePlayPause}
+                  onClick={handleShuffleToggle}
                   disabled={!currentTrack}
                   className={cn(
-                    "w-8 h-8 bg-primary text-primary-foreground rounded-full transition-colors flex items-center justify-center",
-                    currentTrack ? "hover:bg-primary/90" : "opacity-50 cursor-not-allowed"
+                    "p-1.5 transition-colors relative",
+                    !currentTrack && "opacity-50 cursor-not-allowed",
+                    shuffleMode !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground'
                   )}
+                  title={
+                    shuffleMode === 'off' ? 'Shuffle: Off' :
+                    shuffleMode === 'random' ? 'Shuffle: Random' :
+                    'Shuffle: Smart'
+                  }
                 >
-                  {isPlaying ? (
-                    <Pause className="w-4 h-4" />
-                  ) : (
-                    <Play className="w-4 h-4 translate-x-[1px]" />
+                  <Shuffle className="w-3.5 h-3.5" />
+                  {shuffleMode === 'random' && (
+                    <span className="absolute -top-0.5 -right-0.5 text-[7px] font-bold text-primary">R</span>
+                  )}
+                  {shuffleMode === 'smart' && (
+                    <span className="absolute -top-0.5 -right-0.5 text-[7px] font-bold text-primary">S</span>
                   )}
                 </button>
-
-                {/* Right group */}
-                <div className="flex items-center justify-start gap-1">
-                  <button
-                    onClick={handleNext}
-                    disabled={!currentTrack}
-                    className={cn(
-                      "p-1.5 text-muted-foreground transition-colors",
-                      currentTrack ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    <SkipForward className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleRepeatToggle}
-                    disabled={!currentTrack}
-                    className={cn(
-                      "p-1.5 transition-colors",
-                      !currentTrack && "opacity-50 cursor-not-allowed",
-                      repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground'
-                    )}
-                  >
-                    {repeatMode === 'one' ? <Repeat1 className="w-3.5 h-3.5" /> : <Repeat className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
+                <button
+                  onClick={handlePrevious}
+                  disabled={!currentTrack}
+                  className={cn(
+                    "p-1.5 text-muted-foreground transition-colors",
+                    currentTrack ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <SkipBack className="w-4 h-4" />
+                </button>
               </div>
 
-              {/* Volume + Device */}
-              <div className="flex items-center gap-2" onWheel={handleVolumeWheel}>
+              {/* Center - Play/Pause */}
+              <button
+                onClick={handlePlayPause}
+                disabled={!currentTrack}
+                className={cn(
+                  "w-8 h-8 bg-primary text-primary-foreground rounded-full transition-colors flex items-center justify-center",
+                  currentTrack ? "hover:bg-primary/90" : "opacity-50 cursor-not-allowed"
+                )}
+              >
+                {isPlaying ? (
+                  <Pause className="w-4 h-4" />
+                ) : (
+                  <Play className="w-4 h-4 translate-x-[1px]" />
+                )}
+              </button>
+
+              {/* Right group */}
+              <div className="flex items-center justify-start gap-1">
                 <button
-                  onClick={handleMuteToggle}
-                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={handleNext}
+                  disabled={!currentTrack}
+                  className={cn(
+                    "p-1.5 text-muted-foreground transition-colors",
+                    currentTrack ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
+                  )}
                 >
-                  {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  <SkipForward className="w-4 h-4" />
                 </button>
-                <div className="flex-1 relative h-4 flex items-center cursor-pointer group">
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={displayVolume}
-                    onChange={handleVolumeChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  />
-                  <div className="absolute inset-x-0 h-1 bg-muted rounded-full" />
-                  <div
-                    className="absolute left-0 h-1 bg-primary rounded-full"
-                    style={{ width: `${displayVolume * 100}%` }}
-                  />
-                </div>
-                <span className="text-[10px] text-muted-foreground font-mono w-6 text-right">
-                  {Math.round(displayVolume * 100)}
-                </span>
-                <DropdownMenu onOpenChange={(open) => { if (open) loadDevices(); }}>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      className="p-1 text-muted-foreground hover:text-foreground transition-colors ml-1"
-                      title={currentDevice?.name || 'Select audio device'}
-                    >
-                      <Speaker className={cn("w-4 h-4", currentDevice?.isRunning && "text-primary")} />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-[280px] max-h-[300px] overflow-y-auto">
-                    <DropdownMenuLabel className="flex items-center justify-between">
-                      <span>Audio Output</span>
-                      {currentDevice?.sampleRate && (
-                        <span className="text-xs font-normal text-muted-foreground">
-                          {currentDevice.sampleRate}Hz
-                        </span>
-                      )}
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {isLoadingDevices ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
-                    ) : !hasRealDevices ? (
-                      MOCK_DEVICES.map((mockBackend) => (
-                        <div key={mockBackend.backend}>
-                          <DropdownMenuLabel className="text-xs uppercase text-muted-foreground">
-                            {mockBackend.name}
-                          </DropdownMenuLabel>
-                          {mockBackend.devices.map((device) => (
+                <button
+                  onClick={handleRepeatToggle}
+                  disabled={!currentTrack}
+                  className={cn(
+                    "p-1.5 transition-colors",
+                    !currentTrack && "opacity-50 cursor-not-allowed",
+                    repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground'
+                  )}
+                >
+                  {repeatMode === 'one' ? <Repeat1 className="w-3.5 h-3.5" /> : <Repeat className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Volume + Device */}
+            <div className="flex items-center gap-2" onWheel={handleVolumeWheel}>
+              <button
+                onClick={handleMuteToggle}
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </button>
+              <div className="flex-1 relative h-4 flex items-center cursor-pointer group">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={displayVolume}
+                  onChange={handleVolumeChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <div className="absolute inset-x-0 h-1 bg-muted rounded-full" />
+                <div
+                  className="absolute left-0 h-1 bg-primary rounded-full"
+                  style={{ width: `${displayVolume * 100}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono w-6 text-right">
+                {Math.round(displayVolume * 100)}
+              </span>
+              <DropdownMenu onOpenChange={(open) => { if (open) loadDevices(); }}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors ml-1"
+                    title={currentDevice?.name || 'Select audio device'}
+                  >
+                    <Speaker className={cn("w-4 h-4", currentDevice?.isRunning && "text-primary")} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[280px] max-h-[300px] overflow-y-auto">
+                  <DropdownMenuLabel className="flex items-center justify-between">
+                    <span>Audio Output</span>
+                    {currentDevice?.sampleRate && (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {currentDevice.sampleRate}Hz
+                      </span>
+                    )}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {isLoadingDevices ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
+                  ) : !hasRealDevices ? (
+                    MOCK_DEVICES.map((mockBackend) => (
+                      <div key={mockBackend.backend}>
+                        <DropdownMenuLabel className="text-xs uppercase text-muted-foreground">
+                          {mockBackend.name}
+                        </DropdownMenuLabel>
+                        {mockBackend.devices.map((device) => (
+                          <DropdownMenuItem
+                            key={`${device.backend}-${device.name}`}
+                            onClick={() => switchDevice(device.backend, device.name)}
+                            className="flex items-center justify-between cursor-pointer"
+                          >
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <span className="text-sm truncate">{device.name}</span>
+                              <span className="text-xs text-muted-foreground">{device.sampleRate}Hz</span>
+                            </div>
+                            {currentDevice?.name === device.name && <Check className="h-4 w-4 text-primary ml-2" />}
+                          </DropdownMenuItem>
+                        ))}
+                      </div>
+                    ))
+                  ) : backends.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">No audio devices found</div>
+                  ) : (
+                    backends.map((backend, index) => {
+                      if (!backend.available) return null;
+                      const backendDevices = devices.get(backend.backend) || [];
+                      if (backendDevices.length === 0) return null;
+                      return (
+                        <div key={backend.backend}>
+                          {backends.length > 1 && (
+                            <DropdownMenuLabel className="text-xs uppercase text-muted-foreground">
+                              {backend.name}
+                            </DropdownMenuLabel>
+                          )}
+                          {backendDevices.map((device) => (
                             <DropdownMenuItem
                               key={`${device.backend}-${device.name}`}
                               onClick={() => switchDevice(device.backend, device.name)}
@@ -720,55 +763,25 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
                             >
                               <div className="flex flex-col min-w-0 flex-1">
                                 <span className="text-sm truncate">{device.name}</span>
-                                <span className="text-xs text-muted-foreground">{device.sampleRate}Hz</span>
+                                {device.sampleRate && (
+                                  <span className="text-xs text-muted-foreground">{device.sampleRate}Hz</span>
+                                )}
                               </div>
-                              {currentDevice?.name === device.name && <Check className="h-4 w-4 text-primary ml-2" />}
+                              {currentDevice?.name === device.name && currentDevice?.backend === device.backend && (
+                                <Check className="h-4 w-4 text-primary ml-2" />
+                              )}
                             </DropdownMenuItem>
                           ))}
+                          {index < backends.filter(b => b.available).length - 1 && <DropdownMenuSeparator />}
                         </div>
-                      ))
-                    ) : backends.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground">No audio devices found</div>
-                    ) : (
-                      backends.map((backend, index) => {
-                        if (!backend.available) return null;
-                        const backendDevices = devices.get(backend.backend) || [];
-                        if (backendDevices.length === 0) return null;
-                        return (
-                          <div key={backend.backend}>
-                            {backends.length > 1 && (
-                              <DropdownMenuLabel className="text-xs uppercase text-muted-foreground">
-                                {backend.name}
-                              </DropdownMenuLabel>
-                            )}
-                            {backendDevices.map((device) => (
-                              <DropdownMenuItem
-                                key={`${device.backend}-${device.name}`}
-                                onClick={() => switchDevice(device.backend, device.name)}
-                                className="flex items-center justify-between cursor-pointer"
-                              >
-                                <div className="flex flex-col min-w-0 flex-1">
-                                  <span className="text-sm truncate">{device.name}</span>
-                                  {device.sampleRate && (
-                                    <span className="text-xs text-muted-foreground">{device.sampleRate}Hz</span>
-                                  )}
-                                </div>
-                                {currentDevice?.name === device.name && currentDevice?.backend === device.backend && (
-                                  <Check className="h-4 w-4 text-primary ml-2" />
-                                )}
-                              </DropdownMenuItem>
-                            ))}
-                            {index < backends.filter(b => b.available).length - 1 && <DropdownMenuSeparator />}
-                          </div>
-                        );
-                      })
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+                      );
+                    })
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
-        </LayoutGroup>
+        </div>
 
         {/* Settings - bottom of sidebar */}
         <div className="border-t border-border">

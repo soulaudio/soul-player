@@ -57,7 +57,7 @@ impl GraphicEqPreset {
     /// Get gain values for this preset (10-band)
     pub fn gains_10(&self) -> [f32; 10] {
         match self {
-            Self::Flat => [0.0; 10],
+            Self::Flat | Self::Custom => [0.0; 10],
             Self::BassBoost => [6.0, 5.0, 4.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             Self::TrebleBoost => [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 4.0, 5.0, 6.0],
             Self::VShape => [5.0, 4.0, 2.0, -1.0, -2.0, -2.0, -1.0, 2.0, 4.0, 5.0],
@@ -65,7 +65,6 @@ impl GraphicEqPreset {
             Self::Rock => [4.0, 3.0, 1.0, 0.0, -1.0, 0.0, 1.0, 3.0, 4.0, 4.0],
             Self::Electronic => [5.0, 4.0, 2.0, 0.0, 1.0, 2.0, 1.0, 3.0, 4.0, 4.0],
             Self::Acoustic => [2.0, 1.0, 0.0, 1.0, 2.0, 2.0, 1.0, 2.0, 2.0, 1.0],
-            Self::Custom => [0.0; 10],
         }
     }
 

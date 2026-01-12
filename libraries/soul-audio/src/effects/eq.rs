@@ -8,20 +8,15 @@ use super::chain::AudioEffect;
 pub const MAX_EQ_BANDS: usize = 8;
 
 /// Filter type for EQ bands
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum FilterType {
     /// Low shelf - boosts/cuts below frequency
     LowShelf,
     /// Peaking - boosts/cuts around frequency with Q bandwidth
+    #[default]
     Peaking,
     /// High shelf - boosts/cuts above frequency
     HighShelf,
-}
-
-impl Default for FilterType {
-    fn default() -> Self {
-        Self::Peaking
-    }
 }
 
 /// EQ band configuration
@@ -213,7 +208,7 @@ impl BiquadFilter {
         }
 
         let a = 10.0_f32.powf(gain_db / 40.0); // Amplitude
-        // Bug fix: Clamp frequency to 45% of sample rate to prevent near-Nyquist instability
+                                               // Bug fix: Clamp frequency to 45% of sample rate to prevent near-Nyquist instability
         let clamped_freq = frequency.min(sample_rate * 0.45);
         let omega = 2.0 * std::f32::consts::PI * clamped_freq / sample_rate;
         let sin_omega = omega.sin();
@@ -1036,7 +1031,10 @@ mod tests {
 
         // Verify output is valid (not NaN or infinite)
         for sample in &buffer2 {
-            assert!(sample.is_finite(), "Sample should be finite after adding band");
+            assert!(
+                sample.is_finite(),
+                "Sample should be finite after adding band"
+            );
         }
     }
 
@@ -1061,7 +1059,10 @@ mod tests {
 
         // Verify output is valid
         for sample in &buffer2 {
-            assert!(sample.is_finite(), "Sample should be finite after removing band");
+            assert!(
+                sample.is_finite(),
+                "Sample should be finite after removing band"
+            );
         }
     }
 

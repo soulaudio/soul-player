@@ -22,7 +22,9 @@ mod state;
 pub use component::{PipelineComponent, PipelineComponentInfo};
 pub use effect_impls::{CrossfeedUpdateParams, GraphicEqUpdateParams};
 pub use loudness_impls::HeadroomParams;
-pub use registry::{ConvolutionParams, EffectFactory, EffectRegistry, EffectTypeId, GraphicEqParams};
+pub use registry::{
+    ConvolutionParams, EffectFactory, EffectRegistry, EffectTypeId, GraphicEqParams,
+};
 pub use state::{
     CrossfadeProgress, PipelineEvent, PipelineState, PipelineStateMachine, TrackTransition,
 };

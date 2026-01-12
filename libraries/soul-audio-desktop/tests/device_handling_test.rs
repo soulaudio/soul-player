@@ -221,7 +221,12 @@ impl Default for MockDeviceManager {
 // ============================================================================
 
 /// Create a test WAV file
-fn create_test_wav(path: &Path, duration_secs: f32, frequency: f32, sample_rate: u32) -> Result<(), Box<dyn std::error::Error>> {
+fn create_test_wav(
+    path: &Path,
+    duration_secs: f32,
+    frequency: f32,
+    sample_rate: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
     use hound::{WavSpec, WavWriter};
 
     let spec = WavSpec {
@@ -406,7 +411,10 @@ mod device_disconnection_tests {
         assert!(primary.is_available());
 
         // Simulate disconnection
-        manager.get_device_mut("Primary Device").unwrap().disconnect();
+        manager
+            .get_device_mut("Primary Device")
+            .unwrap()
+            .disconnect();
 
         // Primary should no longer be available
         let primary = manager.get_device("Primary Device").unwrap();
@@ -559,7 +567,10 @@ mod device_reconnection_tests {
         eprintln!("  5. Verify it appears in the device list again");
 
         let devices_before = list_devices(AudioBackend::Default).unwrap_or_default();
-        eprintln!("Devices before: {:?}", devices_before.iter().map(|d| &d.name).collect::<Vec<_>>());
+        eprintln!(
+            "Devices before: {:?}",
+            devices_before.iter().map(|d| &d.name).collect::<Vec<_>>()
+        );
 
         // In automated testing, we would use system APIs to simulate device events
         // For now, this serves as a manual test guide
@@ -718,11 +729,9 @@ mod multiple_device_enumeration_tests {
             Ok(devices) => {
                 eprintln!("Found {} audio devices:", devices.len());
                 for device in &devices {
-                    eprintln!("  - {} ({}Hz, {} ch, default: {})",
-                        device.name,
-                        device.sample_rate,
-                        device.channels,
-                        device.is_default
+                    eprintln!(
+                        "  - {} ({}Hz, {} ch, default: {})",
+                        device.name, device.sample_rate, device.channels, device.is_default
                     );
                 }
 
@@ -784,7 +793,10 @@ mod multiple_device_enumeration_tests {
         if !success_counts.is_empty() {
             let first = success_counts[0];
             for count in &success_counts {
-                assert_eq!(*count, first, "Concurrent enumeration should return consistent results");
+                assert_eq!(
+                    *count, first,
+                    "Concurrent enumeration should return consistent results"
+                );
             }
         }
     }
@@ -863,7 +875,7 @@ mod device_switching_tests {
             Ok(mut playback) => {
                 let switch_result = playback.switch_device(
                     AudioBackend::Default,
-                    Some("NonexistentDevice12345XYZ".to_string())
+                    Some("NonexistentDevice12345XYZ".to_string()),
                 );
 
                 assert!(switch_result.is_err(), "Should fail for invalid device");
@@ -896,7 +908,10 @@ mod device_switching_tests {
                     }
                 }
 
-                eprintln!("Rapid switches: {} succeeded, {} failed", success_count, fail_count);
+                eprintln!(
+                    "Rapid switches: {} succeeded, {} failed",
+                    success_count, fail_count
+                );
                 assert!(success_count > 0, "At least some switches should succeed");
             }
             Err(e) => {
@@ -938,7 +953,9 @@ mod device_switching_tests {
         };
 
         // Add track and start playback
-        playback.send_command(PlaybackCommand::AddToQueue(track)).ok();
+        playback
+            .send_command(PlaybackCommand::AddToQueue(track))
+            .ok();
         playback.send_command(PlaybackCommand::Play).ok();
 
         thread::sleep(Duration::from_secs(2));
@@ -1048,14 +1065,21 @@ mod sample_rate_mismatch_tests {
         ];
 
         for (from_rate, to_rate, desc) in conversions {
-            let wav_path = temp_dir.path().join(format!("test_{}_{}.wav", from_rate, to_rate));
+            let wav_path = temp_dir
+                .path()
+                .join(format!("test_{}_{}.wav", from_rate, to_rate));
             create_test_wav(&wav_path, 0.5, 1000.0, from_rate).unwrap();
 
-            let source = LocalAudioSource::new(&wav_path, to_rate)
-                .expect(&format!("Failed for {}", desc));
+            let source =
+                LocalAudioSource::new(&wav_path, to_rate).expect(&format!("Failed for {}", desc));
 
             assert_eq!(source.sample_rate(), to_rate, "{} output rate", desc);
-            assert_eq!(source.source_sample_rate(), from_rate, "{} source rate", desc);
+            assert_eq!(
+                source.source_sample_rate(),
+                from_rate,
+                "{} source rate",
+                desc
+            );
 
             eprintln!("{}: {}Hz -> {}Hz", desc, from_rate, to_rate);
         }
@@ -1189,11 +1213,16 @@ mod automatic_resampling_tests {
         let source = LocalAudioSource::new(&wav_path, 96000).expect("Failed to create source");
 
         let actual_duration = source.duration().as_secs_f64();
-        eprintln!("Expected: {:.3}s, Actual: {:.3}s", expected_duration, actual_duration);
+        eprintln!(
+            "Expected: {:.3}s, Actual: {:.3}s",
+            expected_duration, actual_duration
+        );
 
         // Allow 5% tolerance
-        assert!((actual_duration - expected_duration as f64).abs() < 0.1,
-            "Duration should be preserved");
+        assert!(
+            (actual_duration - expected_duration as f64).abs() < 0.1,
+            "Duration should be preserved"
+        );
     }
 
     #[test]
@@ -1262,7 +1291,9 @@ mod sample_rate_negotiation_tests {
 
         // Find closest supported rate to 88200
         let target = 88200u32;
-        let best = caps.sample_rates.iter()
+        let best = caps
+            .sample_rates
+            .iter()
             .min_by_key(|&&rate| (rate as i64 - target as i64).abs())
             .copied()
             .unwrap_or(44100);
@@ -1271,7 +1302,9 @@ mod sample_rate_negotiation_tests {
 
         // Find closest to unsupported rate like 50000
         let target = 50000u32;
-        let best = caps.sample_rates.iter()
+        let best = caps
+            .sample_rates
+            .iter()
             .min_by_key(|&&rate| (rate as i64 - target as i64).abs())
             .copied()
             .unwrap_or(44100);
@@ -1296,9 +1329,14 @@ mod sample_rate_negotiation_tests {
                     }
 
                     // Should include at least one standard rate
-                    let has_standard = caps.sample_rates.iter()
+                    let has_standard = caps
+                        .sample_rates
+                        .iter()
                         .any(|r| STANDARD_SAMPLE_RATES.contains(r));
-                    assert!(has_standard, "Device should support at least one standard rate");
+                    assert!(
+                        has_standard,
+                        "Device should support at least one standard rate"
+                    );
                 }
             }
             Err(e) => {
@@ -1352,7 +1390,10 @@ mod integration_smoke_tests {
             Ok(devices) => {
                 eprintln!("  Found {} devices", devices.len());
                 for d in &devices {
-                    eprintln!("    - {} ({}Hz, default: {})", d.name, d.sample_rate, d.is_default);
+                    eprintln!(
+                        "    - {} ({}Hz, default: {})",
+                        d.name, d.sample_rate, d.is_default
+                    );
                 }
             }
             Err(e) => {
@@ -1572,7 +1613,7 @@ mod property_tests {
 
                     // Sample rates should be sorted
                     for i in 1..caps.sample_rates.len() {
-                        assert!(caps.sample_rates[i-1] <= caps.sample_rates[i]);
+                        assert!(caps.sample_rates[i - 1] <= caps.sample_rates[i]);
                     }
                 }
             }
@@ -1593,8 +1634,13 @@ mod property_tests {
 
         for (state, expected_available) in transitions {
             device.state = state.clone();
-            assert_eq!(device.is_available(), expected_available,
-                "State {:?} should have is_available={}", state, expected_available);
+            assert_eq!(
+                device.is_available(),
+                expected_available,
+                "State {:?} should have is_available={}",
+                state,
+                expected_available
+            );
         }
     }
 

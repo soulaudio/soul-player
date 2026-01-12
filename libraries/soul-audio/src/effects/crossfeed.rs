@@ -34,9 +34,8 @@ impl CrossfeedPreset {
     pub fn level_db(&self) -> f32 {
         match self {
             Self::Natural => -4.5,
-            Self::Relaxed => -6.0,
+            Self::Relaxed | Self::Custom => -6.0, // Default for custom
             Self::Meier => -9.0,
-            Self::Custom => -6.0, // Default for custom
         }
     }
 
@@ -44,9 +43,8 @@ impl CrossfeedPreset {
     pub fn cutoff_hz(&self) -> f32 {
         match self {
             Self::Natural => 700.0,
-            Self::Relaxed => 650.0,
+            Self::Relaxed | Self::Custom => 650.0, // Default for custom
             Self::Meier => 550.0,
-            Self::Custom => 650.0, // Default for custom
         }
     }
 }

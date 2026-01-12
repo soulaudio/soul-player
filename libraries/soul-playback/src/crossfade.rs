@@ -92,8 +92,7 @@ impl FadeCurve {
     pub fn display_name(&self) -> &'static str {
         match self {
             FadeCurve::Linear => "Linear",
-            FadeCurve::SquareRoot => "Square Root",
-            FadeCurve::Logarithmic => "Square Root", // Deprecated alias
+            FadeCurve::SquareRoot | FadeCurve::Logarithmic => "Square Root", // Logarithmic is deprecated alias
             FadeCurve::SCurve => "S-Curve",
             FadeCurve::EqualPower => "Equal Power",
         }

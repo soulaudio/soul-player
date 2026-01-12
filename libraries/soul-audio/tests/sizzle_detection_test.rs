@@ -196,8 +196,10 @@ fn test_eq_parameter_change_waveform_analysis() {
             chunk_boundary_jumps.push(jump);
 
             if jump > 0.05 {
-                println!("Chunk {} boundary jump: {:.6} (prev_last={:.6}, first={:.6})",
-                         chunk_idx, jump, prev_last_sample, first_sample);
+                println!(
+                    "Chunk {} boundary jump: {:.6} (prev_last={:.6}, first={:.6})",
+                    chunk_idx, jump, prev_last_sample, first_sample
+                );
                 print_waveform_around(&output, 0, 5, "Start of chunk");
             }
         }
@@ -206,8 +208,10 @@ fn test_eq_parameter_change_waveform_analysis() {
 
         // Print detailed info for chunks with high artifact levels
         if high_freq > 0.01 || zipper > 0.5 {
-            println!("Chunk {}: gain={:.1}dB, high_freq={:.6}, zipper={:.4}",
-                     chunk_idx, gain, high_freq, zipper);
+            println!(
+                "Chunk {}: gain={:.1}dB, high_freq={:.6}, zipper={:.4}",
+                chunk_idx, gain, high_freq, zipper
+            );
         }
     }
 
@@ -226,11 +230,19 @@ fn test_eq_parameter_change_waveform_analysis() {
     // Thresholds for detecting audible artifacts
     // Note: With ±6dB gain changes, some high-freq content is expected from coefficient transitions
     // The key is that it's below audible threshold (~0.02 for high-freq)
-    assert!(max_high_freq < 0.02, "High-frequency artifacts detected: {:.6}", max_high_freq);
+    assert!(
+        max_high_freq < 0.02,
+        "High-frequency artifacts detected: {:.6}",
+        max_high_freq
+    );
 
     // Boundary jumps are expected when gain changes - a 6dB change is 2x amplitude
     // Allow up to 0.15 for smooth transitions (actual sizzle would show much higher)
-    assert!(max_boundary_jump < 0.15, "Chunk boundary discontinuity: {:.6}", max_boundary_jump);
+    assert!(
+        max_boundary_jump < 0.15,
+        "Chunk boundary discontinuity: {:.6}",
+        max_boundary_jump
+    );
 }
 
 #[test]
@@ -270,14 +282,20 @@ fn test_eq_rapid_frequency_sweep_artifacts() {
             if jump > max_boundary_jump {
                 max_boundary_jump = jump;
                 if jump > 0.03 {
-                    println!("Chunk {}: freq={:.0}Hz, boundary_jump={:.6}", chunk_idx, eq_freq, jump);
+                    println!(
+                        "Chunk {}: freq={:.0}Hz, boundary_jump={:.6}",
+                        chunk_idx, eq_freq, jump
+                    );
                 }
             }
         }
         prev_last_sample = output[output.len() - 2];
 
         if deviation > 0.02 {
-            println!("Chunk {}: freq={:.0}Hz, deviation={:.6}", chunk_idx, eq_freq, deviation);
+            println!(
+                "Chunk {}: freq={:.0}Hz, deviation={:.6}",
+                chunk_idx, eq_freq, deviation
+            );
         }
     }
 
@@ -287,7 +305,11 @@ fn test_eq_rapid_frequency_sweep_artifacts() {
 
     // EQ frequency sweeps cause filter coefficient changes which affect phase
     // Allow reasonable boundary jumps (< 0.1) for smooth frequency transitions
-    assert!(max_boundary_jump < 0.1, "Boundary discontinuity during freq sweep: {:.6}", max_boundary_jump);
+    assert!(
+        max_boundary_jump < 0.1,
+        "Boundary discontinuity during freq sweep: {:.6}",
+        max_boundary_jump
+    );
 }
 
 #[test]
@@ -327,7 +349,10 @@ fn test_graphic_eq_slider_drag_artifacts() {
             }
 
             if diff > 0.1 {
-                println!("Frame {}: gain={:.1}dB, chunk_boundary_diff={:.6}", frame, gain, diff);
+                println!(
+                    "Frame {}: gain={:.1}dB, chunk_boundary_diff={:.6}",
+                    frame, gain, diff
+                );
             }
         }
 
@@ -342,8 +367,11 @@ fn test_graphic_eq_slider_drag_artifacts() {
     // as high-frequency content, not just level differences from gain changes.
     // Allow up to 0.5 for aggressive gain sweeps - the important metric is that
     // test_sample_by_sample_continuity shows no discontinuities beyond physics
-    assert!(max_inter_chunk_diff < 0.5,
-            "Chunk boundary artifacts during slider drag: {:.6}", max_inter_chunk_diff);
+    assert!(
+        max_inter_chunk_diff < 0.5,
+        "Chunk boundary artifacts during slider drag: {:.6}",
+        max_inter_chunk_diff
+    );
 }
 
 #[test]
@@ -359,7 +387,10 @@ fn test_coefficient_smoothing_effectiveness() {
     eq.process(&mut baseline_output, SAMPLE_RATE);
 
     let baseline_high_freq = measure_high_freq_content(&baseline_output);
-    println!("Baseline (no changes) high-freq content: {:.6}", baseline_high_freq);
+    println!(
+        "Baseline (no changes) high-freq content: {:.6}",
+        baseline_high_freq
+    );
 
     // Now process with parameter changes every chunk
     eq.reset();
@@ -390,7 +421,11 @@ fn test_coefficient_smoothing_effectiveness() {
 
     // With good smoothing, the ratio should be close to 1
     // A high ratio indicates smoothing isn't working well
-    assert!(ratio < 5.0, "Smoothing not effective: {:.2}x more artifacts with changes", ratio);
+    assert!(
+        ratio < 5.0,
+        "Smoothing not effective: {:.2}x more artifacts with changes",
+        ratio
+    );
 }
 
 #[test]
@@ -407,9 +442,13 @@ fn test_sample_by_sample_continuity() {
     // Expected maximum sample-to-sample change for a sine wave
     // derivative of sin(wt) = w*cos(wt), max value = w = 2*pi*f
     // sample-to-sample change = w/sample_rate * amplitude
-    let expected_max_delta = 2.0 * std::f32::consts::PI * test_freq / SAMPLE_RATE as f32 * amplitude;
+    let expected_max_delta =
+        2.0 * std::f32::consts::PI * test_freq / SAMPLE_RATE as f32 * amplitude;
 
-    println!("Expected max delta for {:.0}Hz sine: {:.6}", test_freq, expected_max_delta);
+    println!(
+        "Expected max delta for {:.0}Hz sine: {:.6}",
+        test_freq, expected_max_delta
+    );
 
     let mut discontinuity_count = 0;
     let mut max_discontinuity = 0.0_f32;
@@ -423,7 +462,8 @@ fn test_sample_by_sample_continuity() {
 
         // Generate phase-continuous sine wave
         let start_sample = chunk_idx * CHUNK_SIZE;
-        let mut buffer = generate_sine_at(test_freq, SAMPLE_RATE, start_sample, CHUNK_SIZE, amplitude);
+        let mut buffer =
+            generate_sine_at(test_freq, SAMPLE_RATE, start_sample, CHUNK_SIZE, amplitude);
         eq.process(&mut buffer, SAMPLE_RATE);
 
         for i in 0..(buffer.len() / 2) {
@@ -437,8 +477,10 @@ fn test_sample_by_sample_continuity() {
                     if delta > max_discontinuity {
                         max_discontinuity = delta;
                         if discontinuity_count <= 10 {
-                            println!("Discontinuity at sample {}: delta={:.6} (threshold={:.6})",
-                                     total_samples, delta, threshold);
+                            println!(
+                                "Discontinuity at sample {}: delta={:.6} (threshold={:.6})",
+                                total_samples, delta, threshold
+                            );
                         }
                     }
                 }
@@ -450,13 +492,20 @@ fn test_sample_by_sample_continuity() {
 
     println!("\n=== Summary ===");
     println!("Total samples: {}", total_samples);
-    println!("Discontinuities (>{:.6}): {}", expected_max_delta * 5.0, discontinuity_count);
+    println!(
+        "Discontinuities (>{:.6}): {}",
+        expected_max_delta * 5.0,
+        discontinuity_count
+    );
     println!("Max discontinuity: {:.6}", max_discontinuity);
 
     // Should have very few discontinuities with proper smoothing
     let discontinuity_rate = discontinuity_count as f32 / total_samples as f32;
     println!("Discontinuity rate: {:.4}%", discontinuity_rate * 100.0);
 
-    assert!(discontinuity_rate < 0.01,
-            "Too many discontinuities: {:.4}% (should be <1%)", discontinuity_rate * 100.0);
+    assert!(
+        discontinuity_rate < 0.01,
+        "Too many discontinuities: {:.4}% (should be <1%)",
+        discontinuity_rate * 100.0
+    );
 }

@@ -335,34 +335,32 @@ async fn load_persisted_dsp_chain(
     user_id: &str,
 ) -> Option<[Option<EffectSlotState>; 4]> {
     match soul_storage::settings::get_setting(pool, user_id, DSP_CHAIN_SETTING_KEY).await {
-        Ok(Some(value)) => {
-            match serde_json::from_value::<PersistedDspChain>(value) {
-                Ok(chain) => {
-                    let mut slots: [Option<EffectSlotState>; 4] = Default::default();
+        Ok(Some(value)) => match serde_json::from_value::<PersistedDspChain>(value) {
+            Ok(chain) => {
+                let mut slots: [Option<EffectSlotState>; 4] = Default::default();
 
-                    for persisted_slot in chain.slots {
-                        if persisted_slot.index < 4 {
-                            if let Some(effect) = persisted_slot.effect {
-                                slots[persisted_slot.index] = Some(EffectSlotState {
-                                    effect,
-                                    enabled: persisted_slot.enabled,
-                                });
-                            }
+                for persisted_slot in chain.slots {
+                    if persisted_slot.index < 4 {
+                        if let Some(effect) = persisted_slot.effect {
+                            slots[persisted_slot.index] = Some(EffectSlotState {
+                                effect,
+                                enabled: persisted_slot.enabled,
+                            });
                         }
                     }
+                }
 
-                    eprintln!("[load_persisted_dsp_chain] DSP chain loaded successfully");
-                    Some(slots)
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[load_persisted_dsp_chain] Failed to deserialize DSP chain: {}",
-                        e
-                    );
-                    None
-                }
+                eprintln!("[load_persisted_dsp_chain] DSP chain loaded successfully");
+                Some(slots)
             }
-        }
+            Err(e) => {
+                eprintln!(
+                    "[load_persisted_dsp_chain] Failed to deserialize DSP chain: {}",
+                    e
+                );
+                None
+            }
+        },
         Ok(None) => {
             eprintln!("[load_persisted_dsp_chain] No saved DSP chain found");
             None
@@ -625,7 +623,8 @@ pub async fn update_effect_parameters(
         let slots = playback.get_effect_slots()?;
         if let Some(slot_state) = &slots[slot_index] {
             // Try in-place update first (preserves filter states, no sizzle)
-            let updated_in_place = playback.update_effect_parameters_in_place(slot_index, &effect)?;
+            let updated_in_place =
+                playback.update_effect_parameters_in_place(slot_index, &effect)?;
 
             if updated_in_place {
                 eprintln!(
@@ -1025,8 +1024,13 @@ pub async fn load_dsp_chain_preset(
 
     // Add each effect to its slot (already persists after each add)
     for (slot_index, effect) in effect_chain.iter().enumerate() {
-        add_effect_to_chain(playback.clone(), app_state.clone(), slot_index, effect.clone())
-            .await?;
+        add_effect_to_chain(
+            playback.clone(),
+            app_state.clone(),
+            slot_index,
+            effect.clone(),
+        )
+        .await?;
     }
 
     Ok(())

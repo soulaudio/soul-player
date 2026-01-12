@@ -91,7 +91,12 @@ const LATENCY_ACCURACY_TOLERANCE_PERCENT: f32 = 10.0;
 // =============================================================================
 
 /// Generate a pure sine wave (mono) for frequency response testing
-fn generate_sine_mono(frequency: f32, sample_rate: u32, duration_secs: f32, amplitude: f32) -> Vec<f32> {
+fn generate_sine_mono(
+    frequency: f32,
+    sample_rate: u32,
+    duration_secs: f32,
+    amplitude: f32,
+) -> Vec<f32> {
     let num_samples = (sample_rate as f32 * duration_secs) as usize;
     (0..num_samples)
         .map(|i| {
@@ -173,7 +178,7 @@ fn generate_smpte_imd(sample_rate: u32, duration_secs: f32, amplitude: f32) -> V
     (0..num_samples)
         .map(|i| {
             let t = i as f32 / sample_rate as f32;
-            let lf = 0.8 * (2.0 * PI * 60.0 * t).sin();  // 60 Hz at 80%
+            let lf = 0.8 * (2.0 * PI * 60.0 * t).sin(); // 60 Hz at 80%
             let hf = 0.2 * (2.0 * PI * 7000.0 * t).sin(); // 7 kHz at 20%
             amplitude * (lf + hf)
         })
@@ -302,7 +307,10 @@ fn calculate_thd_n_aes17(samples: &[f32], fundamental_freq: f32, sample_rate: u3
     let max_bin = ((20000.0 / bin_width) as usize).min(nyquist_bin - 1);
     let min_bin = ((20.0 / bin_width) as usize).max(1);
 
-    let total_power: f32 = spectrum[min_bin..=max_bin].iter().map(|c| c.norm_sqr()).sum();
+    let total_power: f32 = spectrum[min_bin..=max_bin]
+        .iter()
+        .map(|c| c.norm_sqr())
+        .sum();
 
     // THD+N = sqrt((total - fundamental) / fundamental)
     let distortion_power = (total_power - fundamental_power).max(0.0);
@@ -334,7 +342,13 @@ struct Measurement {
 }
 
 impl Measurement {
-    fn new(name: &str, measured: f32, threshold: f32, unit: &'static str, higher_is_better: bool) -> Self {
+    fn new(
+        name: &str,
+        measured: f32,
+        threshold: f32,
+        unit: &'static str,
+        higher_is_better: bool,
+    ) -> Self {
         let passed = if higher_is_better {
             measured >= threshold
         } else {
@@ -385,8 +399,16 @@ fn test_frequency_response_flatness_studio_grade() {
     ];
 
     let qualities = [
-        (ResamplingQuality::High, "High", PASSBAND_FLATNESS_CONSUMER_DB),
-        (ResamplingQuality::Maximum, "Maximum", PASSBAND_FLATNESS_STUDIO_DB),
+        (
+            ResamplingQuality::High,
+            "High",
+            PASSBAND_FLATNESS_CONSUMER_DB,
+        ),
+        (
+            ResamplingQuality::Maximum,
+            "Maximum",
+            PASSBAND_FLATNESS_STUDIO_DB,
+        ),
     ];
 
     for (input_rate, output_rate, description) in test_cases {
@@ -395,8 +417,18 @@ fn test_frequency_response_flatness_studio_grade() {
         // Test frequencies from 100Hz to 90% of lower Nyquist
         let nyquist = (input_rate.min(output_rate) as f32) / 2.0;
         let test_frequencies: Vec<f32> = [
-            100.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 10000.0,
-            12000.0, 15000.0, 18000.0, nyquist * 0.85, nyquist * 0.90,
+            100.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0,
+            10000.0,
+            12000.0,
+            15000.0,
+            18000.0,
+            nyquist * 0.85,
+            nyquist * 0.90,
         ]
         .into_iter()
         .filter(|&f| f < nyquist * 0.95)
@@ -446,7 +478,10 @@ fn test_frequency_response_flatness_studio_grade() {
             // Calculate passband ripple (max deviation from mean)
             let gains: Vec<f32> = gains_db.iter().map(|(_, g)| *g).collect();
             let mean_gain = gains.iter().sum::<f32>() / gains.len() as f32;
-            let max_deviation = gains.iter().map(|&g| (g - mean_gain).abs()).fold(0.0f32, f32::max);
+            let max_deviation = gains
+                .iter()
+                .map(|&g| (g - mean_gain).abs())
+                .fold(0.0f32, f32::max);
             let max_gain = gains.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
             let min_gain = gains.iter().cloned().fold(f32::INFINITY, f32::min);
             let ripple = max_gain - min_gain;
@@ -494,10 +529,10 @@ fn test_stopband_attenuation_per_quality() {
     // Note: Due to measurement limitations, we use relaxed thresholds
     // Professional equipment (Audio Precision) would achieve the documented values
     let presets = [
-        (ResamplingQuality::Fast, "Fast", 40.0),        // Relaxed from 60dB
+        (ResamplingQuality::Fast, "Fast", 40.0), // Relaxed from 60dB
         (ResamplingQuality::Balanced, "Balanced", 50.0), // Relaxed from 100dB
-        (ResamplingQuality::High, "High", 50.0),         // Relaxed from 140dB
-        (ResamplingQuality::Maximum, "Maximum", 50.0),   // Relaxed from 180dB
+        (ResamplingQuality::High, "High", 50.0), // Relaxed from 140dB
+        (ResamplingQuality::Maximum, "Maximum", 50.0), // Relaxed from 180dB
     ];
 
     for (input_rate, output_rate, test_freq, description) in test_cases {
@@ -565,9 +600,21 @@ fn test_aliasing_artifact_detection() {
 
     let presets = [
         (ResamplingQuality::Fast, "Fast", ALIASING_REJECTION_MIN_DB),
-        (ResamplingQuality::Balanced, "Balanced", ALIASING_REJECTION_MIN_DB + 10.0),
-        (ResamplingQuality::High, "High", ALIASING_REJECTION_MIN_DB + 20.0),
-        (ResamplingQuality::Maximum, "Maximum", ALIASING_REJECTION_MIN_DB + 20.0),
+        (
+            ResamplingQuality::Balanced,
+            "Balanced",
+            ALIASING_REJECTION_MIN_DB + 10.0,
+        ),
+        (
+            ResamplingQuality::High,
+            "High",
+            ALIASING_REJECTION_MIN_DB + 20.0,
+        ),
+        (
+            ResamplingQuality::Maximum,
+            "Maximum",
+            ALIASING_REJECTION_MIN_DB + 20.0,
+        ),
     ];
 
     for (input_rate, output_rate, description) in test_cases {
@@ -686,14 +733,20 @@ fn test_phase_linearity() {
             }
 
             phase_diffs.push((freq, phase_diff));
-            println!("  {} Hz: Phase shift = {:.1} degrees", freq as u32, phase_diff);
+            println!(
+                "  {} Hz: Phase shift = {:.1} degrees",
+                freq as u32, phase_diff
+            );
         }
 
         // Calculate phase linearity (deviation from linear progression)
         if phase_diffs.len() >= 3 {
             let phases: Vec<f32> = phase_diffs.iter().map(|(_, p)| *p).collect();
             let mean_phase = phases.iter().sum::<f32>() / phases.len() as f32;
-            let max_deviation = phases.iter().map(|&p| (p - mean_phase).abs()).fold(0.0f32, f32::max);
+            let max_deviation = phases
+                .iter()
+                .map(|&p| (p - mean_phase).abs())
+                .fold(0.0f32, f32::max);
 
             println!("  Phase deviation from mean: {:.1} degrees", max_deviation);
             println!("  (Linear-phase SRC should have minimal deviation)");
@@ -810,8 +863,16 @@ fn test_thd_n_various_ratios() {
     let test_frequencies = [100.0, 1000.0, 10000.0];
 
     let conversion_ratios = [
-        (44100, 48000, "44.1kHz <-> 48kHz (1.088x - common DAT conversion)"),
-        (44100, 96000, "44.1kHz -> 96kHz (2.177x - high-res upsampling)"),
+        (
+            44100,
+            48000,
+            "44.1kHz <-> 48kHz (1.088x - common DAT conversion)",
+        ),
+        (
+            44100,
+            96000,
+            "44.1kHz -> 96kHz (2.177x - high-res upsampling)",
+        ),
         (192000, 48000, "192kHz -> 48kHz (4x downsampling)"),
     ];
 
@@ -1008,7 +1069,11 @@ fn test_latency_measurement_accuracy() {
                 ResamplingQuality::Maximum => 100.0,
             };
 
-            let status = if latency_ms <= max_acceptable_ms { "OK" } else { "HIGH" };
+            let status = if latency_ms <= max_acceptable_ms {
+                "OK"
+            } else {
+                "HIGH"
+            };
             println!(
                 "  {:10}: Latency = {:5} frames ({:6.2} ms) [{}]",
                 quality_name, reported_latency, latency_ms, status
@@ -1053,7 +1118,11 @@ fn test_critical_conversion_ratios() {
 
         let ratio = output_rate as f32 / input_rate as f32;
         let is_fractional = (ratio - ratio.round()).abs() > 0.001;
-        let ratio_type = if is_fractional { "Fractional" } else { "Integer" };
+        let ratio_type = if is_fractional {
+            "Fractional"
+        } else {
+            "Integer"
+        };
 
         println!("  Ratio: {:.6}x ({})", ratio, ratio_type);
 
@@ -1089,19 +1158,28 @@ fn test_critical_conversion_ratios() {
         // Test 3: Output size accuracy
         let expected_output_samples = (input.len() as f32 * ratio) as usize;
         let size_error_percent = ((output.len() as f32 - expected_output_samples as f32).abs()
-            / expected_output_samples as f32) * 100.0;
+            / expected_output_samples as f32)
+            * 100.0;
 
         println!("  Gain:      {:+.3} dB (should be ~0)", gain_db);
         println!("  THD+N:     {:.1} dB (should be < -50)", thd_n);
-        println!("  Size:      {} samples (expected ~{}, error {:.1}%)",
-                 output.len(), expected_output_samples, size_error_percent);
+        println!(
+            "  Size:      {} samples (expected ~{}, error {:.1}%)",
+            output.len(),
+            expected_output_samples,
+            size_error_percent
+        );
 
         // Verify quality
         let gain_ok = gain_db.abs() < 1.0;
         let thd_ok = thd_n < -40.0;
         let size_ok = size_error_percent < 15.0;
 
-        let overall = if gain_ok && thd_ok && size_ok { "PASS" } else { "ISSUES" };
+        let overall = if gain_ok && thd_ok && size_ok {
+            "PASS"
+        } else {
+            "ISSUES"
+        };
         println!("  Overall:   [{}]", overall);
         println!();
     }

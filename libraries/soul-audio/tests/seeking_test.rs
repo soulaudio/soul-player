@@ -289,7 +289,11 @@ fn test_seek_to_beginning() {
     assert!(result.is_ok(), "Seek to beginning should succeed");
 
     let actual_position = result.unwrap();
-    assert_eq!(actual_position, Duration::from_secs(0), "Should be at position 0");
+    assert_eq!(
+        actual_position,
+        Duration::from_secs(0),
+        "Should be at position 0"
+    );
 
     // Verify position is actually at the start
     assert_eq!(decoder.position(), Duration::from_secs(0));
@@ -328,7 +332,8 @@ fn test_seek_to_specific_position() {
         assert!(
             actual >= target.saturating_sub(tolerance) && actual <= target + tolerance,
             "Seek to {:?} landed at {:?}, outside tolerance",
-            target, actual
+            target,
+            actual
         );
     }
 }
@@ -365,7 +370,10 @@ fn test_seek_to_end() {
     // After seeking to near the end, we should be able to decode remaining samples
     // (which may be empty or contain just a few trailing samples)
     let chunk = decoder.decode_chunk(1024);
-    assert!(chunk.is_ok(), "Decode after seeking to end should not error");
+    assert!(
+        chunk.is_ok(),
+        "Decode after seeking to end should not error"
+    );
 }
 
 /// Test sample-accurate seeking in WAV files
@@ -616,7 +624,8 @@ fn test_rapid_sequential_seeks() {
         assert!(
             result.is_ok(),
             "Rapid seek {} to {:?} should succeed",
-            i, position
+            i,
+            position
         );
     }
 
@@ -748,7 +757,9 @@ fn test_backward_seek() {
     decoder.open(&path).expect("Failed to open file");
 
     // Seek forward first
-    decoder.seek(Duration::from_secs(8)).expect("Forward seek failed");
+    decoder
+        .seek(Duration::from_secs(8))
+        .expect("Forward seek failed");
 
     // Now seek backward
     let result = decoder.seek(Duration::from_secs(2));
@@ -1109,7 +1120,8 @@ fn test_duration_reporting() {
     assert!(
         duration >= expected.saturating_sub(tolerance) && duration <= expected + tolerance,
         "Duration {:?} should match expected {:?}",
-        duration, expected
+        duration,
+        expected
     );
 }
 
@@ -1268,10 +1280,7 @@ fn test_time_to_sample_index_helper() {
 fn test_sample_index_to_time_helper() {
     let sample_rate = 44100u32;
 
-    assert_eq!(
-        sample_index_to_time(0, sample_rate),
-        Duration::from_secs(0)
-    );
+    assert_eq!(sample_index_to_time(0, sample_rate), Duration::from_secs(0));
     assert_eq!(
         sample_index_to_time(44100, sample_rate),
         Duration::from_secs(1)
@@ -1322,10 +1331,7 @@ fn test_chirp_wav_creation_helper() {
     let buffer = decoder.decode(&path).expect("Failed to decode chirp WAV");
 
     // Verify we got audio
-    assert!(
-        buffer.samples.len() > 0,
-        "Chirp WAV should contain samples"
-    );
+    assert!(buffer.samples.len() > 0, "Chirp WAV should contain samples");
 
     // Verify frequency at start is lower than at end
     let chunk_size = 4410; // 100ms
@@ -1360,7 +1366,9 @@ fn test_segmented_wav_creation_helper() {
     create_segmented_wav(&path, sample_rate, 1.0, 3);
 
     let mut decoder = SymphoniaDecoder::new();
-    let buffer = decoder.decode(&path).expect("Failed to decode segmented WAV");
+    let buffer = decoder
+        .decode(&path)
+        .expect("Failed to decode segmented WAV");
 
     // Should have 3 seconds of audio (3 segments * 1 second each)
     let expected_samples = sample_rate as usize * 2 * 3; // 3 seconds * stereo

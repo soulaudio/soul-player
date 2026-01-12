@@ -73,7 +73,10 @@ pub async fn get_recent_playback_contexts(
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(contexts.into_iter().map(FrontendPlaybackContext::from).collect())
+    Ok(contexts
+        .into_iter()
+        .map(FrontendPlaybackContext::from)
+        .collect())
 }
 
 /// Get the current (most recent) playback context

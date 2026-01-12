@@ -189,13 +189,13 @@ impl Fingerprinter {
         let channels = audio.format.channels as u32;
 
         // Convert to mono if needed and get samples
-        let samples = self.prepare_samples(&audio.samples, channels)?;
+        let samples = Self::prepare_samples(&audio.samples, channels)?;
 
         // Resample to fingerprint sample rate if needed
-        let resampled = if source_rate != FINGERPRINT_SAMPLE_RATE {
-            self.resample(&samples, source_rate, FINGERPRINT_SAMPLE_RATE)?
-        } else {
+        let resampled = if source_rate == FINGERPRINT_SAMPLE_RATE {
             samples
+        } else {
+            Self::resample(&samples, source_rate, FINGERPRINT_SAMPLE_RATE)?
         };
 
         // Calculate duration
@@ -210,7 +210,7 @@ impl Fingerprinter {
         let samples_to_use = &resampled[..resampled.len().min(max_samples)];
 
         // Generate fingerprint
-        let fingerprint = self.compute_fingerprint(samples_to_use)?;
+        let fingerprint = Self::compute_fingerprint(samples_to_use)?;
 
         Ok(FingerprintResult {
             fingerprint,
@@ -229,13 +229,13 @@ impl Fingerprinter {
         channels: u32,
     ) -> Result<FingerprintResult> {
         // Convert to mono if needed
-        let mono = self.prepare_samples(samples, channels)?;
+        let mono = Self::prepare_samples(samples, channels)?;
 
         // Resample to fingerprint sample rate if needed
-        let resampled = if sample_rate != FINGERPRINT_SAMPLE_RATE {
-            self.resample(&mono, sample_rate, FINGERPRINT_SAMPLE_RATE)?
-        } else {
+        let resampled = if sample_rate == FINGERPRINT_SAMPLE_RATE {
             mono
+        } else {
+            Self::resample(&mono, sample_rate, FINGERPRINT_SAMPLE_RATE)?
         };
 
         // Calculate duration
@@ -250,7 +250,7 @@ impl Fingerprinter {
         let samples_to_use = &resampled[..resampled.len().min(max_samples)];
 
         // Generate fingerprint
-        let fingerprint = self.compute_fingerprint(samples_to_use)?;
+        let fingerprint = Self::compute_fingerprint(samples_to_use)?;
 
         Ok(FingerprintResult {
             fingerprint,
@@ -260,7 +260,7 @@ impl Fingerprinter {
     }
 
     /// Convert interleaved multi-channel audio to mono
-    fn prepare_samples(&self, samples: &[f32], channels: u32) -> Result<Vec<f32>> {
+    fn prepare_samples(samples: &[f32], channels: u32) -> Result<Vec<f32>> {
         if channels == 0 {
             return Err(AudioError::Fingerprint("Invalid channel count".to_string()));
         }
@@ -288,7 +288,7 @@ impl Fingerprinter {
     ///
     /// Note: This is a basic resampler suitable for fingerprinting.
     /// For playback, use the high-quality resamplers in the resampling module.
-    fn resample(&self, samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
+    fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
         if from_rate == to_rate {
             return Ok(samples.to_vec());
         }
@@ -318,7 +318,7 @@ impl Fingerprinter {
     }
 
     /// Compute fingerprint using Chromaprint
-    fn compute_fingerprint(&self, samples: &[f32]) -> Result<Vec<u32>> {
+    fn compute_fingerprint(samples: &[f32]) -> Result<Vec<u32>> {
         // Convert f32 samples to i16 for Chromaprint
         let samples_i16: Vec<i16> = samples
             .iter()

@@ -104,9 +104,10 @@ async fn test_setting_roundtrip_boolean_value() {
         .await
         .unwrap();
 
-        let result = settings::get_setting(&pool, USER_ID, SETTING_VOLUME_LEVELING_PREVENT_CLIPPING)
-            .await
-            .unwrap();
+        let result =
+            settings::get_setting(&pool, USER_ID, SETTING_VOLUME_LEVELING_PREVENT_CLIPPING)
+                .await
+                .unwrap();
 
         assert_eq!(
             result,
@@ -392,7 +393,10 @@ async fn test_delete_setting_removes_it() {
     let deleted = settings::delete_setting(&pool, USER_ID, SETTING_VOLUME_LEVELING_MODE)
         .await
         .unwrap();
-    assert!(deleted, "delete_setting should return true when setting exists");
+    assert!(
+        deleted,
+        "delete_setting should return true when setting exists"
+    );
 
     // Verify it's gone
     let mode = settings::get_setting(&pool, USER_ID, SETTING_VOLUME_LEVELING_MODE)
@@ -562,9 +566,14 @@ async fn test_get_all_settings_only_returns_own_user_settings() {
     .await
     .unwrap();
 
-    settings::set_setting(&pool, "1", SETTING_VOLUME_LEVELING_PREAMP, &serde_json::json!(1.0))
-        .await
-        .unwrap();
+    settings::set_setting(
+        &pool,
+        "1",
+        SETTING_VOLUME_LEVELING_PREAMP,
+        &serde_json::json!(1.0),
+    )
+    .await
+    .unwrap();
 
     // User 2 sets 1 setting
     settings::set_setting(

@@ -75,7 +75,8 @@ impl ArtworkManager {
         mime_type: &str,
     ) -> Result<PathBuf, String> {
         let dir = self.get_artwork_dir(entity_type);
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create artwork dir: {}", e))?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create artwork dir: {}", e))?;
 
         // Determine extension from MIME type
         let ext = match mime_type {
@@ -109,26 +110,18 @@ impl ArtworkManager {
 
     /// Get artwork for an album
     ///
-    /// First checks for custom artwork, then falls back to embedded artwork from tracks.
+    /// Priority order:
+    /// 1. Soul Player storage (user explicitly set via UI)
+    /// 2. Folder artwork (cover.jpg, folder.jpg, etc.)
+    /// 3. Embedded artwork (from track metadata)
     ///
     /// # Arguments
     /// * `album_id` - Album ID
     pub async fn get_album_artwork(&self, album_id: AlbumId) -> Result<Option<Vec<u8>>, String> {
-        // Check for custom artwork first (overrides embedded)
-        if let Some(custom_path) = self.find_custom_artwork("albums", &album_id.to_string()) {
-            if let Ok(Some((data, _))) = self.read_custom_artwork(&custom_path) {
-                return Ok(Some(data));
-            }
-        }
-
-        // Fall back to embedded artwork from tracks
-        let track = self.get_track_from_album(album_id).await?;
-
-        if let Some(track_id) = track {
-            self.get_track_artwork(track_id).await
-        } else {
-            Ok(None)
-        }
+        // Get artwork with MIME type, then extract just the data
+        self.get_album_artwork_with_mime(album_id)
+            .await
+            .map(|opt| opt.map(|(data, _mime_type)| data))
     }
 
     /// Get artwork for a specific track
@@ -157,18 +150,47 @@ impl ArtworkManager {
     }
 
     /// Get artwork with MIME type for HTTP response
+    ///
+    /// Priority order:
+    /// 1. Soul Player storage (user explicitly set via UI)
+    /// 2. Folder artwork (cover.jpg, folder.jpg, etc.)
+    /// 3. Embedded artwork (from track metadata)
     pub async fn get_album_artwork_with_mime(
         &self,
         album_id: AlbumId,
     ) -> Result<Option<(Vec<u8>, String)>, String> {
-        // Check for custom artwork first (overrides embedded)
+        // Get album's artwork source preference
+        let artwork_info = soul_storage::albums::get_artwork_source(&self.pool, album_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // 1. Check Soul Player custom artwork (highest priority)
         if let Some(custom_path) = self.find_custom_artwork("albums", &album_id.to_string()) {
             if let Ok(Some(result)) = self.read_custom_artwork(&custom_path) {
                 return Ok(Some(result));
             }
         }
 
-        // Fall back to embedded artwork
+        // 2. Check folder artwork (middle priority)
+        // First try the recorded path from database
+        if let Some((source, Some(path))) = artwork_info {
+            if source == "folder" && std::path::Path::new(&path).exists() {
+                if let Ok(data) = std::fs::read(&path) {
+                    let mime_type = Self::guess_mime_from_path(&path);
+                    return Ok(Some((data, mime_type)));
+                }
+            }
+        }
+
+        // Fallback: Auto-discover folder artwork if not in database
+        if let Ok(Some(folder_path)) = self.discover_folder_artwork_for_album(album_id).await {
+            if let Ok(data) = std::fs::read(&folder_path) {
+                let mime_type = Self::guess_mime_from_path(&folder_path.to_string_lossy());
+                return Ok(Some((data, mime_type)));
+            }
+        }
+
+        // 3. Fall back to embedded artwork (lowest priority)
         let track = self.get_track_from_album(album_id).await?;
 
         if let Some(track_id) = track {
@@ -180,19 +202,48 @@ impl ArtworkManager {
 
     /// Get artwork with MIME type and source info (custom vs embedded)
     ///
+    /// Priority order:
+    /// 1. Soul Player storage (user explicitly set via UI)
+    /// 2. Folder artwork (cover.jpg, folder.jpg, etc.)
+    /// 3. Embedded artwork (from track metadata)
+    ///
     /// Returns (data, mime_type, is_custom) where is_custom=true means from Soul Player storage
     pub async fn get_album_artwork_with_source(
         &self,
         album_id: AlbumId,
     ) -> Result<Option<(Vec<u8>, String, bool)>, String> {
-        // Check for custom artwork first (overrides embedded)
+        // Get album's artwork source preference
+        let artwork_info = soul_storage::albums::get_artwork_source(&self.pool, album_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // 1. Check Soul Player custom artwork (highest priority)
         if let Some(custom_path) = self.find_custom_artwork("albums", &album_id.to_string()) {
             if let Ok(Some((data, mime_type))) = self.read_custom_artwork(&custom_path) {
                 return Ok(Some((data, mime_type, true)));
             }
         }
 
-        // Fall back to embedded artwork
+        // 2. Check folder artwork (middle priority)
+        // First try the recorded path from database
+        if let Some((source, Some(path))) = artwork_info {
+            if source == "folder" && std::path::Path::new(&path).exists() {
+                if let Ok(data) = std::fs::read(&path) {
+                    let mime_type = Self::guess_mime_from_path(&path);
+                    return Ok(Some((data, mime_type, false)));
+                }
+            }
+        }
+
+        // Fallback: Auto-discover folder artwork if not in database
+        if let Ok(Some(folder_path)) = self.discover_folder_artwork_for_album(album_id).await {
+            if let Ok(data) = std::fs::read(&folder_path) {
+                let mime_type = Self::guess_mime_from_path(&folder_path.to_string_lossy());
+                return Ok(Some((data, mime_type, false)));
+            }
+        }
+
+        // 3. Fall back to embedded artwork (lowest priority)
         let track = self.get_track_from_album(album_id).await?;
 
         if let Some(track_id) = track {
@@ -202,6 +253,22 @@ impl ArtworkManager {
         }
 
         Ok(None)
+    }
+
+    /// Guess MIME type from file path
+    fn guess_mime_from_path(path: &str) -> String {
+        let path_lower = path.to_lowercase();
+        if path_lower.ends_with(".png") {
+            "image/png".to_string()
+        } else if path_lower.ends_with(".webp") {
+            "image/webp".to_string()
+        } else if path_lower.ends_with(".gif") {
+            "image/gif".to_string()
+        } else if path_lower.ends_with(".bmp") {
+            "image/bmp".to_string()
+        } else {
+            "image/jpeg".to_string()
+        }
     }
 
     /// Get artwork with MIME type for a specific track
@@ -285,6 +352,59 @@ impl ArtworkManager {
         Ok(paths)
     }
 
+    /// Find the album folder (folder with most tracks)
+    async fn find_album_folder(&self, album_id: AlbumId) -> Result<PathBuf, String> {
+        let track_paths = self.get_all_album_track_paths(album_id).await?;
+
+        if track_paths.is_empty() {
+            return Err("No local files found for album".to_string());
+        }
+
+        // Count tracks per folder
+        let mut folder_counts: std::collections::HashMap<PathBuf, usize> =
+            std::collections::HashMap::new();
+        for track_path in track_paths {
+            if let Some(parent) = track_path.parent() {
+                *folder_counts.entry(parent.to_path_buf()).or_insert(0) += 1;
+            }
+        }
+
+        // Return folder with most tracks
+        folder_counts
+            .into_iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(path, _)| path)
+            .ok_or_else(|| "Could not determine album folder".to_string())
+    }
+
+    /// Discover folder artwork in a directory
+    ///
+    /// Looks for common artwork filenames: cover, folder, front, album, artwork
+    /// Supports extensions: jpg, jpeg, png, webp, gif, bmp
+    fn discover_folder_artwork(folder: &Path) -> Option<PathBuf> {
+        const FILENAMES: &[&str] = &["cover", "folder", "front", "album", "artwork"];
+        const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp"];
+
+        for name in FILENAMES {
+            for ext in EXTENSIONS {
+                let path = folder.join(format!("{}.{}", name, ext));
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+        None
+    }
+
+    /// Discover folder artwork for an album
+    async fn discover_folder_artwork_for_album(
+        &self,
+        album_id: AlbumId,
+    ) -> Result<Option<PathBuf>, String> {
+        let folder = self.find_album_folder(album_id).await?;
+        Ok(Self::discover_folder_artwork(&folder))
+    }
+
     // =========================================================================
     // Artwork Setting/Removal Methods
     // =========================================================================
@@ -296,37 +416,97 @@ impl ArtworkManager {
     /// * `data` - Image data bytes
     /// * `mime_type` - MIME type (e.g., "image/jpeg")
     /// * `write_to_files` - If true, also write to embedded metadata in all album tracks
+    /// * `use_soul_storage` - If true, save to Soul Player storage instead of album folder
     pub async fn set_album_artwork(
         &self,
         album_id: AlbumId,
         data: Vec<u8>,
         mime_type: &str,
         write_to_files: bool,
+        use_soul_storage: bool,
     ) -> Result<(), String> {
-        // Save custom artwork file
-        let artwork_path = self
-            .save_custom_artwork("albums", &album_id.to_string(), &data, mime_type)
-            .await?;
+        if use_soul_storage {
+            // Save to Soul Player storage (managed separately)
+            let artwork_path = self
+                .save_custom_artwork("albums", &album_id.to_string(), &data, mime_type)
+                .await?;
 
-        // Update database with path
-        soul_storage::albums::update_cover_art_path(
-            &self.pool,
-            album_id,
-            Some(&artwork_path.to_string_lossy()),
-        )
-        .await
-        .map_err(|e| format!("Failed to update database: {}", e))?;
+            tracing::info!("Saved artwork to Soul Player storage: {}", artwork_path.display());
+
+            // Update database with artwork source
+            soul_storage::albums::set_artwork_source(
+                &self.pool,
+                album_id,
+                "soul_storage",
+                &artwork_path.to_string_lossy(),
+            )
+            .await
+            .map_err(|e| format!("Failed to update database: {}", e))?;
+        } else {
+            // Save to album folder as cover.{ext}
+            let album_folder = self.find_album_folder(album_id).await?;
+
+            // Determine file extension based on MIME type
+            let ext = match mime_type {
+                "image/png" => "png",
+                "image/webp" => "webp",
+                "image/gif" => "gif",
+                "image/bmp" => "bmp",
+                _ => "jpg",
+            };
+
+            // Write as cover.{ext} in album folder
+            let cover_path = album_folder.join(format!("cover.{}", ext));
+            std::fs::write(&cover_path, &data)
+                .map_err(|e| format!("Failed to write artwork to album folder: {}", e))?;
+
+            tracing::info!("Saved artwork to album folder: {}", cover_path.display());
+
+            // Update database with artwork source
+            soul_storage::albums::set_artwork_source(
+                &self.pool,
+                album_id,
+                "folder",
+                &cover_path.to_string_lossy(),
+            )
+            .await
+            .map_err(|e| format!("Failed to update database: {}", e))?;
+        }
 
         // Optionally write to audio files
         if write_to_files {
             let artwork = ArtworkData::new(data, mime_type.to_string());
             let track_paths = self.get_all_album_track_paths(album_id).await?;
 
+            tracing::info!("Writing artwork to {} track files...", track_paths.len());
+
+            let mut success_count = 0;
+            let mut failure_count = 0;
+
             for path in track_paths {
-                if let Err(e) = ArtworkWriter::write_to_file(&path, &artwork) {
-                    eprintln!("Warning: Failed to write artwork to {}: {}", path.display(), e);
-                    // Continue with other files even if one fails
+                match ArtworkWriter::write_to_file(&path, &artwork) {
+                    Ok(_) => {
+                        success_count += 1;
+                        tracing::debug!("Successfully wrote artwork to: {}", path.display());
+                    }
+                    Err(e) => {
+                        failure_count += 1;
+                        tracing::warn!("Failed to write artwork to {}: {}", path.display(), e);
+                    }
                 }
+            }
+
+            tracing::info!(
+                "Artwork write summary: {} succeeded, {} failed",
+                success_count,
+                failure_count
+            );
+
+            if success_count == 0 && failure_count > 0 {
+                return Err(format!(
+                    "Failed to write artwork to all {} track files. Check file permissions and formats.",
+                    failure_count
+                ));
             }
         }
 
@@ -339,6 +519,11 @@ impl ArtworkManager {
     /// Remove custom artwork from an album
     pub async fn remove_album_artwork(&self, album_id: AlbumId) -> Result<(), String> {
         self.remove_custom_artwork_files("albums", &album_id.to_string())?;
+
+        // Clear artwork source from database (will fall back to folder or embedded)
+        soul_storage::albums::set_artwork_source(&self.pool, album_id, "", "")
+            .await
+            .ok();
 
         soul_storage::albums::update_cover_art_path(&self.pool, album_id, None)
             .await
@@ -510,7 +695,10 @@ pub async fn handle_artwork_request(
     let artwork = match entity_type {
         "album" => {
             let id: i64 = id_str.parse().map_err(|e| {
-                eprintln!("[artwork] ERROR: Failed to parse album ID '{}': {:?}", id_str, e);
+                eprintln!(
+                    "[artwork] ERROR: Failed to parse album ID '{}': {:?}",
+                    id_str, e
+                );
                 "Invalid album ID"
             })?;
             eprintln!("[artwork] Fetching artwork for album {}", id);
@@ -518,7 +706,10 @@ pub async fn handle_artwork_request(
         }
         "track" => {
             let id: i64 = id_str.parse().map_err(|e| {
-                eprintln!("[artwork] ERROR: Failed to parse track ID '{}': {:?}", id_str, e);
+                eprintln!(
+                    "[artwork] ERROR: Failed to parse track ID '{}': {:?}",
+                    id_str, e
+                );
                 "Invalid track ID"
             })?;
             eprintln!("[artwork] Fetching artwork for track {}", id);
@@ -537,7 +728,10 @@ pub async fn handle_artwork_request(
         }
         "artist" => {
             let id: i64 = id_str.parse().map_err(|e| {
-                eprintln!("[artwork] ERROR: Failed to parse artist ID '{}': {:?}", id_str, e);
+                eprintln!(
+                    "[artwork] ERROR: Failed to parse artist ID '{}': {:?}",
+                    id_str, e
+                );
                 "Invalid artist ID"
             })?;
             eprintln!("[artwork] Fetching artwork for artist {}", id);

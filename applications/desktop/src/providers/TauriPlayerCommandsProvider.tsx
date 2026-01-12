@@ -18,9 +18,13 @@ import {
 import { shouldIgnorePositionUpdates } from '@soul-player/shared';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
-export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
-  // Initialize keyboard shortcuts (app-level, not OS-level global)
+// Separate component to initialize keyboard shortcuts AFTER context is provided
+function KeyboardShortcutsInitializer() {
   useKeyboardShortcuts();
+  return null;
+}
+
+export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
 
   // Set up event listeners to update store (similar to old usePlaybackEvents hook)
   useEffect(() => {
@@ -30,10 +34,18 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     // This ensures the UI reflects the actual audio layer state
     const syncInitialState = async () => {
       try {
-        const state = await invoke<string>('get_playback_state');
+        const [state, shuffleMode, repeatMode] = await Promise.all([
+          invoke<string>('get_playback_state'),
+          invoke<string>('get_shuffle'),
+          invoke<string>('get_repeat')
+        ]);
         const isPlaying = state === 'Playing';
-        console.log('[TauriPlayerCommandsProvider] Initial state sync:', state, '-> isPlaying:', isPlaying);
-        usePlayerStore.setState({ isPlaying });
+        console.log('[TauriPlayerCommandsProvider] Initial state sync:', state, '-> isPlaying:', isPlaying, 'shuffle:', shuffleMode, 'repeat:', repeatMode);
+        usePlayerStore.setState({
+          isPlaying,
+          shuffleMode: shuffleMode as 'off' | 'random' | 'smart',
+          repeatMode: repeatMode as 'off' | 'all' | 'one'
+        });
       } catch (error) {
         console.error('[TauriPlayerCommandsProvider] Failed to sync initial state:', error);
       }
@@ -78,9 +90,15 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       usePlayerStore.setState({ volume: event.payload / 100 }); // Convert to 0-1
     });
 
-    // Listen for queue updates
-    const unlistenQueueUpdated = listen('playback:queue-updated', () => {
-      // Queue updates handled by components
+    // Listen for queue updates (shuffle changes emit this event)
+    const unlistenQueueUpdated = listen('playback:queue-updated', async () => {
+      // Query and update shuffle mode when queue changes
+      try {
+        const shuffleMode = await invoke<string>('get_shuffle');
+        usePlayerStore.setState({ shuffleMode: shuffleMode as 'off' | 'random' | 'smart' });
+      } catch (error) {
+        console.error('[TauriPlayerCommandsProvider] Failed to get shuffle mode:', error);
+      }
     });
 
     // Listen for errors
@@ -136,12 +154,22 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         await invoke('set_volume', { volume: Math.round(volume * 100) });
       },
 
-      async setShuffle(enabled: boolean) {
-        await invoke('set_shuffle', { enabled });
+      async setShuffle(mode: 'off' | 'random' | 'smart') {
+        await invoke('set_shuffle', { mode });
+      },
+
+      async cycleShuffle() {
+        const newMode = await invoke<string>('cycle_shuffle');
+        return newMode as 'off' | 'random' | 'smart';
+      },
+
+      async getShuffle() {
+        const mode = await invoke<string>('get_shuffle');
+        return mode as 'off' | 'random' | 'smart';
       },
 
       async setRepeatMode(mode: 'off' | 'all' | 'one') {
-        await invoke('set_repeat_mode', { mode });
+        await invoke('set_repeat', { mode });
       },
 
       async getPlaybackCapabilities(): Promise<PlaybackCapabilities> {
@@ -164,6 +192,23 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
       async skipToQueueIndex(index: number) {
         await invoke('skip_to_queue_index', { index });
+      },
+
+      // Three-tier queue operations
+      async addPlayNext(track) {
+        await invoke('add_play_next', { track });
+      },
+
+      async addToQueueEnd(track) {
+        await invoke('add_to_queue_end', { track });
+      },
+
+      async clearPlayNext() {
+        await invoke('clear_play_next');
+      },
+
+      async clearAddToQueue() {
+        await invoke('clear_add_to_queue');
       },
 
       async getAllSources() {
@@ -249,5 +294,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     return { commands, events };
   }, []);
 
-  return <PlayerCommandsProvider value={value}>{children}</PlayerCommandsProvider>;
+  return (
+    <PlayerCommandsProvider value={value}>
+      <KeyboardShortcutsInitializer />
+      {children}
+    </PlayerCommandsProvider>
+  );
 }

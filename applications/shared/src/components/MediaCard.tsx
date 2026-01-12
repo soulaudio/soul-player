@@ -9,6 +9,7 @@ import { Play, Pause, Disc3, Users, ListMusic } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArtworkImage } from './ArtworkImage'
+import { ProgressiveImage } from './ProgressiveImage'
 import { usePlayerStore } from '../stores/player'
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
 import { useBackend } from '../contexts/BackendContext'
@@ -28,7 +29,7 @@ export interface MediaCardProps {
   subtitle?: string
   /** Cover art URL for non-desktop environments */
   coverUrl?: string
-  /** Card width class (default: w-40) */
+  /** Card width class (default: w-full for responsive grid) */
   className?: string
   /** Additional info like year */
   additionalInfo?: string
@@ -69,37 +70,32 @@ export function MediaCard({
 }: MediaCardProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { isPlaying } = usePlayerStore()
+  const { isPlaying, currentTrack } = usePlayerStore()
   const commands = usePlayerCommands()
   const backend = useBackend()
   const { isDesktop } = usePlatform()
-  const [isThisPlaying, setIsThisPlaying] = useState(false)
+  const [isActiveContext, setIsActiveContext] = useState(false)
 
   const isCircle = type === 'artist'
   const FallbackIcon = getFallbackIcon(type)
 
-  // Check if this entity is the current playback context
+  // Check if this entity is the current playback context (regardless of play/pause state)
   useEffect(() => {
     const checkContext = async () => {
-      if (!isPlaying) {
-        setIsThisPlaying(false)
-        return
-      }
-
       try {
         const contexts = await backend.getRecentContexts(1)
         const context = contexts[0]
         const isActive =
           context?.contextType === type &&
           context?.contextId === String(id)
-        setIsThisPlaying(isActive)
+        setIsActiveContext(isActive)
       } catch {
-        setIsThisPlaying(false)
+        setIsActiveContext(false)
       }
     }
 
     checkContext()
-  }, [isPlaying, id, type, backend])
+  }, [id, type, backend, currentTrack]) // Re-check when track changes
 
   const handleClick = () => {
     navigate(getRoute(type, id))
@@ -108,17 +104,21 @@ export function MediaCard({
   const handlePlayPause = async (e: React.MouseEvent) => {
     e.stopPropagation()
 
-    // If this entity is currently playing, pause it
-    if (isThisPlaying) {
+    // If this context is active, use pause/resume logic (same as PlayerControls)
+    if (isActiveContext) {
       try {
-        await commands.pausePlayback()
+        if (isPlaying) {
+          await commands.pausePlayback()
+        } else {
+          await commands.resumePlayback()
+        }
       } catch (err) {
-        console.error(`[MediaCard] Failed to pause:`, err)
+        console.error(`[MediaCard] Failed to pause/resume:`, err)
       }
       return
     }
 
-    // Otherwise, play the entity
+    // Otherwise, play the entity from beginning
     try {
       let tracks: Awaited<ReturnType<typeof backend.getAllTracks>> = []
 
@@ -187,16 +187,18 @@ export function MediaCard({
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
           fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
           fallbackIcon={type === 'artist' ? 'users' : type === 'playlist' ? 'playlist' : 'music'}
+          shape={isCircle ? 'circular' : 'rounded'}
         />
       )
     }
 
     if (coverUrl) {
       return (
-        <img
+        <ProgressiveImage
           src={coverUrl}
           alt={title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+          shape={isCircle ? 'circular' : 'rounded'}
         />
       )
     }
@@ -212,7 +214,7 @@ export function MediaCard({
   const shapeClasses = isCircle ? 'rounded-full' : 'rounded-lg'
 
   return (
-    <div className={`flex-shrink-0 cursor-pointer group ${className}`}>
+    <div className={`cursor-pointer group ${className}`}>
       <div
         className={`aspect-square ${shapeClasses} overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer`}
         onClick={handleClick}
@@ -224,10 +226,11 @@ export function MediaCard({
         {/* Play/Pause button - centered, visible on hover */}
         <button
           onClick={handlePlayPause}
+          onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200"
-          aria-label={isThisPlaying ? t('playback.pause') : t('playback.play')}
+          aria-label={(isActiveContext && isPlaying) ? t('playback.pause') : t('playback.play')}
         >
-          {isThisPlaying ? (
+          {(isActiveContext && isPlaying) ? (
             <Pause className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" />
           ) : (
             <Play className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" />

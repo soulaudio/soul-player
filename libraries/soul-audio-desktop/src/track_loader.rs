@@ -159,8 +159,10 @@ impl TrackLoader {
                     );
 
                     // This is the slow part - disk I/O!
-                    let result = match LocalAudioSource::new(&request.path, request.target_sample_rate)
-                    {
+                    let result = match LocalAudioSource::new(
+                        &request.path,
+                        request.target_sample_rate,
+                    ) {
                         Ok(source) => {
                             let load_duration = start.elapsed();
                             eprintln!(

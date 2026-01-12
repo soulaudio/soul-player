@@ -204,7 +204,7 @@ impl AudioEffect for Limiter {
 
     fn reset(&mut self) {
         self.envelope = 0.0; // Reset to "no signal detected"
-        // Snap threshold to target when resetting
+                             // Snap threshold to target when resetting
         self.threshold_linear = self.target_threshold_linear;
         self.smooth_samples_remaining = 0;
     }

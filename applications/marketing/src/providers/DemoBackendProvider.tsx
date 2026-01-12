@@ -371,6 +371,19 @@ export function DemoBackendProvider({ children }: DemoBackendProviderProps) {
       throw new Error('Playlist deletion not supported in demo')
     },
 
+    async getPlaylistsContainingTrack(_trackId: number): Promise<string[]> {
+      // Not supported in demo
+      return []
+    },
+
+    async addTrackToPlaylist(_playlistId: string, _trackId: number) {
+      throw new Error('Adding tracks to playlists not supported in demo')
+    },
+
+    async removeTrackFromPlaylist(_playlistId: string, _trackId: number) {
+      throw new Error('Removing tracks from playlists not supported in demo')
+    },
+
     // Track operations - not supported in demo
     async deleteTrack(_id: number) {
       throw new Error('Track deletion not supported in demo')

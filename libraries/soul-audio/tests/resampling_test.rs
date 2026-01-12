@@ -84,7 +84,8 @@ fn test_upsampling_44k_to_96k() {
     // Allow 15% tolerance for chunk-based processing and internal buffering
     // This accounts for resampler latency while still catching real bugs
     assert!(
-        (actual_output_frames as f32 - expected_output_frames).abs() / expected_output_frames < 0.15,
+        (actual_output_frames as f32 - expected_output_frames).abs() / expected_output_frames
+            < 0.15,
         "Output size mismatch: expected ~{} frames, got {} frames (ratio: {:.2})",
         expected_output_frames,
         actual_output_frames,
@@ -146,7 +147,8 @@ fn test_downsampling_96k_to_44k() {
 
     // Allow 15% tolerance for buffering
     assert!(
-        (actual_output_frames as f32 - expected_output_frames).abs() / expected_output_frames < 0.15,
+        (actual_output_frames as f32 - expected_output_frames).abs() / expected_output_frames
+            < 0.15,
         "Output size mismatch: expected ~{} frames, got {} frames (ratio: {:.2})",
         expected_output_frames,
         actual_output_frames,

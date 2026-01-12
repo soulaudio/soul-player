@@ -107,8 +107,11 @@ fn test_play_pause_resume_workflow() {
     // Start in stopped state
     assert_eq!(manager.get_state(), PlaybackState::Stopped);
 
-    // Add track and set source
+    // Add track and start playback
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 180));
+    manager.play().ok(); // Start playback (state: Loading)
+
+    // Set audio source (simulates track loading completing)
     manager.set_audio_source(Box::new(MockAudioSource::new(
         Duration::from_secs(180),
         44100,
@@ -283,6 +286,9 @@ fn test_volume_affects_audio_output() {
 #[test]
 fn test_mute_silences_output() {
     let mut manager = PlaybackManager::default();
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 10));
+    manager.play().ok(); // Start playback
+
     manager.set_audio_source(Box::new(MockAudioSource::new(
         Duration::from_secs(10),
         44100,
@@ -349,6 +355,8 @@ fn test_auto_advance_on_track_end() {
     // Get initial queue length
     let initial_queue_len = manager.queue_len();
     assert_eq!(initial_queue_len, 2, "Should start with 2 tracks in queue");
+
+    manager.play().ok(); // Start playback
 
     manager.set_audio_source(Box::new(MockAudioSource::new(
         Duration::from_secs(1),
@@ -453,6 +461,8 @@ fn test_queue_operations_dont_affect_current_track() {
     let mut manager = PlaybackManager::default();
 
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 180));
+    manager.play().ok(); // Start playback
+
     manager.set_audio_source(Box::new(MockAudioSource::new(
         Duration::from_secs(180),
         44100,

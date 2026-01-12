@@ -832,12 +832,7 @@ fn test_output_samples_always_in_range() {
     let buffer = decoder.decode(&path).expect("Failed to decode");
 
     for (i, &sample) in buffer.samples.iter().enumerate() {
-        assert!(
-            sample.is_finite(),
-            "Sample {} is not finite: {}",
-            i,
-            sample
-        );
+        assert!(sample.is_finite(), "Sample {} is not finite: {}", i, sample);
         assert!(
             sample >= -1.0 && sample <= 1.0,
             "Sample {} out of range [-1.0, 1.0]: {}",
@@ -1513,7 +1508,10 @@ fn test_denormalized_float_handling() {
     let expected = 1.0 / 32768.0; // ~3.05e-5
     for &sample in &buffer.samples {
         assert!(sample.is_finite(), "Sample should be finite");
-        assert!(sample.is_normal() || sample == 0.0, "Sample should be normal or zero");
+        assert!(
+            sample.is_normal() || sample == 0.0,
+            "Sample should be normal or zero"
+        );
         // Allow some tolerance for very small values
         assert!(
             (sample - expected).abs() < 1e-4,

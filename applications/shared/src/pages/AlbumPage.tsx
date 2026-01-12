@@ -11,8 +11,9 @@ import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
-import { useBackend, type BackendTrack, type BackendAlbum, type QueueTrack } from '../contexts/BackendContext'
-import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { useBackend, type BackendTrack, type BackendAlbum } from '../contexts/BackendContext'
+import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 
@@ -20,7 +21,7 @@ export function AlbumPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { isDesktop } = usePlatform()
+  const { isDesktop, features } = usePlatform()
   const backend = useBackend()
   const commands = usePlayerCommands()
 
@@ -30,6 +31,12 @@ export function AlbumPage() {
   const [error, setError] = useState<string | null>(null)
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
   const [artworkVersion, setArtworkVersion] = useState(0)
+
+  // Add to playlist dialog state
+  const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
+    id: number
+    title: string
+  } | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -91,6 +98,38 @@ export function AlbumPage() {
     },
     [buildQueueFromTracks, tracks]
   )
+
+  // Convert BackendTrack to QueueTrack
+  const toQueueTrack = useCallback((track: BackendTrack): QueueTrack => ({
+    trackId: String(track.id),
+    title: track.title || 'Unknown',
+    artist: track.artist_name || 'Unknown Artist',
+    album: track.album_title || null,
+    albumId: track.album_id,
+    filePath: track.file_path || '',
+    durationSeconds: track.duration_seconds || null,
+    trackNumber: track.track_number || null,
+    coverArtPath: track.cover_art_path,
+  }), [])
+
+  // Queue operation handlers
+  const handlePlayNext = useCallback(async (track: BackendTrack) => {
+    try {
+      const queueTrack = toQueueTrack(track)
+      await commands.addPlayNext(queueTrack)
+    } catch (error) {
+      console.error('[AlbumPage] Failed to add track to play next:', error)
+    }
+  }, [commands, toQueueTrack])
+
+  const handleAddToQueue = useCallback(async (track: BackendTrack) => {
+    try {
+      const queueTrack = toQueueTrack(track)
+      await commands.addToQueueEnd(queueTrack)
+    } catch (error) {
+      console.error('[AlbumPage] Failed to add track to queue:', error)
+    }
+  }, [commands, toQueueTrack])
 
   // Play all tracks
   const handlePlayAll = async () => {
@@ -239,6 +278,7 @@ export function AlbumPage() {
 
             <button
               onClick={handlePlayAll}
+              onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
               disabled={tracks.filter(t => t.file_path).length === 0}
               className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50"
             >
@@ -272,6 +312,14 @@ export function AlbumPage() {
             return (
               <TrackMenu
                 track={backendTrack}
+                onPlayNext={() => handlePlayNext(backendTrack)}
+                onAddToQueue={() => handleAddToQueue(backendTrack)}
+                onAddToPlaylist={() => {
+                  setSelectedTrackForPlaylist({
+                    id: backendTrack.id,
+                    title: backendTrack.title,
+                  })
+                }}
                 onDelete={async () => {
                   await backend.deleteTrack(backendTrack.id)
                   if (id) loadAlbum(parseInt(id, 10))
@@ -292,6 +340,16 @@ export function AlbumPage() {
         currentArtworkUrl={coverUrl}
         onArtworkChanged={() => setArtworkVersion(v => v + 1)}
       />
+
+      {/* Add to Playlist Dialog (Desktop only) */}
+      {features.canCreatePlaylists && selectedTrackForPlaylist && (
+        <AddToPlaylistDialog
+          open={!!selectedTrackForPlaylist}
+          onClose={() => setSelectedTrackForPlaylist(null)}
+          trackId={selectedTrackForPlaylist.id}
+          trackTitle={selectedTrackForPlaylist.title}
+        />
+      )}
     </div>
   )
 }

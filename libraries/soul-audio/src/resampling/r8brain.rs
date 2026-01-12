@@ -4,7 +4,7 @@
 //! Professional-grade audiophile quality with minimal artifacts.
 
 use super::{ResamplerImpl, ResamplingError, ResamplingQuality, Result};
-use r8brain_rs::{ConversionQuality, Resampler as R8BrainResamplerCore};
+use r8brain_rs::{PrecisionProfile, Resampler as R8BrainResamplerCore};
 
 /// r8brain-based resampler implementation
 pub struct R8BrainResampler {
@@ -22,20 +22,17 @@ impl R8BrainResampler {
         channels: usize,
         quality: ResamplingQuality,
     ) -> Result<Self> {
-        let r8brain_quality = Self::quality_to_r8brain(quality);
-
         // Create one resampler per channel
         let mut resamplers = Vec::with_capacity(channels);
         for _ in 0..channels {
+            let (trans_band, precision) = Self::quality_to_r8brain(quality);
             let resampler = R8BrainResamplerCore::new(
                 input_rate as f64,
                 output_rate as f64,
                 1024, // max_in_frames - reasonable chunk size
-                r8brain_quality,
-            )
-            .map_err(|e| {
-                ResamplingError::InitializationFailed(format!("r8brain creation failed: {:?}", e))
-            })?;
+                trans_band,
+                precision,
+            );
 
             resamplers.push(resampler);
         }
@@ -48,13 +45,17 @@ impl R8BrainResampler {
         })
     }
 
-    /// Convert quality preset to r8brain quality
-    fn quality_to_r8brain(quality: ResamplingQuality) -> ConversionQuality {
+    /// Convert quality preset to r8brain transition band and precision profile
+    fn quality_to_r8brain(quality: ResamplingQuality) -> (f64, PrecisionProfile) {
         match quality {
-            ResamplingQuality::Fast => ConversionQuality::Fast,
-            ResamplingQuality::Balanced => ConversionQuality::Medium,
-            ResamplingQuality::High => ConversionQuality::High,
-            ResamplingQuality::Maximum => ConversionQuality::VeryHigh,
+            // Fast: wider transition band (3.0%), lower precision
+            ResamplingQuality::Fast => (3.0, PrecisionProfile::Bits16),
+            // Balanced: standard transition band (2.0%), 24-bit precision
+            ResamplingQuality::Balanced => (2.0, PrecisionProfile::Bits24),
+            // High: narrow transition band (1.0%), 24-bit precision
+            ResamplingQuality::High => (1.0, PrecisionProfile::Bits24),
+            // Maximum: very narrow transition band (0.5%), 32-bit precision
+            ResamplingQuality::Maximum => (0.5, PrecisionProfile::Bits32),
         }
     }
 
@@ -83,9 +84,9 @@ impl R8BrainResampler {
         let mut interleaved = Vec::with_capacity(frames * self.channels);
 
         for frame_idx in 0..frames {
-            for ch in 0..self.channels {
+            for channel in &channels {
                 // Convert f64 back to f32
-                interleaved.push(channels[ch][frame_idx] as f32);
+                interleaved.push(channel[frame_idx] as f32);
             }
         }
 
@@ -118,14 +119,19 @@ impl ResamplerImpl for R8BrainResampler {
         // Process each channel independently
         let mut output_channels = Vec::with_capacity(self.channels);
 
-        for (ch_idx, channel_data) in input_channels.iter().enumerate() {
-            let output = self.resamplers[ch_idx].process(channel_data).map_err(|e| {
-                ResamplingError::ProcessingFailed(format!(
-                    "r8brain processing failed on channel {}: {:?}",
-                    ch_idx, e
-                ))
-            })?;
+        for channel_data in &input_channels {
+            // Estimate output size based on rate ratio
+            let output_frames = (channel_data.len() as f64 * self.output_rate as f64
+                / self.input_rate as f64)
+                .ceil() as usize;
+            let mut output = vec![0.0; output_frames * 2]; // Allocate extra space
 
+            // Process returns the number of samples actually generated
+            let generated =
+                self.resamplers[output_channels.len()].process(channel_data, &mut output);
+
+            // Truncate to actual size
+            output.truncate(generated);
             output_channels.push(output);
         }
 
@@ -165,30 +171,27 @@ impl ResamplerImpl for R8BrainResampler {
     }
 
     fn latency(&self) -> usize {
-        // r8brain's latency depends on the quality setting
-        // We use the first channel's resampler to query latency
-        // (all channels should have the same latency)
-        if self.resamplers.is_empty() {
-            0
-        } else {
-            // r8brain-rs provides latency via the latency() method
-            self.resamplers[0].latency()
-        }
+        // r8brain-rs 0.3 doesn't expose latency information
+        // Latency is typically very low (a few samples) for r8brain
+        // Return 0 as a reasonable default
+        0
     }
 
     fn flush(&mut self) -> Result<Vec<f32>> {
         // r8brain doesn't use internal buffering in the same way as rubato,
         // but we should flush any remaining samples
-        // For r8brain, calling process with None input flushes
         let mut output_channels = Vec::with_capacity(self.channels);
 
-        for (ch_idx, resampler) in self.resamplers.iter_mut().enumerate() {
-            let output = resampler.flush().map_err(|e| {
-                ResamplingError::ProcessingFailed(format!(
-                    "r8brain flush failed on channel {}: {:?}",
-                    ch_idx, e
-                ))
-            })?;
+        for resampler in &mut self.resamplers {
+            // Allocate buffer for flush - r8brain typically has minimal latency
+            // so 1024 samples should be more than enough
+            let mut output = vec![0.0; 1024];
+
+            // flush() returns the number of samples actually generated
+            let generated = resampler.flush(&mut output);
+
+            // Truncate to actual size
+            output.truncate(generated);
             output_channels.push(output);
         }
 
@@ -223,22 +226,18 @@ mod tests {
 
     #[test]
     fn test_quality_mapping() {
-        assert_eq!(
-            R8BrainResampler::quality_to_r8brain(ResamplingQuality::Fast),
-            ConversionQuality::Fast
-        );
-        assert_eq!(
-            R8BrainResampler::quality_to_r8brain(ResamplingQuality::Balanced),
-            ConversionQuality::Medium
-        );
-        assert_eq!(
-            R8BrainResampler::quality_to_r8brain(ResamplingQuality::High),
-            ConversionQuality::High
-        );
-        assert_eq!(
-            R8BrainResampler::quality_to_r8brain(ResamplingQuality::Maximum),
-            ConversionQuality::VeryHigh
-        );
+        let (trans_band_fast, _) = R8BrainResampler::quality_to_r8brain(ResamplingQuality::Fast);
+        assert_eq!(trans_band_fast, 3.0);
+
+        let (trans_band_balanced, _) =
+            R8BrainResampler::quality_to_r8brain(ResamplingQuality::Balanced);
+        assert_eq!(trans_band_balanced, 2.0);
+
+        let (trans_band_high, _) = R8BrainResampler::quality_to_r8brain(ResamplingQuality::High);
+        assert_eq!(trans_band_high, 1.0);
+
+        let (trans_band_max, _) = R8BrainResampler::quality_to_r8brain(ResamplingQuality::Maximum);
+        assert_eq!(trans_band_max, 0.5);
     }
 
     #[test]

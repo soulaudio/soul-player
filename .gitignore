@@ -59,3 +59,5 @@ libraries/soul-storage/.tmp/
 .sqlx-check.db
 
 # Note: .sqlx/ is NOT ignored - it contains query metadata for offline compilation
+
+**/tmpclaude-*

@@ -134,7 +134,10 @@ mod coreaudio_backend_tests {
 
         let coreaudio = coreaudio_info.unwrap();
         assert!(coreaudio.available, "CoreAudio should be available");
-        assert!(coreaudio.is_default, "CoreAudio should be the default on macOS");
+        assert!(
+            coreaudio.is_default,
+            "CoreAudio should be the default on macOS"
+        );
     }
 
     #[test]
@@ -451,7 +454,10 @@ mod aggregate_device_tests {
                         eprintln!("  Max channels: {}", caps.max_channels);
                         eprintln!(
                             "  Bit depths: {:?}",
-                            caps.bit_depths.iter().map(|d| d.display_name()).collect::<Vec<_>>()
+                            caps.bit_depths
+                                .iter()
+                                .map(|d| d.display_name())
+                                .collect::<Vec<_>>()
                         );
                     }
                 }
@@ -755,7 +761,10 @@ mod coreaudio_specific {
                     eprintln!("  Max channels: {}", caps.max_channels);
                     eprintln!(
                         "  Bit depths: {:?}",
-                        caps.bit_depths.iter().map(|d| d.display_name()).collect::<Vec<_>>()
+                        caps.bit_depths
+                            .iter()
+                            .map(|d| d.display_name())
+                            .collect::<Vec<_>>()
                     );
                     eprintln!("  DSD support: {}", caps.supports_dsd);
                 }

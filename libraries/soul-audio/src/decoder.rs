@@ -60,8 +60,7 @@ impl SymphoniaDecoder {
         }
 
         // Open the file
-        let file = std::fs::File::open(path)
-            .map_err(|e| AudioError::Io(e))?;
+        let file = std::fs::File::open(path).map_err(|e| AudioError::Io(e))?;
 
         // Create media source
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -91,16 +90,19 @@ impl SymphoniaDecoder {
 
         // Get codec parameters
         let sample_rate = track.codec_params.sample_rate.unwrap_or(44100);
-        let channels = track.codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
+        let channels = track
+            .codec_params
+            .channels
+            .map(|c| c.count() as u16)
+            .unwrap_or(2);
         let track_id = track.id;
         let time_base = track.codec_params.time_base;
 
         // Calculate duration if possible
-        let duration = if let Some(n_frames) = track.codec_params.n_frames {
-            Some(Duration::from_secs_f64(n_frames as f64 / sample_rate as f64))
-        } else {
-            None
-        };
+        let duration = track
+            .codec_params
+            .n_frames
+            .map(|n_frames| Duration::from_secs_f64(n_frames as f64 / sample_rate as f64));
 
         // Create decoder
         let decoder = symphonia::default::get_codecs()
@@ -235,8 +237,8 @@ impl SymphoniaDecoder {
             1 => {
                 // Mono - duplicate to both channels
                 let mono = buf.chan(0);
-                for i in 0..frames {
-                    let sample = normalize(mono[i]);
+                for &sample_val in mono.iter().take(frames) {
+                    let sample = normalize(sample_val);
                     output.push(sample);
                     output.push(sample);
                 }
@@ -494,10 +496,7 @@ impl AudioDecoderTrait for SymphoniaDecoder {
     }
 
     fn decode_chunk(&mut self, max_frames: usize) -> soul_core::Result<Option<AudioBuffer>> {
-        let state = self
-            .stream_state
-            .as_mut()
-            .ok_or_else(|| AudioError::NoFileOpen)?;
+        let state = self.stream_state.as_mut().ok_or(AudioError::NoFileOpen)?;
 
         // Try to decode packets until we have enough frames or reach EOF
         let mut all_samples = Vec::new();
@@ -519,7 +518,9 @@ impl AudioDecoderTrait for SymphoniaDecoder {
                     continue;
                 }
                 Err(e) => {
-                    return Err(AudioError::Symphonia(format!("Error reading packet: {}", e)).into());
+                    return Err(
+                        AudioError::Symphonia(format!("Error reading packet: {}", e)).into(),
+                    );
                 }
             };
 
@@ -569,10 +570,7 @@ impl AudioDecoderTrait for SymphoniaDecoder {
     }
 
     fn seek(&mut self, position: Duration) -> soul_core::Result<Duration> {
-        let state = self
-            .stream_state
-            .as_mut()
-            .ok_or_else(|| AudioError::NoFileOpen)?;
+        let state = self.stream_state.as_mut().ok_or(AudioError::NoFileOpen)?;
 
         // Clamp position to duration if known
         let clamped_position = if let Some(duration) = state.duration {

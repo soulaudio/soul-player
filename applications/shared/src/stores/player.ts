@@ -16,7 +16,7 @@ interface PlayerState {
 
   // Repeat & Shuffle
   repeatMode: 'off' | 'all' | 'one';
-  shuffleEnabled: boolean;
+  shuffleMode: 'off' | 'random' | 'smart';
 
   // Actions
   setCurrentTrack: (track: Track | null) => void;
@@ -30,7 +30,7 @@ interface PlayerState {
 
   // Settings (optimistic updates for UI responsiveness)
   setRepeatMode: (mode: 'off' | 'all' | 'one') => void;
-  toggleShuffle: () => void;
+  setShuffleMode: (mode: 'off' | 'random' | 'smart') => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set) => ({
@@ -44,7 +44,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   queue: [],
   queueIndex: -1,
   repeatMode: 'off',
-  shuffleEnabled: false,
+  shuffleMode: 'off',
 
   // Actions
   setCurrentTrack: (track) => set({ currentTrack: track }),
@@ -59,5 +59,5 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   // Settings (optimistic updates for UI responsiveness)
   setRepeatMode: (mode) => set({ repeatMode: mode }),
 
-  toggleShuffle: () => set((state) => ({ shuffleEnabled: !state.shuffleEnabled })),
+  setShuffleMode: (mode) => set({ shuffleMode: mode }),
 }));

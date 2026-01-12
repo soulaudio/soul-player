@@ -48,14 +48,14 @@ async fn batch_insert_tracks(
             let result = sqlx::query(
                 "INSERT INTO tracks (title, artist_id, album_id, origin_source_id, file_format,
                  duration_seconds, track_number, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, 'mp3', ?, ?, datetime('now'), datetime('now'))"
+                 VALUES (?, ?, ?, ?, 'mp3', ?, ?, datetime('now'), datetime('now'))",
             )
             .bind(&title)
             .bind(artist_id)
             .bind(album_id)
             .bind(source_id)
-            .bind(180.0 + (i as f64 % 120.0))  // Duration between 180-300s
-            .bind((i % 15) as i32 + 1)  // Track number 1-15
+            .bind(180.0 + (i as f64 % 120.0)) // Duration between 180-300s
+            .bind((i % 15) as i32 + 1) // Track number 1-15
             .execute(pool)
             .await
             .expect("Failed to create track");
@@ -159,11 +159,7 @@ async fn test_large_library_get_all_tracks() {
         elapsed
     );
 
-    println!(
-        "Retrieved {} tracks in {:?}",
-        all_tracks.len(),
-        elapsed
-    );
+    println!("Retrieved {} tracks in {:?}", all_tracks.len(), elapsed);
 }
 
 #[tokio::test]
@@ -224,11 +220,7 @@ async fn test_large_library_get_all_artists() {
         elapsed
     );
 
-    println!(
-        "Retrieved {} artists in {:?}",
-        all_artists.len(),
-        elapsed
-    );
+    println!("Retrieved {} artists in {:?}", all_artists.len(), elapsed);
 }
 
 #[tokio::test]
@@ -245,13 +237,12 @@ async fn test_large_library_search_tracks() {
     let start = std::time::Instant::now();
 
     // Search by title pattern
-    let results: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT id, title FROM tracks WHERE title LIKE ? LIMIT 100"
-    )
-    .bind("%Track 001%")
-    .fetch_all(pool)
-    .await
-    .unwrap();
+    let results: Vec<(i64, String)> =
+        sqlx::query_as("SELECT id, title FROM tracks WHERE title LIKE ? LIMIT 100")
+            .bind("%Track 001%")
+            .fetch_all(pool)
+            .await
+            .unwrap();
 
     let elapsed = start.elapsed();
 
@@ -268,11 +259,7 @@ async fn test_large_library_search_tracks() {
         elapsed
     );
 
-    println!(
-        "Search found {} tracks in {:?}",
-        results.len(),
-        elapsed
-    );
+    println!("Search found {} tracks in {:?}", results.len(), elapsed);
 }
 
 #[tokio::test]
@@ -392,14 +379,13 @@ async fn test_large_library_pagination_simulation() {
 
     loop {
         let offset = page * page_size;
-        let tracks: Vec<(i64, String)> = sqlx::query_as(
-            "SELECT id, title FROM tracks ORDER BY id LIMIT ? OFFSET ?"
-        )
-        .bind(page_size as i64)
-        .bind(offset as i64)
-        .fetch_all(pool)
-        .await
-        .unwrap();
+        let tracks: Vec<(i64, String)> =
+            sqlx::query_as("SELECT id, title FROM tracks ORDER BY id LIMIT ? OFFSET ?")
+                .bind(page_size as i64)
+                .bind(offset as i64)
+                .fetch_all(pool)
+                .await
+                .unwrap();
 
         if tracks.is_empty() {
             break;
@@ -452,13 +438,12 @@ async fn test_large_library_concurrent_reads() {
             let pool = pool.clone();
             tokio::spawn(async move {
                 let offset = i * 100;
-                let tracks: Vec<(i64, String)> = sqlx::query_as(
-                    "SELECT id, title FROM tracks ORDER BY id LIMIT 100 OFFSET ?"
-                )
-                .bind(offset as i64)
-                .fetch_all(&pool)
-                .await
-                .unwrap();
+                let tracks: Vec<(i64, String)> =
+                    sqlx::query_as("SELECT id, title FROM tracks ORDER BY id LIMIT 100 OFFSET ?")
+                        .bind(offset as i64)
+                        .fetch_all(&pool)
+                        .await
+                        .unwrap();
                 tracks.len()
             })
         })
@@ -471,7 +456,10 @@ async fn test_large_library_concurrent_reads() {
 
     let elapsed = start.elapsed();
 
-    assert_eq!(total, 1000, "Should fetch 1000 tracks across all concurrent requests");
+    assert_eq!(
+        total, 1000,
+        "Should fetch 1000 tracks across all concurrent requests"
+    );
 
     // Performance: concurrent reads should be efficient
     assert!(
@@ -480,10 +468,7 @@ async fn test_large_library_concurrent_reads() {
         elapsed
     );
 
-    println!(
-        "Concurrent reads fetched {} tracks in {:?}",
-        total, elapsed
-    );
+    println!("Concurrent reads fetched {} tracks in {:?}", total, elapsed);
 }
 
 #[tokio::test]
@@ -502,7 +487,7 @@ async fn test_large_library_filter_by_format() {
 
         sqlx::query(
             "INSERT INTO tracks (title, origin_source_id, file_format, created_at, updated_at)
-             VALUES (?, 1, ?, datetime('now'), datetime('now'))"
+             VALUES (?, 1, ?, datetime('now'), datetime('now'))",
         )
         .bind(format!("Track {}", i))
         .bind(format)
@@ -514,22 +499,17 @@ async fn test_large_library_filter_by_format() {
     // Test filtering by format
     let start = std::time::Instant::now();
 
-    let flac_tracks: Vec<(i64, String, String)> = sqlx::query_as(
-        "SELECT id, title, file_format FROM tracks WHERE file_format = ?"
-    )
-    .bind("flac")
-    .fetch_all(pool)
-    .await
-    .unwrap();
+    let flac_tracks: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT id, title, file_format FROM tracks WHERE file_format = ?")
+            .bind("flac")
+            .fetch_all(pool)
+            .await
+            .unwrap();
 
     let elapsed = start.elapsed();
 
     // Should have ~250 FLAC tracks
-    assert_eq!(
-        flac_tracks.len(),
-        250,
-        "Should find 250 FLAC tracks"
-    );
+    assert_eq!(flac_tracks.len(), 250, "Should find 250 FLAC tracks");
 
     // All should be FLAC
     for (_, _, format) in &flac_tracks {
@@ -567,7 +547,7 @@ async fn test_large_library_album_track_counts() {
         "SELECT album_id, COUNT(*) as track_count
          FROM tracks
          WHERE album_id IS NOT NULL
-         GROUP BY album_id"
+         GROUP BY album_id",
     )
     .fetch_all(pool)
     .await
@@ -623,7 +603,7 @@ async fn test_large_library_artist_track_counts() {
             a.name,
             (SELECT COUNT(*) FROM tracks t WHERE t.artist_id = a.id) as track_count,
             (SELECT COUNT(*) FROM albums al WHERE al.artist_id = a.id) as album_count
-         FROM artists a"
+         FROM artists a",
     )
     .fetch_all(pool)
     .await
@@ -670,14 +650,13 @@ async fn test_large_library_memory_efficient_iteration() {
 
     loop {
         // Keyset pagination (more efficient than OFFSET for large datasets)
-        let chunk: Vec<(i64, String)> = sqlx::query_as(
-            "SELECT id, title FROM tracks WHERE id > ? ORDER BY id LIMIT ?"
-        )
-        .bind(last_id)
-        .bind(chunk_size as i64)
-        .fetch_all(pool)
-        .await
-        .unwrap();
+        let chunk: Vec<(i64, String)> =
+            sqlx::query_as("SELECT id, title FROM tracks WHERE id > ? ORDER BY id LIMIT ?")
+                .bind(last_id)
+                .bind(chunk_size as i64)
+                .fetch_all(pool)
+                .await
+                .unwrap();
 
         if chunk.is_empty() {
             break;
@@ -694,10 +673,7 @@ async fn test_large_library_memory_efficient_iteration() {
 
     let elapsed = start.elapsed();
 
-    assert_eq!(
-        total_processed, 3000,
-        "Should process all 3000 tracks"
-    );
+    assert_eq!(total_processed, 3000, "Should process all 3000 tracks");
 
     // Keyset pagination should be very efficient
     assert!(

@@ -58,7 +58,7 @@ impl SupportedBitDepth {
         }
     }
 
-    /// Convert from CPAL SampleFormat
+    /// Convert from CPAL `SampleFormat`
     fn from_cpal(format: SampleFormat) -> Option<Self> {
         match format {
             SampleFormat::I16 => Some(Self::Int16),
@@ -87,7 +87,7 @@ pub struct DeviceCapabilities {
     /// Supports exclusive mode (WASAPI exclusive, ASIO, etc.)
     pub supports_exclusive: bool,
 
-    /// Supports DSD output (native DoP or DSD-over-USB)
+    /// Supports DSD output (native `DoP` or DSD-over-USB)
     pub supports_dsd: bool,
 
     /// DSD rates supported (64x, 128x, 256x, 512x) - multiples of 44.1kHz
@@ -212,7 +212,7 @@ pub fn detect_device_capabilities(
 
     // Convert to sorted vectors
     let mut sample_rates: Vec<u32> = sample_rates.into_iter().collect();
-    sample_rates.sort();
+    sample_rates.sort_unstable();
 
     let mut bit_depths: Vec<SupportedBitDepth> = bit_depths.into_iter().collect();
     bit_depths.sort_by_key(|d| d.bits());
@@ -284,7 +284,10 @@ pub fn list_devices_with_capabilities(
         .map_err(|_| DeviceError::BackendUnavailable(backend.name()))?;
 
     let default_device = host.default_output_device();
-    let default_name = default_device.as_ref().and_then(|d| d.name().ok());
+    let default_name = default_device
+        .as_ref()
+        .and_then(|d| d.description().ok())
+        .map(|desc| desc.name().to_string());
 
     // Use output_devices() instead of devices() to only enumerate output devices.
     // This is more efficient and avoids issues with input-only devices.
@@ -299,7 +302,7 @@ pub fn list_devices_with_capabilities(
         // one problematic device from failing the entire enumeration.
         // This is especially important for ASIO where some drivers are unreliable.
         let device_info = (|| -> Option<AudioDeviceInfo> {
-            let name = device.name().ok()?;
+            let name = device.description().ok()?.name().to_string();
 
             // Try to get default output config; skip device if unavailable
             let config = device.default_output_config().ok()?;
@@ -369,8 +372,10 @@ pub fn get_default_device_with_capabilities(
         .ok_or(DeviceError::NoDeviceFound)?;
 
     let name = device
+        .description()
+        .map_err(|e| DeviceError::DeviceInfoFailed(e.to_string()))?
         .name()
-        .map_err(|e| DeviceError::DeviceInfoFailed(e.to_string()))?;
+        .to_string();
 
     let config = device
         .default_output_config()
@@ -429,7 +434,7 @@ pub fn find_device_by_name(
         .map_err(|e| DeviceError::EnumerationFailed(e.to_string()))?;
 
     for device in devices {
-        if let Ok(name) = device.name() {
+        if let Some(name) = device.description().ok().map(|desc| desc.name().to_string()) {
             if name == device_name {
                 return Ok(device);
             }

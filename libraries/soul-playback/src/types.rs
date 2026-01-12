@@ -86,10 +86,22 @@ pub enum RepeatMode {
     One,
 }
 
+impl RepeatMode {
+    /// Convert to string representation
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::All => "all",
+            Self::One => "one",
+        }
+    }
+}
+
 /// Shuffle mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ShuffleMode {
     /// No shuffling
+    #[default]
     Off,
 
     /// Pure random shuffle
@@ -97,6 +109,39 @@ pub enum ShuffleMode {
 
     /// Smart shuffle (avoid recently played, distribute artists)
     Smart,
+}
+
+impl ShuffleMode {
+    /// Convert shuffle mode to string representation
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Random => "random",
+            Self::Smart => "smart",
+        }
+    }
+
+    /// Parse shuffle mode from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "off" => Some(Self::Off),
+            "random" => Some(Self::Random),
+            "smart" => Some(Self::Smart),
+            _ => None,
+        }
+    }
+
+    /// Cycle to next shuffle mode
+    ///
+    /// Off → Random → Smart → Off
+    #[must_use]
+    pub fn cycle(&self) -> Self {
+        match self {
+            Self::Off => Self::Random,
+            Self::Random => Self::Smart,
+            Self::Smart => Self::Off,
+        }
+    }
 }
 
 /// Configuration for playback manager

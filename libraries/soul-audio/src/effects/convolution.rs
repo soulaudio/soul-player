@@ -297,12 +297,9 @@ impl ConvolutionEngine {
     /// Uses the overlap-add method: input blocks are zero-padded, convolved via FFT,
     /// and results are added together with proper overlap.
     fn convolve_fft(&mut self, input: &[f32], output: &mut [f32]) {
-        let state = match &mut self.fft_state {
-            Some(s) => s,
-            None => {
-                output.copy_from_slice(input);
-                return;
-            }
+        let Some(state) = &mut self.fft_state else {
+            output.copy_from_slice(input);
+            return;
         };
 
         let frames = input.len() / 2;
@@ -460,9 +457,7 @@ impl AudioEffect for ConvolutionEngine {
         } else {
             // Use time-domain convolution for short IRs
             let mut output = std::mem::take(&mut self.output_scratch);
-            for i in 0..buffer_len {
-                output[i] = 0.0;
-            }
+            output[..buffer_len].fill(0.0);
             self.convolve_time_domain(buffer, &mut output[..buffer_len]);
             self.output_scratch = output;
         }

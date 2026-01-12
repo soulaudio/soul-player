@@ -87,11 +87,7 @@ pub fn parse_folder_name(folder_name: &str) -> FolderMetadata {
                 let album = album_parts[1..].join(" - ");
                 FolderMetadata {
                     artist: Some(artist.to_string()),
-                    album: if album.is_empty() {
-                        None
-                    } else {
-                        Some(album)
-                    },
+                    album: if album.is_empty() { None } else { Some(album) },
                     year: Some(year),
                 }
             } else {
@@ -209,7 +205,7 @@ fn find_best_tag(file: &TaggedFile) -> Option<&lofty::Tag> {
     let best = tags.iter().max_by_key(|t| score_tag(t));
 
     // If best tag has no data, try primary_tag as last resort
-    if best.map(|t| score_tag(t)).unwrap_or(0) == 0 {
+    if best.map(score_tag).unwrap_or(0) == 0 {
         file.primary_tag()
     } else {
         best
@@ -273,10 +269,8 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         };
 
     // Fallback: Use filename as title if no title in tags
-    let title: Option<String> = title.or_else(|| {
-        path.file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-    });
+    let title: Option<String> =
+        title.or_else(|| path.file_stem().map(|s| s.to_string_lossy().into_owned()));
 
     // Check if metadata contains corrupted characters (indicates wrong encoding in tags)
     let has_corrupted_data = artist.as_ref().map(|s| s.contains('?')).unwrap_or(false)
@@ -288,7 +282,9 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     // 2. Tags contain '?' (indicates encoding corruption from non-Latin characters)
     let folder_meta = if artist.is_none() || album.is_none() || has_corrupted_data {
         let parent = path.parent();
-        let folder_name = parent.and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
+        let folder_name = parent
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned());
 
         if let Some(name) = folder_name {
             let mut parsed = parse_folder_name(&name);
@@ -341,7 +337,10 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
 
     // Prefer folder metadata if we detected corrupted data, otherwise use tag data as fallback
     let artist = if has_corrupted_data {
-        folder_meta.as_ref().and_then(|m| m.artist.clone()).or(artist)
+        folder_meta
+            .as_ref()
+            .and_then(|m| m.artist.clone())
+            .or(artist)
     } else {
         artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()))
     };
@@ -375,7 +374,9 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     // Extract album art
     let album_art = tag.and_then(|t| {
         t.pictures().first().map(|pic| {
-            let mime = pic.mime_type().map(|m| m.as_str().to_string())
+            let mime = pic
+                .mime_type()
+                .map(|m| m.as_str().to_string())
                 .unwrap_or_else(|| "image/jpeg".to_string());
             (pic.data().to_vec(), mime)
         })
@@ -435,8 +436,8 @@ pub fn calculate_file_hash(path: &Path) -> Result<String> {
 /// # Returns
 /// * `ExtractedMetadata` with all available metadata
 pub fn extract_metadata_symphonia(path: &Path) -> Result<ExtractedMetadata> {
-    let audio_metadata = soul_audio::extract_metadata(path)
-        .map_err(|e| ImportError::Metadata(e.to_string()))?;
+    let audio_metadata =
+        soul_audio::extract_metadata(path).map_err(|e| ImportError::Metadata(e.to_string()))?;
 
     // Convert genre from single string to vec
     let genres = audio_metadata
@@ -456,9 +457,9 @@ pub fn extract_metadata_symphonia(path: &Path) -> Result<ExtractedMetadata> {
         .unwrap_or_else(|| "unknown".to_string());
 
     // Convert album art
-    let album_art = audio_metadata.album_art.map(|art| {
-        (art.data, art.mime_type)
-    });
+    let album_art = audio_metadata
+        .album_art
+        .map(|art| (art.data, art.mime_type));
 
     Ok(ExtractedMetadata {
         title: audio_metadata.title,
@@ -601,7 +602,10 @@ mod tests {
     fn test_parse_folder_name_album_with_dashes() {
         let result = parse_folder_name("Artist - Part 1 - The Beginning - Remastered");
         assert_eq!(result.artist, Some("Artist".to_string()));
-        assert_eq!(result.album, Some("Part 1 - The Beginning - Remastered".to_string()));
+        assert_eq!(
+            result.album,
+            Some("Part 1 - The Beginning - Remastered".to_string())
+        );
         assert_eq!(result.year, None);
     }
 

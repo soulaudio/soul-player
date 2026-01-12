@@ -269,10 +269,19 @@ fn test_width_zero_produces_perfect_mono() {
     let output_width = calculate_side_to_mid_ratio(&output);
 
     println!("\n=== Width=0 (Mono) Accuracy Test ===");
-    println!("Input correlation: {:.4} (stereo content)", input_correlation);
+    println!(
+        "Input correlation: {:.4} (stereo content)",
+        input_correlation
+    );
     println!("Input side/mid ratio: {:.4}", input_width);
-    println!("Output correlation: {:.4} (should be ~1.0)", output_correlation);
-    println!("Output side/mid ratio: {:.4} (should be ~0.0)", output_width);
+    println!(
+        "Output correlation: {:.4} (should be ~1.0)",
+        output_correlation
+    );
+    println!(
+        "Output side/mid ratio: {:.4} (should be ~0.0)",
+        output_width
+    );
 
     // Verify output is mono (correlation = 1.0)
     assert!(
@@ -391,7 +400,10 @@ fn test_width_intermediate_values() {
         let output_width = calculate_side_to_mid_ratio(&output);
         let correlation = calculate_correlation_coefficient(&output);
 
-        println!("{:.2}  | {:.4}          | {:.4}", width, output_width, correlation);
+        println!(
+            "{:.2}  | {:.4}          | {:.4}",
+            width, output_width, correlation
+        );
 
         // Width should scale approximately with the width parameter
         let expected_ratio = width * base_width;
@@ -477,20 +489,14 @@ fn test_side_gain_accuracy() {
         }
 
         // Measure side RMS before
-        let side_in: Vec<f32> = input
-            .chunks(2)
-            .map(|c| (c[0] - c[1]) / 2.0)
-            .collect();
+        let side_in: Vec<f32> = input.chunks(2).map(|c| (c[0] - c[1]) / 2.0).collect();
         let side_in_rms = calculate_rms_level(&side_in);
 
         let mut output = input.clone();
         enhancer.process(&mut output, SAMPLE_RATE);
 
         // Measure side RMS after
-        let side_out: Vec<f32> = output
-            .chunks(2)
-            .map(|c| (c[0] - c[1]) / 2.0)
-            .collect();
+        let side_out: Vec<f32> = output.chunks(2).map(|c| (c[0] - c[1]) / 2.0).collect();
         let side_out_rms = calculate_rms_level(&side_out);
 
         let measured_gain_db = 20.0 * (side_out_rms / side_in_rms).log10();
@@ -545,7 +551,10 @@ fn test_mid_side_independence() {
     let side_change_db = 20.0 * (side_out_rms / side_in_rms).log10();
 
     println!("\n=== Mid/Side Independence Test ===");
-    println!("Mid gain setting: +6.0 dB, measured: {:+.1} dB", mid_change_db);
+    println!(
+        "Mid gain setting: +6.0 dB, measured: {:+.1} dB",
+        mid_change_db
+    );
     println!(
         "Side gain setting: -6.0 dB, measured: {:+.1} dB",
         side_change_db
@@ -803,7 +812,10 @@ fn test_balance_hard_pan_behavior() {
 
     println!("Hard Right (balance=1.0):");
     println!("  Left channel RMS:  {:.6} (should be ~0)", left_ch_rms_r);
-    println!("  Right channel RMS: {:.4} (should be full)", right_ch_rms_r);
+    println!(
+        "  Right channel RMS: {:.4} (should be full)",
+        right_ch_rms_r
+    );
 
     assert!(
         left_ch_rms_r < 0.01,
@@ -832,7 +844,10 @@ fn test_correlation_meter_accuracy() {
     // Test 1: Perfect correlation (mono)
     let mono = generate_stereo_sine(1000.0, SAMPLE_RATE, 0.5, 0.7, 0.7);
     let mono_corr = calculate_correlation_coefficient(&mono);
-    println!("Mono signal (L=R): correlation = {:.4} (expected: 1.0)", mono_corr);
+    println!(
+        "Mono signal (L=R): correlation = {:.4} (expected: 1.0)",
+        mono_corr
+    );
     assert!(
         mono_corr > 0.999,
         "Mono signal should have correlation ~1.0, got {:.4}",
@@ -1091,7 +1106,8 @@ fn test_phase_coherence_maintained() {
         let phase_diff = calculate_phase_difference(&left_in, &left_out, frequency, SAMPLE_RATE);
 
         // Calculate phase difference between output L and R
-        let lr_phase_diff = calculate_phase_difference(&left_out, &right_out, frequency, SAMPLE_RATE);
+        let lr_phase_diff =
+            calculate_phase_difference(&left_out, &right_out, frequency, SAMPLE_RATE);
 
         println!(
             "Width={:.1}: In->Out phase shift={:.1} deg, L-R phase diff={:.1} deg",
@@ -1146,10 +1162,7 @@ fn test_no_phase_artifacts_across_frequencies() {
             SAMPLE_RATE,
         );
 
-        println!(
-            "{:9.0} | {:19.1} | {:18.1}",
-            freq, phase_15, phase_20
-        );
+        println!("{:9.0} | {:19.1} | {:18.1}", freq, phase_15, phase_20);
 
         // L and R should remain in phase (mono input produces mono output in M/S processing)
         assert!(
@@ -1222,13 +1235,19 @@ fn test_clipping_prevention_affects_gain_accuracy() {
     println!("High-level input (will clip without prevention):");
     println!("  Input mid peak: {:.2}", 0.6 * 0.8 + 0.6 * 0.4);
     println!("  Expected boosted: {:.2} (exceeds 1.0)", (0.6) * 2.0);
-    println!("  Measured gain: {:+.1} dB (expected +6.0 dB)", mid_change_db_high);
+    println!(
+        "  Measured gain: {:+.1} dB (expected +6.0 dB)",
+        mid_change_db_high
+    );
     println!("  Gain error: {:.1} dB", gain_error_high);
 
     println!("\nLow-level input (no clipping risk):");
     println!("  Input mid peak: {:.2}", 0.25);
     println!("  Expected boosted: {:.2} (safe)", 0.25 * 2.0);
-    println!("  Measured gain: {:+.1} dB (expected +6.0 dB)", mid_change_db_low);
+    println!(
+        "  Measured gain: {:+.1} dB (expected +6.0 dB)",
+        mid_change_db_low
+    );
     println!("  Gain error: {:.1} dB", gain_error_low);
 
     // Low-level input should be accurate
@@ -1240,7 +1259,9 @@ fn test_clipping_prevention_affects_gain_accuracy() {
 
     // High-level input will have reduced gain due to clipping prevention
     // This is EXPECTED behavior - document it, don't fail
-    println!("\nCONCLUSION: Clipping prevention reduces effective gain when output would exceed 1.0");
+    println!(
+        "\nCONCLUSION: Clipping prevention reduces effective gain when output would exceed 1.0"
+    );
     println!("This is intentional to prevent clipping artifacts.");
     println!("For accurate gain with high-level input, reduce input level before processing.");
 }

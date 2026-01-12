@@ -229,6 +229,7 @@ function FormatDropdown({
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
+        onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
         className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${activeStyle.bg} ${activeStyle.text} hover:opacity-80`}
       >
         {activeVersion.format?.toUpperCase()}
@@ -331,6 +332,7 @@ function TrackRow({
         ) : isHovered || isCurrentTrack ? (
           <button
             onClick={() => (showPauseButton ? onPause() : onPlay(group))}
+            onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
             className="w-8 h-8 flex items-center justify-center rounded hover:bg-primary/10 transition-colors"
             aria-label={showPauseButton ? 'Pause' : 'Play'}
           >

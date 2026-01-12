@@ -98,10 +98,8 @@ impl EncoderDelay {
     pub fn parse_lame_header(header_bytes: &[u8; 3]) -> Option<Self> {
         // LAME stores 12-bit encoder delay and 12-bit padding
         // Byte layout: [delay_hi:8][delay_lo:4|padding_hi:4][padding_lo:8]
-        let encoder_delay =
-            ((header_bytes[0] as u32) << 4) | ((header_bytes[1] as u32) >> 4);
-        let end_padding =
-            (((header_bytes[1] as u32) & 0x0F) << 8) | (header_bytes[2] as u32);
+        let encoder_delay = ((header_bytes[0] as u32) << 4) | ((header_bytes[1] as u32) >> 4);
+        let end_padding = (((header_bytes[1] as u32) & 0x0F) << 8) | (header_bytes[2] as u32);
 
         // Sanity check: values should be reasonable for MP3
         // Typical LAME delay is 576 samples (one MP3 granule)
@@ -264,7 +262,9 @@ impl DelayTrimmer {
         }
 
         // Skip end padding
-        let valid_end = self.total_samples.saturating_sub(self.delay.end_padding as u64);
+        let valid_end = self
+            .total_samples
+            .saturating_sub(self.delay.end_padding as u64);
         if self.samples_read >= valid_end {
             return true;
         }
@@ -289,7 +289,9 @@ impl DelayTrimmer {
 
     /// Check if we've reached the end padding
     pub fn at_end_padding(&self) -> bool {
-        let valid_end = self.total_samples.saturating_sub(self.delay.end_padding as u64);
+        let valid_end = self
+            .total_samples
+            .saturating_sub(self.delay.end_padding as u64);
         self.samples_read >= valid_end
     }
 
@@ -314,11 +316,8 @@ impl DelayTrimmer {
 
     /// Get current position in valid samples
     pub fn position(&self) -> u64 {
-        if self.samples_read <= self.delay.start_padding as u64 {
-            0
-        } else {
-            self.samples_read - self.delay.start_padding as u64
-        }
+        self.samples_read
+            .saturating_sub(self.delay.start_padding as u64)
     }
 
     /// Get total valid samples
@@ -371,8 +370,8 @@ mod tests {
         // Typical iTunSMPB format
         let smpb = " 00000000 00000840 00000AAC 0000000000012345";
         let delay = EncoderDelay::from_itun_smpb(smpb).unwrap();
-        assert_eq!(delay.start_padding, 0x840);  // 2112
-        assert_eq!(delay.end_padding, 0xAAC);    // 2732
+        assert_eq!(delay.start_padding, 0x840); // 2112
+        assert_eq!(delay.end_padding, 0xAAC); // 2732
         assert_eq!(delay.valid_samples, Some(0x12345));
         assert_eq!(delay.source, DelaySource::ITunSMPB);
     }
@@ -455,7 +454,7 @@ mod tests {
 
         // Seek to valid sample 500
         let raw_pos = trimmer.seek_to(500);
-        assert_eq!(raw_pos, 600);  // 500 + 100 start padding
+        assert_eq!(raw_pos, 600); // 500 + 100 start padding
         assert_eq!(trimmer.position(), 500);
     }
 
@@ -463,7 +462,7 @@ mod tests {
     fn test_delay_trimmer_valid_samples() {
         let delay = EncoderDelay::from_lame(100, 50);
         let trimmer = DelayTrimmer::new(delay, 1000);
-        assert_eq!(trimmer.valid_samples(), 850);  // 1000 - 100 - 50
+        assert_eq!(trimmer.valid_samples(), 850); // 1000 - 100 - 50
     }
 
     #[test]

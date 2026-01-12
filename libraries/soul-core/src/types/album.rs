@@ -14,6 +14,8 @@ pub struct Album {
     pub artist_name: Option<String>, // Denormalized
     pub year: Option<i32>,
     pub cover_art_path: Option<String>,
+    /// Artwork source: 'soul_storage', 'folder', or 'embedded'
+    pub artwork_source: Option<String>,
     pub musicbrainz_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,

@@ -63,13 +63,12 @@ impl<'a> DownloadClient<'a> {
                     status: 404,
                     message: format!("Track not found: {}", track_id),
                 });
-            } else {
-                let error_text = response.text().await.unwrap_or_default();
-                return Err(ServerClientError::ServerError {
-                    status: status.as_u16(),
-                    message: error_text,
-                });
             }
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(ServerClientError::ServerError {
+                status: status.as_u16(),
+                message: error_text,
+            });
         }
 
         // Get content length if available

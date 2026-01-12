@@ -33,8 +33,8 @@
 //! 4. Document the change in version history
 
 use soul_audio::effects::{
-    AudioEffect, Compressor, CompressorSettings, Crossfeed, CrossfeedPreset, EffectChain,
-    Limiter, LimiterSettings, ParametricEq, EqBand, StereoEnhancer, StereoSettings,
+    AudioEffect, Compressor, CompressorSettings, Crossfeed, CrossfeedPreset, EffectChain, EqBand,
+    Limiter, LimiterSettings, ParametricEq, StereoEnhancer, StereoSettings,
 };
 use soul_audio::resampling::{Resampler, ResamplerBackend, ResamplingQuality};
 use std::f32::consts::PI;
@@ -64,7 +64,12 @@ mod signal_gen {
     use std::f32::consts::PI;
 
     /// Generate a deterministic sine wave (no randomness)
-    pub fn sine_wave(frequency: f32, sample_rate: u32, num_samples: usize, amplitude: f32) -> Vec<f32> {
+    pub fn sine_wave(
+        frequency: f32,
+        sample_rate: u32,
+        num_samples: usize,
+        amplitude: f32,
+    ) -> Vec<f32> {
         let mut samples = Vec::with_capacity(num_samples * 2);
         for i in 0..num_samples {
             let t = i as f32 / sample_rate as f32;
@@ -99,7 +104,12 @@ mod signal_gen {
     }
 
     /// Generate a deterministic impulse
-    pub fn impulse(_sample_rate: u32, num_samples: usize, amplitude: f32, position_ratio: f32) -> Vec<f32> {
+    pub fn impulse(
+        _sample_rate: u32,
+        num_samples: usize,
+        amplitude: f32,
+        position_ratio: f32,
+    ) -> Vec<f32> {
         let mut samples = vec![0.0; num_samples * 2];
         let impulse_pos = ((num_samples as f32 * position_ratio) as usize) * 2;
         if impulse_pos + 1 < samples.len() {
@@ -122,7 +132,11 @@ mod signal_gen {
         let mut samples = Vec::with_capacity(num_samples * 2);
         for i in 0..num_samples {
             let t = i as f32 / sample_rate as f32;
-            let amplitude = if i < step_position { quiet_level } else { loud_level };
+            let amplitude = if i < step_position {
+                quiet_level
+            } else {
+                loud_level
+            };
             let sample = (2.0 * PI * frequency * t).sin() * amplitude;
             samples.push(sample);
             samples.push(sample);
@@ -195,9 +209,9 @@ mod comparison {
     impl Default for ComparisonConfig {
         fn default() -> Self {
             Self {
-                max_rms_error: 0.001,        // Very tight by default
-                max_peak_deviation: 0.01,     // 1% peak deviation
-                min_correlation: 0.9999,      // Very high correlation
+                max_rms_error: 0.001,     // Very tight by default
+                max_peak_deviation: 0.01, // 1% peak deviation
+                min_correlation: 0.9999,  // Very high correlation
                 allow_length_mismatch: false,
                 length_tolerance_percent: 5.0,
             }
@@ -331,7 +345,11 @@ mod comparison {
         let sum_e: f64 = expected.iter().map(|&x| x as f64).sum();
         let sum_aa: f64 = actual.iter().map(|&x| (x as f64).powi(2)).sum();
         let sum_ee: f64 = expected.iter().map(|&x| (x as f64).powi(2)).sum();
-        let sum_ae: f64 = actual.iter().zip(expected).map(|(&a, &e)| a as f64 * e as f64).sum();
+        let sum_ae: f64 = actual
+            .iter()
+            .zip(expected)
+            .map(|(&a, &e)| a as f64 * e as f64)
+            .sum();
 
         let numerator = n * sum_ae - sum_a * sum_e;
         let denominator = ((n * sum_aa - sum_a.powi(2)) * (n * sum_ee - sum_e.powi(2))).sqrt();
@@ -451,65 +469,56 @@ fn validate_version() {
 // 1kHz sine through low shelf boost (+6dB at 100Hz)
 // Sample rate: 44100, 512 samples, amplitude 0.5
 const EQ_LOW_SHELF_REFERENCE: [f32; 32] = [
-    0.0, 0.04907, 0.09745, 0.14448, 0.18952, 0.23197, 0.27127, 0.30690,
-    0.33843, 0.36545, 0.38766, 0.40481, 0.41674, 0.42336, 0.42466, 0.42069,
-    0.41159, 0.39756, 0.37886, 0.35581, 0.32878, 0.29819, 0.26451, 0.22825,
-    0.18996, 0.15022, 0.10961, 0.06873, 0.02818, -0.01143, -0.04955, -0.08563,
+    0.0, 0.04907, 0.09745, 0.14448, 0.18952, 0.23197, 0.27127, 0.30690, 0.33843, 0.36545, 0.38766,
+    0.40481, 0.41674, 0.42336, 0.42466, 0.42069, 0.41159, 0.39756, 0.37886, 0.35581, 0.32878,
+    0.29819, 0.26451, 0.22825, 0.18996, 0.15022, 0.10961, 0.06873, 0.02818, -0.01143, -0.04955,
+    -0.08563,
 ];
 
 // Compressor Golden References
 // Step signal through 4:1 compression at -20dB threshold
 // Sample rate: 48000, attack 5ms, release 50ms
 const COMPRESSOR_STEP_REFERENCE: [f32; 32] = [
-    0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01,
-    0.15, 0.22, 0.28, 0.32, 0.35, 0.37, 0.38, 0.39,
-    0.39, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40,
-    0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40,
+    0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.15, 0.22, 0.28, 0.32, 0.35, 0.37, 0.38, 0.39,
+    0.39, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40, 0.40,
 ];
 
 // Limiter Golden References
 // Signal with peaks exceeding threshold
 // Sample rate: 44100, threshold -0.3dB
 const LIMITER_PEAK_REFERENCE: [f32; 32] = [
-    0.0, 0.30, 0.55, 0.75, 0.89, 0.95, 0.97, 0.95,
-    0.89, 0.80, 0.68, 0.54, 0.39, 0.24, 0.08, -0.08,
-    -0.24, -0.39, -0.54, -0.68, -0.80, -0.89, -0.95, -0.97,
-    -0.95, -0.89, -0.80, -0.68, -0.54, -0.39, -0.24, -0.08,
+    0.0, 0.30, 0.55, 0.75, 0.89, 0.95, 0.97, 0.95, 0.89, 0.80, 0.68, 0.54, 0.39, 0.24, 0.08, -0.08,
+    -0.24, -0.39, -0.54, -0.68, -0.80, -0.89, -0.95, -0.97, -0.95, -0.89, -0.80, -0.68, -0.54,
+    -0.39, -0.24, -0.08,
 ];
 
 // Stereo Enhancer Golden References
 // Stereo signal with width = 1.5
 // Sample rate: 44100, different frequencies per channel
 const STEREO_WIDE_REFERENCE: [f32; 32] = [
-    0.0, 0.0, 0.12, 0.08, 0.23, 0.15, 0.33, 0.22,
-    0.42, 0.28, 0.49, 0.33, 0.55, 0.37, 0.59, 0.40,
-    0.61, 0.42, 0.62, 0.43, 0.61, 0.42, 0.59, 0.40,
-    0.55, 0.37, 0.49, 0.33, 0.42, 0.28, 0.33, 0.22,
+    0.0, 0.0, 0.12, 0.08, 0.23, 0.15, 0.33, 0.22, 0.42, 0.28, 0.49, 0.33, 0.55, 0.37, 0.59, 0.40,
+    0.61, 0.42, 0.62, 0.43, 0.61, 0.42, 0.59, 0.40, 0.55, 0.37, 0.49, 0.33, 0.42, 0.28, 0.33, 0.22,
 ];
 
 // Crossfeed Golden References
 // Hard-panned signal through Natural preset
 // Sample rate: 44100
 const CROSSFEED_PANNED_REFERENCE: [f32; 32] = [
-    0.90, 0.05, 0.89, 0.10, 0.88, 0.14, 0.87, 0.17,
-    0.86, 0.20, 0.85, 0.22, 0.84, 0.24, 0.83, 0.26,
-    0.82, 0.27, 0.81, 0.28, 0.80, 0.29, 0.79, 0.30,
-    0.78, 0.30, 0.77, 0.31, 0.76, 0.31, 0.75, 0.31,
+    0.90, 0.05, 0.89, 0.10, 0.88, 0.14, 0.87, 0.17, 0.86, 0.20, 0.85, 0.22, 0.84, 0.24, 0.83, 0.26,
+    0.82, 0.27, 0.81, 0.28, 0.80, 0.29, 0.79, 0.30, 0.78, 0.30, 0.77, 0.31, 0.76, 0.31, 0.75, 0.31,
 ];
 
 // Effect Chain Golden References
 // Signal through EQ -> Compressor -> Limiter
 const CHAIN_FULL_REFERENCE: [f32; 32] = [
-    0.0, 0.0, 0.08, 0.08, 0.15, 0.15, 0.22, 0.22,
-    0.28, 0.28, 0.33, 0.33, 0.37, 0.37, 0.40, 0.40,
-    0.42, 0.42, 0.43, 0.43, 0.43, 0.43, 0.42, 0.42,
-    0.40, 0.40, 0.37, 0.37, 0.33, 0.33, 0.28, 0.28,
+    0.0, 0.0, 0.08, 0.08, 0.15, 0.15, 0.22, 0.22, 0.28, 0.28, 0.33, 0.33, 0.37, 0.37, 0.40, 0.40,
+    0.42, 0.42, 0.43, 0.43, 0.43, 0.43, 0.42, 0.42, 0.40, 0.40, 0.37, 0.37, 0.33, 0.33, 0.28, 0.28,
 ];
 
 // Resampling Golden References (44100 -> 48000)
 // Reference RMS and peak values for resampled signal
-const RESAMPLING_44_TO_48_RMS: f32 = 0.3536;  // RMS of sine wave = amplitude / sqrt(2)
-const RESAMPLING_44_TO_48_PEAK: f32 = 0.5;     // Peak should be preserved
+const RESAMPLING_44_TO_48_RMS: f32 = 0.3536; // RMS of sine wave = amplitude / sqrt(2)
+const RESAMPLING_44_TO_48_PEAK: f32 = 0.5; // Peak should be preserved
 
 // =============================================================================
 // Test Cases
@@ -590,11 +599,14 @@ fn test_eq_mid_peaking_golden() {
 
     // Verify signal was modified
     let rms = comparison::calculate_rms(&signal);
-    println!("Output RMS: {:.4} (should be higher than input due to boost)", rms);
+    println!(
+        "Output RMS: {:.4} (should be higher than input due to boost)",
+        rms
+    );
 
     // For peaking filter at center frequency, expect gain close to +3dB
     let expected_gain = 10.0_f32.powf(3.0 / 20.0); // ~1.41
-    let input_rms = 0.5 / 2.0_f32.sqrt();  // ~0.354
+    let input_rms = 0.5 / 2.0_f32.sqrt(); // ~0.354
     let expected_rms = input_rms * expected_gain;
 
     assert!(
@@ -620,7 +632,7 @@ fn test_compressor_step_response_golden() {
 
     // Generate step signal: quiet -> loud
     let quiet_level = 0.01; // -40dB
-    let loud_level = 0.5;   // -6dB
+    let loud_level = 0.5; // -6dB
     let mut signal = signal_gen::step_signal(
         sample_rate,
         num_samples,
@@ -662,7 +674,10 @@ fn test_compressor_step_response_golden() {
 
     // Verify compression happened
     let output_peak = signal.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
-    println!("\nOutput peak: {:.4} (should be less than input loud level {:.4})", output_peak, loud_level);
+    println!(
+        "\nOutput peak: {:.4} (should be less than input loud level {:.4})",
+        output_peak, loud_level
+    );
 
     assert!(
         output_peak < loud_level,
@@ -996,14 +1011,24 @@ fn test_resampling_quality_golden() {
 
     println!("Input samples: {}", input.len());
     println!("Output samples: {}", all_output.len());
-    println!("Output RMS: {:.4} (expected: {:.4})", output_rms, RESAMPLING_44_TO_48_RMS);
-    println!("Output Peak: {:.4} (expected: {:.4})", output_peak, RESAMPLING_44_TO_48_PEAK);
+    println!(
+        "Output RMS: {:.4} (expected: {:.4})",
+        output_rms, RESAMPLING_44_TO_48_RMS
+    );
+    println!(
+        "Output Peak: {:.4} (expected: {:.4})",
+        output_peak, RESAMPLING_44_TO_48_PEAK
+    );
 
     // Verify output length is approximately correct
     // Resamplers may have internal buffering, so allow 20% tolerance
-    let expected_output_len = (num_input_samples as f64 * output_rate as f64 / input_rate as f64) as usize * 2;
+    let expected_output_len =
+        (num_input_samples as f64 * output_rate as f64 / input_rate as f64) as usize * 2;
     let length_ratio = all_output.len() as f32 / expected_output_len as f32;
-    println!("Length ratio: {:.4} (should be close to 1.0, +-20% tolerance)", length_ratio);
+    println!(
+        "Length ratio: {:.4} (should be close to 1.0, +-20% tolerance)",
+        length_ratio
+    );
 
     assert!(
         (length_ratio - 1.0).abs() < 0.2,
@@ -1105,10 +1130,7 @@ fn test_multi_frequency_through_eq_golden() {
 
     // Output should have slightly different RMS due to frequency-dependent gain
     // The exact change depends on the balance of frequencies
-    assert!(
-        output_rms > 0.0,
-        "Output should have non-zero RMS"
-    );
+    assert!(output_rms > 0.0, "Output should have non-zero RMS");
 }
 
 #[test]
@@ -1193,8 +1215,14 @@ fn test_eq_regression_detection() {
     // These values should remain stable across versions
     // Update if algorithm intentionally changes
     // For now, just verify they're reasonable
-    assert!(output_rms > 0.2 && output_rms < 0.8, "RMS out of expected range");
-    assert!(output_peak > 0.3 && output_peak < 1.0, "Peak out of expected range");
+    assert!(
+        output_rms > 0.2 && output_rms < 0.8,
+        "RMS out of expected range"
+    );
+    assert!(
+        output_peak > 0.3 && output_peak < 1.0,
+        "Peak out of expected range"
+    );
 }
 
 #[test]
@@ -1232,10 +1260,7 @@ fn test_dynamics_regression_detection() {
     println!("  Gain Reduction: {:.1} dB", gain_reduction_db);
 
     // Verify compression happened
-    assert!(
-        output_peak < input_peak,
-        "Compressor should reduce peaks"
-    );
+    assert!(output_peak < input_peak, "Compressor should reduce peaks");
     assert!(
         gain_reduction_db < 0.0,
         "Should have negative gain reduction"

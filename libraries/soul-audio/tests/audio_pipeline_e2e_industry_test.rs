@@ -201,7 +201,9 @@ impl IndustryReferencePipeline {
 
         // Stage 2: Resampling
         let output_rate = if let Some(ref mut resampler) = self.resampler {
-            let resampled = resampler.process(&buffer).unwrap_or_else(|_| buffer.clone());
+            let resampled = resampler
+                .process(&buffer)
+                .unwrap_or_else(|_| buffer.clone());
             buffer = resampled;
             resampler.output_rate()
         } else {
@@ -539,12 +541,7 @@ fn test_gapless_playback_continuous_sweep() {
             let boundary_diff = (prev_last - curr_first).abs();
 
             if boundary_diff > 0.3 {
-                println!(
-                    "  Boundary {} -> {}: diff = {:.4}",
-                    i - 1,
-                    i,
-                    boundary_diff
-                );
+                println!("  Boundary {} -> {}: diff = {:.4}", i - 1, i, boundary_diff);
                 boundary_issues += 1;
             }
         }
@@ -685,8 +682,16 @@ fn test_equal_power_crossfade_level_consistency() {
     let level_variation_db = linear_to_db(max_level / min_level.max(0.0001));
 
     println!("Equal-Power Crossfade Results:");
-    println!("  Max level: {:.4} ({:.2} dB)", max_level, linear_to_db(max_level));
-    println!("  Min level: {:.4} ({:.2} dB)", min_level, linear_to_db(min_level));
+    println!(
+        "  Max level: {:.4} ({:.2} dB)",
+        max_level,
+        linear_to_db(max_level)
+    );
+    println!(
+        "  Min level: {:.4} ({:.2} dB)",
+        min_level,
+        linear_to_db(min_level)
+    );
     println!("  Level variation: {:.2} dB", level_variation_db);
 
     // Level should stay relatively consistent (within 3dB)
@@ -784,7 +789,8 @@ fn test_mp3_like_pipeline_with_encoder_delay_compensation() {
     mp3_output.extend(vec![0.0f32; trailing_padding]);
 
     // Compensate by removing padding
-    let compensated = mp3_output[encoder_delay_samples..mp3_output.len() - trailing_padding].to_vec();
+    let compensated =
+        mp3_output[encoder_delay_samples..mp3_output.len() - trailing_padding].to_vec();
 
     // Process through pipeline
     let mut pipeline = IndustryReferencePipeline::new();
@@ -825,7 +831,9 @@ fn test_flac_24bit_to_16bit_dithered_output() {
     let input = generate_sine_wave(1000.0, 96000, 1.0, 0.5);
 
     let mut pipeline = IndustryReferencePipeline::new();
-    pipeline.setup_resampler(96000, 44100, ResamplingQuality::High).unwrap();
+    pipeline
+        .setup_resampler(96000, 44100, ResamplingQuality::High)
+        .unwrap();
     pipeline.set_output_bit_depth(16);
 
     // Add gentle effects
@@ -898,11 +906,7 @@ fn test_aac_format_simulation() {
     );
 
     let peak = calculate_peak(&output);
-    assert!(
-        peak <= 1.0,
-        "Output should not clip. Peak: {:.4}",
-        peak
-    );
+    assert!(peak <= 1.0, "Output should not clip. Peak: {:.4}", peak);
 
     println!("AAC Format Simulation: PASSED");
 }
@@ -943,10 +947,26 @@ fn test_ab_comparison_bypass_vs_processed() {
     let matched_rms = calculate_rms(&processed);
 
     println!("A/B Level Matching:");
-    println!("  Original RMS: {:.4} ({:.2} dB)", original_rms, linear_to_db(original_rms));
-    println!("  Processed RMS (before): {:.4} ({:.2} dB)", processed_rms, linear_to_db(processed_rms));
-    println!("  Processed RMS (after): {:.4} ({:.2} dB)", matched_rms, linear_to_db(matched_rms));
-    println!("  Level match factor: {:.4} ({:.2} dB)", level_match_factor, linear_to_db(level_match_factor));
+    println!(
+        "  Original RMS: {:.4} ({:.2} dB)",
+        original_rms,
+        linear_to_db(original_rms)
+    );
+    println!(
+        "  Processed RMS (before): {:.4} ({:.2} dB)",
+        processed_rms,
+        linear_to_db(processed_rms)
+    );
+    println!(
+        "  Processed RMS (after): {:.4} ({:.2} dB)",
+        matched_rms,
+        linear_to_db(matched_rms)
+    );
+    println!(
+        "  Level match factor: {:.4} ({:.2} dB)",
+        level_match_factor,
+        linear_to_db(level_match_factor)
+    );
 
     // After level matching, RMS should be equal
     let rms_diff_db = (linear_to_db(matched_rms) - linear_to_db(original_rms)).abs();
@@ -1014,7 +1034,9 @@ fn test_pipeline_latency_impulse_method() {
     let mut pipeline = IndustryReferencePipeline::new();
 
     // Setup resampling (main source of latency)
-    pipeline.setup_resampler(44100, 48000, ResamplingQuality::High).unwrap();
+    pipeline
+        .setup_resampler(44100, 48000, ResamplingQuality::High)
+        .unwrap();
 
     let eq = ParametricEq::new();
     pipeline.add_effect(Box::new(eq));
@@ -1024,10 +1046,7 @@ fn test_pipeline_latency_impulse_method() {
 
     // Find impulse position in input
     let input_mono = extract_mono(&input, 0);
-    let input_impulse_pos = input_mono
-        .iter()
-        .position(|&s| s > 0.9)
-        .unwrap_or(0);
+    let input_impulse_pos = input_mono.iter().position(|&s| s > 0.9).unwrap_or(0);
 
     // Process
     let output = pipeline.process(&input, 44100);
@@ -1054,8 +1073,14 @@ fn test_pipeline_latency_impulse_method() {
     println!("Latency Measurement Results:");
     println!("  Input impulse position: {} samples", input_impulse_pos);
     println!("  Output impulse position: {} samples", output_impulse_pos);
-    println!("  Measured latency: {} samples ({:.2} ms)", latency_samples, latency_ms);
-    println!("  Reported latency: {} samples ({:.2} ms)", reported_latency, reported_latency_ms);
+    println!(
+        "  Measured latency: {} samples ({:.2} ms)",
+        latency_samples, latency_ms
+    );
+    println!(
+        "  Reported latency: {} samples ({:.2} ms)",
+        reported_latency, reported_latency_ms
+    );
 
     // Latency should be reasonable
     assert!(
@@ -1100,7 +1125,10 @@ fn test_effects_chain_group_delay() {
 
     println!("Group Delay Results:");
     println!("  Phase difference at 1kHz: {:.1} degrees", phase_diff);
-    println!("  Group delay: {:.2} samples ({:.3} ms)", group_delay_samples, group_delay_ms);
+    println!(
+        "  Group delay: {:.2} samples ({:.3} ms)",
+        group_delay_samples, group_delay_ms
+    );
 
     // Phase should be reasonably aligned (within 90 degrees)
     assert!(
@@ -1233,7 +1261,9 @@ fn test_worst_case_cpu_load() {
     let mut pipeline = IndustryReferencePipeline::new();
 
     // All effects at demanding settings
-    pipeline.setup_resampler(44100, 96000, ResamplingQuality::Maximum).unwrap();
+    pipeline
+        .setup_resampler(44100, 96000, ResamplingQuality::Maximum)
+        .unwrap();
 
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(20.0, 12.0));
@@ -1405,7 +1435,10 @@ fn test_reset_between_tracks_stability() {
         );
     }
 
-    println!("Track Change Stability: {} tracks processed with reset", num_tracks);
+    println!(
+        "Track Change Stability: {} tracks processed with reset",
+        num_tracks
+    );
 }
 
 // =============================================================================
@@ -1441,8 +1474,14 @@ fn test_comprehensive_audio_quality_report() {
     println!("{}", report.format());
     println!("");
     println!("Quality Assessment:");
-    println!("  Meets professional standards (lenient): {}", report.meets_professional_standards());
-    println!("  Meets strict standards: {}", report.meets_strict_standards());
+    println!(
+        "  Meets professional standards (lenient): {}",
+        report.meets_professional_standards()
+    );
+    println!(
+        "  Meets strict standards: {}",
+        report.meets_strict_standards()
+    );
 
     // Additional metrics
     let imd_smpte = calculate_imd_smpte(&mono, 44100);
@@ -1488,9 +1527,15 @@ fn test_true_peak_measurement_and_limiting() {
 
     println!("True-Peak Measurement Results:");
     println!("  Sample peak: {:.2} dBFS", sample_peak_db);
-    println!("  Estimated true-peak (worst case): {:.2} dBTP", estimated_true_peak_db);
+    println!(
+        "  Estimated true-peak (worst case): {:.2} dBTP",
+        estimated_true_peak_db
+    );
     println!("  Limiter threshold: -1.0 dBTP");
-    println!("  BS.1770 max overshoot: {:.1} dB", MAX_TRUE_PEAK_OVERSHOOT_DB);
+    println!(
+        "  BS.1770 max overshoot: {:.1} dB",
+        MAX_TRUE_PEAK_OVERSHOOT_DB
+    );
 
     // Sample peak should be limited
     assert!(

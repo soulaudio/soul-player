@@ -41,7 +41,12 @@ fn find_peak(buffer: &[f32]) -> f32 {
 }
 
 /// Generate a stereo sine wave at the given frequency and amplitude
-fn generate_sine_wave(frequency: f32, sample_rate: u32, num_samples: usize, amplitude: f32) -> Vec<f32> {
+fn generate_sine_wave(
+    frequency: f32,
+    sample_rate: u32,
+    num_samples: usize,
+    amplitude: f32,
+) -> Vec<f32> {
     let mut buffer = Vec::with_capacity(num_samples * 2);
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
@@ -56,14 +61,19 @@ fn generate_sine_wave(frequency: f32, sample_rate: u32, num_samples: usize, ampl
 fn generate_impulse(num_samples: usize, impulse_position: usize, amplitude: f32) -> Vec<f32> {
     let mut buffer = vec![0.0_f32; num_samples * 2];
     if impulse_position < num_samples {
-        buffer[impulse_position * 2] = amplitude;     // Left
+        buffer[impulse_position * 2] = amplitude; // Left
         buffer[impulse_position * 2 + 1] = amplitude; // Right
     }
     buffer
 }
 
 /// Generate a square wave signal
-fn generate_square_wave(frequency: f32, sample_rate: u32, num_samples: usize, amplitude: f32) -> Vec<f32> {
+fn generate_square_wave(
+    frequency: f32,
+    sample_rate: u32,
+    num_samples: usize,
+    amplitude: f32,
+) -> Vec<f32> {
     let mut buffer = Vec::with_capacity(num_samples * 2);
     let period = sample_rate as f32 / frequency;
 
@@ -115,7 +125,10 @@ mod basic_ceiling_tests {
         assert!(
             output_peak <= threshold_linear + 0.01,
             "Output peak {:.4} ({:.2} dB) exceeded threshold {:.4} ({:.2} dB)",
-            output_peak, output_peak_db, threshold_linear, threshold_db
+            output_peak,
+            output_peak_db,
+            threshold_linear,
+            threshold_db
         );
     }
 
@@ -142,7 +155,10 @@ mod basic_ceiling_tests {
         assert!(
             output_peak <= threshold_linear + 0.01,
             "+6dB input: Output peak {:.4} ({:.2} dB) exceeded threshold {:.4} ({:.2} dB)",
-            output_peak, output_peak_db, threshold_linear, threshold_db
+            output_peak,
+            output_peak_db,
+            threshold_linear,
+            threshold_db
         );
     }
 
@@ -164,7 +180,8 @@ mod basic_ceiling_tests {
         limiter.process(&mut buffer, SAMPLE_RATE);
 
         // Signal should be essentially unchanged
-        let max_diff: f32 = buffer.iter()
+        let max_diff: f32 = buffer
+            .iter()
             .zip(original.iter())
             .map(|(a, b)| (a - b).abs())
             .fold(0.0, f32::max);
@@ -240,7 +257,10 @@ mod threshold_value_tests {
         assert!(
             output_peak <= threshold_linear + 0.01,
             "Threshold {:.1} dB: Output peak {:.4} ({:.2} dB) exceeded threshold {:.4}",
-            threshold_db, output_peak, output_peak_db, threshold_linear
+            threshold_db,
+            output_peak,
+            output_peak_db,
+            threshold_linear
         );
     }
 }
@@ -309,7 +329,11 @@ mod input_level_tests {
         assert!(
             output_peak <= threshold_linear + 0.01,
             "Input {:.1} dB: Output peak {:.4} ({:.2} dB) exceeded threshold {:.4} ({:.1} dB)",
-            input_db, output_peak, output_peak_db, threshold_linear, THRESHOLD_DB
+            input_db,
+            output_peak,
+            output_peak_db,
+            threshold_linear,
+            THRESHOLD_DB
         );
     }
 }
@@ -342,7 +366,8 @@ mod impulse_tests {
         assert!(
             output_peak <= threshold_linear + 0.01,
             "Impulse: Output peak {:.4} exceeded threshold {:.4}",
-            output_peak, threshold_linear
+            output_peak,
+            threshold_linear
         );
     }
 
@@ -379,7 +404,8 @@ mod impulse_tests {
         assert!(
             output_peak <= threshold_linear + 0.01,
             "Multiple impulses: Output peak {:.4} exceeded threshold {:.4}",
-            output_peak, threshold_linear
+            output_peak,
+            threshold_linear
         );
     }
 
@@ -409,7 +435,8 @@ mod impulse_tests {
         assert!(
             max_after_step <= threshold_linear + 0.01,
             "Step response: Max output after step {:.4} exceeded threshold {:.4}",
-            max_after_step, threshold_linear
+            max_after_step,
+            threshold_linear
         );
     }
 }
@@ -442,7 +469,8 @@ mod square_wave_tests {
         assert!(
             output_peak <= threshold_linear + 0.01,
             "Square wave: Output peak {:.4} exceeded threshold {:.4}",
-            output_peak, threshold_linear
+            output_peak,
+            threshold_linear
         );
     }
 
@@ -467,7 +495,9 @@ mod square_wave_tests {
             assert!(
                 output_peak <= threshold_linear + 0.01,
                 "Square wave amplitude {}: Output peak {:.4} exceeded threshold {:.4}",
-                amplitude, output_peak, threshold_linear
+                amplitude,
+                output_peak,
+                threshold_linear
             );
         }
     }
@@ -503,7 +533,9 @@ mod continuous_processing_tests {
             assert!(
                 output_peak <= threshold_linear + 0.01,
                 "Buffer {}: Output peak {:.4} exceeded threshold {:.4}",
-                i, output_peak, threshold_linear
+                i,
+                output_peak,
+                threshold_linear
             );
         }
     }
@@ -535,7 +567,10 @@ mod continuous_processing_tests {
                 assert!(
                     output_peak <= threshold_linear + 0.01,
                     "Buffer {} (input {:.1} dB): Output peak {:.4} exceeded threshold {:.4}",
-                    i, level_db, output_peak, threshold_linear
+                    i,
+                    level_db,
+                    output_peak,
+                    threshold_linear
                 );
             }
         }
@@ -567,7 +602,7 @@ mod exact_output_tests {
         limiter.process(&mut buffer, SAMPLE_RATE);
 
         // Find peak in the second half (after limiter has settled)
-        let second_half = &buffer[buffer.len()/2..];
+        let second_half = &buffer[buffer.len() / 2..];
         let output_peak = find_peak(second_half);
 
         // Output should be very close to threshold (within 0.5dB)
@@ -603,7 +638,8 @@ mod exact_output_tests {
             assert!(
                 out.abs() <= orig.abs() + 0.001,
                 "Limiter boosted signal: output {:.4} > original {:.4}",
-                out.abs(), orig.abs()
+                out.abs(),
+                orig.abs()
             );
         }
     }
@@ -640,7 +676,9 @@ mod sample_rate_tests {
             assert!(
                 output_peak <= threshold_linear + 0.01,
                 "Sample rate {} Hz: Output peak {:.4} exceeded threshold {:.4}",
-                sr, output_peak, threshold_linear
+                sr,
+                output_peak,
+                threshold_linear
             );
         }
     }
@@ -666,7 +704,10 @@ fn comprehensive_ceiling_verification() {
     println!("\n========================================");
     println!("LIMITER CEILING VERIFICATION SUMMARY");
     println!("========================================");
-    println!("Threshold: {} dB ({:.4} linear)", threshold_db, threshold_linear);
+    println!(
+        "Threshold: {} dB ({:.4} linear)",
+        threshold_db, threshold_linear
+    );
     println!("");
 
     for &input_db in &input_levels_db {
@@ -686,11 +727,19 @@ fn comprehensive_ceiling_verification() {
 
             if output_peak <= threshold_linear + 0.01 {
                 tests_passed += 1;
-                println!("PASS: Input {:.0} dB @ {} Hz -> Output {:.2} dB", input_db, freq, output_db);
+                println!(
+                    "PASS: Input {:.0} dB @ {} Hz -> Output {:.2} dB",
+                    input_db, freq, output_db
+                );
             } else {
                 tests_failed += 1;
-                let msg = format!("FAIL: Input {:.0} dB @ {} Hz -> Output {:.2} dB (exceeded by {:.2} dB)",
-                    input_db, freq, output_db, output_db - threshold_db);
+                let msg = format!(
+                    "FAIL: Input {:.0} dB @ {} Hz -> Output {:.2} dB (exceeded by {:.2} dB)",
+                    input_db,
+                    freq,
+                    output_db,
+                    output_db - threshold_db
+                );
                 println!("{}", msg);
                 failures.push(msg);
             }

@@ -258,7 +258,10 @@ impl ManagedImporter {
             .map(|s| s.to_string_lossy().into_owned())
             .ok_or_else(|| ImportError::InvalidPath("Invalid filename".to_string()))?;
 
-        let extension = dest_path.extension().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let extension = dest_path
+            .extension()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
 
         let parent = dest_path.parent().unwrap_or(Path::new(""));
 

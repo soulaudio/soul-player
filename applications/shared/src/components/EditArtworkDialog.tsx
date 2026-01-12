@@ -23,7 +23,7 @@ interface EditArtworkDialogProps {
   onArtworkChanged?: () => void;
 }
 
-type DialogState = 'select' | 'crop' | 'preview' | 'albumChoice' | 'saving';
+type DialogState = 'select' | 'crop' | 'preview' | 'saving';
 
 export function EditArtworkDialog({
   open,
@@ -159,7 +159,7 @@ export function EditArtworkDialog({
     onClose();
   }, [onClose]);
 
-  const handleSave = useCallback(async (base64: string, mimeType: string, writeToFiles: boolean) => {
+  const handleSave = useCallback(async (base64: string, mimeType: string, writeToFiles: boolean, useSoulStorage?: boolean) => {
     setSaving(true);
     setState('saving');
 
@@ -170,6 +170,7 @@ export function EditArtworkDialog({
         artworkBase64: base64,
         mimeType,
         writeToFiles: entityType === 'album' ? writeToFiles : undefined,
+        useSoulStorage: entityType === 'album' ? useSoulStorage : undefined,
       });
 
       // Clear the frontend artwork cache for this entity
@@ -202,22 +203,14 @@ export function EditArtworkDialog({
     }
   }, []);
 
-  const handleAlbumChoice = useCallback((writeToFiles: boolean) => {
+  const handleAlbumChoice = useCallback((storageMode: 'folder' | 'soul_storage' | 'both') => {
     if (selectedImage) {
-      handleSave(selectedImage.base64, selectedImage.mimeType, writeToFiles);
+      // Convert storage mode to writeToFiles boolean for backend compatibility
+      const writeToFiles = storageMode === 'both';
+      const useSoulStorage = storageMode === 'soul_storage';
+      handleSave(selectedImage.base64, selectedImage.mimeType, writeToFiles, useSoulStorage);
     }
   }, [selectedImage, handleSave]);
-
-  const handleSaveClick = useCallback(() => {
-    if (selectedImage) {
-      // For albums, show choice dialog; for artists/playlists, save directly
-      if (entityType === 'album') {
-        setState('albumChoice');
-      } else {
-        handleSave(selectedImage.base64, selectedImage.mimeType, false);
-      }
-    }
-  }, [selectedImage, entityType, handleSave]);
 
   const handleRemove = useCallback(async () => {
     setSaving(true);
@@ -281,11 +274,11 @@ export function EditArtworkDialog({
     );
   }
 
-  // Render preview dialog with Save button
+  // Render preview dialog with save options
   if (state === 'preview' && previewUrl) {
     return (
       <Dialog open={open} onClose={handleClose}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader onClose={handleClose}>
             {t('artwork.edit.title')}
           </DialogHeader>
@@ -296,7 +289,7 @@ export function EditArtworkDialog({
 
             {/* Preview artwork */}
             <div className="flex justify-center mb-6">
-              <div className={`relative w-40 h-40 bg-muted overflow-hidden ${entityType === 'artist' ? 'rounded-full' : 'rounded-lg'}`}>
+              <div className={`relative w-32 h-32 bg-muted overflow-hidden ${entityType === 'artist' ? 'rounded-full' : 'rounded-lg'} shadow-lg`}>
                 <img
                   src={previewUrl}
                   alt={entityName}
@@ -305,77 +298,96 @@ export function EditArtworkDialog({
               </div>
             </div>
 
-            <p className="text-sm text-muted-foreground text-center">
-              {t('artwork.edit.previewHint')}
-            </p>
+            {/* For albums, show storage options */}
+            {entityType === 'album' && (
+              <>
+                <p className="text-sm text-muted-foreground mb-4 text-center">
+                  {t('artwork.writeChoice.description')}
+                </p>
+                <div className="space-y-3">
+                  {/* Album folder only option */}
+                  <button
+                    onClick={() => handleAlbumChoice('folder')}
+                    disabled={saving}
+                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium">{t('artwork.writeChoice.albumFolderOnly')}</div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {t('artwork.writeChoice.albumFolderOnlyDesc')}
+                        </div>
+                      </div>
+                      <span className="text-xs text-primary font-medium ml-3 mt-0.5">
+                        {t('artwork.priority.medium')}
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Album folder + Track metadata option */}
+                  <button
+                    onClick={() => handleAlbumChoice('both')}
+                    disabled={saving}
+                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium">{t('artwork.writeChoice.albumFolderAndMetadata')}</div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {t('artwork.writeChoice.albumFolderAndMetadataDesc')}
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground font-medium ml-3 mt-0.5">
+                        {t('artwork.priority.lowest')}
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Soul Player storage only option */}
+                  <button
+                    onClick={() => handleAlbumChoice('soul_storage')}
+                    disabled={saving}
+                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium">{t('artwork.writeChoice.soulPlayerOnly')}</div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {t('artwork.writeChoice.soulPlayerOnlyDesc')}
+                        </div>
+                      </div>
+                      <span className="text-xs text-primary font-medium ml-3 mt-0.5">
+                        {t('artwork.priority.highest')}
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* For artists/playlists, show simple save */}
+            {entityType !== 'album' && (
+              <p className="text-sm text-muted-foreground text-center">
+                {t('artwork.edit.previewHint')}
+              </p>
+            )}
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={handleCropCancel} disabled={saving}>
               {t('common.back')}
             </Button>
-            <Button onClick={handleSaveClick} disabled={saving}>
-              {saving ? t('common.saving') : t('common.save')}
-            </Button>
+            {/* For artists/playlists, show Save button */}
+            {entityType !== 'album' && (
+              <Button onClick={() => handleAlbumChoice('folder')} disabled={saving}>
+                {saving ? t('common.saving') : t('common.save')}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
     );
   }
 
-  // Render album choice dialog
-  if (state === 'albumChoice') {
-    return (
-      <Dialog open={open} onClose={handleClose}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader onClose={handleClose}>
-            {t('artwork.writeChoice.title')}
-          </DialogHeader>
-          <DialogBody>
-            <p className="text-muted-foreground mb-4">
-              {t('artwork.writeChoice.description')}
-            </p>
-
-            {/* Preview */}
-            {previewUrl && (
-              <div className="flex justify-center mb-6">
-                <img
-                  src={previewUrl}
-                  alt="Preview"
-                  className="w-32 h-32 object-cover rounded-lg shadow-lg"
-                />
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {/* Soul Player Only option */}
-              <button
-                onClick={() => handleAlbumChoice(false)}
-                disabled={saving}
-                className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
-              >
-                <div className="font-medium">{t('artwork.writeChoice.soulPlayerOnly')}</div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  {t('artwork.writeChoice.soulPlayerOnlyDesc')}
-                </div>
-              </button>
-
-              {/* Edit Metadata option */}
-              <button
-                onClick={() => handleAlbumChoice(true)}
-                disabled={saving}
-                className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
-              >
-                <div className="font-medium">{t('artwork.writeChoice.editMetadata')}</div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  {t('artwork.writeChoice.editMetadataDesc')}
-                </div>
-              </button>
-            </div>
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-    );
-  }
 
   // Render main select dialog
   return (

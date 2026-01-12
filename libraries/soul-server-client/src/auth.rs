@@ -161,8 +161,7 @@ impl<'a> AuthClient<'a> {
     pub async fn validate_token(&self, access_token: &str) -> Result<bool> {
         match self.get_current_user(access_token).await {
             Ok(_) => Ok(true),
-            Err(ServerClientError::AuthRequired) => Ok(false),
-            Err(ServerClientError::AuthFailed(_)) => Ok(false),
+            Err(ServerClientError::AuthRequired | ServerClientError::AuthFailed(_)) => Ok(false),
             Err(e) => Err(e),
         }
     }

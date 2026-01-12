@@ -291,7 +291,10 @@ fn calculate_thd_n_aes17(samples: &[f32], fundamental_freq: f32, sample_rate: u3
     let max_bin = ((20000.0 / bin_width) as usize).min(nyquist_bin - 1);
     let min_bin = ((20.0 / bin_width) as usize).max(1);
 
-    let total_power: f32 = spectrum[min_bin..=max_bin].iter().map(|c| c.norm_sqr()).sum();
+    let total_power: f32 = spectrum[min_bin..=max_bin]
+        .iter()
+        .map(|c| c.norm_sqr())
+        .sum();
 
     // THD+N = (total - fundamental) / fundamental
     let distortion_power = (total_power - fundamental_power).max(0.0);
@@ -366,7 +369,10 @@ fn measure_passband_ripple(
     // Calculate ripple as max deviation from mean
     let gains: Vec<f32> = gains_db.iter().map(|(_, g)| *g).collect();
     let mean_gain = gains.iter().sum::<f32>() / gains.len() as f32;
-    let max_deviation = gains.iter().map(|&g| (g - mean_gain).abs()).fold(0.0f32, f32::max);
+    let max_deviation = gains
+        .iter()
+        .map(|&g| (g - mean_gain).abs())
+        .fold(0.0f32, f32::max);
 
     // Ripple is peak-to-peak variation
     let max_gain = gains.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
@@ -632,7 +638,12 @@ fn test_stopband_attenuation_all_quality_presets() {
     let test_cases = [
         (96000, 44100, 30000.0, "96kHz -> 44.1kHz (30kHz test tone)"),
         (96000, 44100, 40000.0, "96kHz -> 44.1kHz (40kHz test tone)"),
-        (192000, 44100, 50000.0, "192kHz -> 44.1kHz (50kHz test tone)"),
+        (
+            192000,
+            44100,
+            50000.0,
+            "192kHz -> 44.1kHz (50kHz test tone)",
+        ),
         (192000, 48000, 40000.0, "192kHz -> 48kHz (40kHz test tone)"),
         (96000, 48000, 30000.0, "96kHz -> 48kHz (30kHz test tone)"),
     ];
@@ -861,21 +872,13 @@ fn test_aliasing_rejection_downsampling() {
     ];
 
     let presets = [
-        (
-            ResamplingQuality::Fast,
-            "Fast",
-            ALIASING_REJECTION_FAST_DB,
-        ),
+        (ResamplingQuality::Fast, "Fast", ALIASING_REJECTION_FAST_DB),
         (
             ResamplingQuality::Balanced,
             "Balanced",
             ALIASING_REJECTION_BALANCED_DB,
         ),
-        (
-            ResamplingQuality::High,
-            "High",
-            ALIASING_REJECTION_HIGH_DB,
-        ),
+        (ResamplingQuality::High, "High", ALIASING_REJECTION_HIGH_DB),
         (
             ResamplingQuality::Maximum,
             "Maximum",
@@ -1197,10 +1200,7 @@ fn test_all_rate_combinations() {
         println!();
     }
 
-    println!(
-        "Total: {}/{} tests passed",
-        passed_tests, total_tests
-    );
+    println!("Total: {}/{} tests passed", passed_tests, total_tests);
 
     if !all_bugs.is_empty() {
         println!();
@@ -1333,8 +1333,12 @@ fn test_generate_comprehensive_bug_report() {
             if output_rate < input_rate {
                 let test_freq = output_rate as f32 * 0.7; // Above output Nyquist
                 resampler.reset();
-                let attenuation =
-                    measure_stopband_attenuation(&mut resampler, input_rate, output_rate, test_freq);
+                let attenuation = measure_stopband_attenuation(
+                    &mut resampler,
+                    input_rate,
+                    output_rate,
+                    test_freq,
+                );
 
                 let atten_threshold = match quality {
                     ResamplingQuality::Fast => STOPBAND_ATTENUATION_FAST_DB,

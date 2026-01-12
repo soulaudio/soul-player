@@ -132,11 +132,13 @@ mod triangular_pdf_tests {
             .unwrap();
 
         let peak_position = peak_idx as i32 - bin_center;
-        println!(
-            "TPDF Distribution Analysis (Lipshitz & Vanderkooy 1987 verification):"
-        );
+        println!("TPDF Distribution Analysis (Lipshitz & Vanderkooy 1987 verification):");
         println!("  Peak position: {} LSB from center", peak_position);
-        println!("  Peak count: {} ({:.2}%)", peak_count, (*peak_count as f64 / STATISTICAL_SAMPLES as f64) * 100.0);
+        println!(
+            "  Peak count: {} ({:.2}%)",
+            peak_count,
+            (*peak_count as f64 / STATISTICAL_SAMPLES as f64) * 100.0
+        );
 
         // TPDF peak should be within 2 LSB of center
         assert!(
@@ -147,7 +149,9 @@ mod triangular_pdf_tests {
 
         // Verify triangular shape: counts should decrease linearly from peak
         // Check that distribution tapers (bins far from center have fewer counts)
-        let center_mass: u64 = histogram[bin_center as usize - 5..=bin_center as usize + 5].iter().sum();
+        let center_mass: u64 = histogram[bin_center as usize - 5..=bin_center as usize + 5]
+            .iter()
+            .sum();
         let edge_mass_low: u64 = histogram[0..10].iter().sum();
         let edge_mass_high: u64 = histogram[num_bins - 10..].iter().sum();
 
@@ -384,7 +388,10 @@ mod noise_floor_tests {
         let level_db = 20.0 * (rms / 32768.0).log10();
 
         println!("Low-level Signal with Dither:");
-        println!("  Input level: {:.2} dBFS", 20.0 * (amplitude as f64).log10());
+        println!(
+            "  Input level: {:.2} dBFS",
+            20.0 * (amplitude as f64).log10()
+        );
         println!("  Output RMS: {:.2}", rms);
         println!("  Output level: {:.2} dBFS", level_db);
 
@@ -566,8 +573,8 @@ mod spectral_flatness_tests {
             .enumerate()
             .map(|(i, &s)| {
                 let x = 2.0 * PI * i as f32 / fft_size as f32;
-                let window =
-                    0.35875 - 0.48829 * x.cos() + 0.14128 * (2.0 * x).cos() - 0.01168 * (3.0 * x).cos();
+                let window = 0.35875 - 0.48829 * x.cos() + 0.14128 * (2.0 * x).cos()
+                    - 0.01168 * (3.0 * x).cos();
                 Complex::new(s * window, 0.0)
             })
             .collect();
@@ -860,7 +867,11 @@ mod stereo_decorrelation_tests {
         println!("  Side RMS: {:.4}", side_rms);
         println!(
             "  Side/Mid ratio: {:.4}",
-            if mid_rms > 0.0 { side_rms / mid_rms } else { 0.0 }
+            if mid_rms > 0.0 {
+                side_rms / mid_rms
+            } else {
+                0.0
+            }
         );
 
         // For decorrelated dither on a mono signal:
@@ -1078,10 +1089,9 @@ mod dynamic_range_tests {
 
             // Find magnitude at signal frequency
             let bin = (freq * n_samples as f32 / SAMPLE_RATE as f32).round() as usize;
-            let signal_mag = ((buffer[bin].re * buffer[bin].re
-                + buffer[bin].im * buffer[bin].im) as f64)
-                .sqrt()
-                / n_samples as f64;
+            let signal_mag =
+                ((buffer[bin].re * buffer[bin].re + buffer[bin].im * buffer[bin].im) as f64).sqrt()
+                    / n_samples as f64;
 
             let detected_db = 20.0 * signal_mag.log10();
 
@@ -1125,9 +1135,8 @@ mod dynamic_range_tests {
         let tail = &samples[tail_start..];
 
         // Calculate RMS of tail
-        let tail_rms: f64 = (tail.iter().map(|&s| (s as f64).powi(2)).sum::<f64>()
-            / tail.len() as f64)
-            .sqrt();
+        let tail_rms: f64 =
+            (tail.iter().map(|&s| (s as f64).powi(2)).sum::<f64>() / tail.len() as f64).sqrt();
 
         // Count non-zero samples in tail
         let non_zero = tail.iter().filter(|&&s| s != 0).count();
@@ -1135,7 +1144,11 @@ mod dynamic_range_tests {
 
         println!("Fade-to-Silence Analysis:");
         println!("  Tail RMS: {:.4}", tail_rms);
-        println!("  Non-zero samples in tail: {} ({:.1}%)", non_zero, non_zero_ratio * 100.0);
+        println!(
+            "  Non-zero samples in tail: {} ({:.1}%)",
+            non_zero,
+            non_zero_ratio * 100.0
+        );
 
         // With dithering, tail should have noise-like behavior
         // Not all samples should be zero (which would indicate truncation)
@@ -1252,8 +1265,16 @@ mod quantization_error_tests {
             variance += e0 * e0;
         }
 
-        let normalized_lag1 = if variance > 0.0 { autocorr_lag1 / variance } else { 0.0 };
-        let normalized_lag2 = if variance > 0.0 { autocorr_lag2 / variance } else { 0.0 };
+        let normalized_lag1 = if variance > 0.0 {
+            autocorr_lag1 / variance
+        } else {
+            0.0
+        };
+        let normalized_lag2 = if variance > 0.0 {
+            autocorr_lag2 / variance
+        } else {
+            0.0
+        };
 
         println!("Error Sequence Autocorrelation:");
         println!("  Lag-1 autocorrelation: {:.6}", normalized_lag1);
@@ -1344,8 +1365,8 @@ mod thd_n_tests {
             .enumerate()
             .map(|(i, &s)| {
                 let x = 2.0 * PI * i as f32 / n as f32;
-                let window =
-                    0.35875 - 0.48829 * x.cos() + 0.14128 * (2.0 * x).cos() - 0.01168 * (3.0 * x).cos();
+                let window = 0.35875 - 0.48829 * x.cos() + 0.14128 * (2.0 * x).cos()
+                    - 0.01168 * (3.0 * x).cos();
                 Complex::new(s * window, 0.0)
             })
             .collect();
@@ -1423,10 +1444,7 @@ mod thd_n_tests {
         println!("THD+N Comparison:");
         println!("  Without dither (truncation): {:.4}%", thd_n_truncated);
         println!("  With TPDF dither: {:.4}%", thd_n_dithered);
-        println!(
-            "  Threshold for dithered: {:.2}%",
-            THD_N_THRESHOLD_DITHERED
-        );
+        println!("  Threshold for dithered: {:.2}%", THD_N_THRESHOLD_DITHERED);
 
         // Dithered should have acceptable THD+N (dominated by noise, not harmonics)
         assert!(
@@ -1518,10 +1536,10 @@ mod thd_n_tests {
         let bin1 = (freq1 as f64 / freq_resolution).round() as usize;
         let bin2 = (freq2 as f64 / freq_resolution).round() as usize;
 
-        let mag1 = ((buffer[bin1].re * buffer[bin1].re + buffer[bin1].im * buffer[bin1].im) as f64)
-            .sqrt();
-        let mag2 = ((buffer[bin2].re * buffer[bin2].re + buffer[bin2].im * buffer[bin2].im) as f64)
-            .sqrt();
+        let mag1 =
+            ((buffer[bin1].re * buffer[bin1].re + buffer[bin1].im * buffer[bin1].im) as f64).sqrt();
+        let mag2 =
+            ((buffer[bin2].re * buffer[bin2].re + buffer[bin2].im * buffer[bin2].im) as f64).sqrt();
 
         // Check for IMD products at f2-f1 and f2+f1
         let imd_bin_diff = ((freq2 - freq1) as f64 / freq_resolution).round() as usize;
@@ -1548,9 +1566,20 @@ mod thd_n_tests {
         let imd_db_sum = 20.0 * (imd_mag_sum / fundamental_avg).log10();
 
         println!("Intermodulation Distortion Test:");
-        println!("  Fundamentals: {:.1} Hz ({:.2}) and {:.1} Hz ({:.2})", freq1, mag1, freq2, mag2);
-        println!("  IMD at f2-f1 ({:.0} Hz): {:.1} dB", freq2 - freq1, imd_db_diff);
-        println!("  IMD at f2+f1 ({:.0} Hz): {:.1} dB", freq2 + freq1, imd_db_sum);
+        println!(
+            "  Fundamentals: {:.1} Hz ({:.2}) and {:.1} Hz ({:.2})",
+            freq1, mag1, freq2, mag2
+        );
+        println!(
+            "  IMD at f2-f1 ({:.0} Hz): {:.1} dB",
+            freq2 - freq1,
+            imd_db_diff
+        );
+        println!(
+            "  IMD at f2+f1 ({:.0} Hz): {:.1} dB",
+            freq2 + freq1,
+            imd_db_sum
+        );
 
         // IMD products should be well below fundamentals (< -60 dB)
         // With dithering, any IMD should be buried in noise
@@ -1590,20 +1619,20 @@ mod real_audio_tests {
             .collect();
 
         // Verify signal integrity
-        let rms: f64 = (dithered.iter().map(|&s| (s * s) as f64).sum::<f64>() / n_samples as f64)
-            .sqrt();
+        let rms: f64 =
+            (dithered.iter().map(|&s| (s * s) as f64).sum::<f64>() / n_samples as f64).sqrt();
         let peak: f32 = dithered.iter().map(|&s| s.abs()).fold(0.0f32, f32::max);
 
         println!("Complex Signal (Chord) Test:");
         println!("  RMS: {:.4} ({:.1} dBFS)", rms, 20.0 * rms.log10());
-        println!("  Peak: {:.4} ({:.1} dBFS)", peak, 20.0 * (peak as f64).log10());
+        println!(
+            "  Peak: {:.4} ({:.1} dBFS)",
+            peak,
+            20.0 * (peak as f64).log10()
+        );
 
         // Signal should be preserved
-        assert!(
-            rms > 0.01,
-            "Complex signal not preserved: RMS = {:.4}",
-            rms
-        );
+        assert!(rms > 0.01, "Complex signal not preserved: RMS = {:.4}", rms);
     }
 
     /// Test stereo dithering with real stereo content
@@ -1728,7 +1757,8 @@ mod real_audio_tests {
 
         // For a 1kHz sine, max sample-to-sample change is limited
         // Boundary should not show excessive jumps
-        let expected_max = ((2.0 * PI * freq / SAMPLE_RATE as f32) * amplitude * 32767.0).abs() as i32 + 100;
+        let expected_max =
+            ((2.0 * PI * freq / SAMPLE_RATE as f32) * amplitude * 32767.0).abs() as i32 + 100;
         assert!(
             max_jump < expected_max,
             "Excessive jump at buffer boundary: {} > expected {}",
@@ -1872,11 +1902,15 @@ mod edge_case_tests {
         // We verify via correlation rather than exact matching (since TPDF outputs
         // are narrowly distributed around 0, +-1 LSB, coincidental matches are common)
         let mut dither3 = TpdfDither::with_seed(seed + 1);
-        let samples3: Vec<f64> = (0..1000).map(|_| dither3.dither_to_i16(0.0) as f64).collect();
+        let samples3: Vec<f64> = (0..1000)
+            .map(|_| dither3.dither_to_i16(0.0) as f64)
+            .collect();
 
         // Reset dither1 and generate with 0.0 input for fair comparison
         let mut dither1_reset = TpdfDither::with_seed(seed);
-        let samples1_noise: Vec<f64> = (0..1000).map(|_| dither1_reset.dither_to_i16(0.0) as f64).collect();
+        let samples1_noise: Vec<f64> = (0..1000)
+            .map(|_| dither1_reset.dither_to_i16(0.0) as f64)
+            .collect();
 
         // Calculate correlation
         let mean1: f64 = samples1_noise.iter().sum::<f64>() / 1000.0;
@@ -1989,7 +2023,12 @@ fn test_comprehensive_dither_verification() {
     stereo.process_stereo_to_i16(&input, &mut output);
 
     let l_samples: Vec<f64> = output.iter().step_by(2).map(|&s| s as f64).collect();
-    let r_samples: Vec<f64> = output.iter().skip(1).step_by(2).map(|&s| s as f64).collect();
+    let r_samples: Vec<f64> = output
+        .iter()
+        .skip(1)
+        .step_by(2)
+        .map(|&s| s as f64)
+        .collect();
 
     let mean_l: f64 = l_samples.iter().sum::<f64>() / l_samples.len() as f64;
     let mean_r: f64 = r_samples.iter().sum::<f64>() / r_samples.len() as f64;
@@ -2015,8 +2054,12 @@ fn test_comprehensive_dither_verification() {
     // 3. Noise Floor (16-bit)
     dither = TpdfDither::with_seed(67890);
     let noise_samples: Vec<i16> = (0..FFT_SIZE).map(|_| dither.dither_to_i16(0.0)).collect();
-    let noise_rms: f64 =
-        (noise_samples.iter().map(|&s| (s as f64).powi(2)).sum::<f64>() / FFT_SIZE as f64).sqrt();
+    let noise_rms: f64 = (noise_samples
+        .iter()
+        .map(|&s| (s as f64).powi(2))
+        .sum::<f64>()
+        / FFT_SIZE as f64)
+        .sqrt();
     let noise_floor_db = 20.0 * (noise_rms / 32768.0).log10();
     let noise_pass = noise_floor_db < EXPECTED_16BIT_NOISE_FLOOR_DB + NOISE_FLOOR_TOLERANCE_DB;
     println!(
@@ -2067,7 +2110,9 @@ fn test_comprehensive_dither_verification() {
     println!();
     let all_pass = dc_pass && corr_pass && noise_pass && dist_pass && mean_pass;
     if all_pass {
-        println!(">>> ALL TESTS PASSED - TPDF dither implementation conforms to industry standards <<<");
+        println!(
+            ">>> ALL TESTS PASSED - TPDF dither implementation conforms to industry standards <<<"
+        );
     } else {
         println!(">>> SOME TESTS FAILED - Review implementation <<<");
     }

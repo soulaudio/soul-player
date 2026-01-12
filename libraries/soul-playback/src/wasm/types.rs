@@ -12,6 +12,7 @@ use wasm_bindgen::prelude::*;
 /// (String instead of PathBuf, f64 instead of Duration).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[wasm_bindgen]
+#[allow(clippy::unsafe_derive_deserialize)] // WASM bindings require unsafe, but usage is controlled
 pub struct WasmQueueTrack {
     id: String,
     path: String,

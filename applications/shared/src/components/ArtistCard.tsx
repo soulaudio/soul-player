@@ -9,11 +9,11 @@ import { type BackendArtist } from '../contexts/BackendContext'
 
 interface ArtistCardProps {
   artist: BackendArtist
-  /** Card width class (default: w-40) */
+  /** Card width class (default: w-full for responsive grid) */
   className?: string
 }
 
-export function ArtistCard({ artist, className = 'w-40' }: ArtistCardProps) {
+export function ArtistCard({ artist, className = 'w-full' }: ArtistCardProps) {
   const { t } = useTranslation()
 
   return (

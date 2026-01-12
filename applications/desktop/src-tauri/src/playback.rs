@@ -321,6 +321,37 @@ impl PlaybackManager {
             .map_err(|e| e.to_string())
     }
 
+    /// Cycle shuffle mode (Off → Random → Smart → Off)
+    ///
+    /// Returns the new shuffle mode as a string
+    pub fn cycle_shuffle(&self) -> Result<String, String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+
+        // Cycle shuffle and get new mode synchronously
+        let new_mode = {
+            let mut manager = playback.get_manager_mut();
+            manager.cycle_shuffle()
+        };
+
+        // Emit queue updated event
+        playback.emit_queue_updated();
+
+        eprintln!("[PlaybackManager] Cycled shuffle to: {}", new_mode.as_str());
+        Ok(new_mode.as_str().to_string())
+    }
+
+    /// Get current shuffle mode
+    pub fn get_shuffle(&self) -> ShuffleMode {
+        let playback = self.playback.lock().unwrap();
+        playback.get_shuffle_mode()
+    }
+
+    /// Get current repeat mode
+    pub fn get_repeat(&self) -> RepeatMode {
+        let playback = self.playback.lock().unwrap();
+        playback.get_repeat_mode()
+    }
+
     /// Set repeat mode
     pub fn set_repeat(&self, mode: RepeatMode) -> Result<(), String> {
         let playback = self.playback.lock().map_err(|e| e.to_string())?;
@@ -353,11 +384,27 @@ impl PlaybackManager {
         playback.get_state()
     }
 
-    /// Add track to queue
+    /// Add track to queue (legacy - maps to add_to_queue_end)
     pub fn add_to_queue(&self, track: QueueTrack) -> Result<(), String> {
         let playback = self.playback.lock().map_err(|e| e.to_string())?;
         playback
             .send_command(PlaybackCommand::AddToQueue(track))
+            .map_err(|e| e.to_string())
+    }
+
+    /// Add track to Play Next queue (plays after current track)
+    pub fn add_play_next(&self, track: QueueTrack) -> Result<(), String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback
+            .send_command(PlaybackCommand::AddPlayNext(track))
+            .map_err(|e| e.to_string())
+    }
+
+    /// Add track to end of Add to Queue (plays after source exhausts)
+    pub fn add_to_queue_end(&self, track: QueueTrack) -> Result<(), String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback
+            .send_command(PlaybackCommand::AddToQueueEnd(track))
             .map_err(|e| e.to_string())
     }
 
@@ -369,11 +416,27 @@ impl PlaybackManager {
             .map_err(|e| e.to_string())
     }
 
-    /// Clear queue
+    /// Clear entire queue (all three tiers)
     pub fn clear_queue(&self) -> Result<(), String> {
         let playback = self.playback.lock().map_err(|e| e.to_string())?;
         playback
             .send_command(PlaybackCommand::ClearQueue)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Clear Play Next queue only
+    pub fn clear_play_next(&self) -> Result<(), String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback
+            .send_command(PlaybackCommand::ClearPlayNext)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Clear Add to Queue only
+    pub fn clear_add_to_queue(&self) -> Result<(), String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        playback
+            .send_command(PlaybackCommand::ClearAddToQueue)
             .map_err(|e| e.to_string())
     }
 

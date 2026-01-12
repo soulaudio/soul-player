@@ -13,7 +13,12 @@ const SAMPLE_RATE: u32 = 44100;
 const CHUNK_SIZE: usize = 512; // Typical audio buffer size
 
 /// Generate a sine wave chunk
-fn generate_sine_chunk(frequency: f32, sample_rate: u32, start_sample: usize, num_samples: usize) -> Vec<f32> {
+fn generate_sine_chunk(
+    frequency: f32,
+    sample_rate: u32,
+    start_sample: usize,
+    num_samples: usize,
+) -> Vec<f32> {
     let mut buffer = Vec::with_capacity(num_samples * 2);
     for i in 0..num_samples {
         let t = (start_sample + i) as f32 / sample_rate as f32;
@@ -38,7 +43,8 @@ fn detect_sizzle(buffer: &[f32], fundamental_freq: f32, sample_rate: u32) -> f32
     // d/dt[A*sin(2*pi*f*t)] = A*2*pi*f*cos(2*pi*f*t)
     // Max value = A * 2 * pi * f / sample_rate
     let amplitude = 0.5;
-    let expected_max_derivative = amplitude * 2.0 * std::f32::consts::PI * fundamental_freq / sample_rate as f32;
+    let expected_max_derivative =
+        amplitude * 2.0 * std::f32::consts::PI * fundamental_freq / sample_rate as f32;
 
     // Check left channel derivatives
     for i in 1..(buffer.len() / 2) {
@@ -51,7 +57,11 @@ fn detect_sizzle(buffer: &[f32], fundamental_freq: f32, sample_rate: u32) -> f32
         count += 1;
     }
 
-    let avg_derivative = if count > 0 { total_derivative / count as f32 } else { 0.0 };
+    let avg_derivative = if count > 0 {
+        total_derivative / count as f32
+    } else {
+        0.0
+    };
 
     // Return ratio of max derivative to expected - values > 2-3x indicate artifacts
     max_derivative / expected_max_derivative
@@ -96,7 +106,8 @@ fn calculate_distortion(buffer: &[f32], fundamental_freq: f32, sample_rate: u32)
         let mut error = 0.0;
         for (i, &sample) in left.iter().take(256).enumerate() {
             let t = i as f32 / sample_rate as f32;
-            let ideal_sample = (2.0 * std::f32::consts::PI * fundamental_freq * t + phase).sin() * 0.5;
+            let ideal_sample =
+                (2.0 * std::f32::consts::PI * fundamental_freq * t + phase).sin() * 0.5;
             error += (sample - ideal_sample).powi(2);
         }
         if error < min_error {
@@ -108,7 +119,8 @@ fn calculate_distortion(buffer: &[f32], fundamental_freq: f32, sample_rate: u32)
     // Generate phase-aligned ideal signal
     for i in 0..left.len() {
         let t = i as f32 / sample_rate as f32;
-        let ideal_sample = (2.0 * std::f32::consts::PI * fundamental_freq * t + best_phase).sin() * 0.5;
+        let ideal_sample =
+            (2.0 * std::f32::consts::PI * fundamental_freq * t + best_phase).sin() * 0.5;
         ideal.push(ideal_sample);
     }
 
@@ -150,7 +162,10 @@ fn test_eq_continuous_frequency_drag() {
     let mut total_distortion = 0.0_f32;
     let mut all_discontinuities = Vec::new();
 
-    println!("EQ Frequency Drag Test: {} Hz -> {} Hz over {} chunks", start_freq, end_freq, num_chunks);
+    println!(
+        "EQ Frequency Drag Test: {} Hz -> {} Hz over {} chunks",
+        start_freq, end_freq, num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         // Calculate current frequency (linear interpolation)
@@ -180,8 +195,10 @@ fn test_eq_continuous_frequency_drag() {
 
         // Debug output for high sizzle chunks
         if sizzle > 3.0 {
-            println!("  Chunk {}: freq={:.0}Hz, sizzle={:.2}x, distortion={:.2}%",
-                     chunk_idx, current_freq, sizzle, distortion);
+            println!(
+                "  Chunk {}: freq={:.0}Hz, sizzle={:.2}x, distortion={:.2}%",
+                chunk_idx, current_freq, sizzle, distortion
+            );
         }
     }
 
@@ -189,19 +206,31 @@ fn test_eq_continuous_frequency_drag() {
 
     println!("\nResults:");
     println!("  Max sizzle ratio: {:.2}x expected", max_sizzle);
-    println!("  Avg distortion: {:.2}% (note: includes intentional EQ effect)", avg_distortion);
+    println!(
+        "  Avg distortion: {:.2}% (note: includes intentional EQ effect)",
+        avg_distortion
+    );
     println!("  Discontinuities: {}", all_discontinuities.len());
 
     // Thresholds based on acceptable audio quality
     // Sizzle > 5x indicates serious high-frequency artifacts
-    assert!(max_sizzle < 5.0,
-            "Excessive sizzle during frequency drag: {:.2}x (max 5.0x)", max_sizzle);
+    assert!(
+        max_sizzle < 5.0,
+        "Excessive sizzle during frequency drag: {:.2}x (max 5.0x)",
+        max_sizzle
+    );
     // Note: distortion metric includes intended EQ amplitude changes as the band sweeps
     // through the test frequency, so we use a higher threshold. The key metric is sizzle.
-    assert!(avg_distortion < 50.0,
-            "Excessive distortion during frequency drag: {:.2}% (max 50%)", avg_distortion);
-    assert!(all_discontinuities.len() < 10,
-            "Too many discontinuities during frequency drag: {} (max 10)", all_discontinuities.len());
+    assert!(
+        avg_distortion < 50.0,
+        "Excessive distortion during frequency drag: {:.2}% (max 50%)",
+        avg_distortion
+    );
+    assert!(
+        all_discontinuities.len() < 10,
+        "Too many discontinuities during frequency drag: {} (max 10)",
+        all_discontinuities.len()
+    );
 }
 
 #[test]
@@ -221,7 +250,10 @@ fn test_eq_continuous_gain_drag() {
     let mut max_sizzle = 0.0_f32;
     let mut max_discontinuity = 0.0_f32;
 
-    println!("EQ Gain Drag Test: {} dB -> {} dB over {} chunks", start_gain, end_gain, num_chunks);
+    println!(
+        "EQ Gain Drag Test: {} dB -> {} dB over {} chunks",
+        start_gain, end_gain, num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         let progress = chunk_idx as f32 / num_chunks as f32;
@@ -244,7 +276,10 @@ fn test_eq_continuous_gain_drag() {
         }
 
         if sizzle > 3.0 {
-            println!("  Chunk {}: gain={:.1}dB, sizzle={:.2}x", chunk_idx, current_gain, sizzle);
+            println!(
+                "  Chunk {}: gain={:.1}dB, sizzle={:.2}x",
+                chunk_idx, current_gain, sizzle
+            );
         }
     }
 
@@ -252,8 +287,16 @@ fn test_eq_continuous_gain_drag() {
     println!("  Max sizzle ratio: {:.2}x", max_sizzle);
     println!("  Max discontinuity: {:.4}", max_discontinuity);
 
-    assert!(max_sizzle < 5.0, "Excessive sizzle during gain drag: {:.2}x", max_sizzle);
-    assert!(max_discontinuity < 0.5, "Large discontinuity detected: {:.4}", max_discontinuity);
+    assert!(
+        max_sizzle < 5.0,
+        "Excessive sizzle during gain drag: {:.2}x",
+        max_sizzle
+    );
+    assert!(
+        max_discontinuity < 0.5,
+        "Large discontinuity detected: {:.4}",
+        max_discontinuity
+    );
 }
 
 #[test]
@@ -272,7 +315,10 @@ fn test_eq_continuous_q_drag() {
     let test_tone = 1000.0;
     let mut max_sizzle = 0.0_f32;
 
-    println!("EQ Q Drag Test: Q={} -> Q={} over {} chunks", start_q, end_q, num_chunks);
+    println!(
+        "EQ Q Drag Test: Q={} -> Q={} over {} chunks",
+        start_q, end_q, num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         let progress = chunk_idx as f32 / num_chunks as f32;
@@ -289,14 +335,21 @@ fn test_eq_continuous_q_drag() {
         max_sizzle = max_sizzle.max(sizzle);
 
         if sizzle > 3.0 {
-            println!("  Chunk {}: Q={:.2}, sizzle={:.2}x", chunk_idx, current_q, sizzle);
+            println!(
+                "  Chunk {}: Q={:.2}, sizzle={:.2}x",
+                chunk_idx, current_q, sizzle
+            );
         }
     }
 
     println!("\nResults:");
     println!("  Max sizzle ratio: {:.2}x", max_sizzle);
 
-    assert!(max_sizzle < 5.0, "Excessive sizzle during Q drag: {:.2}x", max_sizzle);
+    assert!(
+        max_sizzle < 5.0,
+        "Excessive sizzle during Q drag: {:.2}x",
+        max_sizzle
+    );
 }
 
 #[test]
@@ -312,7 +365,10 @@ fn test_graphic_eq_continuous_band_drag() {
     let test_tone = 1000.0;
     let mut max_sizzle = 0.0_f32;
 
-    println!("Graphic EQ Band Drag Test: Band {} (1kHz) sweep over {} chunks", band_index, num_chunks);
+    println!(
+        "Graphic EQ Band Drag Test: Band {} (1kHz) sweep over {} chunks",
+        band_index, num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         // Oscillate gain between -12 and +12 dB (like wiggling a slider)
@@ -330,14 +386,21 @@ fn test_graphic_eq_continuous_band_drag() {
         max_sizzle = max_sizzle.max(sizzle);
 
         if sizzle > 3.0 {
-            println!("  Chunk {}: gain={:.1}dB, sizzle={:.2}x", chunk_idx, gain, sizzle);
+            println!(
+                "  Chunk {}: gain={:.1}dB, sizzle={:.2}x",
+                chunk_idx, gain, sizzle
+            );
         }
     }
 
     println!("\nResults:");
     println!("  Max sizzle ratio: {:.2}x", max_sizzle);
 
-    assert!(max_sizzle < 5.0, "Excessive sizzle during graphic EQ drag: {:.2}x", max_sizzle);
+    assert!(
+        max_sizzle < 5.0,
+        "Excessive sizzle during graphic EQ drag: {:.2}x",
+        max_sizzle
+    );
 }
 
 #[test]
@@ -356,8 +419,10 @@ fn test_limiter_continuous_threshold_drag() {
     let mut max_sizzle = 0.0_f32;
     let mut max_discontinuity = 0.0_f32;
 
-    println!("Limiter Threshold Drag Test: {} dB -> {} dB over {} chunks",
-             start_threshold, end_threshold, num_chunks);
+    println!(
+        "Limiter Threshold Drag Test: {} dB -> {} dB over {} chunks",
+        start_threshold, end_threshold, num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         let progress = chunk_idx as f32 / num_chunks as f32;
@@ -379,8 +444,10 @@ fn test_limiter_continuous_threshold_drag() {
         }
 
         if sizzle > 3.0 {
-            println!("  Chunk {}: threshold={:.1}dB, sizzle={:.2}x",
-                     chunk_idx, current_threshold, sizzle);
+            println!(
+                "  Chunk {}: threshold={:.1}dB, sizzle={:.2}x",
+                chunk_idx, current_threshold, sizzle
+            );
         }
     }
 
@@ -388,7 +455,11 @@ fn test_limiter_continuous_threshold_drag() {
     println!("  Max sizzle ratio: {:.2}x", max_sizzle);
     println!("  Max discontinuity: {:.4}", max_discontinuity);
 
-    assert!(max_sizzle < 5.0, "Excessive sizzle during threshold drag: {:.2}x", max_sizzle);
+    assert!(
+        max_sizzle < 5.0,
+        "Excessive sizzle during threshold drag: {:.2}x",
+        max_sizzle
+    );
 }
 
 #[test]
@@ -407,7 +478,10 @@ fn test_stereo_continuous_width_drag() {
     let mut max_sizzle = 0.0_f32;
     let mut max_discontinuity = 0.0_f32;
 
-    println!("Stereo Width Drag Test: {} -> {} over {} chunks", start_width, end_width, num_chunks);
+    println!(
+        "Stereo Width Drag Test: {} -> {} over {} chunks",
+        start_width, end_width, num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         let progress = chunk_idx as f32 / num_chunks as f32;
@@ -429,7 +503,10 @@ fn test_stereo_continuous_width_drag() {
         }
 
         if sizzle > 3.0 {
-            println!("  Chunk {}: width={:.2}, sizzle={:.2}x", chunk_idx, current_width, sizzle);
+            println!(
+                "  Chunk {}: width={:.2}, sizzle={:.2}x",
+                chunk_idx, current_width, sizzle
+            );
         }
     }
 
@@ -437,7 +514,11 @@ fn test_stereo_continuous_width_drag() {
     println!("  Max sizzle ratio: {:.2}x", max_sizzle);
     println!("  Max discontinuity: {:.4}", max_discontinuity);
 
-    assert!(max_sizzle < 5.0, "Excessive sizzle during width drag: {:.2}x", max_sizzle);
+    assert!(
+        max_sizzle < 5.0,
+        "Excessive sizzle during width drag: {:.2}x",
+        max_sizzle
+    );
 }
 
 #[test]
@@ -455,8 +536,10 @@ fn test_crossfeed_continuous_level_drag() {
     let test_tone = 440.0;
     let mut max_sizzle = 0.0_f32;
 
-    println!("Crossfeed Level Drag Test: {} dB -> {} dB over {} chunks",
-             start_level, end_level, num_chunks);
+    println!(
+        "Crossfeed Level Drag Test: {} dB -> {} dB over {} chunks",
+        start_level, end_level, num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         let progress = chunk_idx as f32 / num_chunks as f32;
@@ -473,14 +556,21 @@ fn test_crossfeed_continuous_level_drag() {
         max_sizzle = max_sizzle.max(sizzle);
 
         if sizzle > 3.0 {
-            println!("  Chunk {}: level={:.1}dB, sizzle={:.2}x", chunk_idx, current_level, sizzle);
+            println!(
+                "  Chunk {}: level={:.1}dB, sizzle={:.2}x",
+                chunk_idx, current_level, sizzle
+            );
         }
     }
 
     println!("\nResults:");
     println!("  Max sizzle ratio: {:.2}x", max_sizzle);
 
-    assert!(max_sizzle < 5.0, "Excessive sizzle during level drag: {:.2}x", max_sizzle);
+    assert!(
+        max_sizzle < 5.0,
+        "Excessive sizzle during level drag: {:.2}x",
+        max_sizzle
+    );
 }
 
 #[test]
@@ -500,7 +590,10 @@ fn test_eq_slow_drag_simulation() {
     let mut max_chunk_boundary_jump = 0.0_f32;
     let mut sizzle_events = 0;
 
-    println!("EQ Slow Drag Simulation: {} chunks, small incremental changes", num_chunks);
+    println!(
+        "EQ Slow Drag Simulation: {} chunks, small incremental changes",
+        num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         // Slowly ramp gain from 0 to +6dB over entire duration
@@ -525,8 +618,10 @@ fn test_eq_slow_drag_simulation() {
             if boundary_jump > expected_max * 3.0 {
                 sizzle_events += 1;
                 if sizzle_events <= 5 {
-                    println!("  Chunk boundary {}: jump={:.4} (expected max {:.4})",
-                             chunk_idx, boundary_jump, expected_max);
+                    println!(
+                        "  Chunk boundary {}: jump={:.4} (expected max {:.4})",
+                        chunk_idx, boundary_jump, expected_max
+                    );
                 }
             }
         }
@@ -540,8 +635,11 @@ fn test_eq_slow_drag_simulation() {
     println!("  Sizzle events: {}", sizzle_events);
 
     // During slow dragging, we shouldn't have many sizzle events
-    assert!(sizzle_events < 20,
-            "Too many sizzle events during slow drag: {} (max 20)", sizzle_events);
+    assert!(
+        sizzle_events < 20,
+        "Too many sizzle events during slow drag: {} (max 20)",
+        sizzle_events
+    );
 }
 
 #[test]
@@ -557,7 +655,10 @@ fn test_eq_rapid_wiggle_simulation() {
     let test_tone = 1000.0;
     let mut max_sizzle = 0.0_f32;
 
-    println!("EQ Rapid Wiggle Test: fast oscillating changes over {} chunks", num_chunks);
+    println!(
+        "EQ Rapid Wiggle Test: fast oscillating changes over {} chunks",
+        num_chunks
+    );
 
     for chunk_idx in 0..num_chunks {
         // Rapid oscillation of gain (simulating jittery mouse)
@@ -579,7 +680,11 @@ fn test_eq_rapid_wiggle_simulation() {
     println!("  Max sizzle ratio: {:.2}x", max_sizzle);
 
     // Even with rapid changes, sizzle should be controlled by smoothing
-    assert!(max_sizzle < 8.0, "Excessive sizzle during rapid wiggle: {:.2}x", max_sizzle);
+    assert!(
+        max_sizzle < 8.0,
+        "Excessive sizzle during rapid wiggle: {:.2}x",
+        max_sizzle
+    );
 }
 
 #[test]
@@ -627,7 +732,11 @@ fn test_multiple_effects_continuous_changes() {
     println!("\nResults:");
     println!("  Max sizzle ratio: {:.2}x", max_sizzle);
 
-    assert!(max_sizzle < 8.0, "Excessive sizzle with multiple effects: {:.2}x", max_sizzle);
+    assert!(
+        max_sizzle < 8.0,
+        "Excessive sizzle with multiple effects: {:.2}x",
+        max_sizzle
+    );
 }
 
 #[test]
@@ -648,7 +757,8 @@ fn test_eq_frequency_sweep_both_directions() {
         let freq = 200.0 + chunk_idx as f32 * 18.0; // 200 -> 2000 Hz
         eq.set_band(0, EqBand::peaking(freq, 6.0, 1.0));
 
-        let mut buffer = generate_sine_chunk(test_tone, SAMPLE_RATE, chunk_idx * CHUNK_SIZE, CHUNK_SIZE);
+        let mut buffer =
+            generate_sine_chunk(test_tone, SAMPLE_RATE, chunk_idx * CHUNK_SIZE, CHUNK_SIZE);
         eq.process(&mut buffer, SAMPLE_RATE);
 
         let sizzle = detect_sizzle(&buffer, test_tone, SAMPLE_RATE);
@@ -664,7 +774,8 @@ fn test_eq_frequency_sweep_both_directions() {
         let freq = 2000.0 - chunk_idx as f32 * 18.0; // 2000 -> 200 Hz
         eq.set_band(0, EqBand::peaking(freq, 6.0, 1.0));
 
-        let mut buffer = generate_sine_chunk(test_tone, SAMPLE_RATE, chunk_idx * CHUNK_SIZE, CHUNK_SIZE);
+        let mut buffer =
+            generate_sine_chunk(test_tone, SAMPLE_RATE, chunk_idx * CHUNK_SIZE, CHUNK_SIZE);
         eq.process(&mut buffer, SAMPLE_RATE);
 
         let sizzle = detect_sizzle(&buffer, test_tone, SAMPLE_RATE);
@@ -675,6 +786,14 @@ fn test_eq_frequency_sweep_both_directions() {
     println!("  Max sizzle (sweep up): {:.2}x", max_sizzle_up);
     println!("  Max sizzle (sweep down): {:.2}x", max_sizzle_down);
 
-    assert!(max_sizzle_up < 5.0, "Excessive sizzle during upward sweep: {:.2}x", max_sizzle_up);
-    assert!(max_sizzle_down < 5.0, "Excessive sizzle during downward sweep: {:.2}x", max_sizzle_down);
+    assert!(
+        max_sizzle_up < 5.0,
+        "Excessive sizzle during upward sweep: {:.2}x",
+        max_sizzle_up
+    );
+    assert!(
+        max_sizzle_down < 5.0,
+        "Excessive sizzle during downward sweep: {:.2}x",
+        max_sizzle_down
+    );
 }

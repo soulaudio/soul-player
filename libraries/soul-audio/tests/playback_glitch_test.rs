@@ -329,9 +329,19 @@ fn test_simulated_high_cpu_load_underrun() {
     }
 
     println!("\n=== CPU Load Impact on Buffer Underruns ===");
-    println!("Buffer size: {} samples, Budget: {:.2}ms", buffer_size, budget.as_secs_f64() * 1000.0);
-    println!("Underruns without load: {} / {}", underruns_without_load, iterations);
-    println!("Underruns with load: {} / {}", underruns_with_load, iterations);
+    println!(
+        "Buffer size: {} samples, Budget: {:.2}ms",
+        buffer_size,
+        budget.as_secs_f64() * 1000.0
+    );
+    println!(
+        "Underruns without load: {} / {}",
+        underruns_without_load, iterations
+    );
+    println!(
+        "Underruns with load: {} / {}",
+        underruns_with_load, iterations
+    );
 
     // The audio processing itself should not cause underruns
     assert!(
@@ -386,16 +396,22 @@ fn test_underrun_detection_callback_timing() {
     let over_budget = callback_timings.iter().filter(|&&t| t > budget).count();
 
     println!("\n=== Callback Timing Analysis ===");
-    println!("Buffer: {} samples, Budget: {:.2}us", buffer_size, budget.as_nanos() as f64 / 1000.0);
+    println!(
+        "Buffer: {} samples, Budget: {:.2}us",
+        buffer_size,
+        budget.as_nanos() as f64 / 1000.0
+    );
     println!("Mean processing: {:.2}us", mean.as_nanos() as f64 / 1000.0);
     println!("Max processing: {:.2}us", max.as_nanos() as f64 / 1000.0);
-    println!("Over budget: {} / {} ({:.2}%)", over_budget, iterations, over_budget as f64 / iterations as f64 * 100.0);
+    println!(
+        "Over budget: {} / {} ({:.2}%)",
+        over_budget,
+        iterations,
+        over_budget as f64 / iterations as f64 * 100.0
+    );
 
     // Processing should typically be well under budget
-    assert!(
-        mean < budget,
-        "Mean processing time exceeds budget"
-    );
+    assert!(mean < budget, "Mean processing time exceeds budget");
 }
 
 // ============================================================================
@@ -454,11 +470,7 @@ fn test_continuous_playback_no_gaps() {
 
     // The effect chain includes a limiter, so zeros are NOT expected in normal operation
     // (unless the input was zero, which it wasn't)
-    assert!(
-        gap_count < 5,
-        "Too many gap events detected: {}",
-        gap_count
-    );
+    assert!(gap_count < 5, "Too many gap events detected: {}", gap_count);
 }
 
 #[test]
@@ -499,12 +511,17 @@ fn test_phase_continuity_through_effect_chain() {
     let samples_per_buffer = buffer_size * 2; // Stereo
     let boundary_discontinuities: Vec<_> = discontinuities
         .iter()
-        .filter(|(pos, _)| *pos % samples_per_buffer < 10 || *pos % samples_per_buffer > samples_per_buffer - 10)
+        .filter(|(pos, _)| {
+            *pos % samples_per_buffer < 10 || *pos % samples_per_buffer > samples_per_buffer - 10
+        })
         .collect();
 
     println!("\n=== Phase Continuity Test ===");
     println!("Total discontinuities: {}", discontinuities.len());
-    println!("Buffer boundary discontinuities: {}", boundary_discontinuities.len());
+    println!(
+        "Buffer boundary discontinuities: {}",
+        boundary_discontinuities.len()
+    );
 
     // Should have very few discontinuities at buffer boundaries
     // Some may occur due to filter state, but should be minimal
@@ -698,7 +715,11 @@ fn test_batch_processing_with_background_threads() {
     println!("\n=== Batch Processing with Background Threads ===");
     println!("Duration: {:?}", test_duration);
     println!("Buffers processed: {}", total_buffers);
-    println!("Underruns: {} ({:.2}%)", total_underruns, underrun_rate * 100.0);
+    println!(
+        "Underruns: {} ({:.2}%)",
+        total_underruns,
+        underrun_rate * 100.0
+    );
 
     // Allow up to 5% underrun rate with heavy background load
     assert!(
@@ -959,7 +980,11 @@ fn test_verify_buffer_reuse_pattern() {
 
             // Verify output validity
             for sample in &buffer {
-                assert!(sample.is_finite(), "Invalid sample at buffer size {}", buffer_size);
+                assert!(
+                    sample.is_finite(),
+                    "Invalid sample at buffer size {}",
+                    buffer_size
+                );
             }
         }
 
@@ -1057,7 +1082,10 @@ fn test_long_running_latency_stability() {
     let mut interval_means: Vec<Duration> = Vec::new();
     let mut interval_stats = TimingStats::new();
 
-    println!("\n=== Long-Running Latency Stability ({} seconds) ===", duration_secs);
+    println!(
+        "\n=== Long-Running Latency Stability ({} seconds) ===",
+        duration_secs
+    );
 
     for i in 0..total_buffers {
         let mut buffer = generate_varied_audio(sample_rate, buffer_size);
@@ -1089,8 +1117,14 @@ fn test_long_running_latency_stability() {
         let max_mean = interval_means.iter().max().unwrap();
         let variation = max_mean.as_nanos() as f64 / min_mean.as_nanos() as f64;
 
-        println!("First interval mean: {:.2}us", first_mean.as_nanos() as f64 / 1000.0);
-        println!("Last interval mean: {:.2}us", last_mean.as_nanos() as f64 / 1000.0);
+        println!(
+            "First interval mean: {:.2}us",
+            first_mean.as_nanos() as f64 / 1000.0
+        );
+        println!(
+            "Last interval mean: {:.2}us",
+            last_mean.as_nanos() as f64 / 1000.0
+        );
         println!("Drift ratio (last/first): {:.2}x", drift_ratio);
         println!("Max variation (max/min): {:.2}x", variation);
 
@@ -1130,10 +1164,7 @@ fn test_accumulated_state_stability() {
             let max_sample = buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
             let rms: f32 = (buffer.iter().map(|s| s * s).sum::<f32>() / buffer.len() as f32).sqrt();
 
-            println!(
-                "  Iteration {}: max={:.4}, rms={:.4}",
-                i, max_sample, rms
-            );
+            println!("  Iteration {}: max={:.4}, rms={:.4}", i, max_sample, rms);
 
             // Values should remain bounded
             assert!(
@@ -1199,7 +1230,10 @@ fn test_one_hour_simulated_playback() {
     );
     println!("Total buffers: {}", total_buffers);
     println!("Underruns: {} ({:.3}%)", underruns, underrun_rate * 100.0);
-    println!("Max latency: {:.2}us", max_latency.as_nanos() as f64 / 1000.0);
+    println!(
+        "Max latency: {:.2}us",
+        max_latency.as_nanos() as f64 / 1000.0
+    );
 
     // Should process faster than realtime
     assert!(
@@ -1260,7 +1294,10 @@ fn test_windows_batch_processing_gap_simulation() {
 
             // Verify no gaps in audio (sudden silence)
             let has_content = buffer.iter().any(|s| s.abs() > 0.001);
-            assert!(has_content, "Audio gap detected - buffer contains only silence");
+            assert!(
+                has_content,
+                "Audio gap detected - buffer contains only silence"
+            );
         }
 
         batch_underruns.push(batch_underrun_count);
@@ -1275,7 +1312,12 @@ fn test_windows_batch_processing_gap_simulation() {
     let total_buffers = num_batches * buffers_per_batch;
     let underrun_rate = total_underruns as f64 / total_buffers as f64;
 
-    println!("Total underruns: {} / {} ({:.2}%)", total_underruns, total_buffers, underrun_rate * 100.0);
+    println!(
+        "Total underruns: {} / {} ({:.2}%)",
+        total_underruns,
+        total_buffers,
+        underrun_rate * 100.0
+    );
 
     // The audio processing itself should remain fast regardless of batch work
     let mean_timing: Duration = all_timings.iter().sum::<Duration>() / all_timings.len() as u32;
@@ -1339,7 +1381,11 @@ fn test_inter_buffer_gap_detection() {
     println!("\n=== Inter-Buffer Gap Detection ===");
     println!("Mean gap: {:.6}", mean_gap);
     println!("Max gap: {:.6}", max_gap);
-    println!("Severe gaps (>{:.1}): {}", severe_gap_threshold, severe_gaps.len());
+    println!(
+        "Severe gaps (>{:.1}): {}",
+        severe_gap_threshold,
+        severe_gaps.len()
+    );
 
     // Should have no severe gaps (these would cause audible clicks)
     assert!(
@@ -1397,23 +1443,21 @@ fn test_callback_scheduling_variance() {
     let stable_times: Vec<_> = inter_callback_times.iter().skip(10).collect();
 
     if stable_times.len() > 10 {
-        let mean: Duration = stable_times.iter().map(|&&d| d).sum::<Duration>() / stable_times.len() as u32;
+        let mean: Duration =
+            stable_times.iter().map(|&&d| d).sum::<Duration>() / stable_times.len() as u32;
         let max_deviation = stable_times
             .iter()
-            .map(|&&d| {
-                if d > mean {
-                    d - mean
-                } else {
-                    mean - d
-                }
-            })
+            .map(|&&d| if d > mean { d - mean } else { mean - d })
             .max()
             .unwrap_or(Duration::ZERO);
 
         println!("\n=== Callback Scheduling Variance ===");
         println!("Expected interval: {:.2}ms", budget.as_secs_f64() * 1000.0);
         println!("Mean interval: {:.2}ms", mean.as_secs_f64() * 1000.0);
-        println!("Max deviation: {:.2}ms", max_deviation.as_secs_f64() * 1000.0);
+        println!(
+            "Max deviation: {:.2}ms",
+            max_deviation.as_secs_f64() * 1000.0
+        );
 
         // Deviation should be within 10% of budget for stable playback
         let acceptable_deviation = budget.mul_f64(0.1);
@@ -1573,7 +1617,10 @@ fn test_one_hour_actual_playback() {
             let underrun_rate = underruns as f64 / buffers_processed as f64;
             println!(
                 "[{:.1}%] Buffers: {}, Underruns: {} ({:.3}%)",
-                progress, buffers_processed, underruns, underrun_rate * 100.0
+                progress,
+                buffers_processed,
+                underruns,
+                underrun_rate * 100.0
             );
             last_report = Instant::now();
         }
@@ -1583,7 +1630,10 @@ fn test_one_hour_actual_playback() {
     let underrun_rate = underruns as f64 / buffers_processed as f64;
 
     println!("\n=== Final Results ===");
-    println!("Total time: {:.1} minutes", total_elapsed.as_secs() as f64 / 60.0);
+    println!(
+        "Total time: {:.1} minutes",
+        total_elapsed.as_secs() as f64 / 60.0
+    );
     println!("Buffers processed: {}", buffers_processed);
     println!("Underruns: {} ({:.4}%)", underruns, underrun_rate * 100.0);
 

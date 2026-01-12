@@ -12,9 +12,10 @@ import { TrackMenu } from '../components/TrackMenu'
 import { AlbumCard } from '../components/AlbumCard'
 import { PlaylistCard } from '../components/PlaylistCard'
 import { ArtistCard } from '../components/ArtistCard'
-import { FeatureGate } from '../contexts/PlatformContext'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { FeatureGate, usePlatform } from '../contexts/PlatformContext'
 import { useBackend, type BackendAlbum, type BackendArtist, type BackendTrack, type BackendPlaylist } from '../contexts/BackendContext'
-import { type QueueTrack } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { removeConsecutiveDuplicates } from '../utils/queue'
 
 type TabId = 'albums' | 'playlists' | 'artists' | 'tracks'
@@ -39,6 +40,8 @@ export function LibraryPage() {
   const tabParam = searchParams.get('tab') as TabId | null
 
   const backend = useBackend()
+  const commands = usePlayerCommands()
+  const { features } = usePlatform()
 
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +52,12 @@ export function LibraryPage() {
   const [playlists, setPlaylists] = useState<BackendPlaylist[]>([])
   const [activeTab, setActiveTab] = useState<TabId>(tabParam || 'albums')
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Add to playlist dialog state
+  const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
+    id: number
+    title: string
+  } | null>(null)
 
   // Load library data
   const loadLibrary = useCallback(async () => {
@@ -174,6 +183,38 @@ export function LibraryPage() {
     [buildQueueFromTracks, filteredTracks]
   )
 
+  // Convert BackendTrack to QueueTrack
+  const toQueueTrack = useCallback((track: BackendTrack): QueueTrack => ({
+    trackId: String(track.id),
+    title: track.title || 'Unknown',
+    artist: track.artist_name || 'Unknown Artist',
+    album: track.album_title || null,
+    albumId: track.album_id,
+    filePath: track.file_path || '',
+    durationSeconds: track.duration_seconds || null,
+    trackNumber: track.track_number || null,
+    coverArtPath: track.cover_art_path,
+  }), [])
+
+  // Queue operation handlers
+  const handlePlayNext = useCallback(async (track: BackendTrack) => {
+    try {
+      const queueTrack = toQueueTrack(track)
+      await commands.addPlayNext(queueTrack)
+    } catch (error) {
+      console.error('[LibraryPage] Failed to add track to play next:', error)
+    }
+  }, [commands, toQueueTrack])
+
+  const handleAddToQueue = useCallback(async (track: BackendTrack) => {
+    try {
+      const queueTrack = toQueueTrack(track)
+      await commands.addToQueueEnd(queueTrack)
+    } catch (error) {
+      console.error('[LibraryPage] Failed to add track to queue:', error)
+    }
+  }, [commands, toQueueTrack])
+
   const handleCreatePlaylist = async () => {
     try {
       const playlist = await backend.createPlaylist(t('playlist.newPlaylistName', 'New Playlist'))
@@ -236,21 +277,6 @@ export function LibraryPage() {
         )}
       </FeatureGate>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">{t('nav.library')}</h1>
-          <p className="text-muted-foreground text-sm sm:text-base mt-1">
-            <span className="hidden sm:inline">
-              {albums.length} {t('library.albums')} • {artists.length} {t('library.artists')} • {tracks.length} {t('library.tracks')}
-            </span>
-            <span className="sm:hidden">
-              {albums.length} {t('library.albums')} • {tracks.length} {t('library.tracks')}
-            </span>
-          </p>
-        </div>
-      </div>
-
       {/* Tab Navigation - responsive with horizontal scroll on mobile */}
       <div className="flex items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1 overflow-x-auto flex-shrink min-w-0">
@@ -292,7 +318,12 @@ export function LibraryPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t(`library.search.${activeTab}`, `Search ${activeTab}...`)}
+            placeholder={
+              activeTab === 'albums' ? t('library.search.albumsWithCount', { count: albums.length }) :
+              activeTab === 'playlists' ? t('library.search.playlistsWithCount', { count: playlists.length }) :
+              activeTab === 'artists' ? t('library.search.artistsWithCount', { count: artists.length }) :
+              t('library.search.tracksWithCount', { count: tracks.length })
+            }
             className="w-full pl-10 pr-4 py-2 rounded-lg bg-muted border border-transparent focus:border-primary focus:outline-none text-sm"
           />
           {searchQuery && (
@@ -421,6 +452,14 @@ export function LibraryPage() {
                 return (
                   <TrackMenu
                     track={backendTrack}
+                    onPlayNext={() => handlePlayNext(backendTrack)}
+                    onAddToQueue={() => handleAddToQueue(backendTrack)}
+                    onAddToPlaylist={() => {
+                      setSelectedTrackForPlaylist({
+                        id: backendTrack.id,
+                        title: backendTrack.title,
+                      })
+                    }}
                     onDelete={async () => {
                       await backend.deleteTrack(backendTrack.id)
                       loadLibrary()
@@ -443,6 +482,16 @@ export function LibraryPage() {
         )}
 
       </div>
+
+      {/* Add to Playlist Dialog (Desktop only) */}
+      {features.canCreatePlaylists && selectedTrackForPlaylist && (
+        <AddToPlaylistDialog
+          open={!!selectedTrackForPlaylist}
+          onClose={() => setSelectedTrackForPlaylist(null)}
+          trackId={selectedTrackForPlaylist.id}
+          trackTitle={selectedTrackForPlaylist.title}
+        />
+      )}
     </div>
   )
 }

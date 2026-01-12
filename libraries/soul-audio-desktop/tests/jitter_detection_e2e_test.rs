@@ -244,10 +244,7 @@ fn analyze_for_jitter(samples: &[f32], sample_rate: u32) -> JitterAnalysis {
     // Calculate RMS of first 10ms (will be low due to fade, that's expected)
     let first_10ms_samples = (sample_rate as usize * 2 / 100).min(samples.len()); // stereo
     if first_10ms_samples > 0 {
-        let sum_sq: f32 = samples[..first_10ms_samples]
-            .iter()
-            .map(|s| s * s)
-            .sum();
+        let sum_sq: f32 = samples[..first_10ms_samples].iter().map(|s| s * s).sum();
         result.first_10ms_rms = (sum_sq / first_10ms_samples as f32).sqrt();
     }
 
@@ -325,10 +322,7 @@ fn test_jitter_detection_cold_start() {
     let source =
         LocalAudioSource::new(&test_file, 48000).expect("Failed to create LocalAudioSource");
 
-    eprintln!(
-        "[test] Source created, duration: {:?}",
-        source.duration()
-    );
+    eprintln!("[test] Source created, duration: {:?}", source.duration());
 
     // Create PlaybackManager and play
     let mut manager = PlaybackManager::new(PlaybackConfig::default());
@@ -465,8 +459,7 @@ fn test_cold_vs_warm_start_consistency() {
     generate_bass_heavy_test_wav(&test_file, 3.0).expect("Failed to generate test file");
 
     // Cold start: Create fresh source and collect output
-    let source1 =
-        LocalAudioSource::new(&test_file, 48000).expect("Failed to create source 1");
+    let source1 = LocalAudioSource::new(&test_file, 48000).expect("Failed to create source 1");
 
     let mut manager1 = PlaybackManager::new(PlaybackConfig::default());
     manager1.set_sample_rate(48000);
@@ -484,8 +477,7 @@ fn test_cold_vs_warm_start_consistency() {
     }
 
     // Warm start: Create source, read some, seek back
-    let mut source2 =
-        LocalAudioSource::new(&test_file, 48000).expect("Failed to create source 2");
+    let mut source2 = LocalAudioSource::new(&test_file, 48000).expect("Failed to create source 2");
 
     // Warm up
     let mut warmup = vec![0.0f32; 48000];
@@ -542,10 +534,8 @@ fn test_cold_vs_warm_start_consistency() {
         );
 
         // The outputs should be similar (allowing for some variance in fade timing)
-        let avg_diff = compare_audio_buffers(
-            &cold_samples[skip_samples..],
-            &warm_samples[skip_samples..],
-        );
+        let avg_diff =
+            compare_audio_buffers(&cold_samples[skip_samples..], &warm_samples[skip_samples..]);
 
         eprintln!("[test] Average sample difference: {:.6}", avg_diff);
 
@@ -571,8 +561,7 @@ fn test_jitter_with_resampling() {
     eprintln!("[test] Created 44.1kHz test file");
 
     // Create source with 48kHz target (will enable resampling)
-    let source =
-        LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
+    let source = LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
 
     eprintln!(
         "[test] Source needs resampling: {}",
@@ -620,8 +609,7 @@ fn test_jitter_after_rapid_seeks() {
 
     generate_bass_heavy_test_wav(&test_file, 10.0).expect("Failed to generate test file");
 
-    let mut source =
-        LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
+    let mut source = LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
 
     // Perform rapid seeks
     for i in 0..10 {
@@ -631,7 +619,9 @@ fn test_jitter_after_rapid_seeks() {
     }
 
     // Seek to start
-    source.seek(Duration::ZERO).expect("Failed to seek to start");
+    source
+        .seek(Duration::ZERO)
+        .expect("Failed to seek to start");
     std::thread::sleep(Duration::from_millis(300)); // Let buffer refill
 
     let mut manager = PlaybackManager::new(PlaybackConfig::default());
@@ -677,8 +667,7 @@ fn test_prebuffer_is_ready_before_playback() {
 
     generate_bass_heavy_test_wav(&test_file, 3.0).expect("Failed to generate test file");
 
-    let source =
-        LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
+    let source = LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
 
     // Check that is_ready() returns true (buffer is pre-filled)
     assert!(
@@ -707,7 +696,10 @@ fn test_prebuffer_is_ready_before_playback() {
     );
 
     // Check that output isn't all zeros (which would indicate underrun)
-    let non_zero_count = buffer[..first_read].iter().filter(|&&s| s.abs() > 1e-10).count();
+    let non_zero_count = buffer[..first_read]
+        .iter()
+        .filter(|&&s| s.abs() > 1e-10)
+        .count();
     let non_zero_ratio = non_zero_count as f32 / first_read as f32;
 
     eprintln!(
@@ -762,7 +754,7 @@ fn decode_with_ffmpeg(input_path: &PathBuf, sample_rate: u32) -> Option<Vec<f32>
             "-ar",
             &sample_rate.to_string(),
             "-ac",
-            "2", // stereo
+            "2",  // stereo
             "-y", // overwrite
             output_path.to_str()?,
         ])
@@ -905,8 +897,8 @@ fn test_compare_with_ffmpeg_reference() {
     eprintln!("[test] Generated test file: {}", test_file.display());
 
     // Decode with ffmpeg (reference)
-    let reference_samples = decode_with_ffmpeg(&test_file, 48000)
-        .expect("Failed to decode with ffmpeg");
+    let reference_samples =
+        decode_with_ffmpeg(&test_file, 48000).expect("Failed to decode with ffmpeg");
 
     eprintln!(
         "[test] Reference samples: {} ({:.2}s)",
@@ -915,8 +907,7 @@ fn test_compare_with_ffmpeg_reference() {
     );
 
     // Decode with Soul Player
-    let source =
-        LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
+    let source = LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
 
     let mut manager = PlaybackManager::new(PlaybackConfig::default());
     manager.set_sample_rate(48000);
@@ -968,8 +959,7 @@ fn test_compare_with_ffmpeg_reference() {
     eprintln!("[test] RMSE between signals: {:.6}", rmse);
 
     // Detect discontinuities that exist in Soul Player but not in reference
-    let (disc_count, max_disc) =
-        detect_discontinuity_differences(ref_post_fade, soul_post_fade);
+    let (disc_count, max_disc) = detect_discontinuity_differences(ref_post_fade, soul_post_fade);
 
     eprintln!(
         "[test] Discontinuity differences: count={}, max={:.4}",
@@ -1045,12 +1035,10 @@ fn test_strong_bass_transient_vs_reference() {
     eprintln!("[test] Generated extreme bass transient file");
 
     // Get reference from ffmpeg
-    let reference = decode_with_ffmpeg(&test_file, 48000)
-        .expect("Failed to decode reference");
+    let reference = decode_with_ffmpeg(&test_file, 48000).expect("Failed to decode reference");
 
     // Get Soul Player output
-    let source =
-        LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
+    let source = LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
 
     let mut manager = PlaybackManager::new(PlaybackConfig::default());
     manager.set_sample_rate(48000);
@@ -1084,9 +1072,7 @@ fn test_strong_bass_transient_vs_reference() {
     );
     eprintln!(
         "  Soul Player: {} discontinuities, {} gaps, max_gap={}",
-        soul_analysis.discontinuities,
-        soul_analysis.silence_gaps,
-        soul_analysis.max_silence_gap
+        soul_analysis.discontinuities, soul_analysis.silence_gaps, soul_analysis.max_silence_gap
     );
 
     // Check for jitter-specific patterns
@@ -1175,10 +1161,10 @@ fn test_with_user_file() {
     let test_file_path = std::env::var("JITTER_TEST_FILE").ok();
 
     if test_file_path.is_none() {
+        eprintln!("⊘ Skipping test: Set JITTER_TEST_FILE env var to test with a specific file");
         eprintln!(
-            "⊘ Skipping test: Set JITTER_TEST_FILE env var to test with a specific file"
+            "  Example: JITTER_TEST_FILE=\"D:\\music\\file.flac\" cargo test test_with_user_file"
         );
-        eprintln!("  Example: JITTER_TEST_FILE=\"D:\\music\\file.flac\" cargo test test_with_user_file");
         return;
     }
 
@@ -1252,10 +1238,8 @@ fn test_with_user_file() {
         if let Some(reference) = decode_with_ffmpeg(&path, 48000) {
             let skip = 4800; // Skip fade
             if reference.len() > skip && collected.len() > skip {
-                let (disc_diff, max_disc) = detect_discontinuity_differences(
-                    &reference[skip..],
-                    &collected[skip..],
-                );
+                let (disc_diff, max_disc) =
+                    detect_discontinuity_differences(&reference[skip..], &collected[skip..]);
                 eprintln!(
                     "[test] vs Reference: {} extra discontinuities, max={:.4}",
                     disc_diff, max_disc
@@ -1289,8 +1273,7 @@ fn test_stress_rapid_play_seek_cycles() {
 
     // Perform 10 play/seek cycles
     for cycle in 0..10 {
-        let mut source =
-            LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
+        let mut source = LocalAudioSource::new(&test_file, 48000).expect("Failed to create source");
 
         // Random seek
         let seek_pos = Duration::from_millis((cycle * 500) % 5000);
@@ -1334,10 +1317,7 @@ fn test_stress_rapid_play_seek_cycles() {
         }
     }
 
-    eprintln!(
-        "[test] Stress test: {}/10 cycles had jitter",
-        jitter_cycles
-    );
+    eprintln!("[test] Stress test: {}/10 cycles had jitter", jitter_cycles);
 
     assert!(
         jitter_cycles == 0,

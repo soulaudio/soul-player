@@ -1639,11 +1639,11 @@ fn test_crossfade_respects_on_skip_setting() {
 
     // Try to start with manual skip - should NOT start
     let started = engine.start(true); // true = manual skip
-    assert!(!started, "Crossfade should NOT start on manual skip when on_skip is false");
     assert!(
-        !engine.is_active(),
-        "Engine should remain inactive"
+        !started,
+        "Crossfade should NOT start on manual skip when on_skip is false"
     );
+    assert!(!engine.is_active(), "Engine should remain inactive");
 
     // Reset and try with auto-advance - should start
     engine.reset();
@@ -1669,7 +1669,10 @@ fn test_crossfade_on_manual_skip() {
 
     // Should start with manual skip
     let started = engine.start(true);
-    assert!(started, "Crossfade should start on manual skip when on_skip is true");
+    assert!(
+        started,
+        "Crossfade should start on manual skip when on_skip is true"
+    );
 }
 
 /// Test crossfade with different curve types
@@ -1703,7 +1706,11 @@ fn test_crossfade_curve_differences() {
 
         let (samples, completed) = engine.process(&outgoing, &incoming, &mut output);
 
-        assert_eq!(samples, 200, "Curve {:?}: Should process all samples", curve);
+        assert_eq!(
+            samples, 200,
+            "Curve {:?}: Should process all samples",
+            curve
+        );
         assert!(completed, "Curve {:?}: Should complete", curve);
 
         // All curves should go from ~1.0 to ~0.0

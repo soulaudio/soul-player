@@ -1,8 +1,9 @@
 'use client';
 
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LeftSidebar } from '../components/LeftSidebar';
+import { useScrollVisibility } from '../contexts/ScrollVisibilityContext';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -12,6 +13,16 @@ interface MainLayoutProps {
 
 export function MainLayout({ children, onAddToPlaylist }: MainLayoutProps) {
   const navigate = useNavigate();
+
+  // Try to get scroll visibility context (optional - may not exist in all environments)
+  let showHeader = true;
+  try {
+    const context = useScrollVisibility();
+    showHeader = context.showHeader;
+  } catch {
+    // Context not available, default to always showing header
+    showHeader = true;
+  }
 
   // Keyboard shortcuts for navigation (playback shortcuts handled by global shortcuts system)
   useEffect(() => {
@@ -48,8 +59,8 @@ export function MainLayout({ children, onAddToPlaylist }: MainLayoutProps) {
       <LeftSidebar onAddToPlaylist={onAddToPlaylist} />
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-auto">
-        <div className="h-full p-6">
+      <main className="flex-1 overflow-hidden">
+        <div className={`h-full pl-6 pr-0 transition-all duration-300 ${showHeader ? 'pt-6' : 'pt-0'}`}>
           {children}
         </div>
       </main>

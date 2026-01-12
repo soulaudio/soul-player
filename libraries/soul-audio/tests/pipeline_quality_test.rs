@@ -35,9 +35,8 @@ use soul_audio::effects::{
 };
 use soul_audio::resampling::{Resampler, ResamplerBackend, ResamplingQuality};
 use soul_audio::test_utils::{
-    calculate_peak, calculate_rms, calculate_signal_difference, calculate_thd_plus_n,
-    db_to_linear, extract_mono, generate_sine_sweep, generate_sine_wave, linear_to_db,
-    AudioQualityReport,
+    calculate_peak, calculate_rms, calculate_signal_difference, calculate_thd_plus_n, db_to_linear,
+    extract_mono, generate_sine_sweep, generate_sine_wave, linear_to_db, AudioQualityReport,
 };
 use std::f32::consts::PI;
 
@@ -328,7 +327,11 @@ fn test_thd_accumulation_through_chain() {
 
     // Verify THD doesn't increase dramatically (>3x) through chain - would indicate bug
     let original_thd = measurements.first().unwrap().1;
-    let increase_ratio = if original_thd > 0.001 { final_thd / original_thd } else { 1.0 };
+    let increase_ratio = if original_thd > 0.001 {
+        final_thd / original_thd
+    } else {
+        1.0
+    };
     assert!(
         increase_ratio < 3.0,
         "THD increased by {:.1}x through chain - possible processing bug",
@@ -447,8 +450,8 @@ fn test_frequency_response_with_eq() {
 
     // Test frequencies in each band
     let test_points = [
-        (50.0, 3.0, "Low boost"),   // Should be boosted ~3 dB
-        (1000.0, -2.0, "Mid cut"),  // Should be cut ~2 dB
+        (50.0, 3.0, "Low boost"),     // Should be boosted ~3 dB
+        (1000.0, -2.0, "Mid cut"),    // Should be cut ~2 dB
         (12000.0, 2.0, "High boost"), // Should be boosted ~2 dB
     ];
 
@@ -638,7 +641,11 @@ fn test_compression_reduces_dynamic_range() {
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
         // Alternating loud/quiet every 0.25 seconds
-        let amplitude = if ((t * 4.0) as i32) % 2 == 0 { 0.8 } else { 0.2 };
+        let amplitude = if ((t * 4.0) as i32) % 2 == 0 {
+            0.8
+        } else {
+            0.2
+        };
         let sample = (2.0 * PI * 440.0 * t).sin() * amplitude;
         original.push(sample); // Left
         original.push(sample); // Right
@@ -710,8 +717,11 @@ fn calculate_level_variance(samples: &[f32], sample_rate: u32) -> f32 {
     }
 
     let mean = window_levels.iter().sum::<f32>() / window_levels.len() as f32;
-    let variance =
-        window_levels.iter().map(|l| (l - mean).powi(2)).sum::<f32>() / window_levels.len() as f32;
+    let variance = window_levels
+        .iter()
+        .map(|l| (l - mean).powi(2))
+        .sum::<f32>()
+        / window_levels.len() as f32;
     variance.sqrt() // Standard deviation in dB
 }
 
@@ -744,7 +754,11 @@ fn test_level_consistency_unity_gain() {
     let level_change_db = linear_to_db(processed_rms / original_rms);
 
     println!("\n=== Level Consistency at Unity Gain ===");
-    println!("Original RMS: {:.4} ({:.1} dBFS)", original_rms, linear_to_db(original_rms));
+    println!(
+        "Original RMS: {:.4} ({:.1} dBFS)",
+        original_rms,
+        linear_to_db(original_rms)
+    );
     println!(
         "Processed RMS: {:.4} ({:.1} dBFS)",
         processed_rms,
@@ -811,7 +825,10 @@ fn test_total_latency_measurement() {
     println!("\n=== Latency Measurement ===");
     println!("Original impulse position: {} samples", original_pos);
     println!("Processed impulse position: {} samples", processed_pos);
-    println!("Algorithmic latency: {} samples ({:.2} ms)", latency_samples, latency_ms);
+    println!(
+        "Algorithmic latency: {} samples ({:.2} ms)",
+        latency_samples, latency_ms
+    );
 
     // Effects chain should have minimal latency (no lookahead in this implementation)
     assert!(
@@ -844,7 +861,10 @@ fn test_scenario_audiophile_playback() {
     let report = AudioQualityReport::analyze(&processed, AES17_TEST_FREQUENCY, sample_rate);
 
     println!("{}", report.format());
-    println!("Meets professional standards: {}", report.meets_professional_standards());
+    println!(
+        "Meets professional standards: {}",
+        report.meets_professional_standards()
+    );
 
     // With simple DFT measurement limitations, the thresholds may not be met.
     // Instead, verify basic sanity: signal present, not clipping, reasonable THD
@@ -914,8 +934,14 @@ fn test_scenario_podcast_processing() {
     let original_rms = calculate_rms(&original);
     let processed_rms = calculate_rms(&processed);
 
-    println!("Original: Peak {:.3}, RMS {:.4}", original_peak, original_rms);
-    println!("Processed: Peak {:.3}, RMS {:.4}", processed_peak, processed_rms);
+    println!(
+        "Original: Peak {:.3}, RMS {:.4}",
+        original_peak, original_rms
+    );
+    println!(
+        "Processed: Peak {:.3}, RMS {:.4}",
+        processed_peak, processed_rms
+    );
     println!(
         "Crest factor change: {:.1} dB",
         linear_to_db(original_peak / original_rms) - linear_to_db(processed_peak / processed_rms)
@@ -947,12 +973,20 @@ fn test_scenario_music_production() {
     let original_rms = calculate_rms(&original);
     let processed_rms = calculate_rms(&processed);
 
-    println!("Original: Peak {:.3} ({:.1} dBFS), RMS {:.4} ({:.1} dBFS)",
-             original_peak, linear_to_db(original_peak),
-             original_rms, linear_to_db(original_rms));
-    println!("Processed: Peak {:.3} ({:.1} dBFS), RMS {:.4} ({:.1} dBFS)",
-             processed_peak, linear_to_db(processed_peak),
-             processed_rms, linear_to_db(processed_rms));
+    println!(
+        "Original: Peak {:.3} ({:.1} dBFS), RMS {:.4} ({:.1} dBFS)",
+        original_peak,
+        linear_to_db(original_peak),
+        original_rms,
+        linear_to_db(original_rms)
+    );
+    println!(
+        "Processed: Peak {:.3} ({:.1} dBFS), RMS {:.4} ({:.1} dBFS)",
+        processed_peak,
+        linear_to_db(processed_peak),
+        processed_rms,
+        linear_to_db(processed_rms)
+    );
 
     // Music production chain should produce valid output
     assert!(processed_peak <= 1.0, "Output should not clip");
@@ -989,8 +1023,15 @@ fn test_full_chain_with_resampling_44_to_96() {
     let flushed = resampler.flush().expect("Flush failed");
     resampled.extend(flushed);
 
-    println!("Resampling: {} -> {} samples", original.len() / 2, resampled.len() / 2);
-    println!("Expected ratio: {:.4}", output_rate as f64 / input_rate as f64);
+    println!(
+        "Resampling: {} -> {} samples",
+        original.len() / 2,
+        resampled.len() / 2
+    );
+    println!(
+        "Expected ratio: {:.4}",
+        output_rate as f64 / input_rate as f64
+    );
     println!(
         "Actual ratio: {:.4}",
         resampled.len() as f64 / original.len() as f64
@@ -1077,8 +1118,14 @@ fn test_complete_audio_pipeline_e2e() {
 
     println!("┌─ INPUT SIGNAL ─────────────────────────────────────────────────┐");
     println!("│ Sample rate: {} Hz", input_rate);
-    println!("│ Duration: 1.0 second ({} stereo samples)", original.len() / 2);
-    println!("│ Test frequency: {} Hz (AES17 standard)", AES17_TEST_FREQUENCY);
+    println!(
+        "│ Duration: 1.0 second ({} stereo samples)",
+        original.len() / 2
+    );
+    println!(
+        "│ Test frequency: {} Hz (AES17 standard)",
+        AES17_TEST_FREQUENCY
+    );
     println!("│ THD+N: {:.4}%", original_report.thd_plus_n_percent);
     println!("│ Peak: {:.1} dBFS", original_report.peak_db);
     println!("└─────────────────────────────────────────────────────────────────┘");
@@ -1148,25 +1195,43 @@ fn test_complete_audio_pipeline_e2e() {
     println!("\n╔══════════════════════════════════════════════════════════════════╗");
     println!("║                    FINAL OUTPUT ANALYSIS                         ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
-    println!("║ Sample rate: {} Hz                                          ║", output_rate);
-    println!("║ Output samples: {} stereo                                  ║", signal.len() / 2);
+    println!(
+        "║ Sample rate: {} Hz                                          ║",
+        output_rate
+    );
+    println!(
+        "║ Output samples: {} stereo                                  ║",
+        signal.len() / 2
+    );
     println!("╠══════════════════════════════════════════════════════════════════╣");
     println!("║  Metric           │ Value          │ Target           │ Status  ║");
     println!("╠───────────────────┼────────────────┼──────────────────┼─────────╣");
 
-    let thd_status = if final_report.thd_plus_n_percent < THD_PLUS_N_TARGET_PERCENT { "PASS" } else { "WARN" };
+    let thd_status = if final_report.thd_plus_n_percent < THD_PLUS_N_TARGET_PERCENT {
+        "PASS"
+    } else {
+        "WARN"
+    };
     println!(
         "║  THD+N            │ {:>12.4}% │ <{:>14.4}% │ {:>7} ║",
         final_report.thd_plus_n_percent, THD_PLUS_N_TARGET_PERCENT, thd_status
     );
 
-    let snr_status = if final_report.snr_db > 15.0 { "PASS" } else { "WARN" };
+    let snr_status = if final_report.snr_db > 15.0 {
+        "PASS"
+    } else {
+        "WARN"
+    };
     println!(
         "║  SNR              │ {:>11.1} dB │ >{:>13.0} dB │ {:>7} ║",
         final_report.snr_db, 15.0, snr_status
     );
 
-    let peak_status = if final_report.peak_db <= 0.0 { "PASS" } else { "CLIP!" };
+    let peak_status = if final_report.peak_db <= 0.0 {
+        "PASS"
+    } else {
+        "CLIP!"
+    };
     println!(
         "║  Peak             │ {:>10.1} dBFS │ <={:>12.0} dB │ {:>7} ║",
         final_report.peak_db, 0.0, peak_status
@@ -1287,7 +1352,7 @@ fn test_no_channel_swap() {
     let mut original = Vec::with_capacity(num_samples * 2);
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let left = (2.0 * PI * 500.0 * t).sin() * 0.5;   // 500 Hz left
+        let left = (2.0 * PI * 500.0 * t).sin() * 0.5; // 500 Hz left
         let right = (2.0 * PI * 2000.0 * t).sin() * 0.5; // 2000 Hz right
         original.push(left);
         original.push(right);
@@ -1354,7 +1419,10 @@ fn test_sample_rate_sensitivity() {
     // THD+N will vary with sample rate due to DFT bin alignment
     // This is a measurement artifact, not a real quality difference.
     // Verify all values are within reasonable bounds (no catastrophic bugs)
-    let min_thd = results.iter().map(|(_, t)| *t).fold(f32::INFINITY, f32::min);
+    let min_thd = results
+        .iter()
+        .map(|(_, t)| *t)
+        .fold(f32::INFINITY, f32::min);
     let max_thd = results.iter().map(|(_, t)| *t).fold(0.0f32, f32::max);
 
     println!("Range: {:.4}% to {:.4}%", min_thd, max_thd);

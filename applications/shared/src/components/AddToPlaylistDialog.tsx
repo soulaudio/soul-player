@@ -1,22 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import { Search, ListMusic, Plus, Check, X } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogBody,
-  DialogFooter,
-} from '@soul-player/shared';
-
-interface Playlist {
-  id: string;
-  name: string;
-  description?: string;
-  track_count: number;
-  is_favorite: boolean;
-}
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter } from './ui/Dialog';
+import { useBackend, type BackendPlaylist } from '../contexts/BackendContext';
 
 interface AddToPlaylistDialogProps {
   open: boolean;
@@ -32,7 +18,8 @@ export function AddToPlaylistDialog({
   trackTitle,
 }: AddToPlaylistDialogProps) {
   const { t } = useTranslation();
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const backend = useBackend();
+  const [playlists, setPlaylists] = useState<BackendPlaylist[]>([]);
   const [containingPlaylistIds, setContainingPlaylistIds] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,9 +35,16 @@ export function AddToPlaylistDialog({
     const loadData = async () => {
       setIsLoading(true);
       try {
+        // Check if backend methods exist
+        if (!backend.getAllPlaylists || !backend.getPlaylistsContainingTrack) {
+          console.error('[AddToPlaylistDialog] Backend methods missing');
+          setIsLoading(false);
+          return;
+        }
+
         const [playlistsResult, containingIds] = await Promise.all([
-          invoke<Playlist[]>('get_all_playlists'),
-          invoke<string[]>('get_playlists_containing_track', { trackId: String(trackId) }),
+          backend.getAllPlaylists(),
+          backend.getPlaylistsContainingTrack(trackId),
         ]);
 
         setPlaylists(playlistsResult);
@@ -59,7 +53,7 @@ export function AddToPlaylistDialog({
         // Pre-select playlists that already contain the track
         setSelectedIds(new Set(containingSet));
       } catch (error) {
-        console.error('Failed to load playlists:', error);
+        console.error('[AddToPlaylistDialog] Failed to load playlists:', error);
       } finally {
         setIsLoading(false);
       }
@@ -69,7 +63,7 @@ export function AddToPlaylistDialog({
     setSearchQuery('');
     setNewPlaylistName('');
     setShowNewPlaylistInput(false);
-  }, [open, trackId]);
+  }, [open, trackId, backend]);
 
   // Filter playlists by search query
   const filteredPlaylists = useMemo(() => {
@@ -100,10 +94,7 @@ export function AddToPlaylistDialog({
     if (!newPlaylistName.trim()) return;
 
     try {
-      const newPlaylist = await invoke<Playlist>('create_playlist', {
-        name: newPlaylistName.trim(),
-        description: null,
-      });
+      const newPlaylist = await backend.createPlaylist(newPlaylistName.trim());
 
       setPlaylists((prev) => [newPlaylist, ...prev]);
       setSelectedIds((prev) => new Set([...prev, newPlaylist.id]));
@@ -124,20 +115,14 @@ export function AddToPlaylistDialog({
       // Add track to new playlists
       await Promise.all(
         toAdd.map((playlistId) =>
-          invoke('add_track_to_playlist', {
-            playlistId,
-            trackId: String(trackId),
-          })
+          backend.addTrackToPlaylist(playlistId, trackId)
         )
       );
 
       // Remove track from deselected playlists
       await Promise.all(
         toRemove.map((playlistId) =>
-          invoke('remove_track_from_playlist', {
-            playlistId,
-            trackId: String(trackId),
-          })
+          backend.removeTrackFromPlaylist(playlistId, trackId)
         )
       );
 

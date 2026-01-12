@@ -16,7 +16,7 @@ export interface Album {
 
 interface AlbumCardProps {
   album: Album;
-  /** Card width class (default: w-40) */
+  /** Card width class (default: w-full for responsive grid) */
   className?: string;
   /** Show artist and year below title */
   showArtist?: boolean;
@@ -31,7 +31,7 @@ interface AlbumTrack {
   duration_seconds?: number;
 }
 
-export function AlbumCard({ album, className = 'w-40', showArtist = true }: AlbumCardProps) {
+export function AlbumCard({ album, className = 'w-full', showArtist = true }: AlbumCardProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { recordContext, getCurrentContext } = usePlaybackContext();
@@ -122,7 +122,7 @@ export function AlbumCard({ album, className = 'w-40', showArtist = true }: Albu
   };
 
   return (
-    <div className={`flex-shrink-0 cursor-pointer group ${className}`}>
+    <div className={`cursor-pointer group ${className}`}>
       <div
         className="aspect-square rounded-lg overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer"
         onClick={handleClick}

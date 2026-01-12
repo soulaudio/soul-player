@@ -156,7 +156,7 @@ pub async fn create(
     source: &CreateLibrarySource,
 ) -> Result<LibrarySource> {
     let now = chrono::Utc::now().timestamp();
-    let sync_deletes = if source.sync_deletes { 1 } else { 0 };
+    let sync_deletes = i32::from(source.sync_deletes);
 
     let result = sqlx::query!(
         r#"
@@ -204,9 +204,9 @@ pub async fn update(pool: &SqlitePool, id: i64, update: &UpdateLibrarySource) ->
 
     let name = update.name.as_ref().unwrap_or(&current.name);
     let enabled = update.enabled.unwrap_or(current.enabled);
-    let enabled_int = if enabled { 1 } else { 0 };
+    let enabled_int = i32::from(enabled);
     let sync_deletes = update.sync_deletes.unwrap_or(current.sync_deletes);
-    let sync_deletes_int = if sync_deletes { 1 } else { 0 };
+    let sync_deletes_int = i32::from(sync_deletes);
 
     let result = sqlx::query!(
         r#"
@@ -282,6 +282,42 @@ pub async fn set_last_scan_at(pool: &SqlitePool, id: i64, timestamp: i64) -> Res
     Ok(())
 }
 
+/// Cleanup orphaned scans on startup
+///
+/// This function should be called on app startup to reset any library sources
+/// that were stuck in "scanning" state due to app crash or forced quit.
+/// It also cancels any running scan_progress records, even if the library_source
+/// scan_status is already 'idle' (can happen if app crashed after updating library_source
+/// but before completing scan_progress).
+///
+/// Returns the number of orphaned scans that were cleaned up.
+pub async fn cleanup_orphaned_scans(
+    pool: &SqlitePool,
+    user_id: &str,
+    device_id: &str,
+) -> Result<usize> {
+    // Get all sources for this user/device
+    let sources = get_by_user_device(pool, user_id, device_id).await?;
+    let mut cleanup_count = 0;
+
+    for source in sources {
+        // Reset library source if stuck in scanning state
+        if source.scan_status == ScanStatus::Scanning {
+            set_scan_status(pool, source.id, ScanStatus::Idle, None).await?;
+            cleanup_count += 1;
+        }
+
+        // Cancel any orphaned running scan_progress records
+        // (this can exist even if library_source.scan_status is 'idle')
+        if let Some(progress) = crate::scan_progress::get_running(pool, source.id).await? {
+            crate::scan_progress::cancel(pool, progress.id).await?;
+            cleanup_count += 1;
+        }
+    }
+
+    Ok(cleanup_count)
+}
+
 /// Check if a path already exists for this user/device
 pub async fn path_exists(
     pool: &SqlitePool,
@@ -317,7 +353,7 @@ pub async fn count(pool: &SqlitePool, user_id: &str, device_id: &str) -> Result<
 /// Set the enabled status of a library source
 pub async fn set_enabled(pool: &SqlitePool, id: i64, enabled: bool) -> Result<bool> {
     let now = chrono::Utc::now().timestamp();
-    let enabled_int = if enabled { 1 } else { 0 };
+    let enabled_int = i32::from(enabled);
 
     let result = sqlx::query!(
         r#"

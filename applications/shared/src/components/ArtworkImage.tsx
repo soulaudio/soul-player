@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Music, Users, ListMusic } from 'lucide-react';
+import { ProgressiveImage } from './ProgressiveImage';
 
 interface ArtworkImageProps {
   trackId?: string | number;
@@ -12,6 +13,8 @@ interface ArtworkImageProps {
   fallbackClassName?: string;
   /** Icon to show when no artwork is available (defaults based on entity type) */
   fallbackIcon?: 'music' | 'users' | 'playlist';
+  /** Shape: rounded for albums/playlists, circular for artists */
+  shape?: 'rounded' | 'circular';
 }
 
 // Cache for artwork data URLs
@@ -46,7 +49,7 @@ export function clearAllArtworkCache(): void {
   notifyListeners('*');
 }
 
-export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtPath, alt, className, fallbackClassName, fallbackIcon }: ArtworkImageProps) {
+export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtPath, alt, className, fallbackClassName, fallbackIcon, shape = 'rounded' }: ArtworkImageProps) {
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -60,6 +63,14 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
     if (playlistId) return `playlist:${playlistId}`;
     return null;
   }, [trackId, albumId, artistId, playlistId]);
+
+  // Reset loading state when any ID prop changes
+  useEffect(() => {
+    console.log(`[ArtworkImage] Props changed, resetting state for trackId=${trackId}, albumId=${albumId}, artistId=${artistId}, playlistId=${playlistId}`);
+    setArtworkUrl(null);
+    setLoading(true);
+    setError(false);
+  }, [trackId, albumId, artistId, playlistId, coverArtPath]);
 
   // Subscribe to cache invalidation events
   useEffect(() => {
@@ -238,11 +249,11 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
   }
 
   return (
-    <img
+    <ProgressiveImage
       src={artworkUrl!}
       alt={alt || 'Album artwork'}
       className={className}
-      onError={() => setError(true)}
+      shape={shape}
     />
   );
 }

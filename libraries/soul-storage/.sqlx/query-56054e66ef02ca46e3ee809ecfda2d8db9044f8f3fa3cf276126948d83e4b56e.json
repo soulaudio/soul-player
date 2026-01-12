@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE albums SET artwork_source = ?, cover_art_path = ?, updated_at = datetime('now') WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "56054e66ef02ca46e3ee809ecfda2d8db9044f8f3fa3cf276126948d83e4b56e"
+}

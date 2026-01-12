@@ -179,8 +179,7 @@ fn create_flac_with_vorbis_comments(
 
     // Vendor string
     let vendor = "soul-audio test";
-    vorbis_data
-        .extend_from_slice(&(vendor.len() as u32).to_le_bytes());
+    vorbis_data.extend_from_slice(&(vendor.len() as u32).to_le_bytes());
     vorbis_data.extend_from_slice(vendor.as_bytes());
 
     // Build comment list
@@ -226,12 +225,7 @@ fn create_flac_with_vorbis_comments(
 }
 
 /// Create a minimal OGG Vorbis file with comments
-fn create_ogg_with_vorbis_comments(
-    path: &PathBuf,
-    title: &str,
-    artist: &str,
-    _album: &str,
-) {
+fn create_ogg_with_vorbis_comments(path: &PathBuf, title: &str, artist: &str, _album: &str) {
     let mut file = File::create(path).expect("Failed to create OGG file");
 
     // OGG page header (simplified - this creates a minimal valid structure)
@@ -565,7 +559,10 @@ fn test_id3v2_title_artist_album() {
     // but the metadata extraction should at least not crash.
     // For real files, title/artist/album would be populated.
     // The filename fallback should provide a title at minimum.
-    assert!(metadata.title.is_some(), "Title should be present (at least from filename)");
+    assert!(
+        metadata.title.is_some(),
+        "Title should be present (at least from filename)"
+    );
 }
 
 #[test]
@@ -864,9 +861,18 @@ fn test_musicbrainz_track_id() {
         "Artist",
         "Album",
         &[
-            ("MUSICBRAINZ_TRACKID", "12345678-1234-1234-1234-123456789012"),
-            ("MUSICBRAINZ_ALBUMID", "87654321-4321-4321-4321-210987654321"),
-            ("MUSICBRAINZ_ARTISTID", "abcdef01-2345-6789-abcd-ef0123456789"),
+            (
+                "MUSICBRAINZ_TRACKID",
+                "12345678-1234-1234-1234-123456789012",
+            ),
+            (
+                "MUSICBRAINZ_ALBUMID",
+                "87654321-4321-4321-4321-210987654321",
+            ),
+            (
+                "MUSICBRAINZ_ARTISTID",
+                "abcdef01-2345-6789-abcd-ef0123456789",
+            ),
         ],
     );
 
@@ -944,9 +950,9 @@ fn test_unicode_cyrillic() {
 
     create_flac_with_vorbis_comments(
         &flac_path,
-        "Песня",        // Russian: "Song"
-        "Артист",       // Russian: "Artist"
-        "Альбом",       // Russian: "Album"
+        "Песня",  // Russian: "Song"
+        "Артист", // Russian: "Artist"
+        "Альбом", // Russian: "Album"
         &[],
     );
 
@@ -961,9 +967,9 @@ fn test_unicode_cjk() {
 
     create_flac_with_vorbis_comments(
         &flac_path,
-        "音楽",           // Japanese: "Music"
-        "アーティスト",   // Japanese: "Artist"
-        "专辑",           // Chinese: "Album"
+        "音楽",         // Japanese: "Music"
+        "アーティスト", // Japanese: "Artist"
+        "专辑",         // Chinese: "Album"
         &[],
     );
 
@@ -989,9 +995,9 @@ fn test_unicode_rtl_arabic() {
 
     create_flac_with_vorbis_comments(
         &flac_path,
-        "أغنية",        // Arabic: "Song"
-        "فنان",         // Arabic: "Artist"
-        "ألبوم",        // Arabic: "Album"
+        "أغنية", // Arabic: "Song"
+        "فنان",  // Arabic: "Artist"
+        "ألبوم", // Arabic: "Album"
         &[],
     );
 
@@ -1067,13 +1073,7 @@ fn test_null_bytes_in_tags() {
     let temp_dir = tempfile::tempdir().unwrap();
     let flac_path = temp_dir.path().join("null_bytes.flac");
 
-    create_flac_with_vorbis_comments(
-        &flac_path,
-        "Title\0With\0Nulls",
-        "Artist",
-        "Album",
-        &[],
-    );
+    create_flac_with_vorbis_comments(&flac_path, "Title\0With\0Nulls", "Artist", "Album", &[]);
 
     // Should handle gracefully (truncate at null or replace)
     todo!("Verify null byte handling in tags")
@@ -1163,9 +1163,16 @@ fn test_duration_extraction() {
     let metadata = decoder.extract_metadata(&wav_path).unwrap();
 
     // Duration should be ~100ms for our test file (0.1 seconds)
-    assert!(metadata.duration_seconds.is_some(), "Duration should be extracted");
+    assert!(
+        metadata.duration_seconds.is_some(),
+        "Duration should be extracted"
+    );
     let duration = metadata.duration_seconds.unwrap();
-    assert!(duration > 0.05 && duration < 0.2, "Duration should be approximately 0.1 seconds, got {}", duration);
+    assert!(
+        duration > 0.05 && duration < 0.2,
+        "Duration should be approximately 0.1 seconds, got {}",
+        duration
+    );
 
     // Sample rate should be 44100 Hz
     assert_eq!(metadata.sample_rate, Some(44100));
@@ -1185,7 +1192,11 @@ fn test_sample_rate_extraction() {
     let decoder = soul_audio::SymphoniaDecoder::new();
     let metadata = decoder.extract_metadata(&wav_path).unwrap();
 
-    assert_eq!(metadata.sample_rate, Some(44100), "Sample rate should be 44100 Hz");
+    assert_eq!(
+        metadata.sample_rate,
+        Some(44100),
+        "Sample rate should be 44100 Hz"
+    );
 }
 
 #[test]
@@ -1214,7 +1225,11 @@ fn test_channel_count_extraction() {
     let decoder = soul_audio::SymphoniaDecoder::new();
     let metadata = decoder.extract_metadata(&wav_path).unwrap();
 
-    assert_eq!(metadata.channels, Some(2), "Channel count should be 2 (stereo)");
+    assert_eq!(
+        metadata.channels,
+        Some(2),
+        "Channel count should be 2 (stereo)"
+    );
 }
 
 // ============================================================================

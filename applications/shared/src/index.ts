@@ -34,6 +34,8 @@ export type {
   SetArtworkParams,
 } from './contexts/BackendContext';
 
+export { ScrollVisibilityProvider, useScrollVisibility } from './contexts/ScrollVisibilityContext';
+
 // Utils
 export { cn, formatDuration, formatBytes, formatRelativeTime, debounce, throttle } from './lib/utils';
 export { getPlatform, isMac, getModifierKey, getModifierKeyName, formatShortcut } from './lib/platform';
@@ -68,6 +70,7 @@ export { ArtworkImage, clearArtworkCache, clearAllArtworkCache } from './compone
 export { TrackQualityBadge } from './components/TrackQualityBadge';
 export { SourceIndicator } from './components/SourceIndicator';
 export { EditArtworkDialog, type ArtworkEntityType } from './components/EditArtworkDialog';
+export { AddToPlaylistDialog } from './components/AddToPlaylistDialog';
 export { ImageCropper } from './components/ImageCropper';
 
 // UI components
@@ -111,10 +114,18 @@ export type { SettingsHandlers, ShortcutsSettingsProps } from './pages/SettingsP
 // Shared components
 export { AlbumCard, type AlbumCardAlbum } from './components/AlbumCard';
 export { PlaylistCard } from './components/PlaylistCard';
+export { LibraryPageLayout } from './components/LibraryPageLayout';
+export { SkeletonCard } from './components/SkeletonCard';
+export { ProgressiveImage } from './components/ProgressiveImage';
+export { VirtualizedGrid } from './components/VirtualizedGrid';
 
 // Hooks
 export { useSeekBar, setIgnorePositionUpdates, shouldIgnorePositionUpdates } from './hooks/useSeekBar';
 export { useGridScale } from './hooks/useGridScale';
+export { useInfiniteLibrary } from './hooks/useInfiniteLibrary';
+
+// TanStack Query exports
+export { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Demo components (for marketing site)
 // export { DemoView } from '../desktop/src/components/DemoView'; // Temporarily disabled

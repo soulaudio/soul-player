@@ -276,8 +276,14 @@ fn test_resampling_timing_accuracy() {
     let orig_crossings = count_zero_crossings(&original_buffer[..orig_samples]);
     let resamp_crossings = count_zero_crossings(&resampled_buffer[..resamp_samples]);
 
-    eprintln!("Original samples: {}, zero crossings: {}", orig_samples, orig_crossings);
-    eprintln!("Resampled samples: {}, zero crossings: {}", resamp_samples, resamp_crossings);
+    eprintln!(
+        "Original samples: {}, zero crossings: {}",
+        orig_samples, orig_crossings
+    );
+    eprintln!(
+        "Resampled samples: {}, zero crossings: {}",
+        resamp_samples, resamp_crossings
+    );
 
     // Should have approximately same number of zero crossings
     // (within 10% tolerance for resampling artifacts)
@@ -377,14 +383,21 @@ fn test_device_switch_resampling() {
     let mut buffer1 = vec![0.0f32; 4096];
     let mut total1 = 0;
     for _ in 0..100 {
-        if total1 >= target1 || source1.is_finished() { break; }
+        if total1 >= target1 || source1.is_finished() {
+            break;
+        }
         match source1.read_samples(&mut buffer1) {
             Ok(0) => std::thread::sleep(std::time::Duration::from_millis(10)),
             Ok(n) => total1 += n,
             Err(e) => panic!("Read error: {}", e),
         }
     }
-    assert!(total1 >= target1, "Should read at least {} samples, got {}", target1, total1);
+    assert!(
+        total1 >= target1,
+        "Should read at least {} samples, got {}",
+        target1,
+        total1
+    );
 
     // Simulate device switch to 96kHz
     // In real app, we would reload the audio source with new target rate
@@ -396,14 +409,21 @@ fn test_device_switch_resampling() {
     let mut buffer2 = vec![0.0f32; 4096];
     let mut total2 = 0;
     for _ in 0..100 {
-        if total2 >= target2 || source2.is_finished() { break; }
+        if total2 >= target2 || source2.is_finished() {
+            break;
+        }
         match source2.read_samples(&mut buffer2) {
             Ok(0) => std::thread::sleep(std::time::Duration::from_millis(10)),
             Ok(n) => total2 += n,
             Err(e) => panic!("Read error: {}", e),
         }
     }
-    assert!(total2 >= target2, "Should read at least {} samples, got {}", target2, total2);
+    assert!(
+        total2 >= target2,
+        "Should read at least {} samples, got {}",
+        target2,
+        total2
+    );
 
     // Verify sample counts are proportional to sample rates (using target amounts)
     let ratio = target2 as f32 / target1 as f32;
@@ -515,7 +535,8 @@ fn test_no_startup_artifacts_with_high_energy_content() {
     );
 
     // Also verify the audio content is valid (not all zeros from skip)
-    let rms: f32 = buffer[..check_samples].iter().map(|s| s * s).sum::<f32>() / check_samples as f32;
+    let rms: f32 =
+        buffer[..check_samples].iter().map(|s| s * s).sum::<f32>() / check_samples as f32;
     let rms = rms.sqrt();
     eprintln!("RMS in first 10ms: {:.6}", rms);
 
@@ -557,7 +578,8 @@ fn test_downsample_no_startup_jitter() {
 
     if !deltas.is_empty() {
         let mean_delta: f32 = deltas.iter().sum::<f32>() / deltas.len() as f32;
-        let variance: f32 = deltas.iter().map(|d| (d - mean_delta).powi(2)).sum::<f32>() / deltas.len() as f32;
+        let variance: f32 =
+            deltas.iter().map(|d| (d - mean_delta).powi(2)).sum::<f32>() / deltas.len() as f32;
         let std_dev = variance.sqrt();
 
         eprintln!("Delta mean: {:.6}, std_dev: {:.6}", mean_delta, std_dev);
@@ -593,7 +615,10 @@ fn test_upsample_no_startup_artifacts() {
     let first_5ms = (96000.0 * 0.005 * 2.0) as usize;
     let check_samples = first_5ms.min(samples_read);
 
-    let max_sample = buffer[..check_samples].iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+    let max_sample = buffer[..check_samples]
+        .iter()
+        .map(|s| s.abs())
+        .fold(0.0f32, f32::max);
 
     eprintln!("Max sample in first 5ms: {:.6}", max_sample);
 
@@ -683,7 +708,10 @@ fn test_no_buffer_underrun_on_initial_load() {
                 // More than 10% zeros = significant underrun
                 eprintln!(
                     "Callback {}: underrun detected - {} zeros out of {} samples ({:.1}%)",
-                    callback_idx, zeros_in_callback, samples_read, zero_ratio * 100.0
+                    callback_idx,
+                    zeros_in_callback,
+                    samples_read,
+                    zero_ratio * 100.0
                 );
                 underrun_detected = true;
             }

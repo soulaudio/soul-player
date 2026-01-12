@@ -174,7 +174,9 @@ fn test_decode_nonexistent_file() {
     let err_string = format!("{:?}", err);
     // The error should indicate a file access issue, not a format issue
     assert!(
-        err_string.contains("Io") || err_string.contains("not found") || err_string.contains("open"),
+        err_string.contains("Io")
+            || err_string.contains("not found")
+            || err_string.contains("open"),
         "Expected IO/file error, got: {}",
         err_string
     );
@@ -187,7 +189,8 @@ fn test_decode_invalid_file_returns_format_error() {
     let invalid_path = temp_dir.path().join("garbage.wav");
 
     let mut file = File::create(&invalid_path).unwrap();
-    file.write_all(b"This is not a valid WAV file at all").unwrap();
+    file.write_all(b"This is not a valid WAV file at all")
+        .unwrap();
     drop(file);
 
     let mut decoder = SymphoniaDecoder::new();
@@ -232,7 +235,7 @@ fn test_decode_truncated_wav_file() {
     file.write_all(&16u16.to_le_bytes()).unwrap(); // Bits per sample
     file.write_all(b"data").unwrap();
     file.write_all(&500u32.to_le_bytes()).unwrap(); // Claims 500 bytes of data
-    // But we only write 8 bytes
+                                                    // But we only write 8 bytes
     file.write_all(&[0u8; 8]).unwrap();
     drop(file);
 
@@ -244,7 +247,10 @@ fn test_decode_truncated_wav_file() {
     match result {
         Ok(buffer) => {
             // If it succeeds, it should have some samples
-            assert!(buffer.samples.len() < 500 / 4, "Should not have full claimed data");
+            assert!(
+                buffer.samples.len() < 500 / 4,
+                "Should not have full claimed data"
+            );
         }
         Err(e) => {
             // Error is also acceptable for truncated file

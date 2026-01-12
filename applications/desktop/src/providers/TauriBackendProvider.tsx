@@ -76,7 +76,7 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
     },
 
     async getPlaylistTracks(playlistId: string) {
-      return invoke<BackendTrack[]>('get_playlist_tracks', { playlistId })
+      return invoke<BackendTrack[]>('get_playlist_tracks', { id: playlistId })
     },
 
     async getGenreTracks(genreId: number) {
@@ -104,6 +104,18 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
 
     async deletePlaylist(id: string) {
       await invoke('delete_playlist', { id })
+    },
+
+    async getPlaylistsContainingTrack(trackId: number) {
+      return invoke<string[]>('get_playlists_containing_track', { trackId: String(trackId) })
+    },
+
+    async addTrackToPlaylist(playlistId: string, trackId: number) {
+      await invoke('add_track_to_playlist', { playlistId, trackId: String(trackId) })
+    },
+
+    async removeTrackFromPlaylist(playlistId: string, trackId: number) {
+      await invoke('remove_track_from_playlist', { playlistId, trackId: String(trackId) })
     },
 
     // Track operations

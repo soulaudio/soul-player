@@ -146,7 +146,16 @@
       "Bash(curl:*)",
       "Bash(tasklist:*)",
       "Bash(netstat:*)",
-      "Bash(cargo run:*)"
+      "Bash(cargo run:*)",
+      "Bash(Select-Object -First 50)",
+      "Bash(ren queue_persistence_test.rs queue_persistence_test.rs.disabled)",
+      "Bash(DATABASE_URL=sqlite:../../libraries/soul-storage/.tmp/dev.db cargo sqlx:*)",
+      "Bash(git add:*)",
+      "Bash(for i in {1..5})",
+      "Bash(do echo \"Run $i:\")",
+      "Bash(for i in {1..10})",
+      "Bash(if [ ! -d .tmp ])",
+      "Bash(then mkdir .tmp)"
     ]
   },
   "hooks": {

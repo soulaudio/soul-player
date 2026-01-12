@@ -331,7 +331,10 @@ pub async fn set_volume_leveling_preamp(
 
     // Set on playback manager (runtime)
     playback.set_loudness_preamp(clamped);
-    eprintln!("[set_volume_leveling_preamp] Pre-amp set to: {} dB", clamped);
+    eprintln!(
+        "[set_volume_leveling_preamp] Pre-amp set to: {} dB",
+        clamped
+    );
 
     // Persist to database
     soul_storage::settings::set_setting(

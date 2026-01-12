@@ -105,6 +105,7 @@ impl AlbumArt {
     }
 
     /// Set description
+    #[must_use]
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
         self
@@ -149,9 +150,7 @@ impl AlbumArt {
                 return "image/bmp";
             }
             // WebP: starts with "RIFF" and contains "WEBP"
-            if self.data.len() >= 12
-                && &self.data[0..4] == b"RIFF"
-                && &self.data[8..12] == b"WEBP"
+            if self.data.len() >= 12 && &self.data[0..4] == b"RIFF" && &self.data[8..12] == b"WEBP"
             {
                 return "image/webp";
             }
@@ -271,7 +270,9 @@ impl AudioMetadata {
 
     /// Get a custom tag value
     pub fn get_custom_tag(&self, key: &str) -> Option<&str> {
-        self.custom_tags.get(key).and_then(|v| v.first().map(|s| s.as_str()))
+        self.custom_tags
+            .get(key)
+            .and_then(|v| v.first().map(|s| s.as_str()))
     }
 }
 
@@ -344,9 +345,7 @@ pub fn extract_metadata(path: &Path) -> Result<AudioMetadata> {
 
     // If no title was found, use filename as fallback
     if metadata.title.is_none() {
-        metadata.title = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned());
+        metadata.title = path.file_stem().map(|s| s.to_string_lossy().into_owned());
     }
 
     Ok(metadata)
@@ -486,7 +485,8 @@ fn extract_from_revision(
     // Set primary album art
     if metadata.album_art.is_none() && !metadata.all_album_art.is_empty() {
         // Prefer front cover
-        let primary = metadata.all_album_art
+        let primary = metadata
+            .all_album_art
             .iter()
             .find(|a| a.is_front_cover())
             .cloned()
@@ -498,9 +498,8 @@ fn extract_from_revision(
 /// Extract string value from a Symphonia tag Value
 fn extract_tag_value(value: &Value) -> String {
     match value {
-        Value::Binary(_) => String::new(), // Skip binary values for text tags
+        Value::Binary(_) | Value::Flag => String::new(), // Skip binary values and flags for text tags
         Value::Boolean(b) => b.to_string(),
-        Value::Flag => String::new(),
         Value::Float(f) => f.to_string(),
         Value::SignedInt(i) => i.to_string(),
         Value::UnsignedInt(u) => u.to_string(),
@@ -511,15 +510,13 @@ fn extract_tag_value(value: &Value) -> String {
 /// Extract album art from a Symphonia Visual
 fn extract_album_art(visual: &Visual) -> AlbumArt {
     let art_type = AlbumArtType::from(visual.usage);
-    let mut art = AlbumArt::new(
-        visual.data.to_vec(),
-        visual.media_type.clone(),
-        art_type,
-    );
+    let mut art = AlbumArt::new(visual.data.to_vec(), visual.media_type.clone(), art_type);
 
     // Add any tags as description
     if !visual.tags.is_empty() {
-        let desc: Vec<String> = visual.tags.iter()
+        let desc: Vec<String> = visual
+            .tags
+            .iter()
             .map(|t| format!("{}: {}", t.key, extract_tag_value(&t.value)))
             .collect();
         art.description = Some(desc.join(", "));
@@ -615,11 +612,7 @@ mod tests {
         assert_eq!(png.detect_mime_type(), "image/png");
 
         // Already has mime type
-        let with_mime = AlbumArt::new(
-            vec![0x00, 0x00],
-            "image/webp",
-            AlbumArtType::FrontCover,
-        );
+        let with_mime = AlbumArt::new(vec![0x00, 0x00], "image/webp", AlbumArtType::FrontCover);
         assert_eq!(with_mime.detect_mime_type(), "image/webp");
     }
 

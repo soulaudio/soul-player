@@ -171,9 +171,18 @@ mod exclusive_config_tests {
         let bp24 = ExclusiveConfig::bit_perfect_24();
         let bp32 = ExclusiveConfig::bit_perfect_32();
 
-        assert!(bp16.exclusive_mode, "bit_perfect_16 should enable exclusive mode");
-        assert!(bp24.exclusive_mode, "bit_perfect_24 should enable exclusive mode");
-        assert!(bp32.exclusive_mode, "bit_perfect_32 should enable exclusive mode");
+        assert!(
+            bp16.exclusive_mode,
+            "bit_perfect_16 should enable exclusive mode"
+        );
+        assert!(
+            bp24.exclusive_mode,
+            "bit_perfect_24 should enable exclusive mode"
+        );
+        assert!(
+            bp32.exclusive_mode,
+            "bit_perfect_32 should enable exclusive mode"
+        );
     }
 
     #[test]
@@ -594,7 +603,10 @@ mod format_negotiation {
                 eprintln!("Requested 96000, got {}", output.sample_rate());
             }
             Err(e) => {
-                eprintln!("96000 Hz not available (high-res may not be supported): {}", e);
+                eprintln!(
+                    "96000 Hz not available (high-res may not be supported): {}",
+                    e
+                );
             }
         }
     }
@@ -681,7 +693,12 @@ mod hardware_tests {
 
             match ExclusiveOutput::new(config) {
                 Ok(output) => {
-                    eprintln!("{:?}: {} Hz, {} ms latency", depth, output.sample_rate(), output.latency().buffer_ms);
+                    eprintln!(
+                        "{:?}: {} Hz, {} ms latency",
+                        depth,
+                        output.sample_rate(),
+                        output.latency().buffer_ms
+                    );
                     let samples = generate_test_audio(output.sample_rate(), 500, 2);
                     output.play_f32(&samples).expect("Should play");
                     std::thread::sleep(Duration::from_millis(500));
@@ -768,7 +785,9 @@ mod hardware_tests {
 
         match output2 {
             Ok(_) => {
-                eprintln!("Warning: Second exclusive output succeeded (may be shared mode fallback)");
+                eprintln!(
+                    "Warning: Second exclusive output succeeded (may be shared mode fallback)"
+                );
             }
             Err(e) => {
                 eprintln!("Second exclusive output failed (expected): {}", e);
@@ -783,7 +802,9 @@ mod hardware_tests {
 
 mod wasapi_specific {
     use super::*;
-    use soul_audio_desktop::device::{get_default_device_with_capabilities, list_devices_with_capabilities};
+    use soul_audio_desktop::device::{
+        get_default_device_with_capabilities, list_devices_with_capabilities,
+    };
 
     #[test]
     fn test_wasapi_device_capabilities() {
@@ -797,7 +818,10 @@ mod wasapi_specific {
                     eprintln!("Sample rates: {:?}", caps.sample_rates);
                     eprintln!(
                         "Bit depths: {:?}",
-                        caps.bit_depths.iter().map(|d| d.display_name()).collect::<Vec<_>>()
+                        caps.bit_depths
+                            .iter()
+                            .map(|d| d.display_name())
+                            .collect::<Vec<_>>()
                     );
                     eprintln!("Exclusive mode support: {}", caps.supports_exclusive);
                 }

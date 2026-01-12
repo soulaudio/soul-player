@@ -14,15 +14,15 @@ use std::any::Any;
 
 impl PipelineComponent for ParametricEq {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        AudioEffect::process(self, buffer, sample_rate)
+        AudioEffect::process(self, buffer, sample_rate);
     }
 
     fn reset(&mut self) {
-        AudioEffect::reset(self)
+        AudioEffect::reset(self);
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        AudioEffect::set_enabled(self, enabled)
+        AudioEffect::set_enabled(self, enabled);
     }
 
     fn is_enabled(&self) -> bool {
@@ -66,15 +66,15 @@ pub struct GraphicEqUpdateParams {
 
 impl PipelineComponent for GraphicEq {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        AudioEffect::process(self, buffer, sample_rate)
+        AudioEffect::process(self, buffer, sample_rate);
     }
 
     fn reset(&mut self) {
-        AudioEffect::reset(self)
+        AudioEffect::reset(self);
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        AudioEffect::set_enabled(self, enabled)
+        AudioEffect::set_enabled(self, enabled);
     }
 
     fn is_enabled(&self) -> bool {
@@ -119,15 +119,15 @@ impl PipelineComponent for GraphicEq {
 
 impl PipelineComponent for Compressor {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        AudioEffect::process(self, buffer, sample_rate)
+        AudioEffect::process(self, buffer, sample_rate);
     }
 
     fn reset(&mut self) {
-        AudioEffect::reset(self)
+        AudioEffect::reset(self);
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        AudioEffect::set_enabled(self, enabled)
+        AudioEffect::set_enabled(self, enabled);
     }
 
     fn is_enabled(&self) -> bool {
@@ -153,7 +153,7 @@ impl PipelineComponent for Compressor {
 
     fn update_parameters(&mut self, params: &dyn Any) -> bool {
         if let Some(settings) = params.downcast_ref::<CompressorSettings>() {
-            self.set_settings(settings.clone());
+            self.set_settings(*settings);
             true
         } else {
             false
@@ -165,15 +165,15 @@ impl PipelineComponent for Compressor {
 
 impl PipelineComponent for Limiter {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        AudioEffect::process(self, buffer, sample_rate)
+        AudioEffect::process(self, buffer, sample_rate);
     }
 
     fn reset(&mut self) {
-        AudioEffect::reset(self)
+        AudioEffect::reset(self);
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        AudioEffect::set_enabled(self, enabled)
+        AudioEffect::set_enabled(self, enabled);
     }
 
     fn is_enabled(&self) -> bool {
@@ -212,15 +212,15 @@ impl PipelineComponent for Limiter {
 
 impl PipelineComponent for StereoEnhancer {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        AudioEffect::process(self, buffer, sample_rate)
+        AudioEffect::process(self, buffer, sample_rate);
     }
 
     fn reset(&mut self) {
-        AudioEffect::reset(self)
+        AudioEffect::reset(self);
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        AudioEffect::set_enabled(self, enabled)
+        AudioEffect::set_enabled(self, enabled);
     }
 
     fn is_enabled(&self) -> bool {
@@ -268,15 +268,15 @@ pub enum CrossfeedUpdateParams {
 
 impl PipelineComponent for Crossfeed {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        AudioEffect::process(self, buffer, sample_rate)
+        AudioEffect::process(self, buffer, sample_rate);
     }
 
     fn reset(&mut self) {
-        AudioEffect::reset(self)
+        AudioEffect::reset(self);
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        AudioEffect::set_enabled(self, enabled)
+        AudioEffect::set_enabled(self, enabled);
     }
 
     fn is_enabled(&self) -> bool {
@@ -329,15 +329,15 @@ impl PipelineComponent for Crossfeed {
 
 impl PipelineComponent for ConvolutionEngine {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        AudioEffect::process(self, buffer, sample_rate)
+        AudioEffect::process(self, buffer, sample_rate);
     }
 
     fn reset(&mut self) {
-        AudioEffect::reset(self)
+        AudioEffect::reset(self);
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        AudioEffect::set_enabled(self, enabled)
+        AudioEffect::set_enabled(self, enabled);
     }
 
     fn is_enabled(&self) -> bool {

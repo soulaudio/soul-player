@@ -144,8 +144,8 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                   <AnimatePresence mode="popLayout" initial={false}>
                     {queue.map((track, index) => (
                       <motion.div
-                        key={track.trackId}
-                        layoutId={`track-${track.trackId}`}
+                        key={`queue-item-${index}`}
+                        layoutId={`queue-track-${index}`}
                         layout
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}

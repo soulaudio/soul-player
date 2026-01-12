@@ -14,8 +14,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, Device, SampleFormat, Stream, StreamConfig, SupportedBufferSize};
 use crossbeam_channel::{bounded, Receiver, Sender};
 
-/// Helper to extract u32 value from cpal::SampleRate
-/// In the current CPAL version, SampleRate is a type alias for u32
+/// Helper to extract u32 value from `cpal::SampleRate`
+/// In the current CPAL version, `SampleRate` is a type alias for u32
 #[inline]
 fn cpal_sample_rate_to_u32(sr: cpal::SampleRate) -> u32 {
     sr
@@ -275,7 +275,7 @@ impl ExclusiveOutput {
         let host = config
             .backend
             .to_cpal_host()
-            .map_err(|e| AudioOutputError::DeviceNotFound)?;
+            .map_err(|_e| AudioOutputError::DeviceNotFound)?;
 
         // Get device
         let device = if let Some(ref name) = config.device_name {

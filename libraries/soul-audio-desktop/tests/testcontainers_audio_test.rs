@@ -86,10 +86,7 @@ async fn test_virtual_devices_have_correct_sample_rates() {
         .await
         .expect("Failed to start container");
 
-    let sinks = container
-        .list_sinks()
-        .await
-        .expect("Failed to list sinks");
+    let sinks = container.list_sinks().await.expect("Failed to list sinks");
 
     // Find specific devices and verify sample rates
     let output_1 = sinks.iter().find(|d| d.name.contains("virtual_output_1"));
@@ -159,10 +156,7 @@ async fn test_play_to_multiple_sinks() {
         .await
         .expect("Failed to start container");
 
-    let sinks = container
-        .list_sinks()
-        .await
-        .expect("Failed to list sinks");
+    let sinks = container.list_sinks().await.expect("Failed to list sinks");
 
     eprintln!("Testing playback to {} sinks...", sinks.len());
 
@@ -269,10 +263,7 @@ async fn test_detect_glitches_in_clean_audio() {
     eprintln!("  Has glitches: {}", report.has_glitches);
 
     // Clean sine wave should not have significant clipping
-    assert!(
-        report.peak_level_db < 0.0,
-        "Clean audio should not clip"
-    );
+    assert!(report.peak_level_db < 0.0, "Clean audio should not clip");
 
     eprintln!("Glitch detection test passed!");
 }
@@ -289,10 +280,7 @@ async fn test_switch_default_sink() {
         .await
         .expect("Failed to start container");
 
-    let sinks = container
-        .list_sinks()
-        .await
-        .expect("Failed to list sinks");
+    let sinks = container.list_sinks().await.expect("Failed to list sinks");
 
     if sinks.len() < 2 {
         eprintln!("Not enough sinks for switching test");
@@ -333,10 +321,7 @@ async fn test_volume_control() {
         .await
         .expect("Failed to start container");
 
-    let sinks = container
-        .list_sinks()
-        .await
-        .expect("Failed to list sinks");
+    let sinks = container.list_sinks().await.expect("Failed to list sinks");
 
     if sinks.is_empty() {
         return;
@@ -355,7 +340,10 @@ async fn test_volume_control() {
     }
 
     // Test mute
-    container.set_mute(sink, true).await.expect("Failed to mute");
+    container
+        .set_mute(sink, true)
+        .await
+        .expect("Failed to mute");
     eprintln!("  Muted");
 
     container
@@ -394,17 +382,18 @@ async fn test_verify_audio_pipeline() {
     eprintln!("Server info:\n{}", info);
 
     // Verify pipeline for each sink
-    let sinks = container
-        .list_sinks()
-        .await
-        .expect("Failed to list sinks");
+    let sinks = container.list_sinks().await.expect("Failed to list sinks");
 
     for sink in &sinks {
         let ok = container
             .verify_pipeline(&sink.name)
             .await
             .expect("Pipeline verification failed");
-        eprintln!("  {} pipeline: {}", sink.name, if ok { "OK" } else { "FAIL" });
+        eprintln!(
+            "  {} pipeline: {}",
+            sink.name,
+            if ok { "OK" } else { "FAIL" }
+        );
         assert!(ok, "Pipeline should work for {}", sink.name);
     }
 
@@ -423,10 +412,7 @@ async fn test_rapid_device_switching_stress() {
         .await
         .expect("Failed to start container");
 
-    let sinks = container
-        .list_sinks()
-        .await
-        .expect("Failed to list sinks");
+    let sinks = container.list_sinks().await.expect("Failed to list sinks");
 
     if sinks.len() < 2 {
         eprintln!("Not enough sinks for stress test");
@@ -448,7 +434,10 @@ async fn test_rapid_device_switching_stress() {
         }
     }
 
-    eprintln!("  Completed {}/{} iterations successfully", success_count, iterations);
+    eprintln!(
+        "  Completed {}/{} iterations successfully",
+        success_count, iterations
+    );
     assert!(
         success_count >= iterations / 2,
         "At least half of switches should succeed"
@@ -468,10 +457,7 @@ async fn test_underrun_detection_during_load() {
     eprintln!("Testing underrun detection during load...");
 
     // Play multiple tones in sequence to create load
-    let sinks = container
-        .list_sinks()
-        .await
-        .expect("Failed to list sinks");
+    let sinks = container.list_sinks().await.expect("Failed to list sinks");
 
     for _ in 0..5 {
         for sink in &sinks {
@@ -494,4 +480,3 @@ async fn test_underrun_detection_during_load() {
 
     eprintln!("Underrun detection test passed!");
 }
-

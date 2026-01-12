@@ -25,12 +25,12 @@
 //! ```
 //!
 //! 1. **Background Decoder Thread**:
-//!    - Continuously decodes packets and fills output_buffer
+//!    - Continuously decodes packets and fills `output_buffer`
 //!    - Handles all disk I/O and resampling off the audio thread
 //!    - Keeps buffer at ~5 seconds of audio
 //!
-//! 2. **Non-blocking read_samples()**:
-//!    - Only reads from output_buffer (no decoding)
+//! 2. **Non-blocking `read_samples()`**:
+//!    - Only reads from `output_buffer` (no decoding)
 //!    - Returns available samples or silence if buffer empty
 //!    - Never blocks on disk I/O
 //!
@@ -205,7 +205,10 @@ impl LocalAudioSource {
 
         // Spawn background decoder thread
         let decoder_thread = thread::Builder::new()
-            .name(format!("decoder-{}", path.file_name().unwrap_or_default().to_string_lossy()))
+            .name(format!(
+                "decoder-{}",
+                path.file_name().unwrap_or_default().to_string_lossy()
+            ))
             .spawn(move || {
                 Self::decoder_thread_main(
                     path_clone,
@@ -219,7 +222,9 @@ impl LocalAudioSource {
                     command_rx,
                 );
             })
-            .map_err(|e| PlaybackError::AudioSource(format!("Failed to spawn decoder thread: {}", e)))?;
+            .map_err(|e| {
+                PlaybackError::AudioSource(format!("Failed to spawn decoder thread: {}", e))
+            })?;
 
         eprintln!("[LocalAudioSource] Background decoder thread started");
 
@@ -234,7 +239,8 @@ impl LocalAudioSource {
                 state.output_buffer.len()
             };
             if buffer_len >= min_initial_samples {
-                eprintln!("[LocalAudioSource] Initial buffer filled: {} samples (~{}ms)",
+                eprintln!(
+                    "[LocalAudioSource] Initial buffer filled: {} samples (~{}ms)",
                     buffer_len,
                     buffer_len * 1000 / (target_sample_rate as usize * channels as usize)
                 );
@@ -319,12 +325,11 @@ impl LocalAudioSource {
 
         let mut format_reader = probed.format;
 
-        let track = match format_reader.default_track() {
-            Some(t) => t,
-            None => {
-                eprintln!("[DecoderThread] No audio track found");
-                return;
-            }
+        let track = if let Some(t) = format_reader.default_track() {
+            t
+        } else {
+            eprintln!("[DecoderThread] No audio track found");
+            return;
         };
 
         let mut decoder = match symphonia::default::get_codecs()
@@ -376,20 +381,26 @@ impl LocalAudioSource {
         };
 
         // Input buffer for accumulating samples before resampling
-        let mut input_buffer: VecDeque<f32> = VecDeque::with_capacity(resampler_chunk_frames * channels as usize * 4);
+        let mut input_buffer: VecDeque<f32> =
+            VecDeque::with_capacity(resampler_chunk_frames * channels as usize * 4);
         let mut is_eof = false;
 
         // Track resampler output delay to skip initial filter ramp-up
         // The sinc resampler produces N output_delay frames of "warming up" audio
         // that contains filter artifacts (amplitude ramp from 0 to full)
         // Skipping these prevents jitter/artifacts at playback start
-        let resampler_skip_samples = resampler.as_ref().map(|r| {
-            let delay_frames = r.output_delay();
-            let skip_samples = delay_frames * channels as usize;
-            eprintln!("[DecoderThread] Will skip first {} samples ({} frames) for resampler settling",
-                skip_samples, delay_frames);
-            skip_samples
-        }).unwrap_or(0);
+        let resampler_skip_samples = resampler
+            .as_ref()
+            .map(|r| {
+                let delay_frames = r.output_delay();
+                let skip_samples = delay_frames * channels as usize;
+                eprintln!(
+                    "[DecoderThread] Will skip first {} samples ({} frames) for resampler settling",
+                    skip_samples, delay_frames
+                );
+                skip_samples
+            })
+            .unwrap_or(0);
         let mut resampler_samples_skipped: usize = 0;
 
         eprintln!("[DecoderThread] Decoder thread ready, starting decode loop");
@@ -428,9 +439,9 @@ impl LocalAudioSource {
                         // Clear output buffer and update position
                         let mut state = shared.lock().unwrap();
                         state.output_buffer.clear();
-                        state.samples_read = (position.as_secs_f64()
-                            * target_sample_rate as f64
-                            * channels as f64) as usize;
+                        state.samples_read =
+                            (position.as_secs_f64() * target_sample_rate as f64 * channels as f64)
+                                as usize;
                         state.is_eof = false;
                         state.seek_pending = false;
                     }
@@ -556,7 +567,7 @@ impl LocalAudioSource {
     ///
     /// This function skips the first `skip_samples` of output to avoid these artifacts.
     ///
-    /// Returns: updated samples_skipped counter
+    /// Returns: updated `samples_skipped` counter
     fn process_resampling_with_skip(
         input_buffer: &mut VecDeque<f32>,
         resampler: &mut Option<SincFixedIn<f32>>,
@@ -616,7 +627,10 @@ impl LocalAudioSource {
                 samples_skipped += samples_to_skip;
 
                 if samples_skipped >= skip_samples {
-                    eprintln!("[DecoderThread] Resampler settling complete, skipped {} samples", samples_skipped);
+                    eprintln!(
+                        "[DecoderThread] Resampler settling complete, skipped {} samples",
+                        samples_skipped
+                    );
                 }
             } else {
                 // Normal operation - add all samples to output buffer
@@ -634,7 +648,7 @@ impl LocalAudioSource {
         samples_skipped
     }
 
-    /// Static version of flush_resampler for use in decoder thread
+    /// Static version of `flush_resampler` for use in decoder thread
     fn flush_resampler_static(
         input_buffer: &mut VecDeque<f32>,
         resampler: &mut Option<SincFixedIn<f32>>,
@@ -668,7 +682,7 @@ impl LocalAudioSource {
 
         let frames_to_pad = chunk_frames - remaining_frames;
         for ch in 0..channels {
-            deinterleaved[ch].extend(std::iter::repeat(0.0f32).take(frames_to_pad));
+            deinterleaved[ch].extend(std::iter::repeat_n(0.0f32, frames_to_pad));
         }
 
         let resampled = match resampler.process(&deinterleaved, None) {
@@ -864,7 +878,9 @@ impl AudioSource for LocalAudioSource {
         // Send seek command to decoder thread
         self.command_tx
             .send(DecoderCommand::Seek(position))
-            .map_err(|e| PlaybackError::AudioSource(format!("Failed to send seek command: {}", e)))?;
+            .map_err(|e| {
+                PlaybackError::AudioSource(format!("Failed to send seek command: {}", e))
+            })?;
 
         Ok(())
     }
@@ -888,7 +904,7 @@ impl AudioSource for LocalAudioSource {
     /// Check if source is ready for glitch-free playback
     ///
     /// Returns true when:
-    /// - Buffer contains at least MIN_BUFFER_SAMPLES (500ms of audio)
+    /// - Buffer contains at least `MIN_BUFFER_SAMPLES` (500ms of audio)
     /// - OR we've reached EOF (short files)
     ///
     /// This prevents buffer underrun at playback start when disk I/O is slow.

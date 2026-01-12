@@ -265,7 +265,10 @@ fn test_concurrent_eq_parameter_changes_while_processing() {
     println!("Parameter changes: {}", changes);
     println!("Errors detected: {}", had_errors);
 
-    assert!(!had_errors, "Errors detected during concurrent EQ parameter changes");
+    assert!(
+        !had_errors,
+        "Errors detected during concurrent EQ parameter changes"
+    );
     assert!(buffers > 0, "No buffers were processed");
     assert!(changes > 0, "No parameter changes were made");
 }
@@ -322,7 +325,10 @@ fn test_concurrent_compressor_parameter_changes() {
     param_thread.join().unwrap();
 
     let had_errors = errors_detected.load(Ordering::Relaxed);
-    assert!(!had_errors, "Errors during concurrent compressor parameter changes");
+    assert!(
+        !had_errors,
+        "Errors during concurrent compressor parameter changes"
+    );
 }
 
 #[test]
@@ -373,7 +379,10 @@ fn test_concurrent_limiter_threshold_changes() {
     audio_thread.join().unwrap();
     param_thread.join().unwrap();
 
-    assert!(!errors_detected.load(Ordering::Relaxed), "Errors during limiter threshold changes");
+    assert!(
+        !errors_detected.load(Ordering::Relaxed),
+        "Errors during limiter threshold changes"
+    );
 }
 
 // ============================================================================
@@ -640,7 +649,10 @@ fn test_effect_chain_reset_while_processing() {
     println!("\n=== Effect Chain Reset While Processing ===");
     println!("Resets performed: {}", resets);
 
-    assert!(!errors_detected.load(Ordering::Relaxed), "Errors during reset");
+    assert!(
+        !errors_detected.load(Ordering::Relaxed),
+        "Errors during reset"
+    );
     assert!(resets > 0, "No resets were performed");
 }
 
@@ -699,7 +711,10 @@ fn test_multiple_independent_decoder_effect_chains() {
 
     println!("\n=== Multiple Independent Effect Chains ===");
     println!("Threads: {}", num_threads);
-    println!("Buffers processed: {} / {}", total_buffers, expected_buffers);
+    println!(
+        "Buffers processed: {} / {}",
+        total_buffers, expected_buffers
+    );
 
     assert!(
         !errors_detected.load(Ordering::Relaxed),
@@ -928,9 +943,8 @@ fn test_processing_within_buffer_period() {
     for &buffer_size in &BUFFER_SIZES {
         let mut chain = create_full_effect_chain();
         let budget = buffer_period(buffer_size, SAMPLE_RATE);
-        let _adjusted_budget = Duration::from_secs_f64(
-            budget.as_secs_f64() * REAL_TIME_SAFETY_MARGIN
-        );
+        let _adjusted_budget =
+            Duration::from_secs_f64(budget.as_secs_f64() * REAL_TIME_SAFETY_MARGIN);
 
         let mut stats = TimingStats::with_capacity(STRESS_ITERATIONS);
 
@@ -1070,7 +1084,10 @@ fn test_processing_time_spike_detection() {
     println!("\n=== Processing Time Spike Detection ===");
     println!("Buffer size: {} samples", buffer_size);
     println!("Iterations: {}", iterations);
-    println!("Spike threshold: {:.2}us (2x budget)", spike_threshold.as_nanos() as f64 / 1000.0);
+    println!(
+        "Spike threshold: {:.2}us (2x budget)",
+        spike_threshold.as_nanos() as f64 / 1000.0
+    );
     println!("Spikes detected: {} ({:.4}%)", spike_count, spike_rate);
     println!("Jitter ratio (P99/Mean): {:.2}x", jitter);
 
@@ -1178,7 +1195,9 @@ fn test_all_effects_enabled_timing() {
     println!("\n=== All Effects Enabled Timing ===");
     println!("Buffer: {} samples @ {}Hz", buffer_size, SAMPLE_RATE);
     println!("Budget: {:.2}us", budget_us);
-    println!("Effects: 6 (ParametricEQ, 31-band GEQ, Compressor, Crossfeed, StereoEnhancer, Limiter)");
+    println!(
+        "Effects: 6 (ParametricEQ, 31-band GEQ, Compressor, Crossfeed, StereoEnhancer, Limiter)"
+    );
     println!();
     println!("Timing Statistics:");
     println!("  Mean:   {:.2}us ({:.1}% of budget)", mean_us, cpu_usage);

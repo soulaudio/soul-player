@@ -102,7 +102,8 @@ export interface SetArtworkParams {
   entityId: string
   artworkBase64: string
   mimeType: string
-  writeToFiles?: boolean // Only for albums
+  writeToFiles?: boolean // Only for albums - embed in track files
+  useSoulStorage?: boolean // Only for albums - use Soul Player storage instead of album folder
 }
 
 // =============================================================================
@@ -140,6 +141,9 @@ export interface BackendInterface {
   // Playlist operations
   createPlaylist: (name: string, description?: string) => Promise<BackendPlaylist>
   deletePlaylist: (id: string) => Promise<void>
+  getPlaylistsContainingTrack: (trackId: number) => Promise<string[]>
+  addTrackToPlaylist: (playlistId: string, trackId: number) => Promise<void>
+  removeTrackFromPlaylist: (playlistId: string, trackId: number) => Promise<void>
 
   // Track operations
   deleteTrack: (id: number) => Promise<void>

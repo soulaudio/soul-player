@@ -162,8 +162,7 @@ impl PathTemplate {
     fn get_artist(&self, metadata: &ExtractedMetadata) -> String {
         metadata
             .artist
-            .as_ref()
-            .map(|s| s.as_str())
+            .as_deref()
             .unwrap_or("Unknown Artist")
             .to_string()
     }
@@ -172,8 +171,7 @@ impl PathTemplate {
     fn get_album(&self, metadata: &ExtractedMetadata) -> String {
         metadata
             .album
-            .as_ref()
-            .map(|s| s.as_str())
+            .as_deref()
             .unwrap_or("Unknown Album")
             .to_string()
     }

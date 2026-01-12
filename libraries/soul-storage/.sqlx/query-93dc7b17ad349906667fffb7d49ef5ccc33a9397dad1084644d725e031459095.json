@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT DISTINCT p.id\n        FROM playlists p\n        INNER JOIN playlist_tracks pt ON p.id = pt.playlist_id\n        LEFT JOIN playlist_shares ps ON p.id = ps.playlist_id\n        WHERE pt.track_id = ?\n          AND (p.owner_id = ? OR ps.shared_with_user_id = ? OR p.is_public = 1)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "93dc7b17ad349906667fffb7d49ef5ccc33a9397dad1084644d725e031459095"
+}

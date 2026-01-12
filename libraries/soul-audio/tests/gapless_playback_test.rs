@@ -227,10 +227,7 @@ fn calculate_peak(samples: &[f32]) -> f32 {
 
 /// Extract mono channel from stereo interleaved signal
 fn extract_mono(stereo: &[f32], channel: usize) -> Vec<f32> {
-    stereo
-        .chunks_exact(2)
-        .map(|chunk| chunk[channel])
-        .collect()
+    stereo.chunks_exact(2).map(|chunk| chunk[channel]).collect()
 }
 
 // =============================================================================
@@ -309,7 +306,8 @@ fn simulate_crossfade_transition(
     let track1_crossfade = &track1[track1_crossfade_start..];
     let track2_crossfade = &track2[..crossfade_len];
 
-    let crossfade_region = perform_crossfade(track1_crossfade, track2_crossfade, crossfade_len, curve);
+    let crossfade_region =
+        perform_crossfade(track1_crossfade, track2_crossfade, crossfade_len, curve);
 
     // Part 3: Track 2 after crossfade
     let track2_after_crossfade = &track2[crossfade_len..];
@@ -445,7 +443,13 @@ fn test_gapless_transition_detects_phase_discontinuity() {
     // Which means start_phase = PI + end_phase (flips the sign)
 
     let track2_start_phase = PI + end_phase; // This inverts the waveform
-    let track2 = generate_sine_wave_with_phase(frequency, sample_rate, duration, amplitude, track2_start_phase);
+    let track2 = generate_sine_wave_with_phase(
+        frequency,
+        sample_rate,
+        duration,
+        amplitude,
+        track2_start_phase,
+    );
 
     // Get the transition values
     let first_sample_track2 = track2[0];
@@ -593,8 +597,7 @@ fn test_sample_rate_transition_44k_to_48k() {
     let duration = 0.1;
 
     // Track at 44.1kHz
-    let (track1_44k, _) =
-        generate_sine_wave_continuous(frequency, 44100, duration, amplitude, 0.0);
+    let (track1_44k, _) = generate_sine_wave_continuous(frequency, 44100, duration, amplitude, 0.0);
 
     // Track at 48kHz - needs to be resampled to 44.1kHz for output
     let track2_48k = generate_sine_wave_with_phase(frequency, 48000, duration, amplitude, 0.0);
@@ -638,8 +641,7 @@ fn test_sample_rate_transition_96k_to_44k_downsampling() {
     let track1_96k = generate_sine_wave_with_phase(frequency, 96000, duration, amplitude, 0.0);
 
     // Track at 44.1kHz
-    let (track2_44k, _) =
-        generate_sine_wave_continuous(frequency, 44100, duration, amplitude, 0.0);
+    let (track2_44k, _) = generate_sine_wave_continuous(frequency, 44100, duration, amplitude, 0.0);
 
     // Resample first track to 44.1kHz (downsampling)
     let track1_resampled = simple_resample(&track1_96k, 96000, 44100);
@@ -657,10 +659,7 @@ fn test_sample_rate_transition_96k_to_44k_downsampling() {
 
     // Combine and check
     let combined = simulate_gapless_transition(&track1_resampled, &track2_44k);
-    assert!(
-        !combined.is_empty(),
-        "Combined signal should not be empty"
-    );
+    assert!(!combined.is_empty(), "Combined signal should not be empty");
 }
 
 #[test]
@@ -822,7 +821,8 @@ fn test_crossfade_scurve_smooth_transition() {
     let start_derivative = (crossfaded[10] - crossfaded[0]).abs();
     let middle_derivative =
         (crossfaded[crossfade_samples / 2 + 10] - crossfaded[crossfade_samples / 2]).abs();
-    let end_derivative = (crossfaded[crossfaded.len() - 1] - crossfaded[crossfaded.len() - 11]).abs();
+    let end_derivative =
+        (crossfaded[crossfaded.len() - 1] - crossfaded[crossfaded.len() - 11]).abs();
 
     // Middle derivative should be larger than start/end
     assert!(
@@ -1028,10 +1028,12 @@ fn test_crossfade_eliminates_clicks() {
     let samples_to_peak = ((1.0 + 4.0 * 100.0) / (4.0 * frequency) * sample_rate as f32) as usize;
     let duration_to_peak = samples_to_peak as f32 / sample_rate as f32;
 
-    let track1 = generate_sine_wave_with_phase(frequency, sample_rate, duration_to_peak, amplitude, 0.0);
+    let track1 =
+        generate_sine_wave_with_phase(frequency, sample_rate, duration_to_peak, amplitude, 0.0);
 
     // Track 2 starts at phase -PI/2 (so sin(-PI/2) = -1)
-    let track2 = generate_sine_wave_with_phase(frequency, sample_rate, duration, amplitude, -PI / 2.0);
+    let track2 =
+        generate_sine_wave_with_phase(frequency, sample_rate, duration, amplitude, -PI / 2.0);
 
     // Verify we created a significant discontinuity
     let last_track1 = track1[track1.len() - 2]; // Left channel
@@ -1057,12 +1059,8 @@ fn test_crossfade_eliminates_clicks() {
     };
 
     // With crossfade - the transition should be smoother
-    let with_crossfade = simulate_crossfade_transition(
-        &track1,
-        &track2,
-        crossfade_samples,
-        FadeCurve::EqualPower,
-    );
+    let with_crossfade =
+        simulate_crossfade_transition(&track1, &track2, crossfade_samples, FadeCurve::EqualPower);
 
     // Find max derivative in the crossfade region
     let crossfade_start = track1.len().saturating_sub(crossfade_samples);
@@ -1275,13 +1273,31 @@ fn test_queue_add_track_during_playback() {
     let mut queue = SimulatedQueue::new();
 
     // Add initial tracks
-    queue.add_track(generate_sine_wave_with_phase(440.0, sample_rate, duration, amplitude, 0.0));
-    queue.add_track(generate_sine_wave_with_phase(880.0, sample_rate, duration, amplitude, 0.0));
+    queue.add_track(generate_sine_wave_with_phase(
+        440.0,
+        sample_rate,
+        duration,
+        amplitude,
+        0.0,
+    ));
+    queue.add_track(generate_sine_wave_with_phase(
+        880.0,
+        sample_rate,
+        duration,
+        amplitude,
+        0.0,
+    ));
 
     assert_eq!(queue.remaining_count(), 1);
 
     // Simulate "playing" - add a track to play next
-    queue.add_next(generate_sine_wave_with_phase(660.0, sample_rate, duration, amplitude, 0.0));
+    queue.add_next(generate_sine_wave_with_phase(
+        660.0,
+        sample_rate,
+        duration,
+        amplitude,
+        0.0,
+    ));
 
     assert_eq!(queue.remaining_count(), 2);
 
@@ -1316,13 +1332,19 @@ fn test_queue_remove_track_during_playback() {
 
     // Remove track at index 2 (third track)
     let removed = queue.remove_track(2);
-    assert!(removed.is_some(), "Should be able to remove non-playing track");
+    assert!(
+        removed.is_some(),
+        "Should be able to remove non-playing track"
+    );
 
     assert_eq!(queue.remaining_count(), 2);
 
     // Should not be able to remove currently playing track
     let removed_current = queue.remove_track(0);
-    assert!(removed_current.is_none(), "Should not remove currently playing track");
+    assert!(
+        removed_current.is_none(),
+        "Should not remove currently playing track"
+    );
 }
 
 #[test]
@@ -1414,9 +1436,11 @@ fn test_prebuffer_triggers_before_track_end() {
     let track_duration = 1.0; // 1 second
     let prebuffer_threshold = 0.2; // 200ms before end
 
-    let current_track = generate_sine_wave_with_phase(440.0, sample_rate, track_duration, amplitude, 0.0);
+    let current_track =
+        generate_sine_wave_with_phase(440.0, sample_rate, track_duration, amplitude, 0.0);
 
-    let simulator = PreBufferSimulator::new(current_track.clone(), prebuffer_threshold, sample_rate);
+    let simulator =
+        PreBufferSimulator::new(current_track.clone(), prebuffer_threshold, sample_rate);
 
     // At start, should not trigger prebuffering
     assert!(
@@ -1470,7 +1494,11 @@ fn test_prebuffer_ready_for_gapless_transition() {
     assert!(transitioned.is_some(), "Transition should succeed");
 
     let new_current = transitioned.unwrap();
-    assert_eq!(new_current.len(), next.len(), "New current track should match next track");
+    assert_eq!(
+        new_current.len(),
+        next.len(),
+        "New current track should match next track"
+    );
 }
 
 #[test]
@@ -1533,8 +1561,13 @@ fn test_rapid_track_transitions() {
 
     for i in 0..num_transitions {
         let freq = 440.0 * (1.0 + (i as f32 * 0.1)); // Slightly increasing frequencies
-        let (track, end_phase) =
-            generate_sine_wave_continuous(freq, sample_rate, short_duration, amplitude, current_phase);
+        let (track, end_phase) = generate_sine_wave_continuous(
+            freq,
+            sample_rate,
+            short_duration,
+            amplitude,
+            current_phase,
+        );
 
         combined.extend_from_slice(&track);
         current_phase = end_phase;
@@ -1569,7 +1602,10 @@ fn test_very_short_crossfade() {
         simulate_crossfade_transition(&track1, &track2, crossfade_samples, FadeCurve::EqualPower);
 
     // Even with very short crossfade, output should be valid
-    assert!(!combined.is_empty(), "Very short crossfade should produce output");
+    assert!(
+        !combined.is_empty(),
+        "Very short crossfade should produce output"
+    );
 
     let combined_peak = calculate_peak(&combined);
     assert!(
@@ -1639,8 +1675,10 @@ fn test_extreme_amplitude_difference() {
     let loud_amplitude = 0.9;
     let duration = 0.1;
 
-    let quiet_track = generate_sine_wave_with_phase(frequency, sample_rate, duration, quiet_amplitude, 0.0);
-    let loud_track = generate_sine_wave_with_phase(frequency, sample_rate, duration, loud_amplitude, 0.0);
+    let quiet_track =
+        generate_sine_wave_with_phase(frequency, sample_rate, duration, quiet_amplitude, 0.0);
+    let loud_track =
+        generate_sine_wave_with_phase(frequency, sample_rate, duration, loud_amplitude, 0.0);
 
     // Measure RMS of each track
     let quiet_rms = calculate_rms(&quiet_track);

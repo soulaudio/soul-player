@@ -156,6 +156,7 @@ export function DropdownMenuContent({ children, align = 'center', className }: D
         className
       )}
       style={{ top: position.top, left: position.left }}
+      data-dropdown-menu
     >
       {children}
     </div>

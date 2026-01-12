@@ -434,14 +434,11 @@ async fn test_setting_update_overwrites_previous() {
         let pool = test_db.open().await;
 
         // Verify initial value
-        let initial = soul_storage::settings::get_setting(
-            &pool,
-            user_id,
-            SETTING_VOLUME_LEVELING_MODE,
-        )
-        .await
-        .expect("Failed to get mode")
-        .expect("Mode should exist");
+        let initial =
+            soul_storage::settings::get_setting(&pool, user_id, SETTING_VOLUME_LEVELING_MODE)
+                .await
+                .expect("Failed to get mode")
+                .expect("Mode should exist");
         assert_eq!(initial.as_str().unwrap(), "disabled");
 
         // Update to new value
@@ -497,9 +494,10 @@ async fn test_missing_settings_return_none() {
         .await
         .expect("Query should succeed");
 
-    let preamp = soul_storage::settings::get_setting(&pool, user_id, SETTING_VOLUME_LEVELING_PREAMP)
-        .await
-        .expect("Query should succeed");
+    let preamp =
+        soul_storage::settings::get_setting(&pool, user_id, SETTING_VOLUME_LEVELING_PREAMP)
+            .await
+            .expect("Query should succeed");
 
     let prevent = soul_storage::settings::get_setting(
         &pool,
@@ -627,11 +625,10 @@ async fn test_dsp_chain_state_transitions() {
         let pool = test_db.open().await;
 
         // Verify effect was added
-        let saved =
-            soul_storage::settings::get_setting(&pool, user_id, DSP_CHAIN_SETTING_KEY)
-                .await
-                .expect("Failed to get chain")
-                .expect("Chain should exist");
+        let saved = soul_storage::settings::get_setting(&pool, user_id, DSP_CHAIN_SETTING_KEY)
+            .await
+            .expect("Failed to get chain")
+            .expect("Chain should exist");
 
         assert_eq!(saved["slots"][0]["effect"]["type"], "eq");
         assert!(saved["slots"][0]["enabled"].as_bool().unwrap());

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.musicbrainz_id, a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         WHERE a.id = ?",
+  "query": "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         ORDER BY a.title",
   "describe": {
     "columns": [
       {
@@ -34,27 +34,33 @@
         "type_info": "Text"
       },
       {
-        "name": "musicbrainz_id",
+        "name": "artwork_source",
         "ordinal": 6,
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "musicbrainz_id",
         "ordinal": 7,
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "created_at",
         "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 9,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
+      true,
       false,
-      false,
+      true,
       true,
       true,
       true,
@@ -64,5 +70,5 @@
       false
     ]
   },
-  "hash": "26f64865acb72bd0435dde905b304ad07ab01b8cffd797ae693b45f1ab403ddc"
+  "hash": "fa9cf9beac772077c347147d8ef39087695208d254d8825df5439dd1a72717b8"
 }

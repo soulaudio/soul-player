@@ -47,7 +47,9 @@ export interface PlayerCommandsInterface {
   setVolume: (volume: number) => Promise<void>;
 
   // Shuffle and repeat
-  setShuffle: (enabled: boolean) => Promise<void>;
+  setShuffle: (mode: 'off' | 'random' | 'smart') => Promise<void>;
+  cycleShuffle: () => Promise<'off' | 'random' | 'smart'>;
+  getShuffle: () => Promise<'off' | 'random' | 'smart'>;
   setRepeatMode: (mode: 'off' | 'all' | 'one') => Promise<void>;
 
   // Capabilities
@@ -60,6 +62,12 @@ export interface PlayerCommandsInterface {
   getQueue: () => Promise<QueueTrack[]>;
   playQueue: (queue: QueueTrack[], startIndex?: number) => Promise<void>;
   skipToQueueIndex: (index: number) => Promise<void>;
+
+  // Three-tier queue operations
+  addPlayNext: (track: QueueTrack) => Promise<void>;
+  addToQueueEnd: (track: QueueTrack) => Promise<void>;
+  clearPlayNext: () => Promise<void>;
+  clearAddToQueue: () => Promise<void>;
 
   // Sources management
   getAllSources: () => Promise<Source[]>;

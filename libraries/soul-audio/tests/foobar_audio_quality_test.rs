@@ -203,7 +203,7 @@ mod encoder_delay_tests {
         let delay = EncoderDelay::from_itun_smpb(smpb).unwrap();
 
         assert_eq!(delay.start_padding, 0x840); // 2112 samples (AAC encoder delay)
-        assert_eq!(delay.end_padding, 0x920);   // 2336 samples
+        assert_eq!(delay.end_padding, 0x920); // 2336 samples
         assert_eq!(delay.valid_samples, Some(0x52A20)); // 338464 samples
         assert_eq!(delay.source, DelaySource::ITunSMPB);
     }
@@ -238,12 +238,18 @@ mod encoder_delay_tests {
 
         // Advance to last valid sample
         trimmer.advance(8847);
-        assert!(!trimmer.should_skip(), "Sample 8847 should not be skipped (last valid)");
+        assert!(
+            !trimmer.should_skip(),
+            "Sample 8847 should not be skipped (last valid)"
+        );
 
         // Advance into end padding
         trimmer.advance(1);
         // Now samples_read = 8848, which >= valid_end (8848)
-        assert!(trimmer.should_skip(), "Sample 8848 should be skipped (first end padding)");
+        assert!(
+            trimmer.should_skip(),
+            "Sample 8848 should be skipped (first end padding)"
+        );
     }
 
     /// Test valid sample count calculation
@@ -334,13 +340,20 @@ mod resampler_backend_tests {
         assert_ne!(resolved, ResamplerBackend::Auto);
 
         // Specific backends resolve to themselves
-        assert_eq!(ResamplerBackend::Rubato.resolved(), ResamplerBackend::Rubato);
+        assert_eq!(
+            ResamplerBackend::Rubato.resolved(),
+            ResamplerBackend::Rubato
+        );
     }
 
     /// Test backend string conversion
     #[test]
     fn test_backend_string_roundtrip() {
-        for backend in [ResamplerBackend::Auto, ResamplerBackend::Rubato, ResamplerBackend::R8Brain] {
+        for backend in [
+            ResamplerBackend::Auto,
+            ResamplerBackend::Rubato,
+            ResamplerBackend::R8Brain,
+        ] {
             let s = backend.as_str();
             let parsed = ResamplerBackend::from_str(s);
             assert_eq!(parsed, Some(backend));

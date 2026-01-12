@@ -154,15 +154,6 @@ struct FrontendPlaylist {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct FrontendPlaylistTrack {
-    track_id: String,
-    position: i32,
-    title: Option<String>,
-    artist_name: Option<String>,
-    duration_seconds: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Playlist {
     id: i64,
     name: String,
@@ -271,7 +262,8 @@ async fn play_queue(
     if let Some(first) = queue.first() {
         tracing::info!(
             "[play_queue] First track: {}, path: {}",
-            first.title, first.file_path
+            first.title,
+            first.file_path
         );
     }
 
@@ -390,6 +382,49 @@ async fn clear_queue(playback: State<'_, PlaybackManager>) -> Result<(), String>
 }
 
 #[tauri::command]
+async fn add_play_next(
+    track: TrackData,
+    playback: State<'_, PlaybackManager>,
+) -> Result<(), String> {
+    let queue_track = track.to_queue_track();
+    playback.add_play_next(queue_track)
+}
+
+#[tauri::command]
+async fn add_to_queue_end(
+    track: TrackData,
+    playback: State<'_, PlaybackManager>,
+) -> Result<(), String> {
+    let queue_track = track.to_queue_track();
+    playback.add_to_queue_end(queue_track)
+}
+
+#[tauri::command]
+async fn clear_play_next(playback: State<'_, PlaybackManager>) -> Result<(), String> {
+    playback.clear_play_next()
+}
+
+#[tauri::command]
+async fn clear_add_to_queue(playback: State<'_, PlaybackManager>) -> Result<(), String> {
+    playback.clear_add_to_queue()
+}
+
+#[tauri::command]
+async fn cycle_shuffle(playback: State<'_, PlaybackManager>) -> Result<String, String> {
+    playback.cycle_shuffle()
+}
+
+#[tauri::command]
+async fn get_shuffle(playback: State<'_, PlaybackManager>) -> Result<String, String> {
+    Ok(playback.get_shuffle().as_str().to_string())
+}
+
+#[tauri::command]
+async fn get_repeat(playback: State<'_, PlaybackManager>) -> Result<String, String> {
+    Ok(playback.get_repeat().as_str().to_string())
+}
+
+#[tauri::command]
 async fn get_queue(playback: State<'_, PlaybackManager>) -> Result<Vec<TrackData>, String> {
     use soul_playback::TrackSource;
 
@@ -499,7 +534,7 @@ async fn get_track_by_id(
 
 #[tauri::command]
 async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String> {
-    eprintln!("[delete_track] Starting deletion for track ID: {}", id);
+    tracing::info!("[delete_track] Starting deletion for track ID: {}", id);
 
     let track_id = soul_core::types::TrackId::new(id.to_string());
 
@@ -507,15 +542,15 @@ async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String>
     let track = soul_storage::tracks::get_by_id(&state.pool, track_id.clone())
         .await
         .map_err(|e| {
-            eprintln!("[delete_track] Failed to fetch track: {}", e);
+            tracing::error!("[delete_track] Failed to fetch track: {}", e);
             format!("Failed to fetch track: {}", e)
         })?
         .ok_or_else(|| {
-            eprintln!("[delete_track] Track not found: {}", id);
+            tracing::error!("[delete_track] Track not found: {}", id);
             format!("Track not found with ID: {}", id)
         })?;
 
-    eprintln!("[delete_track] Found track: {}", track.title);
+    tracing::info!("[delete_track] Found track: {}", track.title);
 
     // Get file path from availability
     let file_path = track
@@ -523,63 +558,63 @@ async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String>
         .iter()
         .find_map(|avail| avail.local_file_path.clone());
 
-    eprintln!("[delete_track] File path: {:?}", file_path);
-    eprintln!("[delete_track] Library path: {:?}", state.library_path);
+    tracing::debug!("[delete_track] File path: {:?}", file_path);
+    tracing::debug!("[delete_track] Library path: {:?}", state.library_path);
 
     // Determine if file should be deleted (library-owned vs external)
     let should_delete_file = if let Some(ref path) = file_path {
         let path_buf = std::path::PathBuf::from(path);
         let is_library_owned = path_buf.starts_with(&state.library_path);
-        eprintln!("[delete_track] Is library-owned: {}", is_library_owned);
+        tracing::debug!("[delete_track] Is library-owned: {}", is_library_owned);
         is_library_owned
     } else {
-        eprintln!("[delete_track] No file path found, skipping file deletion");
+        tracing::debug!("[delete_track] No file path found, skipping file deletion");
         false
     };
 
     // Start database transaction
-    eprintln!("[delete_track] Starting transaction");
+    tracing::debug!("[delete_track] Starting transaction");
     let mut tx = state.pool.begin().await.map_err(|e| {
-        eprintln!("[delete_track] Failed to start transaction: {}", e);
+        tracing::error!("[delete_track] Failed to start transaction: {}", e);
         format!("Database error: {}", e)
     })?;
 
     // Delete from database (CASCADE handles related tables)
-    eprintln!("[delete_track] Deleting from database");
+    tracing::debug!("[delete_track] Deleting from database");
     let id_int: i64 = id;
     sqlx::query!("DELETE FROM tracks WHERE id = ?", id_int)
         .execute(&mut *tx)
         .await
         .map_err(|e| {
-            eprintln!("[delete_track] Database deletion failed: {}", e);
+            tracing::error!("[delete_track] Database deletion failed: {}", e);
             format!("Database deletion failed: {}", e)
         })?;
 
-    eprintln!("[delete_track] Database record deleted");
+    tracing::debug!("[delete_track] Database record deleted");
 
     // If library-owned file, attempt deletion
     if should_delete_file {
         if let Some(path) = file_path {
-            eprintln!("[delete_track] Attempting to delete file: {}", path);
+            tracing::info!("[delete_track] Attempting to delete file: {}", path);
 
             match std::fs::remove_file(&path) {
                 Ok(_) => {
-                    eprintln!("[delete_track] File deleted successfully");
+                    tracing::info!("[delete_track] File deleted successfully");
                     // Commit transaction
                     tx.commit().await.map_err(|e| {
-                        eprintln!("[delete_track] Transaction commit failed: {}", e);
+                        tracing::error!("[delete_track] Transaction commit failed: {}", e);
                         format!("Failed to commit transaction: {}", e)
                     })?;
                 }
                 Err(e) => {
-                    eprintln!(
+                    tracing::error!(
                         "[delete_track] File deletion failed: {}, rolling back transaction",
                         e
                     );
 
                     // Rollback transaction
                     tx.rollback().await.map_err(|e| {
-                        eprintln!("[delete_track] Rollback failed: {}", e);
+                        tracing::error!("[delete_track] Rollback failed: {}", e);
                         format!("Rollback failed: {}", e)
                     })?;
 
@@ -593,14 +628,14 @@ async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String>
         }
     } else {
         // External file - just commit database changes
-        eprintln!("[delete_track] External file, only removing from database");
+        tracing::debug!("[delete_track] External file, only removing from database");
         tx.commit().await.map_err(|e| {
-            eprintln!("[delete_track] Transaction commit failed: {}", e);
+            tracing::error!("[delete_track] Transaction commit failed: {}", e);
             format!("Failed to commit transaction: {}", e)
         })?;
     }
 
-    eprintln!("[delete_track] Track deletion completed successfully");
+    tracing::info!("[delete_track] Track deletion completed successfully");
     Ok(())
 }
 
@@ -637,8 +672,14 @@ async fn show_in_file_explorer(path: String) -> Result<(), String> {
         let parent = path.parent().unwrap_or(path);
         let file_managers = [
             ("xdg-open", vec![parent.to_string_lossy().to_string()]),
-            ("nautilus", vec!["--select".to_string(), path.to_string_lossy().to_string()]),
-            ("dolphin", vec!["--select".to_string(), path.to_string_lossy().to_string()]),
+            (
+                "nautilus",
+                vec!["--select".to_string(), path.to_string_lossy().to_string()],
+            ),
+            (
+                "dolphin",
+                vec!["--select".to_string(), path.to_string_lossy().to_string()],
+            ),
             ("nemo", vec![path.to_string_lossy().to_string()]),
             ("thunar", vec![parent.to_string_lossy().to_string()]),
         ];
@@ -950,30 +991,17 @@ async fn get_playlist_by_id(
 async fn get_playlist_tracks(
     id: String,
     state: State<'_, AppState>,
-) -> Result<Vec<FrontendPlaylistTrack>, String> {
-    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+) -> Result<Vec<FrontendTrack>, String> {
     let playlist_id = soul_core::types::PlaylistId::new(id);
 
-    let playlist = soul_storage::playlists::get_with_tracks(&state.pool, playlist_id, user_id)
+    let tracks = soul_storage::tracks::get_by_playlist(&state.pool, playlist_id)
         .await
         .map_err(|e| e.to_string())?;
 
-    match playlist {
-        Some(p) => {
-            let tracks = p.tracks.unwrap_or_default();
-            Ok(tracks
-                .into_iter()
-                .map(|t| FrontendPlaylistTrack {
-                    track_id: t.track_id.as_str().to_string(),
-                    position: t.position,
-                    title: t.title,
-                    artist_name: t.artist_name,
-                    duration_seconds: t.duration_seconds,
-                })
-                .collect())
-        }
-        None => Ok(vec![]),
-    }
+    Ok(tracks
+        .into_iter()
+        .map(|t| FrontendTrack::from_track_with_library_path(t, &state.library_path))
+        .collect())
 }
 
 #[tauri::command]
@@ -1142,7 +1170,7 @@ fn handle_file_associations(app: AppHandle, files: Vec<PathBuf>) {
         .collect();
 
     if let Err(e) = app.emit("files-opened", file_paths) {
-        eprintln!("Failed to emit files-opened event: {}", e);
+        tracing::error!("Failed to emit files-opened event: {}", e);
     }
 }
 
@@ -1200,7 +1228,7 @@ async fn get_track_artwork(
         }
         Ok(None) => Ok(None),
         Err(e) => {
-            eprintln!("[get_track_artwork] Error: {}", e);
+            tracing::error!("[get_track_artwork] Error: {}", e);
             Ok(None)
         }
     }
@@ -1226,7 +1254,7 @@ async fn get_album_artwork(
         }
         Ok(None) => Ok(None),
         Err(e) => {
-            eprintln!("[get_album_artwork] Error: {}", e);
+            tracing::error!("[get_album_artwork] Error: {}", e);
             Ok(None)
         }
     }
@@ -1262,7 +1290,7 @@ async fn get_album_artwork_with_source(
         }
         Ok(None) => Ok(None),
         Err(e) => {
-            eprintln!("[get_album_artwork_with_source] Error: {}", e);
+            tracing::error!("[get_album_artwork_with_source] Error: {}", e);
             Ok(None)
         }
     }
@@ -1287,7 +1315,7 @@ async fn get_artist_artwork(
         }
         Ok(None) => Ok(None),
         Err(e) => {
-            eprintln!("[get_artist_artwork] Error: {}", e);
+            tracing::error!("[get_artist_artwork] Error: {}", e);
             Ok(None)
         }
     }
@@ -1315,7 +1343,7 @@ async fn get_artist_artwork_with_source(
         }
         Ok(None) => Ok(None),
         Err(e) => {
-            eprintln!("[get_artist_artwork_with_source] Error: {}", e);
+            tracing::error!("[get_artist_artwork_with_source] Error: {}", e);
             Ok(None)
         }
     }
@@ -1341,7 +1369,7 @@ async fn get_playlist_artwork(
         }
         Ok(None) => Ok(None),
         Err(e) => {
-            eprintln!("[get_playlist_artwork] Error: {}", e);
+            tracing::error!("[get_playlist_artwork] Error: {}", e);
             Ok(None)
         }
     }
@@ -1370,7 +1398,7 @@ async fn get_playlist_artwork_with_source(
         }
         Ok(None) => Ok(None),
         Err(e) => {
-            eprintln!("[get_playlist_artwork_with_source] Error: {}", e);
+            tracing::error!("[get_playlist_artwork_with_source] Error: {}", e);
             Ok(None)
         }
     }
@@ -1385,12 +1413,22 @@ struct SetArtworkRequest {
     artwork_base64: String,
     mime_type: String,
     write_to_files: Option<bool>,
+    use_soul_storage: Option<bool>,
+}
+
+/// Event payload for artwork changes
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArtworkChangedEvent {
+    entity_type: String,
+    entity_id: String,
 }
 
 /// Set artwork for an entity (album, artist, or playlist)
 #[tauri::command]
 async fn set_artwork(
     request: SetArtworkRequest,
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     use base64::Engine;
@@ -1399,12 +1437,9 @@ async fn set_artwork(
         .decode(&request.artwork_base64)
         .map_err(|e| format!("Invalid base64 data: {}", e))?;
 
-    match request.entity_type.as_str() {
+    let result = match request.entity_type.as_str() {
         "album" => {
-            let album_id: i64 = request
-                .entity_id
-                .parse()
-                .map_err(|_| "Invalid album ID")?;
+            let album_id: i64 = request.entity_id.parse().map_err(|_| "Invalid album ID")?;
             state
                 .artwork_manager
                 .set_album_artwork(
@@ -1412,21 +1447,19 @@ async fn set_artwork(
                     artwork_data,
                     &request.mime_type,
                     request.write_to_files.unwrap_or(false),
+                    request.use_soul_storage.unwrap_or(false),
                 )
                 .await
         }
         "artist" => {
-            let artist_id: i64 = request
-                .entity_id
-                .parse()
-                .map_err(|_| "Invalid artist ID")?;
+            let artist_id: i64 = request.entity_id.parse().map_err(|_| "Invalid artist ID")?;
             state
                 .artwork_manager
                 .set_artist_artwork(artist_id, artwork_data, &request.mime_type)
                 .await
         }
         "playlist" => {
-            let playlist_id = soul_core::types::PlaylistId::new(request.entity_id);
+            let playlist_id = soul_core::types::PlaylistId::new(request.entity_id.clone());
             let user_id = soul_core::types::UserId::new(state.user_id.clone());
             state
                 .artwork_manager
@@ -1434,7 +1467,20 @@ async fn set_artwork(
                 .await
         }
         _ => Err(format!("Invalid entity type: {}", request.entity_type)),
+    };
+
+    // Emit event if successful
+    if result.is_ok() {
+        let event = ArtworkChangedEvent {
+            entity_type: request.entity_type.clone(),
+            entity_id: request.entity_id.clone(),
+        };
+        if let Err(e) = app.emit("artwork-changed", event) {
+            tracing::error!("Failed to emit artwork-changed event: {}", e);
+        }
     }
+
+    result
 }
 
 /// Remove artwork from an entity
@@ -1442,9 +1488,10 @@ async fn set_artwork(
 async fn remove_artwork(
     entity_type: String,
     entity_id: String,
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    match entity_type.as_str() {
+    let result = match entity_type.as_str() {
         "album" => {
             let album_id: i64 = entity_id.parse().map_err(|_| "Invalid album ID")?;
             state.artwork_manager.remove_album_artwork(album_id).await
@@ -1454,7 +1501,7 @@ async fn remove_artwork(
             state.artwork_manager.remove_artist_artwork(artist_id).await
         }
         "playlist" => {
-            let playlist_id = soul_core::types::PlaylistId::new(entity_id);
+            let playlist_id = soul_core::types::PlaylistId::new(entity_id.clone());
             let user_id = soul_core::types::UserId::new(state.user_id.clone());
             state
                 .artwork_manager
@@ -1462,7 +1509,20 @@ async fn remove_artwork(
                 .await
         }
         _ => Err(format!("Invalid entity type: {}", entity_type)),
+    };
+
+    // Emit event if successful
+    if result.is_ok() {
+        let event = ArtworkChangedEvent {
+            entity_type: entity_type.clone(),
+            entity_id: entity_id.clone(),
+        };
+        if let Err(e) = app.emit("artwork-changed", event) {
+            tracing::error!("Failed to emit artwork-changed event: {}", e);
+        }
     }
+
+    result
 }
 
 /// Debug command to test artwork extraction for a specific track
@@ -1471,7 +1531,7 @@ async fn test_artwork_extraction(
     track_id: i64,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
-    eprintln!(
+    tracing::info!(
         "[test_artwork_extraction] Testing artwork for track {}",
         track_id
     );
@@ -1487,17 +1547,18 @@ async fn test_artwork_extraction(
         return Err(format!("Track {} not found", track_id));
     };
 
-    eprintln!("[test_artwork_extraction] Track title: {}", track.title);
-    eprintln!(
+    tracing::info!("[test_artwork_extraction] Track title: {}", track.title);
+    tracing::debug!(
         "[test_artwork_extraction] Availability count: {}",
         track.availability.len()
     );
 
     // Find file path
     let file_path = track.availability.iter().find_map(|avail| {
-        eprintln!(
+        tracing::debug!(
             "[test_artwork_extraction] Checking availability: status={:?}, path={:?}",
-            avail.status, avail.local_file_path
+            avail.status,
+            avail.local_file_path
         );
         if matches!(
             avail.status,
@@ -1514,7 +1575,7 @@ async fn test_artwork_extraction(
         return Err(format!("No local file path found for track {}", track_id));
     };
 
-    eprintln!("[test_artwork_extraction] File path: {}", file_path);
+    tracing::info!("[test_artwork_extraction] File path: {}", file_path);
 
     // Check if file exists
     let path = std::path::Path::new(&file_path);
@@ -1522,7 +1583,7 @@ async fn test_artwork_extraction(
         return Err(format!("File does not exist: {}", file_path));
     }
 
-    eprintln!("[test_artwork_extraction] File exists, extracting artwork...");
+    tracing::info!("[test_artwork_extraction] File exists, extracting artwork...");
 
     // Try to extract artwork
     match state
@@ -1538,7 +1599,7 @@ async fn test_artwork_extraction(
                 data.len(),
                 mime_type
             );
-            eprintln!("[test_artwork_extraction] {}", msg);
+            tracing::info!("[test_artwork_extraction] {}", msg);
             Ok(msg)
         }
         Ok(None) => {
@@ -1546,12 +1607,12 @@ async fn test_artwork_extraction(
                 "No artwork found in file: {}\nThe file may not have embedded artwork.",
                 file_path
             );
-            eprintln!("[test_artwork_extraction] {}", msg);
+            tracing::warn!("[test_artwork_extraction] {}", msg);
             Err(msg)
         }
         Err(e) => {
             let msg = format!("Failed to extract artwork: {}", e);
-            eprintln!("[test_artwork_extraction] ERROR: {}", msg);
+            tracing::error!("[test_artwork_extraction] ERROR: {}", msg);
             Err(msg)
         }
     }
@@ -1670,7 +1731,7 @@ fn main() {
         }))
         .register_asynchronous_uri_scheme_protocol("artwork", |app, request, responder| {
             let uri = request.uri().to_string();
-            eprintln!("[artwork protocol] Request: {}", uri);
+            tracing::debug!("[artwork protocol] Request: {}", uri);
 
             // Get the artwork manager from app state
             let app_handle = app.app_handle().clone();
@@ -1681,7 +1742,7 @@ fn main() {
                 match artwork::handle_artwork_request(manager, &uri).await {
                     Ok(response) => responder.respond(response),
                     Err(e) => {
-                        eprintln!("[artwork protocol] Error: {}", e);
+                        tracing::error!("[artwork protocol] Error: {}", e);
                         let error_response = tauri::http::Response::builder()
                             .status(500)
                             .body(format!("Error: {}", e).into_bytes())
@@ -1754,7 +1815,7 @@ fn main() {
                 };
 
                 let db_path = app_data_dir.join("soul-player.db");
-                eprintln!("App data directory: {}", db_path.display());
+                tracing::info!("App data directory: {}", db_path.display());
 
                 // Create AppState (handles migrations and default user)
                 // Uses .env file if available (for development)
@@ -1766,6 +1827,26 @@ fn main() {
 
                 emit_init_progress(&app_handle, "Loading settings...", 30).await;
                 app_handle.manage(app_state);
+
+                // Cleanup any orphaned scans from previous app crash/quit
+                let device_id = library_settings::get_device_id();
+                match soul_storage::library_sources::cleanup_orphaned_scans(
+                    &pool, "1", // Desktop uses user_id = "1" as default user
+                    &device_id,
+                )
+                .await
+                {
+                    Ok(count) if count > 0 => {
+                        tracing::info!(
+                            "Cleaned up {} orphaned scan(s) from previous session",
+                            count
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to cleanup orphaned scans: {}", e);
+                    }
+                    _ => {}
+                }
 
                 emit_init_progress(&app_handle, "Initializing audio engine...", 50).await;
 
@@ -1782,7 +1863,7 @@ fn main() {
                     )
                     .await
                     {
-                        eprintln!("[main] Warning: Failed to restore audio device: {}", e);
+                        tracing::warn!("[main] Warning: Failed to restore audio device: {}", e);
                     }
                 }
 
@@ -1795,7 +1876,10 @@ fn main() {
                     )
                     .await
                     {
-                        eprintln!("[main] Warning: Failed to restore volume leveling mode: {}", e);
+                        tracing::warn!(
+                            "[main] Warning: Failed to restore volume leveling mode: {}",
+                            e
+                        );
                     }
                 }
 
@@ -1873,21 +1957,21 @@ fn main() {
 
                 // Register global shortcuts
                 if let Err(e) = shortcuts::register_shortcuts(&app_handle).await {
-                    eprintln!("Failed to register shortcuts: {}", e);
+                    tracing::warn!("Failed to register shortcuts: {}", e);
                 }
 
                 emit_init_progress(&app_handle, "Configuring deep links...", 85).await;
 
                 // Setup deep link handler
                 if let Err(e) = deep_link::setup(&app_handle) {
-                    eprintln!("Failed to setup deep links: {}", e);
+                    tracing::warn!("Failed to setup deep links: {}", e);
                 }
 
                 emit_init_progress(&app_handle, "Loading window state...", 90).await;
 
                 // Load window state
                 if let Err(e) = window_state_manager::load_window_state(&app_handle).await {
-                    eprintln!("Failed to load window state: {}", e);
+                    tracing::warn!("Failed to load window state: {}", e);
                 }
 
                 emit_init_progress(&app_handle, "Starting update checker...", 95).await;
@@ -1935,6 +2019,13 @@ fn main() {
             set_shuffle,
             set_repeat,
             clear_queue,
+            add_play_next,
+            add_to_queue_end,
+            clear_play_next,
+            clear_add_to_queue,
+            cycle_shuffle,
+            get_shuffle,
+            get_repeat,
             get_queue,
             skip_to_queue_index,
             get_playback_capabilities,

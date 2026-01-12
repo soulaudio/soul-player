@@ -666,10 +666,10 @@ mod parameter_ranges {
     #[test]
     fn test_stereo_settings_clamping() {
         let data = StereoData {
-            width: 5.0,        // Out of range (max 2.0)
-            mid_gain_db: 20.0, // Out of range (max 12.0)
+            width: 5.0,          // Out of range (max 2.0)
+            mid_gain_db: 20.0,   // Out of range (max 12.0)
             side_gain_db: -20.0, // Out of range (min -12.0)
-            balance: 2.0,      // Out of range (max 1.0)
+            balance: 2.0,        // Out of range (max 1.0)
         };
 
         let settings: StereoSettings = data.into();
@@ -722,7 +722,10 @@ mod parameter_ranges {
         );
 
         let settings_high = CrossfeedSettings::custom(-1.0, 2000.0);
-        assert_eq!(settings_high.level_db, -3.0, "Level should be clamped to -3.0");
+        assert_eq!(
+            settings_high.level_db, -3.0,
+            "Level should be clamped to -3.0"
+        );
         assert_eq!(
             settings_high.cutoff_hz, 1000.0,
             "Cutoff should be clamped to 1000.0"
@@ -750,12 +753,12 @@ mod parameter_ranges {
 
         // Test exact max boundary
         let mut settings_max = CompressorSettings {
-            threshold_db: 0.0,     // Exact max
-            ratio: 20.0,           // Exact max
-            attack_ms: 100.0,      // Exact max
-            release_ms: 1000.0,    // Exact max
-            knee_db: 10.0,         // Exact max
-            makeup_gain_db: 24.0,  // Exact max
+            threshold_db: 0.0,    // Exact max
+            ratio: 20.0,          // Exact max
+            attack_ms: 100.0,     // Exact max
+            release_ms: 1000.0,   // Exact max
+            knee_db: 10.0,        // Exact max
+            makeup_gain_db: 24.0, // Exact max
         };
         settings_max.validate();
         assert_eq!(settings_max.threshold_db, 0.0);
@@ -1114,8 +1117,7 @@ mod roundtrip {
             }
         });
 
-        let effect: EffectType =
-            serde_json::from_value(frontend_json).expect("Should deserialize");
+        let effect: EffectType = serde_json::from_value(frontend_json).expect("Should deserialize");
 
         let original_data = match &effect {
             EffectType::Stereo { settings } => settings.clone(),
@@ -1250,8 +1252,7 @@ mod roundtrip {
         assert_eq!(slots.as_array().unwrap().len(), 4);
 
         // Deserialize back
-        let restored: PersistedDspChain =
-            serde_json::from_value(json).expect("Should deserialize");
+        let restored: PersistedDspChain = serde_json::from_value(json).expect("Should deserialize");
 
         assert_eq!(restored.slots.len(), 4);
         assert!(restored.slots[0].effect.is_some());
@@ -1765,14 +1766,14 @@ mod convolution_tests {
         // Test boundary values for convolution
         let test_cases = vec![
             // Wet/dry mix: 0.0 to 1.0
-            (0.0, 0.0, 0.5),   // Fully dry
-            (1.0, 0.0, 1.0),   // Fully wet
+            (0.0, 0.0, 0.5), // Fully dry
+            (1.0, 0.0, 1.0), // Fully wet
             // Pre-delay: 0 to 100ms
             (0.5, 0.0, 1.0),   // No pre-delay
             (0.5, 100.0, 1.0), // Max pre-delay
             // Decay: 0.5 to 2.0
-            (0.5, 10.0, 0.5),  // Minimum decay
-            (0.5, 10.0, 2.0),  // Maximum decay
+            (0.5, 10.0, 0.5), // Minimum decay
+            (0.5, 10.0, 2.0), // Maximum decay
         ];
 
         for (wet_dry, pre_delay, decay) in test_cases {
@@ -1817,7 +1818,7 @@ mod convolution_tests {
             "C:\\Windows\\path.wav",
             "relative/path.wav",
             "file with spaces.flac",
-            "ファイル.wav",  // Unicode path
+            "ファイル.wav", // Unicode path
         ];
 
         for path in paths {
@@ -1894,7 +1895,9 @@ mod resampling_tests {
     #[test]
     fn test_resampling_target_rate_values() {
         // 0 = auto, otherwise specific rates
-        let valid_rates = vec![0, 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000];
+        let valid_rates = vec![
+            0, 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000,
+        ];
 
         for rate in valid_rates {
             let settings = ResamplingSettings {

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE tracks\n        SET artist_id = COALESCE(?, artist_id),\n            album_id = COALESCE(?, album_id),\n            updated_at = datetime('now')\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "306a6826aa795868c2280c71f72ae36e2102099fc58c73951b71ee09321f545c"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT artwork_source, cover_art_path FROM albums WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "artwork_source",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "cover_art_path",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "fe9863452fe761a8cfe0d33375b178ec29dd34f92e00fa7857c36d5bbd564bca"
+}

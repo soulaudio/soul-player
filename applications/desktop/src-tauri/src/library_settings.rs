@@ -56,7 +56,7 @@ pub struct FrontendExternalFileSettings {
 }
 
 /// Get the device ID for this desktop instance
-fn get_device_id() -> String {
+pub fn get_device_id() -> String {
     // For desktop, we use a fixed device ID
     // In a real implementation, this would be generated once and stored
     "desktop-local".to_string()
@@ -419,22 +419,48 @@ pub async fn pick_folder() -> Result<Option<String>, String> {
 /// Check if onboarding is needed (first run or empty library)
 #[tauri::command]
 pub async fn check_onboarding_needed(state: State<'_, AppState>) -> Result<bool, String> {
+    tracing::info!("[check_onboarding_needed] Starting check...");
     let device_id = get_device_id();
+    tracing::debug!("[check_onboarding_needed] Device ID: {}", device_id);
 
     // Check if user has any library sources configured
+    tracing::debug!("[check_onboarding_needed] Checking library sources...");
     let sources =
         soul_storage::library_sources::get_by_user_device(&state.pool, &state.user_id, &device_id)
             .await
-            .map_err(|e| format!("Failed to check library sources: {}", e))?;
+            .map_err(|e| {
+                tracing::error!(
+                    "[check_onboarding_needed] Failed to check library sources: {}",
+                    e
+                );
+                format!("Failed to check library sources: {}", e)
+            })?;
+    tracing::debug!("[check_onboarding_needed] Found {} sources", sources.len());
 
     // Check if managed library is configured
+    tracing::debug!("[check_onboarding_needed] Checking managed library settings...");
     let managed =
         soul_storage::managed_library_settings::get(&state.pool, &state.user_id, &device_id)
             .await
-            .map_err(|e| format!("Failed to check managed settings: {}", e))?;
+            .map_err(|e| {
+                tracing::error!(
+                    "[check_onboarding_needed] Failed to check managed settings: {}",
+                    e
+                );
+                format!("Failed to check managed settings: {}", e)
+            })?;
+    tracing::debug!(
+        "[check_onboarding_needed] Managed library configured: {}",
+        managed.is_some()
+    );
 
     // Onboarding needed if no sources AND no managed library configured
-    Ok(sources.is_empty() && managed.is_none())
+    let needs_onboarding = sources.is_empty() && managed.is_none();
+    tracing::info!(
+        "[check_onboarding_needed] Result: needs_onboarding={}",
+        needs_onboarding
+    );
+    Ok(needs_onboarding)
 }
 
 /// Mark onboarding as complete (by setting up minimal config)

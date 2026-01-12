@@ -100,7 +100,13 @@ fn generate_sine_at_dbfs(
     duration_secs: f64,
 ) -> Vec<f32> {
     let amplitude = 10.0_f64.powf(level_dbfs / 20.0);
-    generate_sine_wave(sample_rate, channels, frequency_hz, amplitude, duration_secs)
+    generate_sine_wave(
+        sample_rate,
+        channels,
+        frequency_hz,
+        amplitude,
+        duration_secs,
+    )
 }
 
 /// Generate a signal designed to create inter-sample peaks
@@ -232,11 +238,7 @@ fn generate_pink_noise(
 
 /// Generate "music-like" content with dynamics for realistic testing
 /// Combines multiple sine waves with envelope modulation
-fn generate_music_like_content(
-    sample_rate: u32,
-    channels: usize,
-    duration_secs: f64,
-) -> Vec<f32> {
+fn generate_music_like_content(sample_rate: u32, channels: usize, duration_secs: f64) -> Vec<f32> {
     let num_samples = (sample_rate as f64 * duration_secs) as usize;
     let mut samples = Vec::with_capacity(num_samples * channels);
 
@@ -385,7 +387,10 @@ fn test_true_peak_sample_rate_independence() {
         let info = analyzer.finalize().unwrap();
 
         results.push((sr, info.true_peak_dbfs));
-        println!("Sample rate {} Hz: True peak = {:.3} dBTP", sr, info.true_peak_dbfs);
+        println!(
+            "Sample rate {} Hz: True peak = {:.3} dBTP",
+            sr, info.true_peak_dbfs
+        );
     }
 
     // All sample rates should produce similar true peak within tolerance
@@ -431,7 +436,8 @@ fn test_threshold_accuracy_0_1db() {
 
         // Input signal +12dB above threshold to ensure limiting
         let input_level = threshold_db + 12.0;
-        let mut samples = generate_sine_at_dbfs(sample_rate, channels, 1000.0, input_level as f64, 0.5);
+        let mut samples =
+            generate_sine_at_dbfs(sample_rate, channels, 1000.0, input_level as f64, 0.5);
 
         // Prime the limiter with multiple passes
         for _ in 0..20 {
@@ -488,7 +494,8 @@ fn test_threshold_with_various_input_levels() {
         let mut limiter = TruePeakLimiter::new(sample_rate, channels);
         limiter.set_threshold_db(threshold_db);
 
-        let mut samples = generate_sine_at_dbfs(sample_rate, channels, 1000.0, input_db as f64, 0.3);
+        let mut samples =
+            generate_sine_at_dbfs(sample_rate, channels, 1000.0, input_db as f64, 0.3);
 
         // Process multiple times to account for lookahead
         for _ in 0..15 {
@@ -553,7 +560,9 @@ fn test_attack_time_measurement() {
     // Find how many samples after step until output is limited
     let mut attack_samples = 0_usize;
     for i in step_position..duration_samples {
-        let sample_peak = samples[i * channels].abs().max(samples[i * channels + 1].abs());
+        let sample_peak = samples[i * channels]
+            .abs()
+            .max(samples[i * channels + 1].abs());
         if sample_peak <= threshold_linear * 1.1 {
             attack_samples = i - step_position;
             break;
@@ -676,7 +685,11 @@ fn test_lookahead_latency_verification() {
             "{:?}:\n  \
              Expected: {:.1} ms ({} samples)\n  \
              Actual:   {:.2} ms ({} samples)",
-            preset, expected_ms, expected_samples.max(1), actual_ms, actual_samples
+            preset,
+            expected_ms,
+            expected_samples.max(1),
+            actual_ms,
+            actual_samples
         );
 
         // Latency should be within 1 sample of expected (accounting for ceiling)
@@ -769,7 +782,8 @@ fn test_gain_reduction_accuracy() {
         limiter.reset();
 
         let input_db = threshold_db + above_db;
-        let mut samples = generate_sine_at_dbfs(sample_rate, channels, 1000.0, input_db as f64, 0.2);
+        let mut samples =
+            generate_sine_at_dbfs(sample_rate, channels, 1000.0, input_db as f64, 0.2);
 
         // Process to engage limiting
         for _ in 0..10 {
@@ -823,7 +837,8 @@ fn test_thd_n_measurement() {
         limiter.set_threshold_db(threshold_db);
 
         let input_db = threshold_db + gr_db;
-        let input_samples = generate_sine_at_dbfs(sample_rate, channels, test_frequency, input_db as f64, 0.5);
+        let input_samples =
+            generate_sine_at_dbfs(sample_rate, channels, test_frequency, input_db as f64, 0.5);
         let mut output_samples = input_samples.clone();
 
         // Process
@@ -1196,8 +1211,8 @@ fn test_pumping_artifact_detection() {
 
     // Calculate variation in quiet sections (pumping indicator)
     if quiet_section_variations.len() >= 2 {
-        let mean_rms: f64 = quiet_section_variations.iter().sum::<f64>()
-            / quiet_section_variations.len() as f64;
+        let mean_rms: f64 =
+            quiet_section_variations.iter().sum::<f64>() / quiet_section_variations.len() as f64;
         let variance: f64 = quiet_section_variations
             .iter()
             .map(|x| (x - mean_rms).powi(2))
@@ -1220,7 +1235,11 @@ fn test_pumping_artifact_detection() {
             mean_rms,
             std_dev,
             variation_db,
-            if variation_db.abs() > 3.0 { "DETECTED" } else { "Minimal" }
+            if variation_db.abs() > 3.0 {
+                "DETECTED"
+            } else {
+                "Minimal"
+            }
         );
     }
 
@@ -1290,7 +1309,11 @@ fn test_breathing_with_music_content() {
     // Good limiters preserve crest factor > 6 dB for music
     println!(
         "Dynamic preservation: {}",
-        if crest_factor_db > 6.0 { "Good" } else { "Reduced" }
+        if crest_factor_db > 6.0 {
+            "Good"
+        } else {
+            "Reduced"
+        }
     );
 
     println!("\nBreathing test with music completed (informational)");
@@ -1325,7 +1348,10 @@ fn test_industry_standard_compliance_summary() {
             println!("PASS: ITU-R BS.1770-5 true peak detection");
             passed += 1;
         } else {
-            println!("FAIL: ITU-R BS.1770-5 true peak detection (got {:.2} dBTP)", info.true_peak_dbfs);
+            println!(
+                "FAIL: ITU-R BS.1770-5 true peak detection (got {:.2} dBTP)",
+                info.true_peak_dbfs
+            );
             failed += 1;
         }
     }
@@ -1377,7 +1403,10 @@ fn test_industry_standard_compliance_summary() {
                 println!("PASS: Threshold accuracy (within +/- 0.5 dB)");
                 passed += 1;
             } else {
-                println!("WARN: Threshold accuracy (within +/- {:.2} dB)", accuracy_db);
+                println!(
+                    "WARN: Threshold accuracy (within +/- {:.2} dB)",
+                    accuracy_db
+                );
                 warnings += 1;
             }
         } else {
@@ -1388,14 +1417,21 @@ fn test_industry_standard_compliance_summary() {
 
     // Test 4: Look-ahead latency
     {
-        let limiter = TruePeakLimiter::with_lookahead(sample_rate, channels, LookaheadPreset::Balanced);
+        let limiter =
+            TruePeakLimiter::with_lookahead(sample_rate, channels, LookaheadPreset::Balanced);
         let latency_ms = limiter.latency_ms();
 
         if (latency_ms - 1.5).abs() < 0.5 {
-            println!("PASS: Look-ahead latency (Balanced preset: {:.2} ms)", latency_ms);
+            println!(
+                "PASS: Look-ahead latency (Balanced preset: {:.2} ms)",
+                latency_ms
+            );
             passed += 1;
         } else {
-            println!("FAIL: Look-ahead latency (expected ~1.5 ms, got {:.2} ms)", latency_ms);
+            println!(
+                "FAIL: Look-ahead latency (expected ~1.5 ms, got {:.2} ms)",
+                latency_ms
+            );
             failed += 1;
         }
     }
@@ -1417,10 +1453,16 @@ fn test_industry_standard_compliance_summary() {
             .fold(0.0, f64::max);
 
         if max_diff < ITU_TRUE_PEAK_TOLERANCE_DB {
-            println!("PASS: Sample rate independence (max diff: {:.3} dB)", max_diff);
+            println!(
+                "PASS: Sample rate independence (max diff: {:.3} dB)",
+                max_diff
+            );
             passed += 1;
         } else {
-            println!("FAIL: Sample rate independence (max diff: {:.3} dB)", max_diff);
+            println!(
+                "FAIL: Sample rate independence (max diff: {:.3} dB)",
+                max_diff
+            );
             failed += 1;
         }
     }
@@ -1454,14 +1496,20 @@ fn test_industry_standard_compliance_summary() {
             println!("PASS: Passthrough for signals below threshold");
             passed += 1;
         } else {
-            println!("WARN: Passthrough modified signal (max diff: {:.4})", max_diff);
+            println!(
+                "WARN: Passthrough modified signal (max diff: {:.4})",
+                max_diff
+            );
             warnings += 1;
         }
     }
 
     println!("");
     println!("========================================================");
-    println!("RESULTS: {} passed, {} failed, {} warnings", passed, failed, warnings);
+    println!(
+        "RESULTS: {} passed, {} failed, {} warnings",
+        passed, failed, warnings
+    );
     println!("========================================================");
 
     if failed > 0 {

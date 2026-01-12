@@ -263,7 +263,10 @@ fn test_detect_click_at_playback_start_with_sine() {
     // Calculate expected maximum derivative for a 1kHz sine at 48kHz
     // Max derivative = amplitude * 2 * PI * frequency / sample_rate
     let max_expected_derivative = 0.8 * 2.0 * PI * 1000.0 / 48000.0;
-    println!("Max expected derivative for 1kHz sine: {:.4}", max_expected_derivative);
+    println!(
+        "Max expected derivative for 1kHz sine: {:.4}",
+        max_expected_derivative
+    );
 
     // Check first sample transition
     let first_sample = buffer[0];
@@ -407,7 +410,9 @@ fn test_no_click_on_resume_from_pause() {
     let _ = manager.process_audio(&mut pause_buffer);
     let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
     assert!(
-        pause_buffer.iter().all(|&s| s.abs() < dac_keepalive_threshold),
+        pause_buffer
+            .iter()
+            .all(|&s| s.abs() < dac_keepalive_threshold),
         "Output should be near-silence while paused (after stop fade), max: {:.6}",
         pause_buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
     );
@@ -681,7 +686,10 @@ fn test_waveform_not_distorted_by_fade() {
         .collect();
 
     // Verify we have audio (DC blocker may slightly reduce peak)
-    let peak = post_fade_samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+    let peak = post_fade_samples
+        .iter()
+        .map(|s| s.abs())
+        .fold(0.0f32, f32::max);
     assert!(peak > 0.1, "No audio after fade, peak: {}", peak);
 
     // Check zero crossings - for a 1kHz wave at 48kHz, we expect ~48 samples per cycle
@@ -736,10 +744,7 @@ fn test_no_jitter_during_fade() {
 
     if crossing_positions.len() > 5 {
         // Calculate intervals between crossings
-        let intervals: Vec<usize> = crossing_positions
-            .windows(2)
-            .map(|w| w[1] - w[0])
-            .collect();
+        let intervals: Vec<usize> = crossing_positions.windows(2).map(|w| w[1] - w[0]).collect();
 
         // Expected interval: half a cycle = sample_rate / frequency / 2
         let expected_interval = sample_rate as f32 / frequency / 2.0;
@@ -798,9 +803,8 @@ fn test_fade_does_not_add_harmonics() {
 
     if num_cycles >= 2.0 {
         // Calculate RMS of actual signal
-        let rms_actual: f32 = (left_channel.iter().map(|s| s * s).sum::<f32>()
-            / left_channel.len() as f32)
-            .sqrt();
+        let rms_actual: f32 =
+            (left_channel.iter().map(|s| s * s).sum::<f32>() / left_channel.len() as f32).sqrt();
 
         // Reconstruct ideal sine and calculate error
         let mut error_sum = 0.0f32;
@@ -968,7 +972,9 @@ fn test_no_click_on_pause_resume_cycle() {
         let _ = manager.process_audio(&mut paused_buffer);
         let dac_keepalive_threshold = 0.0001; // ~-80dB, well above DAC keepalive noise
         assert!(
-            paused_buffer.iter().all(|&s| s.abs() < dac_keepalive_threshold),
+            paused_buffer
+                .iter()
+                .all(|&s| s.abs() < dac_keepalive_threshold),
             "Cycle {}: Output should be near-silence while paused (after stop fade), max: {:.6}",
             cycle,
             paused_buffer.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
@@ -1134,8 +1140,7 @@ impl AudioSource for UnderrunSimulatingSource {
     }
 
     fn seek(&mut self, position: Duration) -> Result<()> {
-        self.position_samples =
-            (position.as_secs_f64() * self.sample_rate as f64 * 2.0) as usize;
+        self.position_samples = (position.as_secs_f64() * self.sample_rate as f64 * 2.0) as usize;
         Ok(())
     }
 

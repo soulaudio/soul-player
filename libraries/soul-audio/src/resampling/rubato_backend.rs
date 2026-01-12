@@ -42,81 +42,77 @@ impl RubatoResampler {
 
         // Determine chunk size based on quality
         let chunk_size = match quality {
-            ResamplingQuality::Fast => 1024,
-            ResamplingQuality::Balanced => 1024,
+            ResamplingQuality::Fast | ResamplingQuality::Balanced => 1024,
             ResamplingQuality::High => 2048,
             ResamplingQuality::Maximum => 4096,
         };
 
         // Choose resampler based on quality and ratio
-        let resampler = match quality {
-            ResamplingQuality::Fast => {
-                // Use FastFixed for fast quality
-                if ratio >= 1.0 {
-                    RubatoResamplerType::FastIn(
-                        FastFixedIn::new(
-                            ratio,
-                            2.0, // max_resample_ratio_relative
-                            rubato::PolynomialDegree::Linear,
-                            chunk_size,
-                            channels,
-                        )
-                        .map_err(|e| {
-                            ResamplingError::InitializationFailed(format!(
-                                "FastFixedIn creation failed: {}",
-                                e
-                            ))
-                        })?,
+        let resampler = if quality == ResamplingQuality::Fast {
+            // Use FastFixed for fast quality
+            if ratio >= 1.0 {
+                RubatoResamplerType::FastIn(
+                    FastFixedIn::new(
+                        ratio,
+                        2.0, // max_resample_ratio_relative
+                        rubato::PolynomialDegree::Linear,
+                        chunk_size,
+                        channels,
                     )
-                } else {
-                    RubatoResamplerType::FastOut(
-                        FastFixedOut::new(
-                            ratio,
-                            2.0, // max_resample_ratio_relative
-                            rubato::PolynomialDegree::Linear,
-                            chunk_size,
-                            channels,
-                        )
-                        .map_err(|e| {
-                            ResamplingError::InitializationFailed(format!(
-                                "FastFixedOut creation failed: {}",
-                                e
-                            ))
-                        })?,
+                    .map_err(|e| {
+                        ResamplingError::InitializationFailed(format!(
+                            "FastFixedIn creation failed: {}",
+                            e
+                        ))
+                    })?,
+                )
+            } else {
+                RubatoResamplerType::FastOut(
+                    FastFixedOut::new(
+                        ratio,
+                        2.0, // max_resample_ratio_relative
+                        rubato::PolynomialDegree::Linear,
+                        chunk_size,
+                        channels,
                     )
-                }
+                    .map_err(|e| {
+                        ResamplingError::InitializationFailed(format!(
+                            "FastFixedOut creation failed: {}",
+                            e
+                        ))
+                    })?,
+                )
             }
-            _ => {
-                // Use Sinc for balanced/high/maximum quality
-                let params = Self::quality_to_params(quality);
+        } else {
+            // Use Sinc for balanced/high/maximum quality
+            let params = Self::quality_to_params(quality);
 
-                if ratio >= 1.0 {
-                    RubatoResamplerType::SincIn(
-                        SincFixedIn::<f32>::new(
-                            ratio, 2.0, // max_resample_ratio_relative
-                            params, chunk_size, channels,
-                        )
-                        .map_err(|e| {
-                            ResamplingError::InitializationFailed(format!(
-                                "SincFixedIn creation failed: {}",
-                                e
-                            ))
-                        })?,
+            if ratio >= 1.0 {
+                RubatoResamplerType::SincIn(
+                    SincFixedIn::<f32>::new(
+                        ratio, 2.0, // max_resample_ratio_relative
+                        params, chunk_size, channels,
                     )
-                } else {
-                    RubatoResamplerType::SincOut(
-                        SincFixedOut::<f32>::new(
-                            ratio, 2.0, // max_resample_ratio_relative
-                            params, chunk_size, channels,
-                        )
-                        .map_err(|e| {
-                            ResamplingError::InitializationFailed(format!(
-                                "SincFixedOut creation failed: {}",
-                                e
-                            ))
-                        })?,
+                    .map_err(|e| {
+                        ResamplingError::InitializationFailed(format!(
+                            "SincFixedIn creation failed: {}",
+                            e
+                        ))
+                    })?,
+                )
+            } else {
+                RubatoResamplerType::SincOut(
+                    SincFixedOut::<f32>::new(
+                        ratio, 2.0, // max_resample_ratio_relative
+                        params, chunk_size, channels,
                     )
-                }
+                    .map_err(|e| {
+                        ResamplingError::InitializationFailed(format!(
+                            "SincFixedOut creation failed: {}",
+                            e
+                        ))
+                    })?,
+                )
             }
         };
 
@@ -217,8 +213,8 @@ impl RubatoResampler {
         let mut interleaved = Vec::with_capacity(frames * self.channels);
 
         for frame_idx in 0..frames {
-            for ch in 0..self.channels {
-                interleaved.push(channels[ch][frame_idx]);
+            for channel in &channels {
+                interleaved.push(channel[frame_idx]);
             }
         }
 

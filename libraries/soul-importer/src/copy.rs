@@ -109,7 +109,10 @@ fn resolve_filename_conflict(library_path: &Path, original_filename: &str) -> Re
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .ok_or_else(|| ImportError::InvalidPath("Invalid filename".to_string()))?;
-    let extension = path.extension().map(|ext| ext.to_string_lossy().into_owned()).unwrap_or_default();
+    let extension = path
+        .extension()
+        .map(|ext| ext.to_string_lossy().into_owned())
+        .unwrap_or_default();
 
     // Try appending -1, -2, -3, etc. until we find an available name
     for counter in 1..1000 {

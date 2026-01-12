@@ -160,10 +160,7 @@ fn test_lame_header_byte_layout() {
     let header_bytes: [u8; 3] = [0x24, 0x04, 0x80];
     let delay = EncoderDelay::parse_lame_header(&header_bytes).unwrap();
 
-    assert_eq!(
-        delay.start_padding, 576,
-        "LAME delay should be 576 samples"
-    );
+    assert_eq!(delay.start_padding, 576, "LAME delay should be 576 samples");
     assert_eq!(
         delay.end_padding, 1152,
         "LAME padding should be 1152 samples (one frame)"
@@ -300,10 +297,7 @@ fn test_itun_smpb_standard_format() {
     let delay = EncoderDelay::from_itun_smpb(smpb).unwrap();
 
     assert_eq!(delay.start_padding, 0x840, "Delay should be 0x840 = 2112");
-    assert_eq!(
-        delay.end_padding, 0x1CA,
-        "Padding should be 0x1CA = 458"
-    );
+    assert_eq!(delay.end_padding, 0x1CA, "Padding should be 0x1CA = 458");
     assert_eq!(
         delay.valid_samples,
         Some(0xABCDEF),
@@ -318,7 +312,10 @@ fn test_itun_smpb_various_encoders() {
     // Apple AAC (standard 2112 priming)
     let apple_aac = " 00000000 00000840 000001CA 0000000000123456";
     let delay = EncoderDelay::from_itun_smpb(apple_aac).unwrap();
-    assert_eq!(delay.start_padding, apple_constants::AAC_STANDARD_ENCODER_DELAY);
+    assert_eq!(
+        delay.start_padding,
+        apple_constants::AAC_STANDARD_ENCODER_DELAY
+    );
 
     // FDK-AAC (2048 priming)
     let fdk_aac = " 00000000 00000800 000001CA 0000000000123456";
@@ -489,9 +486,9 @@ fn test_gapless_album_playback_simulation() {
         }
 
         // Calculate ending phase for next track
-        let end_phase =
-            (2.0 * PI * frequency * (valid_samples as f32 / sample_rate as f32) + phase)
-                % (2.0 * PI);
+        let end_phase = (2.0 * PI * frequency * (valid_samples as f32 / sample_rate as f32)
+            + phase)
+            % (2.0 * PI);
 
         // End padding (simulated as trailing zeros)
         for _ in 0..(end_padding as usize * 2) {
@@ -512,8 +509,14 @@ fn test_gapless_album_playback_simulation() {
     let track_duration = 0.5; // 500ms per track
     let end_padding = 1152; // One frame
 
-    let (track1, end_phase1) =
-        generate_track(frequency, sample_rate, track_duration, 0.0, encoder_delay, end_padding);
+    let (track1, end_phase1) = generate_track(
+        frequency,
+        sample_rate,
+        track_duration,
+        0.0,
+        encoder_delay,
+        end_padding,
+    );
 
     let (track2, end_phase2) = generate_track(
         frequency,
@@ -875,7 +878,9 @@ fn test_duration_calculation_cd_audio() {
 /// Test duration with various sample rates
 #[test]
 fn test_duration_various_sample_rates() {
-    let sample_rates = [8000, 11025, 22050, 44100, 48000, 88200, 96000, 176400, 192000];
+    let sample_rates = [
+        8000, 11025, 22050, 44100, 48000, 88200, 96000, 176400, 192000,
+    ];
     let original_duration = 60.0; // 1 minute
 
     let delay = EncoderDelay::from_lame(576, 1152);
@@ -902,10 +907,7 @@ fn test_duration_with_itun_smpb() {
     let sample_rate = 44100u32;
     let explicit_samples = 441000u64; // Exactly 10 seconds
 
-    let smpb = format!(
-        " 00000000 00000840 000001CA {:016X}",
-        explicit_samples
-    );
+    let smpb = format!(" 00000000 00000840 000001CA {:016X}", explicit_samples);
     let delay = EncoderDelay::from_itun_smpb(&smpb).unwrap();
 
     // Total decoded doesn't matter when valid_samples is set
@@ -1062,10 +1064,7 @@ fn test_delay_trimmer_start_skip() {
     }
 
     // Sample 100 should NOT be skipped
-    assert!(
-        !trimmer.should_skip(),
-        "Sample 100 should not be skipped"
-    );
+    assert!(!trimmer.should_skip(), "Sample 100 should not be skipped");
 }
 
 /// Test DelayTrimmer end padding detection
@@ -1083,10 +1082,7 @@ fn test_delay_trimmer_end_skip() {
     trimmer.advance(849);
 
     // Sample 949 is valid (0-indexed position 949 in raw = position 849 in valid)
-    assert!(
-        !trimmer.should_skip(),
-        "Sample 949 should be valid"
-    );
+    assert!(!trimmer.should_skip(), "Sample 949 should be valid");
 
     // Advance to sample 950 (first end padding)
     trimmer.advance(1);
@@ -1094,10 +1090,7 @@ fn test_delay_trimmer_end_skip() {
         trimmer.should_skip(),
         "Sample 950 should be skipped (end padding)"
     );
-    assert!(
-        trimmer.at_end_padding(),
-        "Should be at end padding"
-    );
+    assert!(trimmer.at_end_padding(), "Should be at end padding");
 }
 
 /// Test DelayTrimmer position tracking
@@ -1175,8 +1168,7 @@ fn test_phase_continuity_after_trim() {
     let mut encoded: Vec<f32> = vec![0.0; encoder_delay as usize * 2];
 
     // Valid audio
-    let (valid_audio, _) =
-        generate_reference_sine(frequency, sample_rate, valid_samples, 0.0);
+    let (valid_audio, _) = generate_reference_sine(frequency, sample_rate, valid_samples, 0.0);
     encoded.extend_from_slice(&valid_audio);
 
     // Padding (zeros)
@@ -1260,17 +1252,20 @@ fn test_concatenate_trimmed_tracks() {
 fn test_lame_documented_values() {
     // LAME 3.100 defaults (from lame.sourceforge.io)
     assert_eq!(
-        lame_constants::LAME_DEFAULT_ENCODER_DELAY, 576,
+        lame_constants::LAME_DEFAULT_ENCODER_DELAY,
+        576,
         "LAME default delay is 576 samples"
     );
 
     assert_eq!(
-        lame_constants::MP3_DECODER_DELAY, 529,
+        lame_constants::MP3_DECODER_DELAY,
+        529,
         "MP3 decoder delay is 529 samples"
     );
 
     assert_eq!(
-        lame_constants::MP3_FRAME_SIZE, 1152,
+        lame_constants::MP3_FRAME_SIZE,
+        1152,
         "MP3 Layer III frame is 1152 samples"
     );
 }
@@ -1280,12 +1275,14 @@ fn test_lame_documented_values() {
 fn test_apple_aac_documented_values() {
     // Apple Tech Note TN2258 - "Audio Priming"
     assert_eq!(
-        apple_constants::AAC_STANDARD_ENCODER_DELAY, 2112,
+        apple_constants::AAC_STANDARD_ENCODER_DELAY,
+        2112,
         "Apple AAC standard delay is 2112 samples"
     );
 
     assert_eq!(
-        apple_constants::AAC_FRAME_SIZE, 1024,
+        apple_constants::AAC_FRAME_SIZE,
+        1024,
         "AAC frame size is 1024 samples"
     );
 }
@@ -1385,10 +1382,7 @@ fn test_itunes_aac_playback_simulation() {
     );
 
     let duration_error = (playable_duration.as_secs_f64() - original_duration_secs).abs();
-    assert!(
-        duration_error < 0.001,
-        "Duration error should be < 1ms"
-    );
+    assert!(duration_error < 0.001, "Duration error should be < 1ms");
 }
 
 /// Test cross-format gapless transition (MP3 -> AAC)

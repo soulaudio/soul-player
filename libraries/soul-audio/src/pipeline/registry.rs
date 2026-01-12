@@ -40,7 +40,7 @@ impl Debug for EffectFactory {
             .field("type_id", &self.type_id)
             .field("display_name", &self.display_name)
             .field("supports_in_place_update", &self.supports_in_place_update)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -110,7 +110,11 @@ impl EffectRegistry {
     ///
     /// # Returns
     /// A boxed effect instance, or None if the type is not registered or params are invalid
-    pub fn create(&self, type_id: EffectTypeId, params: &dyn Any) -> Option<Box<dyn PipelineComponent>> {
+    pub fn create(
+        &self,
+        type_id: EffectTypeId,
+        params: &dyn Any,
+    ) -> Option<Box<dyn PipelineComponent>> {
         let factory = self.factories.get(type_id)?;
         (factory.create)(params)
     }
@@ -158,8 +162,8 @@ impl EffectRegistry {
 
     /// Register all built-in effects
     fn register_builtin_effects(&mut self) {
-        use crate::effects::*;
         use super::loudness_impls::HeadroomParams;
+        use crate::effects::*;
         use soul_loudness::headroom::{HeadroomManager, HeadroomMode};
 
         // Parametric EQ
@@ -225,7 +229,7 @@ impl EffectRegistry {
             display_name: "Compressor",
             create: Arc::new(|params| {
                 if let Some(settings) = params.downcast_ref::<CompressorSettings>() {
-                    Some(Box::new(Compressor::with_settings(settings.clone())))
+                    Some(Box::new(Compressor::with_settings(*settings)))
                 } else {
                     Some(Box::new(Compressor::new()))
                 }
@@ -233,7 +237,7 @@ impl EffectRegistry {
             update: Arc::new(|effect, params| {
                 if let Some(comp) = effect.as_any_mut().downcast_mut::<Compressor>() {
                     if let Some(settings) = params.downcast_ref::<CompressorSettings>() {
-                        comp.set_settings(settings.clone());
+                        comp.set_settings(*settings);
                         return true;
                     }
                 }
@@ -248,7 +252,7 @@ impl EffectRegistry {
             display_name: "Limiter",
             create: Arc::new(|params| {
                 if let Some(settings) = params.downcast_ref::<LimiterSettings>() {
-                    Some(Box::new(Limiter::with_settings(settings.clone())))
+                    Some(Box::new(Limiter::with_settings(*settings)))
                 } else {
                     Some(Box::new(Limiter::new()))
                 }

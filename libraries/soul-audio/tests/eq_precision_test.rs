@@ -93,9 +93,8 @@ fn generate_dual_tone(
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let sample = amplitude
-            * 0.5
-            * ((2.0 * PI * freq1 * t).sin() + (2.0 * PI * freq2 * t).sin());
+        let sample =
+            amplitude * 0.5 * ((2.0 * PI * freq1 * t).sin() + (2.0 * PI * freq2 * t).sin());
         buffer.push(sample);
         buffer.push(sample);
     }
@@ -204,11 +203,7 @@ fn measure_gain_db(
 }
 
 /// Estimate phase shift at a frequency using cross-correlation
-fn estimate_phase_shift(
-    eq: &mut dyn AudioEffect,
-    frequency: f32,
-    sample_rate: u32,
-) -> f32 {
+fn estimate_phase_shift(eq: &mut dyn AudioEffect, frequency: f32, sample_rate: u32) -> f32 {
     eq.reset();
 
     let duration = 0.1;
@@ -317,7 +312,6 @@ fn measure_q_factor(
 fn test_parametric_eq_center_frequency_accuracy() {
     /// Test that gain at center frequency matches expected within AES tolerance
     /// Reference: AES-17 (+/- 1 dB full range, +/- 0.5 dB at center)
-
     let test_frequencies = [100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0];
     let test_gains = [-12.0, -6.0, -3.0, 3.0, 6.0, 12.0];
 
@@ -364,7 +358,6 @@ fn test_parametric_eq_center_frequency_accuracy() {
 fn test_graphic_eq_10band_frequency_accuracy() {
     /// Test 10-band graphic EQ at all ISO standard frequencies
     /// Reference: ISO 266:1997 octave band center frequencies
-
     let mut failures = Vec::new();
 
     for (i, &freq) in ISO_10_BAND_FREQUENCIES.iter().enumerate() {
@@ -411,7 +404,6 @@ fn test_graphic_eq_10band_frequency_accuracy() {
 fn test_graphic_eq_31band_frequency_accuracy() {
     /// Test 31-band graphic EQ at all third-octave frequencies
     /// Reference: ISO 266:1997 third-octave band center frequencies
-
     let mut failures = Vec::new();
     let sample_rate = 44100;
     let nyquist = sample_rate as f32 / 2.0;
@@ -469,7 +461,6 @@ fn test_peaking_filter_q_accuracy() {
     /// Verify Q factor affects bandwidth correctly
     /// Q = center_freq / bandwidth
     /// Reference: Audio EQ Cookbook (Robert Bristow-Johnson)
-
     let test_cases = [
         (1000.0, 0.5, "Wide Q=0.5"),
         (1000.0, 1.0, "Standard Q=1.0"),
@@ -545,7 +536,9 @@ fn test_graphic_eq_bandwidth_octave() {
     if q_error > 0.5 {
         eprintln!(
             "BUG CONFIRMED: 10-band EQ Q factor is {:.2} instead of expected {:.2} ({:.1}% error)",
-            measured_q, Q_OCTAVE, q_error * 100.0
+            measured_q,
+            Q_OCTAVE,
+            q_error * 100.0
         );
         eprintln!("  This means bands are narrower than octave-width specification");
     }
@@ -589,7 +582,9 @@ fn test_graphic_eq_bandwidth_third_octave() {
     if q_error > 0.5 {
         eprintln!(
             "BUG CONFIRMED: 31-band EQ Q factor is {:.2} instead of expected {:.2} ({:.1}% error)",
-            measured_q, Q_THIRD_OCTAVE, q_error * 100.0
+            measured_q,
+            Q_THIRD_OCTAVE,
+            q_error * 100.0
         );
         eprintln!("  This means bands are narrower than third-octave specification");
     }
@@ -610,7 +605,6 @@ fn test_graphic_eq_bandwidth_third_octave() {
 fn test_filter_stability_90_percent_nyquist() {
     /// Test filter stability at 90% of Nyquist frequency
     /// Reference: Orfanidis - Digital Filter Design Near Nyquist
-
     for &sample_rate in &SAMPLE_RATES {
         let nyquist = sample_rate as f32 / 2.0;
         let test_freq = nyquist * 0.90;
@@ -634,7 +628,6 @@ fn test_filter_stability_90_percent_nyquist() {
 fn test_filter_stability_95_percent_nyquist() {
     /// Test filter stability at 95% of Nyquist frequency
     /// This is the critical zone where bilinear transform issues appear
-
     for &sample_rate in &SAMPLE_RATES {
         let nyquist = sample_rate as f32 / 2.0;
         let test_freq = nyquist * 0.95;
@@ -667,7 +660,6 @@ fn test_filter_stability_95_percent_nyquist() {
 fn test_filter_stability_99_percent_nyquist() {
     /// Test filter behavior at 99% of Nyquist frequency
     /// Filters may not work correctly here, but should not produce NaN/Inf
-
     let sample_rate = 44100;
     let nyquist = sample_rate as f32 / 2.0;
     let test_freq = nyquist * 0.99;
@@ -693,7 +685,6 @@ fn test_filter_stability_99_percent_nyquist() {
 fn test_graphic_eq_above_nyquist_bands() {
     /// Test 31-band EQ at low sample rates where some bands exceed Nyquist
     /// The 20kHz band at 32kHz sample rate exceeds Nyquist (16kHz)
-
     let sample_rate = 32000;
     let nyquist = sample_rate as f32 / 2.0;
 
@@ -767,8 +758,7 @@ fn test_peaking_filter_phase_response() {
     );
 
     // Phase near 0 or near +-180 is acceptable (depends on boost vs cut)
-    let phase_ok = normalized_phase.abs() < 60.0
-        || (normalized_phase.abs() - 180.0).abs() < 60.0;
+    let phase_ok = normalized_phase.abs() < 60.0 || (normalized_phase.abs() - 180.0).abs() < 60.0;
 
     assert!(
         phase_ok,
@@ -781,7 +771,6 @@ fn test_peaking_filter_phase_response() {
 fn test_shelf_filter_phase_response() {
     /// Verify shelf filters have expected phase characteristics
     /// Shelf filters have asymmetric phase response
-
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(200.0, 6.0));
 
@@ -802,7 +791,6 @@ fn test_shelf_filter_phase_response() {
 fn test_dc_offset_accumulation() {
     /// Test that DC offset does not accumulate over extended processing
     /// Reference: IIR filter DC blocking best practices
-
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0));
 
@@ -837,7 +825,6 @@ fn test_dc_offset_accumulation() {
 #[test]
 fn test_dc_blocking_shelf_filters() {
     /// Shelf filters should not block DC entirely but should not amplify it infinitely
-
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(100.0, 12.0)); // +12dB low shelf
 
@@ -865,7 +852,6 @@ fn test_dc_blocking_shelf_filters() {
 fn test_denormal_number_handling() {
     /// Test that filter handles denormal numbers without CPU performance issues
     /// Reference: EarLevel Engineering - denormal flushing in audio DSP
-
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0));
 
@@ -902,7 +888,6 @@ fn test_denormal_number_handling() {
 #[test]
 fn test_graphic_eq_denormal_handling() {
     /// Test 31-band EQ denormal handling (more filter states to track)
-
     let mut eq = GraphicEq::new_31_band();
 
     // Boost all bands
@@ -936,7 +921,6 @@ fn test_low_shelf_response_curve() {
     /// Below cutoff: full boost/cut
     /// At cutoff: -3dB from full boost
     /// Above cutoff: approaches unity
-
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(200.0, 6.0));
 
@@ -985,7 +969,6 @@ fn test_low_shelf_response_curve() {
 #[test]
 fn test_high_shelf_response_curve() {
     /// Verify high shelf filter response matches expected curve
-
     let mut eq = ParametricEq::new();
     eq.set_high_band(EqBand::high_shelf(5000.0, 6.0));
 
@@ -1034,7 +1017,6 @@ fn test_high_shelf_response_curve() {
 #[test]
 fn test_shelf_boost_and_cut_symmetry() {
     /// Verify shelf filter boost and cut are symmetric
-
     let test_freqs = [50.0, 100.0, 200.0, 400.0, 1000.0];
 
     eprintln!("SHELF BOOST/CUT SYMMETRY (200Hz low shelf):");
@@ -1074,7 +1056,6 @@ fn test_shelf_boost_and_cut_symmetry() {
 fn test_comprehensive_stability_matrix() {
     /// Test stability across many frequency/gain/Q combinations
     /// This is a comprehensive stress test for filter coefficients
-
     let frequencies = [20.0, 100.0, 1000.0, 5000.0, 15000.0, 20000.0];
     let gains = [-12.0, -6.0, 0.0, 6.0, 12.0];
     let q_values = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0];
@@ -1131,7 +1112,6 @@ fn test_comprehensive_stability_matrix() {
 fn test_gain_accuracy_db_scale() {
     /// Verify gain is correctly converted from dB to linear
     /// Reference: dB = 20 * log10(linear)
-
     let test_gains = [-12.0, -6.0, -3.0, 0.0, 3.0, 6.0, 12.0];
 
     eprintln!("GAIN ACCURACY TEST (1kHz peaking, Q=1):");
@@ -1161,7 +1141,6 @@ fn test_gain_accuracy_db_scale() {
 #[test]
 fn test_cumulative_gain_multiple_bands() {
     /// Test gain accumulation when multiple bands affect same frequency
-
     let mut eq = ParametricEq::new();
 
     // All three bands boost at their respective frequencies
@@ -1183,7 +1162,6 @@ fn test_cumulative_gain_multiple_bands() {
 #[test]
 fn test_graphic_eq_cumulative_boost() {
     /// Test what happens when all bands are boosted (cumulative gain)
-
     let mut eq = GraphicEq::new_10_band();
 
     // Boost all bands by 6dB
@@ -1194,10 +1172,7 @@ fn test_graphic_eq_cumulative_boost() {
     // At any given frequency, only nearby bands should contribute
     let gain_1k = measure_gain_db(&mut eq, 1000.0, 44100, 0.5);
 
-    eprintln!(
-        "10-band all +6dB: gain at 1kHz = {:.2}dB",
-        gain_1k
-    );
+    eprintln!("10-band all +6dB: gain at 1kHz = {:.2}dB", gain_1k);
 
     // Should not be 60dB (10 * 6dB) due to frequency selectivity
     // Expect something like 6-18dB depending on band overlap
@@ -1216,7 +1191,6 @@ fn test_graphic_eq_cumulative_boost() {
 fn test_sample_rate_coefficient_recalculation() {
     /// Verify coefficients are correctly recalculated when sample rate changes
     /// This ensures filters maintain correct frequency response across sample rates
-
     let test_freq = 1000.0;
     let gain_db = 6.0;
 
@@ -1252,7 +1226,6 @@ fn test_sample_rate_coefficient_recalculation() {
 #[test]
 fn test_sample_rate_transition_stability() {
     /// Test stability when transitioning between sample rates
-
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0));
 
@@ -1279,12 +1252,10 @@ fn test_sample_rate_transition_stability() {
 fn test_biquad_coefficient_normalization() {
     /// Verify biquad coefficients are properly normalized (a0 = 1)
     /// Reference: Audio EQ Cookbook - coefficient normalization
-
     // We can't directly access coefficients, but we can verify behavior
     // A properly normalized filter should:
     // 1. Pass DC for peaking filters
     // 2. Have finite output for any reasonable input
-
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 12.0, 10.0)); // High Q, high gain
 
@@ -1311,7 +1282,6 @@ fn test_low_frequency_coefficient_precision() {
     /// Test coefficient precision at very low frequencies
     /// Reference: At low frequencies, biquad coefficients approach limiting values
     /// that require high precision (32-bit float may show issues)
-
     let test_frequencies = [10.0, 20.0, 30.0, 40.0, 50.0];
 
     eprintln!("LOW FREQUENCY COEFFICIENT PRECISION:");
@@ -1329,7 +1299,11 @@ fn test_low_frequency_coefficient_precision() {
 
         eprintln!("  {}Hz: Stable={}, Gain={:.2}dB", freq, stable, gain);
 
-        assert!(stable, "Instability at {}Hz due to coefficient precision", freq);
+        assert!(
+            stable,
+            "Instability at {}Hz due to coefficient precision",
+            freq
+        );
     }
 }
 

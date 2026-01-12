@@ -635,10 +635,17 @@
     "writeChoice": {
       "title": "Save Artwork",
       "description": "How would you like to save this artwork?",
-      "editMetadata": "Edit file metadata",
-      "editMetadataDesc": "Writes artwork to all audio files in this album",
-      "soulPlayerOnly": "Soul Player only",
-      "soulPlayerOnlyDesc": "Stores artwork without modifying your audio files"
+      "albumFolderOnly": "Album folder only",
+      "albumFolderOnlyDesc": "Saves as cover.jpg in album folder (recommended for audiophiles)",
+      "albumFolderAndMetadata": "Album folder + Track metadata",
+      "albumFolderAndMetadataDesc": "Saves as cover.jpg in album folder and embeds in all track files",
+      "soulPlayerOnly": "Soul Player storage only",
+      "soulPlayerOnlyDesc": "Managed separately by Soul Player without modifying your music files"
+    },
+    "priority": {
+      "highest": "Highest priority",
+      "medium": "Medium priority",
+      "lowest": "Lowest priority"
     },
     "errors": {
       "invalidFileType": "Please select an image file",

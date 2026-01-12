@@ -129,9 +129,9 @@ pub struct Compressor {
     gain_reduction_db: f32,
 
     // Coefficient cache
-    peak_release_coeff: f32,  // Slow release for peak hold (~100ms)
-    gr_attack_coeff: f32,     // User-configured attack
-    gr_release_coeff: f32,    // User-configured release
+    peak_release_coeff: f32, // Slow release for peak hold (~100ms)
+    gr_attack_coeff: f32,    // User-configured attack
+    gr_release_coeff: f32,   // User-configured release
     makeup_gain_linear: f32,
 
     sample_rate: u32,
@@ -149,8 +149,8 @@ impl Compressor {
         let mut comp = Self {
             settings,
             enabled: true,
-            peak_level_db: -120.0,   // Start with very low level
-            gain_reduction_db: 0.0,  // Start with no gain reduction
+            peak_level_db: -120.0,  // Start with very low level
+            gain_reduction_db: 0.0, // Start with no gain reduction
             peak_release_coeff: 0.0,
             gr_attack_coeff: 0.0,
             gr_release_coeff: 0.0,
@@ -297,8 +297,8 @@ impl Compressor {
             // Decay by (1 - coeff) * range_to_floor per sample
             // Effectively: peak = peak * coeff (multiplicative decay in linear, fixed dB/s in log)
             const NOISE_FLOOR_DB: f32 = -120.0;
-            self.peak_level_db = self.peak_release_coeff * (self.peak_level_db - NOISE_FLOOR_DB)
-                + NOISE_FLOOR_DB;
+            self.peak_level_db =
+                self.peak_release_coeff * (self.peak_level_db - NOISE_FLOOR_DB) + NOISE_FLOOR_DB;
         }
     }
 
@@ -315,8 +315,7 @@ impl Compressor {
             self.gr_release_coeff // Target is less negative = releasing
         };
 
-        self.gain_reduction_db = coeff * self.gain_reduction_db
-            + (1.0 - coeff) * target_gr_db;
+        self.gain_reduction_db = coeff * self.gain_reduction_db + (1.0 - coeff) * target_gr_db;
     }
 }
 

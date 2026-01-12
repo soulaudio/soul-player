@@ -40,8 +40,8 @@ pub async fn get(pool: &SqlitePool, user_id: &str) -> Result<PlaybackState> {
 
 /// Create or update playback state
 pub async fn upsert(pool: &SqlitePool, state: &PlaybackState) -> Result<()> {
-    let is_playing = if state.is_playing { 1 } else { 0 };
-    let shuffle_enabled = if state.shuffle_enabled { 1 } else { 0 };
+    let is_playing = i32::from(state.is_playing);
+    let shuffle_enabled = i32::from(state.shuffle_enabled);
     let repeat_mode = state.repeat_mode.as_str();
     let now = chrono::Utc::now().timestamp();
 

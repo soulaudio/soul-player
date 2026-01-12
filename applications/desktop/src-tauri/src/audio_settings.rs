@@ -893,9 +893,7 @@ pub async fn set_crossfade_enabled(
 
 /// Get current crossfade enabled state
 #[tauri::command]
-pub async fn is_crossfade_enabled(
-    playback: State<'_, PlaybackManager>,
-) -> Result<bool, String> {
+pub async fn is_crossfade_enabled(playback: State<'_, PlaybackManager>) -> Result<bool, String> {
     Ok(playback.is_crossfade_enabled())
 }
 
@@ -919,9 +917,7 @@ pub async fn set_crossfade_duration(
 
 /// Get crossfade duration in milliseconds
 #[tauri::command]
-pub async fn get_crossfade_duration(
-    playback: State<'_, PlaybackManager>,
-) -> Result<u32, String> {
+pub async fn get_crossfade_duration(playback: State<'_, PlaybackManager>) -> Result<u32, String> {
     Ok(playback.get_crossfade_duration())
 }
 
@@ -954,9 +950,7 @@ pub async fn set_crossfade_curve(
 
 /// Get crossfade curve type as string
 #[tauri::command]
-pub async fn get_crossfade_curve(
-    playback: State<'_, PlaybackManager>,
-) -> Result<String, String> {
+pub async fn get_crossfade_curve(playback: State<'_, PlaybackManager>) -> Result<String, String> {
     let curve = playback.get_crossfade_curve();
     let curve_str = match curve {
         soul_playback::FadeCurve::Linear => "linear",
@@ -1127,7 +1121,10 @@ pub async fn set_resampling_quality(
     .await
     .map_err(|e| format!("Failed to save resampling quality: {}", e))?;
 
-    eprintln!("[audio_settings] Resampling quality set to '{}'. Will apply to next track.", quality);
+    eprintln!(
+        "[audio_settings] Resampling quality set to '{}'. Will apply to next track.",
+        quality
+    );
     Ok(())
 }
 
@@ -1152,7 +1149,10 @@ pub async fn set_resampling_target_rate(
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
-    eprintln!("[audio_settings] Setting resampling target rate: {} (0=auto)", rate);
+    eprintln!(
+        "[audio_settings] Setting resampling target rate: {} (0=auto)",
+        rate
+    );
 
     // Validate rate (0 = auto, otherwise must be a reasonable sample rate)
     if rate != 0 && (rate < 8000 || rate > 384000) {

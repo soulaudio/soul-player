@@ -25,7 +25,12 @@ const SAMPLE_RATE: u32 = 44100;
 const TEST_FREQ: f32 = 440.0; // A4 - common test tone
 
 /// Generate a phase-continuous sine wave starting at a specific sample offset
-fn generate_sine_wave(num_samples: usize, freq: f32, sample_rate: u32, start_sample: usize) -> Vec<f32> {
+fn generate_sine_wave(
+    num_samples: usize,
+    freq: f32,
+    sample_rate: u32,
+    start_sample: usize,
+) -> Vec<f32> {
     let mut buffer = Vec::with_capacity(num_samples * 2);
     for i in 0..num_samples {
         let t = (start_sample + i) as f32 / sample_rate as f32;
@@ -98,7 +103,8 @@ where
 
     for update_idx in 0..num_updates {
         // Generate phase-continuous audio
-        let mut buffer = generate_sine_wave(samples_per_update, TEST_FREQ, SAMPLE_RATE, sample_offset);
+        let mut buffer =
+            generate_sine_wave(samples_per_update, TEST_FREQ, SAMPLE_RATE, sample_offset);
 
         // Update parameters before processing this chunk
         update_fn(effect, update_idx);
@@ -181,7 +187,8 @@ fn test_parametric_eq_frequency_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "ParametricEq frequency sweep produced {} discontinuities. Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -210,7 +217,8 @@ fn test_parametric_eq_add_remove_bands_no_sizzle() {
     assert!(
         discontinuities == 0,
         "ParametricEq add/remove bands produced {} discontinuities. Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -244,7 +252,8 @@ fn test_graphic_eq_single_band_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "GraphicEq single band update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -281,7 +290,8 @@ fn test_graphic_eq_preset_change_no_sizzle() {
     assert!(
         discontinuities == 0,
         "GraphicEq preset change produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -315,7 +325,8 @@ fn test_graphic_eq_all_bands_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "GraphicEq all bands update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -349,7 +360,8 @@ fn test_compressor_threshold_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Compressor threshold update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -380,7 +392,8 @@ fn test_compressor_makeup_gain_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Compressor makeup gain update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -411,7 +424,8 @@ fn test_compressor_ratio_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Compressor ratio update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -448,7 +462,8 @@ fn test_compressor_settings_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Compressor settings update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -482,10 +497,10 @@ fn test_limiter_threshold_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Limiter threshold update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
-
 
 #[test]
 fn test_limiter_release_update_no_sizzle() {
@@ -514,7 +529,8 @@ fn test_limiter_release_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Limiter release update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -548,7 +564,8 @@ fn test_stereo_enhancer_width_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "StereoEnhancer width update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -610,7 +627,8 @@ fn test_stereo_enhancer_balance_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "StereoEnhancer balance update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -677,7 +695,8 @@ fn test_crossfeed_level_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Crossfeed level update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -708,7 +727,8 @@ fn test_crossfeed_cutoff_update_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Crossfeed cutoff update produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -743,7 +763,8 @@ fn test_crossfeed_preset_change_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Crossfeed preset change produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -780,7 +801,8 @@ fn test_graphic_eq_rapid_updates_no_sizzle() {
     assert!(
         discontinuities == 0,
         "GraphicEq rapid updates produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -810,7 +832,8 @@ fn test_compressor_rapid_makeup_gain_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Compressor rapid makeup gain produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -839,7 +862,8 @@ fn test_stereo_enhancer_rapid_width_no_sizzle() {
     assert!(
         discontinuities == 0,
         "StereoEnhancer rapid width produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -869,7 +893,8 @@ fn test_crossfeed_rapid_level_no_sizzle() {
     assert!(
         discontinuities == 0,
         "Crossfeed rapid level produced {} discontinuities (sizzle). Max derivative: {:.6}",
-        discontinuities, max_deriv
+        discontinuities,
+        max_deriv
     );
 }
 
@@ -892,11 +917,15 @@ fn test_all_components_summary() {
                 let gain = -6.0 + (idx as f32 / 10.0) * 12.0;
                 eq.set_bands(vec![EqBand::peaking(1000.0, gain.min(6.0), 1.0)]);
             },
-            20, 1024,
+            20,
+            1024,
         );
         let (max_deriv, _, discontinuities) = analyze_for_discontinuities(&output, threshold);
         if discontinuities > 0 {
-            failures.push(format!("ParametricEq: {} discontinuities, max_deriv={:.6}", discontinuities, max_deriv));
+            failures.push(format!(
+                "ParametricEq: {} discontinuities, max_deriv={:.6}",
+                discontinuities, max_deriv
+            ));
         }
     }
 
@@ -909,11 +938,15 @@ fn test_all_components_summary() {
                 let gain = -6.0 + (idx as f32 / 10.0) * 12.0;
                 eq.set_band_gain(5, gain.min(6.0));
             },
-            20, 1024,
+            20,
+            1024,
         );
         let (max_deriv, _, discontinuities) = analyze_for_discontinuities(&output, threshold);
         if discontinuities > 0 {
-            failures.push(format!("GraphicEq: {} discontinuities, max_deriv={:.6}", discontinuities, max_deriv));
+            failures.push(format!(
+                "GraphicEq: {} discontinuities, max_deriv={:.6}",
+                discontinuities, max_deriv
+            ));
         }
     }
 
@@ -927,11 +960,15 @@ fn test_all_components_summary() {
                 let gain = (idx as f32 / 20.0) * 12.0;
                 comp.set_makeup_gain(gain.min(12.0));
             },
-            20, 1024,
+            20,
+            1024,
         );
         let (max_deriv, _, discontinuities) = analyze_for_discontinuities(&output, threshold);
         if discontinuities > 0 {
-            failures.push(format!("Compressor: {} discontinuities, max_deriv={:.6}", discontinuities, max_deriv));
+            failures.push(format!(
+                "Compressor: {} discontinuities, max_deriv={:.6}",
+                discontinuities, max_deriv
+            ));
         }
     }
 
@@ -944,11 +981,15 @@ fn test_all_components_summary() {
                 let threshold = -6.0 + (idx as f32 / 20.0) * 6.0;
                 limiter.set_threshold(threshold.min(0.0));
             },
-            20, 1024,
+            20,
+            1024,
         );
         let (max_deriv, _, discontinuities) = analyze_for_discontinuities(&output, threshold);
         if discontinuities > 0 {
-            failures.push(format!("Limiter: {} discontinuities, max_deriv={:.6}", discontinuities, max_deriv));
+            failures.push(format!(
+                "Limiter: {} discontinuities, max_deriv={:.6}",
+                discontinuities, max_deriv
+            ));
         }
     }
 
@@ -961,11 +1002,15 @@ fn test_all_components_summary() {
                 let width = 0.5 + (idx as f32 / 20.0) * 1.5;
                 enhancer.set_width(width.min(2.0));
             },
-            20, 1024,
+            20,
+            1024,
         );
         let (max_deriv, _, discontinuities) = analyze_for_discontinuities(&output, threshold);
         if discontinuities > 0 {
-            failures.push(format!("StereoEnhancer: {} discontinuities, max_deriv={:.6}", discontinuities, max_deriv));
+            failures.push(format!(
+                "StereoEnhancer: {} discontinuities, max_deriv={:.6}",
+                discontinuities, max_deriv
+            ));
         }
     }
 
@@ -979,11 +1024,15 @@ fn test_all_components_summary() {
                 let level = -6.0 + (idx as f32 / 20.0) * 5.0;
                 crossfeed.set_level_db(level.clamp(-6.0, -1.0));
             },
-            20, 1024,
+            20,
+            1024,
         );
         let (max_deriv, _, discontinuities) = analyze_for_discontinuities(&output, threshold);
         if discontinuities > 0 {
-            failures.push(format!("Crossfeed: {} discontinuities, max_deriv={:.6}", discontinuities, max_deriv));
+            failures.push(format!(
+                "Crossfeed: {} discontinuities, max_deriv={:.6}",
+                discontinuities, max_deriv
+            ));
         }
     }
 

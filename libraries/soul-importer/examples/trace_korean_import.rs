@@ -1,11 +1,11 @@
 /// Trace Korean character handling through the full import pipeline
 /// Tests: D:\music\Indie\Mid-Air Thief\기다림 (Waiting)\01 - 기다림 (Waiting).mp3
-
 use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let test_file = Path::new(r"D:\music\Indie\Mid-Air Thief\기다림 (Waiting)\01 - 기다림 (Waiting).mp3");
+    let test_file =
+        Path::new(r"D:\music\Indie\Mid-Air Thief\기다림 (Waiting)\01 - 기다림 (Waiting).mp3");
 
     println!("═══════════════════════════════════════════════════════════");
     println!("KOREAN CHARACTER IMPORT TRACING TEST");
@@ -19,8 +19,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(parent) = test_file.parent() {
         if let Some(folder_name) = parent.file_name() {
             println!("  Folder name (OsStr): {:?}", folder_name);
-            println!("  Folder name (to_string_lossy): {}", folder_name.to_string_lossy());
-            println!("  Folder name bytes: {:?}", folder_name.to_string_lossy().as_bytes());
+            println!(
+                "  Folder name (to_string_lossy): {}",
+                folder_name.to_string_lossy()
+            );
+            println!(
+                "  Folder name bytes: {:?}",
+                folder_name.to_string_lossy().as_bytes()
+            );
 
             // Check if contains Korean
             let folder_str = folder_name.to_string_lossy();
@@ -71,13 +77,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(folder_name) = parent.file_name() {
                         let folder_str = folder_name.to_string_lossy();
                         let parsed = soul_importer::metadata::parse_folder_name(&folder_str);
-                        println!("  Parsed from folder: artist={:?}, album={:?}", parsed.artist, parsed.album);
+                        println!(
+                            "  Parsed from folder: artist={:?}, album={:?}",
+                            parsed.artist, parsed.album
+                        );
 
                         if let Some(ref artist) = parsed.artist {
                             if artist.contains('기') {
                                 println!("  ✅ Korean '기' preserved in parsed artist");
                             } else if artist.contains("???") {
-                                println!("  ❌ Found '???' in parsed artist - FOLDER PARSING ISSUE!");
+                                println!(
+                                    "  ❌ Found '???' in parsed artist - FOLDER PARSING ISSUE!"
+                                );
                             }
                         }
 
@@ -85,7 +96,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if album.contains('기') {
                                 println!("  ✅ Korean '기' preserved in parsed album");
                             } else if album.contains("???") {
-                                println!("  ❌ Found '???' in parsed album - FOLDER PARSING ISSUE!");
+                                println!(
+                                    "  ❌ Found '???' in parsed album - FOLDER PARSING ISSUE!"
+                                );
                             }
                         }
                     }
@@ -109,7 +122,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (label, test_str) in test_strings {
         println!("  Testing '{}': {}", label, test_str);
         println!("    Bytes: {:?}", test_str.as_bytes());
-        println!("    Len: {} bytes, {} chars", test_str.len(), test_str.chars().count());
+        println!(
+            "    Len: {} bytes, {} chars",
+            test_str.len(),
+            test_str.chars().count()
+        );
 
         // Simulate SQLite round-trip by checking UTF-8 validity
         if std::str::from_utf8(test_str.as_bytes()).is_ok() {

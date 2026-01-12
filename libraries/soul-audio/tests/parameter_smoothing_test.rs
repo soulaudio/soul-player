@@ -144,14 +144,21 @@ fn test_parametric_eq_gain_change_no_clicks() {
 
     // Allow 3x tolerance for filter transients
     let tolerance = 3.0;
-    let (max_diff, max_index, count) = measure_discontinuities(&buffer, expected_max_diff * tolerance);
+    let (max_diff, max_index, count) =
+        measure_discontinuities(&buffer, expected_max_diff * tolerance);
 
     println!("EQ Gain Change Test:");
-    println!("  Expected max diff (boosted sine): {:.4}", expected_max_diff);
+    println!(
+        "  Expected max diff (boosted sine): {:.4}",
+        expected_max_diff
+    );
     println!("  Actual max diff: {:.4}", max_diff);
     println!("  Max diff at sample: {}", max_index);
     println!("  Samples above threshold: {}", count);
-    println!("  Threshold (3x expected): {:.4}", expected_max_diff * tolerance);
+    println!(
+        "  Threshold (3x expected): {:.4}",
+        expected_max_diff * tolerance
+    );
 
     // This test documents the current bug - it SHOULD pass but currently FAILS
     // because the EQ resets filter state on parameter change
@@ -238,13 +245,15 @@ fn test_parametric_eq_rapid_automation() {
 
     // Calculate statistics on discontinuities
     let expected_max_diff = expected_max_diff_sine(freq, sample_rate, amplitude * 2.0);
-    let (max_diff, _, above_threshold) =
-        measure_discontinuities(&buffer, expected_max_diff * 2.0);
+    let (max_diff, _, above_threshold) = measure_discontinuities(&buffer, expected_max_diff * 2.0);
 
     println!("EQ Rapid Automation Test:");
     println!("  Max diff: {:.4}", max_diff);
     println!("  Samples with large jumps: {}", above_threshold);
-    println!("  Percentage: {:.2}%", above_threshold as f32 / buffer.len() as f32 * 100.0);
+    println!(
+        "  Percentage: {:.2}%",
+        above_threshold as f32 / buffer.len() as f32 * 100.0
+    );
 
     // With current implementation, this will have many discontinuities
     // After fixing with coefficient smoothing, should have zero
@@ -490,8 +499,7 @@ fn test_eq_stress_random_changes() {
     }
 
     // Measure overall signal quality
-    let (max_diff, _, above_threshold) =
-        measure_discontinuities(&buffer, 0.1); // 0.1 is a large jump
+    let (max_diff, _, above_threshold) = measure_discontinuities(&buffer, 0.1); // 0.1 is a large jump
 
     println!("EQ Stress Test (random changes every 64 samples):");
     println!("  Max diff: {:.4}", max_diff);

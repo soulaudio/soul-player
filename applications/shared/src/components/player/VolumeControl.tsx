@@ -49,6 +49,13 @@ export function VolumeControl() {
     if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
+      // Only handle wheel events if the target is within the volume control container
+      // This prevents handling scroll events from other UI elements (e.g., dropdowns)
+      const target = e.target as HTMLElement;
+      if (!container.contains(target) || target.closest('[data-dropdown-menu]')) {
+        return;
+      }
+
       e.preventDefault();
       const currentVolume = usePlayerStore.getState().volume;
       const delta = e.deltaY < 0 ? SCROLL_VOLUME_STEP : -SCROLL_VOLUME_STEP;
