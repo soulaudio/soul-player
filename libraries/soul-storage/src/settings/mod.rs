@@ -58,6 +58,12 @@ pub const SETTING_IMPORT_SKIP_DUPLICATES: &str = "import.skip_duplicates";
 /// Enable file logging (true/false)
 pub const SETTING_LOGGING_ENABLED: &str = "app.logging_enabled";
 
+/// Enable home page (true/false, default: true)
+pub const SETTING_HOME_ENABLED: &str = "home.enabled";
+
+/// Home page refresh interval in minutes (number or null, null = refresh on each visit)
+pub const SETTING_HOME_REFRESH_MINUTES: &str = "home.refresh_minutes";
+
 /// User setting entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserSetting {
@@ -263,8 +269,7 @@ pub async fn get_import_skip_duplicates(pool: &SqlitePool, user_id: &str) -> Res
 /// This distinction allows the UI toggle to override the command-line flag while still
 /// supporting users who haven't set a preference.
 pub async fn get_logging_enabled(pool: &SqlitePool, user_id: &str) -> Result<Option<bool>> {
-    Ok(match get_setting(pool, user_id, SETTING_LOGGING_ENABLED).await? {
-        Some(val) => Some(val.as_bool().unwrap_or(false)),
-        None => None,
-    })
+    Ok(get_setting(pool, user_id, SETTING_LOGGING_ENABLED)
+        .await?
+        .map(|val| val.as_bool().unwrap_or(false)))
 }

@@ -4,11 +4,12 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ArrowLeft, Play, ListMusic, Clock, Trash2, Pencil } from 'lucide-react'
 import { useBackend, type BackendPlaylist, type BackendTrack } from '../contexts/BackendContext'
-import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { ConfirmDialog } from '../components/ui/Dialog'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
@@ -19,7 +20,7 @@ import { ArtistLink } from '../components/ArtistLink'
 export function PlaylistPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const { goBack, hasHistory } = useNavigateWithHistory()
   const backend = useBackend()
   const commands = usePlayerCommands()
   const { features, isDesktop } = usePlatform()
@@ -142,7 +143,16 @@ export function PlaylistPage() {
           contextArtworkPath: null,
         })
       }
-      await commands.playQueue(queue, 0)
+
+      // Build queue context for lazy loading (playlists require ownerId)
+      const context: QueueContext | undefined = playlist ? {
+        type: 'Playlist',
+        playlistId: parseInt(playlist.id, 10),
+        ownerId: playlist.owner_id,
+        totalCount: queue.length,
+      } : undefined
+
+      await commands.playQueue(queue, 0, context)
     } catch (err) {
       console.error('Failed to play playlist:', err)
     }
@@ -153,7 +163,7 @@ export function PlaylistPage() {
 
     try {
       await backend.deletePlaylist(playlist.id)
-      navigate('/library?tab=playlists')
+      goBack('/library?tab=playlists')
     } catch (err) {
       console.error('Failed to delete playlist:', err)
     }
@@ -195,7 +205,7 @@ export function PlaylistPage() {
         <div className="text-center text-destructive">
           <p className="font-medium mb-2">{error || t('playlist.notFound', 'Playlist not found')}</p>
           <button
-            onClick={() => navigate('/library?tab=playlists')}
+            onClick={() => goBack('/library?tab=playlists')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
           >
             {t('common.back', 'Back')}
@@ -210,11 +220,11 @@ export function PlaylistPage() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/library?tab=playlists')}
+          onClick={() => goBack('/library?tab=playlists')}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>{t('playlist.backToPlaylists', 'Back to Playlists')}</span>
+          <span>{hasHistory ? t('common.back', 'Back') : t('playlist.backToPlaylists', 'Back to Playlists')}</span>
         </button>
 
         <div className="flex items-start gap-6">

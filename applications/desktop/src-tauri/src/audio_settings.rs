@@ -29,9 +29,7 @@ impl From<BackendInfo> for FrontendBackendInfo {
     fn from(info: BackendInfo) -> Self {
         let backend_str = match info.backend {
             AudioBackend::Default => "default",
-            #[cfg(target_os = "windows")]
             AudioBackend::Asio => "asio",
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
             AudioBackend::Jack => "jack",
         };
 
@@ -151,9 +149,7 @@ impl From<AudioDeviceInfo> for FrontendDeviceInfo {
     fn from(info: AudioDeviceInfo) -> Self {
         let backend_str = match info.backend {
             AudioBackend::Default => "default",
-            #[cfg(target_os = "windows")]
             AudioBackend::Asio => "asio",
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
             AudioBackend::Jack => "jack",
         };
 
@@ -373,9 +369,7 @@ pub async fn get_current_audio_device(
 
     let backend_str = match backend {
         AudioBackend::Default => "default",
-        #[cfg(target_os = "windows")]
         AudioBackend::Asio => "asio",
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
         AudioBackend::Jack => "jack",
     };
 
@@ -426,6 +420,7 @@ pub async fn refresh_sample_rate(playback: State<'_, PlaybackManager>) -> Result
 ///
 /// Returns true if the application was compiled with r8brain support
 #[tauri::command]
+#[allow(unexpected_cfgs)]
 pub async fn is_r8brain_available() -> Result<bool, String> {
     #[cfg(feature = "r8brain")]
     {
@@ -1247,6 +1242,7 @@ pub async fn set_resampling_backend(
     }
 
     // Check if r8brain is available when explicitly requested
+    #[allow(unexpected_cfgs)]
     if backend == "r8brain" {
         #[cfg(not(feature = "r8brain"))]
         {

@@ -11,19 +11,27 @@ interface QueueSidebarProps {
   onClose: () => void;
 }
 
+const INITIAL_LOAD_COUNT = 100; // Load first 100 tracks
+const LOAD_MORE_COUNT = 50; // Load 50 more when clicking "Load More"
+
 export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
-  const [queue, setQueue] = useState<QueueTrack[]>([]);
+  const [fullQueue, setFullQueue] = useState<QueueTrack[]>([]);
+  const [displayLimit, setDisplayLimit] = useState(INITIAL_LOAD_COUNT);
   const { currentTrack, isPlaying } = usePlayerStore();
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
   const parentRef = useRef<HTMLDivElement>(null);
 
-  // Virtual list setup
+  // Windowed queue - only display limited number of tracks
+  const displayedQueue = fullQueue.slice(0, displayLimit);
+  const hasMore = fullQueue.length > displayLimit;
+
+  // Virtual list setup - reduced overscan for better performance
   const virtualizer = useVirtualizer({
-    count: queue.length,
+    count: displayedQueue.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 56, // Estimated height of each queue item (py-2 + content)
-    overscan: 5, // Render 5 extra items above and below viewport for smooth scrolling
+    overscan: 2, // Reduced from 5 to 2 to minimize artwork loading
   });
 
   useEffect(() => {
@@ -39,10 +47,16 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   const loadQueue = async () => {
     try {
       const queueData = await commands.getQueue();
-      setQueue(queueData);
+      setFullQueue(queueData);
+      // Reset display limit when queue updates
+      setDisplayLimit(INITIAL_LOAD_COUNT);
     } catch (error) {
       console.error('[QueueSidebar] Failed to load queue:', error);
     }
+  };
+
+  const loadMore = () => {
+    setDisplayLimit(prev => Math.min(prev + LOAD_MORE_COUNT, fullQueue.length));
   };
 
   const handleQueueItemClick = async (index: number) => {
@@ -78,7 +92,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
 
       {/* Content */}
       <div ref={parentRef} className="flex-1 overflow-y-auto">
-        {!currentTrack && queue.length === 0 ? (
+        {!currentTrack && fullQueue.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8 text-center">
             <Music className="w-12 h-12 mb-4 opacity-50" />
             <p>No tracks in queue</p>
@@ -138,11 +152,16 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
             </AnimatePresence>
 
             {/* Up Next Section - Virtualized */}
-            {queue.length > 0 && (
+            {fullQueue.length > 0 && (
               <>
-                <h3 className="px-4 pt-4 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Up Next ({queue.length})
-                </h3>
+                <div className="px-4 pt-4 pb-1 flex items-center justify-between">
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Up Next
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {displayedQueue.length} of {fullQueue.length}
+                  </span>
+                </div>
                 <div
                   style={{
                     height: `${virtualizer.getTotalSize()}px`,
@@ -151,7 +170,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                   }}
                 >
                   {virtualizer.getVirtualItems().map((virtualItem) => {
-                    const track = queue[virtualItem.index];
+                    const track = displayedQueue[virtualItem.index];
                     return (
                       <div
                         key={`track-${track.trackId}`}
@@ -193,6 +212,17 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                     );
                   })}
                 </div>
+                {/* Load More Button */}
+                {hasMore && (
+                  <div className="px-4 py-3 flex justify-center">
+                    <button
+                      onClick={loadMore}
+                      className="px-4 py-2 text-sm bg-accent hover:bg-accent/80 rounded-md transition-colors"
+                    >
+                      Load {Math.min(LOAD_MORE_COUNT, fullQueue.length - displayLimit)} more tracks
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -200,9 +230,9 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
       </div>
 
       {/* Footer stats */}
-      {(currentTrack || queue.length > 0) && (
+      {(currentTrack || fullQueue.length > 0) && (
         <div className="p-4 border-t border-border text-sm text-muted-foreground">
-          {(currentTrack ? 1 : 0) + queue.length} {(currentTrack ? 1 : 0) + queue.length !== 1 ? 'tracks' : 'track'} total
+          {(currentTrack ? 1 : 0) + fullQueue.length} {(currentTrack ? 1 : 0) + fullQueue.length !== 1 ? 'tracks' : 'track'} total
         </div>
       )}
     </div>

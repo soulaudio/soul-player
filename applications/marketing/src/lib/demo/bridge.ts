@@ -7,15 +7,19 @@ import { usePlayerStore } from '@soul-player/shared/stores/player'
 import { WasmPlaybackAdapter } from './wasm-playback-adapter'
 import { PlaybackState, RepeatMode as DemoRepeatMode, ShuffleMode as DemoShuffleMode, type QueueTrack } from './types'
 import type { Track } from '@soul-player/shared/types'
-import { getDemoStorage } from './storage'
+import type { DemoStorage } from '@soul-player/shared'
 
 // Global manager instance
 let managerInstance: WasmPlaybackAdapter | null = null
 let initPromise: Promise<void> | null = null
+let storageInstance: DemoStorage | null = null
 
-export async function getManager(): Promise<WasmPlaybackAdapter> {
+export async function getManager(storage?: DemoStorage): Promise<WasmPlaybackAdapter> {
   if (!managerInstance) {
     managerInstance = new WasmPlaybackAdapter()
+    if (storage) {
+      storageInstance = storage
+    }
     initPromise = managerInstance.initialize().then(() => {
       setupBridge()
     })
@@ -30,6 +34,13 @@ export async function getManager(): Promise<WasmPlaybackAdapter> {
 
 export function getManagerSync(): WasmPlaybackAdapter | null {
   return managerInstance
+}
+
+function getStorage(): DemoStorage {
+  if (!storageInstance) {
+    throw new Error('Storage not initialized. Call getManager(storage) first.')
+  }
+  return storageInstance
 }
 
 function setupBridge() {
@@ -50,7 +61,7 @@ function setupBridge() {
       const trackId = Number(track.id);
 
       // Look up cover URL from demo storage (WASM doesn't store it)
-      const storage = getDemoStorage();
+      const storage = getStorage();
       const demoTrack = storage.getTrackById(track.id);
       const coverUrl = demoTrack?.coverUrl || undefined;
 
@@ -94,7 +105,8 @@ function setupBridge() {
   })
 
   manager.on('shuffleChange', (mode: DemoShuffleMode) => {
-    usePlayerStore.setState({ shuffleEnabled: mode !== DemoShuffleMode.Off })
+    const shuffleMode = mode === DemoShuffleMode.Off ? 'off' : mode === DemoShuffleMode.Random ? 'random' : 'smart'
+    usePlayerStore.setState({ shuffleMode })
   })
 
   manager.on('repeatChange', (mode: DemoRepeatMode) => {
@@ -108,7 +120,7 @@ function setupBridge() {
 
   // Sync queue to store when it changes
   manager.on('queueChange', () => {
-    const storage = getDemoStorage()
+    const storage = getStorage()
     const wasmQueue = manager.getQueue()
     const tracks: Track[] = wasmQueue.map((queueTrack: QueueTrack) => {
       const demoTrack = storage.getTrackById(queueTrack.id)
@@ -128,9 +140,5 @@ function setupBridge() {
   })
 }
 
-// Initialize bridge on first import (async)
-if (typeof window !== 'undefined') {
-  getManager().catch(err => {
-    console.error('[Bridge] Failed to initialize WASM playback manager:', err)
-  })
-}
+// Note: Bridge initialization is deferred until getManager() is called with storage instance
+// This happens in DemoPlayerCommandsProvider

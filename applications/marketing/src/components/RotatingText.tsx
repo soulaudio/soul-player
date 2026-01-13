@@ -28,9 +28,14 @@ export function RotatingText() {
 
   return (
     <span
-      className={`inline-block transition-all duration-300 ${
+      className={`inline-block transition-all duration-300 text-transparent bg-clip-text ${
         isAnimating ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
       }`}
+      style={{
+        backgroundImage: 'linear-gradient(135deg, hsl(var(--primary)) 0%, color-mix(in srgb, hsl(var(--primary)) 30%, hsl(var(--foreground)) 70%) 30%, hsl(var(--foreground)) 50%, color-mix(in srgb, hsl(var(--foreground)) 70%, hsl(var(--accent)) 30%) 70%, color-mix(in srgb, hsl(var(--foreground)) 60%, hsl(var(--accent)) 40%) 100%)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+      }}
     >
       {ROTATING_WORDS[currentIndex]}
     </span>

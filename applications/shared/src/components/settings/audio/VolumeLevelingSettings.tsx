@@ -258,7 +258,7 @@ export function VolumeLevelingSettings({
         <div className="space-y-3">
           <label className="text-sm font-medium flex items-center gap-2">
             Pre-amp Adjustment
-            <Info className="w-3 h-3 text-muted-foreground" title="Additional gain applied after normalization" />
+            <Info className="w-3 h-3 text-muted-foreground" />
           </label>
 
           <div className="space-y-2">

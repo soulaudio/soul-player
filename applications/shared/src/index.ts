@@ -13,7 +13,7 @@ export { useLibraryStore } from './stores/library';
 
 // Contexts
 export { PlayerCommandsProvider, usePlayerCommands, usePlaybackEvents } from './contexts/PlayerCommandsContext';
-export type { PlayerCommandsInterface, PlaybackEventsInterface, PlayerContextValue, PlaybackCapabilities, QueueTrack, Source } from './contexts/PlayerCommandsContext';
+export type { PlayerCommandsInterface, PlaybackEventsInterface, PlayerContextValue, PlaybackCapabilities, QueueTrack, Source, QueueContext } from './contexts/PlayerCommandsContext';
 
 export { LibraryDataProvider, useLibraryData } from './contexts/LibraryDataContext';
 export type { LibraryDataInterface, Album, Artist, Playlist, Genre, LibraryTrack } from './contexts/LibraryDataContext';
@@ -35,6 +35,15 @@ export type {
 } from './contexts/BackendContext';
 
 export { ScrollVisibilityProvider, useScrollVisibility } from './contexts/ScrollVisibilityContext';
+
+// Backend Providers
+export { AbstractBackendProvider, createBackendProvider } from './providers/AbstractBackendProvider';
+export { MockBackendProvider } from './providers/MockBackendProvider';
+export { ServerBackendProvider } from './providers/ServerBackendProvider';
+
+// Demo Storage
+export { DemoStorage } from './lib/demo-storage';
+export type { DemoTrack, DemoAlbum, DemoPlaylist, DemoData } from './lib/demo-storage';
 
 // Utils
 export { cn, formatDuration, formatBytes, formatRelativeTime, debounce, throttle } from './lib/utils';
@@ -125,6 +134,7 @@ export { VirtualizedGrid } from './components/VirtualizedGrid';
 export { useSeekBar, setIgnorePositionUpdates, shouldIgnorePositionUpdates } from './hooks/useSeekBar';
 export { useGridScale } from './hooks/useGridScale';
 export { useInfiniteLibrary } from './hooks/useInfiniteLibrary';
+export { useNavigateWithHistory } from './hooks/useNavigateWithHistory';
 
 // TanStack Query exports
 export { QueryClient, QueryClientProvider } from '@tanstack/react-query';

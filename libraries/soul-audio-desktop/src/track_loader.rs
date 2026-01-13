@@ -320,8 +320,9 @@ mod tests {
         assert!(loader.request_load(request));
 
         // Wait for result (with timeout)
+        // Increased from 100 to 200 iterations to account for larger buffer (1000ms vs 500ms)
         let mut result = None;
-        for _ in 0..100 {
+        for _ in 0..200 {
             if let Some(r) = loader.poll_ready() {
                 result = Some(r);
                 break;

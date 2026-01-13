@@ -26,8 +26,15 @@
     "build:marketing": "yarn workspace @soul-player/marketing build",
     "build:web": "yarn workspace @soul-player/web build",
     "test": "yarn workspaces foreach run test",
+    "test:e2e": "cd applications/desktop/e2e-tests && yarn test",
+    "test:e2e:ci": "cd applications/desktop/e2e-tests && yarn test:ci",
+    "seed-test-data": "node scripts/seed-test-data.js seed",
+    "cleanup-test-data": "node scripts/seed-test-data.js cleanup",
     "lint": "yarn workspaces foreach run lint",
     "type-check": "yarn workspaces foreach run type-check"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^11.7.0"
   },
   "packageManager": "yarn@4.0.2",
   "engines": {

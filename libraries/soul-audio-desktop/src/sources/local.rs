@@ -56,20 +56,35 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::units::TimeBase;
+use tracing;
 
 /// Size of ring buffer in seconds
 const BUFFER_SIZE_SECONDS: usize = 5;
 
 /// Minimum buffer level (in samples) before source is considered ready for playback
-/// At stereo 48kHz, 48000 samples = 500ms of audio (foobar2000 uses 1000ms default)
+/// At stereo 48kHz, 96000 samples = 1000ms of audio (matches foobar2000 default)
 ///
 /// This MUST be filled BEFORE playback starts to prevent buffer underrun.
 /// The user reported jitter on first play but not on "previous track" because:
 /// - First play: file not cached → slow disk I/O → buffer underrun
 /// - Previous track: file cached → fast I/O → no underrun
 ///
-/// Industry standard: prebuffer 500ms-1000ms before playback starts
-const MIN_BUFFER_SAMPLES: usize = 48000;
+/// Industry standard: prebuffer 1000ms before playback starts
+const MIN_BUFFER_SAMPLES: usize = 96000;
+
+/// Encoder delay to skip at playback start (in frames, not samples)
+///
+/// Most audio codecs add "encoder delay" - padding samples at file start:
+/// - MP3: ~1152 frames (26ms @ 44.1kHz)
+/// - AAC: ~1024-2112 frames
+/// - FLAC: ~0-256 frames (minimal)
+///
+/// These samples contain codec startup artifacts (DC offset, filter ramp-up,
+/// near-silence with sudden jumps) that cause audible pops if played directly.
+///
+/// We use 1200 frames (conservative) to cover all formats cleanly.
+/// At 44.1kHz stereo, this is 27ms - imperceptible loss.
+const ENCODER_DELAY_FRAMES: usize = 1200;
 
 /// Commands sent to the decoder thread
 #[derive(Debug)]
@@ -90,6 +105,9 @@ struct SharedState {
     is_eof: bool,
     /// Whether a seek is pending (decoder will reset)
     seek_pending: bool,
+    /// Track how many encoder delay samples have been skipped
+    /// Reset to 0 on seek (encoder delay reapplied after seek)
+    encoder_delay_skipped: usize,
 }
 
 /// Audio source for local files with background decoder thread
@@ -117,6 +135,95 @@ pub struct LocalAudioSource {
     // Position tracking
     total_duration: Duration,
     needs_resampling: bool,
+}
+
+// ===== Helper Functions for Decoder Thread =====
+
+/// Skip encoder delay samples from decoded audio
+///
+/// Encoder delay (codec startup artifacts) causes pops if played directly.
+/// This function skips the first ENCODER_DELAY_FRAMES worth of samples.
+///
+/// # Arguments
+/// * `samples` - Decoded samples to process
+/// * `skip_target` - Total samples to skip
+/// * `samples_skipped` - Current skip counter
+/// * `output_buffer` - Destination buffer
+/// * `output_buffer_capacity` - Max buffer size
+///
+/// # Returns
+/// Updated skip counter
+fn skip_encoder_delay(
+    samples: Vec<f32>,
+    skip_target: usize,
+    mut samples_skipped: usize,
+    output_buffer: &mut VecDeque<f32>,
+    output_buffer_capacity: usize,
+) -> usize {
+    for sample in samples {
+        if samples_skipped < skip_target {
+            samples_skipped += 1;
+            continue; // Drop sample
+        }
+        output_buffer.push_back(sample);
+        if output_buffer.len() > output_buffer_capacity {
+            output_buffer.pop_front();
+        }
+    }
+    samples_skipped
+}
+
+/// Handle seek command - reset decoder and buffers
+///
+/// Performs seek operation and resets all decoder state.
+/// Returns reset skip counters (resampler_skip, encoder_delay_skip).
+fn handle_seek_command(
+    format_reader: &mut Box<dyn symphonia::core::formats::FormatReader>,
+    decoder: &mut Box<dyn symphonia::core::codecs::Decoder>,
+    resampler: &mut Option<SincFixedIn<f32>>,
+    input_buffer: &mut VecDeque<f32>,
+    shared: &Arc<Mutex<SharedState>>,
+    position: Duration,
+    track_id: u32,
+    time_base: TimeBase,
+    target_sample_rate: u32,
+    channels: u16,
+) -> std::result::Result<(usize, usize), String> {
+    // Perform seek
+    let seek_ts = time_base.calc_timestamp(position.into());
+    if let Err(e) = format_reader.seek(
+        symphonia::core::formats::SeekMode::Accurate,
+        symphonia::core::formats::SeekTo::TimeStamp {
+            ts: seek_ts,
+            track_id,
+        },
+    ) {
+        return Err(format!("Seek failed: {}", e));
+    }
+
+    // Reset decoder state
+    decoder.reset();
+    input_buffer.clear();
+    if let Some(ref mut r) = resampler {
+        r.reset();
+    }
+
+    // Clear output buffer and update position
+    let mut state = shared.lock().unwrap();
+    state.output_buffer.clear();
+    state.samples_read =
+        (position.as_secs_f64() * target_sample_rate as f64 * channels as f64) as usize;
+    state.is_eof = false;
+    state.seek_pending = false;
+    state.encoder_delay_skipped = 0; // Reset encoder delay skip counter
+
+    tracing::debug!(
+        "[DecoderThread] Seek completed to {:?}, reset all skip counters",
+        position
+    );
+
+    // Return reset skip counters (resampler_skip, encoder_delay_skip)
+    Ok((0, 0))
 }
 
 impl LocalAudioSource {
@@ -177,12 +284,14 @@ impl LocalAudioSource {
 
         let needs_resampling = sample_rate != target_sample_rate;
 
-        eprintln!("[LocalAudioSource] File info:");
-        eprintln!("  - Path: {}", path.display());
-        eprintln!("  - Source sample rate: {} Hz", sample_rate);
-        eprintln!("  - Target sample rate: {} Hz", target_sample_rate);
-        eprintln!("  - Channels: {}", channels);
-        eprintln!("  - Needs resampling: {}", needs_resampling);
+        tracing::info!(
+            "[LocalAudioSource] Loading file: path={}, source_rate={}Hz, target_rate={}Hz, channels={}, resampling={}",
+            path.display(),
+            sample_rate,
+            target_sample_rate,
+            channels,
+            needs_resampling
+        );
 
         // Calculate buffer capacity (5 seconds of stereo audio at target sample rate)
         let output_buffer_capacity =
@@ -194,6 +303,7 @@ impl LocalAudioSource {
             samples_read: 0,
             is_eof: false,
             seek_pending: false,
+            encoder_delay_skipped: 0,
         }));
 
         // Create command channel
@@ -226,11 +336,11 @@ impl LocalAudioSource {
                 PlaybackError::AudioSource(format!("Failed to spawn decoder thread: {}", e))
             })?;
 
-        eprintln!("[LocalAudioSource] Background decoder thread started");
+        tracing::debug!("[LocalAudioSource] Background decoder thread started");
 
         // Wait for buffer to have sufficient data (up to 1 second)
         // This ensures the source is immediately playable without underrun
-        // 200ms buffer (MIN_BUFFER_SAMPLES) prevents jitter on first play
+        // 1000ms buffer (MIN_BUFFER_SAMPLES) prevents jitter on first play
         let min_initial_samples = MIN_BUFFER_SAMPLES;
         let mut buffer_filled = false;
         for _ in 0..100 {
@@ -239,7 +349,7 @@ impl LocalAudioSource {
                 state.output_buffer.len()
             };
             if buffer_len >= min_initial_samples {
-                eprintln!(
+                tracing::info!(
                     "[LocalAudioSource] Initial buffer filled: {} samples (~{}ms)",
                     buffer_len,
                     buffer_len * 1000 / (target_sample_rate as usize * channels as usize)
@@ -252,8 +362,8 @@ impl LocalAudioSource {
 
         if !buffer_filled {
             let buffer_len = shared.lock().unwrap().output_buffer.len();
-            eprintln!(
-                "[LocalAudioSource] WARNING: Initial buffer not fully filled ({} samples, wanted {}). May cause jitter.",
+            tracing::warn!(
+                "[LocalAudioSource] Initial buffer not fully filled ({} samples, wanted {}). May cause jitter.",
                 buffer_len, min_initial_samples
             );
         }
@@ -298,7 +408,7 @@ impl LocalAudioSource {
         let file = match File::open(&path) {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("[DecoderThread] Failed to open file: {}", e);
+                tracing::error!("[DecoderThread] Failed to open file: {}", e);
                 return;
             }
         };
@@ -318,7 +428,7 @@ impl LocalAudioSource {
         ) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("[DecoderThread] Failed to probe file: {}", e);
+                tracing::error!("[DecoderThread] Failed to probe file: {}", e);
                 return;
             }
         };
@@ -328,7 +438,7 @@ impl LocalAudioSource {
         let track = if let Some(t) = format_reader.default_track() {
             t
         } else {
-            eprintln!("[DecoderThread] No audio track found");
+            tracing::error!("[DecoderThread] No audio track found");
             return;
         };
 
@@ -337,7 +447,7 @@ impl LocalAudioSource {
         {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("[DecoderThread] Failed to create decoder: {}", e);
+                tracing::error!("[DecoderThread] Failed to create decoder: {}", e);
                 return;
             }
         };
@@ -365,14 +475,14 @@ impl LocalAudioSource {
                 channels as usize,
             ) {
                 Ok(r) => {
-                    eprintln!(
+                    tracing::debug!(
                         "[DecoderThread] Resampler created (output_delay: {} frames)",
                         r.output_delay()
                     );
                     Some(r)
                 }
                 Err(e) => {
-                    eprintln!("[DecoderThread] Failed to create resampler: {}", e);
+                    tracing::error!("[DecoderThread] Failed to create resampler: {}", e);
                     return;
                 }
             }
@@ -394,63 +504,65 @@ impl LocalAudioSource {
             .map(|r| {
                 let delay_frames = r.output_delay();
                 let skip_samples = delay_frames * channels as usize;
-                eprintln!(
+                tracing::debug!(
                     "[DecoderThread] Will skip first {} samples ({} frames) for resampler settling",
-                    skip_samples, delay_frames
+                    skip_samples,
+                    delay_frames
                 );
                 skip_samples
             })
             .unwrap_or(0);
         let mut resampler_samples_skipped: usize = 0;
 
-        eprintln!("[DecoderThread] Decoder thread ready, starting decode loop");
+        // Track encoder delay to skip codec startup artifacts
+        // MP3/AAC/FLAC add padding samples at start that cause pops
+        let encoder_delay_skip_samples = ENCODER_DELAY_FRAMES * channels as usize;
+        let mut encoder_delay_samples_skipped: usize = 0;
+
+        tracing::debug!(
+            "[DecoderThread] Decoder thread ready, will skip {} encoder delay samples, {} resampler samples",
+            encoder_delay_skip_samples,
+            resampler_skip_samples
+        );
 
         loop {
             // Check for commands (non-blocking)
             match command_rx.try_recv() {
                 Ok(DecoderCommand::Stop) => {
-                    eprintln!("[DecoderThread] Stop command received, exiting");
+                    tracing::debug!("[DecoderThread] Stop command received, exiting");
                     break;
                 }
                 Ok(DecoderCommand::Seek(position)) => {
-                    eprintln!("[DecoderThread] Seek command: {:?}", position);
+                    tracing::debug!("[DecoderThread] Seek command: {:?}", position);
 
-                    // Perform seek
-                    let seek_ts = time_base.calc_timestamp(position.into());
-                    if let Err(e) = format_reader.seek(
-                        symphonia::core::formats::SeekMode::Accurate,
-                        symphonia::core::formats::SeekTo::TimeStamp {
-                            ts: seek_ts,
-                            track_id,
-                        },
+                    // Use helper function to handle seek
+                    match handle_seek_command(
+                        &mut format_reader,
+                        &mut decoder,
+                        &mut resampler,
+                        &mut input_buffer,
+                        &shared,
+                        position,
+                        track_id,
+                        time_base,
+                        target_sample_rate,
+                        channels,
                     ) {
-                        eprintln!("[DecoderThread] Seek failed: {}", e);
-                    } else {
-                        decoder.reset();
-                        input_buffer.clear();
-                        if let Some(ref mut r) = resampler {
-                            r.reset();
+                        Ok((resampler_reset, encoder_reset)) => {
+                            resampler_samples_skipped = resampler_reset;
+                            encoder_delay_samples_skipped = encoder_reset;
+                            is_eof = false;
                         }
-                        is_eof = false;
-
-                        // Reset resampler skip counter - need to skip delay samples again after seek
-                        resampler_samples_skipped = 0;
-
-                        // Clear output buffer and update position
-                        let mut state = shared.lock().unwrap();
-                        state.output_buffer.clear();
-                        state.samples_read =
-                            (position.as_secs_f64() * target_sample_rate as f64 * channels as f64)
-                                as usize;
-                        state.is_eof = false;
-                        state.seek_pending = false;
+                        Err(e) => {
+                            tracing::error!("[DecoderThread] Seek failed: {}", e);
+                        }
                     }
                 }
                 Err(crossbeam_channel::TryRecvError::Empty) => {
                     // No command, continue decoding
                 }
                 Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                    eprintln!("[DecoderThread] Command channel disconnected, exiting");
+                    tracing::debug!("[DecoderThread] Command channel disconnected, exiting");
                     break;
                 }
             }
@@ -494,11 +606,11 @@ impl LocalAudioSource {
 
                     let mut state = shared.lock().unwrap();
                     state.is_eof = true;
-                    eprintln!("[DecoderThread] Reached end of file");
+                    tracing::debug!("[DecoderThread] Reached end of file");
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("[DecoderThread] Error reading packet: {}", e);
+                    tracing::warn!("[DecoderThread] Error reading packet: {}", e);
                     thread::sleep(Duration::from_millis(10));
                     continue;
                 }
@@ -513,7 +625,7 @@ impl LocalAudioSource {
             let decoded = match decoder.decode(&packet) {
                 Ok(d) => d,
                 Err(e) => {
-                    eprintln!("[DecoderThread] Decode error: {}", e);
+                    tracing::warn!("[DecoderThread] Decode error: {}", e);
                     continue;
                 }
             };
@@ -522,18 +634,33 @@ impl LocalAudioSource {
             let samples = match Self::convert_to_f32_interleaved(decoded, channels) {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("[DecoderThread] Conversion error: {}", e);
+                    tracing::error!("[DecoderThread] Conversion error: {}", e);
                     continue;
                 }
             };
 
             if needs_resampling {
-                // Add samples to input buffer
+                // Skip encoder delay BEFORE resampling
+                // Add samples to input buffer (after encoder delay skip)
                 for sample in samples {
+                    if encoder_delay_samples_skipped < encoder_delay_skip_samples {
+                        encoder_delay_samples_skipped += 1;
+                        continue; // Skip this sample
+                    }
                     input_buffer.push_back(sample);
                 }
 
-                // Process resampling (with initial delay skipping)
+                // Log when encoder delay skip completes (resampling path)
+                if encoder_delay_samples_skipped >= encoder_delay_skip_samples
+                    && encoder_delay_samples_skipped - encoder_delay_skip_samples < 100
+                {
+                    tracing::debug!(
+                        "[DecoderThread] Encoder delay skipping complete (resampling path, skipped {} samples)",
+                        encoder_delay_skip_samples
+                    );
+                }
+
+                // Process resampling (with resampler delay skipping)
                 resampler_samples_skipped = Self::process_resampling_with_skip(
                     &mut input_buffer,
                     &mut resampler,
@@ -545,18 +672,30 @@ impl LocalAudioSource {
                     resampler_samples_skipped,
                 );
             } else {
-                // No resampling - add directly to output buffer
+                // No resampling - add directly to output buffer WITH encoder delay skip
                 let mut state = shared.lock().unwrap();
-                for sample in samples {
-                    state.output_buffer.push_back(sample);
-                    if state.output_buffer.len() > output_buffer_capacity {
-                        state.output_buffer.pop_front();
-                    }
+                encoder_delay_samples_skipped = skip_encoder_delay(
+                    samples,
+                    encoder_delay_skip_samples,
+                    encoder_delay_samples_skipped,
+                    &mut state.output_buffer,
+                    output_buffer_capacity,
+                );
+
+                // Log when encoder delay skip completes
+                if encoder_delay_samples_skipped >= encoder_delay_skip_samples
+                    && encoder_delay_samples_skipped - encoder_delay_skip_samples < 100
+                {
+                    // Log only once (within 100 samples of completion)
+                    tracing::debug!(
+                        "[DecoderThread] Encoder delay skipping complete (skipped {} samples)",
+                        encoder_delay_skip_samples
+                    );
                 }
             }
         }
 
-        eprintln!("[DecoderThread] Decoder thread exiting");
+        tracing::debug!("[DecoderThread] Decoder thread exiting");
     }
 
     /// Process resampling with initial delay skipping
@@ -597,7 +736,7 @@ impl LocalAudioSource {
             let resampled = match resampler.process(&deinterleaved, None) {
                 Ok(r) => r,
                 Err(e) => {
-                    eprintln!("[DecoderThread] Resampling error: {}", e);
+                    tracing::error!("[DecoderThread] Resampling error: {}", e);
                     return samples_skipped;
                 }
             };
@@ -627,7 +766,7 @@ impl LocalAudioSource {
                 samples_skipped += samples_to_skip;
 
                 if samples_skipped >= skip_samples {
-                    eprintln!(
+                    tracing::debug!(
                         "[DecoderThread] Resampler settling complete, skipped {} samples",
                         samples_skipped
                     );
@@ -688,7 +827,7 @@ impl LocalAudioSource {
         let resampled = match resampler.process(&deinterleaved, None) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("[DecoderThread] Flush resampling error: {}", e);
+                tracing::error!("[DecoderThread] Flush resampling error: {}", e);
                 return;
             }
         };
@@ -831,10 +970,17 @@ impl AudioSource for LocalAudioSource {
         let is_first_read = state.samples_read == 0;
         let is_underrun = available < output.len();
 
-        if is_first_read || is_underrun {
-            eprintln!(
-                "[LocalAudioSource::read_samples] {} requested={}, available={}, buffer_remaining={}, samples_read={}",
-                if is_first_read { "FIRST READ:" } else { "UNDERRUN:" },
+        if is_first_read {
+            tracing::info!(
+                "[LocalAudioSource::read_samples] FIRST READ: requested={}, available={}, buffer_remaining={}, samples_read={}",
+                output.len(),
+                available,
+                state.output_buffer.len(),
+                state.samples_read
+            );
+        } else if is_underrun {
+            tracing::warn!(
+                "[LocalAudioSource::read_samples] UNDERRUN: requested={}, available={}, buffer_remaining={}, samples_read={}",
                 output.len(),
                 available,
                 state.output_buffer.len(),
@@ -848,7 +994,7 @@ impl AudioSource for LocalAudioSource {
 
         // Log first samples on first read
         if is_first_read && available >= 8 {
-            eprintln!(
+            tracing::debug!(
                 "[LocalAudioSource::read_samples] First 8 samples: [{:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}]",
                 output[0], output[1], output[2], output[3], output[4], output[5], output[6], output[7]
             );

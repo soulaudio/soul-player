@@ -17,9 +17,10 @@ import {
   type QueueTrack,
   type Track,
   removeConsecutiveDuplicates,
+  DemoStorage,
+  type DemoTrack,
+  type DemoAlbum,
 } from '@soul-player/shared'
-import { getDemoStorage, initializeDemoStorage } from '@/lib/demo/storage'
-import type { DemoTrack, DemoAlbum } from '@/lib/demo/types'
 
 interface DemoLibraryDataProviderProps {
   children: ReactNode
@@ -98,17 +99,13 @@ export function DemoLibraryDataProvider({ children, jsonUrl = '/demo-data.json' 
   const [artists, setArtists] = useState<Artist[]>([])
   const [rawTracks, setRawTracks] = useState<DemoTrack[]>([])
   const [rawAlbums, setRawAlbums] = useState<DemoAlbum[]>([])
-
-  // Load data on mount
-  useEffect(() => {
-    loadLibrary()
-  }, [jsonUrl])
+  const [storage] = useState(() => new DemoStorage())
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const storage = await initializeDemoStorage(jsonUrl)
+      await storage.loadFromJson(jsonUrl)
       const demoTracks = storage.getAllTracks()
       const demoAlbums = storage.getAllAlbums()
 
@@ -123,7 +120,12 @@ export function DemoLibraryDataProvider({ children, jsonUrl = '/demo-data.json' 
     } finally {
       setIsLoading(false)
     }
-  }, [jsonUrl])
+  }, [jsonUrl, storage])
+
+  // Load data on mount
+  useEffect(() => {
+    loadLibrary()
+  }, [loadLibrary])
 
   // Lookup helpers
   const getTrackById = useCallback((id: string | number): LibraryTrack | undefined => {
@@ -150,10 +152,9 @@ export function DemoLibraryDataProvider({ children, jsonUrl = '/demo-data.json' 
 
   // Data fetching
   const getAlbumTracks = useCallback(async (albumId: string | number): Promise<LibraryTrack[]> => {
-    const storage = getDemoStorage()
     const albumTracks = storage.getAlbumTracks(String(albumId))
     return albumTracks.map(toLibraryTrack)
-  }, [])
+  }, [storage])
 
   const getArtistTracks = useCallback(async (artistId: string | number): Promise<LibraryTrack[]> => {
     const artist = artists.find(a => a.id === artistId)
@@ -172,6 +173,20 @@ export function DemoLibraryDataProvider({ children, jsonUrl = '/demo-data.json' 
       .filter(a => a.artist === artist.name)
       .map(toAlbum)
   }, [artists, rawAlbums])
+
+  const getArtistTopTracks = useCallback(async (artistId: string | number, limit = 10): Promise<LibraryTrack[]> => {
+    const artist = artists.find(a => a.id === artistId)
+    if (!artist) return []
+
+    // Demo: Return random selection of artist tracks (no real play count data)
+    const artistTracks = rawTracks
+      .filter(t => t.artist === artist.name)
+      .map(toLibraryTrack)
+
+    // Shuffle and take first N tracks
+    const shuffled = [...artistTracks].sort(() => Math.random() - 0.5)
+    return shuffled.slice(0, Math.min(limit, shuffled.length))
+  }, [artists, rawTracks])
 
   const getPlaylistTracks = useCallback(async (_playlistId: string): Promise<LibraryTrack[]> => {
     // Demo doesn't have playlists
@@ -235,6 +250,7 @@ export function DemoLibraryDataProvider({ children, jsonUrl = '/demo-data.json' 
     getAlbumTracks,
     getArtistTracks,
     getArtistAlbums,
+    getArtistTopTracks,
     getPlaylistTracks,
 
     buildQueueFromTracks,

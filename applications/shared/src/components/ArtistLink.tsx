@@ -3,8 +3,8 @@
  * Makes artist names clickable throughout the app
  */
 
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 
 export interface ArtistLinkProps {
   /** Artist ID - if missing, link will be disabled */
@@ -15,6 +15,8 @@ export interface ArtistLinkProps {
   className?: string
   /** Click handler (optional - for custom behavior) */
   onClick?: (e: React.MouseEvent) => void
+  /** Inline styles */
+  style?: React.CSSProperties
 }
 
 export function ArtistLink({
@@ -22,19 +24,19 @@ export function ArtistLink({
   artistName,
   className = '',
   onClick,
+  style,
 }: ArtistLinkProps) {
-  const navigate = useNavigate()
+  const { navigate } = useNavigateWithHistory()
   const { t } = useTranslation()
 
   const displayName = artistName || t('common.unknownArtist', 'Unknown Artist')
   const isClickable = !!artistId
 
   const handleClick = (e: React.MouseEvent) => {
-    console.log('[ArtistLink] Click detected', { artistId, artistName })
-
-    e.stopPropagation() // Prevent triggering parent click handlers (e.g., row click)
+    console.log('[ArtistLink] handleClick called!', { artistId, artistName, isClickable })
 
     if (onClick) {
+      console.log('[ArtistLink] Custom onClick provided')
       onClick(e)
       return
     }
@@ -44,7 +46,7 @@ export function ArtistLink({
       return
     }
 
-    console.log('[ArtistLink] Navigating to artist:', artistId)
+    console.log('[ArtistLink] Navigating to /artists/' + artistId)
     navigate(`/artists/${artistId}`)
   }
 
@@ -65,7 +67,7 @@ export function ArtistLink({
           handleClick(e as any)
         }
       }}
-      style={{ cursor: 'pointer', userSelect: 'none' }}
+      style={{ cursor: 'pointer', userSelect: 'none', ...style }}
     >
       {displayName}
     </span>

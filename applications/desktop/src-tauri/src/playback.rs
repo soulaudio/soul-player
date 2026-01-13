@@ -7,11 +7,88 @@ use serde::Serialize;
 use soul_audio_desktop::{
     DesktopPlayback, ExclusiveConfig, LatencyInfo, PlaybackCommand, PlaybackEvent,
 };
-use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode};
+use soul_playback::{
+    lazy_queue::QueueContext, PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode, TrackSource,
+};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
+
+use crate::app_state::AppState;
+
+/// Playback tracker for recording play statistics
+///
+/// Tracks the current playing track to record plays to the database when:
+/// - Track changes (previous track may be completed or skipped)
+/// - Track finishes naturally (always completed)
+/// - Playback stops mid-track (skipped)
+struct PlaybackTracker {
+    current_track_id: Option<String>,
+    current_track_duration: Option<Duration>,
+    playback_start_time: Option<std::time::Instant>,
+    playback_start_position: Duration,
+}
+
+impl PlaybackTracker {
+    fn new() -> Self {
+        Self {
+            current_track_id: None,
+            current_track_duration: None,
+            playback_start_time: None,
+            playback_start_position: Duration::ZERO,
+        }
+    }
+
+    /// Start tracking a new track
+    fn start_tracking(&mut self, track_id: String, duration: Duration) {
+        self.current_track_id = Some(track_id);
+        self.current_track_duration = Some(duration);
+        self.playback_start_time = Some(std::time::Instant::now());
+        self.playback_start_position = Duration::ZERO;
+    }
+
+    /// Update the playback position after a seek
+    fn update_position(&mut self, position: Duration) {
+        self.playback_start_position = position;
+        self.playback_start_time = Some(std::time::Instant::now());
+    }
+
+    /// Calculate the current playback position
+    fn current_position(&self) -> Duration {
+        match (self.playback_start_time, self.playback_start_position) {
+            (Some(start_time), start_pos) => {
+                let elapsed = start_time.elapsed();
+                start_pos + elapsed
+            }
+            _ => Duration::ZERO,
+        }
+    }
+
+    /// Calculate completion percentage (0.0 to 1.0+)
+    fn calculate_completion_percentage(&self) -> f64 {
+        match self.current_track_duration {
+            Some(duration) if duration.as_secs_f64() > 0.0 => {
+                let position = self.current_position();
+                position.as_secs_f64() / duration.as_secs_f64()
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// Check if the track was completed (80% threshold)
+    fn is_completed(&self) -> bool {
+        self.calculate_completion_percentage() >= 0.8
+    }
+
+    /// Reset tracker (call after recording a play)
+    fn reset(&mut self) {
+        self.current_track_id = None;
+        self.current_track_duration = None;
+        self.playback_start_time = None;
+        self.playback_start_position = Duration::ZERO;
+    }
+}
 
 /// Track info for frontend events (with duration in seconds)
 #[derive(Debug, Clone, Serialize)]
@@ -89,9 +166,11 @@ impl PlaybackManager {
     ///
     /// Polls for playback events and emits them to the frontend via Tauri events.
     /// Also polls for device sample rate changes periodically.
+    /// Tracks play statistics and records them to the database.
     fn event_emission_loop(playback: Arc<Mutex<DesktopPlayback>>, app_handle: AppHandle) {
         let mut last_position_emit = std::time::Instant::now();
         let mut last_sample_rate_check = std::time::Instant::now();
+        let mut tracker = PlaybackTracker::new();
 
         loop {
             // Poll for events
@@ -104,18 +183,78 @@ impl PlaybackManager {
                 // Emit to frontend
                 let _ = match &event {
                     PlaybackEvent::StateChanged(state) => {
+                        // Record play if stopping mid-track
+                        if matches!(state, soul_playback::PlaybackState::Stopped) {
+                            if let Some(ref track_id) = tracker.current_track_id {
+                                let completed = tracker.is_completed();
+                                let duration_secs =
+                                    tracker.current_position().as_secs_f64().max(0.0);
+
+                                tracing::debug!(
+                                    track_id = %track_id,
+                                    completed = completed,
+                                    duration_secs = duration_secs,
+                                    "Recording play on stop"
+                                );
+
+                                Self::record_play_event(
+                                    &app_handle,
+                                    track_id.clone(),
+                                    duration_secs,
+                                    completed,
+                                );
+
+                                tracker.reset();
+                            }
+                        }
+
                         app_handle.emit("playback:state-changed", state)
                     }
                     PlaybackEvent::TrackChanged(track) => {
+                        // BEFORE emitting to frontend, record previous track play
+                        if let Some(ref prev_track_id) = tracker.current_track_id {
+                            let completed = tracker.is_completed();
+                            let duration_secs = tracker.current_position().as_secs_f64().max(0.0);
+
+                            tracing::debug!(
+                                track_id = %prev_track_id,
+                                completed = completed,
+                                duration_secs = duration_secs,
+                                completion_pct = tracker.calculate_completion_percentage() * 100.0,
+                                "Recording play on track change"
+                            );
+
+                            Self::record_play_event(
+                                &app_handle,
+                                prev_track_id.clone(),
+                                duration_secs,
+                                completed,
+                            );
+                        }
+
+                        // Start tracking new track
+                        if let Some(ref new_track) = track {
+                            tracker.start_tracking(new_track.id.clone(), new_track.duration);
+                            tracing::debug!(
+                                track_id = %new_track.id,
+                                duration_secs = new_track.duration.as_secs_f64(),
+                                "Started tracking new track"
+                            );
+                        } else {
+                            tracker.reset();
+                        }
+
                         // Convert QueueTrack to FrontendTrackEvent with duration in seconds
                         let frontend_track = track.as_ref().map(FrontendTrackEvent::from);
                         if let Some(ref t) = frontend_track {
-                            eprintln!(
-                                "[playback] Track changed: id={}, title={}, coverArtPath={:?}",
-                                t.id, t.title, t.cover_art_path
+                            tracing::debug!(
+                                track_id = %t.id,
+                                title = %t.title,
+                                cover_art_path = ?t.cover_art_path,
+                                "Track changed"
                             );
                         } else {
-                            eprintln!("[playback] Track changed: None");
+                            tracing::debug!("Track changed: None");
                         }
                         app_handle.emit("playback:track-changed", frontend_track)
                     }
@@ -173,6 +312,62 @@ impl PlaybackManager {
                         eprintln!("[playback] Crossfade completed");
                         app_handle.emit("playback:crossfade-completed", ())
                     }
+                    PlaybackEvent::BatchLoadRequested { offset, limit } => {
+                        eprintln!(
+                            "[BatchLoader] Batch load requested: offset={}, limit={}",
+                            offset, limit
+                        );
+
+                        // Extract values before spawning async task (for 'static lifetime)
+                        let offset_val = *offset;
+                        let limit_val = *limit;
+
+                        // Spawn async task to load batch (non-blocking)
+                        let playback_clone = Arc::clone(&playback);
+                        let app_handle_clone = app_handle.clone();
+
+                        tauri::async_runtime::spawn(async move {
+                            Self::handle_batch_request(
+                                playback_clone,
+                                app_handle_clone,
+                                offset_val,
+                                limit_val,
+                                false,
+                            )
+                            .await;
+                        });
+
+                        // Don't emit to frontend - this is an internal event
+                        continue;
+                    }
+                    PlaybackEvent::JumpLoadRequested { offset, limit } => {
+                        eprintln!(
+                            "[BatchLoader] Jump load requested: offset={}, limit={}",
+                            offset, limit
+                        );
+
+                        // Extract values before spawning async task (for 'static lifetime)
+                        let offset_val = *offset;
+                        let limit_val = *limit;
+
+                        // Spawn async task to load batch (non-blocking)
+                        let playback_clone = Arc::clone(&playback);
+                        let app_handle_clone = app_handle.clone();
+
+                        tauri::async_runtime::spawn(async move {
+                            Self::handle_batch_request(
+                                playback_clone,
+                                app_handle_clone,
+                                offset_val,
+                                limit_val,
+                                true,
+                            )
+                            .await;
+                        });
+
+                        // Don't emit to frontend - this is an internal event
+                        continue;
+                    }
                 };
             }
 
@@ -213,6 +408,190 @@ impl PlaybackManager {
 
             // Sleep briefly to avoid busy-waiting
             thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Record a play event to the database
+    ///
+    /// Spawns a non-blocking async task to record the play.
+    fn record_play_event(
+        app_handle: &AppHandle,
+        track_id: String,
+        duration_secs: f64,
+        completed: bool,
+    ) {
+        let app_handle_clone = app_handle.clone();
+
+        tauri::async_runtime::spawn(async move {
+            let app_state = app_handle_clone.state::<AppState>();
+            let track_id_obj = soul_core::types::TrackId::new(track_id.clone());
+            let user_id = soul_core::types::UserId::new(app_state.user_id.clone());
+
+            tracing::info!(
+                track_id = %track_id,
+                user_id = %app_state.user_id,
+                duration_secs = duration_secs,
+                completed = completed,
+                "Recording track play"
+            );
+
+            if let Err(e) = soul_storage::tracks::record_play(
+                &app_state.pool,
+                user_id,
+                track_id_obj,
+                Some(duration_secs),
+                completed,
+            )
+            .await
+            {
+                tracing::error!(
+                    error = %e,
+                    track_id = %track_id,
+                    "Failed to record play"
+                );
+            }
+        });
+    }
+
+    /// Handle batch loading request (forward pagination or jump)
+    ///
+    /// Queries the database based on the lazy context and appends tracks to the queue.
+    async fn handle_batch_request(
+        playback: Arc<Mutex<DesktopPlayback>>,
+        app_handle: AppHandle,
+        offset: usize,
+        limit: usize,
+        is_jump: bool,
+    ) {
+        eprintln!(
+            "[BatchLoader] Loading batch: offset={}, limit={}, is_jump={}",
+            offset, limit, is_jump
+        );
+
+        // Get lazy state from playback manager
+        let lazy_state = {
+            let pb = playback.lock().unwrap();
+            let pm = pb.get_playback_manager().lock().unwrap();
+            pm.get_lazy_state().cloned()
+        };
+
+        let Some(state) = lazy_state else {
+            eprintln!("[BatchLoader] No lazy state found, skipping batch load");
+            return;
+        };
+
+        // Get app state
+        let app_state = app_handle.state::<AppState>();
+
+        // Query database based on context
+        let tracks_result = match &state.context {
+            QueueContext::AllTracks { .. } => {
+                soul_storage::tracks::get_all_paginated(
+                    &app_state.pool,
+                    offset as i64,
+                    limit as i64,
+                )
+                .await
+            }
+            QueueContext::Album { album_id, .. } => {
+                soul_storage::tracks::get_by_album_paginated(
+                    &app_state.pool,
+                    *album_id,
+                    offset as i64,
+                    limit as i64,
+                )
+                .await
+            }
+            QueueContext::Artist { artist_id, .. } => {
+                soul_storage::tracks::get_by_artist_paginated(
+                    &app_state.pool,
+                    *artist_id,
+                    offset as i64,
+                    limit as i64,
+                )
+                .await
+            }
+            QueueContext::Playlist { playlist_id, .. } => {
+                use soul_core::types::PlaylistId;
+                soul_storage::tracks::get_by_playlist_paginated(
+                    &app_state.pool,
+                    PlaylistId::new(playlist_id.to_string()),
+                    offset as i64,
+                    limit as i64,
+                )
+                .await
+            }
+            QueueContext::Search { .. } => {
+                eprintln!("[BatchLoader] Search pagination not supported yet");
+                return;
+            }
+        };
+
+        let tracks = match tracks_result {
+            Ok(tracks) => tracks,
+            Err(e) => {
+                eprintln!("[BatchLoader] Failed to load batch: {}", e);
+                return;
+            }
+        };
+
+        eprintln!("[BatchLoader] Loaded {} tracks from database", tracks.len());
+
+        // Convert to QueueTrack (inline to avoid needing Track type)
+        let queue_tracks: Vec<QueueTrack> = tracks
+            .into_iter()
+            .filter_map(|track| {
+                // Get file path from availability (first available source)
+                let file_path = track.availability.first()?.local_file_path.as_ref()?;
+
+                let path = app_state.library_path.join(file_path);
+                let source = if let Some(album_id) = track.album_id {
+                    TrackSource::Album {
+                        id: album_id.to_string(),
+                        name: track.album_title.clone().unwrap_or_default(),
+                    }
+                } else {
+                    TrackSource::Single
+                };
+
+                Some(QueueTrack {
+                    id: track.id.to_string(),
+                    title: track.title.clone(),
+                    artist: track.artist_name.clone().unwrap_or_default(),
+                    album: track.album_title.clone(),
+                    duration: Duration::from_secs(track.duration_seconds.unwrap_or(0.0) as u64),
+                    path,
+                    source,
+                    track_number: track.track_number.map(|n| n as u32),
+                })
+            })
+            .collect();
+
+        // Send AppendToSource command
+        let pb = playback.lock().unwrap();
+        if let Err(e) = pb.send_command(PlaybackCommand::AppendToSource(queue_tracks.clone())) {
+            eprintln!("[BatchLoader] Failed to append tracks: {}", e);
+            return;
+        }
+
+        if is_jump {
+            // Jump load: retry the skip to the target index
+            eprintln!(
+                "[BatchLoader] Retrying skip to index {} after jump batch load",
+                offset
+            );
+            if let Err(e) = pb.send_command(PlaybackCommand::SkipToQueueIndex(offset)) {
+                eprintln!("[BatchLoader] Failed to retry skip after jump load: {}", e);
+            }
+        } else {
+            // Forward pagination: resume playback by playing next track
+            eprintln!("[BatchLoader] Resuming playback after forward pagination batch load");
+            if let Err(e) = pb.send_command(PlaybackCommand::Next) {
+                eprintln!(
+                    "[BatchLoader] Failed to resume playback after forward pagination: {}",
+                    e
+                );
+            }
         }
     }
 
@@ -454,6 +833,23 @@ impl PlaybackManager {
         playback
             .send_command(PlaybackCommand::LoadPlaylist(tracks))
             .map_err(|e| e.to_string())
+    }
+
+    /// Set lazy context for on-demand track loading
+    pub fn set_lazy_context(
+        &self,
+        context: QueueContext,
+        shuffle_seed: Option<u64>,
+    ) -> Result<(), String> {
+        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        let mut mgr = playback.get_manager_mut();
+        mgr.set_lazy_context(context, shuffle_seed);
+        Ok(())
+    }
+
+    /// Skip to track at index (alias for skip_to_queue_index)
+    pub fn skip_to_index(&self, index: usize) -> Result<(), String> {
+        self.skip_to_queue_index(index)
     }
 
     /// Switch audio output device

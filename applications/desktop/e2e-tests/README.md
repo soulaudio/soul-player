@@ -104,7 +104,8 @@ e2e-tests/
     └── specs/
         ├── audio-settings.e2e.js   # Audio settings tests
         ├── dsp-effects.e2e.js      # DSP effect workflows
-        └── navigation.e2e.js       # Navigation tests
+        ├── navigation.e2e.js       # Navigation tests
+        └── lazy-queue.e2e.js       # Lazy queue loading tests
 ```
 
 ## Test Suites
@@ -133,6 +134,29 @@ Tests for audio settings including volume leveling, resampling, and buffer setti
 ### Navigation Tests (`navigation.e2e.js`)
 
 Tests for app navigation, settings tabs, and keyboard shortcuts.
+
+### Lazy Queue Loading Tests (`lazy-queue.e2e.js`)
+
+Tests for automatic batch loading of tracks when playing large libraries:
+
+| Test | Description |
+|------|-------------|
+| **Initial Batch Loading** | Verifies only 50 tracks load initially (not 500+) |
+| **Forward Pagination** | Tests automatic loading when clicking near end of queue |
+| **Queue Maintenance** | Verifies queue doesn't become empty when navigating |
+| **Queue Exhaustion** | Tests app doesn't crash when reaching end of queue |
+| **UI Display** | Tests queue items display correctly and update after batch loads |
+
+**Prerequisites**: These tests require test data to be seeded first:
+```bash
+# From repository root
+yarn seed-test-data
+```
+
+This creates 500 test tracks. After testing, clean up with:
+```bash
+yarn cleanup-test-data
+```
 
 ## Writing Tests
 

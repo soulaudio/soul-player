@@ -686,6 +686,74 @@ pub async fn record_play(
     Ok(())
 }
 
+/// Get top tracks by artist sorted by play count
+pub async fn get_top_tracks_by_artist(
+    pool: &SqlitePool,
+    user_id: UserId,
+    artist_id: ArtistId,
+    limit: i32,
+) -> Result<Vec<Track>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+            t.track_number, t.disc_number, t.year, t.duration_seconds,
+            t.bitrate, t.sample_rate, t.channels, t.file_format,
+            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+            t.metadata_source, t.created_at, t.updated_at,
+            ar.name as artist_name,
+            al.title as album_title
+        FROM tracks t
+        LEFT JOIN track_stats ts ON t.id = ts.track_id AND ts.user_id = ?
+        LEFT JOIN artists ar ON t.artist_id = ar.id
+        LEFT JOIN albums al ON t.album_id = al.id
+        WHERE t.artist_id = ?
+        ORDER BY COALESCE(ts.play_count, 0) DESC, t.title ASC
+        LIMIT ?
+        "#,
+        user_id,
+        artist_id,
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut tracks = Vec::new();
+    for row in rows {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
+
+        tracks.push(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: Some(row.artist_name),
+            album_id: row.album_id,
+            album_title: Some(row.album_title),
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        });
+    }
+
+    Ok(tracks)
+}
+
 /// Get recently played tracks
 pub async fn get_recently_played(
     pool: &SqlitePool,
@@ -754,14 +822,17 @@ pub async fn get_recently_played(
 }
 
 /// Get play count for track
-pub async fn get_play_count(pool: &SqlitePool, track_id: TrackId) -> Result<i32> {
+pub async fn get_play_count(pool: &SqlitePool, user_id: UserId, track_id: TrackId) -> Result<i32> {
     let track_id_int: i64 = track_id
         .as_str()
         .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", track_id)))?;
 
+    let user_id_str = user_id.as_str();
+
     let row = sqlx::query!(
-        "SELECT play_count FROM track_stats WHERE track_id = ?",
+        "SELECT play_count FROM track_stats WHERE user_id = ? AND track_id = ?",
+        user_id_str,
         track_id_int
     )
     .fetch_optional(pool)
@@ -847,6 +918,273 @@ pub async fn find_path_by_content_hash(
     Ok(row.and_then(|r| r.file_path))
 }
 
+// =============================================================================
+// Paginated Query Functions (for lazy loading)
+// =============================================================================
+
+/// Get all tracks with pagination
+pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Result<Vec<Track>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+            t.track_number, t.disc_number, t.year, t.duration_seconds,
+            t.bitrate, t.sample_rate, t.channels, t.file_format,
+            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+            t.metadata_source, t.created_at, t.updated_at,
+            ar.name as artist_name,
+            al.title as album_title
+        FROM tracks t
+        LEFT JOIN artists ar ON t.artist_id = ar.id
+        LEFT JOIN albums al ON t.album_id = al.id
+        ORDER BY t.title
+        LIMIT ? OFFSET ?
+        "#,
+        limit,
+        offset
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut tracks = Vec::new();
+    for row in rows {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
+
+        tracks.push(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            album_id: row.album_id,
+            album_title: row.album_title,
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        });
+    }
+
+    Ok(tracks)
+}
+
+/// Get tracks by artist with pagination
+pub async fn get_by_artist_paginated(
+    pool: &SqlitePool,
+    artist_id: ArtistId,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<Track>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+            t.track_number, t.disc_number, t.year, t.duration_seconds,
+            t.bitrate, t.sample_rate, t.channels, t.file_format,
+            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+            t.metadata_source, t.created_at, t.updated_at,
+            ar.name as artist_name,
+            al.title as album_title
+        FROM tracks t
+        LEFT JOIN artists ar ON t.artist_id = ar.id
+        LEFT JOIN albums al ON t.album_id = al.id
+        WHERE t.artist_id = ?
+        ORDER BY t.album_id, t.disc_number, t.track_number, t.title
+        LIMIT ? OFFSET ?
+        "#,
+        artist_id,
+        limit,
+        offset
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut tracks = Vec::new();
+    for row in rows {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
+
+        tracks.push(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: Some(row.artist_name),
+            album_id: row.album_id,
+            album_title: Some(row.album_title),
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        });
+    }
+
+    Ok(tracks)
+}
+
+/// Get tracks by album with pagination
+pub async fn get_by_album_paginated(
+    pool: &SqlitePool,
+    album_id: AlbumId,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<Track>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+            t.track_number, t.disc_number, t.year, t.duration_seconds,
+            t.bitrate, t.sample_rate, t.channels, t.file_format,
+            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+            t.metadata_source, t.created_at, t.updated_at,
+            ar.name as artist_name,
+            al.title as album_title
+        FROM tracks t
+        LEFT JOIN artists ar ON t.artist_id = ar.id
+        LEFT JOIN albums al ON t.album_id = al.id
+        WHERE t.album_id = ?
+        ORDER BY t.disc_number, t.track_number, t.title
+        LIMIT ? OFFSET ?
+        "#,
+        album_id,
+        limit,
+        offset
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut tracks = Vec::new();
+    for row in rows {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
+
+        tracks.push(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: Some(row.artist_name),
+            album_id: row.album_id,
+            album_title: Some(row.album_title),
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        });
+    }
+
+    Ok(tracks)
+}
+
+/// Get tracks by playlist with pagination
+pub async fn get_by_playlist_paginated(
+    pool: &SqlitePool,
+    playlist_id: PlaylistId,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<Track>> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+            t.track_number, t.disc_number, t.year, t.duration_seconds,
+            t.bitrate, t.sample_rate, t.channels, t.file_format,
+            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+            t.metadata_source, t.created_at, t.updated_at,
+            ar.name as "artist_name?",
+            al.title as "album_title?"
+        FROM tracks t
+        LEFT JOIN artists ar ON t.artist_id = ar.id
+        LEFT JOIN albums al ON t.album_id = al.id
+        INNER JOIN playlist_tracks pt ON t.id = pt.track_id
+        WHERE pt.playlist_id = ?
+        ORDER BY pt.position
+        LIMIT ? OFFSET ?
+        "#,
+        playlist_id,
+        limit,
+        offset
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut tracks = Vec::new();
+    for row in rows {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
+
+        tracks.push(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            album_id: row.album_id,
+            album_title: row.album_title,
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        });
+    }
+
+    Ok(tracks)
+}
+
+// =============================================================================
 // Helper functions
 
 fn parse_metadata_source(s: &str) -> MetadataSource {

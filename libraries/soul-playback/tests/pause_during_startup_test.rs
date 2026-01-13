@@ -80,8 +80,7 @@ impl AudioSource for LoudToneSource {
     }
 
     fn seek(&mut self, position: Duration) -> Result<()> {
-        self.position_samples =
-            (position.as_secs_f32() * self.sample_rate as f32 * 2.0) as usize;
+        self.position_samples = (position.as_secs_f32() * self.sample_rate as f32 * 2.0) as usize;
         Ok(())
     }
 
@@ -177,18 +176,14 @@ fn test_pause_immediately_after_play_stops_audio() {
         let peak = get_peak_amplitude(&buffer);
         let silent = is_silent(&buffer);
 
-        println!(
-            "Buffer {}: peak = {:.6}, silent = {}",
-            i, peak, silent
-        );
+        println!("Buffer {}: peak = {:.6}, silent = {}", i, peak, silent);
 
         // The buffer should be silent (paused), not contain audio
         assert!(
             silent,
             "BUG DETECTED: Audio is playing after pause! Buffer {} has peak amplitude {:.4}. \
              Expected silence after immediate pause, but audio is still playing.",
-            i,
-            peak
+            i, peak
         );
     }
 }
@@ -254,10 +249,7 @@ fn test_resume_after_pause_during_startup() {
     // Verify paused (silent)
     let mut pause_buffer = vec![0.0f32; 2048];
     let _ = manager.process_audio(&mut pause_buffer);
-    assert!(
-        is_silent(&pause_buffer),
-        "Should be silent while paused"
-    );
+    assert!(is_silent(&pause_buffer), "Should be silent while paused");
 
     // Now resume
     manager.play().unwrap();
@@ -311,7 +303,10 @@ fn test_multiple_rapid_pause_resume_cycles() {
         let _ = manager.process_audio(&mut buffer);
 
         let silent = is_silent(&buffer);
-        println!("Cycle {}: silent after rapid pause/resume = {}", cycle, silent);
+        println!(
+            "Cycle {}: silent after rapid pause/resume = {}",
+            cycle, silent
+        );
 
         assert!(
             silent,
@@ -353,11 +348,7 @@ fn test_pause_just_after_source_becomes_ready() {
         let silent = is_silent(&buffer);
         println!("Buffer {} after ready+pause: silent = {}", i, silent);
 
-        assert!(
-            silent,
-            "Buffer {} has audio after pause-at-ready",
-            i
-        );
+        assert!(silent, "Buffer {} has audio after pause-at-ready", i);
     }
 }
 

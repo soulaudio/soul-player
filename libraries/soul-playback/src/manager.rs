@@ -7,6 +7,7 @@ use crate::{
     error::{PlaybackError, Result},
     events::{CrossfadeProgressTracker, PlaybackEvent},
     history::History,
+    lazy_queue::LazyQueueState,
     queue::Queue,
     shuffle::shuffle_queue,
     source::AudioSource,
@@ -71,13 +72,13 @@ struct StartFadeEnvelope {
 /// Default fade-in duration in milliseconds
 const START_FADE_DURATION_MS: u32 = 30;
 
-/// Default fade-out duration in milliseconds (50ms for smooth, click-free pause)
-const STOP_FADE_DURATION_MS: u32 = 50;
+/// Default fade-out duration in milliseconds (100ms for smooth, natural-sounding pause)
+const STOP_FADE_DURATION_MS: u32 = 100;
 
 /// Audio detection threshold - amplitude above this triggers fade start
-/// Set to -50dB (0.003) to catch quiet intros while filtering encoder noise
-/// Previous value of 0.02 (-34dB) was too high and missed quiet musical content
-const AUDIO_DETECT_THRESHOLD: f32 = 0.003;
+/// Set to -60dB (0.001) to catch very quiet intros while filtering encoder noise
+/// Previous values: 0.02 (-34dB) too high, 0.003 (-50dB) still missed quiet content
+const AUDIO_DETECT_THRESHOLD: f32 = 0.001; // -60dB
 
 /// Maximum wait time for audio detection (ms) before forcing fade start
 /// Handles edge case of tracks that start with genuine silence
@@ -507,6 +508,7 @@ use std::time::Duration;
 /// - Repeat modes (Off, All, One)
 /// - Audio effects processing
 /// - Gapless playback support
+#[allow(clippy::struct_excessive_bools)]
 pub struct PlaybackManager {
     // State
     state: PlaybackState,
@@ -521,6 +523,9 @@ pub struct PlaybackManager {
     // Queue and history
     queue: Queue,
     history: History,
+
+    // Lazy queue state for on-demand loading
+    lazy_state: Option<LazyQueueState>,
 
     // Settings
     volume: Volume,
@@ -615,6 +620,7 @@ impl PlaybackManager {
             current_track: None,
             queue: Queue::new(),
             history: History::new(config.history_size),
+            lazy_state: None,
             volume: Volume::new(config.volume),
             shuffle: config.shuffle,
             repeat: config.repeat,
@@ -753,7 +759,9 @@ impl PlaybackManager {
             // Both frozen start_fade and active stop_fade will multiply together smoothly
             if self.start_fade.is_active() {
                 self.start_fade.freeze();
-                tracing::debug!("[pause] Froze start_fade to prevent volume spike");
+                tracing::info!("[pause] Froze start_fade at current position");
+            } else {
+                tracing::info!("[pause] start_fade not active, no freeze needed");
             }
 
             // Reset wait counter if paused during loading
@@ -898,6 +906,22 @@ impl PlaybackManager {
                 self.state = PlaybackState::Playing;
                 return Ok(());
             }
+        }
+
+        // CRITICAL: Check if we need to load next batch BEFORE trying to get next track
+        // Otherwise, if the track doesn't exist yet, we return QueueEmpty before batch loading!
+        if let Some((offset, limit)) = self.check_batch_loading() {
+            eprintln!(
+                "[PlaybackManager] Forward pagination triggered: loading batch offset={}, limit={}",
+                offset, limit
+            );
+            self.pending_events
+                .push(PlaybackEvent::BatchLoadRequested { offset, limit });
+
+            // Set loading state and wait for batch to arrive
+            // The batch handler will call play_next_in_queue again after loading
+            self.state = PlaybackState::Loading;
+            return Ok(());
         }
 
         // Get next track from queue
@@ -1108,6 +1132,103 @@ impl PlaybackManager {
         self.queue.remove_consecutive_duplicates();
     }
 
+    /// Append tracks to source queue without shuffling (for lazy loading)
+    ///
+    /// Unlike `append_to_queue()`, this does NOT apply shuffle or remove duplicates.
+    /// Used for lazy loading where tracks are already in the correct order (seed-based shuffle).
+    pub fn append_to_source(&mut self, tracks: Vec<QueueTrack>) {
+        self.queue.append_to_source(tracks);
+    }
+
+    // ===== Lazy Queue Management =====
+
+    /// Set lazy context for on-demand track loading
+    ///
+    /// This enables automatic batch loading for large collections.
+    /// When the queue approaches the end of loaded tracks, the system
+    /// will emit events to trigger loading the next batch.
+    pub fn set_lazy_context(
+        &mut self,
+        context: crate::lazy_queue::QueueContext,
+        shuffle_seed: Option<u64>,
+    ) {
+        use crate::lazy_queue::{LazyQueueState, DEFAULT_WINDOW_SIZE};
+
+        let mut state = LazyQueueState::new(context, 0);
+        state.shuffle_seed = shuffle_seed;
+        state.window_end = DEFAULT_WINDOW_SIZE; // Initial batch loaded
+
+        self.lazy_state = Some(state);
+    }
+
+    /// Clear lazy context (disable lazy loading)
+    pub fn clear_lazy_context(&mut self) {
+        self.lazy_state = None;
+    }
+
+    /// Get lazy queue state (for batch loading)
+    pub fn get_lazy_state(&self) -> Option<&LazyQueueState> {
+        self.lazy_state.as_ref()
+    }
+
+    /// Check if we need to load the next batch (forward pagination)
+    ///
+    /// Returns Some((offset, limit)) if batch loading is needed, None otherwise.
+    pub fn check_batch_loading(&mut self) -> Option<(usize, usize)> {
+        if let Some(ref mut lazy_state) = self.lazy_state {
+            let current_pos = self.queue.current_position_in_source();
+
+            if lazy_state.should_load_next_batch(current_pos) {
+                let (offset, limit) = lazy_state.next_batch_range();
+
+                // Update window boundaries
+                lazy_state.extend_window(limit);
+
+                return Some((offset, limit));
+            }
+        }
+        None
+    }
+
+    /// Check if jumping to index requires loading new batch
+    ///
+    /// Returns Some((offset, limit)) for batch containing target index, None if already loaded.
+    pub fn check_jump_loading(&mut self, target_index: usize) -> Option<(usize, usize)> {
+        use crate::lazy_queue::DEFAULT_WINDOW_SIZE;
+
+        if let Some(ref mut lazy_state) = self.lazy_state {
+            // If target is beyond current window, load batch containing it
+            if target_index >= lazy_state.window_end {
+                eprintln!(
+                    "[PlaybackManager] Jump beyond window: target={}, window_end={}",
+                    target_index, lazy_state.window_end
+                );
+
+                // Calculate which batch contains target_index
+                let batch_number = target_index / DEFAULT_WINDOW_SIZE;
+                let offset = batch_number * DEFAULT_WINDOW_SIZE;
+                let limit = DEFAULT_WINDOW_SIZE;
+
+                // Update window to new position
+                lazy_state.window_start = offset;
+                lazy_state.window_end = offset + limit;
+
+                return Some((offset, limit));
+            }
+            // Also trigger forward pagination if jumping near end of window
+            else if lazy_state.should_load_next_batch(target_index) {
+                eprintln!("[PlaybackManager] Jump near window end: target={}, window_end={}, triggering forward pagination",
+                         target_index, lazy_state.window_end);
+
+                let (offset, limit) = lazy_state.next_batch_range();
+                lazy_state.extend_window(limit);
+
+                return Some((offset, limit));
+            }
+        }
+        None
+    }
+
     /// Remove track from queue by index
     pub fn remove_from_queue(&mut self, index: usize) -> Result<QueueTrack> {
         self.queue
@@ -1143,6 +1264,18 @@ impl PlaybackManager {
     /// (if any) is added to history - skipped-over tracks are NOT added since they
     /// were never actually played.
     pub fn skip_to_queue_index(&mut self, index: usize) -> Result<()> {
+        // Check if jumping to index requires loading new batch
+        if let Some((offset, limit)) = self.check_jump_loading(index) {
+            self.pending_events
+                .push(PlaybackEvent::JumpLoadRequested { offset, limit });
+            // Set loading state while batch is fetched
+            self.state = PlaybackState::Loading;
+
+            // IMPORTANT: Return early - wait for batch to load
+            // The batch handler will call skip_to_queue_index again after loading
+            return Ok(());
+        }
+
         if index >= self.queue.len() {
             return Err(PlaybackError::QueueEmpty);
         }
@@ -1370,17 +1503,44 @@ impl PlaybackManager {
                 // Read audio and apply fades
                 let samples_read = source.read_samples(output)?;
                 if samples_read > 0 {
-                    // CRITICAL: Apply start_fade FIRST if active (prevents volume jump on pause)
-                    // When pause is clicked during fade-in, both fades multiply together smoothly
-                    // Example: start_fade gain=0.5, stop_fade gain=1.0 → combined=0.5 (no jump!)
+                    // CRITICAL: Apply start_fade FIRST if active/frozen
+                    // When pause is clicked during fade-in, frozen start_fade maintains constant gain
+                    // Then stop_fade multiplies on top to create smooth fade-out
                     if self.start_fade.is_active() {
                         self.start_fade.process(&mut output[..samples_read]);
                     }
 
                     // Then apply stop_fade on top
                     if let Some(action) = self.stop_fade.process(&mut output[..samples_read]) {
+                        tracing::info!(
+                            "[process_audio] stop_fade completed, transitioning to paused state"
+                        );
                         self.handle_fade_complete_action(action)?;
                     }
+
+                    // CRITICAL: Apply the same processing chain as normal playback
+                    // This prevents volume jumps when transitioning to/from stop_fade
+
+                    // Apply loudness normalization (gain only, no internal limiter)
+                    #[cfg(feature = "volume-leveling")]
+                    self.loudness_normalizer
+                        .process(&mut output[..samples_read]);
+
+                    // Apply headroom attenuation BEFORE effects to prevent clipping in DSP chain
+                    #[cfg(feature = "volume-leveling")]
+                    self.headroom_manager.process(&mut output[..samples_read]);
+
+                    // Apply effects (if feature enabled)
+                    #[cfg(feature = "effects")]
+                    self.effect_chain
+                        .process(&mut output[..samples_read], self.sample_rate);
+
+                    // Apply volume
+                    self.volume.apply(&mut output[..samples_read]);
+
+                    // Apply output limiter AFTER volume to catch ALL peaks
+                    #[cfg(feature = "volume-leveling")]
+                    self.output_limiter.process(&mut output[..samples_read]);
                 }
                 // Fill remainder with keepalive noise
                 if samples_read < output.len() {
@@ -1485,15 +1645,14 @@ impl PlaybackManager {
                     // Track actually finished - position at or past duration
                     self.handle_track_finished()?;
                     return Ok(0);
-                } else {
-                    // Still buffering after seek - output keepalive noise and continue
-                    tracing::debug!(
-                        "[process_audio] Mono: Source returned 0 samples but pos={:?} < dur={:?}, buffering",
-                        position, duration
-                    );
-                    self.fill_underrun_buffer(output);
-                    return Ok(output.len());
                 }
+                // Still buffering after seek - output keepalive noise and continue
+                tracing::debug!(
+                    "[process_audio] Mono: Source returned 0 samples but pos={:?} < dur={:?}, buffering",
+                    position, duration
+                );
+                self.fill_underrun_buffer(output);
+                return Ok(output.len());
             }
 
             // Apply start fade envelope for click-free playback start/resume
@@ -1551,20 +1710,19 @@ impl PlaybackManager {
                         // Track actually finished
                         self.handle_track_finished()?;
                         return Ok(0);
-                    } else {
-                        // Still buffering - this shouldn't happen but handle it gracefully
-                        tracing::warn!(
-                            "[process_audio] Stereo: Unexpected 0 samples with pos={:?} < dur={:?}",
-                            position, duration
-                        );
-                        self.fill_underrun_buffer(output);
-                        return Ok(output.len());
                     }
-                } else {
-                    // No source, track actually finished
-                    self.handle_track_finished()?;
-                    return Ok(0);
+                    // Still buffering - this shouldn't happen but handle it gracefully
+                    tracing::warn!(
+                        "[process_audio] Stereo: Unexpected 0 samples with pos={:?} < dur={:?}",
+                        position,
+                        duration
+                    );
+                    self.fill_underrun_buffer(output);
+                    return Ok(output.len());
                 }
+                // No source, track actually finished
+                self.handle_track_finished()?;
+                return Ok(0);
             }
 
             // Apply start fade envelope for click-free playback start/resume
@@ -1757,16 +1915,15 @@ impl PlaybackManager {
                     }
                 }
                 return Ok(0);
-            } else {
-                // Still buffering after seek - output keepalive noise and continue
-                tracing::debug!(
-                    "[process_stereo_with_crossfade] Source returned 0 samples but pos={:?} < dur={:?}, buffering",
-                    position, duration
-                );
-                // Fill with keepalive noise and return length to continue
-                self.fill_underrun_buffer(output);
-                return Ok(output.len());
             }
+            // Still buffering after seek - output keepalive noise and continue
+            tracing::debug!(
+                "[process_stereo_with_crossfade] Source returned 0 samples but pos={:?} < dur={:?}, buffering",
+                position, duration
+            );
+            // Fill with keepalive noise and return length to continue
+            self.fill_underrun_buffer(output);
+            return Ok(output.len());
         }
 
         Ok(samples_read)

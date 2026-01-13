@@ -120,10 +120,11 @@ export function ArtistsPage() {
     >
       {errorContent || (filteredArtists.length > 0 ? (
         <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
-          {filteredArtists.map((artist) => (
+          {filteredArtists.map((artist, index) => (
             <ArtistCard
               key={artist.id}
               artist={artist}
+              priority={index < 24}
             />
           ))}
         </div>

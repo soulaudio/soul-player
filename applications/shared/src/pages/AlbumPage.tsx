@@ -4,8 +4,9 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ArrowLeft, Play, Clock, Disc3, Pencil } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
@@ -14,14 +15,14 @@ import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { ArtistLink } from '../components/ArtistLink'
 import { useBackend, type BackendTrack, type BackendAlbum } from '../contexts/BackendContext'
-import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 
 export function AlbumPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const { navigate, goBack, hasHistory } = useNavigateWithHistory()
   const { isDesktop, features } = usePlatform()
   const backend = useBackend()
   const commands = usePlayerCommands()
@@ -150,7 +151,14 @@ export function AlbumPage() {
         })
       }
 
-      await commands.playQueue(queue, 0)
+      // Build queue context for lazy loading
+      const context: QueueContext = {
+        type: 'Album',
+        albumId: album!.id,
+        totalCount: queue.length,
+      }
+
+      await commands.playQueue(queue, 0, context)
     } catch (err) {
       console.error('Failed to play all tracks:', err)
     }
@@ -197,7 +205,7 @@ export function AlbumPage() {
         <div className="text-center text-destructive">
           <p className="font-medium mb-2">{error || t('album.notFound')}</p>
           <button
-            onClick={() => navigate('/library?tab=albums')}
+            onClick={() => goBack('/library?tab=albums')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
           >
             {t('common.back')}
@@ -212,15 +220,15 @@ export function AlbumPage() {
   const hasDesktopArtwork = isDesktop && typeof album.id === 'number'
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col pr-6">
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/library?tab=albums')}
+          onClick={() => goBack('/library?tab=albums')}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>{t('album.backToAlbums')}</span>
+          <span>{hasHistory ? t('common.back') : t('album.backToAlbums')}</span>
         </button>
 
         <div className="flex items-start gap-6">

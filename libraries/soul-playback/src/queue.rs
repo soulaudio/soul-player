@@ -65,7 +65,11 @@ impl Queue {
     /// Track will play immediately after current track.
     /// Multiple calls result in LIFO order (last added plays first).
     pub fn add_next(&mut self, track: QueueTrack) {
-        eprintln!("[Queue] add_next: '{}' (Play Next queue now has {} items)", track.title, self.play_next.len() + 1);
+        eprintln!(
+            "[Queue] add_next: '{}' (Play Next queue now has {} items)",
+            track.title,
+            self.play_next.len() + 1
+        );
         self.play_next.insert(0, track);
     }
 
@@ -74,7 +78,11 @@ impl Queue {
     /// Track will play after all Play Next and Source queue tracks.
     /// Multiple calls result in FIFO order (first added plays first).
     pub fn add_to_end(&mut self, track: QueueTrack) {
-        eprintln!("[Queue] add_to_end: '{}' (Add to Queue now has {} items)", track.title, self.queued_later.len() + 1);
+        eprintln!(
+            "[Queue] add_to_end: '{}' (Add to Queue now has {} items)",
+            track.title,
+            self.queued_later.len() + 1
+        );
         self.queued_later.push(track);
     }
 
@@ -305,11 +313,16 @@ impl Queue {
         // Tier 3: Add to Queue (plays at the end)
         tracks.extend(self.queued_later.iter());
 
-        eprintln!("[Queue] get_all(): {} tracks total (Play Next: {}, Source: {}, Add to Queue: {})",
-            tracks.len(),
-            self.play_next.len(),
-            if self.source_index < self.source.len() { self.source.len() - self.source_index } else { 0 },
-            self.queued_later.len()
+        tracing::debug!(
+            total_tracks = tracks.len(),
+            play_next_count = self.play_next.len(),
+            source_count = if self.source_index < self.source.len() {
+                self.source.len() - self.source_index
+            } else {
+                0
+            },
+            queued_later_count = self.queued_later.len(),
+            "[Queue] get_all() called"
         );
 
         tracks
@@ -352,6 +365,11 @@ impl Queue {
     #[allow(dead_code)]
     pub fn is_shuffled(&self) -> bool {
         self.is_shuffled
+    }
+
+    /// Get current position in source queue (for lazy loading)
+    pub fn current_position_in_source(&self) -> usize {
+        self.source_index
     }
 
     /// Get reference to source queue (for shuffling)

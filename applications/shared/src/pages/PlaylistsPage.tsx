@@ -3,8 +3,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ListMusic, Plus } from 'lucide-react'
 import { PlaylistCard } from '../components/PlaylistCard'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
@@ -14,7 +14,7 @@ import { useGridScale } from '../hooks/useGridScale'
 
 export function PlaylistsPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const { navigate } = useNavigateWithHistory()
   const backend = useBackend()
   const { scale, scaleUp, scaleDown } = useGridScale()
 
@@ -143,11 +143,12 @@ export function PlaylistsPage() {
     >
       {errorContent || (filteredPlaylists.length > 0 ? (
         <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
-          {filteredPlaylists.map((playlist) => (
+          {filteredPlaylists.map((playlist, index) => (
             <PlaylistCard
               key={playlist.id}
               playlist={playlist}
               className="w-full"
+              priority={index < 24}
             />
           ))}
         </div>

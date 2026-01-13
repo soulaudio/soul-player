@@ -3,8 +3,8 @@
  * Makes album names clickable throughout the app
  */
 
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 
 export interface AlbumLinkProps {
   /** Album ID - if missing, link will be disabled */
@@ -23,7 +23,7 @@ export function AlbumLink({
   className = '',
   onClick,
 }: AlbumLinkProps) {
-  const navigate = useNavigate()
+  const { navigate } = useNavigateWithHistory()
   const { t } = useTranslation()
 
   const displayName = albumName || t('common.unknownAlbum', 'Unknown Album')

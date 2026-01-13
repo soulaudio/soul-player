@@ -469,7 +469,304 @@ Desktop scans new files and extracts metadata using soul-metadata. The data is a
 - Battery life: 8+ hours
 - Sync time (100 tracks): <30s
 
+## Frontend Architecture (Cross-Platform UI)
+
+### **@soul-player/shared Package**
+
+The shared package provides a **platform-agnostic React/TypeScript UI library** that works identically across desktop, web (server mode), web (demo mode), and marketing demo. All platforms use the **exact same** pages and components with zero duplication.
+
+#### **Core Abstraction: Provider Pattern**
+
+All platform-specific operations are abstracted behind context providers that implement standard interfaces:
+
+```typescript
+// Backend Interface - Data operations (read/write)
+export interface BackendInterface {
+  // Library data
+  getAllTracks(): Promise<BackendTrack[]>
+  getAllAlbums(): Promise<BackendAlbum[]>
+  getAlbumTracks(albumId: number): Promise<BackendTrack[]>
+
+  // Playlist operations
+  createPlaylist(name: string): Promise<BackendPlaylist>
+  addTrackToPlaylist(playlistId: string, trackId: number): Promise<void>
+
+  // ... 30+ methods covering all data operations
+}
+
+// Player Commands Interface - Playback control only
+export interface PlayerCommandsInterface {
+  playQueue(queue: QueueTrack[], startIndex: number): Promise<void>
+  pausePlayback(): Promise<void>
+  skipNext(): Promise<void>
+  setVolume(volume: number): Promise<void>
+  setShuffle(enabled: boolean): Promise<void>
+  setRepeatMode(mode: 'off' | 'all' | 'one'): Promise<void>
+
+  // ... playback control methods only
+}
+```
+
+**CRITICAL SEPARATION**: `BackendInterface` handles data fetching, `PlayerCommandsInterface` handles playback control. Never mix the two - this ensures clean separation of concerns and prevents duplicate code.
+
+#### **Provider Implementations**
+
+Each platform provides its own implementation:
+
+| Provider | Platform | Data Source | Used By |
+|----------|----------|-------------|---------|
+| **TauriBackendProvider** | Desktop | Tauri `invoke()` commands | Desktop app |
+| **MockBackendProvider** | Demo | In-memory `DemoStorage` | Marketing demo, Web demo mode |
+| **ServerBackendProvider** | Web/Mobile | REST API to Soul Server | Web server mode, Mobile (future) |
+| **AbstractBackendProvider** | Base class | Throws "not implemented" | Documentation, testing |
+
+#### **Shared Components Structure**
+
+```
+@soul-player/shared/
+├── pages/                  # 11 full pages (works on all platforms)
+│   ├── HomePage.tsx
+│   ├── LibraryPage.tsx
+│   ├── AlbumsPage.tsx, ArtistsPage.tsx, PlaylistsPage.tsx
+│   ├── AlbumPage.tsx, ArtistPage.tsx, PlaylistPage.tsx
+│   ├── NowPlayingPage.tsx
+│   └── SettingsPage.tsx
+│
+├── components/             # 75+ reusable components
+│   ├── player/            # PlayerFooter, PlayerControls, VolumeControl
+│   ├── library/           # AlbumCard, TrackList, ArtworkImage
+│   ├── settings/          # Audio effects, EQ, compressor editors
+│   └── ui/                # Shadcn-style primitives
+│
+├── contexts/              # Platform abstraction
+│   ├── BackendContext.tsx         # Data operations interface
+│   ├── PlayerCommandsContext.tsx  # Playback control interface
+│   ├── PlatformContext.tsx        # Feature flags & platform detection
+│   └── LibraryDataContext.tsx
+│
+├── providers/             # Reusable provider implementations
+│   ├── AbstractBackendProvider.tsx  # Base class with defaults
+│   ├── MockBackendProvider.tsx      # Demo/test data
+│   └── ServerBackendProvider.tsx    # REST API client
+│
+├── stores/                # Zustand state management
+│   ├── player.ts          # Current track, progress, volume
+│   ├── library.ts         # Cached library data
+│   └── sync.ts            # Multi-device sync state
+│
+├── lib/                   # Utilities
+│   └── demo-storage.ts    # Demo data management
+│
+└── theme/                 # Theme system with built-in themes
+    ├── ThemeManager.ts
+    └── themes.ts          # dark, light, ocean, earth
+
+**Exports:**
+- 11 pages, 75+ components, 5 contexts, 3 providers
+- Theme system, i18n system, utilities
+- Types: Track, Album, Artist, Playlist, QueueTrack
+- Total: ~12,000 LOC of shared UI code
+```
+
+#### **Platform-Specific Code**
+
+Each platform only needs to implement 2-3 providers:
+
+**Desktop (applications/desktop):**
+```typescript
+// Implements BackendInterface using Tauri commands
+export function TauriBackendProvider({ children }) {
+  const backend = useMemo(() => ({
+    async getAllTracks() {
+      return invoke<BackendTrack[]>('get_all_tracks')
+    },
+    async createPlaylist(name: string) {
+      return invoke<BackendPlaylist>('create_playlist', { name })
+    },
+    // ... all methods map to Tauri commands
+  }), [])
+
+  return <BackendProvider value={backend}>{children}</BackendProvider>
+}
+
+// Usage:
+<TauriBackendProvider>
+  <TauriPlayerCommandsProvider>
+    <AlbumsPage />  {/* Works identical to web! */}
+  </TauriPlayerCommandsProvider>
+</TauriBackendProvider>
+```
+
+**Marketing Demo (applications/marketing):**
+```typescript
+// Uses MockBackendProvider from shared + WASM playback
+const demoStorage = new DemoStorage()
+await demoStorage.loadFromJson('/demo-data.json')
+
+<MockBackendProvider storage={demoStorage}>
+  <DemoPlayerCommandsProvider storage={demoStorage}>
+    <AlbumsPage />  {/* Same component as desktop! */}
+  </DemoPlayerCommandsProvider>
+</MockBackendProvider>
+```
+
+**Web App (applications/web):**
+```typescript
+// Supports both demo mode and server mode
+function WebApp() {
+  const [mode, setMode] = useState<'demo' | 'server'>('demo')
+
+  if (mode === 'demo') {
+    // Local demo with no authentication
+    return (
+      <MockBackendProvider storage={demoStorage}>
+        <WebPlayerCommandsProvider>
+          <AlbumsPage />  {/* Same as desktop & marketing! */}
+        </WebPlayerCommandsProvider>
+      </MockBackendProvider>
+    )
+  } else {
+    // Server mode with authentication
+    return (
+      <ServerBackendProvider apiBase="/api" authToken={token}>
+        <WebPlayerCommandsProvider>
+          <AlbumsPage />  {/* Still the same component! */}
+        </WebPlayerCommandsProvider>
+      </ServerBackendProvider>
+    )
+  }
+}
+```
+
+#### **Feature Gating**
+
+Different platforms have different capabilities. The `PlatformContext` enables conditional rendering:
+
+```typescript
+<PlatformProvider
+  platform="web"
+  features={{
+    canDeleteTracks: false,        // Read-only in demo mode
+    canCreatePlaylists: serverMode, // Only in server mode
+    hasAudioSettings: false,        // No EQ/effects on web
+    hasKeyboardShortcuts: false,    // Desktop only
+  }}
+>
+  {/* Components automatically hide unavailable features */}
+  <FeatureGate feature="canCreatePlaylists">
+    <CreatePlaylistButton />  {/* Only shows if enabled */}
+  </FeatureGate>
+</PlatformProvider>
+```
+
+#### **Command Flow Example**
+
+User clicks "Play Album" button:
+
+1. **UI Component** (AlbumPage.tsx in shared):
+   ```typescript
+   const backend = useBackend()          // Get backend
+   const commands = usePlayerCommands()   // Get player commands
+
+   async function playAlbum(albumId: number) {
+     // 1. Fetch data via BackendInterface
+     const tracks = await backend.getAlbumTracks(albumId)
+
+     // 2. Transform to queue format
+     const queue = tracks.map(t => ({
+       trackId: String(t.id),
+       title: t.title,
+       filePath: t.file_path!,
+       // ...
+     }))
+
+     // 3. Play via PlayerCommandsInterface
+     await commands.playQueue(queue, 0)
+   }
+   ```
+
+2. **Desktop Path**:
+   ```
+   AlbumPage → TauriBackendProvider → invoke('get_album_tracks')
+            → TauriPlayerCommandsProvider → invoke('play_queue')
+            → Rust playback manager → Audio output
+   ```
+
+3. **Web Demo Path**:
+   ```
+   AlbumPage → MockBackendProvider → demoStorage.getAlbumTracks()
+            → DemoPlayerCommandsProvider → WASM playback → Web Audio API
+   ```
+
+4. **Web Server Path**:
+   ```
+   AlbumPage → ServerBackendProvider → fetch('/api/albums/:id/tracks')
+            → WebPlayerCommandsProvider → HTMLAudioElement + server sync
+   ```
+
+**Result:** Same UI code, different backend implementations, identical user experience.
+
+#### **Code Reusability Metrics**
+
+| Component | Desktop | Marketing | Web | Shared |
+|-----------|---------|-----------|-----|--------|
+| Pages | ✅ | ✅ | ✅ | 11 pages (100%) |
+| Components | ✅ | ✅ | ✅ | 75+ components (100%) |
+| Stores | ✅ | ✅ | ✅ | 3 Zustand stores (100%) |
+| Theme System | ✅ | ✅ | ✅ | Full theme engine (100%) |
+| i18n | ✅ | ✅ | ✅ | All translations (100%) |
+| **Backend Logic** | TauriBackend (~160 LOC) | MockBackend (shared) | MockBackend + ServerBackend (shared) | 100% reusable |
+| **Platform Code** | ~400 LOC | ~200 LOC | ~300 LOC | <5% unique per platform |
+
+**Total Shared**: ~12,000 LOC
+**Platform-Specific**: ~400 LOC per platform (3%)
+**Reusability**: 97%
+
+#### **Benefits of This Architecture**
+
+1. **Zero UI Duplication**: All platforms use identical pages/components
+2. **Easy to Add Platforms**: Implement 2 providers (~400 LOC) → get 11 pages + 75 components for free
+3. **Consistent UX**: Users get identical experience across desktop, web, mobile
+4. **Testability**: Mock providers enable easy testing without real backend
+5. **Flexibility**: Platforms can mix providers (e.g., web demo mode + server mode)
+6. **Type Safety**: TypeScript ensures provider implementations match interfaces
+
+#### **Future Platforms**
+
+Adding new platforms is trivial:
+
+**Mobile (React Native):**
+```typescript
+class NativeBackendProvider extends AbstractBackendProvider {
+  async getAllTracks() {
+    return NativeModules.SoulPlayer.getAllTracks()
+  }
+  // ... implement methods using native modules
+}
+
+// Then use shared pages:
+<NativeBackendProvider>
+  <AlbumsPage />  {/* Works immediately! */}
+</NativeBackendProvider>
+```
+
+**CLI (Ink.js):**
+```typescript
+// Terminal-based UI using same data layer
+<TauriBackendProvider>
+  <TerminalAlbumsList />  {/* Custom rendering, shared data */}
+</TauriBackendProvider>
+```
+
+**Browser Extension:**
+```typescript
+<ServerBackendProvider apiBase="https://my-server.com/api">
+  <MiniPlayer />  {/* Compact UI, shared logic */}
+</ServerBackendProvider>
+```
+
 ---
+
 
 ## Scalability
 

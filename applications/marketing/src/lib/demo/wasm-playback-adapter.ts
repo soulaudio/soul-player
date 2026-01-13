@@ -594,4 +594,18 @@ export class WasmPlaybackAdapter {
     }))
     this.wasmManager!.appendToQueue(plainTracks)
   }
+
+  clearPlayNext(): void {
+    this.ensureInitialized()
+    // Note: WASM manager may not have this method yet, stub for now
+    // TODO: Implement in WASM if needed
+    console.warn('[WasmPlaybackAdapter] clearPlayNext() not implemented in WASM')
+  }
+
+  clearAddToQueue(): void {
+    this.ensureInitialized()
+    // Note: WASM manager may not have this method yet, stub for now
+    // TODO: Implement in WASM if needed
+    console.warn('[WasmPlaybackAdapter] clearAddToQueue() not implemented in WASM')
+  }
 }

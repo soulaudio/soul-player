@@ -106,6 +106,7 @@ export interface LibraryDataInterface {
   getAlbumTracks: (albumId: string | number) => Promise<LibraryTrack[]>;
   getArtistTracks: (artistId: string | number) => Promise<LibraryTrack[]>;
   getArtistAlbums: (artistId: string | number) => Promise<Album[]>;
+  getArtistTopTracks: (artistId: string | number, limit?: number) => Promise<LibraryTrack[]>;
   getPlaylistTracks: (playlistId: string) => Promise<LibraryTrack[]>;
 
   // Queue building helper

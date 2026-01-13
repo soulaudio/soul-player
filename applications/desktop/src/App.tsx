@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useBackend, clearArtworkCache } from '@soul-player/shared';
 import { MainLayout } from './layouts/MainLayout';
 // Use shared pages for cross-platform parity
@@ -20,6 +20,52 @@ import { SettingsPage } from './pages/SettingsPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { GenrePage } from './pages/GenrePage';
 import { FileDropHandler } from './components/FileDropHandler';
+
+function HomeRoute() {
+  const backend = useBackend();
+  const [homeEnabled, setHomeEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const loadHomeEnabled = () => {
+      backend.getUserSetting('home.enabled')
+        .then((value) => {
+          setHomeEnabled(value ?? true);
+        })
+        .catch(err => {
+          console.error('Failed to load home.enabled setting:', err);
+          setHomeEnabled(true); // Default to enabled on error
+        });
+    };
+
+    // Load on mount
+    loadHomeEnabled();
+
+    // Listen for changes from settings page
+    const handleHomeEnabledChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ enabled: boolean }>;
+      setHomeEnabled(customEvent.detail.enabled);
+    };
+
+    window.addEventListener('home-enabled-changed', handleHomeEnabledChanged);
+
+    return () => {
+      window.removeEventListener('home-enabled-changed', handleHomeEnabledChanged);
+    };
+  }, [backend]);
+
+  // Show loading while checking
+  if (homeEnabled === null) {
+    return null; // Or a loading spinner
+  }
+
+  // Redirect to albums if home is disabled
+  if (!homeEnabled) {
+    return <Navigate to="/albums" replace />;
+  }
+
+  // Show home page if enabled
+  return <HomePage />;
+}
 
 function App() {
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
@@ -121,7 +167,7 @@ function App() {
     <FileDropHandler>
       <MainLayout>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<HomeRoute />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/albums" element={<AlbumsPage />} />
           <Route path="/albums/:id" element={<AlbumPage />} />

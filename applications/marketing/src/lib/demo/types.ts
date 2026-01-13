@@ -1,11 +1,17 @@
 /**
- * Type definitions for demo playback
+ * WASM-specific type definitions for demo playback
  * Mirrors the Rust WASM types from soul-playback
+ *
+ * NOTE: DemoTrack, DemoAlbum, and DemoData have been moved to @soul-player/shared
+ * This file now only contains WASM-specific types for the playback bridge
  *
  * IMPORTANT: Field names must match Rust serde expectations:
  * - duration_secs (with underscore, not camelCase)
  * - track_number (with underscore, not camelCase)
  */
+
+// Re-export demo data types from shared for backward compatibility
+export type { DemoTrack, DemoAlbum, DemoData } from '@soul-player/shared'
 
 export interface QueueTrack {
   id: string
@@ -58,30 +64,4 @@ export const defaultPlaybackConfig: PlaybackConfig = {
   shuffle: ShuffleMode.Off,
   repeat: RepeatMode.Off,
   gapless: true
-}
-
-// Demo data structure
-export interface DemoTrack {
-  id: string
-  title: string
-  artist: string
-  album?: string
-  duration: number
-  trackNumber?: number
-  path: string
-  coverUrl?: string
-}
-
-export interface DemoAlbum {
-  id: string
-  title: string
-  artist: string
-  year: number
-  trackIds: string[]
-  coverUrl?: string
-}
-
-export interface DemoData {
-  tracks: DemoTrack[]
-  albums: DemoAlbum[]
 }

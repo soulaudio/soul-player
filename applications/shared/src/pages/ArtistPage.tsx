@@ -4,16 +4,19 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ArrowLeft, Play, Users, Disc3, Music, Pencil } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { ViewToggle } from '../components/ViewToggle'
+import { DiscographyListView } from '../components/DiscographyListView'
 import { useBackend, type BackendTrack, type BackendAlbum, type BackendArtist } from '../contexts/BackendContext'
-import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 
@@ -66,7 +69,7 @@ function ArtistAlbumCard({
 export function ArtistPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const { navigate, goBack, hasHistory } = useNavigateWithHistory()
   const { isDesktop, features } = usePlatform()
   const backend = useBackend()
   const commands = usePlayerCommands()
@@ -74,11 +77,22 @@ export function ArtistPage() {
   const [artist, setArtist] = useState<BackendArtist | null>(null)
   const [albums, setAlbums] = useState<BackendAlbum[]>([])
   const [tracks, setTracks] = useState<BackendTrack[]>([])
+  const [topTracks, setTopTracks] = useState<BackendTrack[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'albums' | 'tracks'>('albums')
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
   const [artistArtworkUrl, setArtistArtworkUrl] = useState<string | null>(null)
+
+  // Discography view toggle (grid or list)
+  const [discographyView, setDiscographyView] = useState<'grid' | 'list'>(() => {
+    if (typeof window === 'undefined') return 'grid'
+    return (localStorage.getItem('artist-discography-view') as 'grid' | 'list') || 'grid'
+  })
+
+  // Persist view preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('artist-discography-view', discographyView)
+  }, [discographyView])
 
   // Add to playlist dialog state
   const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
@@ -113,13 +127,15 @@ export function ArtistPage() {
 
       setArtist(foundArtist)
 
-      const [artistTracks, artistAlbums] = await Promise.all([
+      const [artistTracks, artistAlbums, topTracksData] = await Promise.all([
         backend.getArtistTracks(artistId),
         backend.getArtistAlbums(artistId),
+        backend.getArtistTopTracks(artistId, 10),
       ])
 
       setTracks(artistTracks)
       setAlbums(artistAlbums)
+      setTopTracks(topTracksData)
 
       // Load artist artwork if on desktop
       if (isDesktop) {
@@ -218,7 +234,14 @@ export function ArtistPage() {
         })
       }
 
-      await commands.playQueue(queue, 0)
+      // Build queue context for lazy loading
+      const context: QueueContext = {
+        type: 'Artist',
+        artistId: artist!.id,
+        totalCount: queue.length,
+      }
+
+      await commands.playQueue(queue, 0, context)
     } catch (err) {
       console.error('Failed to play all tracks:', err)
     }
@@ -248,7 +271,7 @@ export function ArtistPage() {
         <div className="text-center text-destructive">
           <p className="font-medium mb-2">{error || t('artist.notFound')}</p>
           <button
-            onClick={() => navigate('/library?tab=artists')}
+            onClick={() => goBack('/library?tab=artists')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
           >
             {t('common.back')}
@@ -259,113 +282,71 @@ export function ArtistPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="mb-6">
-        <button
-          onClick={() => navigate('/library?tab=artists')}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{t('artist.backToArtists')}</span>
-        </button>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto pr-6">
+        {/* Header */}
+        <div className="mb-6">
+          <button
+            onClick={() => goBack('/library?tab=artists')}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>{hasHistory ? t('common.back') : t('artist.backToArtists')}</span>
+          </button>
 
-        <div className="flex items-start gap-6">
-          {/* Artist Avatar */}
-          <div className="group relative w-32 h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {artistArtworkUrl ? (
-              <img
-                src={artistArtworkUrl}
-                alt={artist.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <Users className="w-16 h-16 text-muted-foreground" />
-            )}
-            {/* Edit button overlay */}
-            {isDesktop && (
+          <div className="flex items-start gap-6">
+            {/* Artist Avatar */}
+            <div className="group relative w-32 h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {artistArtworkUrl ? (
+                <img
+                  src={artistArtworkUrl}
+                  alt={artist.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Users className="w-16 h-16 text-muted-foreground" />
+              )}
+              {/* Edit button overlay */}
+              {isDesktop && (
+                <button
+                  onClick={() => setEditArtworkOpen(true)}
+                  className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-full"
+                >
+                  <Pencil className="w-6 h-6 text-white" />
+                </button>
+              )}
+            </div>
+
+            {/* Artist Info */}
+            <div className="flex-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
+                {t('library.artist')}
+              </p>
+              <h1 className="text-4xl font-bold mb-2">{artist.name}</h1>
+              <p className="text-muted-foreground mb-4">
+                {artist.album_count} {t('library.albums')} • {artist.track_count} {t('library.tracks')}
+              </p>
+
               <button
-                onClick={() => setEditArtworkOpen(true)}
-                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-full"
+                onClick={handlePlayAll}
+                onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
+                disabled={tracks.filter(t => t.file_path).length === 0}
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50"
               >
-                <Pencil className="w-6 h-6 text-white" />
+                <Play className="w-5 h-5" fill="currentColor" />
+                <span>{t('common.playAll')}</span>
               </button>
-            )}
-          </div>
-
-          {/* Artist Info */}
-          <div className="flex-1">
-            <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
-              {t('library.artist')}
-            </p>
-            <h1 className="text-4xl font-bold mb-2">{artist.name}</h1>
-            <p className="text-muted-foreground mb-4">
-              {artist.album_count} {t('library.albums')} • {artist.track_count} {t('library.tracks')}
-            </p>
-
-            <button
-              onClick={handlePlayAll}
-              onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
-              disabled={tracks.filter(t => t.file_path).length === 0}
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Play className="w-5 h-5" fill="currentColor" />
-              <span>{t('common.playAll')}</span>
-            </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Tab Navigation */}
-      <div className="flex items-center gap-1 bg-muted rounded-lg p-1 mb-6 w-fit">
-        <button
-          onClick={() => setActiveTab('albums')}
-          className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-            activeTab === 'albums' ? 'bg-background shadow-sm' : 'hover:bg-background/50'
-          }`}
-        >
-          <Disc3 className="w-4 h-4" />
-          <span className="text-sm font-medium">{t('library.tab.albums')}</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('tracks')}
-          className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
-            activeTab === 'tracks' ? 'bg-background shadow-sm' : 'hover:bg-background/50'
-          }`}
-        >
-          <Music className="w-4 h-4" />
-          <span className="text-sm font-medium">{t('library.tab.tracks')}</span>
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto">
-        {/* Albums Tab */}
-        {activeTab === 'albums' && (
-          albums.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {albums.map((album) => (
-                <ArtistAlbumCard
-                  key={album.id}
-                  album={album}
-                  onClick={() => handleAlbumClick(album)}
-                  isDesktop={isDesktop}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Disc3 className="w-12 h-12 mb-4 opacity-50" />
-              <p className="font-medium">{t('library.noAlbums')}</p>
-            </div>
-          )
-        )}
-
-        {/* Tracks Tab */}
-        {activeTab === 'tracks' && (
-          tracks.length > 0 ? (
+        {/* Top Songs Section */}
+        {topTracks.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold mb-4">{t('artist.topSongs')}</h2>
             <TrackList
-              tracks={tracks.map(t => ({
+              tracks={topTracks.map(t => ({
                 id: t.id,
                 title: String(t.title || 'Unknown'),
                 artist: t.artist_name,
@@ -380,36 +361,65 @@ export function ArtistPage() {
                 sampleRate: t.sample_rate,
                 channels: t.channels,
               }))}
-              buildQueue={buildQueue}
-              renderMenu={(track) => {
-                const backendTrack = tracks.find(t => t.id === track.id)
-                if (!backendTrack) return null
-                return (
-                  <TrackMenu
-                    track={backendTrack}
-                    onPlayNext={() => handlePlayNext(backendTrack)}
-                    onAddToQueue={() => handleAddToQueue(backendTrack)}
-                    onAddToPlaylist={() => {
-                      setSelectedTrackForPlaylist({
-                        id: backendTrack.id,
-                        title: backendTrack.title,
-                      })
-                    }}
-                    onDelete={async () => {
-                      await backend.deleteTrack(backendTrack.id)
-                      if (id) loadArtist(parseInt(id, 10))
-                    }}
+            virtualized={false}
+            buildQueue={buildQueue}
+            renderMenu={(track) => {
+              const backendTrack = topTracks.find(t => t.id === track.id)
+              if (!backendTrack) return null
+              return (
+                <TrackMenu
+                  track={backendTrack}
+                  onPlayNext={() => handlePlayNext(backendTrack)}
+                  onAddToQueue={() => handleAddToQueue(backendTrack)}
+                  onAddToPlaylist={() => {
+                    setSelectedTrackForPlaylist({
+                      id: backendTrack.id,
+                      title: backendTrack.title,
+                    })
+                  }}
+                  onDelete={async () => {
+                    await backend.deleteTrack(backendTrack.id)
+                    if (id) loadArtist(parseInt(id, 10))
+                  }}
+                />
+              )
+            }}
+          />
+        </div>
+      )}
+
+        {/* Discography Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold">{t('artist.discography')}</h2>
+            <ViewToggle view={discographyView} onViewChange={setDiscographyView} />
+          </div>
+
+          {albums.length > 0 ? (
+            discographyView === 'grid' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {albums.map((album) => (
+                  <ArtistAlbumCard
+                    key={album.id}
+                    album={album}
+                    onClick={() => handleAlbumClick(album)}
+                    isDesktop={isDesktop}
                   />
-                )
-              }}
-            />
+                ))}
+              </div>
+            ) : (
+              <DiscographyListView
+                albums={albums}
+                onAlbumClick={handleAlbumClick}
+              />
+            )
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Music className="w-12 h-12 mb-4 opacity-50" />
-              <p className="font-medium">{t('library.noTracks')}</p>
+              <Disc3 className="w-12 h-12 mb-4 opacity-50" />
+              <p className="font-medium">{t('library.noAlbums')}</p>
             </div>
-          )
-        )}
+          )}
+        </div>
       </div>
 
       {/* Edit Artwork Dialog */}

@@ -6,20 +6,29 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Music } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
+import { TrackMenu } from '../components/TrackMenu'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
-import { type QueueTrack } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { removeConsecutiveDuplicates } from '../utils/queue'
 
 export function TracksPage() {
   const { t } = useTranslation()
   const backend = useBackend()
+  const commands = usePlayerCommands()
 
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tracks, setTracks] = useState<BackendTrack[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [healthWarning, setHealthWarning] = useState<string | null>(null)
+
+  // Add to playlist dialog state
+  const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
+    id: number
+    title: string
+  } | null>(null)
 
   // Load tracks
   const loadTracks = useCallback(async () => {
@@ -59,7 +68,7 @@ export function TracksPage() {
     )
   }, [tracks, searchQuery])
 
-  // Build queue from tracks
+  // Build queue from tracks (optimized: only first 50 tracks for immediate playback)
   const buildQueueFromTracks = useCallback((
     libraryTracks: BackendTrack[],
     clickedTrack: Track,
@@ -68,10 +77,25 @@ export function TracksPage() {
     const validClickedIndex = libraryTracks.findIndex(t => t.id === clickedTrack.id)
     const actualIndex = validClickedIndex !== -1 ? validClickedIndex : clickedIndex
 
-    const queue = [
-      ...libraryTracks.slice(actualIndex),
-      ...libraryTracks.slice(0, actualIndex),
-    ].map((t): QueueTrack => ({
+    // For large libraries, only build queue for first 50 tracks to avoid lag
+    // Backend will lazy-load more tracks as needed
+    const INITIAL_QUEUE_SIZE = 50
+    const totalTracks = libraryTracks.length
+    const shouldLimitQueue = totalTracks > INITIAL_QUEUE_SIZE
+
+    let tracksToQueue: BackendTrack[]
+    if (shouldLimitQueue) {
+      // Only take first 50 tracks starting from clicked position
+      tracksToQueue = libraryTracks.slice(actualIndex, actualIndex + INITIAL_QUEUE_SIZE)
+    } else {
+      // Small library - build full queue
+      tracksToQueue = [
+        ...libraryTracks.slice(actualIndex),
+        ...libraryTracks.slice(0, actualIndex),
+      ]
+    }
+
+    const queue = tracksToQueue.map((t): QueueTrack => ({
       trackId: String(t.id),
       title: t.title || 'Unknown',
       artist: t.artist_name || 'Unknown Artist',
@@ -95,6 +119,51 @@ export function TracksPage() {
     },
     [buildQueueFromTracks, filteredTracks]
   )
+
+  // Convert BackendTrack to QueueTrack
+  const toQueueTrack = useCallback((track: BackendTrack): QueueTrack => ({
+    trackId: String(track.id),
+    title: track.title || 'Unknown',
+    artist: track.artist_name || 'Unknown Artist',
+    album: track.album_title || null,
+    albumId: track.album_id,
+    filePath: track.file_path || '',
+    durationSeconds: track.duration_seconds || null,
+    trackNumber: track.track_number || null,
+    coverArtPath: track.cover_art_path,
+  }), [])
+
+  // Queue operation handlers
+  const handlePlayNext = useCallback(async (track: BackendTrack) => {
+    try {
+      const queueTrack = toQueueTrack(track)
+      await commands.addPlayNext(queueTrack)
+    } catch (error) {
+      console.error('[TracksPage] Failed to add track to play next:', error)
+    }
+  }, [commands, toQueueTrack])
+
+  const handleAddToQueue = useCallback(async (track: BackendTrack) => {
+    try {
+      const queueTrack = toQueueTrack(track)
+      await commands.addToQueueEnd(queueTrack)
+    } catch (error) {
+      console.error('[TracksPage] Failed to add track to queue:', error)
+    }
+  }, [commands, toQueueTrack])
+
+  // Create queue context for lazy loading
+  const queueContext = useMemo<QueueContext | undefined>(() => {
+    // Only use lazy loading for non-filtered views with > 100 tracks
+    if (searchQuery.trim() || filteredTracks.length <= 100) {
+      return undefined
+    }
+    return {
+      type: 'AllTracks',
+      userId: 1, // Default user ID for desktop
+      totalCount: filteredTracks.length,
+    }
+  }, [searchQuery, filteredTracks.length])
 
   // Show error in LibraryPageLayout if present
   const errorContent = error ? (
@@ -125,26 +194,47 @@ export function TracksPage() {
       cacheKey="library-tracks-count"
     >
       {errorContent || (filteredTracks.length > 0 ? (
-        <div>
-          <TrackList
-            tracks={filteredTracks.map(t => ({
-              id: t.id,
-              title: String(t.title || 'Unknown'),
-              artist: t.artist_name,
-              artistId: t.artist_id,
-              album: t.album_title,
-              albumId: t.album_id,
-              duration: t.duration_seconds,
-              trackNumber: t.track_number,
-              isAvailable: !!t.file_path,
-              format: t.file_format,
-              bitrate: t.bit_rate,
-              sampleRate: t.sample_rate,
-              channels: t.channels,
-            }))}
-            buildQueue={buildQueue}
-          />
-        </div>
+        <TrackList
+          tracks={filteredTracks.map(t => ({
+            id: t.id,
+            title: String(t.title || 'Unknown'),
+            artist: t.artist_name,
+            artistId: t.artist_id,
+            album: t.album_title,
+            albumId: t.album_id,
+            duration: t.duration_seconds,
+            trackNumber: t.track_number,
+            isAvailable: !!t.file_path,
+            format: t.file_format,
+            bitrate: t.bit_rate,
+            sampleRate: t.sample_rate,
+            channels: t.channels,
+          }))}
+          buildQueue={buildQueue}
+          virtualized={filteredTracks.length > 100}
+          virtualItemSize={56}
+          renderMenu={(track) => {
+            const backendTrack = filteredTracks.find(t => t.id === track.id)
+            if (!backendTrack) return null
+            return (
+              <TrackMenu
+                track={backendTrack}
+                onPlayNext={() => handlePlayNext(backendTrack)}
+                onAddToQueue={() => handleAddToQueue(backendTrack)}
+                onAddToPlaylist={() => {
+                  setSelectedTrackForPlaylist({
+                    id: backendTrack.id,
+                    title: backendTrack.title,
+                  })
+                }}
+                onDelete={async () => {
+                  await backend.deleteTrack(backendTrack.id)
+                  loadTracks()
+                }}
+              />
+            )
+          }}
+        />
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Music className="w-12 h-12 mb-4 opacity-50" />
@@ -156,6 +246,16 @@ export function TracksPage() {
           </p>
         </div>
       ))}
+
+      {/* Add to Playlist Dialog */}
+      {selectedTrackForPlaylist && (
+        <AddToPlaylistDialog
+          open={true}
+          trackId={selectedTrackForPlaylist.id}
+          trackTitle={selectedTrackForPlaylist.title}
+          onClose={() => setSelectedTrackForPlaylist(null)}
+        />
+      )}
     </LibraryPageLayout>
   )
 }

@@ -21,9 +21,11 @@ interface AlbumCardProps {
   className?: string
   /** Show artist and year below title */
   showArtist?: boolean
+  /** Priority: if true, loads artwork immediately without lazy loading. Use for above-the-fold items (first ~20-30 items) */
+  priority?: boolean
 }
 
-export function AlbumCard({ album, className = 'w-full', showArtist = true }: AlbumCardProps) {
+export function AlbumCard({ album, className = 'w-full', showArtist = true, priority = false }: AlbumCardProps) {
   return (
     <MediaCard
       type="album"
@@ -34,6 +36,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
       additionalInfo={showArtist && album.year ? String(album.year) : undefined}
       coverUrl={album.coverUrl || album.cover_art_path}
       className={className}
+      priority={priority}
     />
   )
 }

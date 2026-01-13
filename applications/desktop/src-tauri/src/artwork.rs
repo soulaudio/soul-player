@@ -431,7 +431,10 @@ impl ArtworkManager {
                 .save_custom_artwork("albums", &album_id.to_string(), &data, mime_type)
                 .await?;
 
-            tracing::info!("Saved artwork to Soul Player storage: {}", artwork_path.display());
+            tracing::info!(
+                "Saved artwork to Soul Player storage: {}",
+                artwork_path.display()
+            );
 
             // Update database with artwork source
             soul_storage::albums::set_artwork_source(

@@ -45,6 +45,30 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
       return invoke<BackendGenre[]>('get_all_genres')
     },
 
+    async getRandomAlbums(limit: number) {
+      return invoke<BackendAlbum[]>('get_random_albums', { limit })
+    },
+
+    async getRecentlyAddedAlbums(limit: number) {
+      return invoke<BackendAlbum[]>('get_recently_added_albums', { limit })
+    },
+
+    async getRecentlyAddedAlbumsWithinDays(days: number, limit: number) {
+      return invoke<BackendAlbum[]>('get_recently_added_albums_within_days', { days, limit })
+    },
+
+    async getLeastPlayedAlbums(limit: number) {
+      return invoke<BackendAlbum[]>('get_least_played_albums', { limit })
+    },
+
+    async getTimeCapsuleAlbums(limit: number) {
+      return invoke<BackendAlbum[]>('get_time_capsule_albums', { limit })
+    },
+
+    async getGenreAlbums(genreId: number, limit: number) {
+      return invoke<BackendAlbum[]>('get_genre_albums', { genreId, limit })
+    },
+
     // Single item lookups
     async getAlbumById(id: number) {
       return invoke<BackendAlbum | null>('get_album_by_id', { id })
@@ -73,6 +97,10 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
 
     async getArtistAlbums(artistId: number) {
       return invoke<BackendAlbum[]>('get_artist_albums', { artistId })
+    },
+
+    async getArtistTopTracks(artistId: number, limit = 10) {
+      return invoke<BackendTrack[]>('get_artist_top_tracks', { artistId, limit })
     },
 
     async getPlaylistTracks(playlistId: string) {
@@ -130,6 +158,14 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
     // Onboarding
     async checkOnboardingNeeded() {
       return invoke<boolean>('check_onboarding_needed')
+    },
+
+    async getUserSetting(key: string) {
+      return invoke<any>('get_user_setting', { key })
+    },
+
+    async setUserSetting(key: string, value: any) {
+      await invoke('set_user_setting', { key, value })
     },
 
     // Artwork editing

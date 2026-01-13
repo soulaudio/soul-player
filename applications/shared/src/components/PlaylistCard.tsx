@@ -11,9 +11,11 @@ interface PlaylistCardProps {
   playlist: BackendPlaylist
   /** Card width class (default: w-full for responsive grid) */
   className?: string
+  /** Priority: if true, loads artwork immediately without lazy loading. Use for above-the-fold items (first ~20-30 items) */
+  priority?: boolean
 }
 
-export function PlaylistCard({ playlist, className = 'w-full' }: PlaylistCardProps) {
+export function PlaylistCard({ playlist, className = 'w-full', priority = false }: PlaylistCardProps) {
   const { t } = useTranslation()
 
   return (
@@ -24,6 +26,7 @@ export function PlaylistCard({ playlist, className = 'w-full' }: PlaylistCardPro
       subtitle={`${playlist.track_count} ${t('library.tracks')}`}
       coverUrl={playlist.cover_art_path ?? undefined}
       className={className}
+      priority={priority}
     />
   )
 }

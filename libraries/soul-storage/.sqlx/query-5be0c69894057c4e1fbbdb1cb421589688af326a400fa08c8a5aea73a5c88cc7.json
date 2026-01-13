@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at,\n                COALESCE(play_counts.count, 0) as play_count\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         LEFT JOIN (\n             SELECT t.album_id, COUNT(*) as count\n             FROM tracks t\n             JOIN playback_contexts pc ON pc.context_type = 'album' AND CAST(pc.context_id AS INTEGER) = t.album_id\n             WHERE pc.user_id = ?\n             GROUP BY t.album_id\n         ) play_counts ON play_counts.album_id = a.id\n         ORDER BY play_count ASC, RANDOM()\n         LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "artist_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "year",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cover_art_path",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "artwork_source",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "musicbrainz_id",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "play_count",
+        "ordinal": 10,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5be0c69894057c4e1fbbdb1cb421589688af326a400fa08c8a5aea73a5c88cc7"
+}

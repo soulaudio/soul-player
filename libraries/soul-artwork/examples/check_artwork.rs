@@ -23,9 +23,14 @@ fn main() {
                     for tag in tagged_file.tags() {
                         let pictures = tag.pictures();
                         if !pictures.is_empty() {
-                            println!("✓ Found {} picture(s) in {:?} tag", pictures.len(), tag.tag_type());
+                            println!(
+                                "✓ Found {} picture(s) in {:?} tag",
+                                pictures.len(),
+                                tag.tag_type()
+                            );
                             for (i, pic) in pictures.iter().enumerate() {
-                                println!("  Picture {}: {:?} ({} bytes)",
+                                println!(
+                                    "  Picture {}: {:?} ({} bytes)",
                                     i + 1,
                                     pic.pic_type(),
                                     pic.data().len()

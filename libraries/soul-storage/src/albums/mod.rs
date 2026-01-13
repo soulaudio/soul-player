@@ -29,6 +29,219 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Album>> {
         .collect())
 }
 
+pub async fn get_random(pool: &SqlitePool, limit: i64) -> Result<Vec<Album>> {
+    let rows = sqlx::query!(
+        "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+         FROM albums a
+         LEFT JOIN artists ar ON a.artist_id = ar.id
+         ORDER BY RANDOM()
+         LIMIT ?",
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Album {
+            id: row.id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            year: row.year.map(|y| y as i32),
+            cover_art_path: row.cover_art_path,
+            artwork_source: row.artwork_source,
+            musicbrainz_id: row.musicbrainz_id,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+        .collect())
+}
+
+pub async fn get_recently_added(pool: &SqlitePool, limit: i64) -> Result<Vec<Album>> {
+    let rows = sqlx::query!(
+        "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+         FROM albums a
+         LEFT JOIN artists ar ON a.artist_id = ar.id
+         ORDER BY a.created_at DESC
+         LIMIT ?",
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Album {
+            id: row.id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            year: row.year.map(|y| y as i32),
+            cover_art_path: row.cover_art_path,
+            artwork_source: row.artwork_source,
+            musicbrainz_id: row.musicbrainz_id,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+        .collect())
+}
+
+pub async fn get_recently_added_within_days(
+    pool: &SqlitePool,
+    days: i64,
+    limit: i64,
+) -> Result<Vec<Album>> {
+    let rows = sqlx::query!(
+        "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+         FROM albums a
+         LEFT JOIN artists ar ON a.artist_id = ar.id
+         WHERE datetime(a.created_at) >= datetime('now', '-' || ? || ' days')
+         ORDER BY a.created_at DESC
+         LIMIT ?",
+        days,
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Album {
+            id: row.id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            year: row.year.map(|y| y as i32),
+            cover_art_path: row.cover_art_path,
+            artwork_source: row.artwork_source,
+            musicbrainz_id: row.musicbrainz_id,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+        .collect())
+}
+
+pub async fn get_least_played(pool: &SqlitePool, limit: i64, user_id: i64) -> Result<Vec<Album>> {
+    // Get albums with lowest play count for this user
+    let rows = sqlx::query!(
+        "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at,
+                COALESCE(play_counts.count, 0) as play_count
+         FROM albums a
+         LEFT JOIN artists ar ON a.artist_id = ar.id
+         LEFT JOIN (
+             SELECT t.album_id, COUNT(*) as count
+             FROM tracks t
+             JOIN playback_contexts pc ON pc.context_type = 'album' AND CAST(pc.context_id AS INTEGER) = t.album_id
+             WHERE pc.user_id = ?
+             GROUP BY t.album_id
+         ) play_counts ON play_counts.album_id = a.id
+         ORDER BY play_count ASC, RANDOM()
+         LIMIT ?",
+        user_id,
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Album {
+            id: row.id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            year: row.year.map(|y| y as i32),
+            cover_art_path: row.cover_art_path,
+            artwork_source: row.artwork_source,
+            musicbrainz_id: row.musicbrainz_id,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+        .collect())
+}
+
+pub async fn get_time_capsule(pool: &SqlitePool, limit: i64, user_id: i64) -> Result<Vec<Album>> {
+    // Get albums played on this day in previous years
+    let rows = sqlx::query!(
+        "SELECT DISTINCT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+         FROM albums a
+         LEFT JOIN artists ar ON a.artist_id = ar.id
+         JOIN playback_contexts pc ON pc.context_type = 'album' AND CAST(pc.context_id AS INTEGER) = a.id
+         WHERE pc.user_id = ?
+           AND strftime('%m-%d', datetime(pc.last_played_at, 'unixepoch')) = strftime('%m-%d', 'now')
+           AND strftime('%Y', datetime(pc.last_played_at, 'unixepoch')) < strftime('%Y', 'now')
+         ORDER BY pc.last_played_at DESC
+         LIMIT ?",
+        user_id,
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let id = row.id?; // Filter out None ids
+            Some(Album {
+                id,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: Some(row.artist_name),
+                year: row.year.map(|y| y as i32),
+                cover_art_path: row.cover_art_path,
+                artwork_source: row.artwork_source,
+                musicbrainz_id: row.musicbrainz_id,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
+        })
+        .collect())
+}
+
+pub async fn get_by_genre(pool: &SqlitePool, genre_id: i64, limit: i64) -> Result<Vec<Album>> {
+    // Get albums that have tracks with this genre
+    let rows = sqlx::query!(
+        "SELECT DISTINCT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+         FROM albums a
+         LEFT JOIN artists ar ON a.artist_id = ar.id
+         JOIN tracks t ON t.album_id = a.id
+         JOIN track_genres tg ON tg.track_id = t.id
+         WHERE tg.genre_id = ?
+         ORDER BY RANDOM()
+         LIMIT ?",
+        genre_id,
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let id = row.id?; // Filter out None ids
+            Some(Album {
+                id,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: Some(row.artist_name),
+                year: row.year.map(|y| y as i32),
+                cover_art_path: row.cover_art_path,
+                artwork_source: row.artwork_source,
+                musicbrainz_id: row.musicbrainz_id,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
+        })
+        .collect())
+}
+
 pub async fn get_by_id(pool: &SqlitePool, id: AlbumId) -> Result<Option<Album>> {
     let row = sqlx::query!(
         "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,

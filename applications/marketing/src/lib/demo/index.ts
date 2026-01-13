@@ -7,7 +7,6 @@
  */
 
 export * from './types'
-export * from './storage'
 export * from './audio-player'
 export * from './wasm-playback-adapter'
 export * from './bridge'

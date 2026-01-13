@@ -1,10 +1,52 @@
 import { useTranslation } from 'react-i18next';
-import { Bug, ExternalLink, FileText, CheckCircle } from 'lucide-react';
+import { Bug, ExternalLink, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { usePlatform } from '../../contexts/PlatformContext';
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 export function ReportBugSettingsPage() {
   const { t } = useTranslation();
   const { isWeb } = usePlatform();
+  const [loggingEnabled, setLoggingEnabled] = useState(false);
+  const [showRestartMessage, setShowRestartMessage] = useState(false);
+
+  // Load logging setting on mount (desktop only)
+  useEffect(() => {
+    if (isWeb) return;
+
+    const loadLoggingSetting = async () => {
+      try {
+        const value = await invoke<string | null>('get_user_setting', {
+          key: 'app.logging_enabled',
+        });
+        if (value !== null) {
+          setLoggingEnabled(JSON.parse(value));
+        }
+      } catch (error) {
+        console.error('Failed to load logging setting:', error);
+      }
+    };
+
+    loadLoggingSetting();
+  }, [isWeb]);
+
+  const handleLoggingToggle = async (enabled: boolean) => {
+    if (isWeb) return;
+
+    try {
+      await invoke('set_user_setting', {
+        key: 'app.logging_enabled',
+        value: JSON.stringify(enabled),
+      });
+      setLoggingEnabled(enabled);
+      setShowRestartMessage(true);
+
+      // Hide restart message after 5 seconds
+      setTimeout(() => setShowRestartMessage(false), 5000);
+    } catch (error) {
+      console.error('Failed to save logging setting:', error);
+    }
+  };
 
   const handleOpenGitHub = () => {
     window.open('https://github.com/soulaudio/soul-player/issues', '_blank', 'noopener,noreferrer');
@@ -100,6 +142,37 @@ export function ReportBugSettingsPage() {
             </div>
           </div>
 
+          {/* Logging Toggle */}
+          <div className="mb-4">
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
+              <input
+                type="checkbox"
+                checked={loggingEnabled}
+                onChange={(e) => handleLoggingToggle(e.target.checked)}
+                className="w-4 h-4 mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium">
+                  {t('settings.reportBugLoggingToggleLabel')}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('settings.reportBugLoggingToggleDescription')}
+                </p>
+              </div>
+            </label>
+
+            {/* Restart required message */}
+            {showRestartMessage && (
+              <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  {t('settings.reportBugLoggingRestartRequired')}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Log Paths */}
           <div className="bg-muted/30 rounded-lg p-4">
             <div className="space-y-3">
               <div className="flex items-start gap-2">
@@ -129,13 +202,6 @@ export function ReportBugSettingsPage() {
                   </code>
                 </div>
               </div>
-            </div>
-
-            <div className="mt-4 pt-4 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                <strong>Tip:</strong> Run Soul Player with <code className="bg-muted px-2 py-0.5 rounded">--logs</code> flag or use{' '}
-                <code className="bg-muted px-2 py-0.5 rounded">yarn dev:desktop:logs</code> to enable file logging.
-              </p>
             </div>
           </div>
         </section>

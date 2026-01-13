@@ -154,15 +154,19 @@ export const config = {
   onPrepare: async function () {
     console.log('Starting tauri-driver...');
 
+    // Get absolute path to tauri-driver
+    const cargoPath = join(process.env.HOME || process.env.USERPROFILE, '.cargo', 'bin');
+    const driverPath = join(cargoPath, process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver');
+
     // Verify tauri-driver is installed
-    try {
-      const driverPath = process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver';
-      execSync(`${driverPath} --version`, { stdio: 'pipe' });
-    } catch {
+    if (!existsSync(driverPath)) {
       throw new Error(
-        'tauri-driver not found. Install it with: cargo install tauri-driver'
+        `tauri-driver not found at: ${driverPath}\n` +
+        'Install it with: cargo install tauri-driver'
       );
     }
+
+    console.log(`Found tauri-driver at: ${driverPath}`);
 
     // Verify the app exists
     const appPath = getAppPath();
@@ -173,15 +177,23 @@ export const config = {
       );
     }
 
-    // Start tauri-driver
+    // Get msedgedriver path
+    const edgedriverPath = join(process.env.TEMP || process.env.TMP || '/tmp', 'msedgedriver.exe');
+
+    // Start tauri-driver using absolute path with native driver
+    // Pass through all environment variables so DATABASE_PATH reaches the app
     tauriDriver = spawn(
-      process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver',
-      ['--port', '4444'],
+      driverPath,
+      ['--port', '4444', '--native-driver', edgedriverPath],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: process.platform === 'win32',
+        shell: false,
+        env: process.env, // Pass through all environment variables
       }
     );
+
+    console.log(`Using tauri-driver at: ${driverPath}`);
+    console.log(`Using msedgedriver at: ${edgedriverPath}`);
 
     tauriDriver.stdout.on('data', (data) => {
       console.log(`[tauri-driver] ${data}`);

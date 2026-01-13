@@ -184,10 +184,49 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         return await invoke('get_queue');
       },
 
-      async playQueue(queue, startIndex = 0) {
-        // Backend handles: stop current playback, load new context, start playing
-        // This ensures clicking play replaces queue (Spotify behavior)
-        await invoke('play_queue', { queue, startIndex });
+      async playQueue(queue, startIndex = 0, context) {
+        // Lazy loading: If context provided and total count is large, use context-based loading
+        const LAZY_LOADING_THRESHOLD = 100;
+
+        // Check context.totalCount (not queue.length) since queue is already limited to 50
+        const totalCount = context && 'totalCount' in context ? context.totalCount : queue.length;
+
+        if (context && totalCount > LAZY_LOADING_THRESHOLD) {
+          console.log('[TauriPlayerCommandsProvider] Using lazy loading:', {
+            totalCount,
+            queueSize: queue.length,
+            context: context.type,
+            threshold: LAZY_LOADING_THRESHOLD,
+          });
+
+          // Get current shuffle state
+          const shuffleMode = await invoke<string>('get_shuffle');
+          const enableShuffle = shuffleMode !== 'off';
+
+          // Take first 50 tracks as initial batch
+          const initialBatch = queue.slice(0, 50);
+
+          // Use lazy loading via playQueueWithContext command
+          await invoke('play_queue_with_context', {
+            context,
+            initialBatch,
+            startIndex,
+            enableShuffle,
+          });
+        } else {
+          // Small queue or no context - use regular playback
+          await invoke('play_queue', { queue, startIndex });
+        }
+      },
+
+      async playQueueWithContext(context, initialBatch, startIndex, enableShuffle) {
+        // Lazy loading: Send context and initial batch instead of full queue
+        await invoke('play_queue_with_context', {
+          context,
+          initialBatch,
+          startIndex,
+          enableShuffle,
+        });
       },
 
       async skipToQueueIndex(index: number) {

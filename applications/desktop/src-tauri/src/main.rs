@@ -1,5 +1,16 @@
 // Prevents additional console window on Windows in release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::case_sensitive_file_extension_comparisons)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::manual_range_contains)]
+#![allow(clippy::unnecessary_filter_map)]
+#![allow(clippy::struct_field_names)]
+#![allow(clippy::match_wildcard_for_single_variants)]
+#![allow(clippy::semicolon_if_nothing_returned)]
+#![allow(clippy::unused_self)]
+#![allow(clippy::inefficient_to_string)]
+#![allow(clippy::manual_flatten)]
 
 mod app_state;
 mod artwork;
@@ -24,7 +35,7 @@ use app_state::AppState;
 use import::ImportManager;
 use playback::PlaybackManager;
 use serde::{Deserialize, Serialize};
-use soul_playback::{RepeatMode, ShuffleMode};
+use soul_playback::{lazy_queue::QueueContext, RepeatMode, ShuffleMode};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -35,6 +46,7 @@ struct FrontendTrack {
     id: i64,
     title: String,
     artist_name: Option<String>,
+    artist_id: Option<i64>,
     album_title: Option<String>,
     album_id: Option<i64>,
     duration_seconds: Option<f64>,
@@ -69,6 +81,7 @@ impl From<soul_core::types::Track> for FrontendTrack {
             id: track.id.as_str().parse().unwrap_or(0),
             title: track.title,
             artist_name: track.artist_name,
+            artist_id: track.artist_id,
             album_title: track.album_title,
             album_id: track.album_id,
             duration_seconds: track.duration_seconds,
@@ -108,6 +121,7 @@ struct FrontendAlbum {
     id: i64,
     title: String,
     artist_name: Option<String>,
+    artist_id: Option<i64>,
     year: Option<i32>,
     cover_art_path: Option<String>,
 }
@@ -118,6 +132,7 @@ impl From<soul_core::types::Album> for FrontendAlbum {
             id: album.id,
             title: album.title,
             artist_name: album.artist_name,
+            artist_id: album.artist_id,
             year: album.year,
             cover_art_path: album.cover_art_path,
         }
@@ -300,6 +315,76 @@ async fn play_queue(
     tracing::debug!("[play_queue] play() returned: {:?}", play_result);
     play_result?;
     tracing::info!("[play_queue] All commands sent successfully");
+
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn play_queue_with_context(
+    context: QueueContext,
+    initial_batch: Vec<TrackData>,
+    start_index: usize,
+    enable_shuffle: bool,
+    playback: State<'_, PlaybackManager>,
+) -> Result<(), String> {
+    tracing::info!(
+        "[play_queue_with_context] Context: {:?}, batch size: {}, start_index: {}, shuffle: {}",
+        context.type_name(),
+        initial_batch.len(),
+        start_index,
+        enable_shuffle
+    );
+
+    if initial_batch.is_empty() {
+        return Err("Initial batch is empty".to_string());
+    }
+
+    // Convert to QueueTrack format
+    let tracks: Vec<soul_playback::QueueTrack> = initial_batch
+        .iter()
+        .map(|track_data| track_data.to_queue_track())
+        .collect();
+
+    // Generate shuffle seed on backend if shuffle is enabled
+    let shuffle_seed = if enable_shuffle {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_secs();
+        tracing::info!("[play_queue_with_context] Generated shuffle seed: {}", seed);
+        Some(seed)
+    } else {
+        None
+    };
+
+    // Stop current playback
+    playback.stop()?;
+
+    // Load initial batch as source queue
+    playback.load_playlist(tracks)?;
+
+    // Set lazy context with backend-generated seed
+    playback.set_lazy_context(context.clone(), shuffle_seed)?;
+
+    // Apply shuffle if enabled
+    if enable_shuffle {
+        playback.set_shuffle(ShuffleMode::Random)?;
+    }
+
+    // Skip to start index if needed
+    if start_index > 0 {
+        playback.skip_to_index(start_index)?;
+    }
+
+    // Start playback
+    playback.play()?;
+
+    tracing::info!(
+        "[play_queue_with_context] Lazy queue initialized: context={:?}, total_count={}",
+        context.type_name(),
+        context.total_count()
+    );
 
     Ok(())
 }
@@ -741,6 +826,76 @@ async fn get_all_albums(state: State<'_, AppState>) -> Result<Vec<FrontendAlbum>
     Ok(albums.into_iter().map(FrontendAlbum::from).collect())
 }
 
+#[tauri::command]
+async fn get_random_albums(
+    state: State<'_, AppState>,
+    limit: i64,
+) -> Result<Vec<FrontendAlbum>, String> {
+    let albums = soul_storage::albums::get_random(&state.pool, limit)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(albums.into_iter().map(FrontendAlbum::from).collect())
+}
+
+#[tauri::command]
+async fn get_recently_added_albums(
+    state: State<'_, AppState>,
+    limit: i64,
+) -> Result<Vec<FrontendAlbum>, String> {
+    let albums = soul_storage::albums::get_recently_added(&state.pool, limit)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(albums.into_iter().map(FrontendAlbum::from).collect())
+}
+
+#[tauri::command]
+async fn get_recently_added_albums_within_days(
+    state: State<'_, AppState>,
+    days: i64,
+    limit: i64,
+) -> Result<Vec<FrontendAlbum>, String> {
+    let albums = soul_storage::albums::get_recently_added_within_days(&state.pool, days, limit)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(albums.into_iter().map(FrontendAlbum::from).collect())
+}
+
+#[tauri::command]
+async fn get_least_played_albums(
+    state: State<'_, AppState>,
+    limit: i64,
+) -> Result<Vec<FrontendAlbum>, String> {
+    const DEFAULT_USER_ID: i64 = 1;
+    let albums = soul_storage::albums::get_least_played(&state.pool, limit, DEFAULT_USER_ID)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(albums.into_iter().map(FrontendAlbum::from).collect())
+}
+
+#[tauri::command]
+async fn get_time_capsule_albums(
+    state: State<'_, AppState>,
+    limit: i64,
+) -> Result<Vec<FrontendAlbum>, String> {
+    const DEFAULT_USER_ID: i64 = 1;
+    let albums = soul_storage::albums::get_time_capsule(&state.pool, limit, DEFAULT_USER_ID)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(albums.into_iter().map(FrontendAlbum::from).collect())
+}
+
+#[tauri::command]
+async fn get_genre_albums(
+    state: State<'_, AppState>,
+    genre_id: i64,
+    limit: i64,
+) -> Result<Vec<FrontendAlbum>, String> {
+    let albums = soul_storage::albums::get_by_genre(&state.pool, genre_id, limit)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(albums.into_iter().map(FrontendAlbum::from).collect())
+}
+
 // ============================================================================
 // Artist commands
 // ============================================================================
@@ -826,6 +981,23 @@ async fn get_artist_tracks(
     let tracks = soul_storage::tracks::get_by_artist(&state.pool, artist_id)
         .await
         .map_err(|e| e.to_string())?;
+    Ok(tracks.into_iter().map(FrontendTrack::from).collect())
+}
+
+#[tauri::command]
+async fn get_artist_top_tracks(
+    artist_id: i64,
+    limit: Option<i32>,
+    state: State<'_, AppState>,
+) -> Result<Vec<FrontendTrack>, String> {
+    let user_id = soul_core::types::UserId::new(state.user_id.clone());
+    let limit = limit.unwrap_or(10); // Default top 10
+
+    let tracks =
+        soul_storage::tracks::get_top_tracks_by_artist(&state.pool, user_id, artist_id, limit)
+            .await
+            .map_err(|e| e.to_string())?;
+
     Ok(tracks.into_iter().map(FrontendTrack::from).collect())
 }
 
@@ -1618,31 +1790,38 @@ async fn test_artwork_extraction(
     }
 }
 
+/// Get platform-specific app data directory
+/// Windows: %APPDATA%\Soul Player\
+/// macOS: ~/Library/Application Support/soul-player/
+/// Linux: ~/.config/soul-player/
+fn get_app_data_dir() -> std::path::PathBuf {
+    if cfg!(target_os = "windows") {
+        let roaming = std::env::var("APPDATA").expect("APPDATA environment variable not found");
+        std::path::PathBuf::from(roaming).join("Soul Player")
+    } else if cfg!(target_os = "macos") {
+        let home = std::env::var("HOME").expect("HOME environment variable not found");
+        std::path::PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join("soul-player")
+    } else {
+        let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+            std::path::PathBuf::from(xdg_config)
+        } else {
+            let home = std::env::var("HOME").expect("HOME environment variable not found");
+            std::path::PathBuf::from(home).join(".config")
+        };
+        config_dir.join("soul-player")
+    }
+}
+
 /// Initialize logging system with optional file output
 fn init_logging(enable_file_logging: bool) {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
     if enable_file_logging {
         // Get app data directory for logs
-        let app_data_dir = if cfg!(target_os = "windows") {
-            let roaming = std::env::var("APPDATA").expect("APPDATA environment variable not found");
-            std::path::PathBuf::from(roaming).join("Soul Player")
-        } else if cfg!(target_os = "macos") {
-            let home = std::env::var("HOME").expect("HOME environment variable not found");
-            std::path::PathBuf::from(home)
-                .join("Library")
-                .join("Application Support")
-                .join("soul-player")
-        } else {
-            let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
-                std::path::PathBuf::from(xdg_config)
-            } else {
-                let home = std::env::var("HOME").expect("HOME environment variable not found");
-                std::path::PathBuf::from(home).join(".config")
-            };
-            config_dir.join("soul-player")
-        };
-
+        let app_data_dir = get_app_data_dir();
         let logs_dir = app_data_dir.join("logs");
 
         // Create logs directory if it doesn't exist
@@ -1692,8 +1871,43 @@ fn init_console_logging() {
 }
 
 fn main() {
-    // Check for --logs flag in command line arguments
-    let enable_file_logging = std::env::args().any(|arg| arg == "--logs");
+    // Check user's logging preference from database before initializing logging
+    // This allows the UI toggle to override the --logs command-line flag
+    let enable_file_logging = tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(async {
+            // Get database path (same logic as in setup closure)
+            let app_data_dir = get_app_data_dir();
+            let db_path = app_data_dir.join("soul-player.db");
+
+            // Only check database if it exists (avoid creating DB just to check logging)
+            if !db_path.exists() {
+                return None;
+            }
+
+            // Create temporary pool to check setting
+            let db_url = if cfg!(windows) {
+                let path_str = db_path.to_str()?.replace('\\', "/");
+                format!("sqlite:///{}", path_str)
+            } else {
+                format!("sqlite://{}", db_path.to_str()?)
+            };
+
+            let pool = soul_storage::create_pool(&db_url).await.ok()?;
+
+            // Check user's logging preference (user_id = "1" for desktop)
+            soul_storage::settings::get_logging_enabled(&pool, "1")
+                .await
+                .ok()
+                .flatten()
+        })
+        .unwrap_or_else(|| {
+            // Fall back to --logs flag if:
+            // - Database doesn't exist yet (first run)
+            // - Database check failed
+            // - User hasn't set preference (returns None)
+            std::env::args().any(|arg| arg == "--logs")
+        });
 
     // Initialize logging system
     init_logging(enable_file_logging);
@@ -1786,34 +2000,7 @@ fn main() {
                 emit_init_progress(&app_handle, "Initializing database...", 10).await;
 
                 // Get platform-specific app data directory
-                // Windows: %APPDATA%\Soul Player\
-                // macOS: ~/Library/Application Support/soul-player/
-                // Linux: ~/.config/soul-player/
-                let app_data_dir = if cfg!(target_os = "windows") {
-                    // Windows: Use "Soul Player" (with space)
-                    let roaming =
-                        std::env::var("APPDATA").expect("APPDATA environment variable not found");
-                    std::path::PathBuf::from(roaming).join("Soul Player")
-                } else if cfg!(target_os = "macos") {
-                    // macOS: Use "soul-player" (with hyphen)
-                    let home = std::env::var("HOME").expect("HOME environment variable not found");
-                    std::path::PathBuf::from(home)
-                        .join("Library")
-                        .join("Application Support")
-                        .join("soul-player")
-                } else {
-                    // Linux: Use "soul-player" (with hyphen)
-                    // Respect XDG_CONFIG_HOME if set, otherwise use ~/.config
-                    let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
-                        std::path::PathBuf::from(xdg_config)
-                    } else {
-                        let home =
-                            std::env::var("HOME").expect("HOME environment variable not found");
-                        std::path::PathBuf::from(home).join(".config")
-                    };
-                    config_dir.join("soul-player")
-                };
-
+                let app_data_dir = get_app_data_dir();
                 let db_path = app_data_dir.join("soul-player.db");
                 tracing::info!("App data directory: {}", db_path.display());
 
@@ -2006,6 +2193,7 @@ fn main() {
             // Playback control
             play_track,
             play_queue,
+            play_queue_with_context,
             play,
             pause_playback,
             resume_playback,
@@ -2096,6 +2284,12 @@ fn main() {
             check_database_health,
             // Albums
             get_all_albums,
+            get_random_albums,
+            get_recently_added_albums,
+            get_recently_added_albums_within_days,
+            get_least_played_albums,
+            get_time_capsule_albums,
+            get_genre_albums,
             get_album_by_id,
             get_album_tracks,
             // Artists
@@ -2103,6 +2297,7 @@ fn main() {
             get_artist_by_id,
             get_artist_albums,
             get_artist_tracks,
+            get_artist_top_tracks,
             // Genres
             get_all_genres,
             get_genre_by_id,

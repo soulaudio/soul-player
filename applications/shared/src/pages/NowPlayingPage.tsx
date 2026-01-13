@@ -4,8 +4,8 @@
  */
 
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { usePlayerStore } from '../stores/player'
 import { usePlayerCommands, usePlaybackEvents } from '../contexts/PlayerCommandsContext'
 import { useBackend } from '../contexts/BackendContext'
@@ -131,7 +131,7 @@ function FormatDropdown({
 
 export function NowPlayingPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const { navigate } = useNavigateWithHistory()
   const { features } = usePlatform()
   const { currentTrack, isPlaying } = usePlayerStore()
   const commands = usePlayerCommands()

@@ -1,3 +1,19 @@
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::return_self_not_must_use)]
+#![allow(clippy::match_wildcard_for_single_variants)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::filter_next)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::assigning_clones)]
+#![allow(clippy::manual_let_else)]
+#![allow(clippy::comparison_to_empty)]
+
 //! Desktop audio output implementation using CPAL
 //!
 //! This crate provides the `CpalOutput` implementation of the `AudioOutput` trait

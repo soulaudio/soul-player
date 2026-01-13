@@ -4,8 +4,9 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { Music, Disc3, ListMusic, Users, Search, X, Plus } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
@@ -35,7 +36,7 @@ const TABS: Tab[] = [
 
 export function LibraryPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const { navigate } = useNavigateWithHistory()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as TabId | null
 
@@ -350,6 +351,7 @@ export function LibraryPage() {
                     id: album.id,
                     title: album.title,
                     artist_name: album.artist_name,
+                    artist_id: album.artist_id,
                     year: album.year,
                     cover_art_path: album.cover_art_path,
                   }}

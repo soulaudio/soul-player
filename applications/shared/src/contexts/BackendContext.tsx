@@ -117,6 +117,14 @@ export interface BackendInterface {
   getAllArtists: () => Promise<BackendArtist[]>
   getAllPlaylists: () => Promise<BackendPlaylist[]>
   getAllGenres: () => Promise<BackendGenre[]>
+  getRandomAlbums: (limit: number) => Promise<BackendAlbum[]>
+
+  // Discovery & recommendations
+  getRecentlyAddedAlbums: (limit: number) => Promise<BackendAlbum[]>
+  getRecentlyAddedAlbumsWithinDays: (days: number, limit: number) => Promise<BackendAlbum[]>
+  getLeastPlayedAlbums: (limit: number) => Promise<BackendAlbum[]>
+  getTimeCapsuleAlbums: (limit: number) => Promise<BackendAlbum[]>
+  getGenreAlbums: (genreId: number, limit: number) => Promise<BackendAlbum[]>
 
   // Single item lookups
   getAlbumById: (id: number) => Promise<BackendAlbum | null>
@@ -128,6 +136,7 @@ export interface BackendInterface {
   getAlbumTracks: (albumId: number) => Promise<BackendTrack[]>
   getArtistTracks: (artistId: number) => Promise<BackendTrack[]>
   getArtistAlbums: (artistId: number) => Promise<BackendAlbum[]>
+  getArtistTopTracks: (artistId: number, limit?: number) => Promise<BackendTrack[]>
   getPlaylistTracks: (playlistId: string) => Promise<BackendTrack[]>
   getGenreTracks: (genreId: number) => Promise<BackendTrack[]>
 
@@ -151,6 +160,10 @@ export interface BackendInterface {
 
   // Onboarding (desktop only, can be no-op for web)
   checkOnboardingNeeded: () => Promise<boolean>
+
+  // Settings
+  getUserSetting: (key: string) => Promise<any>
+  setUserSetting: (key: string, value: any) => Promise<void>
 
   // Artwork editing
   setArtwork: (params: SetArtworkParams) => Promise<void>

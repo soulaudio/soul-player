@@ -38,8 +38,16 @@ export function TrackMenu({
     }
   }
 
-  // Only show menu on desktop
-  if (!isDesktop) {
+  // Check if any menu items are available
+  const hasAnyEnabledItems =
+    (!!onPlayNext && features.hasPlaybackContext) ||
+    (!!onAddToQueue && features.hasPlaybackContext) ||
+    features.canCreatePlaylists ||
+    (!!track.file_path && isDesktop) ||
+    (!!track.is_in_managed_library && !!onDelete && features.canDeleteTracks)
+
+  // Don't show menu if no items are available
+  if (!features.hasTrackMenu || !hasAnyEnabledItems) {
     return null
   }
 
@@ -70,6 +78,7 @@ export function TrackMenu({
             <DropdownMenu.Item
               className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
               onSelect={onPlayNext}
+              disabled={!features.hasPlaybackContext}
             >
               <ArrowUpCircle className="w-4 h-4" />
               <span>{t('queue.playNext', 'Play Next')}</span>
@@ -81,6 +90,7 @@ export function TrackMenu({
             <DropdownMenu.Item
               className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
               onSelect={onAddToQueue}
+              disabled={!features.hasPlaybackContext}
             >
               <ListEnd className="w-4 h-4" />
               <span>{t('queue.addToQueue', 'Add to Queue')}</span>
@@ -104,6 +114,7 @@ export function TrackMenu({
             <DropdownMenu.Item
               className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
               onSelect={handleShowInExplorer}
+              disabled={!isDesktop}
             >
               <FolderOpen className="w-4 h-4" />
               <span>{t('trackMenu.showInExplorer', 'Show in File Explorer')}</span>
@@ -117,6 +128,7 @@ export function TrackMenu({
               <DropdownMenu.Item
                 className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-red-600"
                 onSelect={handleDelete}
+                disabled={!features.canDeleteTracks}
               >
                 <Trash className="w-4 h-4" />
                 <span>{t('trackMenu.deleteFromManagedLibrary', 'Delete from Managed Library')}</span>

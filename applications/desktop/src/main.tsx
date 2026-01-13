@@ -8,9 +8,13 @@ import { TauriPlayerCommandsProvider } from './providers/TauriPlayerCommandsProv
 import { TauriBackendProvider } from './providers/TauriBackendProvider';
 import App from './App';
 import './index.css';
+import { initTestHelpers } from './test-helpers';
 
 // Initialize i18n from shared package
 initI18n();
+
+// Initialize test helpers (only in dev/test mode)
+initTestHelpers();
 
 // Create TanStack Query client
 const queryClient = new QueryClient({

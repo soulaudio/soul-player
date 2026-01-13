@@ -22,6 +22,7 @@ soul-audio.workspace = true
 soul-playback.workspace = true
 thiserror.workspace = true
 serde = { workspace = true }
+tracing = { workspace = true }
 
 # Audio I/O
 cpal = { workspace = true }

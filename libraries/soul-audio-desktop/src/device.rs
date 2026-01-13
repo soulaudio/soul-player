@@ -434,7 +434,11 @@ pub fn find_device_by_name(
         .map_err(|e| DeviceError::EnumerationFailed(e.to_string()))?;
 
     for device in devices {
-        if let Some(name) = device.description().ok().map(|desc| desc.name().to_string()) {
+        if let Some(name) = device
+            .description()
+            .ok()
+            .map(|desc| desc.name().to_string())
+        {
             if name == device_name {
                 return Ok(device);
             }

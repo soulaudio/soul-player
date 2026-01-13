@@ -32,6 +32,7 @@ import {
 } from './ui/dropdown-menu';
 import { cn } from '../lib/utils';
 import { usePlatform } from '../contexts/PlatformContext';
+import { useBackend } from '../contexts/BackendContext';
 
 interface NavItem {
   id: string;
@@ -147,7 +148,9 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { features } = usePlatform();
+  const backend = useBackend();
   const [queue, setQueue] = useState<QueueTrack[]>([]);
+  const [homeEnabled, setHomeEnabled] = useState(true);
   const {
     currentTrack,
     isPlaying,
@@ -217,6 +220,32 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
       loadCurrentDevice();
     }
   }, [hasRealDevices]);
+
+  // Load home page enabled setting
+  useEffect(() => {
+    const loadHomeEnabled = () => {
+      backend.getUserSetting('home.enabled')
+        .then((value) => {
+          setHomeEnabled(value ?? true)
+        })
+        .catch(err => console.error('Failed to load home.enabled setting:', err))
+    }
+
+    // Load on mount
+    loadHomeEnabled()
+
+    // Listen for changes from settings page
+    const handleHomeEnabledChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ enabled: boolean }>
+      setHomeEnabled(customEvent.detail.enabled)
+    }
+
+    window.addEventListener('home-enabled-changed', handleHomeEnabledChanged)
+
+    return () => {
+      window.removeEventListener('home-enabled-changed', handleHomeEnabledChanged)
+    }
+  }, [backend]);
 
   const loadCurrentDevice = async () => {
     try {
@@ -458,12 +487,20 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     applyVolumeChange(volume + delta);
   }, [volume, applyVolumeChange]);
 
+  // Filter navigation items based on settings
+  const visibleNavigationItems = navigationItems.filter(item => {
+    if (item.id === 'home' && !homeEnabled) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div className="w-72 bg-card border-r border-border flex flex-col h-full">
       {/* Navigation */}
       <nav className="p-4 pt-6">
         <ul className="space-y-0">
-          {navigationItems.map((item) => (
+          {visibleNavigationItems.map((item) => (
             <li key={item.id}>
               <button
                 onClick={() => navigate(item.path)}
@@ -487,10 +524,13 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         </ul>
       </nav>
 
-      {/* Queue Section - can expand/contract */}
-      <div className="mt-auto flex flex-col">
+      {/* Spacer - minimum 100px between navigation and queue */}
+      <div className="min-h-[100px] flex-1" />
+
+      {/* Queue Section - constrained height, always above playback */}
+      <div className="flex flex-col flex-shrink-0">
         {displayQueue.length > 0 && (
-          <div className="flex flex-col max-h-[32rem] group/queue">
+          <div className="flex flex-col max-h-[280px] group/queue">
             <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
               {t('sidebar.queue')}
             </div>
@@ -548,11 +588,14 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
               )}
             </div>
             <button
-              onClick={onAddToPlaylist}
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddToPlaylist?.()
+              }}
               disabled={!currentTrack || !features.canCreatePlaylists}
               className={cn(
-                "p-1.5 transition-colors text-muted-foreground flex-shrink-0",
-                currentTrack && features.canCreatePlaylists ? "hover:text-foreground" : "opacity-50 cursor-not-allowed"
+                "p-2 transition-colors text-muted-foreground flex-shrink-0 relative z-10",
+                currentTrack && features.canCreatePlaylists ? "hover:text-foreground hover:bg-accent rounded-md" : "opacity-50 cursor-not-allowed"
               )}
               title={features.canCreatePlaylists
                 ? t('playlist.addToPlaylist', 'Add to Playlist')

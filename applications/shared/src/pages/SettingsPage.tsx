@@ -3,11 +3,12 @@
  * Uses FeatureGate for platform-specific features
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ThemePicker } from '../theme'
 import { Kbd } from '../components/ui/Kbd'
 import { usePlatform } from '../contexts/PlatformContext'
+import { useBackend } from '../contexts/BackendContext'
 import { AudioSettingsPage } from '../components/settings/AudioSettingsPage'
 import { LibrarySettingsPage } from '../components/settings/LibrarySettingsPage'
 import { ReportBugSettingsPage } from '../components/settings/ReportBugSettingsPage'
@@ -184,6 +185,91 @@ export function SettingsPage({ handlers, ShortcutsSettingsComponent }: SettingsP
   )
 }
 
+// Home Page Settings Component
+function HomePageSettings() {
+  const { t } = useTranslation()
+  const backend = useBackend()
+  const [homeEnabled, setHomeEnabled] = useState(true)
+  const [refreshMinutes, setRefreshMinutes] = useState<string>('')
+
+  // Load settings on mount
+  useEffect(() => {
+    Promise.all([
+      backend.getUserSetting('home.enabled'),
+      backend.getUserSetting('home.refresh_minutes'),
+    ])
+      .then(([enabled, minutes]) => {
+        setHomeEnabled(enabled ?? true)
+        setRefreshMinutes(minutes !== null && minutes !== undefined ? String(minutes) : '')
+      })
+      .catch(err => console.error('Failed to load home settings:', err))
+  }, [backend])
+
+  const handleEnabledChange = (enabled: boolean) => {
+    setHomeEnabled(enabled)
+    backend.setUserSetting('home.enabled', enabled)
+      .then(() => {
+        // Dispatch event to notify LeftSidebar to refresh
+        window.dispatchEvent(new CustomEvent('home-enabled-changed', { detail: { enabled } }))
+      })
+      .catch(err => console.error('Failed to save home enabled:', err))
+  }
+
+  const handleRefreshChange = (value: string) => {
+    setRefreshMinutes(value)
+    const minutes = value === '' ? null : parseInt(value, 10)
+    if (value === '' || !isNaN(minutes!)) {
+      backend.setUserSetting('home.refresh_minutes', minutes)
+        .catch(err => console.error('Failed to save refresh minutes:', err))
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-xl font-semibold mb-4">{t('settings.homePage')}</h2>
+      <div className="space-y-6">
+        <label className="flex items-start space-x-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={homeEnabled}
+            onChange={(e) => handleEnabledChange(e.target.checked)}
+            className="w-4 h-4 mt-0.5"
+          />
+          <div>
+            <span className="text-sm font-medium block">{t('settings.homePageEnabled')}</span>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('settings.homePageEnabledDescription')}
+            </p>
+          </div>
+        </label>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            {t('settings.homeRefreshInterval')}
+          </label>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={refreshMinutes}
+              onChange={(e) => handleRefreshChange(e.target.value)}
+              placeholder={t('settings.homeRefreshOnVisit')}
+              className="w-32 px-3 py-2 rounded-lg bg-muted text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            {refreshMinutes && (
+              <span className="text-sm text-muted-foreground">{t('settings.homeRefreshMinutes')}</span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t('settings.homeRefreshIntervalDescription')}
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 // General Settings Tab Content
 function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
   const { t, i18n } = useTranslation()
@@ -195,6 +281,9 @@ function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
 
   return (
     <div className="space-y-8">
+      {/* Home Page Section */}
+      <HomePageSettings />
+
       {/* Appearance Section */}
       <section>
         <h2 className="text-xl font-semibold mb-4">{t('settings.appearance')}</h2>

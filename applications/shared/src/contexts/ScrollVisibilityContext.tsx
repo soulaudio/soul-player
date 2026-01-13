@@ -3,7 +3,7 @@
  * Used to sync search bar and window controls auto-hide behavior
  */
 
-import { createContext, useContext, useState, ReactNode } from 'react'
+import { createContext, useContext, useState, useMemo, ReactNode } from 'react'
 
 interface ScrollVisibilityContextValue {
   showHeader: boolean
@@ -15,8 +15,12 @@ const ScrollVisibilityContext = createContext<ScrollVisibilityContextValue | und
 export function ScrollVisibilityProvider({ children }: { children: ReactNode }) {
   const [showHeader, setShowHeader] = useState(true)
 
+  // Memoize context value to prevent unnecessary re-renders
+  // setShowHeader is stable from useState, only showHeader changes
+  const value = useMemo(() => ({ showHeader, setShowHeader }), [showHeader])
+
   return (
-    <ScrollVisibilityContext.Provider value={{ showHeader, setShowHeader }}>
+    <ScrollVisibilityContext.Provider value={value}>
       {children}
     </ScrollVisibilityContext.Provider>
   )

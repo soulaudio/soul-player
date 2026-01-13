@@ -7,9 +7,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { usePlayerStore } from '@soul-player/shared'
-import { getDemoStorage } from '@/lib/demo/storage'
-import type { DemoTrack } from '@/lib/demo/types'
+import { usePlayerStore, DemoStorage, DemoTrack } from '@soul-player/shared'
 
 // Track type matching the player store's expected type (from types/index.ts)
 interface PlayerTrack {
@@ -39,7 +37,13 @@ function demoTrackToPlayerTrack(dt: DemoTrack, index: number): PlayerTrack {
   }
 }
 
-export function DemoInitializer({ children }: { children: React.ReactNode }) {
+export function DemoInitializer({
+  storage,
+  children,
+}: {
+  storage: DemoStorage
+  children: React.ReactNode
+}) {
   const initialized = useRef(false)
   const setCurrentTrack = usePlayerStore((state) => state.setCurrentTrack)
   const setQueue = usePlayerStore((state) => state.setQueue)
@@ -50,7 +54,6 @@ export function DemoInitializer({ children }: { children: React.ReactNode }) {
     if (initialized.current) return
     initialized.current = true
 
-    const storage = getDemoStorage()
     const tracks = storage.getAllTracks()
 
     if (tracks.length === 0) return
@@ -73,7 +76,7 @@ export function DemoInitializer({ children }: { children: React.ReactNode }) {
       .map((t, i) => demoTrackToPlayerTrack(t, i))
 
     setQueue(queueTracks)
-  }, [setCurrentTrack, setQueue, setDuration])
+  }, [storage, setCurrentTrack, setQueue, setDuration])
 
   return <>{children}</>
 }

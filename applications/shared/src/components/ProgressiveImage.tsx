@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef, ImgHTMLAttributes } from 'react'
 import { cn } from '../lib/utils'
 
-interface ProgressiveImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'onLoad'> {
+interface ProgressiveImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'onLoad' | 'src'> {
   /** Main image source */
   src?: string | null
   /** Alt text for accessibility */

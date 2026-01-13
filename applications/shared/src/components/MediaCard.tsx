@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { ArtworkImage } from './ArtworkImage'
 import { ProgressiveImage } from './ProgressiveImage'
 import { usePlayerStore } from '../stores/player'
-import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
@@ -36,6 +36,8 @@ export interface MediaCardProps {
   className?: string
   /** Additional info like year */
   additionalInfo?: string
+  /** Priority: if true, loads artwork immediately without lazy loading. Use for above-the-fold items (first ~20-30 items) */
+  priority?: boolean
 }
 
 /** Get fallback icon for media type */
@@ -71,6 +73,7 @@ export function MediaCard({
   coverUrl,
   className = 'w-40',
   additionalInfo,
+  priority = false,
 }: MediaCardProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -79,6 +82,11 @@ export function MediaCard({
   const backend = useBackend()
   const { isDesktop } = usePlatform()
   const [isActiveContext, setIsActiveContext] = useState(false)
+
+  // Debug logging for album cards
+  if (type === 'album') {
+    console.log('[MediaCard] Album card props:', { id, title, subtitle, artistId, type })
+  }
 
   const isCircle = type === 'artist'
   const FallbackIcon = getFallbackIcon(type)
@@ -167,7 +175,31 @@ export function MediaCard({
         contextArtworkPath: coverUrl || null,
       })
 
-      await commands.playQueue(queue, 0)
+      // Build queue context for lazy loading
+      let context: QueueContext | undefined
+      switch (type) {
+        case 'album':
+          context = {
+            type: 'Album',
+            albumId: Number(id),
+            totalCount: queue.length,
+          }
+          break
+        case 'artist':
+          context = {
+            type: 'Artist',
+            artistId: Number(id),
+            totalCount: queue.length,
+          }
+          break
+        case 'playlist':
+          // Playlists need owner_id - we don't have it here, so skip context
+          // This is fine since playlist pages use their own handlers
+          context = undefined
+          break
+      }
+
+      await commands.playQueue(queue, 0, context)
     } catch (err) {
       console.error(`[MediaCard] Failed to play ${type}:`, err)
     }
@@ -193,6 +225,7 @@ export function MediaCard({
           fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
           fallbackIcon={type === 'artist' ? 'users' : type === 'playlist' ? 'playlist' : 'music'}
           shape={isCircle ? 'circular' : 'rounded'}
+          priority={priority}
         />
       )
     }
@@ -220,6 +253,7 @@ export function MediaCard({
 
   return (
     <div className={`group ${className}`}>
+      {/* Artwork - always clickable */}
       <div
         className={`aspect-square ${shapeClasses} overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer`}
         onClick={handleClick}
@@ -242,6 +276,8 @@ export function MediaCard({
           )}
         </button>
       </div>
+
+      {/* Title - always clickable */}
       <p
         className={`font-medium truncate group-hover:text-primary transition-colors cursor-pointer ${isCircle ? 'text-center' : ''}`}
         title={title}
@@ -249,28 +285,31 @@ export function MediaCard({
       >
         {title}
       </p>
-      {subtitle && (
-        <p
-          className={`text-sm text-muted-foreground truncate ${isCircle ? 'text-center' : ''}`}
-          title={subtitle}
-        >
-          {type === 'album' && artistId ? (
-            <>
-              <ArtistLink
-                artistId={artistId}
-                artistName={subtitle}
-                className="text-sm text-muted-foreground hover:text-foreground hover:underline"
-              />
-              {additionalInfo && <span className="cursor-default"> • {additionalInfo}</span>}
-            </>
-          ) : (
-            <span onClick={handleClick} className="cursor-pointer">
-              {subtitle}
-              {additionalInfo && ` • ${additionalInfo}`}
-            </span>
+
+      {/* Subtitle - independent element, NOT nested in album click handler */}
+      {subtitle && type === 'album' ? (
+        // Album card - artist link is completely independent, NO onClick on parent
+        <p className={`text-sm text-muted-foreground ${isCircle ? 'text-center' : ''}`}>
+          <ArtistLink
+            artistId={artistId}
+            artistName={subtitle}
+            className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+          />
+          {additionalInfo && (
+            <span className="cursor-default"> • {additionalInfo}</span>
           )}
         </p>
-      )}
+      ) : subtitle ? (
+        // Artist or playlist - entire subtitle navigates to that entity
+        <p
+          className={`text-sm text-muted-foreground cursor-pointer ${isCircle ? 'text-center' : ''}`}
+          title={subtitle}
+          onClick={handleClick}
+        >
+          {subtitle}
+          {additionalInfo && ` • ${additionalInfo}`}
+        </p>
+      ) : null}
     </div>
   )
 }

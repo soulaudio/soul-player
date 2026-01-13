@@ -180,7 +180,7 @@ impl StorageContext for LocalStorageContext {
     }
 
     async fn get_play_count(&self, track_id: TrackId) -> Result<i32> {
-        tracks::get_play_count(&self.pool, track_id).await
+        tracks::get_play_count(&self.pool, self.user_id.clone(), track_id).await
     }
 
     async fn search_tracks(&self, query: &str) -> Result<Vec<Track>> {

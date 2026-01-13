@@ -39,16 +39,13 @@ fn drain_events(playback: &DesktopPlayback) -> Vec<PlaybackEvent> {
 
 /// Helper to find the latest StateChanged event
 fn get_latest_state(events: &[PlaybackEvent]) -> Option<PlaybackState> {
-    events
-        .iter()
-        .rev()
-        .find_map(|e| {
-            if let PlaybackEvent::StateChanged(state) = e {
-                Some(*state)
-            } else {
-                None
-            }
-        })
+    events.iter().rev().find_map(|e| {
+        if let PlaybackEvent::StateChanged(state) = e {
+            Some(*state)
+        } else {
+            None
+        }
+    })
 }
 
 #[test]
@@ -142,7 +139,10 @@ fn test_mediacard_double_click_pause_bug() {
             final_state
         );
 
-        println!("[TEST] ✓ Pause command was processed (state transitioned to {:?})", final_state);
+        println!(
+            "[TEST] ✓ Pause command was processed (state transitioned to {:?})",
+            final_state
+        );
     } else {
         // Files exist - strict check
         assert_eq!(
@@ -194,7 +194,10 @@ fn test_triple_rapid_commands() {
     let events = drain_events(&playback);
     let final_state = get_latest_state(&events);
 
-    println!("[TEST] Final state after Play→Pause→Play: {:?}", final_state);
+    println!(
+        "[TEST] Final state after Play→Pause→Play: {:?}",
+        final_state
+    );
 
     // Final state should be Playing (last command was Play)
     // But if files don't exist, we get Stopped after error
@@ -255,7 +258,8 @@ fn test_pause_then_resume_during_loading() {
     } else {
         println!("[TEST] ⚠️  Files don't exist, checking pause was processed...");
         assert!(
-            paused_state == Some(PlaybackState::Paused) || paused_state == Some(PlaybackState::Stopped),
+            paused_state == Some(PlaybackState::Paused)
+                || paused_state == Some(PlaybackState::Stopped),
             "Pause command ignored! State: {:?}",
             paused_state
         );
@@ -302,9 +306,15 @@ fn test_command_queue_ordering() {
 
     // Send a sequence of volume commands
     // If processed in order, final volume should be 75
-    playback.send_command(PlaybackCommand::SetVolume(25)).unwrap();
-    playback.send_command(PlaybackCommand::SetVolume(50)).unwrap();
-    playback.send_command(PlaybackCommand::SetVolume(75)).unwrap();
+    playback
+        .send_command(PlaybackCommand::SetVolume(25))
+        .unwrap();
+    playback
+        .send_command(PlaybackCommand::SetVolume(50))
+        .unwrap();
+    playback
+        .send_command(PlaybackCommand::SetVolume(75))
+        .unwrap();
 
     std::thread::sleep(Duration::from_millis(100));
 
@@ -393,11 +403,15 @@ fn test_pause_immediately_after_load_playlist() {
         println!("[TEST] ⚠️  Audio files don't exist (expected in CI)");
         // Check pause was processed (not ignored)
         assert!(
-            final_state == Some(PlaybackState::Paused) || final_state == Some(PlaybackState::Stopped),
+            final_state == Some(PlaybackState::Paused)
+                || final_state == Some(PlaybackState::Stopped),
             "Pause command was ignored! Got {:?}",
             final_state
         );
-        println!("[TEST] ✓ Pause command was processed (state: {:?})", final_state);
+        println!(
+            "[TEST] ✓ Pause command was processed (state: {:?})",
+            final_state
+        );
     } else {
         assert_eq!(
             final_state,

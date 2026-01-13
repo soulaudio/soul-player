@@ -1,7 +1,7 @@
 //! Tauri commands for server source management.
 
 use crate::app_state::AppState;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use soul_server_client::{ServerConfig, SoulServerClient};
 use soul_storage::sources;
 use tauri::State;

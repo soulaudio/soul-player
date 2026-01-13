@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import {
   MainLayout,
@@ -17,12 +17,15 @@ import {
   PlaylistPage,
   NowPlayingPage,
   SettingsPage,
+  MockBackendProvider,
+  DemoStorage,
+  ScrollVisibilityProvider,
+  AddToPlaylistDialog,
+  usePlayerStore,
 } from '@soul-player/shared'
 import { DemoPlayerCommandsProvider } from '@/providers/DemoPlayerCommandsProvider'
-import { DemoBackendProvider } from '@/providers/DemoBackendProvider'
 import { MockSettingsProvider } from './MockContexts'
 import { DemoInitializer } from './DemoInitializer'
-import { initializeDemoStorage } from '@/lib/demo/storage'
 
 // Initialize i18n for the demo
 initI18n()
@@ -32,13 +35,19 @@ initI18n()
  * Uses real playback with demo data loaded from JSON
  * Fixed dimensions (1200x750) - will be scaled by DemoScaler
  */
+// Singleton demo storage instance
+const demoStorage = new DemoStorage()
+
 export function DemoApp() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showAddToPlaylist, setShowAddToPlaylist] = useState(false)
+  const { currentTrack } = usePlayerStore()
 
   // Initialize demo storage on mount
   useEffect(() => {
-    initializeDemoStorage('/demo-data.json')
+    demoStorage
+      .loadFromJson('/demo-data.json')
       .then(() => {
         setIsLoading(false)
       })
@@ -48,6 +57,13 @@ export function DemoApp() {
         setIsLoading(false)
       })
   }, [])
+
+  // Handle add to playlist button click
+  const handleAddToPlaylist = useCallback(() => {
+    if (currentTrack) {
+      setShowAddToPlaylist(true)
+    }
+  }, [currentTrack])
 
   if (isLoading) {
     return (
@@ -92,14 +108,14 @@ export function DemoApp() {
         <PlatformProvider
           platform="web"
           features={{
-            // Library features - disabled for web demo
+            // Library features - demo supports playlists now!
             canDeleteTracks: false,
-            canCreatePlaylists: false,
+            canCreatePlaylists: true,
             hasFilters: false,
             hasHealthCheck: false,
             hasVirtualization: false,
-            hasTrackMenu: false,
-            hasPlaybackContext: false,
+            hasTrackMenu: true,
+            hasPlaybackContext: true,
             // Settings features - disabled for web demo
             hasLibrarySettings: false,
             hasAudioSettings: false,
@@ -112,32 +128,44 @@ export function DemoApp() {
             hasRealDeviceSelection: false,
           }}
         >
-          <DemoPlayerCommandsProvider>
-            <DemoBackendProvider>
+          <DemoPlayerCommandsProvider storage={demoStorage}>
+            <MockBackendProvider storage={demoStorage}>
               <MockSettingsProvider>
-                <DemoInitializer>
+                <DemoInitializer storage={demoStorage}>
                   {/* Wrapper to ensure MainLayout fills available space */}
                   <div className="flex-1 min-h-0 h-full">
-                    <MainLayout>
-                      <Routes>
-                        <Route path="/" element={<HomePage />} />
-                        <Route path="/library" element={<LibraryPage />} />
-                        <Route path="/albums" element={<AlbumsPage />} />
-                        <Route path="/albums/:id" element={<AlbumPage />} />
-                        <Route path="/artists" element={<ArtistsPage />} />
-                        <Route path="/artists/:id" element={<ArtistPage />} />
-                        <Route path="/playlists" element={<PlaylistsPage />} />
-                        <Route path="/playlists/:id" element={<PlaylistPage />} />
-                        <Route path="/tracks" element={<TracksPage />} />
-                        <Route path="/now-playing" element={<NowPlayingPage />} />
-                        <Route path="/settings" element={<SettingsPage />} />
-                        <Route path="/search" element={<div className="text-center py-20 text-muted-foreground">Search Page (Demo)</div>} />
-                      </Routes>
-                    </MainLayout>
+                    <ScrollVisibilityProvider>
+                      <MainLayout onAddToPlaylist={handleAddToPlaylist}>
+                        <Routes>
+                          <Route path="/" element={<HomePage />} />
+                          <Route path="/library" element={<LibraryPage />} />
+                          <Route path="/albums" element={<AlbumsPage />} />
+                          <Route path="/albums/:id" element={<AlbumPage />} />
+                          <Route path="/artists" element={<ArtistsPage />} />
+                          <Route path="/artists/:id" element={<ArtistPage />} />
+                          <Route path="/playlists" element={<PlaylistsPage />} />
+                          <Route path="/playlists/:id" element={<PlaylistPage />} />
+                          <Route path="/tracks" element={<TracksPage />} />
+                          <Route path="/now-playing" element={<NowPlayingPage />} />
+                          <Route path="/settings" element={<SettingsPage />} />
+                          <Route path="/search" element={<div className="text-center py-20 text-muted-foreground">Search Page (Demo)</div>} />
+                        </Routes>
+                      </MainLayout>
+                    </ScrollVisibilityProvider>
                   </div>
                 </DemoInitializer>
+
+                {/* Add to Playlist Dialog */}
+                {currentTrack && showAddToPlaylist && (
+                  <AddToPlaylistDialog
+                    open={showAddToPlaylist}
+                    onClose={() => setShowAddToPlaylist(false)}
+                    trackId={currentTrack.id}
+                    trackTitle={currentTrack.title}
+                  />
+                )}
               </MockSettingsProvider>
-            </DemoBackendProvider>
+            </MockBackendProvider>
           </DemoPlayerCommandsProvider>
         </PlatformProvider>
       </MemoryRouter>

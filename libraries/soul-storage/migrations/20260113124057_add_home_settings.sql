@@ -1,0 +1,6 @@
+-- Home page settings are stored as key-value pairs in user_settings table
+-- No schema changes needed, using existing key-value infrastructure
+-- 
+-- New setting keys:
+-- - home.enabled (boolean): Enable/disable home page (default: true)
+-- - home.refresh_minutes (number|null): Refresh interval in minutes, null = refresh on each visit

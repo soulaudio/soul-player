@@ -7,7 +7,7 @@ use cpal::{
     Device, Stream, StreamConfig,
 };
 use crossbeam_channel::{bounded, Receiver, Sender};
-use soul_playback::{PlaybackConfig, PlaybackManager, QueueTrack};
+use soul_playback::{AudioSource, PlaybackConfig, PlaybackManager, QueueTrack};
 use std::sync::{Arc, Mutex};
 
 use crate::error::Result;
@@ -227,6 +227,9 @@ pub enum PlaybackCommand {
     /// Load playlist/album as new source queue (replaces playback context)
     LoadPlaylist(Vec<QueueTrack>),
 
+    /// Append tracks to source queue (for lazy loading)
+    AppendToSource(Vec<QueueTrack>),
+
     /// Set shuffle mode
     SetShuffle(soul_playback::ShuffleMode),
 
@@ -282,6 +285,22 @@ pub enum PlaybackEvent {
 
     /// Crossfade completed
     CrossfadeCompleted,
+
+    /// Batch load requested (forward pagination)
+    BatchLoadRequested {
+        /// Offset in the collection to start loading from
+        offset: usize,
+        /// Number of tracks to load
+        limit: usize,
+    },
+
+    /// Jump load requested (direct navigation to far track)
+    JumpLoadRequested {
+        /// Offset in the collection to start loading from
+        offset: usize,
+        /// Number of tracks to load
+        limit: usize,
+    },
 
     /// Error occurred
     Error(String),
@@ -1383,6 +1402,12 @@ impl DesktopPlayback {
                 soul_playback::PlaybackEvent::QueueChanged { length: _ } => {
                     Some(PlaybackEvent::QueueUpdated)
                 }
+                soul_playback::PlaybackEvent::BatchLoadRequested { offset, limit } => {
+                    Some(PlaybackEvent::BatchLoadRequested { offset, limit })
+                }
+                soul_playback::PlaybackEvent::JumpLoadRequested { offset, limit } => {
+                    Some(PlaybackEvent::JumpLoadRequested { offset, limit })
+                }
                 soul_playback::PlaybackEvent::Error { message } => {
                     Some(PlaybackEvent::Error(message))
                 }
@@ -1415,9 +1440,15 @@ impl DesktopPlayback {
                 } else {
                     // Current track loaded (initial load or track change)
                     eprintln!("[poll_track_loader] Track loaded: {}", result.track.title);
-                    eprintln!("[poll_track_loader] State BEFORE set_audio_source: {:?}", mgr.get_state());
+                    eprintln!(
+                        "[poll_track_loader] State BEFORE set_audio_source: {:?}",
+                        mgr.get_state()
+                    );
                     mgr.set_audio_source(source);
-                    eprintln!("[poll_track_loader] State AFTER set_audio_source: {:?}", mgr.get_state());
+                    eprintln!(
+                        "[poll_track_loader] State AFTER set_audio_source: {:?}",
+                        mgr.get_state()
+                    );
                     let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
                     let _ = event_tx.try_send(PlaybackEvent::TrackChanged(Some(result.track)));
                     let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
@@ -1495,9 +1526,15 @@ impl DesktopPlayback {
                 }
             }
             PlaybackCommand::Pause => {
-                eprintln!("[PlaybackCommand::Pause] Received, current state: {:?}", mgr.get_state());
+                eprintln!(
+                    "[PlaybackCommand::Pause] Received, current state: {:?}",
+                    mgr.get_state()
+                );
                 mgr.pause();
-                eprintln!("[PlaybackCommand::Pause] After pause(), state: {:?}", mgr.get_state());
+                eprintln!(
+                    "[PlaybackCommand::Pause] After pause(), state: {:?}",
+                    mgr.get_state()
+                );
                 event_tx
                     .send(PlaybackEvent::StateChanged(mgr.get_state()))
                     .ok();
@@ -1639,6 +1676,11 @@ impl DesktopPlayback {
             PlaybackCommand::LoadPlaylist(tracks) => {
                 // Load playlist/album as source queue (Spotify-style context)
                 mgr.add_playlist_to_queue(tracks);
+                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+            }
+            PlaybackCommand::AppendToSource(tracks) => {
+                // Append tracks to source queue (for lazy loading)
+                mgr.append_to_source(tracks);
                 event_tx.send(PlaybackEvent::QueueUpdated).ok();
             }
             PlaybackCommand::SetShuffle(mode) => {
@@ -1801,6 +1843,11 @@ impl DesktopPlayback {
     /// Get mutable reference to PlaybackManager
     pub fn get_manager_mut(&self) -> std::sync::MutexGuard<'_, soul_playback::PlaybackManager> {
         self.manager.lock().unwrap()
+    }
+
+    /// Get the playback manager (for batch loading)
+    pub fn get_playback_manager(&self) -> &Arc<Mutex<soul_playback::PlaybackManager>> {
+        &self.manager
     }
 
     /// Emit queue updated event
@@ -1982,43 +2029,78 @@ impl DesktopPlayback {
             callbacks_after_backend - callbacks_before_backend
         );
 
-        // Reload the audio source with the new sample rate
-        // This is necessary because the old audio source was created with the old device's sample rate
+        // Reload the audio source ONLY if sample rate changed
+        // This prevents unnecessary reloads when switching devices with the same sample rate
+        // (e.g., WASAPI 48kHz → ASIO 48kHz)
         let current_track = {
             let mgr = self.manager.lock().unwrap();
             mgr.get_current_track().cloned()
         };
 
-        if let Some(track) = current_track {
-            eprintln!("[DesktopPlayback] Reloading audio source for new sample rate");
+        #[allow(clippy::if_not_else)]
+        if old_sample_rate != new_sample_rate {
+            if let Some(track) = current_track {
+                tracing::info!(
+                    "[DesktopPlayback] Sample rate changed, reloading audio source: {} Hz -> {} Hz",
+                    old_sample_rate,
+                    new_sample_rate
+                );
 
-            let target_sample_rate = {
-                let mgr = self.manager.lock().unwrap();
-                mgr.get_sample_rate()
-            };
+                let target_sample_rate = {
+                    let mgr = self.manager.lock().unwrap();
+                    mgr.get_sample_rate()
+                };
 
-            match crate::sources::local::LocalAudioSource::new(&track.path, target_sample_rate) {
-                Ok(source) => {
-                    let mut mgr = self.manager.lock().unwrap();
-                    mgr.set_audio_source(Box::new(source));
-                    eprintln!(
-                        "[DesktopPlayback] Audio source reloaded with sample rate: {}",
-                        target_sample_rate
-                    );
-                }
-                Err(e) => {
-                    eprintln!("[DesktopPlayback] Failed to reload audio source: {}", e);
+                match crate::sources::local::LocalAudioSource::new(&track.path, target_sample_rate)
+                {
+                    Ok(mut source) => {
+                        // CRITICAL: Seek the source to the saved position BEFORE setting it
+                        // This prevents the track from restarting when switching devices
+                        if position > std::time::Duration::ZERO {
+                            tracing::info!(
+                                "[DesktopPlayback] Seeking new audio source to position: {:?}",
+                                position
+                            );
+                            if let Err(e) = source.seek(position) {
+                                tracing::error!(
+                                    "[DesktopPlayback] Failed to seek new audio source: {}",
+                                    e
+                                );
+                            } else {
+                                tracing::info!(
+                                    "[DesktopPlayback] Audio source pre-seeked to {:?}",
+                                    position
+                                );
+                            }
+                        }
+
+                        // Now set the pre-seeked source
+                        let mut mgr = self.manager.lock().unwrap();
+                        mgr.set_audio_source(Box::new(source));
+                        tracing::info!(
+                            "[DesktopPlayback] Audio source reloaded and set with sample rate: {}",
+                            target_sample_rate
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("[DesktopPlayback] Failed to reload audio source: {}", e);
+                    }
                 }
             }
-        }
+        } else {
+            tracing::info!(
+                "[DesktopPlayback] Sample rate unchanged ({}Hz), skipping audio source reload",
+                new_sample_rate
+            );
 
-        // Restore position if we had one
-        if position > std::time::Duration::ZERO {
-            let mut mgr = self.manager.lock().unwrap();
-            if let Err(e) = mgr.seek_to(position) {
-                eprintln!("[DesktopPlayback] Failed to restore position: {}", e);
-            } else {
-                eprintln!("[DesktopPlayback] Position restored to {:?}", position);
+            // Even though we're not reloading, restore position in case it drifted
+            if position > std::time::Duration::ZERO {
+                let mut mgr = self.manager.lock().unwrap();
+                if let Err(e) = mgr.seek_to(position) {
+                    tracing::error!("[DesktopPlayback] Failed to restore position: {}", e);
+                } else {
+                    tracing::info!("[DesktopPlayback] Position restored to {:?}", position);
+                }
             }
         }
 

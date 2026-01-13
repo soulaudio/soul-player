@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, memo, useRef } from 'react';
 import { Music, Users, ListMusic } from 'lucide-react';
 import { ProgressiveImage } from './ProgressiveImage';
 
@@ -15,6 +15,8 @@ interface ArtworkImageProps {
   fallbackIcon?: 'music' | 'users' | 'playlist';
   /** Shape: rounded for albums/playlists, circular for artists */
   shape?: 'rounded' | 'circular';
+  /** Priority: if true, loads immediately without waiting for viewport. Use for above-the-fold items (first ~20-30 items) */
+  priority?: boolean;
 }
 
 // Cache for artwork data URLs
@@ -38,7 +40,6 @@ function notifyListeners(key: string): void {
 /** Clear a specific entry from the artwork cache */
 export function clearArtworkCache(type: 'track' | 'album' | 'artist' | 'playlist', id: string | number): void {
   const key = `${type}:${id}`;
-  console.log(`[ArtworkImage] Clearing cache for ${key}, notifying ${cacheListeners.size} listeners`);
   artworkCache.delete(key);
   notifyListeners(key);
 }
@@ -49,11 +50,13 @@ export function clearAllArtworkCache(): void {
   notifyListeners('*');
 }
 
-export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtPath, alt, className, fallbackClassName, fallbackIcon, shape = 'rounded' }: ArtworkImageProps) {
+export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtPath, alt, className, fallbackClassName, fallbackIcon, shape = 'rounded', priority = false }: ArtworkImageProps) {
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
+  const [isInViewport, setIsInViewport] = useState(priority); // Priority items start as visible
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Determine the cache key for this component
   const getCacheKey = useCallback((): string | null => {
@@ -66,7 +69,6 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
 
   // Reset loading state when any ID prop changes
   useEffect(() => {
-    console.log(`[ArtworkImage] Props changed, resetting state for trackId=${trackId}, albumId=${albumId}, artistId=${artistId}, playlistId=${playlistId}`);
     setArtworkUrl(null);
     setLoading(true);
     setError(false);
@@ -79,7 +81,6 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
 
     const handleInvalidation = (invalidatedKey: string) => {
       if (invalidatedKey === '*' || invalidatedKey === cacheKey) {
-        console.log(`[ArtworkImage] Cache invalidated for ${cacheKey}, triggering reload`);
         // Force a refetch by resetting state
         setArtworkUrl(null);
         setLoading(true);
@@ -88,21 +89,46 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
       }
     };
 
-    console.log(`[ArtworkImage] Subscribing to cache invalidation for ${cacheKey}`);
     const unsubscribe = subscribeToCacheInvalidation(handleInvalidation);
-
-    return () => {
-      console.log(`[ArtworkImage] Unsubscribing from cache invalidation for ${cacheKey}`);
-      unsubscribe();
-    };
+    return unsubscribe;
   }, [getCacheKey]);
 
+  // Lazy loading with IntersectionObserver (only for non-priority items)
   useEffect(() => {
+    if (priority || !containerRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsInViewport(true);
+            // Once in viewport, we can stop observing
+            observer.disconnect();
+          }
+        });
+      },
+      {
+        // Start loading slightly before entering viewport (500px margin)
+        rootMargin: '500px',
+        threshold: 0.01, // Trigger as soon as 1% is visible
+      }
+    );
+
+    observer.observe(containerRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [priority]);
+
+  useEffect(() => {
+    // Only load artwork when in viewport (or priority is set)
+    if (!isInViewport) return;
+
     let cancelled = false;
 
     async function loadArtwork() {
       const cacheKey = getCacheKey();
-      console.log(`[ArtworkImage] Loading artwork for ${cacheKey}, loading=${loading}, refreshCounter=${refreshCounter}`);
 
       // Parse artwork:// protocol URLs to extract IDs for Tauri invoke
       let effectiveTrackId = trackId;
@@ -181,17 +207,14 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
           if (cancelled) return;
 
           if (dataUrl) {
-            console.log(`[ArtworkImage] Loaded artwork for ${effectiveCacheKey}, caching`);
             artworkCache.set(effectiveCacheKey, dataUrl);
             setArtworkUrl(dataUrl);
             setError(false);
           } else {
-            console.log(`[ArtworkImage] No artwork found for ${effectiveCacheKey}`);
             setError(true);
           }
         } else {
           // Not in Tauri environment
-          console.log(`[ArtworkImage] Not in Tauri environment`);
           if (!cancelled) {
             setError(true);
           }
@@ -210,14 +233,12 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
 
     if (loading) {
       loadArtwork();
-    } else {
-      console.log(`[ArtworkImage] Skipping load for ${getCacheKey()}, loading=${loading}`);
     }
 
     return () => {
       cancelled = true;
     };
-  }, [trackId, albumId, artistId, playlistId, coverArtPath, loading, refreshCounter]);
+  }, [trackId, albumId, artistId, playlistId, coverArtPath, loading, refreshCounter, isInViewport, getCacheKey]);
 
   // Determine which icon to use for fallback
   const getFallbackIcon = () => {
@@ -234,7 +255,7 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
 
   if (error || (!loading && !artworkUrl)) {
     return (
-      <div className={fallbackClassName || 'flex items-center justify-center'}>
+      <div ref={containerRef} className={fallbackClassName || 'flex items-center justify-center'}>
         {getFallbackIcon()}
       </div>
     );
@@ -242,18 +263,20 @@ export function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtP
 
   if (loading) {
     return (
-      <div className={fallbackClassName || 'flex items-center justify-center animate-pulse bg-muted'}>
+      <div ref={containerRef} className={fallbackClassName || 'flex items-center justify-center animate-pulse bg-muted'}>
         <span className="opacity-50">{getFallbackIcon()}</span>
       </div>
     );
   }
 
   return (
-    <ProgressiveImage
-      src={artworkUrl!}
-      alt={alt || 'Album artwork'}
-      className={className}
-      shape={shape}
-    />
+    <div ref={containerRef} className="w-full h-full">
+      <ProgressiveImage
+        src={artworkUrl!}
+        alt={alt || 'Album artwork'}
+        className={className}
+        shape={shape}
+      />
+    </div>
   );
-}
+});

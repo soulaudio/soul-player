@@ -31,6 +31,14 @@ export interface Source {
   isOnline: boolean;
 }
 
+// Queue context for lazy loading
+export type QueueContext =
+  | { type: 'AllTracks'; userId: number; totalCount: number }
+  | { type: 'Album'; albumId: number; totalCount: number }
+  | { type: 'Artist'; artistId: number; totalCount: number }
+  | { type: 'Playlist'; playlistId: number; ownerId: number; totalCount: number }
+  | { type: 'Search'; query: string };
+
 export interface PlayerCommandsInterface {
   // Playback control
   playTrack: (trackId: string | number) => Promise<void>;
@@ -60,7 +68,13 @@ export interface PlayerCommandsInterface {
 
   // Queue management
   getQueue: () => Promise<QueueTrack[]>;
-  playQueue: (queue: QueueTrack[], startIndex?: number) => Promise<void>;
+  playQueue: (queue: QueueTrack[], startIndex?: number, context?: QueueContext) => Promise<void>;
+  playQueueWithContext: (
+    context: QueueContext,
+    initialBatch: QueueTrack[],
+    startIndex: number,
+    enableShuffle: boolean
+  ) => Promise<void>;
   skipToQueueIndex: (index: number) => Promise<void>;
 
   // Three-tier queue operations

@@ -85,6 +85,28 @@ pub enum PlaybackEvent {
         length: usize,
     },
 
+    /// Batch load requested (forward pagination)
+    ///
+    /// Emitted when the queue approaches the end of loaded tracks
+    /// and needs the next batch loaded from the database.
+    BatchLoadRequested {
+        /// Offset in the collection to start loading from
+        offset: usize,
+        /// Number of tracks to load
+        limit: usize,
+    },
+
+    /// Jump load requested (direct navigation to far track)
+    ///
+    /// Emitted when user jumps to a track beyond the loaded window
+    /// and needs that specific batch loaded from the database.
+    JumpLoadRequested {
+        /// Offset in the collection to start loading from
+        offset: usize,
+        /// Number of tracks to load
+        limit: usize,
+    },
+
     /// Error occurred during playback
     Error {
         /// Error message

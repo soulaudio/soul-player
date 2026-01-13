@@ -32,7 +32,7 @@ impl ArtworkWriter {
 
         // Remove ALL existing pictures (not just CoverFront)
         // This ensures clean replacement and avoids duplicate/orphaned artwork
-        while let Some(_) = tag.pictures().first() {
+        while !tag.pictures().is_empty() {
             tag.remove_picture(0);
         }
 

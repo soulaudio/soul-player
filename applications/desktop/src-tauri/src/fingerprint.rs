@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use soul_audio::fingerprint::{FingerprintConfig, Fingerprinter};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 /// Fingerprint worker state
