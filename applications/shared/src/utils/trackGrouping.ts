@@ -8,6 +8,7 @@ export interface TrackForGrouping {
   title: string;
   artist?: string;
   artist_name?: string;
+  artist_id?: number;
   format?: string;
   file_format?: string;
   bitrate?: number;

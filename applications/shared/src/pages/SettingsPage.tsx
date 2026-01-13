@@ -10,6 +10,7 @@ import { Kbd } from '../components/ui/Kbd'
 import { usePlatform } from '../contexts/PlatformContext'
 import { AudioSettingsPage } from '../components/settings/AudioSettingsPage'
 import { LibrarySettingsPage } from '../components/settings/LibrarySettingsPage'
+import { ReportBugSettingsPage } from '../components/settings/ReportBugSettingsPage'
 import {
   Settings,
   Volume2,
@@ -17,9 +18,10 @@ import {
   Info,
   ChevronDown,
   FolderOpen,
+  Bug,
 } from 'lucide-react'
 
-type SettingsTab = 'general' | 'library' | 'audio' | 'shortcuts' | 'about'
+type SettingsTab = 'general' | 'library' | 'audio' | 'shortcuts' | 'reportBug' | 'about'
 
 interface NavItem {
   id: SettingsTab
@@ -64,6 +66,7 @@ export function SettingsPage({ handlers, ShortcutsSettingsComponent }: SettingsP
     { id: 'library', labelKey: 'settings.library', icon: FolderOpen, featureRequired: 'hasLibrarySettings' },
     { id: 'audio', labelKey: 'settings.audio.title', icon: Volume2 },
     { id: 'shortcuts', labelKey: 'settings.shortcuts', icon: Keyboard },
+    { id: 'reportBug', labelKey: 'settings.reportBug', icon: Bug },
     { id: 'about', labelKey: 'settings.about', icon: Info },
   ]
 
@@ -173,6 +176,7 @@ export function SettingsPage({ handlers, ShortcutsSettingsComponent }: SettingsP
               <DefaultShortcutsSettings disabled={!features.hasShortcutSettings} />
             )
           )}
+          {activeTab === 'reportBug' && <ReportBugSettingsPage />}
           {activeTab === 'about' && <AboutSettings />}
         </div>
       </main>

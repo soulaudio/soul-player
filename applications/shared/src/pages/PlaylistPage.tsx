@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../components/ui/Dialog'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { TrackMenu } from '../components/TrackMenu'
+import { ArtistLink } from '../components/ArtistLink'
 
 export function PlaylistPage() {
   const { t } = useTranslation()
@@ -312,7 +313,13 @@ export function PlaylistPage() {
                 >
                   <td className="py-3 text-muted-foreground">{index + 1}</td>
                   <td className="py-3 font-medium">{track.title || 'Unknown'}</td>
-                  <td className="py-3 text-muted-foreground">{track.artist_name || 'Unknown Artist'}</td>
+                  <td className="py-3 text-muted-foreground">
+                    <ArtistLink
+                      artistId={track.artist_id}
+                      artistName={track.artist_name}
+                      className="text-muted-foreground hover:text-foreground"
+                    />
+                  </td>
                   <td className="py-3 text-right text-muted-foreground">
                     {formatTrackDuration(track.duration_seconds)}
                   </td>

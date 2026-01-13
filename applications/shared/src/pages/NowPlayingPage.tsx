@@ -11,6 +11,7 @@ import { usePlayerCommands, usePlaybackEvents } from '../contexts/PlayerCommands
 import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { ArtworkImage } from '../components/ArtworkImage'
+import { ArtistLink } from '../components/ArtistLink'
 import { groupTracks } from '../utils/trackGrouping'
 import type { TrackForGrouping, GroupedTrack } from '../utils/trackGrouping'
 import {
@@ -194,6 +195,7 @@ export function NowPlayingPage() {
             id: t.id,
             title: t.title,
             artist_name: t.artist_name,
+            artist_id: t.artist_id,
             album_title: t.album_title,
             track_number: t.track_number,
             duration_seconds: t.duration_seconds,
@@ -212,6 +214,7 @@ export function NowPlayingPage() {
             id: t.id,
             title: t.title,
             artist_name: t.artist_name,
+            artist_id: t.artist_id,
             album_title: t.album_title,
             track_number: t.track_number,
             duration_seconds: t.duration_seconds,
@@ -230,6 +233,7 @@ export function NowPlayingPage() {
             id: t.id,
             title: t.title,
             artist_name: t.artist_name,
+            artist_id: t.artist_id,
             album_title: t.album_title,
             track_number: t.track_number,
             duration_seconds: t.duration_seconds,
@@ -244,6 +248,7 @@ export function NowPlayingPage() {
             id: t.id,
             title: t.title,
             artist_name: t.artist_name,
+            artist_id: t.artist_id,
             album_title: t.album_title,
             track_number: t.track_number,
             duration_seconds: t.duration_seconds,
@@ -259,6 +264,7 @@ export function NowPlayingPage() {
             id: t.id,
             title: t.title,
             artist_name: t.artist_name,
+            artist_id: t.artist_id,
             album_title: t.album_title,
             track_number: t.track_number,
             duration_seconds: t.duration_seconds,
@@ -401,6 +407,22 @@ export function NowPlayingPage() {
   const headerSubtitle = getContextLabel(playbackContext?.contextType)
   const headerIcon = getContextIcon(playbackContext?.contextType)
 
+  // Handle context navigation
+  const handleContextClick = () => {
+    if (!playbackContext) return
+
+    const { contextType, contextId } = playbackContext
+    if (contextType === 'album' && contextId) {
+      navigate(`/albums/${contextId}`)
+    } else if (contextType === 'artist' && contextId) {
+      navigate(`/artists/${contextId}`)
+    } else if (contextType === 'playlist' && contextId) {
+      navigate(`/playlists/${contextId}`)
+    }
+  }
+
+  const isContextClickable = playbackContext && ['album', 'artist', 'playlist'].includes(playbackContext.contextType)
+
   return (
     <div className="h-full flex items-center justify-center">
       <div className="flex gap-10 max-w-6xl w-full items-center">
@@ -424,7 +446,12 @@ export function NowPlayingPage() {
               {headerIcon}
               <span>{headerSubtitle}</span>
             </div>
-            <h2 className="text-lg font-bold">{headerTitle}</h2>
+            <h2
+              className={`text-lg font-bold ${isContextClickable ? 'hover:text-primary cursor-pointer hover:underline' : ''}`}
+              onClick={isContextClickable ? handleContextClick : undefined}
+            >
+              {headerTitle}
+            </h2>
             <p className="text-sm text-muted-foreground">
               {groupedTracks.length} {t('library.tracks', 'tracks')}
             </p>
@@ -490,11 +517,15 @@ export function NowPlayingPage() {
                         >
                           {activeVersion.title}
                         </p>
-                        <p
+                        <div
                           className={`text-xs truncate ${isCurrentTrack ? 'text-primary/70' : 'text-muted-foreground'}`}
                         >
-                          {activeVersion.artist_name || currentTrack.artist}
-                        </p>
+                          <ArtistLink
+                            artistId={activeVersion.artist_id}
+                            artistName={activeVersion.artist_name || currentTrack.artist}
+                            className={`text-xs ${isCurrentTrack ? 'text-primary/70' : 'text-muted-foreground'} hover:underline`}
+                          />
+                        </div>
                       </div>
 
                       {/* Format dropdown */}

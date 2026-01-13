@@ -6510,6 +6510,7 @@ dependencies = [
  "soul-audio",
  "soul-loudness",
  "thiserror 1.0.69",
+ "tracing",
  "uuid",
  "wasm-bindgen",
  "web-sys",

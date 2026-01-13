@@ -12,6 +12,7 @@ import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { ArtistLink } from '../components/ArtistLink'
 import { useBackend, type BackendTrack, type BackendAlbum } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
@@ -260,13 +261,11 @@ export function AlbumPage() {
             </p>
             <h1 className="text-4xl font-bold mb-2">{album.title}</h1>
             <p className="text-lg mb-2">
-              <button
-                onClick={handleArtistClick}
-                className="hover:underline"
-                disabled={!album.artist_id}
-              >
-                {album.artist_name || t('common.unknownArtist')}
-              </button>
+              <ArtistLink
+                artistId={album.artist_id}
+                artistName={album.artist_name}
+                className="text-lg hover:text-primary"
+              />
               {album.year && (
                 <span className="text-muted-foreground"> • {album.year}</span>
               )}
@@ -296,7 +295,9 @@ export function AlbumPage() {
             id: t.id,
             title: String(t.title || 'Unknown'),
             artist: t.artist_name,
+            artistId: t.artist_id,
             album: t.album_title,
+            albumId: t.album_id,
             duration: t.duration_seconds,
             trackNumber: t.track_number,
             isAvailable: !!t.file_path,

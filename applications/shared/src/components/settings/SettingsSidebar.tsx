@@ -9,6 +9,7 @@ import {
   Zap,
   Info,
   Keyboard,
+  Bug,
 } from 'lucide-react';
 
 interface NavItem {
@@ -48,6 +49,12 @@ const navigationItems: NavItem[] = [
     labelKey: 'settings.sections.shortcuts',
     path: '/settings/shortcuts',
     icon: Keyboard,
+  },
+  {
+    id: 'reportBug',
+    labelKey: 'settings.sections.reportBug',
+    path: '/settings/report-bug',
+    icon: Bug,
   },
   {
     id: 'about',

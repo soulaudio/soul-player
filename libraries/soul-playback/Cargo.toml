@@ -16,6 +16,7 @@ soul-loudness = { workspace = true, optional = true }
 
 thiserror = { workspace = true }
 serde = { workspace = true }
+tracing = { workspace = true }
 rand = "0.8"
 
 # WASM support

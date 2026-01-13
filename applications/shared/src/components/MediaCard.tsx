@@ -15,6 +15,7 @@ import { usePlayerCommands } from '../contexts/PlayerCommandsContext'
 import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
+import { ArtistLink } from './ArtistLink'
 
 export type MediaType = 'album' | 'artist' | 'playlist'
 
@@ -27,6 +28,8 @@ export interface MediaCardProps {
   title: string
   /** Secondary text (artist for albums, track count for playlists/artists) */
   subtitle?: string
+  /** Artist ID for albums - enables clickable artist name */
+  artistId?: number
   /** Cover art URL for non-desktop environments */
   coverUrl?: string
   /** Card width class (default: w-full for responsive grid) */
@@ -64,6 +67,7 @@ export function MediaCard({
   id,
   title,
   subtitle,
+  artistId,
   coverUrl,
   className = 'w-40',
   additionalInfo,
@@ -104,8 +108,9 @@ export function MediaCard({
   const handlePlayPause = async (e: React.MouseEvent) => {
     e.stopPropagation()
 
-    // If this context is active, use pause/resume logic (same as PlayerControls)
-    if (isActiveContext) {
+    // If this context is active AND there's a track loaded, use pause/resume logic
+    // CRITICAL: Check currentTrack to prevent resume on empty player (fixes first play ignored bug)
+    if (isActiveContext && currentTrack) {
       try {
         if (isPlaying) {
           await commands.pausePlayback()
@@ -214,7 +219,7 @@ export function MediaCard({
   const shapeClasses = isCircle ? 'rounded-full' : 'rounded-lg'
 
   return (
-    <div className={`cursor-pointer group ${className}`}>
+    <div className={`group ${className}`}>
       <div
         className={`aspect-square ${shapeClasses} overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer`}
         onClick={handleClick}
@@ -238,7 +243,7 @@ export function MediaCard({
         </button>
       </div>
       <p
-        className={`font-medium truncate group-hover:text-primary transition-colors ${isCircle ? 'text-center' : ''}`}
+        className={`font-medium truncate group-hover:text-primary transition-colors cursor-pointer ${isCircle ? 'text-center' : ''}`}
         title={title}
         onClick={handleClick}
       >
@@ -248,10 +253,22 @@ export function MediaCard({
         <p
           className={`text-sm text-muted-foreground truncate ${isCircle ? 'text-center' : ''}`}
           title={subtitle}
-          onClick={handleClick}
         >
-          {subtitle}
-          {additionalInfo && ` • ${additionalInfo}`}
+          {type === 'album' && artistId ? (
+            <>
+              <ArtistLink
+                artistId={artistId}
+                artistName={subtitle}
+                className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+              />
+              {additionalInfo && <span className="cursor-default"> • {additionalInfo}</span>}
+            </>
+          ) : (
+            <span onClick={handleClick} className="cursor-pointer">
+              {subtitle}
+              {additionalInfo && ` • ${additionalInfo}`}
+            </span>
+          )}
         </p>
       )}
     </div>

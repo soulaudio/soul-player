@@ -55,6 +55,9 @@ pub const SETTING_IMPORT_FILE_NAMING_PATTERN: &str = "import.file_naming_pattern
 /// Import skip duplicates flag
 pub const SETTING_IMPORT_SKIP_DUPLICATES: &str = "import.skip_duplicates";
 
+/// Enable file logging (true/false)
+pub const SETTING_LOGGING_ENABLED: &str = "app.logging_enabled";
+
 /// User setting entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserSetting {
@@ -250,4 +253,18 @@ pub async fn get_import_skip_duplicates(pool: &SqlitePool, user_id: &str) -> Res
             None => true,
         },
     )
+}
+
+/// Get logging enabled setting
+///
+/// Returns `Ok(Some(true))` if logging is enabled, `Ok(Some(false))` if explicitly disabled,
+/// or `Ok(None)` if no preference is set (allowing fallback to --logs flag).
+///
+/// This distinction allows the UI toggle to override the command-line flag while still
+/// supporting users who haven't set a preference.
+pub async fn get_logging_enabled(pool: &SqlitePool, user_id: &str) -> Result<Option<bool>> {
+    Ok(match get_setting(pool, user_id, SETTING_LOGGING_ENABLED).await? {
+        Some(val) => Some(val.as_bool().unwrap_or(false)),
+        None => None,
+    })
 }

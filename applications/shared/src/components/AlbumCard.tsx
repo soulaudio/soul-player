@@ -9,6 +9,7 @@ export interface AlbumCardAlbum {
   id: number
   title: string
   artist_name?: string
+  artist_id?: number
   year?: number
   cover_art_path?: string
   coverUrl?: string
@@ -29,6 +30,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
       id={album.id}
       title={album.title}
       subtitle={showArtist ? album.artist_name : undefined}
+      artistId={showArtist ? album.artist_id : undefined}
       additionalInfo={showArtist && album.year ? String(album.year) : undefined}
       coverUrl={album.coverUrl || album.cover_art_path}
       className={className}

@@ -34,6 +34,9 @@ struct StartFadeEnvelope {
     /// Whether fade-in is currently active
     active: bool,
 
+    /// Whether the fade is frozen at current gain (prevents progression)
+    frozen: bool,
+
     /// Whether we've detected actual audio content yet
     audio_detected: bool,
 
@@ -68,8 +71,8 @@ struct StartFadeEnvelope {
 /// Default fade-in duration in milliseconds
 const START_FADE_DURATION_MS: u32 = 30;
 
-/// Default fade-out duration in milliseconds (shorter for snappy response)
-const STOP_FADE_DURATION_MS: u32 = 15;
+/// Default fade-out duration in milliseconds (50ms for smooth, click-free pause)
+const STOP_FADE_DURATION_MS: u32 = 50;
 
 /// Audio detection threshold - amplitude above this triggers fade start
 /// Set to -50dB (0.003) to catch quiet intros while filtering encoder noise
@@ -221,6 +224,7 @@ impl StartFadeEnvelope {
     fn new(sample_rate: u32) -> Self {
         Self {
             active: false,
+            frozen: false,
             audio_detected: false,
             position_samples: 0,
             duration_samples: Self::calculate_duration_samples(sample_rate, START_FADE_DURATION_MS),
@@ -246,6 +250,7 @@ impl StartFadeEnvelope {
     #[inline]
     fn start(&mut self) {
         self.active = true;
+        self.frozen = false;
         self.audio_detected = false;
         self.position_samples = 0;
         self.wait_samples = 0;
@@ -260,9 +265,20 @@ impl StartFadeEnvelope {
     #[inline]
     fn reset(&mut self) {
         self.active = false;
+        self.frozen = false;
         self.audio_detected = false;
         self.position_samples = 0;
         self.wait_samples = 0;
+    }
+
+    /// Freeze the envelope at current gain (prevents further fade-in)
+    /// Used when pause is clicked during fade-in to prevent volume spike
+    #[inline]
+    fn freeze(&mut self) {
+        self.frozen = true;
+        // Keep active=true so the fade continues to be applied
+        // Keep position_samples constant to maintain current gain when combined with stop_fade
+        // audio_detected stays as-is (already detected if we're fading)
     }
 
     /// Update sample rate and recalculate duration
@@ -410,7 +426,10 @@ impl StartFadeEnvelope {
                     let gain = (1.0 - (std::f32::consts::PI * progress).cos()) * 0.5;
                     buffer[left_idx] = blocked_l * gain;
                     buffer[right_idx] = blocked_r * gain;
-                    self.position_samples += 2;
+                    // Only increment position if not frozen (maintains constant gain during pause)
+                    if !self.frozen {
+                        self.position_samples += 2;
+                    }
                 }
             } else {
                 // WAIT PHASE: Looking for actual audio content
@@ -491,6 +510,12 @@ use std::time::Duration;
 pub struct PlaybackManager {
     // State
     state: PlaybackState,
+    /// Pending state transition waiting for audio callback to acknowledge
+    /// Used to defer state changes until fades complete for deterministic behavior
+    pending_state: Option<PlaybackState>,
+    /// Flag indicating user explicitly paused playback
+    /// Prevents set_audio_source() from overriding pause when audio loads late
+    user_paused: bool,
     current_track: Option<QueueTrack>,
 
     // Queue and history
@@ -585,6 +610,8 @@ impl PlaybackManager {
 
         Self {
             state: PlaybackState::Stopped,
+            pending_state: None,
+            user_paused: false,
             current_track: None,
             queue: Queue::new(),
             history: History::new(config.history_size),
@@ -649,18 +676,22 @@ impl PlaybackManager {
             FadeCompleteAction::Stop => {
                 self.state = PlaybackState::Stopped;
                 self.audio_source = None;
+                self.pending_state = None;
                 self.emit_state_changed(PlaybackState::Stopped);
                 Ok(())
             }
             FadeCompleteAction::Pause => {
-                // State should already be Paused, just confirm
+                // Apply the pending state and emit event NOW (after fade completes)
                 self.state = PlaybackState::Paused;
+                self.pending_state = None;
+                self.emit_state_changed(PlaybackState::Paused);
                 Ok(())
             }
             FadeCompleteAction::TransitionToNext => {
                 // Transition handled by pending_source mechanism
                 // Just clear the old source
                 self.audio_source = None;
+                self.pending_state = None;
                 Ok(())
             }
         }
@@ -672,6 +703,9 @@ impl PlaybackManager {
     pub fn play(&mut self) -> Result<()> {
         match self.state {
             PlaybackState::Paused => {
+                // Clear pause flag when user explicitly resumes
+                self.user_paused = false;
+
                 // Resume from pause
                 self.state = PlaybackState::Playing;
 
@@ -686,6 +720,9 @@ impl PlaybackManager {
                 Ok(())
             }
             PlaybackState::Stopped | PlaybackState::Loading => {
+                // Clear pause flag on new playback start
+                self.user_paused = false;
+
                 // Start playing from queue
                 self.play_next_in_queue()
             }
@@ -698,7 +735,7 @@ impl PlaybackManager {
 
     /// Pause playback
     pub fn pause(&mut self) {
-        eprintln!(
+        tracing::debug!(
             "[pause] Called: state={:?}, source_ready={}, has_source={}",
             self.state,
             self.source_ready_verified,
@@ -708,33 +745,43 @@ impl PlaybackManager {
         // Can pause from Playing OR Loading states
         // Loading state happens when user clicks pause during track load
         if self.state == PlaybackState::Playing || self.state == PlaybackState::Loading {
-            // Cancel any active start fade (prevents audio from playing during pause)
-            self.start_fade.reset();
-            eprintln!("[pause] Reset start_fade");
+            // Set user pause flag FIRST to prevent set_audio_source() from overriding
+            self.user_paused = true;
+
+            // CRITICAL: Freeze start_fade at current gain to prevent volume spike
+            // When pause is clicked during fade-in, freezing prevents gain from continuing to increase
+            // Both frozen start_fade and active stop_fade will multiply together smoothly
+            if self.start_fade.is_active() {
+                self.start_fade.freeze();
+                tracing::debug!("[pause] Froze start_fade to prevent volume spike");
+            }
 
             // Reset wait counter if paused during loading
             // This prevents timeout from carrying over when resuming
             if !self.source_ready_verified {
                 self.source_ready_wait_samples = 0;
-                eprintln!("[pause] Reset wait counter (source not ready yet)");
+                tracing::debug!("[pause] Reset wait counter (source not ready yet)");
             }
 
             // Start smooth fade-out before pausing
-            // Only if source is ready and audio is actually playing
-            if self.audio_source.is_some()
-                && self.source_ready_verified
-                && !self.stop_fade.is_active()
-            {
+            // Fade whenever we have an audio source (even if not verified)
+            // This prevents pops when pausing after seek or during load
+            if self.audio_source.is_some() && !self.stop_fade.is_active() {
                 self.stop_fade.start(FadeCompleteAction::Pause);
-                eprintln!("[pause] Started stop fade");
+                // Defer state change until fade completes (sample-accurate)
+                self.pending_state = Some(PlaybackState::Paused);
+                tracing::debug!(
+                    "[pause] Started fade-out (source_ready={}), state change deferred",
+                    self.source_ready_verified
+                );
             } else {
-                eprintln!("[pause] No stop fade (source not ready or no source)");
+                // No audio source or fade already active, change state immediately
+                self.state = PlaybackState::Paused;
+                self.emit_state_changed(PlaybackState::Paused);
+                tracing::debug!("[pause] State changed to Paused (no fade needed)");
             }
-            self.state = PlaybackState::Paused;
-            self.emit_state_changed(PlaybackState::Paused);
-            eprintln!("[pause] State changed to Paused");
         } else {
-            eprintln!("[pause] Ignored (state is {:?})", self.state);
+            tracing::debug!("[pause] Ignored (state is {:?})", self.state);
         }
     }
 
@@ -743,24 +790,20 @@ impl PlaybackManager {
     /// Stops playback and clears current track (but not queue).
     /// Uses smooth fade-out to prevent clicks.
     pub fn stop(&mut self) {
-        // Start smooth fade-out if currently playing
-        if self.state == PlaybackState::Playing
-            && self.audio_source.is_some()
-            && !self.stop_fade.is_active()
-        {
-            self.stop_fade.start(FadeCompleteAction::Stop);
-        }
+        // CRITICAL: Cancel any active stop_fade to prevent it from completing later
+        // This is important for play_queue flow (stop -> load -> play)
+        // Without this, the old fade can complete and override the new playback state
+        self.stop_fade.reset();
 
         self.state = PlaybackState::Stopped;
         self.current_track = None;
-        // Note: audio_source cleared after fade completes (in handle_fade_complete_action)
-        // If no fade was started, clear immediately
-        if !self.stop_fade.is_active() {
-            self.audio_source = None;
-        }
+        // Audio source cleared immediately since we're force-stopping
+        self.audio_source = None;
         self.next_source = None;
         self.next_track = None;
         self.pending_source = None;
+        self.pending_state = None; // Clear any pending state transition
+        self.user_paused = false; // Clear pause flag when explicitly stopping
         self.crossfade.reset();
         self.crossfade_progress.reset();
         self.is_manual_skip = false;
@@ -771,6 +814,14 @@ impl PlaybackManager {
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<()> {
         self.is_manual_skip = true;
+
+        // Cancel any active stop_fade to prevent race conditions
+        self.stop_fade.reset();
+        self.pending_state = None;
+
+        // CRITICAL: Clear user_paused flag when manually skipping
+        // User expects next() to START the next track, not stay paused
+        self.user_paused = false;
 
         // Save current track to history (if any)
         if let Some(track) = self.current_track.take() {
@@ -785,6 +836,14 @@ impl PlaybackManager {
     /// If >3 seconds into current track, restarts current track.
     /// Otherwise, uses index-based navigation to go back without reordering the queue.
     pub fn previous(&mut self) -> Result<()> {
+        // Cancel any active stop_fade to prevent race conditions
+        self.stop_fade.reset();
+        self.pending_state = None;
+
+        // CRITICAL: Clear user_paused flag when manually going to previous track
+        // User expects previous() to START the previous track, not stay paused
+        self.user_paused = false;
+
         // Check position in current track
         if let Some(ref source) = self.audio_source {
             if source.position() > Duration::from_secs(3) {
@@ -890,6 +949,13 @@ impl PlaybackManager {
     pub fn seek_to(&mut self, position: Duration) -> Result<()> {
         if let Some(ref mut source) = self.audio_source {
             source.seek(position)?;
+
+            // CRITICAL: Mark source as not ready after seek
+            // This prevents the audio callback from reading 0 samples and thinking track finished
+            // We wait for source.is_ready() before continuing playback (same as track load)
+            self.source_ready_verified = false;
+            self.source_ready_wait_samples = 0;
+
             // Start fade-in for click-free seek
             self.start_fade.start();
             Ok(())
@@ -1081,6 +1147,14 @@ impl PlaybackManager {
             return Err(PlaybackError::QueueEmpty);
         }
 
+        // CRITICAL: Clear user_paused flag - user explicitly selected a track to play
+        // This ensures clicking a queue item in paused state starts playback
+        self.user_paused = false;
+
+        // Reset any active fades
+        self.stop_fade.reset();
+        self.pending_state = None;
+
         // Save current track to history (if any) - only actually-played tracks
         if let Some(track) = self.current_track.take() {
             self.history.push(track);
@@ -1266,14 +1340,14 @@ impl PlaybackManager {
         static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
         let count = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
         if count < 3 {
-            eprintln!("[process_audio] Call #{}", count + 1);
-            eprintln!("  - Output buffer size: {} samples", output.len());
-            eprintln!("  - Output channels: {}", self.output_channels);
-            eprintln!(
+            tracing::debug!("[process_audio] Call #{}", count + 1);
+            tracing::debug!("  - Output buffer size: {} samples", output.len());
+            tracing::debug!("  - Output channels: {}", self.output_channels);
+            tracing::debug!(
                 "  - Expected frames: {}",
                 output.len() / self.output_channels as usize
             );
-            eprintln!("  - Sample rate: {} Hz", self.sample_rate);
+            tracing::debug!("  - Sample rate: {} Hz", self.sample_rate);
         }
 
         // === PHASE 1: Handle stop fade and pending source activation ===
@@ -1285,7 +1359,35 @@ impl PlaybackManager {
             // Don't start fade yet - wait for source to be ready first
             self.source_ready_verified = false;
             self.source_ready_wait_samples = 0;
-            eprintln!("[process_audio] Activated pending source, waiting for ready");
+            tracing::debug!("[process_audio] Activated pending source, waiting for ready");
+        }
+
+        // === PHASE 1.5: Universal fade processing (CRITICAL FIX) ===
+        // Process stop_fade REGARDLESS of state to ensure immediate response to pause/stop commands
+        // This fixes the race condition where pause() is called while state is still Playing
+        if self.stop_fade.is_active() {
+            if let Some(ref mut source) = self.audio_source {
+                // Read audio and apply fades
+                let samples_read = source.read_samples(output)?;
+                if samples_read > 0 {
+                    // CRITICAL: Apply start_fade FIRST if active (prevents volume jump on pause)
+                    // When pause is clicked during fade-in, both fades multiply together smoothly
+                    // Example: start_fade gain=0.5, stop_fade gain=1.0 → combined=0.5 (no jump!)
+                    if self.start_fade.is_active() {
+                        self.start_fade.process(&mut output[..samples_read]);
+                    }
+
+                    // Then apply stop_fade on top
+                    if let Some(action) = self.stop_fade.process(&mut output[..samples_read]) {
+                        self.handle_fade_complete_action(action)?;
+                    }
+                }
+                // Fill remainder with keepalive noise
+                if samples_read < output.len() {
+                    self.fill_underrun_buffer(&mut output[samples_read..]);
+                }
+                return Ok(output.len());
+            }
         }
 
         // === PHASE 2: State-based processing ===
@@ -1296,50 +1398,12 @@ impl PlaybackManager {
                 return Ok(output.len());
             }
             PlaybackState::Paused => {
-                // Paused: if stop_fade is active, process it to fade out gracefully
-                if self.stop_fade.is_active() {
-                    if let Some(ref mut source) = self.audio_source {
-                        // Read audio and apply stop fade
-                        let samples_read = source.read_samples(output)?;
-                        if samples_read > 0 {
-                            if let Some(action) =
-                                self.stop_fade.process(&mut output[..samples_read])
-                            {
-                                self.handle_fade_complete_action(action)?;
-                            }
-                        }
-                        // Fill remainder with keepalive noise
-                        if samples_read < output.len() {
-                            self.fill_underrun_buffer(&mut output[samples_read..]);
-                        }
-                        return Ok(output.len());
-                    }
-                }
-                // No active fade, output keepalive noise
+                // Paused: output keepalive noise (stop_fade handled in Phase 1.5)
                 self.fill_underrun_buffer(output);
                 return Ok(output.len());
             }
             PlaybackState::Loading => {
-                // Loading: if stop_fade is active, process it to fade out gracefully
-                if self.stop_fade.is_active() {
-                    if let Some(ref mut source) = self.audio_source {
-                        // Read audio and apply stop fade
-                        let samples_read = source.read_samples(output)?;
-                        if samples_read > 0 {
-                            if let Some(action) =
-                                self.stop_fade.process(&mut output[..samples_read])
-                            {
-                                self.handle_fade_complete_action(action)?;
-                            }
-                        }
-                        // Fill remainder with keepalive noise
-                        if samples_read < output.len() {
-                            self.fill_underrun_buffer(&mut output[samples_read..]);
-                        }
-                        return Ok(output.len());
-                    }
-                }
-                // No source or no active fade - output keepalive noise
+                // Loading: output keepalive noise while waiting (stop_fade handled in Phase 1.5)
                 self.fill_underrun_buffer(output);
                 return Ok(output.len());
             }
@@ -1359,7 +1423,7 @@ impl PlaybackManager {
                     self.start_fade.start();
                     let wait_ms =
                         (self.source_ready_wait_samples as f64 / self.sample_rate as f64) * 1000.0;
-                    eprintln!(
+                    tracing::debug!(
                         "[process_audio] Source ready after {} samples ({:.1}ms wait), starting playback",
                         self.source_ready_wait_samples, wait_ms
                     );
@@ -1373,7 +1437,7 @@ impl PlaybackManager {
                         let wait_ms = (self.source_ready_wait_samples as f64
                             / self.sample_rate as f64)
                             * 1000.0;
-                        eprintln!(
+                        tracing::debug!(
                             "[process_audio] Waiting for source ready... ({:.0}ms elapsed)",
                             wait_ms
                         );
@@ -1382,8 +1446,8 @@ impl PlaybackManager {
                     // Timeout after 2 seconds - proceed anyway with warning
                     let timeout_samples = self.sample_rate as usize * 2; // 2 seconds
                     if self.source_ready_wait_samples >= timeout_samples {
-                        eprintln!(
-                            "[process_audio] WARNING: Source ready timeout after 2 seconds, proceeding anyway"
+                        tracing::warn!(
+                            "[process_audio] Source ready timeout after 2 seconds, proceeding anyway"
                         );
                         self.source_ready_verified = true;
                         self.start_fade.start();
@@ -1413,9 +1477,23 @@ impl PlaybackManager {
                 source.read_samples(&mut self.stereo_conversion_buffer[..stereo_samples])?;
 
             if samples_read == 0 {
-                // Track finished
-                self.handle_track_finished()?;
-                return Ok(0);
+                // CRITICAL: Check if track actually finished or just buffering
+                // After seek, source may return 0 samples temporarily while buffering
+                let position = source.position();
+                let duration = source.duration();
+                if position >= duration {
+                    // Track actually finished - position at or past duration
+                    self.handle_track_finished()?;
+                    return Ok(0);
+                } else {
+                    // Still buffering after seek - output keepalive noise and continue
+                    tracing::debug!(
+                        "[process_audio] Mono: Source returned 0 samples but pos={:?} < dur={:?}, buffering",
+                        position, duration
+                    );
+                    self.fill_underrun_buffer(output);
+                    return Ok(output.len());
+                }
             }
 
             // Apply start fade envelope for click-free playback start/resume
@@ -1464,9 +1542,29 @@ impl PlaybackManager {
             let samples_read = self.process_stereo_with_crossfade(output)?;
 
             if samples_read == 0 {
-                // Track finished (no crossfade or crossfade completed)
-                self.handle_track_finished()?;
-                return Ok(0);
+                // CRITICAL: Check if track actually finished or just buffering
+                // process_stereo_with_crossfade should handle this, but double-check here
+                if let Some(ref source) = self.audio_source {
+                    let position = source.position();
+                    let duration = source.duration();
+                    if position >= duration {
+                        // Track actually finished
+                        self.handle_track_finished()?;
+                        return Ok(0);
+                    } else {
+                        // Still buffering - this shouldn't happen but handle it gracefully
+                        tracing::warn!(
+                            "[process_audio] Stereo: Unexpected 0 samples with pos={:?} < dur={:?}",
+                            position, duration
+                        );
+                        self.fill_underrun_buffer(output);
+                        return Ok(output.len());
+                    }
+                } else {
+                    // No source, track actually finished
+                    self.handle_track_finished()?;
+                    return Ok(0);
+                }
             }
 
             // Apply start fade envelope for click-free playback start/resume
@@ -1646,16 +1744,29 @@ impl PlaybackManager {
         let samples_read = source.read_samples(output)?;
 
         if samples_read == 0 {
-            // Track finished
-            if should_gapless {
-                // Seamless transition to next track
-                self.transition_to_next_track()?;
-                // Try to read from new source
-                if let Some(ref mut new_source) = self.audio_source {
-                    return new_source.read_samples(output);
+            // CRITICAL: Check if track actually finished or just buffering
+            // After seek, source may return 0 samples temporarily while buffering
+            if position >= duration {
+                // Track actually finished - position at or past duration
+                if should_gapless {
+                    // Seamless transition to next track
+                    self.transition_to_next_track()?;
+                    // Try to read from new source
+                    if let Some(ref mut new_source) = self.audio_source {
+                        return new_source.read_samples(output);
+                    }
                 }
+                return Ok(0);
+            } else {
+                // Still buffering after seek - output keepalive noise and continue
+                tracing::debug!(
+                    "[process_stereo_with_crossfade] Source returned 0 samples but pos={:?} < dur={:?}, buffering",
+                    position, duration
+                );
+                // Fill with keepalive noise and return length to continue
+                self.fill_underrun_buffer(output);
+                return Ok(output.len());
             }
-            return Ok(0);
         }
 
         Ok(samples_read)
@@ -2018,31 +2129,37 @@ impl PlaybackManager {
             // Currently playing - use pending source pattern for smooth transition
             // 1. Start stop fade to fade out current audio
             // 2. Set new source as pending (will be activated when fade completes)
-            eprintln!("[set_audio_source] Using pending source pattern for smooth transition");
+            tracing::info!("[set_audio_source] Using pending source pattern for smooth transition");
             self.pending_source = Some(source);
             self.stop_fade.start(FadeCompleteAction::TransitionToNext);
             // State stays Playing during the fade-out, then becomes Playing again after fade-in
         } else {
             // Not currently playing or already transitioning - directly set the source
-            eprintln!(
+            tracing::info!(
                 "[set_audio_source] Direct source set (no active audio or already transitioning)"
             );
             self.pending_source = None; // Clear any pending source
             self.audio_source = Some(source);
 
-            // CRITICAL FIX: Respect current Paused state
-            // If user paused during loading, don't override their pause command
-            let should_play = self.state == PlaybackState::Playing || self.state == PlaybackState::Loading;
+            // CRITICAL FIX: Respect user_paused flag
+            // If user explicitly paused, DON'T override their command even if state is Loading
+            let should_play = !self.user_paused
+                && (self.state == PlaybackState::Playing || self.state == PlaybackState::Loading);
 
             if should_play {
-                eprintln!("[set_audio_source] Setting state to Playing");
+                tracing::info!("[set_audio_source] Setting state to Playing");
                 self.state = PlaybackState::Playing;
                 self.source_ready_verified = false;
                 self.source_ready_wait_samples = 0;
                 self.stop_fade.reset(); // Cancel any active stop fade
             } else {
                 // User has paused/stopped - keep current state
-                eprintln!("[set_audio_source] Keeping state={:?} (user has paused/stopped)", self.state);
+                tracing::info!(
+                    "[set_audio_source] Keeping state={:?} (user_paused={}, original_state={:?})",
+                    self.state,
+                    self.user_paused,
+                    self.state
+                );
                 self.source_ready_verified = false;
                 self.source_ready_wait_samples = 0;
                 self.stop_fade.reset();

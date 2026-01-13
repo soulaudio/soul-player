@@ -7,6 +7,8 @@ import { usePlayerStore } from '../stores/player';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import type { QueueTrack } from '../contexts/PlayerCommandsContext';
 import { Tooltip } from './ui/Tooltip';
+import { ArtistLink } from './ArtistLink';
+import { AlbumLink } from './AlbumLink';
 
 export type SourceType = 'local' | 'server' | 'cached';
 
@@ -14,7 +16,9 @@ export interface Track {
   id: number | string;
   title: string;
   artist?: string;
+  artistId?: number;
   album?: string;
+  albumId?: number;
   duration?: number;
   trackNumber?: number;
   /** Whether the track is available (file exists). Defaults to true. */
@@ -359,13 +363,39 @@ function TrackRow({
       </div>
 
       {/* Artist */}
-      <div className="flex items-center text-sm text-muted-foreground truncate">
-        {activeVersion.artist || 'Unknown Artist'}
+      <div
+        className="flex items-center text-sm text-muted-foreground truncate"
+        onClick={(e) => {
+          console.log('[TrackList] Artist cell clicked', {
+            artistId: activeVersion.artistId,
+            artist: activeVersion.artist
+          })
+          e.stopPropagation()
+        }}
+      >
+        <ArtistLink
+          artistId={activeVersion.artistId}
+          artistName={activeVersion.artist}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        />
       </div>
 
       {/* Album */}
-      <div className="flex items-center text-sm text-muted-foreground truncate">
-        {activeVersion.album || '—'}
+      <div
+        className="flex items-center text-sm text-muted-foreground truncate"
+        onClick={(e) => {
+          console.log('[TrackList] Album cell clicked', {
+            albumId: activeVersion.albumId,
+            album: activeVersion.album
+          })
+          e.stopPropagation()
+        }}
+      >
+        <AlbumLink
+          albumId={activeVersion.albumId}
+          albumName={activeVersion.album}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        />
       </div>
 
       {/* Format dropdown */}

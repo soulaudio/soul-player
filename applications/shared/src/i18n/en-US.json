@@ -107,6 +107,10 @@
     "audio": {
       "title": "Audio",
       "outputDevice": "Output Device",
+      "warning": {
+        "title": "Experimental Audio Pipeline",
+        "description": "The audio pipeline and features are under active development and may contain bugs or instability. If you experience issues, please see the \"Report Bug\" section in settings."
+      },
       "latency": {
         "title": "Latency Monitor",
         "loading": "Loading latency info...",
@@ -158,13 +162,34 @@
     "checking": "Checking...",
     "shortcuts": "Keyboard Shortcuts",
     "resetShortcuts": "Reset to Defaults",
+    "reportBug": "Report Bug",
+    "reportBugDescription": "Help improve Soul Player by reporting issues you encounter",
+    "reportBugTitle": "Report a Bug",
+    "reportBugInstructions": "If you encounter any issues with Soul Player, please help us improve by reporting them on GitHub.",
+    "reportBugSteps": {
+      "step1": "Check if the issue has already been reported",
+      "step2": "Create a detailed bug report including steps to reproduce",
+      "step3": "Include system information and logs if applicable"
+    },
+    "reportBugGithubLink": "Report on GitHub Issues",
+    "reportBugLogs": "View Logs",
+    "reportBugLogsDescription": "Application logs can help diagnose issues. Enable logging with the --logs flag when starting the app.",
     "about": "About",
     "aboutDescription": "Local-first music player with high-quality audio playback and professional audio processing pipeline.",
     "version": "Version",
     "links": "Links",
     "github": "GitHub",
     "website": "Website",
-    "demoDisabled": "Available in desktop app"
+    "demoDisabled": "Available in desktop app",
+    "sections": {
+      "audio": "Audio",
+      "library": "Library",
+      "playback": "Playback",
+      "appearance": "Appearance",
+      "shortcuts": "Keyboard Shortcuts",
+      "reportBug": "Report Bug",
+      "about": "About"
+    }
   },
   "scan": {
     "scanning": "Scanning Library",

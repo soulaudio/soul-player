@@ -72,6 +72,8 @@ export { SourceIndicator } from './components/SourceIndicator';
 export { EditArtworkDialog, type ArtworkEntityType } from './components/EditArtworkDialog';
 export { AddToPlaylistDialog } from './components/AddToPlaylistDialog';
 export { ImageCropper } from './components/ImageCropper';
+export { ArtistLink } from './components/ArtistLink';
+export { AlbumLink } from './components/AlbumLink';
 
 // UI components
 export { Kbd, KbdGroup } from './components/ui/Kbd';
