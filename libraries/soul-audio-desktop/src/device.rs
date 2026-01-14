@@ -486,6 +486,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_list_devices_default_backend() {
         let backend = AudioBackend::Default;
         let devices = list_devices(backend);
@@ -513,6 +514,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_get_default_device() {
         let backend = AudioBackend::Default;
         let device = get_default_device(backend);
@@ -529,6 +531,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_find_device_by_name() {
         let backend = AudioBackend::Default;
         let devices = list_devices(backend).unwrap();
@@ -556,6 +559,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_device_sorting() {
         let backend = AudioBackend::Default;
         let devices = list_devices(backend).unwrap();
@@ -651,6 +655,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_list_devices_with_capabilities() {
         let backend = AudioBackend::Default;
         let devices = list_devices_with_capabilities(backend, true);
@@ -677,6 +682,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_get_default_device_with_capabilities() {
         let backend = AudioBackend::Default;
         let device = get_default_device_with_capabilities(backend, true);
@@ -702,6 +708,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_get_device_capabilities_by_name() {
         let backend = AudioBackend::Default;
         let devices = list_devices(backend).unwrap();

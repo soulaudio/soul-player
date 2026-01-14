@@ -14,17 +14,13 @@ use soul_server::{
     services::{AuthService, FileStorage},
     state::AppState,
 };
+use soul_storage::Database;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tower::util::ServiceExt;
 
 /// Helper to create test app router
-async fn create_test_app() -> (
-    Router,
-    Arc<AuthService>,
-    TempDir,
-    Arc<soul_storage::Database>,
-) {
+async fn create_test_app() -> (Router, Arc<AuthService>, TempDir, Arc<Database>) {
     let db = create_test_database().await.unwrap();
 
     let temp_dir = TempDir::new().unwrap();
@@ -380,7 +376,7 @@ async fn test_create_playlist() {
 /// Test GET /api/playlists
 #[tokio::test]
 async fn test_get_playlists() {
-    let (app, auth_service, _temp_dir, db) = create_test_app().await;
+    let (app, auth_service, _temp_dir, db): (_, _, _, Arc<Database>) = create_test_app().await;
 
     let user = db.create_user("testuser").await.unwrap();
 
@@ -412,7 +408,7 @@ async fn test_get_playlists() {
 /// Test POST /api/admin/users
 #[tokio::test]
 async fn test_create_user() {
-    let (app, auth_service, _temp_dir, db) = create_test_app().await;
+    let (app, auth_service, _temp_dir, db): (_, _, _, Arc<Database>) = create_test_app().await;
 
     let admin_user = db.create_user("admin").await.unwrap();
 
@@ -447,7 +443,7 @@ async fn test_create_user() {
 /// Test GET /api/admin/users
 #[tokio::test]
 async fn test_list_users() {
-    let (app, auth_service, _temp_dir, db) = create_test_app().await;
+    let (app, auth_service, _temp_dir, db): (_, _, _, Arc<Database>) = create_test_app().await;
 
     let admin_user = db.create_user("admin").await.unwrap();
     db.create_user("user1").await.unwrap();

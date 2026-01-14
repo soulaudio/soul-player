@@ -382,13 +382,14 @@ mod integration {
 
         // Check position
         let position = manager.get_position();
-        eprintln!("[test] Playback position after 1s: {:.2}s", position);
+        let position_secs = position.as_secs_f64();
+        eprintln!("[test] Playback position after 1s: {:.2}s", position_secs);
 
         // Position should be approximately 1 second (±0.2s tolerance)
         assert!(
-            (0.8..=1.2).contains(&position),
+            (0.8..=1.2).contains(&position_secs),
             "Position should be ~1 second, got {:.2}s",
-            position
+            position_secs
         );
 
         eprintln!("[test] ✓ Playback successful with device selection");
@@ -421,7 +422,7 @@ mod integration {
         eprintln!("[test] File sample rate: {}Hz (mismatch)", file_sample_rate);
 
         // Create audio source with TARGET sample rate (device rate)
-        let source = LocalAudioSource::new(&test_file, device.sample_rate)
+        let _source = LocalAudioSource::new(&test_file, device.sample_rate)
             .expect("Should create audio source with resampling");
 
         eprintln!("[test] Audio source created - resampling should be active");

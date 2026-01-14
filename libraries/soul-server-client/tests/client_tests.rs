@@ -4,7 +4,7 @@
 //! requiring a real server connection.
 
 use soul_server_client::{ServerClientError, ServerConfig, SoulServerClient};
-use wiremock::matchers::{body_json_string, header, method, path};
+use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // =============================================================================

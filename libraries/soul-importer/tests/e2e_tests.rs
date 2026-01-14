@@ -2,7 +2,7 @@
 //!
 //! These tests simulate real-world import scenarios with actual audio files
 
-use soul_importer::{ImportConfig, ImportProgress, ImportSummary, MusicImporter, Result};
+use soul_importer::{ImportConfig, MusicImporter};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;

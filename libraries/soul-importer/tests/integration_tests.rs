@@ -3,7 +3,7 @@
 //! These tests verify the full import pipeline from file scanning to database insertion
 
 use soul_core::types::CreateGenre;
-use soul_importer::{ImportConfig, ImportProgress, ImportSummary, MusicImporter, Result};
+use soul_importer::{ImportConfig, MusicImporter};
 use std::fs;
 use std::io::Write;
 use tempfile::TempDir;

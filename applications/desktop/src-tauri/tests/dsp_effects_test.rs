@@ -9,40 +9,7 @@
 //! 6. Multiple effects work together in chain
 
 use soul_audio_desktop::DesktopPlayback;
-use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode};
-use std::path::PathBuf;
-use std::time::Duration;
-use tempfile::TempDir;
-
-/// Helper to create a test WAV file
-fn create_test_wav(
-    path: &std::path::Path,
-    duration_secs: f32,
-    frequency: f32,
-) -> std::io::Result<()> {
-    use hound::{WavSpec, WavWriter};
-
-    let spec = WavSpec {
-        channels: 2,
-        sample_rate: 44100,
-        bits_per_sample: 16,
-        sample_format: hound::SampleFormat::Int,
-    };
-
-    let mut writer = WavWriter::create(path, spec)?;
-
-    let num_samples = (44100.0 * duration_secs) as usize;
-    for i in 0..num_samples {
-        let t = i as f32 / 44100.0;
-        let sample = (t * frequency * 2.0 * std::f32::consts::PI).sin();
-        let amplitude = (i16::MAX as f32 * 0.5 * sample) as i16;
-        writer.write_sample(amplitude)?;
-        writer.write_sample(amplitude)?;
-    }
-
-    writer.finalize()?;
-    Ok(())
-}
+use soul_playback::{PlaybackConfig, RepeatMode, ShuffleMode};
 
 /// Test that effects can be added and retrieved from slots
 #[test]

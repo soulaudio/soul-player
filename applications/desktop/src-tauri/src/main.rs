@@ -777,7 +777,7 @@ async fn show_in_file_explorer(path: String) -> Result<(), String> {
             }
         }
 
-        return Err("No supported file manager found".to_string());
+        Err("No supported file manager found".to_string())
     }
 }
 

@@ -38,6 +38,7 @@ use tracing::{debug, info, warn};
 /// let library = client.library().get_full_library().await?;
 /// println!("Found {} tracks", library.tracks.len());
 /// ```
+#[derive(Debug)]
 pub struct SoulServerClient {
     http: Client,
     config: Arc<RwLock<ServerConfig>>,
@@ -297,6 +298,7 @@ impl SoulServerClient {
 ///
 /// This is returned by `SoulServerClient::library()` and provides
 /// access to library-related methods.
+#[derive(Debug)]
 pub struct LibraryClientHandle {
     http: Client,
     url: String,
@@ -314,6 +316,7 @@ impl LibraryClientHandle {
 // Use .client() method to get a LibraryClient with proper lifetime bounds.
 
 /// Handle for upload operations.
+#[derive(Debug)]
 pub struct UploadClientHandle {
     http: Client,
     url: String,

@@ -163,7 +163,8 @@
       "Bash(npm run test:lazy-queue:*)",
       "Bash(npm test:*)",
       "Bash(rustup target list:*)",
-      "Bash(wasm-pack:*)"
+      "Bash(wasm-pack:*)",
+      "Bash(git grep:*)"
     ]
   },
   "hooks": {
