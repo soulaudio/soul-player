@@ -802,7 +802,6 @@ fn test_sample_rate_transition_no_glitches() {
     for (input_rate, output_rate) in transitions {
         let buffer_size = 1024usize;
         let frequency = 1000.0f32;
-        let _amplitude = 0.8f32;
 
         // Generate input at source sample rate
         let input = generate_stereo_sine(frequency, input_rate, buffer_size);
@@ -1589,7 +1588,7 @@ fn test_rapid_buffer_submission_no_gaps() {
 // ============================================================================
 
 #[test]
-#[ignore]
+#[ignore = "Long-running test, run manually for sustained load testing"]
 fn test_one_hour_actual_playback() {
     // Full 1-hour sustained load test
     // Run with: cargo test --package soul-audio test_one_hour_actual_playback -- --ignored

@@ -150,10 +150,10 @@ fn calculate_phase_at_frequency(samples: &[f32], frequency: f32, sample_rate: u3
     let mut real = 0.0_f32;
     let mut imag = 0.0_f32;
 
-    for i in 0..n {
+    for (i, &sample) in samples.iter().enumerate().take(n) {
         let angle = omega * i as f32;
-        real += samples[i] * angle.cos();
-        imag -= samples[i] * angle.sin();
+        real += sample * angle.cos();
+        imag -= sample * angle.sin();
     }
 
     imag.atan2(real) * 180.0 / PI

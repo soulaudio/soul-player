@@ -753,6 +753,7 @@ mod effect_combination_tests {
     use super::*;
 
     /// Test a specific combination of effects
+    #[allow(clippy::fn_params_excessive_bools)]
     fn test_effect_combination(
         use_eq: bool,
         use_graphic_eq: bool,

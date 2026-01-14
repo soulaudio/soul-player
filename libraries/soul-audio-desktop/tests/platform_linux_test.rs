@@ -428,7 +428,7 @@ mod buffer_underrun_tests {
         if let Ok(output) = ExclusiveOutput::new(ExclusiveConfig::default()) {
             let sample_rate = output.sample_rate();
 
-            for i in 0..5 {
+            for _i in 0..5 {
                 let samples = generate_test_audio(sample_rate, 50, 2);
                 if output.play(AudioData::Float32(samples)).is_ok() {
                     std::thread::sleep(Duration::from_millis(30));

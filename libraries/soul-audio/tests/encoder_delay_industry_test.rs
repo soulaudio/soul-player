@@ -1208,8 +1208,8 @@ fn test_phase_continuity_after_trim() {
 fn test_concatenate_trimmed_tracks() {
     let sample_rate = 44100;
     let frequency = 440.0;
-    let _encoder_delay = 576; // Used in real-world but simulation uses already-trimmed audio
-    let _end_padding = 576;
+    // Encoder delay and end padding: 576 samples each
+    // Used in real-world but simulation uses already-trimmed audio
     let valid_samples_per_track = 5000;
 
     // Generate 3 tracks that should concatenate seamlessly
@@ -1291,7 +1291,7 @@ fn test_apple_aac_documented_values() {
 #[test]
 fn test_opus_documented_values() {
     // RFC 6716 - Definition of the Opus Audio Codec
-    assert!(
+    const _: () = assert!(
         opus_constants::OPUS_TYPICAL_PRE_SKIP >= 312
             && opus_constants::OPUS_TYPICAL_PRE_SKIP <= 360,
         "Opus pre-skip is typically 312-360 samples"
@@ -1312,7 +1312,7 @@ fn test_lame_track_playback_simulation() {
 
     // LAME encoding simulation
     let encoder_delay = lame_constants::LAME_DEFAULT_ENCODER_DELAY;
-    let _decoder_delay = lame_constants::MP3_DECODER_DELAY; // Note: handled by decoder
+    // Note: decoder delay (MP3_DECODER_DELAY) is handled by the decoder
 
     // Calculate padding for frame alignment
     let frame_size = lame_constants::MP3_FRAME_SIZE as u64;
@@ -1388,7 +1388,7 @@ fn test_itunes_aac_playback_simulation() {
 /// Test cross-format gapless transition (MP3 -> AAC)
 #[test]
 fn test_cross_format_gapless() {
-    let _sample_rate = 44100; // Would be used in actual playback
+    // Sample rate: 44100 Hz (would be used in actual playback)
 
     // Track 1: LAME MP3
     let mp3_delay = EncoderDelay::from_lame(576, 1152);

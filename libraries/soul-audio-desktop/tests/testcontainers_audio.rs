@@ -142,6 +142,7 @@ impl AudioTestImage {
     }
 
     /// Force rebuild the Docker image.
+    #[must_use]
     pub fn with_force_rebuild(mut self) -> Self {
         self.force_rebuild = true;
         self
@@ -264,7 +265,7 @@ impl AudioTestContainer {
     }
 
     /// Execute a command in the container.
-    async fn exec(&self, args: &[&str]) -> Result<String, String> {
+    fn exec(&self, args: &[&str]) -> Result<String, String> {
         let mut cmd_args = vec!["exec", self.container.id()];
         cmd_args.extend_from_slice(args);
 
@@ -282,8 +283,8 @@ impl AudioTestContainer {
     }
 
     /// Execute a command as testuser in the container.
-    pub async fn exec_as_testuser(&self, command: &str) -> Result<String, String> {
-        self.exec(&["su", "-", "testuser", "-c", command]).await
+    pub fn exec_as_testuser(&self, command: &str) -> Result<String, String> {
+        self.exec(&["su", "-", "testuser", "-c", command])
     }
 
     /// List all available virtual audio devices.
@@ -291,10 +292,9 @@ impl AudioTestContainer {
         let mut devices = Vec::new();
 
         // Get sinks (outputs)
-        let sinks_output = self.exec_as_testuser("pactl list sinks short").await?;
+        let sinks_output = self.exec_as_testuser("pactl list sinks short")?;
         let default_sink = self
             .exec_as_testuser("pactl get-default-sink")
-            .await
             .unwrap_or_default()
             .trim()
             .to_string();
@@ -328,10 +328,9 @@ impl AudioTestContainer {
         }
 
         // Get sources (inputs)
-        let sources_output = self.exec_as_testuser("pactl list sources short").await?;
+        let sources_output = self.exec_as_testuser("pactl list sources short")?;
         let default_source = self
             .exec_as_testuser("pactl get-default-source")
-            .await
             .unwrap_or_default()
             .trim()
             .to_string();
@@ -396,14 +395,14 @@ impl AudioTestContainer {
             sink, duration_secs, frequency
         );
 
-        self.exec_as_testuser(&cmd).await?;
+        self.exec_as_testuser(&cmd)?;
         Ok(())
     }
 
     /// Play audio from a WAV file to a virtual sink.
     pub async fn play_audio_file(&self, sink: &str, file_path: &str) -> Result<(), String> {
         let cmd = format!("paplay -d {} {}", sink, file_path);
-        self.exec_as_testuser(&cmd).await?;
+        self.exec_as_testuser(&cmd)?;
         Ok(())
     }
 
@@ -426,7 +425,7 @@ impl AudioTestContainer {
             source,
             output_path
         );
-        self.exec_as_testuser(&cmd).await?;
+        self.exec_as_testuser(&cmd)?;
 
         // Wait for recording to complete
         tokio::time::sleep(Duration::from_secs_f32(duration_secs + 1.0)).await;
@@ -443,9 +442,7 @@ impl AudioTestContainer {
     ///
     /// Returns the number of underruns detected.
     pub async fn detect_underruns(&self, sink: &str) -> Result<u32, String> {
-        let output = self
-            .exec_as_testuser(&format!("pactl list sinks | grep -A 20 '{}'", sink))
-            .await?;
+        let output = self.exec_as_testuser(&format!("pactl list sinks | grep -A 20 '{}'", sink))?;
 
         // Look for underrun count in output
         // PulseAudio reports this in sink statistics
@@ -463,9 +460,7 @@ impl AudioTestContainer {
 
     /// Detect audio glitches in a recorded file.
     pub async fn detect_glitches(&self, wav_path: &str) -> Result<GlitchReport, String> {
-        let output = self
-            .exec_as_testuser(&format!("sox {} -n stats 2>&1", wav_path))
-            .await?;
+        let output = self.exec_as_testuser(&format!("sox {} -n stats 2>&1", wav_path))?;
 
         let mut report = GlitchReport::default();
 
@@ -497,42 +492,36 @@ impl AudioTestContainer {
 
     /// Switch the default sink.
     pub async fn switch_default_sink(&self, sink: &str) -> Result<(), String> {
-        self.exec_as_testuser(&format!("pactl set-default-sink {}", sink))
-            .await?;
+        self.exec_as_testuser(&format!("pactl set-default-sink {}", sink))?;
         Ok(())
     }
 
     /// Switch the default source.
     pub async fn switch_default_source(&self, source: &str) -> Result<(), String> {
-        self.exec_as_testuser(&format!("pactl set-default-source {}", source))
-            .await?;
+        self.exec_as_testuser(&format!("pactl set-default-source {}", source))?;
         Ok(())
     }
 
     /// Set volume on a sink (0-100).
     pub async fn set_volume(&self, sink: &str, volume_percent: u8) -> Result<(), String> {
         let volume = volume_percent.min(100);
-        self.exec_as_testuser(&format!("pactl set-sink-volume {} {}%", sink, volume))
-            .await?;
+        self.exec_as_testuser(&format!("pactl set-sink-volume {} {}%", sink, volume))?;
         Ok(())
     }
 
     /// Mute or unmute a sink.
     pub async fn set_mute(&self, sink: &str, mute: bool) -> Result<(), String> {
         let mute_arg = if mute { "1" } else { "0" };
-        self.exec_as_testuser(&format!("pactl set-sink-mute {} {}", sink, mute_arg))
-            .await?;
+        self.exec_as_testuser(&format!("pactl set-sink-mute {} {}", sink, mute_arg))?;
         Ok(())
     }
 
     /// Verify the audio pipeline is working.
     pub async fn verify_pipeline(&self, sink: &str) -> Result<bool, String> {
-        let result = self
-            .exec_as_testuser(&format!(
-                "sox -n -t pulseaudio {} synth 0.5 sine 1000 2>&1",
-                sink
-            ))
-            .await;
+        let result = self.exec_as_testuser(&format!(
+            "sox -n -t pulseaudio {} synth 0.5 sine 1000 2>&1",
+            sink
+        ));
 
         match result {
             Ok(_) => Ok(true),
@@ -543,13 +532,12 @@ impl AudioTestContainer {
 
     /// Get `PulseAudio` server info.
     pub async fn get_server_info(&self) -> Result<String, String> {
-        self.exec_as_testuser("pactl info").await
+        self.exec_as_testuser("pactl info")
     }
 
     /// Check if `PulseAudio` is running.
     pub async fn is_pulseaudio_running(&self) -> bool {
         self.exec_as_testuser("pgrep pulseaudio")
-            .await
             .map(|out| !out.trim().is_empty())
             .unwrap_or(false)
     }

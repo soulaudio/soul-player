@@ -255,9 +255,8 @@ fn test_gapless_transition() {
     // Read until track transitions
     for _ in 0..100 {
         match manager.process_audio(&mut buffer) {
-            Ok(0) => break,
+            Ok(0) | Err(_) => break,
             Ok(n) => total_samples += n,
-            Err(_) => break,
         }
     }
 
@@ -723,9 +722,8 @@ fn test_track_end_advances_queue() {
     let mut iterations = 0;
     while manager.get_state() == PlaybackState::Playing && iterations < 100 {
         match manager.process_audio(&mut buffer) {
-            Ok(0) => break, // Track finished
+            Ok(0) | Err(_) => break, // Track finished
             Ok(_) => {}
-            Err(_) => break,
         }
         iterations += 1;
     }
@@ -1292,7 +1290,7 @@ fn test_continuous_playback_processing() {
 
     for _ in 0..1000 {
         match manager.process_audio(&mut buffer) {
-            Ok(0) => break,
+            Ok(0) | Err(_) => break,
             Ok(n) => {
                 total_samples += n;
                 // Verify output is valid
@@ -1301,7 +1299,6 @@ fn test_continuous_playback_processing() {
                     "All samples should be finite"
                 );
             }
-            Err(_) => break,
         }
     }
 
@@ -1450,7 +1447,7 @@ fn test_crossfade_both_tracks_audible_during_transition() {
     for _ in 0..50 {
         // Process up to 50 buffers
         match manager.process_audio(&mut buffer) {
-            Ok(0) => break,
+            Ok(0) | Err(_) => break,
             Ok(n) => {
                 all_samples.extend_from_slice(&buffer[..n]);
 
@@ -1459,7 +1456,6 @@ fn test_crossfade_both_tracks_audible_during_transition() {
                     crossfade_triggered = true;
                 }
             }
-            Err(_) => break,
         }
 
         // Stop if we've processed enough for the crossfade
@@ -1799,14 +1795,13 @@ fn test_crossfade_triggers_at_correct_time() {
 
     for _ in 0..10 {
         match manager.process_audio(&mut buffer) {
-            Ok(0) => break,
+            Ok(0) | Err(_) => break,
             Ok(_) => {
                 if manager.is_crossfading() {
                     crossfade_started = true;
                     break;
                 }
             }
-            Err(_) => break,
         }
     }
 
@@ -1851,13 +1846,12 @@ fn test_crossfade_fails_without_next_source() {
 
     for _ in 0..50 {
         match manager.process_audio(&mut buffer) {
-            Ok(0) => break,
+            Ok(0) | Err(_) => break,
             Ok(_) => {
                 if manager.is_crossfading() {
                     crossfade_triggered = true;
                 }
             }
-            Err(_) => break,
         }
     }
 

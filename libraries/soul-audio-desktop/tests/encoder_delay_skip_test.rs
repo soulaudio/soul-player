@@ -272,8 +272,8 @@ fn test_no_amplitude_discontinuity_at_start() {
     let mut max_jump = 0.0f32;
     let mut prev_amplitude = 0.0f32;
 
-    for i in 0..samples_read {
-        let current_amplitude = buffer[i].abs();
+    for sample in buffer.iter().take(samples_read) {
+        let current_amplitude = sample.abs();
         let jump = (current_amplitude - prev_amplitude).abs();
 
         if jump > max_jump {

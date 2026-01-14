@@ -246,9 +246,7 @@ async fn test_detect_glitches_in_clean_audio() {
         .expect("Failed to start container");
 
     // Generate a clean test file
-    let _ = container
-        .exec_as_testuser("sox -n /tmp/clean_test.wav synth 1 sine 440")
-        .await;
+    let _ = container.exec_as_testuser("sox -n /tmp/clean_test.wav synth 1 sine 440");
 
     let report = container
         .detect_glitches("/tmp/clean_test.wav")

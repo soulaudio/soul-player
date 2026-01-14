@@ -17,7 +17,7 @@ use soul_audio_desktop::LocalAudioSource;
 use soul_playback::{AudioSource, PlaybackConfig, PlaybackManager};
 use std::fs::File;
 use std::io::Write as IoWrite;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
@@ -733,7 +733,7 @@ fn is_ffmpeg_available() -> bool {
 /// Decode audio file using ffmpeg and return raw PCM samples
 ///
 /// This provides a reference decoder output to compare against Soul Player
-fn decode_with_ffmpeg(input_path: &PathBuf, sample_rate: u32) -> Option<Vec<f32>> {
+fn decode_with_ffmpeg(input_path: &Path, sample_rate: u32) -> Option<Vec<f32>> {
     if !is_ffmpeg_available() {
         eprintln!("[ffmpeg] ffmpeg not available, skipping reference decode");
         return None;

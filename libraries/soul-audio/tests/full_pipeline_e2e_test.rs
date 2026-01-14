@@ -1000,7 +1000,7 @@ fn test_playlist_playback_simulation() {
     pipeline.add_effect(Box::new(limiter));
 
     // Simulate 5 tracks with different characteristics
-    let tracks = vec![
+    let tracks = [
         generate_sine_wave(440.0, 44100, 0.5, 0.5), // Track 1: Simple tone
         generate_multitone(&[100.0, 500.0, 2000.0], 44100, 0.5, 0.3), // Track 2: Multi-tone
         generate_dynamic_signal(44100, 0.5, 0.1, 0.7), // Track 3: Dynamic

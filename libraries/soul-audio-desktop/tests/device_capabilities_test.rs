@@ -895,7 +895,7 @@ mod backend_tests {
 
         #[test]
         fn test_asio_backend_exists() {
-            let _asio = AudioBackend::Asio;
+            let _ = AudioBackend::Asio;
         }
 
         #[test]
@@ -943,7 +943,7 @@ mod backend_tests {
 
         #[test]
         fn test_jack_backend_exists() {
-            let _jack = AudioBackend::Jack;
+            let _ = AudioBackend::Jack;
         }
 
         #[test]

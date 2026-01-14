@@ -275,7 +275,7 @@ fn test_resampling_with_tiny_chunks() {
             // Zero read in the middle of the file is a bug!
             // Allow zeros at end
             assert!(
-                !(!source.is_finished() && i < 1500),
+                source.is_finished() || i >= 1500,
                 "Got zero samples at iteration {} when not at EOF - chunk gap bug!",
                 i
             );

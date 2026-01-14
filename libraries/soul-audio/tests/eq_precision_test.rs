@@ -308,8 +308,8 @@ fn measure_q_factor(
 
 #[test]
 fn test_parametric_eq_center_frequency_accuracy() {
-    /// Test that gain at center frequency matches expected within AES tolerance
-    /// Reference: AES-17 (+/- 1 dB full range, +/- 0.5 dB at center)
+    // Test that gain at center frequency matches expected within AES tolerance
+    // Reference: AES-17 (+/- 1 dB full range, +/- 0.5 dB at center)
     let test_frequencies = [100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0];
     let test_gains = [-12.0, -6.0, -3.0, 3.0, 6.0, 12.0];
 
@@ -354,8 +354,8 @@ fn test_parametric_eq_center_frequency_accuracy() {
 
 #[test]
 fn test_graphic_eq_10band_frequency_accuracy() {
-    /// Test 10-band graphic EQ at all ISO standard frequencies
-    /// Reference: ISO 266:1997 octave band center frequencies
+    // Test 10-band graphic EQ at all ISO standard frequencies
+    // Reference: ISO 266:1997 octave band center frequencies
     let mut failures = Vec::new();
 
     for (i, &freq) in ISO_10_BAND_FREQUENCIES.iter().enumerate() {
@@ -400,8 +400,8 @@ fn test_graphic_eq_10band_frequency_accuracy() {
 
 #[test]
 fn test_graphic_eq_31band_frequency_accuracy() {
-    /// Test 31-band graphic EQ at all third-octave frequencies
-    /// Reference: ISO 266:1997 third-octave band center frequencies
+    // Test 31-band graphic EQ at all third-octave frequencies
+    // Reference: ISO 266:1997 third-octave band center frequencies
     let mut failures = Vec::new();
     let sample_rate = 44100;
     let nyquist = sample_rate as f32 / 2.0;
@@ -456,9 +456,9 @@ fn test_graphic_eq_31band_frequency_accuracy() {
 
 #[test]
 fn test_peaking_filter_q_accuracy() {
-    /// Verify Q factor affects bandwidth correctly
-    /// Q = center_freq / bandwidth
-    /// Reference: Audio EQ Cookbook (Robert Bristow-Johnson)
+    // Verify Q factor affects bandwidth correctly
+    // Q = center_freq / bandwidth
+    // Reference: Audio EQ Cookbook (Robert Bristow-Johnson)
     let test_cases = [
         (1000.0, 0.5, "Wide Q=0.5"),
         (1000.0, 1.0, "Standard Q=1.0"),
@@ -601,8 +601,8 @@ fn test_graphic_eq_bandwidth_third_octave() {
 
 #[test]
 fn test_filter_stability_90_percent_nyquist() {
-    /// Test filter stability at 90% of Nyquist frequency
-    /// Reference: Orfanidis - Digital Filter Design Near Nyquist
+    // Test filter stability at 90% of Nyquist frequency
+    // Reference: Orfanidis - Digital Filter Design Near Nyquist
     for &sample_rate in &SAMPLE_RATES {
         let nyquist = sample_rate as f32 / 2.0;
         let test_freq = nyquist * 0.90;
@@ -624,8 +624,8 @@ fn test_filter_stability_90_percent_nyquist() {
 
 #[test]
 fn test_filter_stability_95_percent_nyquist() {
-    /// Test filter stability at 95% of Nyquist frequency
-    /// This is the critical zone where bilinear transform issues appear
+    // Test filter stability at 95% of Nyquist frequency
+    // This is the critical zone where bilinear transform issues appear
     for &sample_rate in &SAMPLE_RATES {
         let nyquist = sample_rate as f32 / 2.0;
         let test_freq = nyquist * 0.95;

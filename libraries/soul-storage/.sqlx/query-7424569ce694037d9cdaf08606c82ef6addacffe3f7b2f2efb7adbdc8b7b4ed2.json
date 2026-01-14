@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT last_played_at FROM track_stats WHERE user_id = ? AND track_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "last_played_at",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7424569ce694037d9cdaf08606c82ef6addacffe3f7b2f2efb7adbdc8b7b4ed2"
+}

@@ -1012,9 +1012,9 @@ fn test_no_dc_accumulation() {
 
     // Process in chunks to simulate real-time processing
     let mut signal = vec![0.0; 44100 * 10]; // 10 seconds
-    for i in 0..signal.len() {
+    for (i, sample) in signal.iter_mut().enumerate() {
         let t = i as f32 / 44100.0;
-        signal[i] = (2.0 * PI * 440.0 * t).sin() * 0.5;
+        *sample = (2.0 * PI * 440.0 * t).sin() * 0.5;
     }
 
     // Measure DC before
@@ -1294,7 +1294,7 @@ fn test_noise_floor_measurement() {
 
     // Verify we can accurately measure low levels
     let expected_peak_db = -80.0;
-    let _expected_rms_db = -80.0 - 3.0; // RMS of sine is -3dB from peak
+    // Note: RMS of sine is -3dB from peak (would be -83.0 dBFS)
 
     assert!(
         (peak_db - expected_peak_db).abs() < 1.0,
