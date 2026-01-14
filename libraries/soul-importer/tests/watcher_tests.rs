@@ -10,6 +10,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 
 /// Create a test audio file (fake FLAC with minimal header)
+#[allow(dead_code)]
 fn create_test_audio_file(path: &std::path::Path, filename: &str) -> std::path::PathBuf {
     let file_path = path.join(filename);
     let mut file = fs::File::create(&file_path).expect("Failed to create test file");

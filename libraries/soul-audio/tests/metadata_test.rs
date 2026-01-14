@@ -54,27 +54,27 @@ fn create_mp3_with_id3v2(
 
     // TIT2 frame (Title)
     if !title.is_empty() {
-        write_id3v2_text_frame(&mut frames, b"TIT2", title);
+        write_id3v2_text_frame(&mut frames, *b"TIT2", title);
     }
 
     // TPE1 frame (Artist)
     if !artist.is_empty() {
-        write_id3v2_text_frame(&mut frames, b"TPE1", artist);
+        write_id3v2_text_frame(&mut frames, *b"TPE1", artist);
     }
 
     // TALB frame (Album)
     if !album.is_empty() {
-        write_id3v2_text_frame(&mut frames, b"TALB", album);
+        write_id3v2_text_frame(&mut frames, *b"TALB", album);
     }
 
     // TYER frame (Year) - ID3v2.3
     if let Some(y) = year {
-        write_id3v2_text_frame(&mut frames, b"TYER", y);
+        write_id3v2_text_frame(&mut frames, *b"TYER", y);
     }
 
     // TRCK frame (Track number)
     if let Some(track) = track_number {
-        write_id3v2_text_frame(&mut frames, b"TRCK", &track.to_string());
+        write_id3v2_text_frame(&mut frames, *b"TRCK", &track.to_string());
     }
 
     // Write tag size (syncsafe integer: 28 bits spread across 4 bytes)
@@ -98,9 +98,9 @@ fn create_mp3_with_id3v2(
 }
 
 /// Write an ID3v2.3 text frame
-fn write_id3v2_text_frame(buffer: &mut Vec<u8>, frame_id: &[u8; 4], text: &str) {
+fn write_id3v2_text_frame(buffer: &mut Vec<u8>, frame_id: [u8; 4], text: &str) {
     // Frame ID (4 bytes)
-    buffer.extend_from_slice(frame_id);
+    buffer.extend_from_slice(&frame_id);
 
     // Frame content: encoding byte (0x03 = UTF-8) + text + null terminator
     let content = format!("\u{03}{}\0", text);

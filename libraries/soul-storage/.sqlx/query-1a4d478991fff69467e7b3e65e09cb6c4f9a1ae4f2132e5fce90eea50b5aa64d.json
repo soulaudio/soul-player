@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE source_sync_state\n        SET sync_status = 'idle',\n            last_sync_at = ?,\n            current_operation = NULL,\n            current_item = NULL,\n            tracks_uploaded = ?,\n            tracks_downloaded = ?,\n            tracks_updated = ?,\n            tracks_deleted = ?,\n            server_sync_token = COALESCE(?, server_sync_token),\n            error_message = NULL,\n            updated_at = datetime('now')\n        WHERE source_id = ? AND user_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "1a4d478991fff69467e7b3e65e09cb6c4f9a1ae4f2132e5fce90eea50b5aa64d"
+}

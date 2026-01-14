@@ -1328,7 +1328,10 @@ fn test_chirp_wav_creation_helper() {
     let buffer = decoder.decode(&path).expect("Failed to decode chirp WAV");
 
     // Verify we got audio
-    assert!(!buffer.samples.is_empty(), "Chirp WAV should contain samples");
+    assert!(
+        !buffer.samples.is_empty(),
+        "Chirp WAV should contain samples"
+    );
 
     // Verify frequency at start is lower than at end
     let chunk_size = 4410; // 100ms

@@ -483,9 +483,11 @@ fn test_multiple_sources_all_skip_encoder_delay() {
     }
 
     // Create multiple sources
-    let mut sources = [LocalAudioSource::new(&mp3_path, 44100).expect("MP3 failed"),
+    let mut sources = [
+        LocalAudioSource::new(&mp3_path, 44100).expect("MP3 failed"),
         LocalAudioSource::new(&flac_path, 44100).expect("FLAC failed"),
-        LocalAudioSource::new(&mp3_path, 48000).expect("MP3 resampled failed")];
+        LocalAudioSource::new(&mp3_path, 48000).expect("MP3 resampled failed"),
+    ];
 
     // All should have some audio (not complete silence)
     for (i, source) in sources.iter_mut().enumerate() {

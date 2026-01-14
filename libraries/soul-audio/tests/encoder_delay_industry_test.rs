@@ -195,8 +195,12 @@ fn test_lame_header_various_delays() {
         let result = EncoderDelay::parse_lame_header(&bytes);
 
         if expected_delay <= 2000 && expected_padding <= 2000 {
-            let delay = result.unwrap_or_else(|| panic!("Should parse delay={}, padding={}",
-                expected_delay, expected_padding));
+            let delay = result.unwrap_or_else(|| {
+                panic!(
+                    "Should parse delay={}, padding={}",
+                    expected_delay, expected_padding
+                )
+            });
 
             assert_eq!(
                 delay.start_padding, expected_delay,
@@ -271,8 +275,8 @@ fn test_lame_delay_encoding() {
         let decoded = EncoderDelay::parse_lame_header(&encoded);
 
         if delay <= 2000 && padding <= 2000 {
-            let d = decoded.unwrap_or_else(|| panic!("Should decode delay={}, padding={}",
-                delay, padding));
+            let d = decoded
+                .unwrap_or_else(|| panic!("Should decode delay={}, padding={}", delay, padding));
             assert_eq!(d.start_padding, delay, "Delay round-trip failed");
             assert_eq!(d.end_padding, padding, "Padding round-trip failed");
         }

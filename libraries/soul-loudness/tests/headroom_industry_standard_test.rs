@@ -218,7 +218,7 @@ fn test_rg_scenario_very_quiet_ambient() {
 #[test]
 fn test_rg_scenario_reference_level_track() {
     let track_lufs = RG2_REFERENCE_LUFS;
-    let _track_peak_dbtp = -6.0;
+    // Track peak: -6.0 dBTP (has good headroom)
 
     let expected_gain = RG2_REFERENCE_LUFS - track_lufs; // 0 dB
     assert!(

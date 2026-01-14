@@ -236,7 +236,6 @@ pub fn measure_thd_n(signal: &[f32], fundamental_freq: f32, sample_rate: u32) ->
     // THD+N = sqrt(distortion_noise_power) / sqrt(fundamental_power) * 100
     // This is equivalent to: sqrt((total - fund) / fund) * 100
     let distortion_noise_power = (total_power - fundamental_power).max(0.0);
-    
 
     (distortion_noise_power / fundamental_power).sqrt() * 100.0
 }

@@ -5,8 +5,7 @@
 //! This can cause sizzle/artifacts that don't show up in single-change tests.
 
 use soul_audio::effects::{
-    AudioEffect, Crossfeed, EqBand, GraphicEq, Limiter, ParametricEq,
-    StereoEnhancer,
+    AudioEffect, Crossfeed, EqBand, GraphicEq, Limiter, ParametricEq, StereoEnhancer,
 };
 
 const SAMPLE_RATE: u32 = 44100;

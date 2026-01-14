@@ -25,8 +25,7 @@
 //! - True-peak measurement error: < 0.6 dB
 
 use soul_audio::effects::{
-    AudioEffect, EqBand, GraphicEq, ParametricEq, ISO_10_BAND_FREQUENCIES,
-    ISO_31_BAND_FREQUENCIES,
+    AudioEffect, EqBand, GraphicEq, ParametricEq, ISO_10_BAND_FREQUENCIES, ISO_31_BAND_FREQUENCIES,
 };
 use std::f32::consts::PI;
 
@@ -245,7 +244,6 @@ fn estimate_phase_shift(eq: &mut dyn AudioEffect, frequency: f32, sample_rate: u
 
     // Convert sample offset to phase in degrees
     let phase_samples = best_offset as f32;
-    
 
     (phase_samples / samples_per_cycle) * 360.0
 }

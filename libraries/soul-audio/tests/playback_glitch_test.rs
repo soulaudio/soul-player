@@ -671,7 +671,10 @@ fn test_batch_processing_with_background_threads() {
 
             // Verify output validity
             for sample in &buffer {
-                assert!(sample.is_finite(), "Invalid sample detected in audio thread");
+                assert!(
+                    sample.is_finite(),
+                    "Invalid sample detected in audio thread"
+                );
             }
         }
     });
@@ -1445,7 +1448,13 @@ fn test_callback_scheduling_variance() {
             stable_times.iter().map(|&&d| d).sum::<Duration>() / stable_times.len() as u32;
         let max_deviation = stable_times
             .iter()
-            .map(|&&d| if d > mean { d.checked_sub(mean).unwrap() } else { mean.checked_sub(d).unwrap() })
+            .map(|&&d| {
+                if d > mean {
+                    d.checked_sub(mean).unwrap()
+                } else {
+                    mean.checked_sub(d).unwrap()
+                }
+            })
             .max()
             .unwrap_or(Duration::ZERO);
 

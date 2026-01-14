@@ -1070,8 +1070,8 @@ mod sample_rate_mismatch_tests {
                 .join(format!("test_{}_{}.wav", from_rate, to_rate));
             create_test_wav(&wav_path, 0.5, 1000.0, from_rate).unwrap();
 
-            let source =
-                LocalAudioSource::new(&wav_path, to_rate).unwrap_or_else(|_| panic!("Failed for {}", desc));
+            let source = LocalAudioSource::new(&wav_path, to_rate)
+                .unwrap_or_else(|_| panic!("Failed for {}", desc));
 
             assert_eq!(source.sample_rate(), to_rate, "{} output rate", desc);
             assert_eq!(

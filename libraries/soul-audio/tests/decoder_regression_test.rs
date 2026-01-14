@@ -445,8 +445,7 @@ fn test_bug4_channel_count_mismatch_mono() {
 
     let buffer = result.unwrap();
 
-    // The decoder duplicates mono to stereo, so we have 2x the samples
-    let _expected_samples_if_mono = 100;
+    // The decoder duplicates mono to stereo, so we have 2x the samples (100 mono -> 200 stereo)
     let expected_samples_if_stereo = 200;
 
     println!("Input: 100 mono samples");
@@ -681,14 +680,7 @@ fn test_decoder_with_ramp() {
     let mut decoder = SymphoniaDecoder::new();
     let buffer = decoder.decode(&path).unwrap();
 
-    // Verify samples are monotonically increasing
-    let _prev = buffer.samples[0];
-    for &_sample in &buffer.samples[2..] {
-        // Every other sample (left channel only since mono is duplicated to stereo)
-        // Note: We're iterating all samples, L and R alternate
-    }
-
-    // Just verify no NaN or Inf
+    // Verify no NaN or Inf in samples
     for &sample in &buffer.samples {
         assert!(sample.is_finite());
     }

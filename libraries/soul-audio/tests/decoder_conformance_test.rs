@@ -1539,18 +1539,9 @@ fn test_symmetric_clipping_behavior() {
     let min_val = -1.0f32;
     let max_val = 32767.0 / 32768.0;
 
-    for i in 0..buffer.samples.len() / 2 {
-        let _left = buffer.samples[i * 2];
-        let _right = buffer.samples[i * 2 + 1];
-
-        // Left should be min, right should be max (for each stereo pair)
-        let _expected_left = if i % 2 == 0 { min_val } else { max_val };
-        let _expected_right = if i % 2 == 0 { max_val } else { min_val };
-
-        // Actually the pattern is: [min, max, min, max, ...] interleaved as stereo
-        // So sample 0 = left of pair 0, sample 1 = right of pair 0
-        // Pair 0: samples[0]=min (left channel), samples[1]=max (right channel)
-    }
+    // Pattern is: [min, max, min, max, ...] interleaved as stereo
+    // Sample 0 = left of pair 0, sample 1 = right of pair 0
+    // Pair 0: samples[0]=min (left channel), samples[1]=max (right channel)
 
     // Just verify we have both extreme values
     let has_min = buffer.samples.iter().any(|&s| (s - min_val).abs() < 1e-5);

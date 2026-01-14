@@ -37,13 +37,8 @@ fn generate_sine(
 
 /// Generate white noise at specified RMS level
 #[allow(dead_code)]
-fn generate_noise(
-    _sample_rate: u32,
-    channels: u32,
-    rms_level: f32,
-    duration_secs: f32,
-) -> Vec<f32> {
-    let num_samples = (_sample_rate as f32 * duration_secs) as usize;
+fn generate_noise(sample_rate: u32, channels: u32, rms_level: f32, duration_secs: f32) -> Vec<f32> {
+    let num_samples = (sample_rate as f32 * duration_secs) as usize;
     let mut samples = Vec::with_capacity(num_samples * channels as usize);
 
     // Simple pseudo-random number generator (for deterministic tests)

@@ -141,11 +141,13 @@ fn test_e2e_play_queue_from_middle() {
     let manager = TestPlaybackManager::new().unwrap();
 
     // Simulate clicking track 3 in library (creates queue starting from track 3)
-    let library = [create_test_track("1", "Track 1", "Artist A"),
+    let library = [
+        create_test_track("1", "Track 1", "Artist A"),
         create_test_track("2", "Track 2", "Artist B"),
         create_test_track("3", "Track 3", "Artist C"),
         create_test_track("4", "Track 4", "Artist D"),
-        create_test_track("5", "Track 5", "Artist E")];
+        create_test_track("5", "Track 5", "Artist E"),
+    ];
 
     let start_index = 2; // User clicked track 3
 
@@ -548,10 +550,12 @@ fn test_e2e_complete_queue_workflow() {
     let manager = TestPlaybackManager::new().unwrap();
 
     // Simulate user clicking track in library
-    let library = [create_test_track("1", "Song One", "Artist A"),
+    let library = [
+        create_test_track("1", "Song One", "Artist A"),
         create_test_track("2", "Song Two", "Artist B"),
         create_test_track("3", "Song Three", "Artist C"),
-        create_test_track("4", "Song Four", "Artist D")];
+        create_test_track("4", "Song Four", "Artist D"),
+    ];
 
     // User clicks song 2 (index 1)
     let start_index = 1;

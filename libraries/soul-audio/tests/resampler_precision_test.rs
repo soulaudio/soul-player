@@ -467,7 +467,11 @@ fn measure_aliasing_rejection(
 /// Per Infinite Wave: linear-phase filters exhibit pre-ringing (energy before
 /// the impulse peak). This is measured as the ratio of pre-peak energy to
 /// peak energy.
-fn measure_pre_ringing(resampler: &mut Resampler, input_rate: u32, _output_rate: u32) -> (f32, f32) {
+fn measure_pre_ringing(
+    resampler: &mut Resampler,
+    input_rate: u32,
+    _output_rate: u32,
+) -> (f32, f32) {
     resampler.reset();
 
     let input_mono = generate_impulse(input_rate, 0.2);

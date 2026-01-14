@@ -371,8 +371,6 @@ fn bug_attack_time_5x_too_slow() {
 
     // Process samples and find when compression reaches 90%
     let mut samples_to_90_percent = 0;
-    let input_db = 20.0 * loud.log10();
-    let _target_envelope = input_db; // Final envelope should match input
 
     for i in 0..(expected_samples * 10) {
         let mut buffer = vec![loud, loud];

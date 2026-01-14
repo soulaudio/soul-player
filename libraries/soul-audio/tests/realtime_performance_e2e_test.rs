@@ -1236,7 +1236,12 @@ fn test_memory_usage_stability_over_time() {
         // Periodic validity check
         if i % 10000 == 0 {
             let progress = i as f64 / iterations as f64 * 100.0;
-            assert!(buffer.iter().all(|s| s.is_finite()), "Invalid output at iteration {} ({:.1}%)", i, progress);
+            assert!(
+                buffer.iter().all(|s| s.is_finite()),
+                "Invalid output at iteration {} ({:.1}%)",
+                i,
+                progress
+            );
         }
     }
 
@@ -1679,7 +1684,8 @@ fn test_sustained_processing_1_minute() {
             sample_stats.add(elapsed);
 
             // Verify output validity
-            assert!(buffer.iter().all(|s| s.is_finite()), 
+            assert!(
+                buffer.iter().all(|s| s.is_finite()),
                 "Invalid output after {} buffers ({:.1}s)",
                 buffers_processed,
                 start.elapsed().as_secs_f64()
@@ -1800,7 +1806,11 @@ fn test_memory_stability_sustained() {
 
         // Verify output periodically
         if buffers_processed % 10000 == 0 {
-            assert!(buffer.iter().all(|s| s.is_finite()), "Memory corruption detected at buffer {}", buffers_processed);
+            assert!(
+                buffer.iter().all(|s| s.is_finite()),
+                "Memory corruption detected at buffer {}",
+                buffers_processed
+            );
         }
     }
 
@@ -1863,7 +1873,8 @@ fn test_sustained_processing_1_hour() {
 
         // Verify output periodically
         if buffers_processed % 100000 == 0 {
-            assert!(buffer.iter().all(|s| s.is_finite()), 
+            assert!(
+                buffer.iter().all(|s| s.is_finite()),
                 "Invalid output after {} buffers ({:.1} minutes)",
                 buffers_processed,
                 start.elapsed().as_secs() as f64 / 60.0

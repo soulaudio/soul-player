@@ -72,7 +72,7 @@ impl AllocationTracker {
     }
 
     /// Estimate current heap usage by creating and measuring a large allocation
-    fn estimate_heap_pressure(&self) -> usize {
+    fn estimate_heap_pressure() -> usize {
         // Create a reasonably sized allocation and see what we get
         let test_vec: Vec<u8> = Vec::with_capacity(1024 * 1024);
         let got = test_vec.capacity();

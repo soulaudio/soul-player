@@ -269,10 +269,7 @@ fn test_e2e_shuffle_modes() {
 
     // Test all shuffle modes
     for mode in [ShuffleMode::Off, ShuffleMode::Random, ShuffleMode::Smart] {
-        assert!(
-            manager.set_shuffle(mode).is_ok(),
-            "Should set shuffle mode"
-        );
+        assert!(manager.set_shuffle(mode).is_ok(), "Should set shuffle mode");
         std::thread::sleep(Duration::from_millis(20));
     }
 

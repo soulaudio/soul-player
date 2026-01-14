@@ -523,15 +523,19 @@ fn test_quality_affects_latency() {
     high_output.extend(high_resampler.flush().unwrap());
 
     // Both should produce valid output
-    assert!(!fast_output.is_empty(), "Fast quality should produce output");
-    assert!(!high_output.is_empty(), "High quality should produce output");
+    assert!(
+        !fast_output.is_empty(),
+        "Fast quality should produce output"
+    );
+    assert!(
+        !high_output.is_empty(),
+        "High quality should produce output"
+    );
 
-    // Verify latency API is available
-    let fast_latency = fast_resampler.latency();
-    let high_latency = high_resampler.latency();
-    // Just verify it returns something (latency values depend on implementation)
-    assert!(fast_latency >= 0);
-    assert!(high_latency >= 0);
+    // Verify latency API is available and returns valid values
+    let _fast_latency = fast_resampler.latency();
+    let _high_latency = high_resampler.latency();
+    // Latency values depend on implementation, just verify API is callable
 }
 
 // ============================================================================

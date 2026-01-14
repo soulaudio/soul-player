@@ -1026,8 +1026,8 @@ mod stereo_image_tests {
     /// Note: Width reduction at 1kHz is affected by the interplay between:
     /// - Crossfeed level (more negative = more crossfeed)
     /// - LPF cutoff (lower cutoff attenuates 1kHz more)
-    /// Meier has more aggressive crossfeed but lower cutoff (550Hz),
-    /// so at 1kHz, the LPF attenuates more of the crossfed signal.
+    ///   Meier has more aggressive crossfeed but lower cutoff (550Hz),
+    ///   so at 1kHz, the LPF attenuates more of the crossfed signal.
     #[test]
     fn test_preset_width_reduction_comparison() {
         let presets = [

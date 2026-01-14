@@ -175,12 +175,12 @@ mod supported_bit_depth {
 
     #[test]
     fn test_all_variants_exist() {
-        // Ensure all expected variants are accessible
-        let _int16 = SupportedBitDepth::Int16;
-        let _int24 = SupportedBitDepth::Int24;
-        let _int32 = SupportedBitDepth::Int32;
-        let _float32 = SupportedBitDepth::Float32;
-        let _float64 = SupportedBitDepth::Float64;
+        // Ensure all expected variants are accessible (compile-time check)
+        let _ = SupportedBitDepth::Int16;
+        let _ = SupportedBitDepth::Int24;
+        let _ = SupportedBitDepth::Int32;
+        let _ = SupportedBitDepth::Float32;
+        let _ = SupportedBitDepth::Float64;
     }
 
     #[test]

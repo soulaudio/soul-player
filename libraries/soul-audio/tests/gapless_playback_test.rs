@@ -87,7 +87,6 @@ fn generate_track_ending(
 
         // Apply fade-out in the last portion
         let fade_factor = if i >= total_samples - fade_samples {
-            
             (total_samples - i) as f32 / fade_samples as f32
         } else {
             1.0

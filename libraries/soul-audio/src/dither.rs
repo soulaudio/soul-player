@@ -293,9 +293,13 @@ mod tests {
     fn test_dither_to_i16_clipping() {
         let mut dither = TpdfDither::new();
 
-        // Values beyond ±1.0 should be clipped
-        assert!(dither.dither_to_i16(2.0) <= i16::MAX);
-        assert!(dither.dither_to_i16(-2.0) >= i16::MIN);
+        // Values beyond ±1.0 should be clipped to valid i16 range
+        let max_result = dither.dither_to_i16(2.0);
+        let min_result = dither.dither_to_i16(-2.0);
+
+        // Verify clipping results in max/min values (type system guarantees they're in range)
+        assert!(max_result > 30000); // Should be near i16::MAX
+        assert!(min_result < -30000); // Should be near i16::MIN
     }
 
     #[test]

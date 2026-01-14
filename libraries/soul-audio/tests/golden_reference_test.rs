@@ -284,7 +284,8 @@ mod comparison {
             if !self.failure_reasons.is_empty() {
                 report.push_str("\nFailure Reasons:");
                 for reason in &self.failure_reasons {
-                    report.push_str(&format!("\n  - {}", reason));
+                    use std::fmt::Write;
+                    let _ = write!(report, "\n  - {}", reason);
                 }
             }
             report
@@ -527,7 +528,7 @@ const RESAMPLING_44_TO_48_PEAK: f32 = 0.5; // Peak should be preserved
 #[test]
 fn test_version_tracking() {
     validate_version();
-    assert!(
+    const _: () = assert!(
         GOLDEN_REFERENCE_VERSION >= 1,
         "Golden reference version must be at least 1"
     );

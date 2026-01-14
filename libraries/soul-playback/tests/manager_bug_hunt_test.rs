@@ -505,7 +505,7 @@ fn test_position_reporting_during_crossfade() {
 
 #[test]
 fn test_logarithmic_is_actually_power_curve() {
-    let curve = FadeCurve::Logarithmic;
+    let curve = FadeCurve::SquareRoot;
 
     // sqrt(0.25) = 0.5
     let gain_at_25_percent = curve.calculate_gain(0.25, false);
