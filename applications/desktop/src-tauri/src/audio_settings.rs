@@ -181,9 +181,9 @@ impl From<AudioDeviceInfo> for FrontendDeviceInfo {
 fn parse_backend(backend_str: &str) -> Result<AudioBackend, String> {
     match backend_str {
         "default" => Ok(AudioBackend::Default),
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "asio"))]
         "asio" => Ok(AudioBackend::Asio),
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "jack"))]
         "jack" => Ok(AudioBackend::Jack),
         _ => Err(format!("Unknown backend: {}", backend_str)),
     }
@@ -521,14 +521,14 @@ mod tests {
         assert!(result.unwrap_err().contains("Unknown backend"));
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", feature = "asio"))]
     #[test]
     fn test_parse_backend_asio() {
         let backend = parse_backend("asio").unwrap();
         assert_eq!(backend, AudioBackend::Asio);
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "jack"))]
     #[test]
     fn test_parse_backend_jack() {
         let backend = parse_backend("jack").unwrap();

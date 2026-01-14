@@ -741,6 +741,7 @@ async fn show_in_file_explorer(path: String) -> Result<(), String> {
             .args(["/select,", &path.to_string_lossy()])
             .spawn()
             .map_err(|e| format!("Failed to open explorer: {}", e))?;
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]
@@ -749,6 +750,7 @@ async fn show_in_file_explorer(path: String) -> Result<(), String> {
             .args(["-R", &path.to_string_lossy()])
             .spawn()
             .map_err(|e| format!("Failed to open Finder: {}", e))?;
+        Ok(())
     }
 
     #[cfg(target_os = "linux")]
@@ -777,8 +779,6 @@ async fn show_in_file_explorer(path: String) -> Result<(), String> {
 
         return Err("No supported file manager found".to_string());
     }
-
-    Ok(())
 }
 
 /// Diagnostic command to check database state

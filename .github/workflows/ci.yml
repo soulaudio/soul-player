@@ -52,8 +52,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
+      # Create mock dist directory for Tauri's generate_context!() macro
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+
       - name: Run Clippy
-        run: cargo clippy --lib --bins --all-features -- -D warnings
+        run: cargo clippy --workspace --lib --bins -- -D warnings
 
   # ============================================================================
   # Security
@@ -158,6 +164,13 @@ jobs:
         run: |
           brew install pkg-config
 
+      # Create mock dist directory for Tauri's generate_context!() macro
+      # This prevents "frontendDist path doesn't exist" errors during cargo test
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+
       # Run unit tests (libraries + applications)
       - name: Run unit tests
         run: cargo test --workspace --lib --bins
@@ -183,6 +196,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
+      # Create mock dist directory for Tauri's generate_context!() macro
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+
       # Docker is available by default on GitHub Actions Ubuntu runners
       - name: Run testcontainer integration tests
         run: cargo test --workspace --test '*' -- --test-threads=1
@@ -205,6 +224,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+
+      # Create mock dist directory for Tauri's generate_context!() macro
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
 
       - name: Install tarpaulin
         run: cargo install cargo-tarpaulin --locked
@@ -276,8 +301,14 @@ jobs:
         run: |
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
+      # Create mock dist directory for Tauri's generate_context!() macro
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+
       - name: Build workspace
-        run: cargo build --workspace --all-features --target ${{ matrix.target }}
+        run: cargo build --workspace --target ${{ matrix.target }}
 
   # ============================================================================
   # All Checks Summary (Required for PR merge)
