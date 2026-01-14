@@ -2,10 +2,10 @@
 /// Tests JWT generation, password hashing, token validation
 mod common;
 
-use common::{create_test_database, fixtures};
-use soul_core::{Storage, UserId};
+use common::{create_test_database, create_user_in_db, fixtures, get_pool};
+use soul_core::types::UserId;
 use soul_server::services::auth::AuthService;
-use soul_storage::Database;
+use soul_storage::LocalStorageContext as Database;
 use std::sync::Arc;
 
 /// Test password hashing produces valid bcrypt hashes
@@ -202,32 +202,32 @@ async fn test_complete_authentication_flow() {
     let auth_service = create_test_auth_service();
 
     // Create user
-    let user = db.create_user(fixtures::TEST_USERNAME).await.unwrap();
+    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME).await.unwrap();
 
     // Hash and store password
     let password_hash = auth_service.hash_password(fixtures::TEST_PASSWORD).unwrap();
-    store_user_credentials(&db, &user.id, &password_hash)
+    store_user_credentials(&db, &user, &password_hash)
         .await
         .unwrap();
 
     // Simulate login: retrieve hash and verify password
-    let stored_hash = get_user_password_hash(&db, &user.id).await.unwrap();
+    let stored_hash = get_user_password_hash(&db, &user).await.unwrap();
     let password_valid = auth_service
         .verify_password(fixtures::TEST_PASSWORD, &stored_hash)
         .unwrap();
     assert!(password_valid, "Password should be valid");
 
     // Generate tokens
-    let access_token = auth_service.create_access_token(&user.id).unwrap();
-    let refresh_token = auth_service.create_refresh_token(&user.id).unwrap();
+    let access_token = auth_service.create_access_token(&user).unwrap();
+    let refresh_token = auth_service.create_refresh_token(&user).unwrap();
 
     // Validate access token
     let decoded_id = auth_service.verify_access_token(&access_token).unwrap();
-    assert_eq!(user.id, decoded_id);
+    assert_eq!(user, decoded_id);
 
     // Validate refresh token
     let decoded_id = auth_service.verify_refresh_token(&refresh_token).unwrap();
-    assert_eq!(user.id, decoded_id);
+    assert_eq!(user, decoded_id);
 }
 
 /// Test authentication with wrong password
@@ -237,16 +237,16 @@ async fn test_authentication_wrong_password() {
     let auth_service = create_test_auth_service();
 
     // Create user
-    let user = db.create_user(fixtures::TEST_USERNAME).await.unwrap();
+    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME).await.unwrap();
 
     // Hash and store password
     let password_hash = auth_service.hash_password(fixtures::TEST_PASSWORD).unwrap();
-    store_user_credentials(&db, &user.id, &password_hash)
+    store_user_credentials(&db, &user, &password_hash)
         .await
         .unwrap();
 
     // Try to authenticate with wrong password
-    let stored_hash = get_user_password_hash(&db, &user.id).await.unwrap();
+    let stored_hash = get_user_password_hash(&db, &user).await.unwrap();
     let password_valid = auth_service
         .verify_password("WrongPassword", &stored_hash)
         .unwrap();
@@ -270,28 +270,28 @@ async fn test_multiple_users_authentication() {
     let auth_service = create_test_auth_service();
 
     // Create first user
-    let user1 = db.create_user("user1").await.unwrap();
+    let user1 = create_user_in_db(get_pool(&db), "user1").await.unwrap();
     let password1 = "Password1!";
     let hash1 = auth_service.hash_password(password1).unwrap();
-    store_user_credentials(&db, &user1.id, &hash1)
+    store_user_credentials(&db, &user1, &hash1)
         .await
         .unwrap();
 
     // Create second user
-    let user2 = db.create_user("user2").await.unwrap();
+    let user2 = create_user_in_db(get_pool(&db), "user2").await.unwrap();
     let password2 = "Password2!";
     let hash2 = auth_service.hash_password(password2).unwrap();
-    store_user_credentials(&db, &user2.id, &hash2)
+    store_user_credentials(&db, &user2, &hash2)
         .await
         .unwrap();
 
     // Verify user1 can authenticate with password1
-    let hash = get_user_password_hash(&db, &user1.id).await.unwrap();
+    let hash = get_user_password_hash(&db, &user1).await.unwrap();
     assert!(auth_service.verify_password(password1, &hash).unwrap());
     assert!(!auth_service.verify_password(password2, &hash).unwrap());
 
     // Verify user2 can authenticate with password2
-    let hash = get_user_password_hash(&db, &user2.id).await.unwrap();
+    let hash = get_user_password_hash(&db, &user2).await.unwrap();
     assert!(auth_service.verify_password(password2, &hash).unwrap());
     assert!(!auth_service.verify_password(password1, &hash).unwrap());
 }
@@ -303,26 +303,26 @@ async fn test_password_update() {
     let auth_service = create_test_auth_service();
 
     // Create user with initial password
-    let user = db.create_user(fixtures::TEST_USERNAME).await.unwrap();
+    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME).await.unwrap();
     let old_password = "OldPassword123!";
     let old_hash = auth_service.hash_password(old_password).unwrap();
-    store_user_credentials(&db, &user.id, &old_hash)
+    store_user_credentials(&db, &user, &old_hash)
         .await
         .unwrap();
 
     // Verify old password works
-    let hash = get_user_password_hash(&db, &user.id).await.unwrap();
+    let hash = get_user_password_hash(&db, &user).await.unwrap();
     assert!(auth_service.verify_password(old_password, &hash).unwrap());
 
     // Update password
     let new_password = "NewPassword456!";
     let new_hash = auth_service.hash_password(new_password).unwrap();
-    update_user_credentials(&db, &user.id, &new_hash)
+    update_user_credentials(&db, &user, &new_hash)
         .await
         .unwrap();
 
     // Verify old password no longer works
-    let hash = get_user_password_hash(&db, &user.id).await.unwrap();
+    let hash = get_user_password_hash(&db, &user).await.unwrap();
     assert!(!auth_service.verify_password(old_password, &hash).unwrap());
 
     // Verify new password works
@@ -344,7 +344,6 @@ async fn store_user_credentials(
     user_id: &UserId,
     password_hash: &str,
 ) -> Result<(), soul_storage::StorageError> {
-    use sqlx::Row;
     let pool = db.pool();
     let now = chrono::Utc::now().timestamp();
 
@@ -381,7 +380,6 @@ async fn update_user_credentials(
     user_id: &UserId,
     password_hash: &str,
 ) -> Result<(), soul_storage::StorageError> {
-    use sqlx::Row;
     let pool = db.pool();
     let now = chrono::Utc::now().timestamp();
 

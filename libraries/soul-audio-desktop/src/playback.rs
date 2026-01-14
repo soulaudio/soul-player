@@ -2673,6 +2673,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn create_desktop_playback() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
@@ -2691,6 +2692,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_create_with_default_backend() {
         let result = DesktopPlayback::new_with_device(
             PlaybackConfig::default(),
@@ -2713,6 +2715,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_get_current_device_info() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
@@ -2737,6 +2740,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_switch_device_to_default() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
@@ -2769,6 +2773,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_switch_device_preserves_backend() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
@@ -2789,6 +2794,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_switch_device_invalid_device() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
