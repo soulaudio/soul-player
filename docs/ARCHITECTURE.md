@@ -2,11 +2,11 @@
 
 ## System Overview
 
-Soul Player is a local-first, multi-platform music player with three operational modes:
+Soul Player is a local-first, multi-platform music player with multiple operational modes:
 
 1. **Desktop**: Standalone application (Tauri)
-2. **Server**: Multi-user streaming server with sync
-3. **Embedded**: ESP32-S3 portable DAP (Digital Audio Player)
+2. **Mobile**: iOS/Android mobile app (Tauri Mobile)
+3. **Server**: Multi-user streaming server with sync
 
 **Core Principle**: Shared Rust logic across all platforms, with platform-specific adapters for I/O.
 
@@ -14,7 +14,7 @@ Soul Player is a local-first, multi-platform music player with three operational
 
 ## High-Level Architecture
 
-The architecture consists of three layers: soul-core provides platform-agnostic traits and business logic at the base. The middle layer contains soul-storage (SQLite), soul-audio (Symphonia), and soul-metadata (tag I/O) which implement the core traits. The top layer has platform-specific adapters: Desktop uses CPAL for audio output, Server uses Axum/Tokio for HTTP endpoints, and ESP32-S3 uses awedio_esp32 for embedded audio.
+The architecture consists of three layers: soul-core provides platform-agnostic traits and business logic at the base. The middle layer contains soul-storage (SQLite), soul-audio (Symphonia), and soul-metadata (tag I/O) which implement the core traits. The top layer has platform-specific adapters: Desktop and Mobile use CPAL for audio output, and Server uses Axum/Tokio for HTTP endpoints.
 
 ---
 
@@ -136,8 +136,8 @@ CREATE TABLE playlist_shares (
 
 **Platform Support**:
 - Desktop: SQLite file on disk
+- Mobile: SQLite file in app data directory
 - Server: Same SQLite schema (single DB, multi-user)
-- ESP32-S3: SQLite on SD card (ESP-IDF provides filesystem)
 
 ---
 
@@ -152,11 +152,7 @@ pub struct AudioDecoder {
 }
 
 // Platform-specific output
-#[cfg(not(target_os = "espidf"))]
-pub struct CpalOutput { /* Desktop via CPAL */ }
-
-#[cfg(target_os = "espidf")]
-pub struct EspOutput { /* ESP32 via awedio_esp32 */ }
+pub struct CpalOutput { /* Desktop/Mobile via CPAL */ }
 
 // Effect chain (trait-based)
 pub trait AudioEffect: Send {

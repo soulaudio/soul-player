@@ -1,6 +1,6 @@
 # Soul Player
 
-Local-first, cross-platform music player. Desktop, mobile (iOS/Android), server, and ESP32-S3 DAP firmware.
+Local-first, cross-platform music player. Desktop, mobile (iOS/Android), and server.
 
 ---
 
@@ -216,7 +216,6 @@ applications/
   web/             # Web player (connects to server)
   server/          # Multi-user streaming server
   marketing/       # Marketing website with demo
-  firmware/        # ESP32-S3 DAP firmware
 docs/              # Architecture, testing, CI/CD guides
 ```
 
@@ -315,7 +314,6 @@ See **[docs/README.md](./docs/README.md)** for complete documentation index.
 **Backend**: Rust (Symphonia, CPAL, SQLx, Axum)
 **Frontend**: React, TypeScript, Tailwind CSS, Zustand
 **Desktop/Mobile**: Tauri 2.0
-**Firmware**: ESP32-S3 (Embassy, awedio_esp32)
 
 ---
 

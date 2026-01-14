@@ -62,3 +62,15 @@ libraries/soul-storage/.tmp/
 
 **/tmpclaude-*
 **/.tmp
+
+# Claude Code artifacts
+**/DEBUG_*.md
+**/PAUSE_FIX_*.md
+**/FINAL_FIX_*.md
+**/AUDIO_SETUP_*.md
+**/CONTRAST-FIXES.md
+**/PLAYBACK_DEBUG_*.md
+**/WASM_FIELD_*.md
+**/WASM_PLAYBACK_*.md
+**/NEXTJS_*_FIX.md
+clippy-errors.txt

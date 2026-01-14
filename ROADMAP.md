@@ -1,13 +1,13 @@
 # Soul Player - Development Roadmap
 
 ## Vision
-A local-first, cross-platform music player with server streaming capabilities and embedded hardware support (ESP32-S3 DAP).
+A local-first, cross-platform music player with server streaming capabilities.
 
 ## Architecture Principles
 - **Shared Core Logic**: Platform-agnostic Rust crates for all platforms
 - **Vertical Slicing**: Feature-complete across all layers when possible
 - **Quality Over Quantity**: Deep, meaningful tests - no shallow coverage
-- **Embedded-First Thinking**: Core logic must work on resource-constrained devices
+- **Cross-Platform**: Core logic must work across desktop, mobile, and server platforms
 
 ---
 
@@ -518,34 +518,7 @@ impl ConnectClient {
 
 ---
 
-## Phase 3: ESP32-S3 Embedded DAP
-**Goal**: Portable hardware music player
-
-### Deliverables
-- [ ] ESP32-S3 Firmware (`soul-player-esp32`)
-  - awedio_esp32 audio playback
-  - Symphonia decoder (shared with desktop)
-  - SD card filesystem integration
-  - SQLite database (same schema)
-  - WiFi server sync
-  - Battery management
-- [ ] E-ink Display Driver
-  - Album art display
-  - Track info
-  - Menu system
-- [ ] Hardware Integration
-  - I2S DAC output
-  - Button controls
-
-### Success Criteria
-- Plays music from SD card
-- E-ink display shows track info
-- Syncs library with server over WiFi
-- 8+ hours battery life
-
----
-
-## Phase 4: Discovery & Advanced Features
+## Phase 3: Discovery & Advanced Features
 **Goal**: Music discovery and recommendations
 
 ### Deliverables

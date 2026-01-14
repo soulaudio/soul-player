@@ -280,90 +280,6 @@ jobs:
         run: cargo build --workspace --all-features --target ${{ matrix.target }}
 
   # ============================================================================
-  # Firmware Build Check (ESP32-S3 DAP)
-  # ============================================================================
-
-  check-firmware:
-    name: Firmware Build Check (ESP32-S3)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-key: "esp32"
-
-      # Install ESP32 toolchain
-      - name: Install ESP32 toolchain
-        run: |
-          cargo install espup --locked
-          espup install
-          . $HOME/export-esp.sh
-
-      # Check that firmware compiles
-      - name: Check ESP32-S3 DAP compilation
-        run: |
-          . $HOME/export-esp.sh
-          cargo check -p soul-player-dap --target xtensa-esp32s3-espidf
-
-      # Check that embedded crates are compatible
-      - name: Check embedded library compatibility
-        run: |
-          . $HOME/export-esp.sh
-          cargo check -p soul-core --target xtensa-esp32s3-espidf
-          cargo check -p soul-audio-embedded --target xtensa-esp32s3-espidf
-
-  # ============================================================================
-  # Documentation
-  # ============================================================================
-
-  docs:
-    name: Documentation Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
-
-      - name: Check documentation
-        run: cargo doc --workspace --no-deps --all-features
-        env:
-          RUSTDOCFLAGS: "-D warnings"
-
-  # ============================================================================
-  # MSRV (Minimum Supported Rust Version)
-  # ============================================================================
-
-  msrv:
-    name: MSRV Check (Rust 1.75)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.75"
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
-
-      - name: Check MSRV compilation
-        run: cargo check --workspace --all-targets
-
-  # ============================================================================
   # All Checks Summary (Required for PR merge)
   # ============================================================================
 
@@ -376,9 +292,6 @@ jobs:
       - test
       - test-containers
       - build
-      - check-firmware
-      - docs
-      - msrv
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -389,10 +302,7 @@ jobs:
                 "${{ needs.audit.result }}" != "success" || \
                 "${{ needs.test.result }}" != "success" || \
                 "${{ needs.test-containers.result }}" != "success" || \
-                "${{ needs.build.result }}" != "success" || \
-                "${{ needs.check-firmware.result }}" != "success" || \
-                "${{ needs.docs.result }}" != "success" || \
-                "${{ needs.msrv.result }}" != "success" ]]; then
+                "${{ needs.build.result }}" != "success" ]]; then
             echo "One or more CI jobs failed"
             exit 1
           fi

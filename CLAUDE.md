@@ -6,7 +6,7 @@ Instructions for Claude Code when working with Soul Player.
 
 ## Project Overview
 
-**Soul Player**: Cross-platform music player (Desktop/Server/ESP32-S3)
+**Soul Player**: Cross-platform music player (Desktop/Server/Mobile)
 - **Stack**: Cargo workspace + Yarn workspace + Tauri (Moon tasks optional for local dev)
 - **Storage**: SQLite with multi-user schema from day 1
 - **Audio**: Symphonia decoder + platform-specific output
@@ -104,7 +104,7 @@ fn process(&mut self, buffer: &mut [f32]) {
 ALL user-facing strings MUST use localization - NEVER hardcode text:
 - Desktop: Use i18n framework (e.g., `react-i18next`, `fluent`)
 - Mobile: Platform localization APIs
-- Firmware (ESP32-S3): Minimal string tables for display text
+- Server/Web: Use i18n framework with server-side rendering support
 - Applies to: buttons, labels, messages, tooltips, errors
 
 ```typescript
@@ -115,19 +115,6 @@ ALL user-facing strings MUST use localization - NEVER hardcode text:
 // ❌ WRONG
 <button>Play</button>
 <div className="error">File not found: {filename}</div>
-```
-
-```rust
-// ✅ CORRECT (Firmware/Embedded)
-const STRINGS: &[&str] = &[
-    "Play",      // en
-    "Jouer",     // fr
-    "Abspielen", // de
-];
-display.text(STRINGS[locale_index]);
-
-// ❌ WRONG
-display.text("Play");
 ```
 
 **Why**: Enables internationalization from day 1, easier to maintain, professional UX.
@@ -594,6 +581,6 @@ cargo check -p soul-storage         # Verify compile-time queries
 
 ---
 
-**Last Updated**: 2026-01-12
+**Last Updated**: 2026-01-14
 **Rust Edition**: 2021
-**Platforms**: Windows, macOS, Linux, ESP32-S3
+**Platforms**: Windows, macOS, Linux

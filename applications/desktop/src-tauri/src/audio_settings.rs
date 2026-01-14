@@ -29,7 +29,9 @@ impl From<BackendInfo> for FrontendBackendInfo {
     fn from(info: BackendInfo) -> Self {
         let backend_str = match info.backend {
             AudioBackend::Default => "default",
+            #[cfg(target_os = "windows")]
             AudioBackend::Asio => "asio",
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             AudioBackend::Jack => "jack",
         };
 
@@ -149,7 +151,9 @@ impl From<AudioDeviceInfo> for FrontendDeviceInfo {
     fn from(info: AudioDeviceInfo) -> Self {
         let backend_str = match info.backend {
             AudioBackend::Default => "default",
+            #[cfg(target_os = "windows")]
             AudioBackend::Asio => "asio",
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             AudioBackend::Jack => "jack",
         };
 
@@ -369,7 +373,9 @@ pub async fn get_current_audio_device(
 
     let backend_str = match backend {
         AudioBackend::Default => "default",
+        #[cfg(target_os = "windows")]
         AudioBackend::Asio => "asio",
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         AudioBackend::Jack => "jack",
     };
 

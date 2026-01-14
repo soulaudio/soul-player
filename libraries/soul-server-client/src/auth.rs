@@ -169,7 +169,5 @@ impl<'a> AuthClient<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Tests would go here with mocked HTTP responses
 }

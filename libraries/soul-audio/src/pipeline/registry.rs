@@ -440,7 +440,7 @@ impl Clone for EffectRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::effects::{CompressorSettings, EqBand, LimiterSettings, StereoSettings};
+    use crate::effects::{CompressorSettings, EqBand, LimiterSettings};
     use soul_loudness::headroom::HeadroomMode;
 
     #[test]

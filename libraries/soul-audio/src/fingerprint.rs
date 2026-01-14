@@ -499,11 +499,9 @@ mod tests {
 
     #[test]
     fn test_mono_conversion() {
-        let fingerprinter = Fingerprinter::default();
-
         // Stereo samples: L=1.0, R=0.5, L=0.5, R=0.5
         let stereo = vec![1.0f32, 0.5, 0.5, 0.5];
-        let mono = fingerprinter.prepare_samples(&stereo, 2).unwrap();
+        let mono = Fingerprinter::prepare_samples(&stereo, 2).unwrap();
 
         assert_eq!(mono.len(), 2);
         assert!((mono[0] - 0.75).abs() < 0.001); // (1.0 + 0.5) / 2
