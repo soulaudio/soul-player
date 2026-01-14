@@ -202,7 +202,9 @@ async fn test_complete_authentication_flow() {
     let auth_service = create_test_auth_service();
 
     // Create user
-    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME).await.unwrap();
+    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME)
+        .await
+        .unwrap();
 
     // Hash and store password
     let password_hash = auth_service.hash_password(fixtures::TEST_PASSWORD).unwrap();
@@ -237,7 +239,9 @@ async fn test_authentication_wrong_password() {
     let auth_service = create_test_auth_service();
 
     // Create user
-    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME).await.unwrap();
+    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME)
+        .await
+        .unwrap();
 
     // Hash and store password
     let password_hash = auth_service.hash_password(fixtures::TEST_PASSWORD).unwrap();
@@ -273,17 +277,13 @@ async fn test_multiple_users_authentication() {
     let user1 = create_user_in_db(get_pool(&db), "user1").await.unwrap();
     let password1 = "Password1!";
     let hash1 = auth_service.hash_password(password1).unwrap();
-    store_user_credentials(&db, &user1, &hash1)
-        .await
-        .unwrap();
+    store_user_credentials(&db, &user1, &hash1).await.unwrap();
 
     // Create second user
     let user2 = create_user_in_db(get_pool(&db), "user2").await.unwrap();
     let password2 = "Password2!";
     let hash2 = auth_service.hash_password(password2).unwrap();
-    store_user_credentials(&db, &user2, &hash2)
-        .await
-        .unwrap();
+    store_user_credentials(&db, &user2, &hash2).await.unwrap();
 
     // Verify user1 can authenticate with password1
     let hash = get_user_password_hash(&db, &user1).await.unwrap();
@@ -303,12 +303,12 @@ async fn test_password_update() {
     let auth_service = create_test_auth_service();
 
     // Create user with initial password
-    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME).await.unwrap();
-    let old_password = "OldPassword123!";
-    let old_hash = auth_service.hash_password(old_password).unwrap();
-    store_user_credentials(&db, &user, &old_hash)
+    let user = create_user_in_db(get_pool(&db), fixtures::TEST_USERNAME)
         .await
         .unwrap();
+    let old_password = "OldPassword123!";
+    let old_hash = auth_service.hash_password(old_password).unwrap();
+    store_user_credentials(&db, &user, &old_hash).await.unwrap();
 
     // Verify old password works
     let hash = get_user_password_hash(&db, &user).await.unwrap();

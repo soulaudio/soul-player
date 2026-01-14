@@ -35,14 +35,12 @@ pub async fn create_user_in_db(pool: &SqlitePool, username: &str) -> Result<User
     let user_id = UserId::generate();
     let created_at = chrono::Utc::now().timestamp();
 
-    sqlx::query(
-        "INSERT INTO users (id, name, created_at) VALUES (?, ?, ?)"
-    )
-    .bind(user_id.as_str())
-    .bind(username)
-    .bind(created_at)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO users (id, name, created_at) VALUES (?, ?, ?)")
+        .bind(user_id.as_str())
+        .bind(username)
+        .bind(created_at)
+        .execute(pool)
+        .await?;
 
     Ok(user_id)
 }

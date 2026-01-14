@@ -228,33 +228,33 @@ async fn test_get_tracks_authenticated() {
 // DISABLED: #[tokio::test]
 // DISABLED: async fn test_get_tracks_with_data() {
 // DISABLED:     let (app, auth_service, _temp_dir, db) = create_test_app().await;
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let user = create_user_in_db(get_pool(&db), "testuser").await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     // Add test tracks
 // DISABLED:     let track = Track::new(
 // DISABLED:         "Test Song".to_string(),
 // DISABLED:         std::path::PathBuf::from("/fake/path.mp3"),
 // DISABLED:     );
 // DISABLED:     db.add_track(track.clone()).await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let access_token = auth_service.create_access_token(&user).unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let request = Request::builder()
 // DISABLED:         .uri("/api/tracks")
 // DISABLED:         .header(header::AUTHORIZATION, format!("Bearer {}", access_token))
 // DISABLED:         .body(Body::empty())
 // DISABLED:         .unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let response = app.oneshot(request).await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     assert_eq!(response.status(), StatusCode::OK);
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
 // DISABLED:         .await
 // DISABLED:         .unwrap();
 // DISABLED:     let tracks_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     assert_eq!(tracks_response["total"], 1);
 // DISABLED:     assert_eq!(tracks_response["tracks"].as_array().unwrap().len(), 1);
 // DISABLED:     assert_eq!(tracks_response["tracks"][0]["title"], "Test Song");
@@ -264,9 +264,9 @@ async fn test_get_tracks_authenticated() {
 // DISABLED: #[tokio::test]
 // DISABLED: async fn test_get_tracks_with_search() {
 // DISABLED:     let (app, auth_service, _temp_dir, db) = create_test_app().await;
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let user = create_user_in_db(get_pool(&db), "testuser").await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     // Add multiple tracks
 // DISABLED:     let track1 = Track::new(
 // DISABLED:         "Rock Song".to_string(),
@@ -278,25 +278,25 @@ async fn test_get_tracks_authenticated() {
 // DISABLED:     );
 // DISABLED:     db.add_track(track1).await.unwrap();
 // DISABLED:     db.add_track(track2).await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let access_token = auth_service.create_access_token(&user).unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     // Search for "Rock"
 // DISABLED:     let request = Request::builder()
 // DISABLED:         .uri("/api/tracks?q=Rock")
 // DISABLED:         .header(header::AUTHORIZATION, format!("Bearer {}", access_token))
 // DISABLED:         .body(Body::empty())
 // DISABLED:         .unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let response = app.oneshot(request).await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     assert_eq!(response.status(), StatusCode::OK);
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
 // DISABLED:         .await
 // DISABLED:         .unwrap();
 // DISABLED:     let tracks_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     assert_eq!(tracks_response["total"], 1);
 // DISABLED:     assert_eq!(tracks_response["tracks"][0]["title"], "Rock Song");
 // DISABLED: }
@@ -305,9 +305,9 @@ async fn test_get_tracks_authenticated() {
 // DISABLED: #[tokio::test]
 // DISABLED: async fn test_get_tracks_with_pagination() {
 // DISABLED:     let (app, auth_service, _temp_dir, db) = create_test_app().await;
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let user = create_user_in_db(get_pool(&db), "testuser").await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     // Add 5 tracks
 // DISABLED:     for i in 1..=5 {
 // DISABLED:         let track = Track::new(
@@ -316,25 +316,25 @@ async fn test_get_tracks_authenticated() {
 // DISABLED:         );
 // DISABLED:         db.add_track(track).await.unwrap();
 // DISABLED:     }
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let access_token = auth_service.create_access_token(&user).unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     // Get first 2 tracks
 // DISABLED:     let request = Request::builder()
 // DISABLED:         .uri("/api/tracks?limit=2&offset=0")
 // DISABLED:         .header(header::AUTHORIZATION, format!("Bearer {}", access_token))
 // DISABLED:         .body(Body::empty())
 // DISABLED:         .unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let response = app.oneshot(request).await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     assert_eq!(response.status(), StatusCode::OK);
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
 // DISABLED:         .await
 // DISABLED:         .unwrap();
 // DISABLED:     let tracks_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     assert_eq!(tracks_response["total"], 5);
 // DISABLED:     assert_eq!(tracks_response["tracks"].as_array().unwrap().len(), 2);
 // DISABLED: }
@@ -377,29 +377,29 @@ async fn test_create_playlist() {
 // DISABLED: #[tokio::test]
 // DISABLED: async fn test_get_playlists() {
 // DISABLED:     let (app, auth_service, _temp_dir, db): (_, _, _, Arc<Database>) = create_test_app().await;
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let user = create_user_in_db(get_pool(&db), "testuser").await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     // Create a playlist
 // DISABLED:     db.create_playlist(&user, "Test Playlist").await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let access_token = auth_service.create_access_token(&user).unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let request = Request::builder()
 // DISABLED:         .uri("/api/playlists")
 // DISABLED:         .header(header::AUTHORIZATION, format!("Bearer {}", access_token))
 // DISABLED:         .body(Body::empty())
 // DISABLED:         .unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let response = app.oneshot(request).await.unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     assert_eq!(response.status(), StatusCode::OK);
-// DISABLED: 
+// DISABLED:
 // DISABLED:     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
 // DISABLED:         .await
 // DISABLED:         .unwrap();
 // DISABLED:     let playlists: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-// DISABLED: 
+// DISABLED:
 // DISABLED:     assert!(playlists.is_array());
 // DISABLED:     assert_eq!(playlists.as_array().unwrap().len(), 1);
 // DISABLED:     assert_eq!(playlists[0]["name"], "Test Playlist");
