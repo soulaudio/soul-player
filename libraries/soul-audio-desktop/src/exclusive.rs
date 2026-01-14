@@ -262,8 +262,8 @@ pub struct ExclusiveOutput {
     sample_rate: u32,
     /// Shared state
     state: Arc<ExclusiveState>,
-    /// Audio thread handle
-    _audio_thread: Option<JoinHandle<()>>,
+    /// Audio thread handle (kept alive to prevent thread termination)
+    audio_thread: Option<JoinHandle<()>>,
     /// Latency information
     latency: LatencyInfo,
 }
@@ -325,7 +325,7 @@ impl ExclusiveOutput {
             config,
             sample_rate,
             state,
-            _audio_thread: Some(audio_thread),
+            audio_thread: Some(audio_thread),
             latency,
         })
     }
@@ -860,7 +860,14 @@ impl ExclusiveOutput {
 
 impl Drop for ExclusiveOutput {
     fn drop(&mut self) {
+        // Send shutdown command
         let _ = self.command_tx.send(ExclusiveCommand::Shutdown);
+
+        // Wait for audio thread to finish cleanup to avoid WASAPI/COM access violations
+        // This is critical on Windows where COM cleanup must happen in the correct order
+        if let Some(handle) = self.audio_thread.take() {
+            let _ = handle.join();
+        }
     }
 }
 
@@ -952,6 +959,7 @@ mod tests {
 
     // Integration tests that require audio device
     #[test]
+    #[ignore] // Requires real audio hardware - not available in CI environments
     fn test_create_exclusive_output() {
         // This may fail in CI without audio devices
         let config = ExclusiveConfig::default();

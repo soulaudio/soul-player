@@ -164,7 +164,8 @@
       "Bash(npm test:*)",
       "Bash(rustup target list:*)",
       "Bash(wasm-pack:*)",
-      "Bash(git grep:*)"
+      "Bash(git grep:*)",
+      "Bash(Select-String -Pattern \"test result\" -Context 2,10)"
     ]
   },
   "hooks": {
