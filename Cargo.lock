@@ -6409,10 +6409,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "soul-audio-embedded"
-version = "0.0.1-test"
-
-[[package]]
 name = "soul-audio-mobile"
 version = "0.0.1-test"
 

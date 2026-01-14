@@ -10,7 +10,6 @@ members = [
     "libraries/soul-audio",
     "libraries/soul-audio-desktop",
     "libraries/soul-audio-mobile",
-    "libraries/soul-audio-embedded",
     "libraries/soul-playback",
     "libraries/soul-metadata",
     "libraries/soul-importer",
@@ -109,20 +108,12 @@ testcontainers = "0.23"
 mockall = "0.12"
 tempfile = "3.24"
 
-# ESP32-specific (only for soul-audio-embedded)
-esp-idf-hal = "0.43"
-esp-idf-sys = "0.34"
-embassy-executor = { version = "0.5", features = ["arch-xtensa"] }
-embassy-time = "0.3"
-awedio_esp32 = "0.2"
-
 # Internal workspace crates (libraries)
 soul-core = { path = "libraries/soul-core" }
 soul-storage = { path = "libraries/soul-storage" }
 soul-audio = { path = "libraries/soul-audio" }
 soul-audio-desktop = { path = "libraries/soul-audio-desktop" }
 soul-audio-mobile = { path = "libraries/soul-audio-mobile" }
-soul-audio-embedded = { path = "libraries/soul-audio-embedded" }
 soul-playback = { path = "libraries/soul-playback" }
 soul-metadata = { path = "libraries/soul-metadata" }
 soul-importer = { path = "libraries/soul-importer" }

@@ -27,12 +27,16 @@ pub struct FrontendBackendInfo {
 
 impl From<BackendInfo> for FrontendBackendInfo {
     fn from(info: BackendInfo) -> Self {
+        // Convert backend to string representation
         let backend_str = match info.backend {
             AudioBackend::Default => "default",
-            #[cfg(target_os = "windows")]
+            #[cfg(all(target_os = "windows", feature = "asio"))]
             AudioBackend::Asio => "asio",
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            #[cfg(feature = "jack")]
             AudioBackend::Jack => "jack",
+            // Catch-all for variants not available in current build config
+            #[allow(unreachable_patterns)]
+            _ => "default",
         };
 
         Self {
@@ -151,10 +155,13 @@ impl From<AudioDeviceInfo> for FrontendDeviceInfo {
     fn from(info: AudioDeviceInfo) -> Self {
         let backend_str = match info.backend {
             AudioBackend::Default => "default",
-            #[cfg(target_os = "windows")]
+            #[cfg(all(target_os = "windows", feature = "asio"))]
             AudioBackend::Asio => "asio",
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            #[cfg(feature = "jack")]
             AudioBackend::Jack => "jack",
+            // Catch-all for variants not available in current build config
+            #[allow(unreachable_patterns)]
+            _ => "default",
         };
 
         Self {
@@ -373,10 +380,13 @@ pub async fn get_current_audio_device(
 
     let backend_str = match backend {
         AudioBackend::Default => "default",
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "asio"))]
         AudioBackend::Asio => "asio",
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(feature = "jack")]
         AudioBackend::Jack => "jack",
+        // Catch-all for variants not available in current build config
+        #[allow(unreachable_patterns)]
+        _ => "default",
     };
 
     // Try to get device info by listing all devices and finding the matching one

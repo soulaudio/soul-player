@@ -55,18 +55,6 @@ tasks:
     options:
       cache: true
 
-  build-firmware:
-    command: 'cargo build -p soul-player-firmware --release'
-    inputs:
-      - 'applications/firmware/**/*.rs'
-      - 'libraries/soul-audio-embedded/**/*.rs'
-      - 'libraries/soul-core/**/*.rs'
-    outputs:
-      - 'target/release/soul-player-firmware*'
-    options:
-      cache: true
-      runInCI: false
-
   # ============================================================================
   # Test Tasks
   # ============================================================================

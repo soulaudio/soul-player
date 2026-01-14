@@ -103,7 +103,6 @@ soul-player/
 │   ├── soul-audio/
 │   ├── soul-audio-desktop/
 │   ├── soul-audio-mobile/
-│   ├── soul-audio-embedded/
 │   ├── soul-metadata/
 │   ├── soul-discovery/
 │   └── soul-sync/

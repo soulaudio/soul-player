@@ -20,13 +20,11 @@ projects:
     soul-audio: 'libraries/soul-audio'
     soul-audio-desktop: 'libraries/soul-audio-desktop'
     soul-audio-mobile: 'libraries/soul-audio-mobile'
-    soul-audio-embedded: 'libraries/soul-audio-embedded'
 
     # Applications
     desktop: 'applications/desktop'
     server: 'applications/server'
     mobile: 'applications/mobile'
-    firmware: 'applications/firmware'
     shared: 'applications/shared'
     marketing: 'applications/marketing'
 
@@ -35,7 +33,6 @@ runner:
   archivableTargets:
     - 'build'
     - 'build-release'
-    - 'build-firmware'
 
   cacheLifetime: '7 days'
 

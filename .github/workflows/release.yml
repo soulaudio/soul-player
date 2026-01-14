@@ -216,30 +216,6 @@ jobs:
           name: ios-ipa
           path: applications/mobile/src-tauri/gen/ios/build/*.ipa
 
-  build-esp32:
-    name: Build ESP32 Firmware
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install ESP-IDF
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.1
-
-      - name: Build firmware
-        run: |
-          cd applications/firmware
-          idf.py build
-
-      - name: Upload firmware
-        uses: actions/upload-artifact@v4
-        with:
-          name: esp32-firmware
-          path: |
-            applications/firmware/build/*.bin
-            applications/firmware/build/*.elf
-
   build-server:
     name: Build Server Docker Image
     runs-on: ubuntu-latest
@@ -270,7 +246,7 @@ jobs:
 
   create-draft-release:
     name: Create Draft Release
-    needs: [build-windows, build-linux, build-macos, build-android, build-ios, build-esp32, build-server]
+    needs: [build-windows, build-linux, build-macos, build-android, build-ios, build-server]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -301,9 +277,6 @@ jobs:
           #### Mobile
           - **Android**: `.apk` (sideload)
           - **iOS**: `.ipa` (TestFlight/sideload)
-
-          #### Firmware
-          - **ESP32-S3**: `.bin` (flash via esptool or OTA)
 
           #### Server
           - **Docker**: `soul-server:latest`
@@ -640,25 +613,6 @@ jobs:
           xcrun simctl uninstall $DEVICE_ID com.soulplayer.app
           echo "✓ Uninstall successful"
 
-  test-esp32-qemu:
-    name: Test ESP32 Firmware (QEMU)
-    needs: create-draft-release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: esp32-firmware
-          path: firmware
-
-      - name: Run QEMU tests
-        uses: Meltwind/esp32-qemu-runner@v1
-        with:
-          image: firmware/*.elf
-          timeout: 60000
-          expected-output: "Tests passed"
-
   test-server-docker:
     name: Test Server Docker Image
     needs: create-draft-release
@@ -709,7 +663,6 @@ jobs:
       test-macos-install,
       test-android-install,
       test-ios-install,
-      test-esp32-qemu,
       test-server-docker
     ]
     runs-on: ubuntu-latest

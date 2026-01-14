@@ -86,7 +86,6 @@ Run the version bump script:
 ✓ libraries/soul-artwork/Cargo.toml
 ✓ libraries/soul-audio-desktop/Cargo.toml
 ✓ libraries/soul-audio-mobile/Cargo.toml
-✓ libraries/soul-audio-embedded/Cargo.toml
 ✓ applications/desktop/src-tauri/Cargo.toml
 ✓ package.json (root)
 ✓ applications/desktop/package.json

@@ -99,13 +99,6 @@ soul-player/
 │   │   ├── Cargo.toml
 │   │   └── README.md
 │   │
-│   ├── soul-audio-embedded/             # ESP32 audio output
-│   │   ├── src/
-│   │   │   ├── lib.rs
-│   │   │   └── esp32_output.rs          # awedio_esp32 wrapper
-│   │   ├── Cargo.toml
-│   │   └── README.md
-│   │
 │   ├── soul-metadata/                   # Tag reading & library scanning
 │   │   ├── src/
 │   │   │   ├── lib.rs

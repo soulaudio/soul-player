@@ -14,7 +14,6 @@ Soul Player needs to output audio on multiple platforms with different audio API
 | Mobile (iOS) | AVAudioEngine | `soul-audio-mobile` (Swift bridge) |
 | Mobile (Android) | AudioTrack | `soul-audio-mobile` (Kotlin bridge) |
 | Server | Streaming | `soul-audio-server` (network streaming) |
-| ESP32-S3 | I2S | `soul-audio-embedded` (awedio_esp32) |
 
 **Challenge**: The audio engine (`soul-audio`) should not be coupled to any specific platform implementation.
 
@@ -709,21 +708,6 @@ impl AudioOutput for StreamingAudioOutput {
     fn play(&mut self, buffer: &AudioBuffer) -> Result<()> {
         // Encode buffer to Opus/AAC
         // Send to all connected clients via WebRTC or HLS
-        Ok(())
-    }
-}
-```
-
-### ESP32 Embedded Output
-```rust
-pub struct Esp32AudioOutput {
-    i2s_driver: I2sDriver,
-}
-
-impl AudioOutput for Esp32AudioOutput {
-    fn play(&mut self, buffer: &AudioBuffer) -> Result<()> {
-        // Write to I2S peripheral
-        self.i2s_driver.write(&buffer.samples)?;
         Ok(())
     }
 }
