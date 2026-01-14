@@ -158,13 +158,11 @@ impl MusicImporter {
         let library_path = match config.file_strategy {
             FileManagementStrategy::Copy => {
                 eprintln!("[Importer] COPY: {} -> library", file_path.display());
-                // NOTE: Calling move_to_library for Copy strategy because the implementations are swapped
-                copy::move_to_library(file_path, &config.library_path, &metadata)?
+                copy::copy_to_library(file_path, &config.library_path, &metadata)?
             }
             FileManagementStrategy::Move => {
                 eprintln!("[Importer] MOVE: {} -> library", file_path.display());
-                // NOTE: Calling copy_to_library for Move strategy because the implementations are swapped
-                copy::copy_to_library(file_path, &config.library_path, &metadata)?
+                copy::move_to_library(file_path, &config.library_path, &metadata)?
             }
             FileManagementStrategy::Reference => {
                 eprintln!("[Importer] REFERENCE: Keeping at {}", file_path.display());

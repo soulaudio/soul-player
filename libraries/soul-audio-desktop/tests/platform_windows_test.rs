@@ -415,7 +415,7 @@ mod buffer_size_negotiation {
             // At 48kHz that's ~480 samples
             // We'll accept a reasonable range
             assert!(
-                buffer_samples >= 64 && buffer_samples <= 8192,
+                (64..=8192).contains(&buffer_samples),
                 "Default buffer should be reasonable: {} samples",
                 buffer_samples
             );
@@ -980,14 +980,11 @@ mod error_handling {
     fn test_zero_buffer_handling() {
         let config = ExclusiveConfig::default().with_buffer_frames(0);
 
-        match ExclusiveOutput::new(config) {
-            Ok(output) => {
-                // May succeed with default buffer
-                assert!(output.latency().buffer_samples > 0);
-            }
-            Err(_) => {
-                // Error is also acceptable
-            }
+        if let Ok(output) = ExclusiveOutput::new(config) {
+            // May succeed with default buffer
+            assert!(output.latency().buffer_samples > 0);
+        } else {
+            // Error is also acceptable
         }
     }
 

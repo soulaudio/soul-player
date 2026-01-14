@@ -482,8 +482,8 @@ fn test_frequency_response_flatness_studio_grade() {
                 .iter()
                 .map(|&g| (g - mean_gain).abs())
                 .fold(0.0f32, f32::max);
-            let max_gain = gains.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-            let min_gain = gains.iter().cloned().fold(f32::INFINITY, f32::min);
+            let max_gain = gains.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let min_gain = gains.iter().copied().fold(f32::INFINITY, f32::min);
             let ripple = max_gain - min_gain;
 
             let measurement = Measurement::new(

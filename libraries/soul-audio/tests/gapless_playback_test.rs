@@ -87,8 +87,8 @@ fn generate_track_ending(
 
         // Apply fade-out in the last portion
         let fade_factor = if i >= total_samples - fade_samples {
-            let fade_position = (total_samples - i) as f32 / fade_samples as f32;
-            fade_position
+            
+            (total_samples - i) as f32 / fade_samples as f32
         } else {
             1.0
         };
@@ -781,8 +781,8 @@ fn test_crossfade_equal_power_constant_loudness() {
     // This is expected behavior - equal power maintains perceived loudness for
     // uncorrelated signals, but for identical DC signals it produces gain.
     // For this test, we verify the fade is smooth and symmetric.
-    let max_rms = rms_values.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let min_rms = rms_values.iter().cloned().fold(f32::INFINITY, f32::min);
+    let max_rms = rms_values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let min_rms = rms_values.iter().copied().fold(f32::INFINITY, f32::min);
 
     // Verify middle segments are relatively stable (within 40% variation)
     // The actual variation depends on the fade curve mathematics

@@ -195,10 +195,8 @@ fn test_lame_header_various_delays() {
         let result = EncoderDelay::parse_lame_header(&bytes);
 
         if expected_delay <= 2000 && expected_padding <= 2000 {
-            let delay = result.expect(&format!(
-                "Should parse delay={}, padding={}",
-                expected_delay, expected_padding
-            ));
+            let delay = result.unwrap_or_else(|| panic!("Should parse delay={}, padding={}",
+                expected_delay, expected_padding));
 
             assert_eq!(
                 delay.start_padding, expected_delay,
@@ -273,10 +271,8 @@ fn test_lame_delay_encoding() {
         let decoded = EncoderDelay::parse_lame_header(&encoded);
 
         if delay <= 2000 && padding <= 2000 {
-            let d = decoded.expect(&format!(
-                "Should decode delay={}, padding={}",
-                delay, padding
-            ));
+            let d = decoded.unwrap_or_else(|| panic!("Should decode delay={}, padding={}",
+                delay, padding));
             assert_eq!(d.start_padding, delay, "Delay round-trip failed");
             assert_eq!(d.end_padding, padding, "Padding round-trip failed");
         }
@@ -426,7 +422,7 @@ fn test_vorbis_comment_parsing() {
 fn test_opus_typical_preskip() {
     // Opus standard pre-skip range: 312-360 samples
     let typical_preskip = opus_constants::OPUS_TYPICAL_PRE_SKIP;
-    assert!(typical_preskip >= 312 && typical_preskip <= 360);
+    assert!((312..=360).contains(&typical_preskip));
 
     let delay = EncoderDelay::from_vorbis_comment(Some("312"), None).unwrap();
     assert_eq!(delay.start_padding, 312);
@@ -713,7 +709,7 @@ fn test_sample_accuracy_various_lengths() {
         // Calculate padding to complete last frame
         let frame_size = 1152u64;
         let total_with_delay = original_samples + encoder_delay as u64;
-        let frames_needed = (total_with_delay + frame_size - 1) / frame_size;
+        let frames_needed = total_with_delay.div_ceil(frame_size);
         let end_padding = (frames_needed * frame_size - total_with_delay) as u32;
 
         let total_encoded = original_samples + encoder_delay as u64 + end_padding as u64;
@@ -994,7 +990,7 @@ fn test_frame_boundary_alignment() {
 
     // Calculate how LAME would pad this
     let with_delay = original_samples + 576;
-    let frames_needed = (with_delay + mp3_frame_samples - 1) / mp3_frame_samples;
+    let frames_needed = with_delay.div_ceil(mp3_frame_samples);
     let total_frame_samples = frames_needed * mp3_frame_samples;
     let end_padding = (total_frame_samples - with_delay) as u32;
 
@@ -1317,7 +1313,7 @@ fn test_lame_track_playback_simulation() {
     // Calculate padding for frame alignment
     let frame_size = lame_constants::MP3_FRAME_SIZE as u64;
     let with_delay = original_samples + encoder_delay as u64;
-    let frames = (with_delay + frame_size - 1) / frame_size;
+    let frames = with_delay.div_ceil(frame_size);
     let total_frame_samples = frames * frame_size;
     let end_padding = (total_frame_samples - with_delay) as u32;
 
@@ -1359,7 +1355,7 @@ fn test_itunes_aac_playback_simulation() {
 
     // Calculate padding for frame alignment
     let with_delay = original_samples + encoder_delay as u64;
-    let frames = (with_delay + frame_size - 1) / frame_size;
+    let frames = with_delay.div_ceil(frame_size);
     let total_frame_samples = frames * frame_size;
     let end_padding = (total_frame_samples - with_delay) as u32;
 

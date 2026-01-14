@@ -235,7 +235,7 @@ fn test_effect_chain_latency_contribution() {
         let mut buffer = generate_varied_audio(sample_rate, buffer_size);
         let start = Instant::now();
         // Just touch the buffer to simulate minimal processing
-        for sample in buffer.iter_mut() {
+        for sample in &mut buffer {
             *sample *= 1.0;
         }
         baseline_stats.add(start.elapsed());
@@ -1236,9 +1236,7 @@ fn test_memory_usage_stability_over_time() {
         // Periodic validity check
         if i % 10000 == 0 {
             let progress = i as f64 / iterations as f64 * 100.0;
-            if !buffer.iter().all(|s| s.is_finite()) {
-                panic!("Invalid output at iteration {} ({:.1}%)", i, progress);
-            }
+            assert!(buffer.iter().all(|s| s.is_finite()), "Invalid output at iteration {} ({:.1}%)", i, progress);
         }
     }
 
@@ -1540,7 +1538,7 @@ fn test_audio_thread_priority_simulation() {
 
             // Simulate real-time callback timing
             if elapsed < budget {
-                thread::sleep(budget - elapsed);
+                thread::sleep(budget.checked_sub(elapsed).unwrap());
             }
         }
     });
@@ -1681,13 +1679,11 @@ fn test_sustained_processing_1_minute() {
             sample_stats.add(elapsed);
 
             // Verify output validity
-            if !buffer.iter().all(|s| s.is_finite()) {
-                panic!(
-                    "Invalid output after {} buffers ({:.1}s)",
-                    buffers_processed,
-                    start.elapsed().as_secs_f64()
-                );
-            }
+            assert!(buffer.iter().all(|s| s.is_finite()), 
+                "Invalid output after {} buffers ({:.1}s)",
+                buffers_processed,
+                start.elapsed().as_secs_f64()
+            );
         }
     }
 
@@ -1804,9 +1800,7 @@ fn test_memory_stability_sustained() {
 
         // Verify output periodically
         if buffers_processed % 10000 == 0 {
-            if !buffer.iter().all(|s| s.is_finite()) {
-                panic!("Memory corruption detected at buffer {}", buffers_processed);
-            }
+            assert!(buffer.iter().all(|s| s.is_finite()), "Memory corruption detected at buffer {}", buffers_processed);
         }
     }
 
@@ -1869,13 +1863,11 @@ fn test_sustained_processing_1_hour() {
 
         // Verify output periodically
         if buffers_processed % 100000 == 0 {
-            if !buffer.iter().all(|s| s.is_finite()) {
-                panic!(
-                    "Invalid output after {} buffers ({:.1} minutes)",
-                    buffers_processed,
-                    start.elapsed().as_secs() as f64 / 60.0
-                );
-            }
+            assert!(buffer.iter().all(|s| s.is_finite()), 
+                "Invalid output after {} buffers ({:.1} minutes)",
+                buffers_processed,
+                start.elapsed().as_secs() as f64 / 60.0
+            );
         }
     }
 

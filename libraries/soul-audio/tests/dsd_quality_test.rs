@@ -83,7 +83,7 @@ fn fft_magnitude_db(samples: &[f32], sample_rate: u32) -> Vec<(f32, f32)> {
     // Apply Hann window to reduce spectral leakage
     for (i, sample) in buffer.iter_mut().enumerate() {
         let window = 0.5 * (1.0 - (2.0 * PI * i as f32 / n as f32).cos());
-        *sample = *sample * window;
+        *sample *= window;
     }
 
     fft.process(&mut buffer);

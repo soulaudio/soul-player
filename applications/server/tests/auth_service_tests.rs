@@ -171,7 +171,7 @@ async fn test_token_validation_empty() {
 /// Testing expiration would require waiting 1+ hours, which is impractical for unit tests
 /// TODO: Refactor AuthService to support second/millisecond expiration for testing
 #[tokio::test]
-#[ignore]
+#[ignore = "Requires waiting 1+ hours - AuthService only supports hour-granularity expiration"]
 async fn test_access_token_expiration() {
     // This test is skipped because it would require waiting over an hour
     // In production, tokens are validated properly with hour-based expiration

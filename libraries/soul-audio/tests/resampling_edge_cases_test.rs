@@ -80,7 +80,7 @@ fn test_48000_to_44100() {
     let output = resampler.process(&input).unwrap();
 
     // Output should be produced (latency may vary)
-    assert!(output.len() > 0, "Downsampling should produce output");
+    assert!(!output.is_empty(), "Downsampling should produce output");
     // Verify signal integrity
     assert!(calculate_rms(&output) > 0.2);
 }
@@ -124,7 +124,7 @@ fn test_96000_to_44100() {
     let output = resampler.process(&input).unwrap();
 
     // Output should be produced
-    assert!(output.len() > 0, "Downsampling should produce output");
+    assert!(!output.is_empty(), "Downsampling should produce output");
     assert!(calculate_rms(&output) > 0.2);
 }
 
@@ -220,7 +220,7 @@ fn test_same_rate_passthrough() {
     let output = resampler.process(&input).unwrap();
 
     // Should produce output and preserve signal
-    assert!(output.len() > 0, "Same rate should produce output");
+    assert!(!output.is_empty(), "Same rate should produce output");
     assert!(calculate_rms(&output) > 0.3, "Signal should be preserved");
 }
 
@@ -243,7 +243,7 @@ fn test_non_standard_rates() {
     let input = generate_stereo_sine(1000.0, 37800, 3780);
     let output = resampler.process(&input).unwrap();
 
-    assert!(output.len() > 0);
+    assert!(!output.is_empty());
     assert!(calculate_rms(&output) > 0.2);
 }
 
@@ -262,7 +262,7 @@ fn test_prime_number_rates() {
     let input = generate_stereo_sine(1000.0, 44101, 4410);
     let output = resampler.process(&input).unwrap();
 
-    assert!(output.len() > 0);
+    assert!(!output.is_empty());
 }
 
 // ============================================================================
@@ -483,7 +483,7 @@ fn test_all_quality_presets() {
         let input = generate_stereo_sine(1000.0, 44100, 4410);
         let output = resampler.process(&input).unwrap();
 
-        assert!(output.len() > 0, "{:?} should produce output", quality);
+        assert!(!output.is_empty(), "{:?} should produce output", quality);
         assert!(
             calculate_rms(&output) > 0.3,
             "{:?} should preserve signal",
@@ -523,8 +523,8 @@ fn test_quality_affects_latency() {
     high_output.extend(high_resampler.flush().unwrap());
 
     // Both should produce valid output
-    assert!(fast_output.len() > 0, "Fast quality should produce output");
-    assert!(high_output.len() > 0, "High quality should produce output");
+    assert!(!fast_output.is_empty(), "Fast quality should produce output");
+    assert!(!high_output.is_empty(), "High quality should produce output");
 
     // Verify latency API is available
     let fast_latency = fast_resampler.latency();

@@ -814,11 +814,7 @@ fn test_total_latency_measurement() {
 
     // Calculate latency (difference in sample positions)
     // Note: This is algorithmic latency, not lookahead
-    let latency_samples = if processed_pos >= original_pos {
-        processed_pos - original_pos
-    } else {
-        0
-    };
+    let latency_samples = processed_pos.saturating_sub(original_pos);
 
     let latency_ms = (latency_samples as f32 / sample_rate as f32) * 1000.0;
 

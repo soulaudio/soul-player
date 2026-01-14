@@ -1,8 +1,8 @@
-//! Linux-specific audio tests for ALSA and PulseAudio
+//! Linux-specific audio tests for ALSA and `PulseAudio`
 //!
 //! These tests cover Linux-specific audio functionality:
 //! - ALSA direct access
-//! - PulseAudio integration
+//! - `PulseAudio` integration
 //! - Buffer underrun recovery
 //!
 //! ## Running Hardware-Dependent Tests
@@ -23,8 +23,8 @@
 //! ## Requirements for Hardware Tests
 //!
 //! - A physical audio output device must be connected
-//! - ALSA or PulseAudio must be properly configured
-//! - For ALSA direct tests, PulseAudio should not be using the device
+//! - ALSA or `PulseAudio` must be properly configured
+//! - For ALSA direct tests, `PulseAudio` should not be using the device
 //! - For JACK tests, JACK server must be running
 //!
 //! ## Linux Audio Architecture Notes
@@ -34,17 +34,17 @@
 //! 1. **ALSA (Advanced Linux Sound Architecture)**
 //!    - Kernel-level audio driver framework
 //!    - Direct hardware access with lowest latency
-//!    - Exclusive access when used directly (without PulseAudio)
+//!    - Exclusive access when used directly (without `PulseAudio`)
 //!
-//! 2. **PulseAudio**
+//! 2. **`PulseAudio`**
 //!    - Sound server running in userspace
 //!    - Provides mixing, routing, and per-app volume
 //!    - Higher latency but more flexible
-//!    - Most desktop Linux distributions use PulseAudio by default
+//!    - Most desktop Linux distributions use `PulseAudio` by default
 //!
-//! 3. **PipeWire** (newer systems)
-//!    - Modern replacement for both PulseAudio and JACK
-//!    - Compatible with PulseAudio and JACK applications
+//! 3. **`PipeWire`** (newer systems)
+//!    - Modern replacement for both `PulseAudio` and JACK
+//!    - Compatible with `PulseAudio` and JACK applications
 //!
 //! 4. **JACK (JACK Audio Connection Kit)**
 //!    - Professional low-latency audio

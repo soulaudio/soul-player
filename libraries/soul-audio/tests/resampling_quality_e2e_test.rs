@@ -604,10 +604,10 @@ fn test_thd_n_aes17_multiple_frequencies() {
         println!("{} Hz: THD+N = {:.1} dB", test_freq, thd_n);
 
         // Allow more tolerance at frequency extremes
-        let threshold = if test_freq < 50.0 || test_freq > 18000.0 {
-            MAX_THD_N_DB_BALANCED
-        } else {
+        let threshold = if (50.0..=18000.0).contains(&test_freq) {
             MAX_THD_N_DB_HIGH_QUALITY
+        } else {
+            MAX_THD_N_DB_BALANCED
         };
 
         assert!(
@@ -691,7 +691,7 @@ fn test_passband_flatness_high_quality() {
     for (input_rate, output_rate, description) in get_conversion_paths() {
         // Skip extreme ratios - they have fundamentally different passband behavior
         let ratio = output_rate as f32 / input_rate as f32;
-        if ratio > 10.0 || ratio < 0.1 {
+        if !(0.1..=10.0).contains(&ratio) {
             println!("{}: Skipped (extreme ratio {:.1}x)", description, ratio);
             continue;
         }
@@ -1004,8 +1004,8 @@ fn test_group_delay_consistency() {
     // Check group delay variation
     if group_delays.len() >= 2 {
         let delays: Vec<f32> = group_delays.iter().map(|(_, _, d)| *d).collect();
-        let max_delay = delays.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-        let min_delay = delays.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max_delay = delays.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let min_delay = delays.iter().copied().fold(f32::INFINITY, f32::min);
         let variation = (max_delay - min_delay).abs();
 
         println!("Group delay variation: {:.3} ms", variation);

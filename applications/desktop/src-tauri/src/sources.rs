@@ -130,9 +130,12 @@ pub async fn get_server_sources(state: State<'_, AppState>) -> Result<Vec<Source
     // For desktop, use user_id = 1
     let user_id = 1i64;
 
-    let server_sources = sources::get_server_sources_for_user(pool, user_id)
-        .await
-        .map_err(|e| format!("Failed to get server sources: {}", e))?;
+    let server_sources = sources::get_server_sources_for_user(
+        pool,
+        soul_core::types::UserId::new(user_id.to_string()),
+    )
+    .await
+    .map_err(|e| format!("Failed to get server sources: {}", e))?;
 
     let mut result = Vec::new();
 
@@ -183,9 +186,14 @@ pub async fn add_server_source(
     // For desktop, use user_id = 1
     let user_id = 1i64;
 
-    let source = sources::add_server_source(pool, user_id, &name, &url)
-        .await
-        .map_err(|e| format!("Failed to add server source: {}", e))?;
+    let source = sources::add_server_source(
+        pool,
+        soul_core::types::UserId::new(user_id.to_string()),
+        &name,
+        &url,
+    )
+    .await
+    .map_err(|e| format!("Failed to add server source: {}", e))?;
 
     Ok(SourceInfo {
         id: source.id,
@@ -460,9 +468,13 @@ pub async fn get_source_sync_status(
     // For desktop, use user_id = 1
     let user_id = 1i64;
 
-    let sync_state = sources::get_sync_state(pool, source_id, user_id)
-        .await
-        .map_err(|e| format!("Failed to get sync status: {}", e))?;
+    let sync_state = sources::get_sync_state(
+        pool,
+        source_id,
+        soul_core::types::UserId::new(user_id.to_string()),
+    )
+    .await
+    .map_err(|e| format!("Failed to get sync status: {}", e))?;
 
     match sync_state {
         Some(state) => {
@@ -522,9 +534,15 @@ pub async fn sync_from_server(
         .ok_or("Not authenticated")?;
 
     // Initialize sync state
-    sources::init_sync_state(pool, source_id, user_id, "download", 0)
-        .await
-        .map_err(|e| format!("Failed to init sync: {}", e))?;
+    sources::init_sync_state(
+        pool,
+        source_id,
+        soul_core::types::UserId::new(user_id.to_string()),
+        "download",
+        0,
+    )
+    .await
+    .map_err(|e| format!("Failed to init sync: {}", e))?;
 
     // Create client with token
     let config = ServerConfig::with_tokens(&url, &token.access_token, token.refresh_token);
@@ -532,9 +550,13 @@ pub async fn sync_from_server(
         SoulServerClient::new(config).map_err(|e| format!("Failed to create client: {}", e))?;
 
     // Get server sync token for delta sync
-    let sync_token = sources::get_server_sync_token(pool, source_id, user_id)
-        .await
-        .map_err(|e| format!("Failed to get sync token: {}", e))?;
+    let sync_token = sources::get_server_sync_token(
+        pool,
+        source_id,
+        soul_core::types::UserId::new(user_id.to_string()),
+    )
+    .await
+    .map_err(|e| format!("Failed to get sync token: {}", e))?;
 
     // Get library delta
     let library_client = client
@@ -551,7 +573,7 @@ pub async fn sync_from_server(
             let _ = tokio::runtime::Handle::current().block_on(sources::fail_sync(
                 pool,
                 source_id,
-                user_id,
+                soul_core::types::UserId::new(user_id.to_string()),
                 &e.to_string(),
             ));
             format!("Failed to get library delta: {}", e)
@@ -568,7 +590,7 @@ pub async fn sync_from_server(
     sources::complete_sync(
         pool,
         source_id,
-        user_id,
+        soul_core::types::UserId::new(user_id.to_string()),
         0,
         tracks_downloaded,
         tracks_updated,
@@ -617,9 +639,15 @@ pub async fn upload_to_server(
         .ok_or("Not authenticated")?;
 
     // Initialize sync state
-    sources::init_sync_state(pool, source_id, user_id, "upload", track_ids.len() as i32)
-        .await
-        .map_err(|e| format!("Failed to init sync: {}", e))?;
+    sources::init_sync_state(
+        pool,
+        source_id,
+        soul_core::types::UserId::new(user_id.to_string()),
+        "upload",
+        track_ids.len() as i32,
+    )
+    .await
+    .map_err(|e| format!("Failed to init sync: {}", e))?;
 
     // Create client with token
     let config = ServerConfig::with_tokens(&url, &token.access_token, token.refresh_token);
@@ -635,9 +663,18 @@ pub async fn upload_to_server(
     let tracks_uploaded = track_ids.len() as i32;
 
     // Complete sync
-    sources::complete_sync(pool, source_id, user_id, tracks_uploaded, 0, 0, 0, None)
-        .await
-        .map_err(|e| format!("Failed to complete sync: {}", e))?;
+    sources::complete_sync(
+        pool,
+        source_id,
+        soul_core::types::UserId::new(user_id.to_string()),
+        tracks_uploaded,
+        0,
+        0,
+        0,
+        None,
+    )
+    .await
+    .map_err(|e| format!("Failed to complete sync: {}", e))?;
 
     Ok(SyncResult {
         success: true,
@@ -657,9 +694,13 @@ pub async fn cancel_source_sync(state: State<'_, AppState>, source_id: i64) -> R
     // For desktop, use user_id = 1
     let user_id = 1i64;
 
-    sources::cancel_sync(pool, source_id, user_id)
-        .await
-        .map_err(|e| format!("Failed to cancel sync: {}", e))?;
+    sources::cancel_sync(
+        pool,
+        source_id,
+        soul_core::types::UserId::new(user_id.to_string()),
+    )
+    .await
+    .map_err(|e| format!("Failed to cancel sync: {}", e))?;
 
     Ok(())
 }

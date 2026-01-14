@@ -3,14 +3,9 @@
 //! Tests audio device selection, switching, and persistence across the entire
 //! audio pipeline (device detection → backend selection → playback).
 //!
-//! NOTE: These tests are disabled in CI as they require real audio hardware
-//! and have compilation issues due to API changes. They need to be updated
-//! to use the current audio device API.
-
-#![cfg(not(test))] // Disable entire file in test mode to prevent compilation errors
+//! NOTE: These tests are disabled in CI as they require real audio hardware.
 
 use soul_audio_desktop::{backend, device, AudioBackend};
-use std::sync::{Arc, Mutex};
 
 // Helper to skip tests if no audio device available
 fn has_audio_device() -> bool {
@@ -19,7 +14,7 @@ fn has_audio_device() -> bool {
 }
 
 #[test]
-#[ignore] // Requires real audio hardware - not available in CI environments
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_list_available_devices() {
     if !has_audio_device() {
         println!("Skipping test - no audio device available");
@@ -91,7 +86,7 @@ fn test_list_available_devices() {
 }
 
 #[test]
-#[ignore] // Requires real audio hardware - not available in CI environments
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_get_default_device() {
     if !has_audio_device() {
         println!("Skipping test - no audio device available");
@@ -122,7 +117,7 @@ fn test_get_default_device() {
 }
 
 #[test]
-#[ignore] // Requires real audio hardware - not available in CI environments
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_find_device_by_name() {
     if !has_audio_device() {
         println!("Skipping test - no audio device available");
@@ -138,9 +133,16 @@ fn test_find_device_by_name() {
 
     eprintln!("[test] Searching for device: {}", device_name);
 
-    // Find device by name
-    let found_device =
+    // Find device by name - this returns a cpal::Device, so we need to verify it exists
+    let _found_cpal_device =
         device::find_device_by_name(backend, &device_name).expect("Should find device by name");
+
+    // Get the device info by listing all devices and finding the matching one
+    let devices = device::list_devices(backend).expect("Should list devices");
+    let found_device = devices
+        .iter()
+        .find(|d| d.name == device_name)
+        .expect("Should find device in list");
 
     // Verify match
     assert_eq!(found_device.name, device_name, "Device names should match");
@@ -161,7 +163,7 @@ fn test_find_device_by_name() {
 }
 
 #[test]
-#[ignore] // Requires real audio hardware - not available in CI environments
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_find_nonexistent_device() {
     if !has_audio_device() {
         println!("Skipping test - no audio device available");
@@ -178,14 +180,13 @@ fn test_find_nonexistent_device() {
 
     // Should fail
     assert!(result.is_err(), "Should fail to find non-existent device");
-    eprintln!(
-        "[test] Correctly failed to find device: {:?}",
-        result.unwrap_err()
-    );
+    if let Err(e) = result {
+        eprintln!("[test] Correctly failed to find device: {}", e);
+    }
 }
 
 #[test]
-#[ignore] // Requires real audio hardware - not available in CI environments
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_device_sample_rate_ranges() {
     if !has_audio_device() {
         println!("Skipping test - no audio device available");
@@ -236,7 +237,7 @@ fn test_device_sample_rate_ranges() {
 }
 
 #[test]
-#[ignore] // Requires real audio hardware - not available in CI environments
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_backend_availability() {
     let backends = backend::get_backend_info();
 
@@ -278,7 +279,7 @@ fn test_backend_availability() {
 }
 
 #[test]
-#[ignore] // Requires real audio hardware - not available in CI environments
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_device_channel_counts() {
     if !has_audio_device() {
         println!("Skipping test - no audio device available");
@@ -313,7 +314,7 @@ mod integration {
     use super::*;
     use soul_audio_desktop::playback::DesktopPlayback;
     use soul_audio_desktop::sources::local::LocalAudioSource;
-    use soul_playback::{types::TrackInfo, PlaybackManager as CoreManager};
+    use soul_playback::{PlaybackConfig, PlaybackManager as CoreManager};
     use std::path::PathBuf;
 
     // Helper to create test audio file
@@ -338,7 +339,7 @@ mod integration {
         for i in 0..samples_per_channel {
             let t = i as f32 / sample_rate as f32;
             let sample = (t * 440.0 * 2.0 * std::f32::consts::PI).sin();
-            let amplitude = (sample * std::i16::MAX as f32) as i16;
+            let amplitude = (sample * i16::MAX as f32) as i16;
 
             // Write stereo
             writer.write_sample(amplitude).unwrap();
@@ -352,6 +353,7 @@ mod integration {
     }
 
     #[test]
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_playback_with_device_selection() {
         if !has_audio_device() {
             println!("Skipping test - no audio device available");
@@ -376,20 +378,22 @@ mod integration {
 
         eprintln!("[test] Created audio source");
 
-        // Create playback system
-        let playback = DesktopPlayback::new(backend, Some(device.name.clone()))
-            .expect("Should create playback system");
+        // Create playback system with device selection
+        let config = PlaybackConfig::default();
+        let _playback =
+            DesktopPlayback::new_with_device(config.clone(), backend, Some(device.name.clone()))
+                .expect("Should create playback system");
 
         eprintln!("[test] Created playback system");
 
-        // Create playback manager
-        let mut manager = CoreManager::new(device.sample_rate);
+        // Create playback manager with proper config
+        let mut manager = CoreManager::new(config);
         manager.set_audio_source(Box::new(source));
 
         eprintln!("[test] Created playback manager");
 
         // Play for 1 second
-        manager.play();
+        let _ = manager.play();
         std::thread::sleep(std::time::Duration::from_secs(1));
         manager.pause();
 
@@ -412,6 +416,7 @@ mod integration {
     }
 
     #[test]
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_device_sample_rate_mismatch() {
         if !has_audio_device() {
             println!("Skipping test - no audio device available");

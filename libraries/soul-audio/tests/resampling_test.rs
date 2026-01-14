@@ -813,8 +813,8 @@ fn test_passband_flatness() {
 
     // Verify relative flatness (max deviation between any two frequencies)
     let gains: Vec<f32> = amplitude_responses.iter().map(|(_, g)| *g).collect();
-    let max_gain = gains.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let min_gain = gains.iter().cloned().fold(f32::INFINITY, f32::min);
+    let max_gain = gains.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let min_gain = gains.iter().copied().fold(f32::INFINITY, f32::min);
     let ripple = max_gain - min_gain;
 
     eprintln!("Passband ripple: {:.2} dB", ripple);

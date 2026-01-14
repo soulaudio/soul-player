@@ -708,7 +708,7 @@ fn comprehensive_ceiling_verification() {
         "Threshold: {} dB ({:.4} linear)",
         threshold_db, threshold_linear
     );
-    println!("");
+    println!();
 
     for &input_db in &input_levels_db {
         for &freq in &frequencies {
@@ -746,7 +746,7 @@ fn comprehensive_ceiling_verification() {
         }
     }
 
-    println!("");
+    println!();
     println!("========================================");
     println!("Results: {} passed, {} failed", tests_passed, tests_failed);
     println!("========================================");

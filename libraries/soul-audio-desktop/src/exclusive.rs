@@ -959,7 +959,7 @@ mod tests {
 
     // Integration tests that require audio device
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_create_exclusive_output() {
         // This may fail in CI without audio devices
         let config = ExclusiveConfig::default();

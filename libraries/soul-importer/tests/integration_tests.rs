@@ -3,7 +3,7 @@
 //! These tests verify the full import pipeline from file scanning to database insertion
 
 use soul_core::types::CreateGenre;
-use soul_importer::{ImportConfig, MusicImporter};
+use soul_importer::{FileManagementStrategy, ImportConfig, MusicImporter};
 use std::fs;
 use std::io::Write;
 use tempfile::TempDir;
@@ -37,7 +37,7 @@ async fn test_import_single_file_creates_all_entities() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -71,7 +71,7 @@ async fn test_import_directory_with_multiple_files() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -101,7 +101,7 @@ async fn test_import_skips_duplicates() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -144,7 +144,7 @@ async fn test_import_progress_updates() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -163,7 +163,7 @@ async fn test_import_progress_updates() {
     let summary = handle.await.unwrap().unwrap();
 
     // Should have received multiple progress updates
-    assert!(progress_updates.len() > 0);
+    assert!(!progress_updates.is_empty());
 
     // Last update should match final summary
     let last_progress = progress_updates.last().unwrap();
@@ -186,7 +186,7 @@ async fn test_import_handles_nested_directories() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -248,7 +248,7 @@ async fn test_import_with_confidence_threshold() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 90, // High threshold - may require review
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,

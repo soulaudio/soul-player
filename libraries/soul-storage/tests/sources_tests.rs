@@ -484,10 +484,13 @@ async fn test_add_server_source_for_user() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first (required for foreign key constraint)
+    let user_id = create_test_user(pool, "testuser").await;
+
     // Add a server source for user
     let source = soul_storage::sources::add_server_source(
         pool,
-        1, // user_id
+        user_id.clone(),
         "User's Server",
         "https://user.server.example.com",
     )
@@ -512,16 +515,30 @@ async fn test_get_server_sources_for_user() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create users first
+    let user1 = create_test_user(pool, "user1").await;
+    let user2 = create_test_user(pool, "user2").await;
+
     // Add multiple server sources
-    soul_storage::sources::add_server_source(pool, 1, "Server A", "https://a.example.com")
-        .await
-        .unwrap();
-    soul_storage::sources::add_server_source(pool, 1, "Server B", "https://b.example.com")
-        .await
-        .unwrap();
     soul_storage::sources::add_server_source(
         pool,
-        2,
+        user1.clone(),
+        "Server A",
+        "https://a.example.com",
+    )
+    .await
+    .unwrap();
+    soul_storage::sources::add_server_source(
+        pool,
+        user1.clone(),
+        "Server B",
+        "https://b.example.com",
+    )
+    .await
+    .unwrap();
+    soul_storage::sources::add_server_source(
+        pool,
+        user2.clone(),
         "Other User Server",
         "https://other.example.com",
     )
@@ -529,7 +546,7 @@ async fn test_get_server_sources_for_user() {
     .unwrap();
 
     // Get sources for user 1
-    let sources = soul_storage::sources::get_server_sources_for_user(pool, 1)
+    let sources = soul_storage::sources::get_server_sources_for_user(pool, user1)
         .await
         .expect("Failed to get sources");
 
@@ -549,11 +566,18 @@ async fn test_store_and_get_auth_token() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     // Create a server source
-    let source =
-        soul_storage::sources::add_server_source(pool, 1, "Auth Test", "https://auth.example.com")
-            .await
-            .unwrap();
+    let source = soul_storage::sources::add_server_source(
+        pool,
+        user,
+        "Auth Test",
+        "https://auth.example.com",
+    )
+    .await
+    .unwrap();
 
     // Store auth token
     let expires_at = chrono::Utc::now().timestamp() + 3600; // 1 hour from now
@@ -584,9 +608,12 @@ async fn test_store_auth_token_upsert() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user,
         "Upsert Test",
         "https://upsert.example.com",
     )
@@ -625,9 +652,12 @@ async fn test_clear_auth_token() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user,
         "Clear Test",
         "https://clear.example.com",
     )
@@ -707,9 +737,12 @@ async fn test_init_sync_state() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user.clone(),
         "Sync State Test",
         "https://sync.example.com",
     )
@@ -717,18 +750,18 @@ async fn test_init_sync_state() {
     .unwrap();
 
     // Initialize sync state
-    soul_storage::sources::init_sync_state(pool, source.id, 1, "download", 100)
+    soul_storage::sources::init_sync_state(pool, source.id, user.clone(), "download", 100)
         .await
         .expect("Failed to init sync state");
 
     // Get sync state
-    let state = soul_storage::sources::get_sync_state(pool, source.id, 1)
+    let state = soul_storage::sources::get_sync_state(pool, source.id, user.clone())
         .await
         .expect("Failed to get sync state")
         .expect("Sync state not found");
 
     assert_eq!(state.source_id, source.id);
-    assert_eq!(state.user_id, 1);
+    assert_eq!(state.user_id, user);
     assert_eq!(state.sync_status, "syncing");
     assert_eq!(state.last_sync_direction, Some("download".to_string()));
     assert_eq!(state.total_items, 100);
@@ -740,9 +773,12 @@ async fn test_update_sync_progress() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user.clone(),
         "Progress Test",
         "https://progress.example.com",
     )
@@ -750,7 +786,7 @@ async fn test_update_sync_progress() {
     .unwrap();
 
     // Initialize
-    soul_storage::sources::init_sync_state(pool, source.id, 1, "upload", 50)
+    soul_storage::sources::init_sync_state(pool, source.id, user.clone(), "upload", 50)
         .await
         .unwrap();
 
@@ -758,7 +794,7 @@ async fn test_update_sync_progress() {
     soul_storage::sources::update_sync_progress(
         pool,
         source.id,
-        1,
+        user.clone(),
         "uploading",
         Some("track_123.flac"),
         25,
@@ -767,7 +803,7 @@ async fn test_update_sync_progress() {
     .expect("Failed to update progress");
 
     // Verify
-    let state = soul_storage::sources::get_sync_state(pool, source.id, 1)
+    let state = soul_storage::sources::get_sync_state(pool, source.id, user)
         .await
         .unwrap()
         .unwrap();
@@ -782,9 +818,12 @@ async fn test_complete_sync() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user.clone(),
         "Complete Test",
         "https://complete.example.com",
     )
@@ -792,7 +831,7 @@ async fn test_complete_sync() {
     .unwrap();
 
     // Initialize
-    soul_storage::sources::init_sync_state(pool, source.id, 1, "download", 100)
+    soul_storage::sources::init_sync_state(pool, source.id, user.clone(), "download", 100)
         .await
         .unwrap();
 
@@ -800,7 +839,7 @@ async fn test_complete_sync() {
     soul_storage::sources::complete_sync(
         pool,
         source.id,
-        1,
+        user.clone(),
         10, // uploaded
         80, // downloaded
         5,  // updated
@@ -811,7 +850,7 @@ async fn test_complete_sync() {
     .expect("Failed to complete sync");
 
     // Verify
-    let state = soul_storage::sources::get_sync_state(pool, source.id, 1)
+    let state = soul_storage::sources::get_sync_state(pool, source.id, user)
         .await
         .unwrap()
         .unwrap();
@@ -831,23 +870,30 @@ async fn test_fail_sync() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
-    let source =
-        soul_storage::sources::add_server_source(pool, 1, "Fail Test", "https://fail.example.com")
-            .await
-            .unwrap();
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
+    let source = soul_storage::sources::add_server_source(
+        pool,
+        user.clone(),
+        "Fail Test",
+        "https://fail.example.com",
+    )
+    .await
+    .unwrap();
 
     // Initialize
-    soul_storage::sources::init_sync_state(pool, source.id, 1, "download", 100)
+    soul_storage::sources::init_sync_state(pool, source.id, user.clone(), "download", 100)
         .await
         .unwrap();
 
     // Fail sync
-    soul_storage::sources::fail_sync(pool, source.id, 1, "Connection timeout")
+    soul_storage::sources::fail_sync(pool, source.id, user.clone(), "Connection timeout")
         .await
         .expect("Failed to fail sync");
 
     // Verify
-    let state = soul_storage::sources::get_sync_state(pool, source.id, 1)
+    let state = soul_storage::sources::get_sync_state(pool, source.id, user)
         .await
         .unwrap()
         .unwrap();
@@ -861,9 +907,12 @@ async fn test_cancel_sync() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user.clone(),
         "Cancel Test",
         "https://cancel.example.com",
     )
@@ -871,17 +920,17 @@ async fn test_cancel_sync() {
     .unwrap();
 
     // Initialize
-    soul_storage::sources::init_sync_state(pool, source.id, 1, "upload", 50)
+    soul_storage::sources::init_sync_state(pool, source.id, user.clone(), "upload", 50)
         .await
         .unwrap();
 
     // Cancel sync
-    soul_storage::sources::cancel_sync(pool, source.id, 1)
+    soul_storage::sources::cancel_sync(pool, source.id, user.clone())
         .await
         .expect("Failed to cancel sync");
 
     // Verify
-    let state = soul_storage::sources::get_sync_state(pool, source.id, 1)
+    let state = soul_storage::sources::get_sync_state(pool, source.id, user)
         .await
         .unwrap()
         .unwrap();
@@ -894,9 +943,12 @@ async fn test_cancel_only_affects_syncing_state() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user.clone(),
         "Cancel Check",
         "https://check.example.com",
     )
@@ -904,20 +956,20 @@ async fn test_cancel_only_affects_syncing_state() {
     .unwrap();
 
     // Initialize and complete sync first
-    soul_storage::sources::init_sync_state(pool, source.id, 1, "download", 10)
+    soul_storage::sources::init_sync_state(pool, source.id, user.clone(), "download", 10)
         .await
         .unwrap();
-    soul_storage::sources::complete_sync(pool, source.id, 1, 0, 10, 0, 0, None)
+    soul_storage::sources::complete_sync(pool, source.id, user.clone(), 0, 10, 0, 0, None)
         .await
         .unwrap();
 
     // Try to cancel (should not change from 'idle')
-    soul_storage::sources::cancel_sync(pool, source.id, 1)
+    soul_storage::sources::cancel_sync(pool, source.id, user.clone())
         .await
         .unwrap();
 
     // Verify state is still idle
-    let state = soul_storage::sources::get_sync_state(pool, source.id, 1)
+    let state = soul_storage::sources::get_sync_state(pool, source.id, user)
         .await
         .unwrap()
         .unwrap();
@@ -930,9 +982,12 @@ async fn test_get_server_sync_token() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create user first
+    let user = create_test_user(pool, "testuser").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user.clone(),
         "Token Test",
         "https://token.example.com",
     )
@@ -940,21 +995,30 @@ async fn test_get_server_sync_token() {
     .unwrap();
 
     // Initially no sync token
-    let token = soul_storage::sources::get_server_sync_token(pool, source.id, 1)
+    let token = soul_storage::sources::get_server_sync_token(pool, source.id, user.clone())
         .await
         .unwrap();
     assert!(token.is_none());
 
     // Complete a sync with a token
-    soul_storage::sources::init_sync_state(pool, source.id, 1, "download", 10)
+    soul_storage::sources::init_sync_state(pool, source.id, user.clone(), "download", 10)
         .await
         .unwrap();
-    soul_storage::sources::complete_sync(pool, source.id, 1, 0, 10, 0, 0, Some("token_abc123"))
-        .await
-        .unwrap();
+    soul_storage::sources::complete_sync(
+        pool,
+        source.id,
+        user.clone(),
+        0,
+        10,
+        0,
+        0,
+        Some("token_abc123"),
+    )
+    .await
+    .unwrap();
 
     // Should now have the token
-    let token = soul_storage::sources::get_server_sync_token(pool, source.id, 1)
+    let token = soul_storage::sources::get_server_sync_token(pool, source.id, user)
         .await
         .unwrap();
     assert_eq!(token, Some("token_abc123".to_string()));
@@ -965,9 +1029,13 @@ async fn test_sync_state_per_user_isolation() {
     let test_db = TestDb::new().await;
     let pool = test_db.pool();
 
+    // Create two users first
+    let user1 = create_test_user(pool, "user1").await;
+    let user2 = create_test_user(pool, "user2").await;
+
     let source = soul_storage::sources::add_server_source(
         pool,
-        1,
+        user1.clone(),
         "Multi User",
         "https://multi.example.com",
     )
@@ -975,21 +1043,21 @@ async fn test_sync_state_per_user_isolation() {
     .unwrap();
 
     // Init sync for user 1
-    soul_storage::sources::init_sync_state(pool, source.id, 1, "download", 100)
+    soul_storage::sources::init_sync_state(pool, source.id, user1.clone(), "download", 100)
         .await
         .unwrap();
 
     // Init sync for user 2
-    soul_storage::sources::init_sync_state(pool, source.id, 2, "upload", 50)
+    soul_storage::sources::init_sync_state(pool, source.id, user2.clone(), "upload", 50)
         .await
         .unwrap();
 
     // Verify isolation
-    let state1 = soul_storage::sources::get_sync_state(pool, source.id, 1)
+    let state1 = soul_storage::sources::get_sync_state(pool, source.id, user1)
         .await
         .unwrap()
         .unwrap();
-    let state2 = soul_storage::sources::get_sync_state(pool, source.id, 2)
+    let state2 = soul_storage::sources::get_sync_state(pool, source.id, user2)
         .await
         .unwrap()
         .unwrap();

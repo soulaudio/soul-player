@@ -1,7 +1,7 @@
-//! Testcontainers module for audio testing with PulseAudio virtual devices.
+//! Testcontainers module for audio testing with `PulseAudio` virtual devices.
 //!
 //! This module provides an `AudioTestContainer` that creates an isolated Linux
-//! environment with PulseAudio and virtual audio devices for comprehensive
+//! environment with `PulseAudio` and virtual audio devices for comprehensive
 //! audio testing without requiring physical hardware.
 //!
 //! # Features
@@ -57,7 +57,7 @@ use testcontainers::{
 /// Represents a virtual audio device in the container.
 #[derive(Debug, Clone)]
 pub struct VirtualAudioDevice {
-    /// Device name (e.g., "virtual_output_1")
+    /// Device name (e.g., "`virtual_output_1`")
     pub name: String,
     /// Device description
     pub description: String,
@@ -225,7 +225,7 @@ impl AudioTestContainer {
     /// Start a new audio test container.
     ///
     /// This will build the Docker image if needed and start the container
-    /// with PulseAudio and virtual audio devices.
+    /// with `PulseAudio` and virtual audio devices.
     pub async fn start() -> Result<Self, String> {
         let image = AudioTestImage::new();
 
@@ -308,9 +308,9 @@ impl AudioTestContainer {
                 // Determine sample rate from device name
                 let sample_rate = if name.contains("hires") {
                     192000
-                } else if name.contains("3") {
+                } else if name.contains('3') {
                     96000
-                } else if name.contains("2") {
+                } else if name.contains('2') {
                     48000
                 } else {
                     44100
@@ -382,7 +382,7 @@ impl AudioTestContainer {
     /// Play a test tone to a virtual sink.
     ///
     /// # Arguments
-    /// * `sink` - Name of the sink (e.g., "virtual_output_1")
+    /// * `sink` - Name of the sink (e.g., "`virtual_output_1`")
     /// * `frequency` - Frequency in Hz
     /// * `duration_secs` - Duration in seconds
     pub async fn play_test_tone(
@@ -410,7 +410,7 @@ impl AudioTestContainer {
     /// Record audio from a virtual source.
     ///
     /// # Arguments
-    /// * `source` - Name of the source (e.g., "virtual_input_1")
+    /// * `source` - Name of the source (e.g., "`virtual_input_1`")
     /// * `duration_secs` - Recording duration in seconds
     /// * `output_path` - Path in container to save the recording
     pub async fn record_from_source(
@@ -541,12 +541,12 @@ impl AudioTestContainer {
         }
     }
 
-    /// Get PulseAudio server info.
+    /// Get `PulseAudio` server info.
     pub async fn get_server_info(&self) -> Result<String, String> {
         self.exec_as_testuser("pactl info").await
     }
 
-    /// Check if PulseAudio is running.
+    /// Check if `PulseAudio` is running.
     pub async fn is_pulseaudio_running(&self) -> bool {
         self.exec_as_testuser("pgrep pulseaudio")
             .await

@@ -2,7 +2,7 @@
 //!
 //! These tests simulate real-world import scenarios with actual audio files
 
-use soul_importer::{ImportConfig, MusicImporter};
+use soul_importer::{FileManagementStrategy, ImportConfig, MusicImporter};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -47,7 +47,7 @@ fn create_minimal_mp3_with_tags(
     file.write_all(&[0xFF, 0xFB, 0x90, 0x00])?;
 
     // Dummy frame data (36 bytes minimum for valid frame)
-    file.write_all(&vec![0x00; 36])?;
+    file.write_all(&[0x00; 36])?;
 
     Ok(())
 }
@@ -123,7 +123,7 @@ async fn test_e2e_import_mp3_with_full_metadata() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -165,7 +165,7 @@ async fn test_e2e_import_creates_library_file() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -214,7 +214,7 @@ async fn test_e2e_import_multiple_genres() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -230,7 +230,7 @@ async fn test_e2e_import_multiple_genres() {
     if summary.successful > 0 && !summary.require_review.is_empty() {
         let result = &summary.require_review[0];
         // Should have parsed multiple genres
-        assert!(result.genre_matches.len() >= 1);
+        assert!(!result.genre_matches.is_empty());
     }
 }
 
@@ -249,7 +249,7 @@ async fn test_e2e_duplicate_detection_by_hash() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -295,7 +295,7 @@ async fn test_e2e_batch_import_with_mixed_results() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -336,7 +336,7 @@ async fn test_e2e_import_with_special_characters_in_metadata() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,
@@ -389,7 +389,7 @@ async fn test_e2e_import_estimates_time_remaining() {
 
     let config = ImportConfig {
         library_path: library_dir.path().to_path_buf(),
-        copy_files: true,
+        file_strategy: FileManagementStrategy::Copy,
         confidence_threshold: 80,
         file_naming_pattern: "{artist} - {title}.{ext}".to_string(),
         skip_duplicates: true,

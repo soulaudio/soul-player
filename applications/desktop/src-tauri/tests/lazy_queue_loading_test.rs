@@ -9,7 +9,7 @@
 //! These tests use a real database with 500 test tracks to verify the full
 //! playback pipeline from database queries through to queue management.
 
-use soul_audio_desktop::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
+use soul_audio_desktop::{DesktopPlayback, PlaybackCommand};
 use soul_playback::{lazy_queue::QueueContext, PlaybackConfig, QueueTrack, TrackSource};
 use soul_storage::{create_pool, run_migrations};
 use sqlx::SqlitePool;

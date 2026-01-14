@@ -139,7 +139,7 @@ fn test_lazy_queue_jump_detection() {
 
         // Should load batch containing track 450
         assert!(
-            offset >= 400 && offset <= 450,
+            (400..=450).contains(&offset),
             "Offset {} should be near track 450",
             offset
         );

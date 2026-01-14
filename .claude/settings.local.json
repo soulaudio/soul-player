@@ -165,7 +165,9 @@
       "Bash(rustup target list:*)",
       "Bash(wasm-pack:*)",
       "Bash(git grep:*)",
-      "Bash(Select-String -Pattern \"test result\" -Context 2,10)"
+      "Bash(Select-String -Pattern \"test result\" -Context 2,10)",
+      "Bash(tee:*)",
+      "Bash(git checkout:*)"
     ]
   },
   "hooks": {

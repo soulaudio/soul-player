@@ -251,16 +251,13 @@ fn test_wav_with_empty_data_chunk() {
     let result = decoder.decode(&path);
 
     // Should either error or return empty buffer
-    match result {
-        Ok(buffer) => {
-            assert!(
-                buffer.samples.is_empty(),
-                "Empty data chunk should produce empty samples"
-            );
-        }
-        Err(_) => {
-            // Also acceptable
-        }
+    if let Ok(buffer) = result {
+        assert!(
+            buffer.samples.is_empty(),
+            "Empty data chunk should produce empty samples"
+        );
+    } else {
+        // Also acceptable
     }
 }
 
@@ -300,7 +297,7 @@ fn test_mono_file() {
 
     let buffer = result.unwrap();
     // Decoder should output stereo by duplicating mono channel
-    assert!(buffer.samples.len() > 0);
+    assert!(!buffer.samples.is_empty());
 }
 
 #[test]

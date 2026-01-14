@@ -1457,10 +1457,10 @@ fn comprehensive_ceiling_breach_count() {
     println!("  - ITU-R BS.1770-4/5 (True Peak Measurement)");
     println!("  - EBU R128 (Loudness Normalisation)");
     println!("  - Netflix/Spotify delivery specs (-1 dBTP)");
-    println!("");
+    println!();
     println!("Total ceiling tests: {}", total_tests);
     println!("Ceiling breaches: {}", ceiling_breaches);
-    println!("");
+    println!();
 
     if !breach_details.is_empty() {
         println!("BREACH DETAILS:");
@@ -1469,7 +1469,7 @@ fn comprehensive_ceiling_breach_count() {
         }
     }
 
-    println!("");
+    println!();
     println!("========================================");
 
     // This is informational - we document breaches rather than failing

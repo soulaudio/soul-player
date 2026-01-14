@@ -568,19 +568,16 @@ fn test_seek_past_end() {
     // Two acceptable behaviors:
     // 1. Error is returned
     // 2. Position is clamped to end of file
-    match result {
-        Ok(actual) => {
-            // If success, should be clamped to file duration
-            let tolerance = Duration::from_millis(50);
-            assert!(
-                actual <= file_duration + tolerance,
-                "Seek past end should clamp to duration, got {:?}",
-                actual
-            );
-        }
-        Err(_) => {
-            // Error is also acceptable behavior
-        }
+    if let Ok(actual) = result {
+        // If success, should be clamped to file duration
+        let tolerance = Duration::from_millis(50);
+        assert!(
+            actual <= file_duration + tolerance,
+            "Seek past end should clamp to duration, got {:?}",
+            actual
+        );
+    } else {
+        // Error is also acceptable behavior
     }
 }
 
@@ -1311,7 +1308,7 @@ fn test_wav_creation_helper() {
     let tolerance = 100; // Allow small variation
 
     assert!(
-        (buffer.samples.len() as i32 - expected_samples as i32).abs() < tolerance,
+        (buffer.samples.len() as i32 - expected_samples).abs() < tolerance,
         "Expected ~{} samples, got {}",
         expected_samples,
         buffer.samples.len()
@@ -1331,7 +1328,7 @@ fn test_chirp_wav_creation_helper() {
     let buffer = decoder.decode(&path).expect("Failed to decode chirp WAV");
 
     // Verify we got audio
-    assert!(buffer.samples.len() > 0, "Chirp WAV should contain samples");
+    assert!(!buffer.samples.is_empty(), "Chirp WAV should contain samples");
 
     // Verify frequency at start is lower than at end
     let chunk_size = 4410; // 100ms

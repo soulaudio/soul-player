@@ -1186,7 +1186,7 @@ mod crossfeed_tests {
         let mut cf = Crossfeed::with_preset(CrossfeedPreset::Natural);
 
         let mut buffer = generate_stereo_sine(1000.0, SAMPLE_RATE, 0.2);
-        let original_rms = rms_level(&buffer);
+        let _original_rms = rms_level(&buffer);
 
         cf.process(&mut buffer, SAMPLE_RATE);
 
@@ -1386,7 +1386,7 @@ mod stereo_enhancer_tests {
         // Normal stereo signal
         let mut buffer = generate_stereo_sine(1000.0, SAMPLE_RATE, 0.2);
 
-        let original_compat = mono_compatibility(&buffer);
+        let _original_compat = mono_compatibility(&buffer);
 
         enhancer.process(&mut buffer, SAMPLE_RATE);
 
@@ -1445,7 +1445,7 @@ mod stereo_enhancer_tests {
         let mut buffer = generate_stereo_with_phase(1000.0, SAMPLE_RATE, 0.2, PI / 2.0);
 
         // Scale to near clipping
-        for sample in buffer.iter_mut() {
+        for sample in &mut buffer {
             *sample *= 0.9;
         }
 
@@ -1706,16 +1706,16 @@ mod effect_combination_tests {
         geq.set_preset(GraphicEqPreset::Rock);
         chain.add_effect(Box::new(geq));
 
-        let mut compressor = Compressor::with_settings(CompressorSettings::moderate());
+        let compressor = Compressor::with_settings(CompressorSettings::moderate());
         chain.add_effect(Box::new(compressor));
 
-        let mut stereo = StereoEnhancer::with_settings(StereoSettings::wide());
+        let stereo = StereoEnhancer::with_settings(StereoSettings::wide());
         chain.add_effect(Box::new(stereo));
 
-        let mut crossfeed = Crossfeed::with_preset(CrossfeedPreset::Natural);
+        let crossfeed = Crossfeed::with_preset(CrossfeedPreset::Natural);
         chain.add_effect(Box::new(crossfeed));
 
-        let mut limiter = Limiter::with_settings(LimiterSettings::brickwall());
+        let limiter = Limiter::with_settings(LimiterSettings::brickwall());
         chain.add_effect(Box::new(limiter));
 
         // Process audio
@@ -1745,7 +1745,7 @@ mod effect_combination_tests {
         for order in orderings {
             let mut chain = EffectChain::new();
 
-            let effects: Vec<Box<dyn AudioEffect>> = vec![
+            let _effects: Vec<Box<dyn AudioEffect>> = vec![
                 Box::new(ParametricEq::new()),
                 Box::new(GraphicEq::new_10_band()),
                 Box::new(Compressor::new()),

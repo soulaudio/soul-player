@@ -1,14 +1,14 @@
-//! E2E test for pause-during-startup bug (MediaCard scenario)
+//! E2E test for pause-during-startup bug (`MediaCard` scenario)
 //!
 //! **Bug reproduction:**
-//! User clicks Play on MediaCard → clicks Pause immediately → audio continues playing
+//! User clicks Play on `MediaCard` → clicks Pause immediately → audio continues playing
 //!
 //! **Root cause:**
 //! Commands are queued and processed in audio callback. By the time the pause
 //! command is processed, the audio source may have already started outputting audio.
 //!
 //! This test reproduces the EXACT flow:
-//! 1. User clicks Play button → sends LoadPlaylist + Play commands
+//! 1. User clicks Play button → sends `LoadPlaylist` + Play commands
 //! 2. User immediately clicks Pause → sends Pause command
 //! 3. Audio callbacks process commands and output audio
 //! 4. Verify audio is SILENT (not playing)
@@ -37,7 +37,7 @@ fn drain_events(playback: &DesktopPlayback) -> Vec<PlaybackEvent> {
     std::iter::from_fn(|| playback.try_recv_event()).collect()
 }
 
-/// Helper to find the latest StateChanged event
+/// Helper to find the latest `StateChanged` event
 fn get_latest_state(events: &[PlaybackEvent]) -> Option<PlaybackState> {
     events.iter().rev().find_map(|e| {
         if let PlaybackEvent::StateChanged(state) = e {
@@ -203,17 +203,17 @@ fn test_triple_rapid_commands() {
     // But if files don't exist, we get Stopped after error
     let has_errors = events.iter().any(|e| matches!(e, PlaybackEvent::Error(_)));
 
-    if !has_errors {
+    if has_errors {
+        println!("[TEST] ⚠️  Files don't exist, skipping state check");
+    } else {
         assert!(
             matches!(
                 final_state,
-                Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
+                Some(PlaybackState::Playing | PlaybackState::Loading)
             ),
             "Expected Playing or Loading after final Play command, got {:?}",
             final_state
         );
-    } else {
-        println!("[TEST] ⚠️  Files don't exist, skipping state check");
     }
 }
 
@@ -249,19 +249,19 @@ fn test_pause_then_resume_during_loading() {
 
     let has_errors1 = events.iter().any(|e| matches!(e, PlaybackEvent::Error(_)));
 
-    if !has_errors1 {
-        assert_eq!(
-            paused_state,
-            Some(PlaybackState::Paused),
-            "Should be paused after pause command"
-        );
-    } else {
+    if has_errors1 {
         println!("[TEST] ⚠️  Files don't exist, checking pause was processed...");
         assert!(
             paused_state == Some(PlaybackState::Paused)
                 || paused_state == Some(PlaybackState::Stopped),
             "Pause command ignored! State: {:?}",
             paused_state
+        );
+    } else {
+        assert_eq!(
+            paused_state,
+            Some(PlaybackState::Paused),
+            "Should be paused after pause command"
         );
     }
 
@@ -281,17 +281,17 @@ fn test_pause_then_resume_during_loading() {
     // Unless files don't exist
     let has_errors = events2.iter().any(|e| matches!(e, PlaybackEvent::Error(_)));
 
-    if !has_errors {
+    if has_errors {
+        println!("[TEST] ⚠️  Files don't exist, skipping state check");
+    } else {
         assert!(
             matches!(
                 resumed_state,
-                Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
+                Some(PlaybackState::Playing | PlaybackState::Loading)
             ),
             "Should be Playing or Loading after resume, got {:?}",
             resumed_state
         );
-    } else {
-        println!("[TEST] ⚠️  Files don't exist, skipping state check");
     }
 }
 
@@ -382,11 +382,8 @@ fn test_pause_immediately_after_load_playlist() {
 
     println!("[TEST] Events received:");
     for event in &events {
-        match event {
-            PlaybackEvent::StateChanged(state) => {
-                println!("  - StateChanged({:?})", state);
-            }
-            _ => {}
+        if let PlaybackEvent::StateChanged(state) = event {
+            println!("  - StateChanged({:?})", state);
         }
     }
 

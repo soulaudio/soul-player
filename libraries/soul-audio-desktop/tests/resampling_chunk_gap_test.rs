@@ -1,23 +1,22 @@
 //! Resampling Chunk Gap Detection Tests
 //!
-//! These tests verify that the LocalAudioSource produces continuous audio
+//! These tests verify that the `LocalAudioSource` produces continuous audio
 //! when resampling is required. The bug occurs when:
 //! 1. The resampler needs N frames (e.g., 1024) to produce output
 //! 2. Decoded packets don't accumulate enough frames for a chunk
-//! 3. read_samples() returns with output_buffer empty, filling silence
+//! 3. `read_samples()` returns with `output_buffer` empty, filling silence
 //!
 //! This causes audible gaps/glitches during playback.
 
 use soul_audio_desktop::LocalAudioSource;
 use soul_playback::AudioSource;
-use std::f32::consts::PI;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// Generate a WAV file at a specific sample rate
-/// This allows testing resampling scenarios (source_rate != target_rate)
+/// This allows testing resampling scenarios (`source_rate` != `target_rate`)
 fn generate_wav_at_rate(
     path: &PathBuf,
     sample_rate: u32,
@@ -274,13 +273,11 @@ fn test_resampling_with_tiny_chunks() {
                 break;
             }
             // Zero read in the middle of the file is a bug!
-            if !source.is_finished() && i < 1500 {
-                // Allow zeros at end
-                panic!(
-                    "Got zero samples at iteration {} when not at EOF - chunk gap bug!",
-                    i
-                );
-            }
+            // Allow zeros at end
+            assert!(!(!source.is_finished() && i < 1500), 
+                                "Got zero samples at iteration {} when not at EOF - chunk gap bug!",
+                                i
+                            );
             continue;
         }
 

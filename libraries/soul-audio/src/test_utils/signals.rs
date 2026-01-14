@@ -471,7 +471,7 @@ mod tests {
         let signal = generate_square_wave(100.0, 44100, 0.1, 1.0);
 
         // Should alternate between +1 and -1
-        let unique_values: Vec<_> = signal.iter().copied().collect();
+        let unique_values: Vec<_> = signal.clone();
         assert!(unique_values.contains(&1.0) || unique_values.contains(&-1.0));
     }
 

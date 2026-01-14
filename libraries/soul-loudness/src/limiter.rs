@@ -402,7 +402,7 @@ mod tests {
 
         // Latency should be approximately 1.5ms
         let latency_ms = limiter.latency_ms();
-        assert!(latency_ms >= 1.0 && latency_ms <= 2.0);
+        assert!((1.0..=2.0).contains(&latency_ms));
     }
 
     #[test]

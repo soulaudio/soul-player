@@ -3,14 +3,13 @@
 //! These tests verify the complete flow from Tauri commands through
 //! PlaybackManager to DesktopPlayback and event emission.
 
-use soul_audio_desktop::{DesktopPlayback, LocalAudioSource, PlaybackCommand, PlaybackEvent};
+use soul_audio_desktop::{DesktopPlayback, PlaybackCommand, PlaybackEvent};
 use soul_playback::{PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode, TrackSource};
 use std::fs::File;
 use std::io::Write as IoWrite;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tempfile::TempDir;
 
 /// Helper to generate test WAV file
 fn generate_test_wav(path: &PathBuf, duration_secs: f64, frequency: f64) -> std::io::Result<()> {
@@ -271,7 +270,7 @@ fn test_e2e_shuffle_modes() {
     // Test all shuffle modes
     for mode in [ShuffleMode::Off, ShuffleMode::Random, ShuffleMode::Smart] {
         assert!(
-            manager.set_shuffle(mode.clone()).is_ok(),
+            manager.set_shuffle(mode).is_ok(),
             "Should set shuffle mode"
         );
         std::thread::sleep(Duration::from_millis(20));

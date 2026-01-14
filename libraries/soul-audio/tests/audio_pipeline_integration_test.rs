@@ -884,7 +884,7 @@ fn test_long_duration_processing() {
 
     for _ in 0..num_chunks {
         let mut chunk: Vec<f32> = (0..chunk_size / 2)
-            .flat_map(|i| {
+            .flat_map(|_i| {
                 let t = (rand::random::<f32>() * 0.1) as f32;
                 let sample = (2.0 * PI * 440.0 * t).sin() * 0.3;
                 [sample, sample]
@@ -1273,7 +1273,7 @@ fn test_podcast_voice_processing() {
     let level_ratio = processed_rms / original_rms;
     let level_change_db = 20.0 * level_ratio.log10();
     assert!(
-        level_change_db >= -3.0 && level_change_db <= 3.0,
+        (-3.0..=3.0).contains(&level_change_db),
         "Voice processing should maintain roughly unity gain. Original RMS: {:.3}, Processed RMS: {:.3}, Level change: {:.1} dB",
         original_rms,
         processed_rms,

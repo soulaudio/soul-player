@@ -68,7 +68,7 @@ fn measure_thd_n_aes17(samples: &[f32], sample_rate: u32, fundamental_freq: f32)
 
     // Compute power spectrum using manual DFT for fundamental and harmonics
     let bin_width = sample_rate as f32 / fft_size as f32;
-    let fundamental_bin = (fundamental_freq / bin_width).round() as usize;
+    let _fundamental_bin = (fundamental_freq / bin_width).round() as usize;
 
     // Measure fundamental power (AES17 uses 1-octave span around fundamental)
     let octave_low = (fundamental_freq / 2.0_f32.sqrt() / bin_width) as usize;
@@ -79,7 +79,7 @@ fn measure_thd_n_aes17(samples: &[f32], sample_rate: u32, fundamental_freq: f32)
 
     // Calculate DFT magnitudes for relevant bins
     for bin in 1..(fft_size / 2) {
-        let freq = bin as f32 * bin_width;
+        let _freq = bin as f32 * bin_width;
         let mut real = 0.0_f32;
         let mut imag = 0.0_f32;
 
@@ -704,6 +704,6 @@ fn summary_industry_standard_compliance() {
     println!("EBU R128: Broadcast loudness normalization");
     println!("Infinite Wave: SRC quality metrics");
     println!("Fraunhofer: Gapless playback verification");
-    println!("");
+    println!();
     println!("Running {} industry-standard tests...", 15);
 }

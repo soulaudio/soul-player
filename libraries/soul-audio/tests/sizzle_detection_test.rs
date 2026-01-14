@@ -216,9 +216,9 @@ fn test_eq_parameter_change_waveform_analysis() {
     }
 
     // Summary statistics
-    let max_high_freq = all_high_freq.iter().cloned().fold(0.0_f32, f32::max);
-    let max_zipper = all_zipper.iter().cloned().fold(0.0_f32, f32::max);
-    let max_boundary_jump = chunk_boundary_jumps.iter().cloned().fold(0.0_f32, f32::max);
+    let max_high_freq = all_high_freq.iter().copied().fold(0.0_f32, f32::max);
+    let max_zipper = all_zipper.iter().copied().fold(0.0_f32, f32::max);
+    let max_boundary_jump = chunk_boundary_jumps.iter().copied().fold(0.0_f32, f32::max);
     let avg_high_freq: f32 = all_high_freq.iter().sum::<f32>() / all_high_freq.len() as f32;
 
     println!("\n=== Summary ===");

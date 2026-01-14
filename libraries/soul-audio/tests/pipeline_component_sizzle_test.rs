@@ -1036,7 +1036,9 @@ fn test_all_components_summary() {
         }
     }
 
-    if !failures.is_empty() {
+    if failures.is_empty() {
+        println!("\n=== ALL COMPONENTS PASSED SIZZLE TESTS ===\n");
+    } else {
         println!("\n=== SIZZLE TEST FAILURES ===");
         for failure in &failures {
             println!("  FAIL: {}", failure);
@@ -1047,7 +1049,5 @@ fn test_all_components_summary() {
             failures.len(),
             failures.join("\n")
         );
-    } else {
-        println!("\n=== ALL COMPONENTS PASSED SIZZLE TESTS ===\n");
     }
 }

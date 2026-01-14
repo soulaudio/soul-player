@@ -33,6 +33,9 @@ fn test_generate_filename_with_artist_and_title() {
         sample_rate: None,
         channels: None,
         file_format: "mp3".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let source = Path::new("/path/to/song.mp3");
@@ -56,6 +59,9 @@ fn test_generate_filename_prefers_album_artist() {
         sample_rate: None,
         channels: None,
         file_format: "flac".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let source = Path::new("/path/to/song.flac");
@@ -79,6 +85,9 @@ fn test_generate_filename_no_artist() {
         sample_rate: None,
         channels: None,
         file_format: "mp3".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let source = Path::new("/path/to/song.mp3");
@@ -102,6 +111,9 @@ fn test_generate_filename_fallback_to_original() {
         sample_rate: None,
         channels: None,
         file_format: "mp3".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let source = Path::new("/path/to/original_song.mp3");
@@ -125,6 +137,9 @@ fn test_generate_filename_sanitizes_special_chars() {
         sample_rate: None,
         channels: None,
         file_format: "mp3".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let source = Path::new("/path/to/song.mp3");
@@ -158,6 +173,9 @@ fn test_copy_to_library() {
         sample_rate: None,
         channels: None,
         file_format: "mp3".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let dest_path = copy_to_library(&source_file, &library_dir, &metadata).unwrap();
@@ -196,6 +214,9 @@ fn test_copy_to_library_creates_directory() {
         sample_rate: None,
         channels: None,
         file_format: "mp3".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let dest_path = copy_to_library(&source_file, &library_dir, &metadata).unwrap();
@@ -229,6 +250,9 @@ fn test_copy_to_library_handles_conflicts() {
         sample_rate: None,
         channels: None,
         file_format: "mp3".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let dest_path = copy_to_library(&source_file, library_dir, &metadata).unwrap();
@@ -271,6 +295,9 @@ fn test_copy_to_library_multiple_conflicts() {
         sample_rate: None,
         channels: None,
         file_format: "mp3".to_string(),
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     };
 
     let dest_path = copy_to_library(&source_file, library_dir, &metadata).unwrap();

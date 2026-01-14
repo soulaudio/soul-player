@@ -125,7 +125,7 @@ fn test_volume_actually_affects_output_level() {
 
     // Play at full volume
     output.set_volume(1.0).unwrap();
-    let buffer_full = AudioBuffer::new(samples_full.clone(), format.clone());
+    let buffer_full = AudioBuffer::new(samples_full.clone(), format);
     assert!(output.play(&buffer_full).is_ok());
     std::thread::sleep(std::time::Duration::from_millis(50));
     output.stop().unwrap();

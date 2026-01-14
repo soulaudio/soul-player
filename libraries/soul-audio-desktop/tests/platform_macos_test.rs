@@ -1,4 +1,4 @@
-//! macOS-specific audio tests for CoreAudio
+//! macOS-specific audio tests for `CoreAudio`
 //!
 //! These tests cover macOS-specific audio functionality:
 //! - Audio unit configuration
@@ -26,9 +26,9 @@
 //! - For aggregate device tests, you need Audio MIDI Setup configured
 //! - Some tests may require adjusting System Preferences > Sound
 //!
-//! ## CoreAudio Architecture Notes
+//! ## `CoreAudio` Architecture Notes
 //!
-//! CoreAudio on macOS operates differently from WASAPI on Windows:
+//! `CoreAudio` on macOS operates differently from WASAPI on Windows:
 //! - All audio goes through the Core Audio HAL (Hardware Abstraction Layer)
 //! - "Exclusive mode" is achieved via kAudioDevicePropertyHogMode
 //! - Sample rate changes affect the entire system (not per-stream)

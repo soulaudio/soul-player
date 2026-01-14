@@ -309,7 +309,7 @@ mod supported_bit_depth {
     #[test]
     fn test_clone_and_copy() {
         let depth = SupportedBitDepth::Int24;
-        let cloned = depth.clone();
+        let cloned = depth;
         let copied = depth;
 
         assert_eq!(depth, cloned);
@@ -1001,7 +1001,7 @@ mod backend_tests {
     #[test]
     fn test_backend_clone() {
         let backend = AudioBackend::Default;
-        let cloned = backend.clone();
+        let cloned = backend;
         assert_eq!(backend, cloned);
     }
 

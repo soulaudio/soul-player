@@ -57,45 +57,45 @@ impl KWeightingFilter {
         // These coefficients are from ITU-R BS.1770-4 Table 1
         let (hs_b0, hs_b1, hs_b2, hs_a1, hs_a2) = if sample_rate == 48000 {
             (
-                1.53512485958697,
-                -2.69169618940638,
-                1.19839281085285,
-                -1.69065929318241,
-                0.73248077421585,
+                1.535_124_9,
+                -2.691_696_2,
+                1.198_392_9,
+                -1.690_659_3,
+                0.732_480_76,
             )
         } else if sample_rate == 44100 {
             // Coefficients for 44.1kHz (approximated)
             (
-                1.53084738912058,
-                -2.65097063887073,
-                1.16907542031339,
-                -1.66365511894011,
-                0.71265695684315,
+                1.530_847_4,
+                -2.650_970_7,
+                1.169_075_4,
+                -1.663_655_2,
+                0.712_657,
             )
         } else {
             // Fallback to 48kHz coefficients
             (
-                1.53512485958697,
-                -2.69169618940638,
-                1.19839281085285,
-                -1.69065929318241,
-                0.73248077421585,
+                1.535_124_9,
+                -2.691_696_2,
+                1.198_392_9,
+                -1.690_659_3,
+                0.732_480_76,
             )
         };
 
         // High-pass filter (stage 2) - removes DC and very low frequencies
         let (hp_b0, hp_b1, hp_b2, hp_a1, hp_a2) = if sample_rate == 48000 {
-            (1.0, -2.0, 1.0, -1.99004745483398, 0.99007225036621)
+            (1.0, -2.0, 1.0, -1.990_047_5, 0.990_072_25)
         } else if sample_rate == 44100 {
             (
-                0.99980789816053,
-                -1.99961579632107,
-                0.99980789816053,
-                -1.99961369710251,
-                0.99961789553962,
+                0.999_807_9,
+                -1.999_615_8,
+                0.999_807_9,
+                -1.999_613_6,
+                0.999_617_9,
             )
         } else {
-            (1.0, -2.0, 1.0, -1.99004745483398, 0.99007225036621)
+            (1.0, -2.0, 1.0, -1.990_047_5, 0.990_072_25)
         };
 
         Self {
@@ -1373,7 +1373,7 @@ fn test_full_dynamics_chain_measurements() {
     let output_dr = calculate_dr_crest_factor(&extract_mono(&output, 0));
 
     println!("Full Dynamics Chain Test:");
-    println!("");
+    println!();
     println!("  Metric          | Input    | Output   | Change");
     println!("  ----------------|----------|----------|--------");
     println!(
@@ -1454,7 +1454,7 @@ fn test_ebu_r128_broadcast_compliance() {
     let adjustment_db = target_lufs - current_lufs;
     let adjustment_linear = db_to_linear(adjustment_db);
 
-    for sample in signal.iter_mut() {
+    for sample in &mut signal {
         *sample *= adjustment_linear;
     }
 
@@ -1465,12 +1465,12 @@ fn test_ebu_r128_broadcast_compliance() {
 
     println!("EBU R 128 Broadcast Compliance Test:");
     println!("  Target: -23 LUFS (+/- 1 LU)");
-    println!("");
+    println!();
     println!("  Integrated Loudness: {:.2} LUFS", final_lufs);
     println!("  True Peak: {:.2} dBTP", linear_to_db(true_peak));
     println!("  LRA: {:.1} LU", lra);
     println!("  Sample Peak: {:.2} dBFS", linear_to_db(peak));
-    println!("");
+    println!();
 
     let passes = (final_lufs + 23.0).abs() < 1.0;
     let true_peak_ok = linear_to_db(true_peak) < -1.0;

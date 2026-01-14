@@ -234,7 +234,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_default_backend_available() {
         let backend = AudioBackend::Default;
         assert!(
@@ -258,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_list_available_backends() {
         let backends = list_available_backends();
         assert!(
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_get_backend_info() {
         let info = get_backend_info();
         assert!(!info.is_empty(), "Should return backend info");
@@ -293,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_to_cpal_host() {
         let backend = AudioBackend::Default;
         let host = backend.to_cpal_host();

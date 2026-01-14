@@ -13,7 +13,7 @@ use std::thread;
 use std::time::Duration;
 use testcontainers::{core::WaitFor, runners::AsyncRunner, Image};
 
-/// Custom Docker image for audio testing with PulseAudio virtual devices
+/// Custom Docker image for audio testing with `PulseAudio` virtual devices
 #[derive(Debug, Clone)]
 struct AudioTestImage;
 
@@ -92,7 +92,7 @@ fn exec_in_container(container_id: &str, command: &[&str]) -> Result<String, Str
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-/// Test device enumeration in a Linux container with PulseAudio
+/// Test device enumeration in a Linux container with `PulseAudio`
 #[tokio::test]
 async fn test_device_enumeration_in_container() {
     if !is_docker_available() {
@@ -238,7 +238,7 @@ fn test_device_switching_stress_host() {
 
             for i in 0..5 {
                 match playback.switch_device(AudioBackend::Default, None) {
-                    Ok(_) => {
+                    Ok(()) => {
                         success_count += 1;
                         let current = playback.get_current_device();
                         eprintln!("  Switch {}: {} ✓", i + 1, current);
@@ -271,7 +271,7 @@ fn test_commands_after_device_switch() {
             eprintln!("Testing playback commands after device switch");
 
             // Switch device
-            if let Ok(_) = playback.switch_device(AudioBackend::Default, None) {
+            if let Ok(()) = playback.switch_device(AudioBackend::Default, None) {
                 let device = playback.get_current_device();
                 eprintln!("Switched to device: {}", device);
 
@@ -321,7 +321,7 @@ fn test_multi_backend_switching() {
                 eprintln!("Switching to backend {}: {:?}", i + 1, backend);
 
                 match playback.switch_device(*backend, None) {
-                    Ok(_) => {
+                    Ok(()) => {
                         let current_backend = playback.get_current_backend();
                         let current_device = playback.get_current_device();
 

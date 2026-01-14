@@ -1,7 +1,7 @@
 //! Exclusive mode and bit-perfect output tests
 //!
-//! Comprehensive tests for ExclusiveConfig, AudioData conversions,
-//! LatencyInfo calculations, and ExclusiveOutput functionality.
+//! Comprehensive tests for `ExclusiveConfig`, `AudioData` conversions,
+//! `LatencyInfo` calculations, and `ExclusiveOutput` functionality.
 //!
 //! Uses proptest for property-based testing of audio conversions.
 //! Integration tests gracefully handle CI environments without audio devices.
@@ -321,7 +321,7 @@ mod audio_data_tests {
             AudioData::Int16(v) => {
                 assert_eq!(v.len(), 3);
                 // All values <= -1.0 should be clamped to -1.0 before conversion
-                let min_expected = (-1.0f32 * i16::MAX as f32) as i16;
+                let min_expected = -(i16::MAX as f32) as i16;
                 assert_eq!(v[0], min_expected, "-1.0 should produce -i16::MAX");
                 assert_eq!(v[1], min_expected, "-1.5 should be clamped to -1.0");
                 assert_eq!(v[2], min_expected, "-2.0 should be clamped to -1.0");
@@ -374,7 +374,7 @@ mod audio_data_tests {
                 assert_eq!(v.len(), 2);
                 let scale = 8388607.0f32;
                 let max_expected = scale as i32;
-                let min_expected = (-1.0f32 * scale) as i32;
+                let min_expected = -scale as i32;
                 assert_eq!(
                     v[0], max_expected,
                     "1.5 should be clamped to 1.0 -> max i24"
@@ -429,7 +429,7 @@ mod audio_data_tests {
             AudioData::Int32(v) => {
                 assert_eq!(v.len(), 2);
                 let max_expected = i32::MAX as f32 as i32;
-                let min_expected = (-1.0f32 * i32::MAX as f32) as i32;
+                let min_expected = -(i32::MAX as f32) as i32;
                 assert_eq!(
                     v[0], max_expected,
                     "2.0 should be clamped to 1.0 -> max i32"
@@ -447,7 +447,7 @@ mod audio_data_tests {
 
     #[test]
     fn test_f32_passthrough() {
-        let samples = vec![0.0f32, 0.5, -0.5, 1.0, -1.0, 0.123456789];
+        let samples = vec![0.0f32, 0.5, -0.5, 1.0, -1.0, 0.123_456_79];
         let data = AudioData::from_f32(&samples, SupportedBitDepth::Float32);
 
         match data {
@@ -965,8 +965,8 @@ mod property_tests {
 
             match data16 {
                 AudioData::Int16(v) => {
-                    prop_assert!(v[0] >= i16::MIN && v[0] <= i16::MAX,
-                        "i16 value out of bounds: {}", v[0]);
+                    // Type system guarantees i16 is in valid range
+                    prop_assert!(!v.is_empty(), "Buffer should not be empty");
                 }
                 _ => prop_assert!(false, "Expected Int16"),
             }
@@ -983,9 +983,8 @@ mod property_tests {
 
             match data32 {
                 AudioData::Int32(v) => {
-                    // i32 can't overflow from f32 cast, but should be clamped to reasonable range
-                    prop_assert!(v[0] >= i32::MIN && v[0] <= i32::MAX,
-                        "i32 value out of bounds: {}", v[0]);
+                    // Type system guarantees i32 is in valid range
+                    prop_assert!(!v.is_empty(), "Buffer should not be empty");
                 }
                 _ => prop_assert!(false, "Expected Int32"),
             }
@@ -1079,12 +1078,16 @@ mod property_tests {
             let latency1 = buffer1 as f32 / sample_rate as f32 * 1000.0;
             let latency2 = buffer2 as f32 / sample_rate as f32 * 1000.0;
 
-            if buffer1 > buffer2 {
-                prop_assert!(latency1 > latency2, "Larger buffer should have higher latency");
-            } else if buffer1 < buffer2 {
-                prop_assert!(latency1 < latency2, "Smaller buffer should have lower latency");
-            } else {
-                prop_assert_eq!(latency1, latency2, "Same buffer should have same latency");
+            match buffer1.cmp(&buffer2) {
+                std::cmp::Ordering::Greater => {
+                    prop_assert!(latency1 > latency2, "Larger buffer should have higher latency");
+                }
+                std::cmp::Ordering::Less => {
+                    prop_assert!(latency1 < latency2, "Smaller buffer should have lower latency");
+                }
+                std::cmp::Ordering::Equal => {
+                    prop_assert_eq!(latency1, latency2, "Same buffer should have same latency");
+                }
             }
         }
 

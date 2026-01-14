@@ -11,21 +11,18 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use soul_metadata::{LoftyMetadataReader, LibraryScanner};
-//! use soul_core::MetadataReader;
+//! use soul_metadata::LoftyMetadataReader;
+//! use soul_core::traits::MetadataReader;
 //! use std::path::Path;
-//! use std::sync::Arc;
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Read metadata from a file
 //! let reader = LoftyMetadataReader::new();
 //! let metadata = reader.read(Path::new("/music/song.mp3"))?;
-//!
-//! // Scan a library (requires database)
-//! // let scanner = LibraryScanner::new(db);
-//! // let stats = scanner.scan(Path::new("/music"), None).await?;
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! Library scanning is currently disabled pending architectural updates.
 //!
 //! # Future: soul-import
 //!

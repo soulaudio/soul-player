@@ -453,7 +453,7 @@ fn test_i32_f32_i32_roundtrip() {
         let roundtrip = i32_to_f32_to_i32(value);
         // Large values will have quantization error
         let expected_max_error = if value.abs() > (1 << 23) {
-            (value.abs() >> 23) as i32 // About 8 bits of error at full scale
+            value.abs() >> 23 // About 8 bits of error at full scale
         } else {
             0
         };
@@ -472,7 +472,7 @@ fn test_i32_f32_i32_roundtrip() {
 fn test_f32_i16_dithering_quality() {
     // Generate a sine wave and convert to i16 with dithering simulation
     let num_samples = 44100;
-    let mut signal: Vec<f32> = (0..num_samples)
+    let signal: Vec<f32> = (0..num_samples)
         .map(|i| {
             let t = i as f32 / 44100.0;
             (2.0 * PI * 1000.0 * t).sin() * 0.5
@@ -649,8 +649,8 @@ fn test_tpdf_dither_amplitude() {
     let num_samples = 100000;
     let dither = generate_tpdf_dither(num_samples);
 
-    let min_val = dither.iter().cloned().fold(f32::INFINITY, f32::min);
-    let max_val = dither.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let min_val = dither.iter().copied().fold(f32::INFINITY, f32::min);
+    let max_val = dither.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     let rms = calculate_rms(&dither);
 
     println!("TPDF Dither Amplitude:");
@@ -751,7 +751,7 @@ fn test_hard_clipping_at_1_0() {
     // Verify clipping
     for (i, &sample) in signal.iter().enumerate() {
         assert!(
-            sample >= -1.0 && sample <= 1.0,
+            (-1.0..=1.0).contains(&sample),
             "Sample {} exceeds limits: {}",
             i,
             sample
@@ -966,7 +966,7 @@ fn test_dc_removal_effectiveness() {
     let mut prev_input = signal[0];
     let mut prev_output = 0.0;
 
-    for sample in signal.iter_mut() {
+    for sample in &mut signal {
         let output = *sample - prev_input + alpha * prev_output;
         prev_input = *sample;
         prev_output = output;
@@ -1007,7 +1007,7 @@ fn test_no_dc_accumulation() {
     ]);
     chain.add_effect(Box::new(eq));
 
-    let mut compressor = Compressor::with_settings(CompressorSettings::gentle());
+    let compressor = Compressor::with_settings(CompressorSettings::gentle());
     chain.add_effect(Box::new(compressor));
 
     // Process in chunks to simulate real-time processing
@@ -1294,7 +1294,7 @@ fn test_noise_floor_measurement() {
 
     // Verify we can accurately measure low levels
     let expected_peak_db = -80.0;
-    let expected_rms_db = -80.0 - 3.0; // RMS of sine is -3dB from peak
+    let _expected_rms_db = -80.0 - 3.0; // RMS of sine is -3dB from peak
 
     assert!(
         (peak_db - expected_peak_db).abs() < 1.0,

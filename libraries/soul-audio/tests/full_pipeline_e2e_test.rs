@@ -1604,7 +1604,7 @@ fn test_level_matching_for_ab_comparison() {
     // Note: At the shelf cutoff frequency (80Hz), we get -3dB from full boost,
     // so the expected gain is ~3dB, not 6dB. Full boost occurs below cutoff.
     assert!(
-        level_diff_db >= 2.5 && level_diff_db < 9.0,
+        (2.5..9.0).contains(&level_diff_db),
         "Level should increase (at cutoff: ~3dB, below cutoff: ~6dB), got {:.1}dB",
         level_diff_db
     );
@@ -1913,8 +1913,8 @@ fn test_audiophile_mastering_chain() {
 
     // All frequencies should be present (within 10dB of each other)
     let levels: Vec<f32> = response.iter().map(|(_, db)| *db).collect();
-    let level_range = levels.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
-        - levels.iter().cloned().fold(f32::INFINITY, f32::min);
+    let level_range = levels.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+        - levels.iter().copied().fold(f32::INFINITY, f32::min);
 
     assert!(
         level_range < 10.0,

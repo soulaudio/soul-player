@@ -375,8 +375,8 @@ fn measure_passband_ripple(
         .fold(0.0f32, f32::max);
 
     // Ripple is peak-to-peak variation
-    let max_gain = gains.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let min_gain = gains.iter().cloned().fold(f32::INFINITY, f32::min);
+    let max_gain = gains.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let min_gain = gains.iter().copied().fold(f32::INFINITY, f32::min);
     let ripple = max_gain - min_gain;
 
     (ripple.max(max_deviation * 2.0), gains_db)
@@ -390,7 +390,7 @@ fn measure_passband_ripple(
 fn measure_stopband_attenuation(
     resampler: &mut Resampler,
     input_rate: u32,
-    output_rate: u32,
+    _output_rate: u32,
     test_frequency: f32,
 ) -> f32 {
     resampler.reset();
@@ -467,7 +467,7 @@ fn measure_aliasing_rejection(
 /// Per Infinite Wave: linear-phase filters exhibit pre-ringing (energy before
 /// the impulse peak). This is measured as the ratio of pre-peak energy to
 /// peak energy.
-fn measure_pre_ringing(resampler: &mut Resampler, input_rate: u32, output_rate: u32) -> (f32, f32) {
+fn measure_pre_ringing(resampler: &mut Resampler, input_rate: u32, _output_rate: u32) -> (f32, f32) {
     resampler.reset();
 
     let input_mono = generate_impulse(input_rate, 0.2);

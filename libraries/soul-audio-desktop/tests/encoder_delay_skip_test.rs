@@ -17,7 +17,7 @@
 //! Playing these directly causes audible "pops" at track start.
 //!
 //! ## Solution
-//! Skip the first ENCODER_DELAY_FRAMES (1200 frames) of decoded audio
+//! Skip the first `ENCODER_DELAY_FRAMES` (1200 frames) of decoded audio
 //! to ensure clean playback startup.
 
 use soul_audio_desktop::LocalAudioSource;
@@ -230,7 +230,7 @@ fn test_position_accurate_with_encoder_delay_skip() {
     // Read 1 second worth of samples
     let one_second_samples = 44100 * 2; // stereo
     let mut buffer = vec![0.0f32; one_second_samples];
-    let samples_read = source.read_samples(&mut buffer).unwrap();
+    let _samples_read = source.read_samples(&mut buffer).unwrap();
 
     // Position should advance by ~1 second
     let position = source.position();
@@ -483,11 +483,9 @@ fn test_multiple_sources_all_skip_encoder_delay() {
     }
 
     // Create multiple sources
-    let mut sources = vec![
-        LocalAudioSource::new(&mp3_path, 44100).expect("MP3 failed"),
+    let mut sources = [LocalAudioSource::new(&mp3_path, 44100).expect("MP3 failed"),
         LocalAudioSource::new(&flac_path, 44100).expect("FLAC failed"),
-        LocalAudioSource::new(&mp3_path, 48000).expect("MP3 resampled failed"),
-    ];
+        LocalAudioSource::new(&mp3_path, 48000).expect("MP3 resampled failed")];
 
     // All should have some audio (not complete silence)
     for (i, source) in sources.iter_mut().enumerate() {

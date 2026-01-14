@@ -173,23 +173,20 @@ mod mid_stream_corruption {
         // 2. Return partial data up to the corruption (acceptable)
         // 3. Skip the corrupted section and continue (ideal)
         // It should NOT panic
-        match result {
-            Ok(buffer) => {
-                // If we got data, verify it's valid
-                let valid_samples: Vec<f32> = buffer
-                    .samples
-                    .iter()
-                    .filter(|s| s.is_finite())
-                    .cloned()
-                    .collect();
-                assert!(
-                    !valid_samples.is_empty(),
-                    "Should have some valid samples before corruption"
-                );
-            }
-            Err(_) => {
-                // Error is acceptable for corrupted file
-            }
+        if let Ok(buffer) = result {
+            // If we got data, verify it's valid
+            let valid_samples: Vec<f32> = buffer
+                .samples
+                .iter()
+                .filter(|s| s.is_finite())
+                .copied()
+                .collect();
+            assert!(
+                !valid_samples.is_empty(),
+                "Should have some valid samples before corruption"
+            );
+        } else {
+            // Error is acceptable for corrupted file
         }
     }
 
@@ -285,22 +282,19 @@ mod truncated_files {
         let mut decoder = SymphoniaDecoder::new();
         let result = decoder.decode(&path);
 
-        match result {
-            Ok(buffer) => {
-                // Should have partial data
-                assert!(
-                    !buffer.samples.is_empty(),
-                    "Should have some samples from truncated file"
-                );
-                // Verify what we got is valid
-                assert!(
-                    all_finite(&buffer.samples),
-                    "Partial decode should produce valid samples"
-                );
-            }
-            Err(_) => {
-                // Error is also acceptable
-            }
+        if let Ok(buffer) = result {
+            // Should have partial data
+            assert!(
+                !buffer.samples.is_empty(),
+                "Should have some samples from truncated file"
+            );
+            // Verify what we got is valid
+            assert!(
+                all_finite(&buffer.samples),
+                "Partial decode should produce valid samples"
+            );
+        } else {
+            // Error is also acceptable
         }
     }
 
@@ -315,20 +309,17 @@ mod truncated_files {
         let mut decoder = SymphoniaDecoder::new();
         let result = decoder.decode(&path);
 
-        match result {
-            Ok(buffer) => {
-                // Should have exactly 256 stereo samples (1024 bytes / 4 bytes per stereo sample)
-                let expected_samples = 1024 / 4 * 2; // stereo interleaved
-                assert!(
-                    buffer.samples.len() <= expected_samples + 100, // Allow some tolerance
-                    "Got {} samples, expected around {}",
-                    buffer.samples.len(),
-                    expected_samples
-                );
-            }
-            Err(_) => {
-                // Error is acceptable
-            }
+        if let Ok(buffer) = result {
+            // Should have exactly 256 stereo samples (1024 bytes / 4 bytes per stereo sample)
+            let expected_samples = 1024 / 4 * 2; // stereo interleaved
+            assert!(
+                buffer.samples.len() <= expected_samples + 100, // Allow some tolerance
+                "Got {} samples, expected around {}",
+                buffer.samples.len(),
+                expected_samples
+            );
+        } else {
+            // Error is acceptable
         }
     }
 
@@ -359,16 +350,13 @@ mod truncated_files {
         let result = decoder.decode(&path);
 
         // Should either error or return empty buffer
-        match result {
-            Ok(buffer) => {
-                assert!(
-                    buffer.samples.is_empty() || buffer.samples.len() < 10,
-                    "Should have minimal or no data"
-                );
-            }
-            Err(_) => {
-                // Error is acceptable
-            }
+        if let Ok(buffer) = result {
+            assert!(
+                buffer.samples.is_empty() || buffer.samples.len() < 10,
+                "Should have minimal or no data"
+            );
+        } else {
+            // Error is acceptable
         }
     }
 
@@ -393,17 +381,14 @@ mod truncated_files {
         let result = decoder.decode(&path);
 
         // Should handle the mismatch gracefully
-        match result {
-            Ok(buffer) => {
-                // Should have approximately half the expected samples
-                assert!(
-                    all_finite(&buffer.samples),
-                    "Samples should be valid even with size mismatch"
-                );
-            }
-            Err(_) => {
-                // Error is acceptable
-            }
+        if let Ok(buffer) = result {
+            // Should have approximately half the expected samples
+            assert!(
+                all_finite(&buffer.samples),
+                "Samples should be valid even with size mismatch"
+            );
+        } else {
+            // Error is acceptable
         }
     }
 }
@@ -816,8 +801,8 @@ mod nan_inf_recovery {
         let sample_before_nan = buffer[99];
 
         // Create a burst of NaN
-        for i in 100..110 {
-            buffer[i] = f32::NAN;
+        for sample in buffer.iter_mut().skip(100).take(10) {
+            *sample = f32::NAN;
         }
 
         let replaced = AudioSanitizer::sanitize_with_fade(&mut buffer);
@@ -1065,7 +1050,7 @@ mod effect_invalid_output {
         }
 
         // Buffer now has NaN, sanitize it
-        for sample in buffer.iter_mut() {
+        for sample in &mut buffer {
             if !sample.is_finite() {
                 *sample = 0.0;
             }
@@ -1422,7 +1407,7 @@ mod stress_recovery {
             let had_nan = !all_finite(&buffer);
             if had_nan {
                 nan_detected += 1;
-                for sample in buffer.iter_mut() {
+                for sample in &mut buffer {
                     if !sample.is_finite() {
                         *sample = 0.0;
                     }
@@ -1503,7 +1488,7 @@ mod stress_recovery {
             chain.process(&mut buffer, SAMPLE_RATE);
 
             // Sanitize
-            for sample in buffer.iter_mut() {
+            for sample in &mut buffer {
                 if !sample.is_finite() {
                     *sample = 0.0;
                 }

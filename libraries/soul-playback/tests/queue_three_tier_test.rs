@@ -309,7 +309,7 @@ fn test_repeat_all_only_affects_source_queue() {
     manager.next().ok();
 
     // Should restart from source queue
-    let queue = manager.get_queue();
+    let _queue = manager.get_queue();
     // Note: Exact behavior depends on implementation
     // With Spotify-style behavior, manual queue tracks should NOT repeat
 }

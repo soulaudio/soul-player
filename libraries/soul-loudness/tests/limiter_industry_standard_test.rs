@@ -679,7 +679,7 @@ fn test_lookahead_latency_verification() {
 
         let actual_ms = limiter.latency_ms();
         let actual_samples = limiter.latency_samples();
-        let expected_samples = (sample_rate as f64 * expected_ms as f64 / 1000.0).ceil() as usize;
+        let expected_samples = (sample_rate as f64 * expected_ms / 1000.0).ceil() as usize;
 
         println!(
             "{:?}:\n  \
@@ -1329,7 +1329,7 @@ fn test_industry_standard_compliance_summary() {
     println!("INDUSTRY STANDARD LIMITER COMPLIANCE SUMMARY");
     println!("========================================================");
     println!("Standards: ITU-R BS.1770-5, EBU R128, AES");
-    println!("");
+    println!();
 
     let sample_rate = 48000_u32;
     let channels = 2;
@@ -1504,7 +1504,7 @@ fn test_industry_standard_compliance_summary() {
         }
     }
 
-    println!("");
+    println!();
     println!("========================================================");
     println!(
         "RESULTS: {} passed, {} failed, {} warnings",

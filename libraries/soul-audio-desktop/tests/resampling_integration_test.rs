@@ -8,10 +8,8 @@
 //! 5. Common sample rate conversions work (44.1→96, 48→96, etc.)
 
 use soul_audio_desktop::sources::local::LocalAudioSource;
-use soul_audio_desktop::DesktopPlayback;
-use soul_playback::{AudioSource, PlaybackConfig, QueueTrack};
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use soul_playback::AudioSource;
+use std::path::Path;
 use tempfile::TempDir;
 
 /// Helper to create a test WAV file
@@ -780,7 +778,7 @@ fn test_no_underrun_after_seek_to_start() {
 
 /// Manual test guide
 #[test]
-#[ignore] // This is a documentation test, not meant to run
+#[ignore = "This is a documentation test, not meant to run"]
 fn manual_test_guide() {
     eprintln!("\n=== MANUAL TESTING GUIDE ===\n");
     eprintln!("1. Sample Rate Mismatch Detection:");
@@ -814,5 +812,5 @@ fn manual_test_guide() {
     eprintln!("    - Target sample rate: 96000 Hz");
     eprintln!("    - Needs resampling: true");
     eprintln!("    - Speed ratio: 0.4594x");
-    eprintln!("");
+    eprintln!();
 }

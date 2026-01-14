@@ -1508,7 +1508,7 @@ async fn test_fingerprint_queue_get_batch() {
     // Create and add items with different priorities
     for i in 0..5 {
         let track_id = create_track_for_fingerprint(&pool, &format!("Track {}", i)).await;
-        soul_storage::fingerprint_queue::enqueue(&pool, &track_id, i as i32)
+        soul_storage::fingerprint_queue::enqueue(&pool, &track_id, i)
             .await
             .unwrap();
     }

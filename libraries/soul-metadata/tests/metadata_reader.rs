@@ -89,10 +89,10 @@ fn read_directory_instead_of_file_returns_error() {
 
 #[test]
 fn write_metadata_not_yet_implemented() {
-    use soul_core::TrackMetadata;
+    use soul_core::types::TrackMetadata;
 
     let reader = LoftyMetadataReader::new();
-    let metadata = TrackMetadata::new();
+    let metadata = TrackMetadata::default();
     let result = reader.write(Path::new("/tmp/test.mp3"), &metadata);
 
     // Writing is not implemented in MVP

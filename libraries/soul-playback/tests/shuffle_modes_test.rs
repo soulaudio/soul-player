@@ -8,7 +8,6 @@
 //! Also tests shuffle mode cycling: Off → Random → Smart → Off
 
 use soul_playback::{PlaybackManager, QueueTrack, ShuffleMode, TrackSource};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -204,7 +203,7 @@ fn test_shuffle_random_contains_all_tracks() {
     let mut expected_ids = vec!["1", "2", "3", "4", "5"];
     let mut actual_ids = shuffled_ids.clone();
 
-    expected_ids.sort();
+    expected_ids.sort_unstable();
     actual_ids.sort();
 
     assert_eq!(
@@ -231,8 +230,8 @@ fn test_shuffle_random_is_deterministic_per_seed() {
     manager2.load_playlist(tracks, 0);
     manager2.set_shuffle(ShuffleMode::Random);
 
-    let order1 = get_queue_ids(&manager1);
-    let order2 = get_queue_ids(&manager2);
+    let _order1 = get_queue_ids(&manager1);
+    let _order2 = get_queue_ids(&manager2);
 
     // Note: If using system random, orders will differ
     // If using seeded random, orders should match
@@ -379,7 +378,7 @@ fn test_shuffle_smart_contains_all_tracks() {
     let mut expected_ids = vec!["1", "2", "3", "4", "5"];
     let mut actual_ids = shuffled_ids.clone();
 
-    expected_ids.sort();
+    expected_ids.sort_unstable();
     actual_ids.sort();
 
     assert_eq!(
@@ -408,7 +407,7 @@ fn test_shuffle_smart_with_single_artist() {
     assert_eq!(queue.len(), 4, "Should contain all tracks");
 
     // All tracks should be from Artist A
-    for track in queue.iter() {
+    for track in &queue {
         assert_eq!(track.artist, "Artist A");
     }
 }
@@ -435,7 +434,7 @@ fn test_shuffle_smart_vs_random_different_distribution() {
     manager_random.set_shuffle(ShuffleMode::Random);
 
     let artists_smart = get_queue_artists(&manager_smart);
-    let artists_random = get_queue_artists(&manager_random);
+    let _artists_random = get_queue_artists(&manager_random);
 
     // Smart shuffle should have no consecutive same artist
     for i in 0..artists_smart.len() - 1 {

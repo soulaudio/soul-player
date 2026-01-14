@@ -530,7 +530,7 @@ fn test_gapless_playback_continuous_sweep() {
     }
 
     // Concatenate processed tracks
-    let concatenated: Vec<f32> = processed_tracks.iter().flatten().cloned().collect();
+    let concatenated: Vec<f32> = processed_tracks.iter().flatten().copied().collect();
 
     // Check for clicks/pops at boundaries
     let mut boundary_issues = 0;
@@ -677,8 +677,8 @@ fn test_equal_power_crossfade_level_consistency() {
     }
 
     // Find level variation
-    let max_level = levels.iter().cloned().fold(0.0f32, f32::max);
-    let min_level = levels.iter().cloned().fold(f32::INFINITY, f32::min);
+    let max_level = levels.iter().copied().fold(0.0f32, f32::max);
+    let min_level = levels.iter().copied().fold(f32::INFINITY, f32::min);
     let level_variation_db = linear_to_db(max_level / min_level.max(0.0001));
 
     println!("Equal-Power Crossfade Results:");
@@ -1472,7 +1472,7 @@ fn test_comprehensive_audio_quality_report() {
     let report = AudioQualityReport::analyze(&output, 1000.0, 44100);
 
     println!("{}", report.format());
-    println!("");
+    println!();
     println!("Quality Assessment:");
     println!(
         "  Meets professional standards (lenient): {}",
@@ -1487,7 +1487,7 @@ fn test_comprehensive_audio_quality_report() {
     let imd_smpte = calculate_imd_smpte(&mono, 44100);
     let channel_sep = calculate_channel_separation(&output, 0);
 
-    println!("");
+    println!();
     println!("Additional Metrics:");
     println!("  IMD (SMPTE): {:.4}%", imd_smpte);
     println!("  Channel Separation: {:.1} dB", channel_sep);

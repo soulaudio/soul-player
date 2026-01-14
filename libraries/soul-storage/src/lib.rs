@@ -17,14 +17,16 @@
 //! ```rust,no_run
 //! use soul_storage::{LocalStorageContext, create_pool, run_migrations};
 //! use soul_core::storage::StorageContext;
+//! use soul_core::types::UserId;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create database connection
 //! let pool = create_pool("sqlite://soul.db").await?;
 //! run_migrations(&pool).await?;
 //!
-//! // Create storage context for user 1 (default local user)
-//! let storage = LocalStorageContext::new(pool, 1);
+//! // Create storage context for default local user
+//! let user_id = UserId::new("1");
+//! let storage = LocalStorageContext::new(pool, user_id);
 //!
 //! // Get all tracks
 //! let tracks = storage.get_all_tracks().await?;

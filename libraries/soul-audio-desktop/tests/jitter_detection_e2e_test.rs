@@ -218,7 +218,7 @@ fn analyze_for_jitter(samples: &[f32], sample_rate: u32) -> JitterAnalysis {
     let post_fade_samples = if samples.len() > fade_skip_samples {
         &samples[fade_skip_samples..]
     } else {
-        &samples[..]
+        samples
     };
 
     for &sample in post_fade_samples {
@@ -659,7 +659,7 @@ fn test_jitter_after_rapid_seeks() {
 /// Test that the buffer is properly filled before playback starts
 ///
 /// This directly tests the prebuffering fix - the source should have
-/// significant samples ready before process_audio is first called.
+/// significant samples ready before `process_audio` is first called.
 #[test]
 fn test_prebuffer_is_ready_before_playback() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -864,7 +864,7 @@ fn detect_discontinuity_differences(reference: &[f32], test: &[f32]) -> (usize, 
         let ref_diff = (reference[i] - reference[i - 1]).abs();
         let test_diff = (test[i] - test[i - 1]).abs();
 
-        let derivative_error = (ref_diff - test_diff).abs();
+        let _derivative_error = (ref_diff - test_diff).abs();
 
         // If test has a much larger jump than reference, it's a potential discontinuity
         if test_diff > 0.2 && ref_diff < 0.1 {
@@ -1155,7 +1155,7 @@ fn generate_extreme_bass_transient(path: &PathBuf) -> std::io::Result<()> {
 
 /// Test with actual user-provided file path (if available)
 ///
-/// Run with: JITTER_TEST_FILE="D:\music\path\to\file.flac" cargo test test_with_user_file
+/// Run with: `JITTER_TEST_FILE="D:\music\path\to\file.flac`" cargo test `test_with_user_file`
 #[test]
 fn test_with_user_file() {
     let test_file_path = std::env::var("JITTER_TEST_FILE").ok();

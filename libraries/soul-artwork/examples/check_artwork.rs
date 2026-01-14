@@ -40,14 +40,14 @@ fn main() {
                         }
                     }
 
-                    if !found_artwork {
-                        println!("✗ No artwork found in file");
-                    } else {
+                    if found_artwork {
                         println!("\n✓ Artwork is embedded in the file!");
                         println!("If Windows Media Player doesn't show it, try:");
                         println!("  1. Close Windows Media Player completely");
                         println!("  2. Delete: %LOCALAPPDATA%\\Microsoft\\Media Player\\*.wmdb");
                         println!("  3. Restart Windows Media Player and re-scan library");
+                    } else {
+                        println!("✗ No artwork found in file");
                     }
                 }
                 Err(e) => eprintln!("Error reading file: {}", e),

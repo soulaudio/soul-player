@@ -5,7 +5,7 @@
 //! This can cause sizzle/artifacts that don't show up in single-change tests.
 
 use soul_audio::effects::{
-    AudioEffect, Crossfeed, CrossfeedPreset, EqBand, GraphicEq, Limiter, ParametricEq,
+    AudioEffect, Crossfeed, EqBand, GraphicEq, Limiter, ParametricEq,
     StereoEnhancer,
 };
 
@@ -57,7 +57,7 @@ fn detect_sizzle(buffer: &[f32], fundamental_freq: f32, sample_rate: u32) -> f32
         count += 1;
     }
 
-    let avg_derivative = if count > 0 {
+    let _avg_derivative = if count > 0 {
         total_derivative / count as f32
     } else {
         0.0
@@ -95,7 +95,7 @@ fn calculate_distortion(buffer: &[f32], fundamental_freq: f32, sample_rate: u32)
 
     // Generate ideal sine wave at same frequency and phase-match
     let mut ideal = Vec::with_capacity(left.len());
-    let period_samples = sample_rate as f32 / fundamental_freq;
+    let _period_samples = sample_rate as f32 / fundamental_freq;
 
     // Find best phase alignment by checking first zero crossing
     let mut best_phase = 0.0_f32;

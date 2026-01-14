@@ -707,8 +707,8 @@ async fn test_large_json_value() {
     for i in 0..31 {
         bands.push(serde_json::json!({
             "frequency": 20 * (i + 1),  // Integer frequencies: 20, 40, 60, ...
-            "gain": i as i32 - 15,       // Integer gains: -15 to +15
-            "q": 1                        // Integer Q
+            "gain": i - 15,              // Integer gains: -15 to +15
+            "q": 1                       // Integer Q
         }));
     }
 

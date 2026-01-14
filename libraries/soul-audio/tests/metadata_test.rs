@@ -295,7 +295,7 @@ fn create_ogg_page(sequence_number: u32, data: &[u8], is_bos: bool, is_eos: bool
     page.extend_from_slice(&[0u8; 4]);
 
     // Number of segments
-    let num_segments = (data.len() + 254) / 255;
+    let num_segments = data.len().div_ceil(255);
     page.push(num_segments as u8);
 
     // Segment table
@@ -632,15 +632,12 @@ fn test_flac_vorbis_comments_basic() {
 
     // Our test FLAC file may not be valid enough for Symphonia to parse,
     // but the extraction should handle it gracefully
-    match decoder.extract_metadata(&flac_path) {
-        Ok(metadata) => {
-            // If it parses, check we got some metadata
-            assert!(metadata.title.is_some(), "Title should be present");
-        }
-        Err(_) => {
-            // The minimal FLAC file might not be valid enough for Symphonia,
-            // but this verifies the function doesn't panic
-        }
+    if let Ok(metadata) = decoder.extract_metadata(&flac_path) {
+        // If it parses, check we got some metadata
+        assert!(metadata.title.is_some(), "Title should be present");
+    } else {
+        // The minimal FLAC file might not be valid enough for Symphonia,
+        // but this verifies the function doesn't panic
     }
 }
 

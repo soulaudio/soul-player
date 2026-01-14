@@ -282,7 +282,7 @@ async fn test_per_user_isolation() {
 
     // User 1's top tracks should show the shared track
     let user1_top =
-        soul_storage::tracks::get_top_tracks_by_artist(pool, user1.clone(), artist_id.clone(), 10)
+        soul_storage::tracks::get_top_tracks_by_artist(pool, user1.clone(), artist_id, 10)
             .await
             .expect("Failed to get user1 top tracks");
     assert_eq!(user1_top.len(), 1);
@@ -290,7 +290,7 @@ async fn test_per_user_isolation() {
 
     // User 2's top tracks should also show the shared track
     let user2_top =
-        soul_storage::tracks::get_top_tracks_by_artist(pool, user2.clone(), artist_id.clone(), 10)
+        soul_storage::tracks::get_top_tracks_by_artist(pool, user2.clone(), artist_id, 10)
             .await
             .expect("Failed to get user2 top tracks");
     assert_eq!(user2_top.len(), 1);
@@ -315,7 +315,7 @@ async fn test_per_user_isolation() {
     }
 
     let user2_top_updated =
-        soul_storage::tracks::get_top_tracks_by_artist(pool, user2.clone(), artist_id.clone(), 10)
+        soul_storage::tracks::get_top_tracks_by_artist(pool, user2.clone(), artist_id, 10)
             .await
             .expect("Failed to get user2 top tracks");
 
@@ -325,7 +325,7 @@ async fn test_per_user_isolation() {
 
     // For user1, track_id (3 plays) should still be first
     let user1_top_updated =
-        soul_storage::tracks::get_top_tracks_by_artist(pool, user1.clone(), artist_id.clone(), 10)
+        soul_storage::tracks::get_top_tracks_by_artist(pool, user1.clone(), artist_id, 10)
             .await
             .expect("Failed to get user1 top tracks");
     assert_eq!(user1_top_updated[0].id, track_id);

@@ -486,7 +486,7 @@ mod tests {
     use soul_core::SampleRate;
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn create_output() {
         // This test might fail in CI without audio devices
         match CpalOutput::new() {
@@ -501,7 +501,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn volume_control() {
         let Ok(mut output) = CpalOutput::new() else {
             return; // Skip test if no device
@@ -522,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn playback_silence() {
         let Ok(mut output) = CpalOutput::new() else {
             return; // Skip test if no device

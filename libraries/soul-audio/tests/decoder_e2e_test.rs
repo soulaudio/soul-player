@@ -1020,7 +1020,7 @@ fn test_missing_fmt_chunk() {
     // Skip fmt chunk, go directly to data
     file.write_all(b"data").unwrap();
     file.write_all(&50u32.to_le_bytes()).unwrap();
-    file.write_all(&vec![0u8; 50]).unwrap();
+    file.write_all(&[0u8; 50]).unwrap();
     drop(file);
 
     let mut decoder = SymphoniaDecoder::new();
@@ -1076,16 +1076,13 @@ fn test_missing_data_chunk() {
     let result = decoder.decode(&path);
 
     // May succeed with empty buffer or fail - either is acceptable
-    match result {
-        Ok(buffer) => {
-            assert!(
-                buffer.samples.is_empty(),
-                "Missing data should produce empty buffer"
-            );
-        }
-        Err(_) => {
-            // Also acceptable
-        }
+    if let Ok(buffer) = result {
+        assert!(
+            buffer.samples.is_empty(),
+            "Missing data should produce empty buffer"
+        );
+    } else {
+        // Also acceptable
     }
 }
 
@@ -1214,7 +1211,7 @@ fn test_zero_sample_rate() {
     file.write_all(&16u16.to_le_bytes()).unwrap();
     file.write_all(b"data").unwrap();
     file.write_all(&8u32.to_le_bytes()).unwrap();
-    file.write_all(&vec![0u8; 8]).unwrap();
+    file.write_all(&[0u8; 8]).unwrap();
     drop(file);
 
     // Zero sample rate should either return an error or panic in Symphonia
@@ -1296,16 +1293,13 @@ fn test_wav_header_only() {
     let mut decoder = SymphoniaDecoder::new();
     let result = decoder.decode(&path);
 
-    match result {
-        Ok(buffer) => {
-            assert!(
-                buffer.samples.is_empty(),
-                "Header-only should produce empty buffer"
-            );
-        }
-        Err(_) => {
-            // Also acceptable
-        }
+    if let Ok(buffer) = result {
+        assert!(
+            buffer.samples.is_empty(),
+            "Header-only should produce empty buffer"
+        );
+    } else {
+        // Also acceptable
     }
 }
 

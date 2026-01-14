@@ -281,7 +281,7 @@ mod tests {
         for sample in samples {
             let result = dither.dither_to_i16(sample);
             assert!(
-                result >= i16::MIN && result <= i16::MAX,
+                (i16::MIN..=i16::MAX).contains(&result),
                 "Sample {} produced out of range result {}",
                 sample,
                 result
@@ -306,7 +306,7 @@ mod tests {
         for sample in samples {
             let result = dither.dither_to_i32(sample);
             // Just verify no panic, range is always valid for i32
-            assert!(result >= i32::MIN && result <= i32::MAX);
+            assert!((i32::MIN..=i32::MAX).contains(&result));
         }
     }
 

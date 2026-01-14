@@ -101,7 +101,7 @@ proptest! {
         // TODO: Investigate limiter overshoot at high gain values
         let max_allowed = threshold_linear * 1.01;
         let mut worst_overshoot = 0.0f32;
-        for sample in samples.iter() {
+        for sample in &samples {
             let overshoot = (sample.abs() / threshold_linear) - 1.0;
             if overshoot > worst_overshoot {
                 worst_overshoot = overshoot;

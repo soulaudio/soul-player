@@ -560,7 +560,7 @@ fn test_itu_r_bs775_center_mix_coefficient() {
     // We verify this by checking the code constant
 
     const EXPECTED_CENTER_MIX: f32 = 0.707;
-    const ITU_R_3DB_COEFFICIENT: f32 = 0.7071067811865476; // 1/sqrt(2)
+    const ITU_R_3DB_COEFFICIENT: f32 = 0.707_106_77; // 1/sqrt(2)
 
     // Verify our constant matches ITU-R within reasonable tolerance
     assert!(
@@ -596,19 +596,16 @@ fn test_truncated_file_handling() {
     // 1. Return an error (preferred for corrupted files)
     // 2. Return partial data without crashing
     // The key is NO PANIC
-    match result {
-        Ok(buffer) => {
-            // Partial decode is acceptable, but samples should be valid
-            for sample in &buffer.samples {
-                assert!(
-                    sample.is_finite(),
-                    "Truncated file produced non-finite sample"
-                );
-            }
+    if let Ok(buffer) = result {
+        // Partial decode is acceptable, but samples should be valid
+        for sample in &buffer.samples {
+            assert!(
+                sample.is_finite(),
+                "Truncated file produced non-finite sample"
+            );
         }
-        Err(_) => {
-            // Error is the expected behavior for truncated files
-        }
+    } else {
+        // Error is the expected behavior for truncated files
     }
 }
 
@@ -666,16 +663,13 @@ fn test_header_only_file() {
     let result = decoder.decode(&path);
 
     // Should either return empty buffer or error, but not crash
-    match result {
-        Ok(buffer) => {
-            assert!(
-                buffer.samples.is_empty(),
-                "Header-only file should have no samples"
-            );
-        }
-        Err(_) => {
-            // Error is also acceptable
-        }
+    if let Ok(buffer) = result {
+        assert!(
+            buffer.samples.is_empty(),
+            "Header-only file should have no samples"
+        );
+    } else {
+        // Error is also acceptable
     }
 }
 
@@ -834,7 +828,7 @@ fn test_output_samples_always_in_range() {
     for (i, &sample) in buffer.samples.iter().enumerate() {
         assert!(sample.is_finite(), "Sample {} is not finite: {}", i, sample);
         assert!(
-            sample >= -1.0 && sample <= 1.0,
+            (-1.0..=1.0).contains(&sample),
             "Sample {} out of range [-1.0, 1.0]: {}",
             i,
             sample
@@ -1031,7 +1025,7 @@ fn test_sine_wave_frequency_integrity() {
     let tolerance = 5; // Allow some tolerance
 
     assert!(
-        (zero_crossings as i32 - expected_crossings as i32).abs() <= tolerance as i32,
+        (zero_crossings - expected_crossings as i32).abs() <= tolerance,
         "Zero crossings {} should be near expected {} for {} Hz sine",
         zero_crossings,
         expected_crossings,
@@ -1210,7 +1204,7 @@ fn test_s24_conversion_formula_analysis() {
     );
 
     // Test maximum (8388607 -> ~1.0)
-    let max_result = 8388607i32 as f32 / 8388608.0;
+    let max_result = 8388607_f32 / 8388608.0;
     let expected_max = 8388607.0 / 8388608.0; // 0.999999880...
     assert!(
         (max_result - expected_max).abs() < 1e-6,
@@ -1237,7 +1231,7 @@ fn test_u16_conversion_formula_analysis() {
     );
 
     // Test mid-point (32768 -> ~0.0)
-    let mid_result = (32768u16 as f32 / 65535.0) * 2.0 - 1.0;
+    let mid_result = (32768_f32 / 65535.0) * 2.0 - 1.0;
     assert!(
         mid_result.abs() < 1e-3,
         "U16 mid-point should be ~0.0, got {}",
@@ -1245,7 +1239,7 @@ fn test_u16_conversion_formula_analysis() {
     );
 
     // Test maximum (65535 -> 1.0)
-    let max_result = (65535u16 as f32 / 65535.0) * 2.0 - 1.0;
+    let max_result = (65535_f32 / 65535.0) * 2.0 - 1.0;
     assert!(
         (max_result - 1.0).abs() < 1e-5,
         "U16 max should be 1.0, got {}",
@@ -1291,7 +1285,7 @@ fn test_u8_conversion_formula_analysis() {
 
     // Test mid-point (128 -> ~0.0)
     // Note: 128/255 * 2 - 1 = 0.00392... not exactly 0
-    let mid_result = (128u8 as f32 / 255.0) * 2.0 - 1.0;
+    let mid_result = (128_f32 / 255.0) * 2.0 - 1.0;
     println!("U8 mid-point (128) converts to: {}", mid_result);
     assert!(
         mid_result.abs() < 0.01,
@@ -1300,7 +1294,7 @@ fn test_u8_conversion_formula_analysis() {
     );
 
     // Test maximum (255 -> 1.0)
-    let max_result = (255u8 as f32 / 255.0) * 2.0 - 1.0;
+    let max_result = (255_f32 / 255.0) * 2.0 - 1.0;
     assert!(
         (max_result - 1.0).abs() < 1e-5,
         "U8 max should be 1.0, got {}",
@@ -1314,7 +1308,7 @@ fn test_s8_conversion_formula_analysis() {
     // Formula: s / 128.0
 
     // Test minimum (-128 -> -1.0)
-    let min_result = -128i8 as f32 / 128.0;
+    let min_result = -128_f32 / 128.0;
     assert!(
         (min_result - (-1.0)).abs() < 1e-5,
         "S8 min should be -1.0, got {}",
@@ -1330,7 +1324,7 @@ fn test_s8_conversion_formula_analysis() {
     );
 
     // Test maximum (127 -> 0.9921875)
-    let max_result = 127i8 as f32 / 128.0;
+    let max_result = 127_f32 / 128.0;
     let expected = 127.0 / 128.0;
     assert!(
         (max_result - expected).abs() < 1e-5,
@@ -1346,7 +1340,7 @@ fn test_s16_conversion_formula_analysis() {
     // Formula: s / 32768.0
 
     // Test minimum (-32768 -> -1.0)
-    let min_result = -32768i16 as f32 / 32768.0;
+    let min_result = -32768_f32 / 32768.0;
     assert!(
         (min_result - (-1.0)).abs() < 1e-6,
         "S16 min should be -1.0, got {}",
@@ -1362,7 +1356,7 @@ fn test_s16_conversion_formula_analysis() {
     );
 
     // Test maximum (32767 -> 0.999969...)
-    let max_result = 32767i16 as f32 / 32768.0;
+    let max_result = 32767_f32 / 32768.0;
     let expected = 32767.0 / 32768.0;
     assert!(
         (max_result - expected).abs() < 1e-6,
@@ -1434,7 +1428,7 @@ fn test_large_file_precision() {
     let buffer = decoder.decode(&path).expect("Failed to decode large file");
 
     // Verify first and last few samples have same expected pattern
-    let first_expected = ((0 % 65536) as i32 - 32768) as f32 / 32768.0;
+    let first_expected = (0_i32 - 32768) as f32 / 32768.0;
     let last_idx = num_samples - 1;
     let last_expected = ((last_idx % 65536) as i32 - 32768) as f32 / 32768.0;
 
@@ -1546,12 +1540,12 @@ fn test_symmetric_clipping_behavior() {
     let max_val = 32767.0 / 32768.0;
 
     for i in 0..buffer.samples.len() / 2 {
-        let left = buffer.samples[i * 2];
-        let right = buffer.samples[i * 2 + 1];
+        let _left = buffer.samples[i * 2];
+        let _right = buffer.samples[i * 2 + 1];
 
         // Left should be min, right should be max (for each stereo pair)
-        let expected_left = if i % 2 == 0 { min_val } else { max_val };
-        let expected_right = if i % 2 == 0 { max_val } else { min_val };
+        let _expected_left = if i % 2 == 0 { min_val } else { max_val };
+        let _expected_right = if i % 2 == 0 { max_val } else { min_val };
 
         // Actually the pattern is: [min, max, min, max, ...] interleaved as stereo
         // So sample 0 = left of pair 0, sample 1 = right of pair 0

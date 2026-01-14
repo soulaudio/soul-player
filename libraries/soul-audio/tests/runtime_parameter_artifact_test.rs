@@ -59,7 +59,7 @@ fn generate_pink_noise(sample_rate: u32, duration_sec: f32, amplitude: f32) -> V
         // Voss-McCartney pink noise approximation
         b0 = 0.99886 * b0 + white * 0.0555179;
         b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
+        b2 = 0.96900 * b2 + white * 0.153_852;
         let pink = (b0 + b1 + b2 + white * 0.5362) * amplitude * 0.2;
         buffer.push(pink); // Left
         buffer.push(pink); // Right
@@ -476,7 +476,7 @@ fn test_effect_enable_disable_no_clicks() {
         let mut buffer = generate_sine(1000.0, sample_rate, 0.5, amplitude);
 
         let chunk_size = 512;
-        let total_chunks = buffer.len() / chunk_size;
+        let _total_chunks = buffer.len() / chunk_size;
 
         for (i, chunk) in buffer.chunks_mut(chunk_size).enumerate() {
             // Toggle enable/disable

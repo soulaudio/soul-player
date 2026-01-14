@@ -21,7 +21,7 @@ fn test_device_switch_preserves_state() {
 
             // Attempt to switch to default device (should work even if it's already the default)
             match playback.switch_device(AudioBackend::Default, None) {
-                Ok(_) => {
+                Ok(()) => {
                     let new_device = playback.get_current_device();
                     let new_backend = playback.get_current_backend();
 
@@ -70,7 +70,7 @@ fn test_switch_to_specific_device() {
                         match playback
                             .switch_device(AudioBackend::Default, Some(target_device.name.clone()))
                         {
-                            Ok(_) => {
+                            Ok(()) => {
                                 let current = playback.get_current_device();
                                 eprintln!("Successfully switched to: {}", current);
                                 assert_eq!(
@@ -114,7 +114,7 @@ fn test_multiple_device_switches() {
                 eprintln!("Switch iteration {}", i);
 
                 match playback.switch_device(AudioBackend::Default, None) {
-                    Ok(_) => {
+                    Ok(()) => {
                         let device = playback.get_current_device();
                         eprintln!("  Current device: {}", device);
                         assert!(!device.is_empty());
@@ -246,7 +246,7 @@ fn test_rapid_device_switches() {
             // Try 10 rapid switches
             for i in 0..10 {
                 match playback.switch_device(AudioBackend::Default, None) {
-                    Ok(_) => {
+                    Ok(()) => {
                         success_count += 1;
                         // Very small delay
                         std::thread::sleep(Duration::from_millis(20));
@@ -300,7 +300,7 @@ fn test_switch_between_backends() {
                     eprintln!("Switching to backend: {:?}", backend);
 
                     match playback.switch_device(backend, None) {
-                        Ok(_) => {
+                        Ok(()) => {
                             let current_backend = playback.get_current_backend();
                             let current_device = playback.get_current_device();
 

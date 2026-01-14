@@ -263,7 +263,7 @@ mod queue_management {
 
         // Verify each track appeared at multiple positions
         for (id, positions) in &position_counts {
-            let unique_positions: HashSet<usize> = positions.iter().cloned().collect();
+            let unique_positions: HashSet<usize> = positions.iter().copied().collect();
             assert!(
                 unique_positions.len() >= 5,
                 "Track {} should appear at multiple positions, got {:?}",

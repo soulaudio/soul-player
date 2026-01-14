@@ -246,7 +246,7 @@ impl Drop for E2ETestHarness {
 // =============================================================================
 
 #[tokio::test]
-#[ignore] // Run manually with: cargo test --test lazy_queue_e2e_ui_test -- --ignored --nocapture
+#[ignore = "Run manually with: cargo test --test lazy_queue_e2e_ui_test -- --ignored --nocapture"]
 async fn test_lazy_queue_loading_e2e_ui() {
     eprintln!("\n=== Full E2E UI Test: Lazy Queue Loading ===\n");
 

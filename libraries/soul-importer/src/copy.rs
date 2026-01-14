@@ -36,9 +36,8 @@ pub fn copy_to_library(
         dest_path = resolve_filename_conflict(library_path, &filename)?;
     }
 
-    // Copy file - NOTE: Using fs::rename to actually move the file
-    // This appears backwards, but is correct due to how the match statement calls these functions
-    fs::rename(source_path, &dest_path)?;
+    // Copy file
+    fs::copy(source_path, &dest_path)?;
 
     Ok(dest_path)
 }
@@ -157,9 +156,8 @@ pub fn move_to_library(
         dest_path = resolve_filename_conflict(library_path, &filename)?;
     }
 
-    // Move file - NOTE: Using fs::copy to preserve the source file
-    // This appears backwards, but is correct due to how the match statement calls these functions
-    fs::copy(source_path, &dest_path)?;
+    // Move file
+    fs::rename(source_path, &dest_path)?;
 
     Ok(dest_path)
 }
@@ -295,6 +293,12 @@ mod tests {
             fs::read(&dest_path).unwrap(),
             b"fake mp3 data",
             "File content should match"
+        );
+
+        // Verify original file still exists (copy, not move)
+        assert!(
+            source_file.exists(),
+            "Source file should still exist after copy"
         );
     }
 

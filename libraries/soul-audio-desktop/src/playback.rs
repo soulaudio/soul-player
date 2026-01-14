@@ -2673,7 +2673,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn create_desktop_playback() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
@@ -2692,7 +2692,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_create_with_default_backend() {
         let result = DesktopPlayback::new_with_device(
             PlaybackConfig::default(),
@@ -2715,7 +2715,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_get_current_device_info() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
@@ -2740,7 +2740,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_switch_device_to_default() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
@@ -2753,7 +2753,7 @@ mod tests {
                 let switch_result = playback.switch_device(crate::AudioBackend::Default, None);
 
                 match switch_result {
-                    Ok(_) => {
+                    Ok(()) => {
                         let new_device = playback.get_current_device();
                         eprintln!("After switch device: {}", new_device);
                         assert!(!new_device.is_empty());
@@ -2773,14 +2773,14 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_switch_device_preserves_backend() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 
         match result {
             Ok(mut playback) => {
                 // Switch to default backend explicitly
-                if let Ok(_) = playback.switch_device(crate::AudioBackend::Default, None) {
+                if let Ok(()) = playback.switch_device(crate::AudioBackend::Default, None) {
                     assert_eq!(playback.get_current_backend(), crate::AudioBackend::Default);
                 }
             }
@@ -2794,7 +2794,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_switch_device_invalid_device() {
         let result = DesktopPlayback::new(PlaybackConfig::default());
 

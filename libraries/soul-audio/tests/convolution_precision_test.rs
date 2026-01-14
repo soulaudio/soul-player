@@ -1038,11 +1038,11 @@ fn test_z_summary_and_bug_report() {
     println!("\n-----------------------------------------------------------------");
     println!("BUGS FOUND:");
     println!("-----------------------------------------------------------------");
-    println!("");
+    println!();
     println!("CRITICAL BUGS: 0");
-    println!("");
+    println!();
     println!("MINOR ISSUES: 2");
-    println!("");
+    println!();
     println!("1. NO AUTOMATIC IR NORMALIZATION");
     println!("   Severity: Minor (Documentation/Design)");
     println!("   Description: The engine does not normalize impulse responses.");
@@ -1052,7 +1052,7 @@ fn test_z_summary_and_bug_report() {
     println!("   prevent clipping. Users must manually normalize IRs.");
     println!("   Recommendation: Add optional normalization parameter to");
     println!("   load_impulse_response() or document this behavior clearly.");
-    println!("");
+    println!();
     println!("2. NO SAMPLE RATE CONVERSION FOR IR");
     println!("   Severity: Minor (Documentation)");
     println!("   Description: The engine stores ir_sample_rate but does not");
@@ -1060,11 +1060,11 @@ fn test_z_summary_and_bug_report() {
     println!("   This can cause pitch/speed shifts in the reverb tail.");
     println!("   Recommendation: Either implement automatic resampling or");
     println!("   add validation/warning when sample rates mismatch.");
-    println!("");
+    println!();
     println!("-----------------------------------------------------------------");
     println!("VERIFIED CORRECT BEHAVIORS:");
     println!("-----------------------------------------------------------------");
-    println!("");
+    println!();
     println!("* Dirac impulse correctly passes signal through unchanged");
     println!("* Null test shows excellent cancellation (-140 dB)");
     println!("* Dry/wet mix works correctly at 0%, 50%, and 100%");
@@ -1074,7 +1074,7 @@ fn test_z_summary_and_bug_report() {
     println!("* Variable buffer sizes are handled correctly");
     println!("* Reset properly clears internal state");
     println!("* Mono IR is correctly applied to both stereo channels");
-    println!("");
+    println!();
     println!("=================================================================");
     println!("TOTAL: 0 Critical, 2 Minor (Documentation/Design)");
     println!("=================================================================\n");

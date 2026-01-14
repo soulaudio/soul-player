@@ -561,7 +561,7 @@ fn test_sample_continuity_across_buffers() {
 
     // Calculate statistics on boundary jumps
     let mean_jump: f32 = boundary_jumps.iter().sum::<f32>() / boundary_jumps.len() as f32;
-    let max_jump = boundary_jumps.iter().cloned().fold(0.0f32, f32::max);
+    let max_jump = boundary_jumps.iter().copied().fold(0.0f32, f32::max);
 
     println!("\n=== Sample Continuity Across Buffers ===");
     println!("Mean boundary jump: {:.6}", mean_jump);
@@ -671,9 +671,7 @@ fn test_batch_processing_with_background_threads() {
 
             // Verify output validity
             for sample in &buffer {
-                if !sample.is_finite() {
-                    panic!("Invalid sample detected in audio thread");
-                }
+                assert!(sample.is_finite(), "Invalid sample detected in audio thread");
             }
         }
     });
@@ -1435,7 +1433,7 @@ fn test_callback_scheduling_variance() {
         // Sleep to simulate real callback timing (approximately)
         let processing_time = callback_start.elapsed();
         if processing_time < budget {
-            thread::sleep(budget - processing_time);
+            thread::sleep(budget.checked_sub(processing_time).unwrap());
         }
     }
 
@@ -1447,7 +1445,7 @@ fn test_callback_scheduling_variance() {
             stable_times.iter().map(|&&d| d).sum::<Duration>() / stable_times.len() as u32;
         let max_deviation = stable_times
             .iter()
-            .map(|&&d| if d > mean { d - mean } else { mean - d })
+            .map(|&&d| if d > mean { d.checked_sub(mean).unwrap() } else { mean.checked_sub(d).unwrap() })
             .max()
             .unwrap_or(Duration::ZERO);
 

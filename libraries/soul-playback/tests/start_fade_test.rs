@@ -811,7 +811,7 @@ fn test_fade_does_not_add_harmonics() {
         let amplitude = rms_actual * 2.0_f32.sqrt(); // RMS to peak
 
         for (i, &sample) in left_channel.iter().enumerate() {
-            let t = i as f32 / sample_rate as f32;
+            let _t = i as f32 / sample_rate as f32;
             // We don't know the phase, so we'll just check if the envelope is correct
             // by comparing absolute values
             let ideal_envelope = amplitude;

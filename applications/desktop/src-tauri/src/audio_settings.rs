@@ -546,7 +546,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires real audio hardware - not available in CI environments
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
     async fn test_get_devices_default_backend() {
         let devices = get_audio_devices("default".to_string()).await.unwrap();
         assert!(!devices.is_empty(), "Should have at least one device");

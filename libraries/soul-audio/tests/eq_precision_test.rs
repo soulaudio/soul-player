@@ -25,7 +25,7 @@
 //! - True-peak measurement error: < 0.6 dB
 
 use soul_audio::effects::{
-    AudioEffect, EqBand, GraphicEq, GraphicEqBands, ParametricEq, ISO_10_BAND_FREQUENCIES,
+    AudioEffect, EqBand, GraphicEq, ParametricEq, ISO_10_BAND_FREQUENCIES,
     ISO_31_BAND_FREQUENCIES,
 };
 use std::f32::consts::PI;
@@ -44,7 +44,7 @@ const HIFI_CENTER_TOLERANCE_DB: f32 = 0.5;
 const COEFFICIENT_PRECISION: f32 = 1e-6;
 
 /// Denormal threshold (IEEE 754 single-precision)
-const DENORMAL_THRESHOLD: f32 = 1.17549435e-38;
+const DENORMAL_THRESHOLD: f32 = 1.175_494_4e-38;
 
 /// Practical denormal detection threshold
 const PRACTICAL_DENORMAL_THRESHOLD: f32 = 1e-38;
@@ -245,9 +245,9 @@ fn estimate_phase_shift(eq: &mut dyn AudioEffect, frequency: f32, sample_rate: u
 
     // Convert sample offset to phase in degrees
     let phase_samples = best_offset as f32;
-    let phase_degrees = (phase_samples / samples_per_cycle) * 360.0;
+    
 
-    phase_degrees
+    (phase_samples / samples_per_cycle) * 360.0
 }
 
 /// Measure Q factor by finding -3dB points
@@ -255,7 +255,7 @@ fn measure_q_factor(
     eq: &mut dyn AudioEffect,
     center_freq: f32,
     sample_rate: u32,
-    expected_gain_db: f32,
+    _expected_gain_db: f32,
 ) -> f32 {
     // Measure gain at center
     let gain_center = measure_gain_db(eq, center_freq, sample_rate, 0.5);
@@ -371,10 +371,10 @@ fn test_graphic_eq_10band_frequency_accuracy() {
 
         // At center frequency of a boosted band, expect gain close to setting
         // Allow more tolerance for extreme frequencies
-        let tolerance = if freq < 50.0 || freq > 10000.0 {
-            3.0
-        } else {
+        let tolerance = if (50.0..=10000.0).contains(&freq) {
             2.0
+        } else {
+            3.0
         };
 
         if gain < 3.0 || (gain - 6.0).abs() > tolerance {
@@ -423,10 +423,10 @@ fn test_graphic_eq_31band_frequency_accuracy() {
         let gain = measure_gain_db(&mut eq, freq, sample_rate, 0.5);
 
         // Third-octave filters have more overlap, so expect less isolation
-        let tolerance = if freq < 50.0 || freq > 10000.0 {
-            4.0
-        } else {
+        let _tolerance = if (50.0..=10000.0).contains(&freq) {
             3.0
+        } else {
+            4.0
         };
 
         if gain < 2.0 {

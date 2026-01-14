@@ -1,6 +1,6 @@
 //! Integration tests using Docker testcontainers for audio testing.
 //!
-//! These tests verify audio functionality using PulseAudio virtual devices
+//! These tests verify audio functionality using `PulseAudio` virtual devices
 //! in isolated Docker containers.
 //!
 //! Run with:

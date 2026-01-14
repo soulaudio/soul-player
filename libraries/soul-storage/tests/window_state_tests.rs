@@ -19,7 +19,7 @@ async fn test_get_default_window_state() {
     // Should return default values
     assert_eq!(state.width, 1200);
     assert_eq!(state.height, 800);
-    assert_eq!(state.maximized, false);
+    assert!(!state.maximized);
     assert_eq!(state.x, None);
     assert_eq!(state.y, None);
 }
@@ -55,7 +55,7 @@ async fn test_save_and_load_window_state() {
     assert_eq!(loaded_state.y, Some(200));
     assert_eq!(loaded_state.width, 1400);
     assert_eq!(loaded_state.height, 900);
-    assert_eq!(loaded_state.maximized, false);
+    assert!(!loaded_state.maximized);
     assert_eq!(loaded_state.last_route, Some("/library".to_string()));
 }
 
@@ -102,7 +102,7 @@ async fn test_update_window_state() {
     assert_eq!(loaded.y, Some(400));
     assert_eq!(loaded.width, 1600);
     assert_eq!(loaded.height, 1000);
-    assert_eq!(loaded.maximized, true);
+    assert!(loaded.maximized);
     assert_eq!(loaded.last_route, Some("/playlists".to_string()));
 }
 
@@ -131,7 +131,7 @@ async fn test_maximized_state() {
         .unwrap();
     let loaded = window_state::get_window_state(&pool, "1").await.unwrap();
 
-    assert_eq!(loaded.maximized, true);
+    assert!(loaded.maximized);
 }
 
 #[tokio::test]

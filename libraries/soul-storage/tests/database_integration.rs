@@ -530,7 +530,7 @@ async fn test_play_tracking() {
         .unwrap();
 
     // Check play count
-    let play_count = soul_storage::tracks::get_play_count(pool, track.clone())
+    let play_count = soul_storage::tracks::get_play_count(pool, user.clone(), track.clone())
         .await
         .unwrap();
     assert_eq!(play_count, 1);
@@ -540,7 +540,7 @@ async fn test_play_tracking() {
         .await
         .unwrap();
 
-    let play_count_2 = soul_storage::tracks::get_play_count(pool, track)
+    let play_count_2 = soul_storage::tracks::get_play_count(pool, user.clone(), track.clone())
         .await
         .unwrap();
     assert_eq!(play_count_2, 2);
@@ -560,7 +560,7 @@ async fn test_skip_tracking() {
         .unwrap();
 
     // Play count should still be 0
-    let play_count = soul_storage::tracks::get_play_count(pool, track.clone())
+    let play_count = soul_storage::tracks::get_play_count(pool, user.clone(), track.clone())
         .await
         .unwrap();
     assert_eq!(play_count, 0);
@@ -639,23 +639,28 @@ async fn test_per_user_statistics() {
         .unwrap();
 
     // Get Alice's recently played
-    let alice_recent = soul_storage::tracks::get_recently_played(pool, alice, 10)
+    let alice_recent = soul_storage::tracks::get_recently_played(pool, alice.clone(), 10)
         .await
         .unwrap();
     assert_eq!(alice_recent.len(), 1);
 
     // Get Bob's recently played
-    let bob_recent = soul_storage::tracks::get_recently_played(pool, bob, 10)
+    let bob_recent = soul_storage::tracks::get_recently_played(pool, bob.clone(), 10)
         .await
         .unwrap();
     assert_eq!(bob_recent.len(), 1);
 
-    // Note: get_play_count returns play count from ONE user's stats (whichever row it finds first)
-    // since track_stats is per-user. For a total, we'd need to sum across users manually.
-    let play_count = soul_storage::tracks::get_play_count(pool, track)
+    // Note: get_play_count is now per-user. Alice should have 2 plays.
+    let alice_play_count = soul_storage::tracks::get_play_count(pool, alice, track.clone())
         .await
         .unwrap();
-    assert!(play_count >= 1 && play_count <= 2); // Either Alice's (2) or Bob's (1) count
+    assert_eq!(alice_play_count, 2);
+
+    // Bob should have 1 play
+    let bob_play_count = soul_storage::tracks::get_play_count(pool, bob, track)
+        .await
+        .unwrap();
+    assert_eq!(bob_play_count, 1);
 }
 
 // ============================================================================

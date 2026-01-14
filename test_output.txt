@@ -1,0 +1,755 @@
+   Compiling soul-storage v0.0.1-test (D:\dev\soulaudio\soul-player\libraries\soul-storage)
+   Compiling soul-playback v0.0.1-test (D:\dev\soulaudio\soul-player\libraries\soul-playback)
+   Compiling soul-audio v0.0.1-test (D:\dev\soulaudio\soul-player\libraries\soul-audio)
+warning: unused variable: `expected_samples_if_mono`
+   --> libraries\soul-audio\tests\decoder_regression_test.rs:449:9
+    |
+449 |     let expected_samples_if_mono = 100;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_expected_samples_if_mono`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> libraries\soul-audio\tests\decoder_regression_test.rs:685:9
+    |
+685 |     let mut prev = buffer.samples[0];
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `prev`
+   --> libraries\soul-audio\tests\decoder_regression_test.rs:685:9
+    |
+685 |     let mut prev = buffer.samples[0];
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_prev`
+
+warning: unused variable: `sample`
+   --> libraries\soul-audio\tests\decoder_regression_test.rs:686:10
+    |
+686 |     for &sample in &buffer.samples[2..] {
+    |          ^^^^^^ help: if this is intentional, prefix it with an underscore: `_sample`
+
+warning: unused variable: `left`
+    --> libraries\soul-audio\tests\decoder_conformance_test.rs:1549:13
+     |
+1549 |         let left = buffer.samples[i * 2];
+     |             ^^^^ help: if this is intentional, prefix it with an underscore: `_left`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `right`
+    --> libraries\soul-audio\tests\decoder_conformance_test.rs:1550:13
+     |
+1550 |         let right = buffer.samples[i * 2 + 1];
+     |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_right`
+
+warning: unused variable: `expected_left`
+    --> libraries\soul-audio\tests\decoder_conformance_test.rs:1553:13
+     |
+1553 |         let expected_left = if i % 2 == 0 { min_val } else { max_val };
+     |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_expected_left`
+
+warning: unused variable: `expected_right`
+    --> libraries\soul-audio\tests\decoder_conformance_test.rs:1554:13
+     |
+1554 |         let expected_right = if i % 2 == 0 { max_val } else { min_val };
+     |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_expected_right`
+
+warning: comparison is useless due to type limits
+   --> libraries\soul-audio\tests\resampling_edge_cases_test.rs:533:13
+    |
+533 |     assert!(fast_latency >= 0);
+    |             ^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_comparisons)]` on by default
+
+warning: comparison is useless due to type limits
+   --> libraries\soul-audio\tests\resampling_edge_cases_test.rs:534:13
+    |
+534 |     assert!(high_latency >= 0);
+    |             ^^^^^^^^^^^^^^^^^
+
+warning: `soul-audio` (test "decoder_regression_test") generated 4 warnings (run `cargo fix --test "decoder_regression_test" -p soul-audio` to apply 4 suggestions)
+warning: unused variable: `fundamental_bin`
+  --> libraries\soul-audio\tests\audio_standards_test.rs:71:9
+   |
+71 |     let fundamental_bin = (fundamental_freq / bin_width).round() as usize;
+   |         ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_fundamental_bin`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `freq`
+  --> libraries\soul-audio\tests\audio_standards_test.rs:82:13
+   |
+82 |         let freq = bin as f32 * bin_width;
+   |             ^^^^ help: if this is intentional, prefix it with an underscore: `_freq`
+
+warning: `soul-audio` (test "resampling_edge_cases_test") generated 2 warnings
+   Compiling soul-audio-desktop v0.0.1-test (D:\dev\soulaudio\soul-player\libraries\soul-audio-desktop)
+warning: unused import: `GraphicEqBands`
+  --> libraries\soul-audio\tests\eq_precision_test.rs:28:37
+   |
+28 |     AudioEffect, EqBand, GraphicEq, GraphicEqBands, ParametricEq, ISO_10_BAND_FREQUENCIES,
+   |                                     ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:313:5
+    |
+313 | /     /// Test that gain at center frequency matches expected within AES tolerance
+314 | |     /// Reference: AES-17 (+/- 1 dB full range, +/- 0.5 dB at center)
+    | |_____________________________________________________________________^
+315 |       let test_frequencies = [100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0];
+    |       ----------------------------------------------------------------------- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+    = note: `#[warn(unused_doc_comments)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:359:5
+    |
+359 | /     /// Test 10-band graphic EQ at all ISO standard frequencies
+360 | |     /// Reference: ISO 266:1997 octave band center frequencies
+    | |______________________________________________________________^
+361 |       let mut failures = Vec::new();
+    |       ------------------------------ rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:405:5
+    |
+405 | /     /// Test 31-band graphic EQ at all third-octave frequencies
+406 | |     /// Reference: ISO 266:1997 third-octave band center frequencies
+    | |____________________________________________________________________^
+407 |       let mut failures = Vec::new();
+    |       ------------------------------ rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:461:5
+    |
+461 | /     /// Verify Q factor affects bandwidth correctly
+462 | |     /// Q = center_freq / bandwidth
+463 | |     /// Reference: Audio EQ Cookbook (Robert Bristow-Johnson)
+    | |_____________________________________________________________^
+464 | /     let test_cases = [
+465 | |         (1000.0, 0.5, "Wide Q=0.5"),
+466 | |         (1000.0, 1.0, "Standard Q=1.0"),
+467 | |         (1000.0, 2.0, "Narrow Q=2.0"),
+468 | |         (1000.0, 4.0, "Very Narrow Q=4.0"),
+469 | |     ];
+    | |______- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:606:5
+    |
+606 | /     /// Test filter stability at 90% of Nyquist frequency
+607 | |     /// Reference: Orfanidis - Digital Filter Design Near Nyquist
+    | |_________________________________________________________________^
+608 | /     for &sample_rate in &SAMPLE_RATES {
+609 | |         let nyquist = sample_rate as f32 / 2.0;
+610 | |         let test_freq = nyquist * 0.90;
+...   |
+623 | |         );
+624 | |     }
+    | |_____- rustdoc does not generate documentation for expressions
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:629:5
+    |
+629 | /     /// Test filter stability at 95% of Nyquist frequency
+630 | |     /// This is the critical zone where bilinear transform issues appear
+    | |________________________________________________________________________^
+631 | /     for &sample_rate in &SAMPLE_RATES {
+632 | |         let nyquist = sample_rate as f32 / 2.0;
+633 | |         let test_freq = nyquist * 0.95;
+...   |
+655 | |         );
+656 | |     }
+    | |_____- rustdoc does not generate documentation for expressions
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:661:5
+    |
+661 | /     /// Test filter behavior at 99% of Nyquist frequency
+662 | |     /// Filters may not work correctly here, but should not produce NaN/Inf
+    | |___________________________________________________________________________^
+663 |       let sample_rate = 44100;
+    |       ------------------------ rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:686:5
+    |
+686 | /     /// Test 31-band EQ at low sample rates where some bands exceed Nyquist
+687 | |     /// The 20kHz band at 32kHz sample rate exceeds Nyquist (16kHz)
+    | |___________________________________________________________________^
+688 |       let sample_rate = 32000;
+    |       ------------------------ rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:772:5
+    |
+772 | /     /// Verify shelf filters have expected phase characteristics
+773 | |     /// Shelf filters have asymmetric phase response
+    | |____________________________________________________^
+774 |       let mut eq = ParametricEq::new();
+    |       --------------------------------- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:792:5
+    |
+792 | /     /// Test that DC offset does not accumulate over extended processing
+793 | |     /// Reference: IIR filter DC blocking best practices
+    | |________________________________________________________^
+794 |       let mut eq = ParametricEq::new();
+    |       --------------------------------- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:827:5
+    |
+827 |     /// Shelf filters should not block DC entirely but should not amplify it infinitely
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+828 |     let mut eq = ParametricEq::new();
+    |     --------------------------------- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:853:5
+    |
+853 | /     /// Test that filter handles denormal numbers without CPU performance issues
+854 | |     /// Reference: EarLevel Engineering - denormal flushing in audio DSP
+    | |________________________________________________________________________^
+855 |       let mut eq = ParametricEq::new();
+    |       --------------------------------- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:890:5
+    |
+890 |     /// Test 31-band EQ denormal handling (more filter states to track)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+891 |     let mut eq = GraphicEq::new_31_band();
+    |     -------------------------------------- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:920:5
+    |
+920 | /     /// Verify low shelf filter response matches expected curve
+921 | |     /// Below cutoff: full boost/cut
+922 | |     /// At cutoff: -3dB from full boost
+923 | |     /// Above cutoff: approaches unity
+    | |______________________________________^
+924 |       let mut eq = ParametricEq::new();
+    |       --------------------------------- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+   --> libraries\soul-audio\tests\eq_precision_test.rs:971:5
+    |
+971 |     /// Verify high shelf filter response matches expected curve
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+972 |     let mut eq = ParametricEq::new();
+    |     --------------------------------- rustdoc does not generate documentation for statements
+    |
+    = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1019:5
+     |
+1019 |     /// Verify shelf filter boost and cut are symmetric
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1020 |     let test_freqs = [50.0, 100.0, 200.0, 400.0, 1000.0];
+     |     ----------------------------------------------------- rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1057:5
+     |
+1057 | /     /// Test stability across many frequency/gain/Q combinations
+1058 | |     /// This is a comprehensive stress test for filter coefficients
+     | |___________________________________________________________________^
+1059 |       let frequencies = [20.0, 100.0, 1000.0, 5000.0, 15000.0, 20000.0];
+     |       ------------------------------------------------------------------ rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1113:5
+     |
+1113 | /     /// Verify gain is correctly converted from dB to linear
+1114 | |     /// Reference: dB = 20 * log10(linear)
+     | |__________________________________________^
+1115 |       let test_gains = [-12.0, -6.0, -3.0, 0.0, 3.0, 6.0, 12.0];
+     |       ---------------------------------------------------------- rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1143:5
+     |
+1143 |     /// Test gain accumulation when multiple bands affect same frequency
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1144 |     let mut eq = ParametricEq::new();
+     |     --------------------------------- rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1164:5
+     |
+1164 |     /// Test what happens when all bands are boosted (cumulative gain)
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1165 |     let mut eq = GraphicEq::new_10_band();
+     |     -------------------------------------- rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1192:5
+     |
+1192 | /     /// Verify coefficients are correctly recalculated when sample rate changes
+1193 | |     /// This ensures filters maintain correct frequency response across sample rates
+     | |____________________________________________________________________________________^
+1194 |       let test_freq = 1000.0;
+     |       ----------------------- rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1228:5
+     |
+1228 |     /// Test stability when transitioning between sample rates
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1229 |     let mut eq = ParametricEq::new();
+     |     --------------------------------- rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1253:5
+     |
+1253 | /     /// Verify biquad coefficients are properly normalized (a0 = 1)
+1254 | |     /// Reference: Audio EQ Cookbook - coefficient normalization
+     | |________________________________________________________________^
+...
+1259 |       let mut eq = ParametricEq::new();
+     |       --------------------------------- rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1282:5
+     |
+1282 | /     /// Test coefficient precision at very low frequencies
+1283 | |     /// Reference: At low frequencies, biquad coefficients approach limiting values
+1284 | |     /// that require high precision (32-bit float may show issues)
+     | |__________________________________________________________________^
+1285 |       let test_frequencies = [10.0, 20.0, 30.0, 40.0, 50.0];
+     |       ------------------------------------------------------ rustdoc does not generate documentation for statements
+     |
+     = help: use `//` for a plain comment
+
+warning: unused doc comment
+    --> libraries\soul-audio\tests\eq_precision_test.rs:1316:5
+     |
+1316 |     /// Summary test that reports overall compliance with industry standards
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ rustdoc does not generate documentation for macro invocations
+     |
+     = help: to document an item produced by a macro, the macro must produce the documentation as part of its expansion
+
+warning: `soul-audio` (test "decoder_conformance_test") generated 4 warnings (run `cargo fix --test "decoder_conformance_test" -p soul-audio` to apply 4 suggestions)
+warning: unused variable: `expected_gain_db`
+   --> libraries\soul-audio\tests\eq_precision_test.rs:258:5
+    |
+258 |     expected_gain_db: f32,
+    |     ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_expected_gain_db`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `original_rms`
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1189:13
+     |
+1189 |         let original_rms = rms_level(&buffer);
+     |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_original_rms`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `original_compat`
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1389:13
+     |
+1389 |         let original_compat = mono_compatibility(&buffer);
+     |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_original_compat`
+
+warning: unused variable: `tolerance`
+   --> libraries\soul-audio\tests\eq_precision_test.rs:426:13
+    |
+426 |         let tolerance = if freq < 50.0 || freq > 10000.0 {
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tolerance`
+
+warning: variable does not need to be mutable
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1709:13
+     |
+1709 |         let mut compressor = Compressor::with_settings(CompressorSettings::moderate());
+     |             ----^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1712:13
+     |
+1712 |         let mut stereo = StereoEnhancer::with_settings(StereoSettings::wide());
+     |             ----^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1715:13
+     |
+1715 |         let mut crossfeed = Crossfeed::with_preset(CrossfeedPreset::Natural);
+     |             ----^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1718:13
+     |
+1718 |         let mut limiter = Limiter::with_settings(LimiterSettings::brickwall());
+     |             ----^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: unused variable: `effects`
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1748:17
+     |
+1748 |             let effects: Vec<Box<dyn AudioEffect>> = vec![
+     |                 ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_effects`
+
+warning: variable `passed` is assigned to, but never used
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1855:13
+     |
+1855 |         let mut passed = 0;
+     |             ^^^^^^^^^^
+     |
+     = note: consider using `_passed` instead
+
+warning: value assigned to `passed` is never read
+    --> libraries\soul-audio\tests\effects_chain_e2e_test.rs:1899:17
+     |
+1899 |                 passed += 1;
+     |                 ^^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `t`
+   --> libraries\soul-playback\tests\start_fade_test.rs:814:17
+    |
+814 |             let t = i as f32 / sample_rate as f32;
+    |                 ^ help: if this is intentional, prefix it with an underscore: `_t`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: use of deprecated unit variant `soul_playback::FadeCurve::Logarithmic`: Use SquareRoot instead - this is actually a square root curve, not logarithmic
+   --> libraries\soul-playback\tests\manager_bug_hunt_test.rs:508:28
+    |
+508 |     let curve = FadeCurve::Logarithmic;
+    |                            ^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: `soul-audio` (test "audio_standards_test") generated 2 warnings (run `cargo fix --test "audio_standards_test" -p soul-audio` to apply 2 suggestions)
+warning: unused variable: `queue`
+   --> libraries\soul-playback\tests\queue_three_tier_test.rs:312:9
+    |
+312 |     let queue = manager.get_queue();
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_queue`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling soul-importer v0.0.1-test (D:\dev\soulaudio\soul-player\libraries\soul-importer)
+warning: `soul-audio` (test "eq_precision_test") generated 28 warnings (run `cargo fix --test "eq_precision_test" -p soul-audio` to apply 3 suggestions)
+warning: `soul-playback` (test "start_fade_test") generated 1 warning (run `cargo fix --test "start_fade_test" -p soul-playback` to apply 1 suggestion)
+   Compiling soul-sync v0.0.1-test (D:\dev\soulaudio\soul-player\libraries\soul-sync)
+warning: `soul-audio` (test "effects_chain_e2e_test") generated 9 warnings (run `cargo fix --test "effects_chain_e2e_test" -p soul-audio` to apply 7 suggestions)
+   Compiling soul-server v0.0.1-test (D:\dev\soulaudio\soul-player\applications\server)
+warning: `soul-playback` (test "manager_bug_hunt_test") generated 1 warning
+warning: `soul-playback` (test "queue_three_tier_test") generated 1 warning (run `cargo fix --test "queue_three_tier_test" -p soul-playback` to apply 1 suggestion)
+warning: unused import: `std::collections::HashMap`
+  --> libraries\soul-playback\tests\shuffle_modes_test.rs:11:5
+   |
+11 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `order1`
+   --> libraries\soul-playback\tests\shuffle_modes_test.rs:234:9
+    |
+234 |     let order1 = get_queue_ids(&manager1);
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_order1`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `order2`
+   --> libraries\soul-playback\tests\shuffle_modes_test.rs:235:9
+    |
+235 |     let order2 = get_queue_ids(&manager2);
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_order2`
+
+warning: unused variable: `artists_random`
+   --> libraries\soul-playback\tests\shuffle_modes_test.rs:438:9
+    |
+438 |     let artists_random = get_queue_artists(&manager_random);
+    |         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_artists_random`
+
+warning: unused import: `CrossfeedPreset`
+ --> libraries\soul-audio\tests\continuous_parameter_change_test.rs:8:29
+  |
+8 |     AudioEffect, Crossfeed, CrossfeedPreset, EqBand, GraphicEq, Limiter, ParametricEq,
+  |                             ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `avg_derivative`
+  --> libraries\soul-audio\tests\continuous_parameter_change_test.rs:60:9
+   |
+60 |     let avg_derivative = if count > 0 {
+   |         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_avg_derivative`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `period_samples`
+  --> libraries\soul-audio\tests\continuous_parameter_change_test.rs:98:9
+   |
+98 |     let period_samples = sample_rate as f32 / fundamental_freq;
+   |         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_period_samples`
+
+warning: unused variable: `output_rate`
+   --> libraries\soul-audio\tests\resampler_precision_test.rs:393:5
+    |
+393 |     output_rate: u32,
+    |     ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_output_rate`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `output_rate`
+   --> libraries\soul-audio\tests\resampler_precision_test.rs:470:68
+    |
+470 | fn measure_pre_ringing(resampler: &mut Resampler, input_rate: u32, output_rate: u32) -> (f32, f32) {
+    |                                                                    ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_output_rate`
+
+warning: `soul-playback` (test "shuffle_modes_test") generated 4 warnings (run `cargo fix --test "shuffle_modes_test" -p soul-playback` to apply 4 suggestions)
+warning: `soul-audio` (test "continuous_parameter_change_test") generated 3 warnings (run `cargo fix --test "continuous_parameter_change_test" -p soul-audio` to apply 3 suggestions)
+   Compiling soul-player-desktop v0.0.1-test (D:\dev\soulaudio\soul-player\applications\desktop\src-tauri)
+   Compiling soul-metadata v0.0.1-test (D:\dev\soulaudio\soul-player\libraries\soul-metadata)
+warning: unexpected `cfg` condition value: `scanner_tests_disabled`
+   --> libraries\soul-metadata\tests\metadata_integration.rs:128:7
+    |
+128 | #[cfg(feature = "scanner_tests_disabled")]
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: remove the condition
+    |
+    = note: no expected values for `feature`
+    = help: consider adding `scanner_tests_disabled` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: function `create_test_audio_file` is never used
+  --> libraries\soul-importer\tests\watcher_tests.rs:13:4
+   |
+13 | fn create_test_audio_file(path: &std::path::Path, filename: &str) -> std::path::PathBuf {
+   |    ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `soul-audio` (test "resampler_precision_test") generated 2 warnings (run `cargo fix --test "resampler_precision_test" -p soul-audio` to apply 2 suggestions)
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:133:69
+    |
+133 |     let server_sources = sources::get_server_sources_for_user(pool, user_id)
+    |                          ------------------------------------       ^^^^^^^ expected `UserId`, found `i64`
+    |                          |
+    |                          arguments to this function are incorrect
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:222:14
+    |
+222 | pub async fn get_server_sources_for_user(pool: &SqlitePool, user_id: UserId) -> Result<Vec<Source>> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:186:51
+    |
+186 |     let source = sources::add_server_source(pool, user_id, &name, &url)
+    |                  --------------------------       ^^^^^^^ expected `UserId`, found `i64`
+    |                  |
+    |                  arguments to this function are incorrect
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:254:14
+    |
+254 | pub async fn add_server_source(
+    |              ^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:463:63
+    |
+463 |     let sync_state = sources::get_sync_state(pool, source_id, user_id)
+    |                      -----------------------                  ^^^^^^^ expected `UserId`, found `i64`
+    |                      |
+    |                      arguments to this function are incorrect
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:415:14
+    |
+415 | pub async fn get_sync_state(
+    |              ^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:525:47
+    |
+525 |     sources::init_sync_state(pool, source_id, user_id, "download", 0)
+    |     ------------------------                  ^^^^^^^ expected `UserId`, found `i64`
+    |     |
+    |     arguments to this function are incorrect
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:456:14
+    |
+456 | pub async fn init_sync_state(
+    |              ^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:535:70
+    |
+535 |     let sync_token = sources::get_server_sync_token(pool, source_id, user_id)
+    |                      ------------------------------                  ^^^^^^^ expected `UserId`, found `i64`
+    |                      |
+    |                      arguments to this function are incorrect
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:623:14
+    |
+623 | pub async fn get_server_sync_token(
+    |              ^^^^^^^^^^^^^^^^^^^^^
+
+warning: `soul-metadata` (test "metadata_integration") generated 1 warning
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:554:17
+    |
+551 |             let _ = tokio::runtime::Handle::current().block_on(sources::fail_sync(
+    |                                                                ------------------ arguments to this function are incorrect
+...
+554 |                 user_id,
+    |                 ^^^^^^^ expected `UserId`, found `i64`
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:578:14
+    |
+578 | pub async fn fail_sync(
+    |              ^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:571:9
+    |
+568 |     sources::complete_sync(
+    |     ---------------------- arguments to this function are incorrect
+...
+571 |         user_id,
+    |         ^^^^^^^ expected `UserId`, found `i64`
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:525:14
+    |
+525 | pub async fn complete_sync(
+    |              ^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:620:47
+    |
+620 |     sources::init_sync_state(pool, source_id, user_id, "upload", track_ids.len() as i32)
+    |     ------------------------                  ^^^^^^^ expected `UserId`, found `i64`
+    |     |
+    |     arguments to this function are incorrect
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:456:14
+    |
+456 | pub async fn init_sync_state(
+    |              ^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:638:45
+    |
+638 |     sources::complete_sync(pool, source_id, user_id, tracks_uploaded, 0, 0, 0, None)
+    |     ----------------------                  ^^^^^^^ expected `UserId`, found `i64`
+    |     |
+    |     arguments to this function are incorrect
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:525:14
+    |
+525 | pub async fn complete_sync(
+    |              ^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> applications\desktop\src-tauri\src\sources.rs:660:43
+    |
+660 |     sources::cancel_sync(pool, source_id, user_id)
+    |     --------------------                  ^^^^^^^ expected `UserId`, found `i64`
+    |     |
+    |     arguments to this function are incorrect
+    |
+note: function defined here
+   --> D:\dev\soulaudio\soul-player\libraries\soul-storage\src\sources\mod.rs:604:14
+    |
+604 | pub async fn cancel_sync(pool: &SqlitePool, source_id: i64, user_id: UserId) -> Result<()> {
+    |              ^^^^^^^^^^^
+
+warning: `soul-importer` (test "watcher_tests") generated 1 warning
+error[E0599]: no method named `set_enabled` found for struct `ParametricEq` in the current scope
+   --> applications\desktop\src-tauri\tests\dsp_effects_test.rs:134:8
+    |
+134 |     eq.set_enabled(true);
+    |        ^^^^^^^^^^^ method not found in `ParametricEq`
+    |
+    = help: items from traits can only be used if the trait is in scope
+help: the following traits which provide `set_enabled` are implemented but not in scope; perhaps you want to import one of them
+    |
+ 11 + use soul_audio::effects::AudioEffect;
+    |
+ 11 + use soul_audio::pipeline::PipelineComponent;
+    |
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `soul-player-desktop` (test "dsp_effects_test") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `soul-player-desktop` (bin "soul-player-desktop") due to 10 previous errors
+error: could not compile `soul-player-desktop` (bin "soul-player-desktop" test) due to 10 previous errors

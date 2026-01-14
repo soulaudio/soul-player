@@ -55,7 +55,7 @@ fn generate_test_wav(path: &PathBuf, duration_secs: f64, sample_rate: u32) -> st
     Ok(())
 }
 
-/// Test that read_samples completes quickly after source is loaded
+/// Test that `read_samples` completes quickly after source is loaded
 /// This simulates the steady-state audio callback path
 #[test]
 fn test_read_samples_timing_steady_state() {
@@ -110,7 +110,7 @@ fn test_read_samples_timing_steady_state() {
     );
 }
 
-/// Test that read_samples with resampling also completes quickly
+/// Test that `read_samples` with resampling also completes quickly
 #[test]
 fn test_read_samples_timing_with_resampling() {
     let temp_dir = TempDir::new().unwrap();
@@ -154,7 +154,7 @@ fn test_read_samples_timing_with_resampling() {
     );
 }
 
-/// Test that LocalAudioSource::new() is slow (expected - happens off audio thread)
+/// Test that `LocalAudioSource::new()` is slow (expected - happens off audio thread)
 /// This documents that track loading MUST happen outside the audio callback
 #[test]
 fn test_source_creation_is_slow() {
@@ -181,7 +181,7 @@ fn test_source_creation_is_slow() {
 }
 
 /// Test that demonstrates the problem: loading a source takes too long for audio callback
-/// This test shows WHY load_next_track() causes gaps when called from audio callback
+/// This test shows WHY `load_next_track()` causes gaps when called from audio callback
 #[test]
 fn test_source_loading_exceeds_callback_budget() {
     let temp_dir = TempDir::new().unwrap();

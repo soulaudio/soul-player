@@ -131,7 +131,7 @@ fn generate_pink_noise(sample_rate: u32, duration: f32, amplitude: f32) -> Vec<f
 
         b0 = 0.99886 * b0 + white * 0.0555179;
         b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
+        b2 = 0.96900 * b2 + white * 0.153_852;
         b3 = 0.86650 * b3 + white * 0.3104856;
         b4 = 0.55000 * b4 + white * 0.5329522;
         b5 = -0.7616 * b5 - white * 0.0168980;
@@ -474,7 +474,7 @@ fn measure_compression_ratio(
     let mut input_above_threshold = Vec::new();
     let mut output_levels = Vec::new();
 
-    for level_offset in test_levels.iter() {
+    for level_offset in &test_levels {
         let input_level_db = threshold_db + level_offset;
         let mut signal = generate_signal_at_level(sample_rate, 0.5, input_level_db);
 

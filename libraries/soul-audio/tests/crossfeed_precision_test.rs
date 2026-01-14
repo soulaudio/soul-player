@@ -326,7 +326,7 @@ mod channel_separation_tests {
                 .iter()
                 .filter(|(f, _)| *f > 4000.0)
                 .map(|(_, s)| *s)
-                .last();
+                .next_back();
 
             if let (Some(low), Some(high)) = (low_freq_sep, high_freq_sep) {
                 // High frequencies should have at least similar or more separation
@@ -1315,12 +1315,12 @@ fn test_crossfeed_implementation_summary() {
             break;
         }
     }
-    if !all_finite {
+    if all_finite {
+        println!("OK");
+    } else {
         bugs_found += 1;
         bug_descriptions.push("Non-finite values produced during processing".to_string());
         println!("FAIL");
-    } else {
-        println!("OK");
     }
 
     // Print summary

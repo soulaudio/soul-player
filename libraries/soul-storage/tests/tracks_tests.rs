@@ -421,7 +421,7 @@ async fn test_record_play() {
         .expect("Failed to record play");
 
     // Check play count
-    let play_count = soul_storage::tracks::get_play_count(pool, track_id.clone())
+    let play_count = soul_storage::tracks::get_play_count(pool, user_id.clone(), track_id.clone())
         .await
         .unwrap();
 

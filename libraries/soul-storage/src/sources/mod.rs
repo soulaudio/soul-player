@@ -219,14 +219,18 @@ pub async fn update_last_sync(pool: &SqlitePool, id: SourceId) -> Result<()> {
 }
 
 /// Get all server sources for a user
-pub async fn get_server_sources_for_user(pool: &SqlitePool, user_id: i64) -> Result<Vec<Source>> {
+pub async fn get_server_sources_for_user(
+    pool: &SqlitePool,
+    user_id: UserId,
+) -> Result<Vec<Source>> {
+    let user_id_str = user_id.as_str();
     let rows = sqlx::query!(
         "SELECT id, name, source_type, server_url, server_username, server_token,
                 is_active, is_online, last_sync_at
          FROM sources
          WHERE source_type = 'server' AND (user_id = ? OR user_id IS NULL)
          ORDER BY name",
-        user_id
+        user_id_str
     )
     .fetch_all(pool)
     .await?;
@@ -252,16 +256,17 @@ pub async fn get_server_sources_for_user(pool: &SqlitePool, user_id: i64) -> Res
 /// Add a new server source for a user
 pub async fn add_server_source(
     pool: &SqlitePool,
-    user_id: i64,
+    user_id: UserId,
     name: &str,
     url: &str,
 ) -> Result<Source> {
+    let user_id_str = user_id.as_str();
     let result = sqlx::query!(
         "INSERT INTO sources (name, source_type, server_url, user_id, is_online)
          VALUES (?, 'server', ?, ?, 0)",
         name,
         url,
-        user_id
+        user_id_str
     )
     .execute(pool)
     .await?;
@@ -393,7 +398,7 @@ pub fn is_token_expired(token: &AuthToken) -> bool {
 #[derive(Debug, Clone)]
 pub struct SourceSyncState {
     pub source_id: i64,
-    pub user_id: i64,
+    pub user_id: UserId,
     pub last_sync_at: Option<i64>,
     pub last_sync_direction: Option<String>,
     pub sync_status: String,
@@ -413,8 +418,9 @@ pub struct SourceSyncState {
 pub async fn get_sync_state(
     pool: &SqlitePool,
     source_id: i64,
-    user_id: i64,
+    user_id: UserId,
 ) -> Result<Option<SourceSyncState>> {
+    let user_id_str = user_id.as_str();
     let row = sqlx::query!(
         r#"
         SELECT source_id, user_id, last_sync_at, last_sync_direction, sync_status,
@@ -425,25 +431,25 @@ pub async fn get_sync_state(
         WHERE source_id = ? AND user_id = ?
         "#,
         source_id,
-        user_id
+        user_id_str
     )
     .fetch_optional(pool)
     .await?;
 
     Ok(row.map(|r| SourceSyncState {
         source_id: r.source_id,
-        user_id: r.user_id,
+        user_id: UserId::new(r.user_id),
         last_sync_at: r.last_sync_at,
         last_sync_direction: r.last_sync_direction,
         sync_status: r.sync_status,
         current_operation: r.current_operation,
         current_item: r.current_item,
-        total_items: r.total_items.unwrap_or(0) as i32,
-        processed_items: r.processed_items.unwrap_or(0) as i32,
-        tracks_uploaded: r.tracks_uploaded.unwrap_or(0) as i32,
-        tracks_downloaded: r.tracks_downloaded.unwrap_or(0) as i32,
-        tracks_updated: r.tracks_updated.unwrap_or(0) as i32,
-        tracks_deleted: r.tracks_deleted.unwrap_or(0) as i32,
+        total_items: r.total_items.map(|v| v as i32).unwrap_or(0),
+        processed_items: r.processed_items.map(|v| v as i32).unwrap_or(0),
+        tracks_uploaded: r.tracks_uploaded.map(|v| v as i32).unwrap_or(0),
+        tracks_downloaded: r.tracks_downloaded.map(|v| v as i32).unwrap_or(0),
+        tracks_updated: r.tracks_updated.map(|v| v as i32).unwrap_or(0),
+        tracks_deleted: r.tracks_deleted.map(|v| v as i32).unwrap_or(0),
         error_message: r.error_message,
         server_sync_token: r.server_sync_token,
     }))
@@ -453,10 +459,11 @@ pub async fn get_sync_state(
 pub async fn init_sync_state(
     pool: &SqlitePool,
     source_id: i64,
-    user_id: i64,
+    user_id: UserId,
     direction: &str,
     total_items: i32,
 ) -> Result<()> {
+    let user_id_str = user_id.as_str();
     sqlx::query!(
         r#"
         INSERT INTO source_sync_state (source_id, user_id, sync_status, last_sync_direction, total_items, processed_items)
@@ -476,7 +483,7 @@ pub async fn init_sync_state(
             updated_at = datetime('now')
         "#,
         source_id,
-        user_id,
+        user_id_str,
         direction,
         total_items
     )
@@ -490,11 +497,12 @@ pub async fn init_sync_state(
 pub async fn update_sync_progress(
     pool: &SqlitePool,
     source_id: i64,
-    user_id: i64,
+    user_id: UserId,
     operation: &str,
     current_item: Option<&str>,
     processed_items: i32,
 ) -> Result<()> {
+    let user_id_str = user_id.as_str();
     sqlx::query!(
         r#"
         UPDATE source_sync_state
@@ -508,7 +516,7 @@ pub async fn update_sync_progress(
         current_item,
         processed_items,
         source_id,
-        user_id
+        user_id_str
     )
     .execute(pool)
     .await?;
@@ -520,7 +528,7 @@ pub async fn update_sync_progress(
 pub async fn complete_sync(
     pool: &SqlitePool,
     source_id: i64,
-    user_id: i64,
+    user_id: UserId,
     tracks_uploaded: i32,
     tracks_downloaded: i32,
     tracks_updated: i32,
@@ -528,6 +536,7 @@ pub async fn complete_sync(
     server_sync_token: Option<&str>,
 ) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
+    let user_id_str = user_id.as_str();
 
     sqlx::query!(
         r#"
@@ -552,7 +561,7 @@ pub async fn complete_sync(
         tracks_deleted,
         server_sync_token,
         source_id,
-        user_id
+        user_id_str
     )
     .execute(pool)
     .await?;
@@ -572,9 +581,10 @@ pub async fn complete_sync(
 pub async fn fail_sync(
     pool: &SqlitePool,
     source_id: i64,
-    user_id: i64,
+    user_id: UserId,
     error_message: &str,
 ) -> Result<()> {
+    let user_id_str = user_id.as_str();
     sqlx::query!(
         r#"
         UPDATE source_sync_state
@@ -585,7 +595,7 @@ pub async fn fail_sync(
         "#,
         error_message,
         source_id,
-        user_id
+        user_id_str
     )
     .execute(pool)
     .await?;
@@ -594,7 +604,8 @@ pub async fn fail_sync(
 }
 
 /// Cancel ongoing sync
-pub async fn cancel_sync(pool: &SqlitePool, source_id: i64, user_id: i64) -> Result<()> {
+pub async fn cancel_sync(pool: &SqlitePool, source_id: i64, user_id: UserId) -> Result<()> {
+    let user_id_str = user_id.as_str();
     sqlx::query!(
         r#"
         UPDATE source_sync_state
@@ -603,7 +614,7 @@ pub async fn cancel_sync(pool: &SqlitePool, source_id: i64, user_id: i64) -> Res
         WHERE source_id = ? AND user_id = ? AND sync_status = 'syncing'
         "#,
         source_id,
-        user_id
+        user_id_str
     )
     .execute(pool)
     .await?;
@@ -615,12 +626,13 @@ pub async fn cancel_sync(pool: &SqlitePool, source_id: i64, user_id: i64) -> Res
 pub async fn get_server_sync_token(
     pool: &SqlitePool,
     source_id: i64,
-    user_id: i64,
+    user_id: UserId,
 ) -> Result<Option<String>> {
+    let user_id_str = user_id.as_str();
     let row = sqlx::query!(
         "SELECT server_sync_token FROM source_sync_state WHERE source_id = ? AND user_id = ?",
         source_id,
-        user_id
+        user_id_str
     )
     .fetch_optional(pool)
     .await?;

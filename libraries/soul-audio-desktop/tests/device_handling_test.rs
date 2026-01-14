@@ -820,7 +820,7 @@ mod device_switching_tests {
 
                 // Switch to same device (should succeed)
                 match playback.switch_device(AudioBackend::Default, None) {
-                    Ok(_) => {
+                    Ok(()) => {
                         let new_backend = playback.get_current_backend();
                         assert_eq!(new_backend, original_backend);
                     }
@@ -848,7 +848,7 @@ mod device_switching_tests {
                     eprintln!("Switching to: {}", target.name);
 
                     match playback.switch_device(AudioBackend::Default, Some(target.name.clone())) {
-                        Ok(_) => {
+                        Ok(()) => {
                             let current = playback.get_current_device();
                             assert_eq!(current, target.name);
                             eprintln!("Successfully switched to: {}", current);
@@ -897,7 +897,7 @@ mod device_switching_tests {
 
                 for i in 0..5 {
                     match playback.switch_device(AudioBackend::Default, None) {
-                        Ok(_) => {
+                        Ok(()) => {
                             success_count += 1;
                             thread::sleep(Duration::from_millis(50));
                         }
@@ -967,7 +967,7 @@ mod device_switching_tests {
             eprintln!("Switching to {} during playback...", target.name);
 
             match playback.switch_device(AudioBackend::Default, Some(target.name.clone())) {
-                Ok(_) => {
+                Ok(()) => {
                     eprintln!("Switch successful");
 
                     // Verify playback continues
@@ -1071,7 +1071,7 @@ mod sample_rate_mismatch_tests {
             create_test_wav(&wav_path, 0.5, 1000.0, from_rate).unwrap();
 
             let source =
-                LocalAudioSource::new(&wav_path, to_rate).expect(&format!("Failed for {}", desc));
+                LocalAudioSource::new(&wav_path, to_rate).unwrap_or_else(|_| panic!("Failed for {}", desc));
 
             assert_eq!(source.sample_rate(), to_rate, "{} output rate", desc);
             assert_eq!(

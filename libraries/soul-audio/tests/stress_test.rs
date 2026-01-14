@@ -503,7 +503,7 @@ fn test_consistent_processing_time() {
 
     // Use 99th percentile instead of max to avoid OS scheduling outliers
     let mut sorted_times: Vec<u128> = times.iter().map(|t| t.as_nanos()).collect();
-    sorted_times.sort();
+    sorted_times.sort_unstable();
     let p99_ns = sorted_times[(sorted_times.len() * 99) / 100];
 
     println!(

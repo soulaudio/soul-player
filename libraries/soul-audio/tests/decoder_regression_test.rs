@@ -446,7 +446,7 @@ fn test_bug4_channel_count_mismatch_mono() {
     let buffer = result.unwrap();
 
     // The decoder duplicates mono to stereo, so we have 2x the samples
-    let expected_samples_if_mono = 100;
+    let _expected_samples_if_mono = 100;
     let expected_samples_if_stereo = 200;
 
     println!("Input: 100 mono samples");
@@ -497,7 +497,7 @@ fn test_bug7_f32_no_clamping() {
     // Check if out-of-range samples are clamped
     let mut has_over_one = false;
     for &sample in &buffer.samples {
-        if sample > 1.0 || sample < -1.0 {
+        if !(-1.0..=1.0).contains(&sample) {
             has_over_one = true;
             println!("Sample exceeds range: {}", sample);
         }
@@ -682,8 +682,8 @@ fn test_decoder_with_ramp() {
     let buffer = decoder.decode(&path).unwrap();
 
     // Verify samples are monotonically increasing
-    let mut prev = buffer.samples[0];
-    for &sample in &buffer.samples[2..] {
+    let _prev = buffer.samples[0];
+    for &_sample in &buffer.samples[2..] {
         // Every other sample (left channel only since mono is duplicated to stereo)
         // Note: We're iterating all samples, L and R alternate
     }
