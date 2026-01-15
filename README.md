@@ -5,7 +5,7 @@
 Soul Player is a modern, open-source music player for desktop. Play your local music library with advanced audio features, privacy-first design, and no subscriptions required. Server and mobile apps coming soon.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
-[![Discord](https://img.shields.io/discord/pCkTFbY9hC?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/pCkTFbY9hC)
+[![Discord](https://img.shields.io/discord/1461068250711461982?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/pCkTFbY9hC)
 [![GitHub Stars](https://img.shields.io/github/stars/soulaudio/soul-player?style=social)](https://github.com/soulaudio/soul-player)
 
 ---

@@ -217,8 +217,15 @@ fn bug_linear_pan_law_loudness_shift() {
     let mut buffer_right = generate_sine_stereo(1000.0, SAMPLE_RATE, 4096, 0.7, 0.7);
     enhancer_right.process(&mut buffer_right, SAMPLE_RATE);
 
-    let left_rms_right = calculate_rms(&extract_left(&buffer_right));
-    let right_rms_right = calculate_rms(&extract_right(&buffer_right));
+    // Skip first 0.05 seconds to allow parameter smoothing to settle
+    // StereoEnhancer uses exponential smoothing (SMOOTH_COEFF=0.003) which takes
+    // ~1534 samples to reach 99% of target. Balance starts at 0.0 and transitions to 1.0.
+    let skip_samples = (SAMPLE_RATE as f32 * 0.05) as usize * 2; // stereo
+    let left_channel_settled = extract_left(&buffer_right[skip_samples..]);
+    let right_channel_settled = extract_right(&buffer_right[skip_samples..]);
+
+    let left_rms_right = calculate_rms(&left_channel_settled);
+    let right_rms_right = calculate_rms(&right_channel_settled);
 
     println!("\nAt hard right balance (1.0):");
     println!("Left RMS: {:.4} (should be ~0)", left_rms_right);
@@ -242,8 +249,13 @@ fn bug_linear_pan_law_loudness_shift() {
     let mut buffer_half = generate_sine_stereo(1000.0, SAMPLE_RATE, 4096, 0.7, 0.7);
     enhancer_half.process(&mut buffer_half, SAMPLE_RATE);
 
-    let left_rms = calculate_rms(&extract_left(&buffer_half));
-    let right_rms_half = calculate_rms(&extract_right(&buffer_half));
+    // Skip first 0.05 seconds to allow parameter smoothing to settle
+    let skip_samples = (SAMPLE_RATE as f32 * 0.05) as usize * 2; // stereo
+    let left_channel_half = extract_left(&buffer_half[skip_samples..]);
+    let right_channel_half = extract_right(&buffer_half[skip_samples..]);
+
+    let left_rms = calculate_rms(&left_channel_half);
+    let right_rms_half = calculate_rms(&right_channel_half);
 
     // At balance=0.5: pan_angle = 0.75 * PI/2 = 3*PI/8
     // left_gain = cos(3*PI/8) ~ 0.383
