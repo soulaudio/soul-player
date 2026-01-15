@@ -358,10 +358,17 @@ fn test_eq_boost_increases_level() {
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0)); // +6 dB at 1kHz
 
     let mut buffer = generate_sine(1000.0, SAMPLE_RATE, 0.1);
+
+    // Measure RMS before processing
     let original_rms = rms_level(&buffer);
 
     eq.process(&mut buffer, SAMPLE_RATE);
-    let processed_rms = rms_level(&buffer);
+
+    // Skip first 0.05 seconds (2205 stereo samples = 4410 samples) to allow
+    // coefficient smoothing to settle. The EQ uses exponential smoothing with
+    // SMOOTH_COEFF=0.002, which takes ~2300 samples to reach 99% of target.
+    let skip_samples = (SAMPLE_RATE as f32 * 0.05) as usize * 2; // stereo
+    let processed_rms = rms_level(&buffer[skip_samples..]);
 
     let boost_db = linear_to_db(processed_rms / original_rms);
 
@@ -379,10 +386,15 @@ fn test_eq_cut_decreases_level() {
     eq.set_mid_band(EqBand::peaking(1000.0, -6.0, 1.0)); // -6 dB at 1kHz
 
     let mut buffer = generate_sine(1000.0, SAMPLE_RATE, 0.1);
+
+    // Measure RMS before processing
     let original_rms = rms_level(&buffer);
 
     eq.process(&mut buffer, SAMPLE_RATE);
-    let processed_rms = rms_level(&buffer);
+
+    // Skip first 0.05 seconds to allow coefficient smoothing to settle
+    let skip_samples = (SAMPLE_RATE as f32 * 0.05) as usize * 2; // stereo
+    let processed_rms = rms_level(&buffer[skip_samples..]);
 
     let cut_db = linear_to_db(processed_rms / original_rms);
 

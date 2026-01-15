@@ -1,27 +1,145 @@
 # Soul Player
 
-Local-first, cross-platform music player. Desktop, mobile (iOS/Android), and server.
+**Your music. Your way. Your privacy.**
+
+Soul Player is a modern, open-source music player for desktop. Play your local music library with advanced audio features, privacy-first design, and no subscriptions required. Server and mobile apps coming soon.
+
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
+[![Discord](https://img.shields.io/discord/pCkTFbY9hC?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/pCkTFbY9hC)
+[![GitHub Stars](https://img.shields.io/github/stars/soulaudio/soul-player?style=social)](https://github.com/soulaudio/soul-player)
 
 ---
 
-## Quick Start
+## Why Soul Player?
 
-### Desktop
+**Privacy First** - Your music stays on your devices. No cloud uploads, no tracking, no telemetry.
+
+**Cross-Platform Desktop** - Windows, macOS, and Linux support. Mobile and server apps are planned.
+
+**Advanced Audio Engine** - Gapless playback, crossfade, DSP effects, ReplayGain, high-quality resampling, DSD support, and bit-perfect output with WASAPI/ASIO exclusive mode.
+
+**100% Free Core** - The music player is free and open source forever. Optional paid discovery features (Discogs, Bandcamp, metadata enrichment) will be available as a separate service to fund development.
+
+**No Ads, No Subscriptions** - Play your music without interruption. Pay only if you want advanced discovery features.
+
+---
+
+## Get Started
+
+### Download
+
+**Desktop** - [Download for Windows, macOS, or Linux](https://github.com/soulaudio/soul-player/releases)
+
+**Mobile** - iOS & Android apps are planned (see [ROADMAP.md](./ROADMAP.md))
+
+**Server** - Multi-user streaming server is in development
+
+### Join the Community
+
+- [Discord](https://discord.gg/pCkTFbY9hC) - Chat with the community, get help, share feedback
+- [Report Issues](https://github.com/soulaudio/soul-player/issues) - Found a bug? Let us know
+- [Feature Requests](https://github.com/soulaudio/soul-player/issues/new/choose) - Suggest new features
+
+---
+
+## Current Features (Desktop)
+
+### Audio Playback
+- **Gapless playback** and **crossfade** with configurable duration and fade curves
+- **Queue management** with shuffle and repeat modes
+- **Multiple audio formats** - MP3, FLAC, OGG, WAV, AAC, OPUS via Symphonia decoder
+
+### Audio Quality
+- **Bit-perfect output** with exclusive mode (WASAPI on Windows)
+- **ASIO support** (Windows) and **JACK support** (Linux/macOS) via feature flags
+- **High-quality resampling** with rubato and r8brain backends
+- **DSD playback** - PCM to DSD64/DSD128/DSD256 conversion
+- **ReplayGain normalization** - Track and album gain with EBU R128 loudness analysis
+- **Low-latency monitoring** with real-time latency display
+
+### DSP Effects
+- **3-band parametric EQ** with fine-tune controls
+- **10-band and 31-band graphic EQ** with presets
+- **Dynamic range compressor** and **brick-wall limiter**
+- **Crossfeed** (Bauer stereophonic-to-binaural DSP) with presets
+- **Convolution engine** for room correction (IR file loading)
+- **Stereo enhancement** - width control, mid/side processing, balance adjustment
+- **Effect chain** with add/remove/reorder, per-effect enable/disable, and presets
+
+### Library Management
+- **Local music scanning** with metadata extraction (ID3, Vorbis, APE tags)
+- **Multi-user database** with SQLite (designed for server use)
+- **Artists, albums, genres** with separate tables
+- **Playlists** with track management
+
+### User Interface
+- **Modern design** with dark mode and smooth animations
+- **Customizable keyboard shortcuts** (app-level, not OS-level)
+- **Album, artist, genre views** with navigation
+- **Now Playing page** with playback controls
+- **Settings page** for audio output, effects, and shortcuts
+
+---
+
+## Planned Features
+
+See [ROADMAP.md](./ROADMAP.md) for detailed development timeline.
+
+### Server (In Development)
+- Multi-user authentication (JWT)
+- Audio streaming with range requests
+- REST API for library access
+- Docker container support
+
+### Mobile Apps (Planned)
+- Native iOS and Android apps via Tauri Mobile
+- Touch-optimized UI
+- Background playback and notification controls
+- Sync with server or local library
+
+### Discovery & Metadata (Planned via Soul Services)
+- **Discogs integration** - Browse and discover through real music communities
+- **Bandcamp integration** - Support independent artists
+- **AcoustID fingerprinting** - Identify unknown tracks automatically
+- **MusicBrainz metadata** - Rich, community-curated music information
+- **Lyrics support** - via Genius and LRCLIB
+- **ListenBrainz scrobbling** - Track your listening history
+
+**Note**: Discovery features will be offered as a paid subscription service (starting at $5-10/month) OR self-hosted for free if you provide your own API keys. The core music player remains 100% free and open source.
+
+### Multi-Device Control (Planned)
+- Soul Connect - Spotify Connect-style device control
+- Transfer playback between devices seamlessly
+- Jam Sessions - Collaborative listening with shareable links
+
+---
+
+## For Developers
+
+Soul Player is built with Rust and TypeScript, designed for performance and cross-platform compatibility.
+
+### Quick Start - Desktop Development
 
 ```bash
-# From repository root
-corepack enable     # Enable Yarn 4.x via Corepack (first time only)
-yarn install        # Install all dependencies
-yarn dev:desktop    # Run desktop app
+# Clone the repository
+git clone https://github.com/soulaudio/soul-player.git
+cd soul-player
+
+# Enable Yarn 4.x (first time only)
+corepack enable
+
+# Install dependencies
+yarn install
+
+# Run the desktop app
+yarn dev:desktop
 ```
 
-**Requirements**: Rust 1.75+, Node 20+, system deps (see below)
+**Requirements**: Rust 1.75+, Node 20+, system dependencies (see below)
 
----
+### System Dependencies
 
-## System Dependencies
-
-### Quick Install (Recommended)
+#### Quick Install (Recommended)
 
 ```bash
 # Unix/Linux/macOS (bash)
@@ -31,9 +149,10 @@ yarn dev:desktop    # Run desktop app
 .\scripts\install-deps.ps1 -AutoInstall
 ```
 
-### Manual Installation
+<details>
+<summary>Manual Installation</summary>
 
-#### Linux (Ubuntu/Debian)
+**Linux (Ubuntu/Debian)**
 ```bash
 # Tauri / WebKit
 sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf pkg-config
@@ -51,13 +170,13 @@ sudo apt install libglib2.0-dev libgtk-3-dev
 sudo apt install sqlite3
 ```
 
-#### macOS
+**macOS**
 ```bash
 xcode-select --install   # Xcode Command Line Tools
 brew install cmake pkg-config sqlite
 ```
 
-#### Windows
+**Windows**
 
 | Dependency | Install Command | Notes |
 |------------|-----------------|-------|
@@ -66,21 +185,20 @@ brew install cmake pkg-config sqlite
 | LLVM/Clang | `winget install LLVM.LLVM` | Required for ASIO audio support |
 | WebView2 | Usually pre-installed | [Download](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) |
 
-**Important (Windows)**: Set the `LIBCLANG_PATH` environment variable:
+Set the `LIBCLANG_PATH` environment variable:
 ```powershell
 [System.Environment]::SetEnvironmentVariable("LIBCLANG_PATH", "C:\Program Files\LLVM\bin", "User")
 ```
 
-### Cargo Tools (All Platforms)
+**Cargo Tools (All Platforms)**
 ```bash
 cargo install cargo-audit --locked      # Security auditing
 cargo install sqlx-cli --no-default-features --features sqlite --locked  # Database migrations
 cargo install wasm-pack --locked        # WASM builds (optional, for marketing demo)
 ```
+</details>
 
----
-
-## Database Setup
+### Database Setup
 
 **First time only**:
 
@@ -95,153 +213,34 @@ See [docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md) for details.
 
 ---
 
-## Mobile
-
-```bash
-# From repository root, or cd applications/mobile
-
-# iOS
-yarn workspace soul-player-mobile tauri:ios init
-yarn workspace soul-player-mobile tauri:ios dev
-
-# Android
-yarn workspace soul-player-mobile tauri:android init
-yarn workspace soul-player-mobile tauri:android dev
-```
-
-See `docs/development/MOBILE_SETUP.md` for prerequisites.
-
----
-
-## Server
-
-Run the multi-user streaming server with web interface.
-
-### Local (No Docker)
-
-```bash
-# Server only (API on port 8080)
-cargo run -p soul-server -- serve
-
-# Server + Web UI (two terminals)
-cargo run -p soul-server -- serve   # Terminal 1: API on :8080
-yarn dev:web                         # Terminal 2: Web UI on :3000 (proxies to API)
-```
-
-Access:
-- **Web UI**: http://localhost:3000
-- **API**: http://localhost:8080/api
-
-### Docker - Production
-
-```bash
-# Build and run (serves web UI + API on port 8080)
-docker compose up -d
-
-# Or build manually
-docker build -f applications/server/Dockerfile -t soul-player .
-docker run -p 8080:8080 -v soul-data:/app/data soul-player
-```
-
-Access:
-- **Web UI**: http://localhost:8080
-- **API**: http://localhost:8080/api
-
-### Development (Hot Reload)
-
-```bash
-# Start server with cargo-watch + web dev server with HMR
-docker compose -f docker-compose.dev.yml up
-
-# Or use yarn scripts
-yarn dev:all           # Start both server and web
-yarn dev:all:down      # Stop
-```
-
-Access:
-- **Web UI (Vite HMR)**: http://localhost:3000
-- **API**: http://localhost:8080/api
-
-### API-Only (No Web UI)
-
-```bash
-docker build -f applications/server/Dockerfile.server-only -t soul-server:api .
-docker run -p 8080:8080 -v soul-data:/app/data soul-server:api
-```
-
-### Create User
-
-```bash
-# Inside container
-docker compose exec soul-player soul-server add-user -u myuser -p mypassword
-
-# Or with docker run
-docker run --rm -v soul-data:/app/data soul-player soul-server add-user -u myuser -p mypassword
-```
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SOUL_SERVER_HOST` | `0.0.0.0` | Server bind address |
-| `SOUL_SERVER_PORT` | `8080` | Server port |
-| `SOUL_AUTH_JWT_SECRET` | - | **Required**: JWT signing secret |
-| `SOUL_STORAGE_DATABASE_URL` | `sqlite:///app/data/soul.db` | Database path |
-| `SOUL_STORAGE_MUSIC_STORAGE_PATH` | `/app/data/tracks` | Music storage path |
-| `SOUL_TRANSCODING_ENABLED` | `true` | Enable audio transcoding |
-| `SOUL_WEB_DIR` | `/app/web` | Web UI static files path |
-
----
-
 ## Build
 
 ```bash
 # From repository root
 yarn build:desktop     # Desktop app
-yarn build:mobile      # Mobile app
-yarn build:web         # Web player
+yarn build:web         # Web player (for server)
 yarn build:marketing   # Marketing site
 ```
 
 ---
 
-## Structure
+## Project Structure
 
 ```
 libraries/          # Rust libraries (audio, storage, metadata, sync)
 applications/
   shared/          # React components (shared across desktop/mobile/web)
   desktop/         # Desktop Tauri app
-  mobile/          # Mobile Tauri app (iOS/Android)
-  web/             # Web player (connects to server)
-  server/          # Multi-user streaming server
+  mobile/          # Mobile Tauri app (iOS/Android) - in development
+  web/             # Web player (connects to server) - in development
+  server/          # Multi-user streaming server - in development
   marketing/       # Marketing website with demo
 docs/              # Architecture, testing, CI/CD guides
 ```
 
 ---
 
-## Development
-
-```bash
-# From repository root
-yarn test          # Run all tests
-yarn lint          # Lint all workspaces
-yarn type-check    # TypeScript type checking
-```
-
----
-
 ## Testing
-
-### Test Categories
-
-| Category | Description | Docker Required |
-|----------|-------------|-----------------|
-| **Unit tests** | Fast, isolated tests for individual functions | No |
-| **Integration tests** | Database and component interaction tests | No |
-| **Testcontainer tests** | Audio backend tests with PulseAudio virtual device | Yes |
-| **Hardware tests** | Physical audio device tests (skipped in CI) | No |
 
 ### Running Tests
 
@@ -252,43 +251,18 @@ cargo test --all
 # Full tests with Docker/testcontainers
 cargo test --all --features testcontainers
 
-# Nightly tests (memory stability)
-cargo test -p soul-audio --test memory_stability_test
-
-# Run specific test crate
-cargo test -p soul-storage
-cargo test -p soul-audio
-```
-
-### Hardware-Dependent Tests
-
-These tests require physical audio hardware and are marked `#[ignore]` in CI:
-
-- **WASAPI exclusive mode** - Windows-only, requires audio device
-- **Device hot-plug detection** - Tests USB audio device connect/disconnect
-- **Real-time latency measurement** - Measures actual audio latency
-- **Platform-specific backends** - ASIO (Windows), CoreAudio (macOS), ALSA (Linux)
-
-Run locally with:
-```bash
+# Hardware-dependent tests (requires physical audio device)
 cargo test --all -- --ignored
 ```
 
-### Testcontainers Setup
+### Test Categories
 
-For full audio backend testing with Docker:
-
-1. **Install Docker** - [Get Docker](https://docs.docker.com/get-docker/)
-2. **Run tests** - The testcontainer automatically provisions a PulseAudio virtual audio device
-3. **Local testing**:
-   ```bash
-   cargo test --all --features testcontainers
-   ```
-
-The testcontainer provides:
-- PulseAudio virtual audio sink
-- Simulated audio device enumeration
-- Cross-platform audio backend testing
+| Category | Description | Docker Required |
+|----------|-------------|-----------------|
+| Unit tests | Fast, isolated tests for individual functions | No |
+| Integration tests | Database and component interaction tests | No |
+| Testcontainer tests | Audio backend tests with PulseAudio virtual device | Yes |
+| Hardware tests | Physical audio device tests (skipped in CI) | No |
 
 See [docs/TESTING.md](./docs/TESTING.md) for detailed testing strategy.
 
@@ -296,16 +270,17 @@ See [docs/TESTING.md](./docs/TESTING.md) for detailed testing strategy.
 
 ## Documentation
 
-See **[docs/README.md](./docs/README.md)** for complete documentation index.
+See [docs/README.md](./docs/README.md) for complete documentation index.
 
 ### Essential Docs
 
-- **[docs/SOUL_SERVICES_PLAN.md](./docs/SOUL_SERVICES_PLAN.md)** - Future: Subscription-based metadata & discovery platform
-- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - System design and architecture
-- **[docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md)** - Database setup and troubleshooting
-- **[docs/FOLDER_STRUCTURE.md](./docs/FOLDER_STRUCTURE.md)** - Project layout
-- **[docs/TESTING.md](./docs/TESTING.md)** - Testing strategy
-- **[CLAUDE.md](./CLAUDE.md)** - Codebase instructions for Claude Code
+- [ARCHITECTURE.md](./docs/ARCHITECTURE.md) - System design and architecture
+- [ROADMAP.md](./ROADMAP.md) - Development roadmap and planned features
+- [SOUL_SERVICES_PLAN.md](./docs/SOUL_SERVICES_PLAN.md) - Discovery & metadata subscription service plan
+- [TESTING.md](./docs/TESTING.md) - Testing strategy
+- [SQLX_SETUP.md](./docs/SQLX_SETUP.md) - Database setup and troubleshooting
+- [CLAUDE.md](./CLAUDE.md) - Codebase instructions for Claude Code
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - How to contribute
 
 ---
 
@@ -317,6 +292,44 @@ See **[docs/README.md](./docs/README.md)** for complete documentation index.
 
 ---
 
+## Contributing
+
+We welcome contributions! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+- Pick an issue labeled `good first issue`
+- Follow [CONVENTIONS.md](./docs/CONVENTIONS.md) for coding standards
+- Join [Discord](https://discord.gg/pCkTFbY9hC) to discuss ideas
+
+---
+
+## Security
+
+Found a security vulnerability? Please email **sebastian.stupak@pm.me** instead of opening a public issue.
+
+---
+
 ## License
 
-GNU AGPL-3.0
+GNU AGPL-3.0 - see [LICENSE](./LICENSE) for details.
+
+---
+
+## Support the Project
+
+Soul Player is free and open source. If you find it useful, consider:
+
+- Starring the repo on GitHub
+- Joining the [Discord](https://discord.gg/pCkTFbY9hC) community
+- Reporting bugs or suggesting features
+- Contributing code or documentation
+- Spreading the word to fellow music lovers
+
+---
+
+<div align="center">
+
+**[Website](https://player.soulaudio.co)** • **[Discord](https://discord.gg/pCkTFbY9hC)** • **[GitHub](https://github.com/soulaudio/soul-player)** • **[Download](https://github.com/soulaudio/soul-player/releases)**
+
+Soul Audio
+
+</div>

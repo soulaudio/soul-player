@@ -6,55 +6,23 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a feature! Please provide as much detail as possible to help us understand your request.
+        Thanks for suggesting a feature! Please describe what you'd like to see and why it would be useful.
 
   - type: textarea
-    id: problem
+    id: description
     attributes:
-      label: Problem Statement
-      description: Is your feature request related to a problem? Describe what the problem is.
-      placeholder: e.g., I'm always frustrated when...
+      label: Feature Description
+      description: Describe the feature you'd like to see. What should it do?
+      placeholder: I would like Soul Player to...
     validations:
       required: true
 
   - type: textarea
-    id: solution
+    id: motivation
     attributes:
-      label: Proposed Solution
-      description: Describe the solution you'd like to see.
-      placeholder: Describe your proposed feature...
-    validations:
-      required: true
-
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives Considered
-      description: Have you considered any alternative solutions or features?
-      placeholder: Describe alternatives you've considered...
-    validations:
-      required: false
-
-  - type: textarea
-    id: use-case
-    attributes:
-      label: Use Case
-      description: How would this feature benefit you and other users?
-      placeholder: Describe how you would use this feature...
-    validations:
-      required: true
-
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Target Platform
-      description: Which platform(s) should this feature target?
-      multiple: true
-      options:
-        - Desktop (Windows/macOS/Linux)
-        - Server
-        - Mobile
-        - All platforms
+      label: Why is this needed?
+      description: Explain why this feature would be useful. What problem does it solve?
+      placeholder: This would help me/users to...
     validations:
       required: true
 
@@ -62,8 +30,8 @@ body:
     id: additional-context
     attributes:
       label: Additional Context
-      description: Add any other context, mockups, or examples about the feature request.
-      placeholder: Any additional information, screenshots, or examples...
+      description: Add any other context, mockups, examples, or screenshots.
+      placeholder: Any additional information...
     validations:
       required: false
 
@@ -74,5 +42,3 @@ body:
       options:
         - label: I have searched existing issues to ensure this is not a duplicate
           required: true
-        - label: This feature aligns with Soul Player's goals (cross-platform, multi-user, privacy-focused)
-          required: false

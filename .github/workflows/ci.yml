@@ -341,12 +341,29 @@ jobs:
 
   coverage:
     name: Code Coverage
-    needs: cleanup
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
+      # Aggressive disk cleanup - coverage builds need space
+      - name: Free disk space
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+
+          echo "Disk after cleanup:"
+          df -h
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -355,25 +372,26 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+          sudo apt-get install -y libasound2-dev pkg-config
 
-      # Create mock dist directory
-      - name: Create mock frontend dist
-        run: |
-          mkdir -p applications/desktop/dist
-          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+      # Use cargo-llvm-cov (faster and more efficient than tarpaulin)
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin --locked
-
+      # Only test libraries (exclude desktop/server apps to save time/space)
       - name: Generate coverage
-        run: cargo tarpaulin --workspace --out Html --output-dir coverage --release
+        run: |
+          cargo llvm-cov --workspace \
+            --exclude soul-player-desktop \
+            --exclude soul-server \
+            --lcov --output-path lcov.info \
+            --no-fail-fast
         continue-on-error: true
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: coverage/tarpaulin-report.html
+          files: lcov.info
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
