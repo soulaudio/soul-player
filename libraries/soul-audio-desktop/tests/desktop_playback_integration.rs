@@ -23,6 +23,7 @@ fn create_test_track(id: &str, title: &str, duration_secs: u64) -> QueueTrack {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_desktop_playback_creation() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config);
@@ -35,6 +36,7 @@ fn test_desktop_playback_creation() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_command_sending_does_not_block() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -58,6 +60,7 @@ fn test_command_sending_does_not_block() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_event_reception_after_commands() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -80,6 +83,7 @@ fn test_event_reception_after_commands() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_volume_command_processing() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -106,6 +110,7 @@ fn test_volume_command_processing() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_mute_unmute_commands() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -134,6 +139,7 @@ fn test_mute_unmute_commands() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_shuffle_mode_commands() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -150,6 +156,7 @@ fn test_shuffle_mode_commands() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_repeat_mode_commands() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -166,6 +173,7 @@ fn test_repeat_mode_commands() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_queue_commands() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -191,6 +199,7 @@ fn test_queue_commands() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_clear_queue_command() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -227,6 +236,7 @@ fn test_clear_queue_command() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_seek_command() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -238,6 +248,7 @@ fn test_seek_command() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_playback_control_sequence() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -267,6 +278,7 @@ fn test_playback_control_sequence() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_rapid_sequential_commands() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -288,6 +300,7 @@ fn test_rapid_sequential_commands() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_event_order_preservation() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -321,6 +334,7 @@ fn test_event_order_preservation() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_queue_management_workflow() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -362,6 +376,7 @@ fn test_queue_management_workflow() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_rapid_play_pause_toggle() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -393,6 +408,7 @@ fn test_rapid_play_pause_toggle() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_volume_bounds_enforcement() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -411,6 +427,7 @@ fn test_volume_bounds_enforcement() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_no_events_without_commands() {
     let config = PlaybackConfig::default();
     let playback = DesktopPlayback::new(config).unwrap();
@@ -435,6 +452,7 @@ fn test_no_events_without_commands() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_playback_manager_survives_stress() {
     use rand::Rng;
 
@@ -475,6 +493,7 @@ fn test_playback_manager_survives_stress() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_playback_instance_isolation() {
     // Create a playback instance, use it, then drop it
     {
