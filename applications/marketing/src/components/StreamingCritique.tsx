@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { FadeIn } from './animations/FadeIn'
 
 interface SourceLink {
@@ -19,7 +19,7 @@ function CritiqueItem({ title, description, sources }: Problem) {
   const visibleSources = showAllSources ? sources : sources.slice(0, 3)
 
   return (
-    <div className="flex-shrink-0 w-full sm:w-[calc(33.333%-1rem)]">
+    <div className="flex-shrink-0 w-full sm:w-[calc(33.333%-0.75rem)] min-w-0">
       <h4
         className="text-base font-semibold mb-1"
         style={{ color: 'hsl(var(--foreground))' }}
@@ -64,6 +64,15 @@ function CritiqueItem({ title, description, sources }: Problem) {
 
 export function StreamingCritique() {
   const [currentPage, setCurrentPage] = useState(0)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const problems: Problem[] = [
     {
@@ -192,10 +201,15 @@ export function StreamingCritique() {
     },
   ]
 
-  const itemsPerPage = 3
+  const itemsPerPage = isMobile ? 1 : 3
   const totalPages = Math.ceil(problems.length / itemsPerPage)
   const startIndex = currentPage * itemsPerPage
   const visibleProblems = problems.slice(startIndex, startIndex + itemsPerPage)
+
+  // Reset to page 0 when switching between mobile/desktop
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [isMobile])
 
   const goToPrev = () => setCurrentPage((p) => Math.max(0, p - 1))
   const goToNext = () => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))
@@ -250,7 +264,7 @@ export function StreamingCritique() {
         <FadeIn delay={0.1}>
           <div className="relative">
             {/* Items */}
-            <div className="flex gap-6 mb-4">
+            <div className="flex gap-4 sm:gap-6 mb-4 overflow-hidden">
               {visibleProblems.map((problem, i) => (
                 <CritiqueItem key={startIndex + i} {...problem} />
               ))}

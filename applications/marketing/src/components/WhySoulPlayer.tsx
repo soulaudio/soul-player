@@ -590,7 +590,7 @@ function SupportSection() {
 export function WhySoulPlayer() {
   return (
     <section
-      className="relative transition-colors"
+      className="relative transition-colors overflow-hidden"
       style={{ backgroundColor: 'hsl(var(--background))' }}
     >
       {/* Hero Title */}

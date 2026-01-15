@@ -511,7 +511,7 @@ function FeatureIcon({ data }: { data: FeatureValue }) {
 
 export function ComparisonTable() {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-zinc-800">

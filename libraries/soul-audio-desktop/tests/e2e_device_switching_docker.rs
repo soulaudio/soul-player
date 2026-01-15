@@ -139,6 +139,7 @@ async fn test_device_enumeration_in_container() {
 /// Test that verifies backend enumeration works
 /// (This runs on host, not in container, to test actual CPAL functionality)
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_backend_enumeration_host() {
     let backends = backend::list_available_backends();
 
@@ -166,6 +167,7 @@ fn test_backend_enumeration_host() {
 
 /// Test device listing on host system
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_device_listing_host() {
     let backends = backend::list_available_backends();
 
@@ -200,6 +202,7 @@ fn test_device_listing_host() {
 
 /// Test creating playback instance on host
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_playback_creation_host() {
     let config = PlaybackConfig::default();
 
@@ -223,6 +226,7 @@ fn test_playback_creation_host() {
 
 /// Test device switching on host with multiple switches
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_device_switching_stress_host() {
     let config = PlaybackConfig::default();
 
@@ -263,6 +267,7 @@ fn test_device_switching_stress_host() {
 
 /// Integration test: Verify playback commands work after device switch
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_commands_after_device_switch() {
     let config = PlaybackConfig::default();
 
@@ -303,6 +308,7 @@ fn test_commands_after_device_switch() {
 
 /// Test that exercises multiple backends if available
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_multi_backend_switching() {
     let backends = backend::list_available_backends();
 

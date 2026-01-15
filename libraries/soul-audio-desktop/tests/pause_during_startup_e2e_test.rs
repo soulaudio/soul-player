@@ -49,6 +49,7 @@ fn get_latest_state(events: &[PlaybackEvent]) -> Option<PlaybackState> {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_mediacard_double_click_pause_bug() {
     // **SCENARIO: User rapidly clicks Play then Pause on MediaCard**
     //
@@ -157,6 +158,7 @@ fn test_mediacard_double_click_pause_bug() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_triple_rapid_commands() {
     // Test even more extreme case: Play → Pause → Play rapidly
 
@@ -218,6 +220,7 @@ fn test_triple_rapid_commands() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_pause_then_resume_during_loading() {
     // Test pausing during track loading, then resuming
 
@@ -296,6 +299,7 @@ fn test_pause_then_resume_during_loading() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_command_queue_ordering() {
     // Verify commands are processed in order (FIFO)
 
@@ -344,6 +348,7 @@ fn test_command_queue_ordering() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_pause_immediately_after_load_playlist() {
     // This is the EXACT MediaCard scenario:
     // LoadPlaylist sets up the queue, but doesn't play yet
@@ -425,6 +430,7 @@ fn test_pause_immediately_after_load_playlist() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_multiple_pause_resume_cycles() {
     // Test that pause/resume works correctly across multiple cycles
 
@@ -475,6 +481,7 @@ fn test_multiple_pause_resume_cycles() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - not available in CI environments"]
 fn test_pause_during_background_loading() {
     // **THE CRITICAL BUG TEST:**
     // This reproduces the EXACT race condition that causes audio to play after pause.

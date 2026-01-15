@@ -4,8 +4,8 @@ import { ComparisonTable } from './ComparisonTable'
 
 export function ComparisonSection() {
   return (
-    <section className="py-24 bg-zinc-950">
-      <div className="container mx-auto px-6">
+    <section className="py-24 bg-zinc-950 overflow-hidden">
+      <div className="container mx-auto px-6 max-w-full">
         <div className="text-center mb-16">
           <h2 className="text-5xl font-serif font-bold mb-4">
             Why Listen With Us?
