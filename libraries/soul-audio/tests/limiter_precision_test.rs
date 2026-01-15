@@ -332,7 +332,6 @@ fn estimate_thd(buffer: &[f32], fundamental_freq: f32, sample_rate: u32) -> f32 
     let bin_size = sample_rate as f32 / n as f32;
     let fundamental_bin = (fundamental_freq / bin_size).round() as usize;
 
-    let mut fundamental_power = 0.0_f32;
     let mut harmonic_power = 0.0_f32;
 
     // Calculate power at fundamental
@@ -343,7 +342,7 @@ fn estimate_thd(buffer: &[f32], fundamental_freq: f32, sample_rate: u32) -> f32 
         real += sample * angle.cos();
         imag += sample * angle.sin();
     }
-    fundamental_power = (real * real + imag * imag) / (n * n) as f32;
+    let fundamental_power = (real * real + imag * imag) / (n * n) as f32;
 
     // Calculate power at harmonics 2-10
     for harmonic in 2..=10 {
