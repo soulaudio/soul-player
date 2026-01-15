@@ -402,13 +402,24 @@ impl ExclusiveOutput {
         let sample_format = selected_config.sample_format();
 
         // Determine buffer size
+        // If zero buffer size is requested, fall back to a sensible default (1024 frames)
+        // This follows WASAPI best practices: zero buffer is invalid and should use a safe default
+        const DEFAULT_BUFFER_FRAMES: u32 = 1024;
+
         let buffer_size = if let Some(frames) = config.buffer_frames {
+            // Handle zero buffer specially - use default instead
+            let requested_frames = if frames == 0 {
+                DEFAULT_BUFFER_FRAMES
+            } else {
+                frames
+            };
+
             match selected_config.buffer_size() {
                 SupportedBufferSize::Range { min, max } => {
-                    let clamped = frames.clamp(*min, *max);
+                    let clamped = requested_frames.clamp(*min, *max);
                     BufferSize::Fixed(clamped)
                 }
-                SupportedBufferSize::Unknown => BufferSize::Fixed(frames),
+                SupportedBufferSize::Unknown => BufferSize::Fixed(requested_frames),
             }
         } else {
             BufferSize::Default
