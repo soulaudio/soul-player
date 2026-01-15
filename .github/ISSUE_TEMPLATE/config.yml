@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discord Community
+    url: https://discord.gg/pCkTFbY9hC
+    about: Ask questions, get help, and discuss Soul Player with the community
+  - name: Documentation
+    url: https://player.soulaudio.co/docs
+    about: Read the documentation and guides
+  - name: Security Issue
+    url: mailto:sebastian.stupak@pm.me
+    about: Report security vulnerabilities privately via email (do not create public issues)

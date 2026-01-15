@@ -155,9 +155,28 @@ mod tests {
 
         let new_order: Vec<String> = tracks.iter().map(|t| t.id.clone()).collect();
 
-        // Very unlikely to be in same order (probability: 1/120)
-        // If this fails occasionally, it's just bad luck, not a bug
-        assert_ne!(original_order, new_order);
+        // With 5 items, there's a 1/120 (0.83%) chance of same order
+        // Instead of asserting inequality (flaky), verify shuffle ran multiple times
+        // or check that at least ONE shuffle attempt changes the order
+        let mut changed = original_order != new_order;
+
+        // If first shuffle didn't change order (rare), try a few more times
+        // This makes the test robust while still catching broken shuffle logic
+        if !changed {
+            for _ in 0..10 {
+                shuffle_random(&mut tracks);
+                let attempt_order: Vec<String> = tracks.iter().map(|t| t.id.clone()).collect();
+                if attempt_order != original_order {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        assert!(
+            changed,
+            "Shuffle failed to change order after 11 attempts - shuffle algorithm may be broken"
+        );
     }
 
     #[test]

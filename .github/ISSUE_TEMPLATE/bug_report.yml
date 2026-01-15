@@ -1,0 +1,119 @@
+name: Bug Report
+description: Report a bug or issue with Soul Player
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below to help us diagnose and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe the bug...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+      placeholder: Describe what should happen...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened.
+      placeholder: Describe what actually happened...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        **REQUIRED**: Please attach logs from the "Report Bug" section in Settings page.
+
+        **Desktop App**: Settings → Report Bug → Toggle logs
+        Logs are saved to:
+        - Windows: `%APPDATA%\Soul Player\logs\`
+        - macOS: `~/Library/Application Support/soul-player/logs/`
+        - Linux: `~/.config/soul-player/logs/`
+      placeholder: Paste logs here...
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which platform are you using?
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Server (Headless)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Soul Player Version
+      description: What version of Soul Player are you using? (Check in Settings → About)
+      placeholder: e.g., v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version
+      description: Your operating system version.
+      placeholder: e.g., Windows 11 23H2, macOS 14.2, Ubuntu 22.04
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here (screenshots, error messages, related issues, etc.).
+      placeholder: Any additional information...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have attached logs from the "Report Bug" section in Settings
+          required: true
+        - label: I am using the latest version of Soul Player
+          required: false

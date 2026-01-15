@@ -1,20 +1,5 @@
 # Contributing to Soul Player
 
-## Prerequisites
-
-- Rust 1.75+
-- Node.js 16+ (for Tauri desktop)
-- Docker (for integration tests)
-
-## Setup
-
-```bash
-git clone https://github.com/yourusername/soul-player.git
-cd soul-player
-cargo build --all
-cargo test --all
-```
-
 ## Workflow
 
 1. Pick an issue (look for `good first issue` labels)
@@ -31,21 +16,17 @@ Write tests for business logic, edge cases, and integration points. Do not write
 
 ## Architecture Guidelines
 
-All storage operations must include user context for multi-user support. Use trait abstractions for platform-specific code (desktop/server/ESP32). See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md), , and [TESTING.md](docs/TESTING.md) for detailed guidelines.
 
 ## PR Checklist
 
-- Code compiles without warnings
-- Tests pass (`cargo test --all`)
-- Formatted (`cargo fmt --all`)
-- Linted (`cargo clippy --all-targets --all-features -- -D warnings`)
-- Security audit passes (`cargo audit`)
+- All GitHub CI gates must pass (formatting, linting, tests, security audit)
 - Documentation updated if API changed
 
 ## Security
 
-Do not open public issues for security vulnerabilities. Email security concerns to security@soul-player.dev.
+Do not open public issues for security vulnerabilities. Email security concerns to sebastian.stupak@pm.me.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under MIT OR Apache-2.0.
+By contributing, you agree that your contributions will be licensed under AGPL-3.0.
