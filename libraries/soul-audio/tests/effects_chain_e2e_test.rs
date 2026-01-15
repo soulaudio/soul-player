@@ -1852,7 +1852,6 @@ mod effect_combination_tests {
     /// Test all 32 effect combinations (5 effects = 32 combinations)
     #[test]
     fn test_all_32_combinations() {
-        let mut passed = 0;
         let mut failed_combinations = Vec::new();
 
         for i in 0..32 {
@@ -1895,9 +1894,7 @@ mod effect_combination_tests {
                 assert!(is_stable(&buffer));
             });
 
-            if result.is_ok() {
-                passed += 1;
-            } else {
+            if result.is_err() {
                 failed_combinations.push(format!(
                     "EQ={} GEQ={} Comp={} Stereo={} Lim={}",
                     use_eq, use_geq, use_comp, use_stereo, use_limiter
