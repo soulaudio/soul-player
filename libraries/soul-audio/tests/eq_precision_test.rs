@@ -656,8 +656,8 @@ fn test_filter_stability_95_percent_nyquist() {
 
 #[test]
 fn test_filter_stability_99_percent_nyquist() {
-    /// Test filter behavior at 99% of Nyquist frequency
-    /// Filters may not work correctly here, but should not produce NaN/Inf
+    // Test filter behavior at 99% of Nyquist frequency
+    // Filters may not work correctly here, but should not produce NaN/Inf
     let sample_rate = 44100;
     let nyquist = sample_rate as f32 / 2.0;
     let test_freq = nyquist * 0.99;
@@ -681,8 +681,8 @@ fn test_filter_stability_99_percent_nyquist() {
 
 #[test]
 fn test_graphic_eq_above_nyquist_bands() {
-    /// Test 31-band EQ at low sample rates where some bands exceed Nyquist
-    /// The 20kHz band at 32kHz sample rate exceeds Nyquist (16kHz)
+    // Test 31-band EQ at low sample rates where some bands exceed Nyquist
+    // The 20kHz band at 32kHz sample rate exceeds Nyquist (16kHz)
     let sample_rate = 32000;
     let nyquist = sample_rate as f32 / 2.0;
 
@@ -767,8 +767,8 @@ fn test_peaking_filter_phase_response() {
 
 #[test]
 fn test_shelf_filter_phase_response() {
-    /// Verify shelf filters have expected phase characteristics
-    /// Shelf filters have asymmetric phase response
+    // Verify shelf filters have expected phase characteristics
+    // Shelf filters have asymmetric phase response
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(200.0, 6.0));
 
@@ -787,8 +787,8 @@ fn test_shelf_filter_phase_response() {
 
 #[test]
 fn test_dc_offset_accumulation() {
-    /// Test that DC offset does not accumulate over extended processing
-    /// Reference: IIR filter DC blocking best practices
+    // Test that DC offset does not accumulate over extended processing
+    // Reference: IIR filter DC blocking best practices
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0));
 
@@ -822,7 +822,7 @@ fn test_dc_offset_accumulation() {
 
 #[test]
 fn test_dc_blocking_shelf_filters() {
-    /// Shelf filters should not block DC entirely but should not amplify it infinitely
+    // Shelf filters should not block DC entirely but should not amplify it infinitely
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(100.0, 12.0)); // +12dB low shelf
 
@@ -848,8 +848,8 @@ fn test_dc_blocking_shelf_filters() {
 
 #[test]
 fn test_denormal_number_handling() {
-    /// Test that filter handles denormal numbers without CPU performance issues
-    /// Reference: EarLevel Engineering - denormal flushing in audio DSP
+    // Test that filter handles denormal numbers without CPU performance issues
+    // Reference: EarLevel Engineering - denormal flushing in audio DSP
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0));
 
@@ -885,7 +885,7 @@ fn test_denormal_number_handling() {
 
 #[test]
 fn test_graphic_eq_denormal_handling() {
-    /// Test 31-band EQ denormal handling (more filter states to track)
+    // Test 31-band EQ denormal handling (more filter states to track)
     let mut eq = GraphicEq::new_31_band();
 
     // Boost all bands
@@ -915,10 +915,10 @@ fn test_graphic_eq_denormal_handling() {
 
 #[test]
 fn test_low_shelf_response_curve() {
-    /// Verify low shelf filter response matches expected curve
-    /// Below cutoff: full boost/cut
-    /// At cutoff: -3dB from full boost
-    /// Above cutoff: approaches unity
+    // Verify low shelf filter response matches expected curve
+    // Below cutoff: full boost/cut
+    // At cutoff: -3dB from full boost
+    // Above cutoff: approaches unity
     let mut eq = ParametricEq::new();
     eq.set_low_band(EqBand::low_shelf(200.0, 6.0));
 
@@ -966,7 +966,7 @@ fn test_low_shelf_response_curve() {
 
 #[test]
 fn test_high_shelf_response_curve() {
-    /// Verify high shelf filter response matches expected curve
+    // Verify high shelf filter response matches expected curve
     let mut eq = ParametricEq::new();
     eq.set_high_band(EqBand::high_shelf(5000.0, 6.0));
 
@@ -1014,7 +1014,7 @@ fn test_high_shelf_response_curve() {
 
 #[test]
 fn test_shelf_boost_and_cut_symmetry() {
-    /// Verify shelf filter boost and cut are symmetric
+    // Verify shelf filter boost and cut are symmetric
     let test_freqs = [50.0, 100.0, 200.0, 400.0, 1000.0];
 
     eprintln!("SHELF BOOST/CUT SYMMETRY (200Hz low shelf):");
@@ -1052,8 +1052,8 @@ fn test_shelf_boost_and_cut_symmetry() {
 
 #[test]
 fn test_comprehensive_stability_matrix() {
-    /// Test stability across many frequency/gain/Q combinations
-    /// This is a comprehensive stress test for filter coefficients
+    // Test stability across many frequency/gain/Q combinations
+    // This is a comprehensive stress test for filter coefficients
     let frequencies = [20.0, 100.0, 1000.0, 5000.0, 15000.0, 20000.0];
     let gains = [-12.0, -6.0, 0.0, 6.0, 12.0];
     let q_values = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0];
@@ -1108,8 +1108,8 @@ fn test_comprehensive_stability_matrix() {
 
 #[test]
 fn test_gain_accuracy_db_scale() {
-    /// Verify gain is correctly converted from dB to linear
-    /// Reference: dB = 20 * log10(linear)
+    // Verify gain is correctly converted from dB to linear
+    // Reference: dB = 20 * log10(linear)
     let test_gains = [-12.0, -6.0, -3.0, 0.0, 3.0, 6.0, 12.0];
 
     eprintln!("GAIN ACCURACY TEST (1kHz peaking, Q=1):");
@@ -1138,7 +1138,7 @@ fn test_gain_accuracy_db_scale() {
 
 #[test]
 fn test_cumulative_gain_multiple_bands() {
-    /// Test gain accumulation when multiple bands affect same frequency
+    // Test gain accumulation when multiple bands affect same frequency
     let mut eq = ParametricEq::new();
 
     // All three bands boost at their respective frequencies
@@ -1159,7 +1159,7 @@ fn test_cumulative_gain_multiple_bands() {
 
 #[test]
 fn test_graphic_eq_cumulative_boost() {
-    /// Test what happens when all bands are boosted (cumulative gain)
+    // Test what happens when all bands are boosted (cumulative gain)
     let mut eq = GraphicEq::new_10_band();
 
     // Boost all bands by 6dB
@@ -1187,8 +1187,8 @@ fn test_graphic_eq_cumulative_boost() {
 
 #[test]
 fn test_sample_rate_coefficient_recalculation() {
-    /// Verify coefficients are correctly recalculated when sample rate changes
-    /// This ensures filters maintain correct frequency response across sample rates
+    // Verify coefficients are correctly recalculated when sample rate changes
+    // This ensures filters maintain correct frequency response across sample rates
     let test_freq = 1000.0;
     let gain_db = 6.0;
 
@@ -1223,7 +1223,7 @@ fn test_sample_rate_coefficient_recalculation() {
 
 #[test]
 fn test_sample_rate_transition_stability() {
-    /// Test stability when transitioning between sample rates
+    // Test stability when transitioning between sample rates
     let mut eq = ParametricEq::new();
     eq.set_mid_band(EqBand::peaking(1000.0, 6.0, 1.0));
 
@@ -1248,8 +1248,8 @@ fn test_sample_rate_transition_stability() {
 
 #[test]
 fn test_biquad_coefficient_normalization() {
-    /// Verify biquad coefficients are properly normalized (a0 = 1)
-    /// Reference: Audio EQ Cookbook - coefficient normalization
+    // Verify biquad coefficients are properly normalized (a0 = 1)
+    // Reference: Audio EQ Cookbook - coefficient normalization
     // We can't directly access coefficients, but we can verify behavior
     // A properly normalized filter should:
     // 1. Pass DC for peaking filters
@@ -1277,9 +1277,9 @@ fn test_biquad_coefficient_normalization() {
 
 #[test]
 fn test_low_frequency_coefficient_precision() {
-    /// Test coefficient precision at very low frequencies
-    /// Reference: At low frequencies, biquad coefficients approach limiting values
-    /// that require high precision (32-bit float may show issues)
+    // Test coefficient precision at very low frequencies
+    // Reference: At low frequencies, biquad coefficients approach limiting values
+    // that require high precision (32-bit float may show issues)
     let test_frequencies = [10.0, 20.0, 30.0, 40.0, 50.0];
 
     eprintln!("LOW FREQUENCY COEFFICIENT PRECISION:");
@@ -1311,7 +1311,7 @@ fn test_low_frequency_coefficient_precision() {
 
 #[test]
 fn test_industry_standards_summary() {
-    /// Summary test that reports overall compliance with industry standards
+    // Summary test that reports overall compliance with industry standards
 
     eprintln!("\n========================================");
     eprintln!("INDUSTRY STANDARD EQ TEST SUMMARY");

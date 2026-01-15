@@ -14,8 +14,35 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Optimize builds for CI
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
 
 jobs:
+  # ============================================================================
+  # Disk Space Management (Run First)
+  # ============================================================================
+
+  cleanup:
+    name: Free Disk Space
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free disk space
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+
+          # Remove unnecessary preinstalled tools
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+
+          echo "Disk after cleanup:"
+          df -h
+
   # ============================================================================
   # Code Quality Checks
   # ============================================================================
@@ -31,7 +58,7 @@ jobs:
           components: rustfmt
 
       - name: Check Rust formatting
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all --check
 
   clippy:
     name: Clippy Lint
@@ -46,6 +73,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          # Increase cache efficiency
+          shared-key: "clippy"
 
       - name: Install Linux dependencies
         run: |
@@ -59,7 +88,7 @@ jobs:
           echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
 
       - name: Run Clippy
-        run: cargo clippy --workspace --lib --bins -- -D warnings
+        run: cargo clippy --workspace --lib --bins --release -- -D warnings
 
   # ============================================================================
   # Security
@@ -74,6 +103,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "audit"
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
@@ -129,144 +160,28 @@ jobs:
             --ignore RUSTSEC-2025-0111
 
   # ============================================================================
-  # Tests - Multi-Platform
+  # Build + Test (Combined for Efficiency)
   # ============================================================================
 
-  test:
-    name: Test Suite
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
-      # Install system dependencies for audio (Linux)
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
-
-      # Install system dependencies (macOS)
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        run: |
-          brew install pkg-config
-
-      # Create mock dist directory for Tauri's generate_context!() macro
-      # This prevents "frontendDist path doesn't exist" errors during cargo test
-      - name: Create mock frontend dist
-        run: |
-          mkdir -p applications/desktop/dist
-          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
-
-      # Run unit tests (libraries + applications)
-      - name: Run unit tests
-        run: cargo test --workspace --lib --bins
-        env:
-          RUST_TEST_THREADS: 4
-
-  # ============================================================================
-  # Integration Tests with Testcontainers (Linux only)
-  # ============================================================================
-
-  test-containers:
-    name: Integration Tests (Testcontainers)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
-
-      # Create mock dist directory for Tauri's generate_context!() macro
-      - name: Create mock frontend dist
-        run: |
-          mkdir -p applications/desktop/dist
-          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
-
-      # Docker is available by default on GitHub Actions Ubuntu runners
-      - name: Run testcontainer integration tests
-        run: cargo test --workspace --tests -- --test-threads=1
-
-  # ============================================================================
-  # Code Coverage
-  # ============================================================================
-
-  coverage:
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
-
-      # Create mock dist directory for Tauri's generate_context!() macro
-      - name: Create mock frontend dist
-        run: |
-          mkdir -p applications/desktop/dist
-          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
-
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin --locked
-
-      - name: Generate coverage
-        run: cargo tarpaulin --workspace --out Html --output-dir coverage
-        continue-on-error: true
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage/tarpaulin-report.html
-          fail_ci_if_error: false # Don't fail CI on coverage upload issues
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-  # ============================================================================
-  # Build Checks - Multi-Platform
-  # ============================================================================
-
-  build:
-    name: Build Check
+  build-and-test:
+    name: Build & Test
+    needs: cleanup
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          # ARM64 Linux build disabled - requires cross-compilation sysroot setup
-          # TODO: Re-enable with proper ARM64 glib/GTK cross-compilation dependencies
-          # - os: ubuntu-latest
-          #   target: aarch64-unknown-linux-gnu
+            use_release: ${{ github.ref == 'refs/heads/main' }}
           - os: macos-latest
             target: x86_64-apple-darwin
+            use_release: ${{ github.ref == 'refs/heads/main' }}
           - os: macos-latest
             target: aarch64-apple-darwin
+            use_release: ${{ github.ref == 'refs/heads/main' }}
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            use_release: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -278,33 +193,189 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          # Use target-specific cache keys
+          key: ${{ matrix.target }}-${{ matrix.use_release && 'release' || 'debug' }}
+          shared-key: ${{ matrix.target }}
 
+      # Install system dependencies (Linux)
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
+      # Install system dependencies (macOS)
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: |
-          brew install pkg-config
+        run: brew install pkg-config
 
-      # Install LLVM for ASIO support (bindgen requires libclang)
+      # Install LLVM for ASIO support (Windows)
       - name: Install LLVM (Windows)
         if: runner.os == 'Windows'
         run: |
           choco install llvm -y
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-      # Create mock dist directory for Tauri's generate_context!() macro
+      # Create mock dist directory for Tauri
       - name: Create mock frontend dist
         run: |
           mkdir -p applications/desktop/dist
           echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
 
-      - name: Build workspace
+      # Build in release mode on main, debug mode elsewhere
+      - name: Build workspace (Release)
+        if: matrix.use_release == true
+        run: cargo build --workspace --release --target ${{ matrix.target }}
+
+      - name: Build workspace (Debug)
+        if: matrix.use_release != true
         run: cargo build --workspace --target ${{ matrix.target }}
+
+      # Run tests (use same build profile)
+      - name: Run unit tests (Release)
+        if: matrix.use_release == true
+        run: cargo test --workspace --lib --bins --release --target ${{ matrix.target }}
+        env:
+          RUST_TEST_THREADS: 4
+
+      - name: Run unit tests (Debug)
+        if: matrix.use_release != true
+        run: cargo test --workspace --lib --bins --target ${{ matrix.target }}
+        env:
+          RUST_TEST_THREADS: 4
+
+      # Upload artifacts on main branch for release pipeline
+      - name: Upload build artifacts (main branch only)
+        if: matrix.use_release == true && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: soul-player-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/soul-player*
+            target/${{ matrix.target }}/release/*.so
+            target/${{ matrix.target }}/release/*.dylib
+            target/${{ matrix.target }}/release/*.dll
+          retention-days: 7
+
+  # ============================================================================
+  # Integration Tests with Testcontainers (Linux only)
+  # ============================================================================
+
+  test-containers:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    env:
+      # Force release mode for tests to reduce binary size
+      CARGO_PROFILE_TEST_OPT_LEVEL: 3
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      # Aggressive disk cleanup BEFORE any other steps
+      - name: Free disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+
+          # Remove unnecessary tools
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+
+          # Remove old package lists
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+          echo "=== Disk space after cleanup ==="
+          df -h
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "integration"
+          # Save cache even if tests fail (for debugging)
+          save-if: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+
+      # Create mock dist directory
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+
+      # Build only integration tests incrementally to manage disk space
+      - name: Build integration tests (libraries only)
+        run: |
+          echo "=== Building library integration tests ==="
+          cargo test --tests --release --no-run \
+            -p soul-audio \
+            -p soul-audio-desktop \
+            -p soul-playback \
+            -p soul-storage
+
+          echo "=== Disk space after build ==="
+          df -h
+
+      # Run tests with minimal parallelism
+      - name: Run testcontainer integration tests
+        run: |
+          echo "=== Running integration tests ==="
+          cargo test --tests --release \
+            -p soul-audio \
+            -p soul-audio-desktop \
+            -p soul-playback \
+            -p soul-storage \
+            -- --test-threads=1
+        continue-on-error: false
+
+  # ============================================================================
+  # Code Coverage
+  # ============================================================================
+
+  coverage:
+    name: Code Coverage
+    needs: cleanup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "coverage"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+
+      # Create mock dist directory
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin --locked
+
+      - name: Generate coverage
+        run: cargo tarpaulin --workspace --out Html --output-dir coverage --release
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/tarpaulin-report.html
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # ============================================================================
   # All Checks Summary (Required for PR merge)
@@ -316,9 +387,8 @@ jobs:
       - format
       - clippy
       - audit
-      - test
+      - build-and-test
       - test-containers
-      - build
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -327,9 +397,37 @@ jobs:
           if [[ "${{ needs.format.result }}" != "success" || \
                 "${{ needs.clippy.result }}" != "success" || \
                 "${{ needs.audit.result }}" != "success" || \
-                "${{ needs.test.result }}" != "success" || \
-                "${{ needs.test-containers.result }}" != "success" || \
-                "${{ needs.build.result }}" != "success" ]]; then
-            echo "One or more CI jobs failed"
+                "${{ needs.build-and-test.result }}" != "success" || \
+                "${{ needs.test-containers.result }}" != "success" ]]; then
+            echo "❌ One or more CI jobs failed"
             exit 1
           fi
+          echo "✅ All CI jobs passed successfully!"
+
+  # ============================================================================
+  # Trigger Release Pipeline (main branch only)
+  # ============================================================================
+
+  trigger-release:
+    name: Trigger Release Pipeline
+    needs: ci-success
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger release workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release.yml',
+              ref: 'main',
+              inputs: {
+                triggered_by_ci: 'true',
+                commit_sha: context.sha
+              }
+            });
+            console.log('✅ Release pipeline triggered for commit:', context.sha);
