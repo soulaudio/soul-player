@@ -47,7 +47,7 @@ RUN yarn build
 # =============================================================================
 # Stage 2: Build the Rust server
 # =============================================================================
-FROM rust:1.83-slim AS server-builder
+FROM rust:1.84-slim AS server-builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -69,6 +69,11 @@ COPY applications/desktop/src-tauri/Cargo.toml ./applications/desktop/src-tauri/
 # Create dummy main.rs to satisfy Cargo's requirement
 RUN mkdir -p ./applications/desktop/src-tauri/src && \
     echo "fn main() {}" > ./applications/desktop/src-tauri/src/main.rs
+
+# Create dummy test file to satisfy Cargo's manifest validation
+# (test files are excluded by .dockerignore but referenced in Cargo.toml)
+RUN mkdir -p ./libraries/soul-audio/tests && \
+    echo "#[test]\nfn dummy() {}" > ./libraries/soul-audio/tests/pipeline_quality_test.rs
 
 # Build release binary
 RUN cargo build --release -p soul-server
