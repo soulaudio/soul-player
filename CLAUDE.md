@@ -243,6 +243,10 @@ cargo install wasm-pack
 
 **MANDATORY**: Before committing ANY code changes, ALL checks below MUST pass. CI will reject commits that fail these checks.
 
+**Automated Checks**: Husky is configured to automatically run all quality checks before each commit. If any check fails, the commit will be blocked until issues are fixed.
+
+**Windows File Locking**: If Rust tests fail due to file locks (common when dev server or IDE is running), Husky will warn but allow the commit. Tests will still run in CI. Close running applications before committing to run tests locally.
+
 ### Rust Quality Checks
 ```bash
 # 1. Format check (auto-fix: cargo fmt --all)
@@ -269,17 +273,24 @@ yarn workspace @soul-player/shared run lint
 
 ### AI Agent Workflow
 1. Make code changes
-2. **Run ALL pre-commit checks** (use script below for convenience)
+2. **Run ALL pre-commit checks** (automated via Husky, or use script below for manual runs)
 3. **Fix ANY errors before proceeding**
 4. Only commit when ALL checks pass ✓
 
-**Quick Check Script**:
+**Manual Check Scripts** (optional - Husky runs these automatically):
 ```bash
 # Unix/Linux/macOS
 ./scripts/pre-commit-check.sh
 
 # Windows (PowerShell)
 .\scripts\pre-commit-check.ps1
+```
+
+**Note**: When you run `git commit`, Husky will automatically execute all checks. You can also run the scripts above manually to test before committing.
+
+**Bypassing Hooks** (use sparingly for WIP commits):
+```bash
+git commit --no-verify -m "WIP: work in progress"
 ```
 
 **Common Issues**:

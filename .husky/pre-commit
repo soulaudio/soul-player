@@ -1,0 +1,67 @@
+#!/usr/bin/env sh
+
+echo "===================="
+echo "Pre-Commit Checks"
+echo "===================="
+echo ""
+
+# Rust checks
+echo "→ Checking Rust formatting..."
+cargo fmt --all --check || exit 1
+echo "✓ Rust formatting OK"
+echo ""
+
+echo "→ Running Clippy..."
+cargo clippy --workspace --lib --bins --release -- -D warnings || exit 1
+echo "✓ Clippy OK"
+echo ""
+
+echo "→ Running Rust tests..."
+# Run tests with error capture
+TEST_OUTPUT=$(cargo test --all --quiet 2>&1)
+TEST_EXIT=$?
+
+if [ $TEST_EXIT -eq 0 ]; then
+    echo "✓ Rust tests OK"
+elif echo "$TEST_OUTPUT" | grep -q "The process cannot access the file"; then
+    echo "⚠ Warning: Rust tests skipped due to Windows file locks"
+    echo "  Close running apps (dev server, IDE) and run tests manually"
+    echo "  Or use: git commit --no-verify (tests will still run in CI)"
+    # Don't exit, just warn
+else
+    echo "✗ Rust tests failed:"
+    echo "$TEST_OUTPUT"
+    exit 1
+fi
+echo ""
+
+# TypeScript checks
+echo "→ TypeScript check - Desktop..."
+yarn workspace soul-player-desktop run tsc --noEmit || exit 1
+echo "✓ Desktop TypeScript OK"
+echo ""
+
+echo "→ TypeScript check - Shared..."
+yarn workspace @soul-player/shared run tsc --noEmit || exit 1
+echo "✓ Shared TypeScript OK"
+echo ""
+
+echo "→ TypeScript check - Marketing..."
+yarn workspace @soul-player/marketing run tsc --noEmit || exit 1
+echo "✓ Marketing TypeScript OK"
+echo ""
+
+echo "→ ESLint - Desktop..."
+yarn workspace soul-player-desktop run lint || exit 1
+echo "✓ Desktop ESLint OK"
+echo ""
+
+echo "→ ESLint - Shared..."
+yarn workspace @soul-player/shared run lint || exit 1
+echo "✓ Shared ESLint OK"
+echo ""
+
+echo "===================="
+echo "✓ All checks passed!"
+echo "===================="
+echo "Safe to commit."

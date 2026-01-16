@@ -10,6 +10,7 @@
     "applications/web"
   ],
   "scripts": {
+    "prepare": "husky || true",
     "dev:desktop": "yarn workspace soul-player-desktop tauri:dev",
     "dev:desktop:logs": "yarn workspace soul-player-desktop tauri:dev:logs",
     "dev:mobile": "yarn workspace soul-player-mobile tauri:dev",
@@ -34,7 +35,8 @@
     "type-check": "yarn workspaces foreach run type-check"
   },
   "devDependencies": {
-    "better-sqlite3": "^11.7.0"
+    "better-sqlite3": "^11.7.0",
+    "husky": "^9.1.7"
   },
   "packageManager": "yarn@4.0.2",
   "engines": {

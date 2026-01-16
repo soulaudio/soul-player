@@ -48,6 +48,9 @@ jobs:
       - name: Install dependencies
         run: yarn
 
+      - name: Build frontend
+        run: yarn workspace soul-player-desktop build
+
       - name: Build Tauri app (MSI + NSIS)
         run: yarn build:desktop --bundles msi,nsis
 
@@ -120,6 +123,9 @@ jobs:
       - name: Install dependencies
         run: yarn
 
+      - name: Build frontend
+        run: yarn workspace soul-player-desktop build
+
       - name: Build Tauri app (DEB + RPM + AppImage)
         run: yarn build:desktop --bundles deb,rpm,appimage
 
@@ -178,6 +184,9 @@ jobs:
 
       - name: Install dependencies
         run: yarn
+
+      - name: Build frontend
+        run: yarn workspace soul-player-desktop build
 
       - name: Build Tauri app (DMG)
         run: yarn build:desktop --bundles dmg
