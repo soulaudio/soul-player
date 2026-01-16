@@ -182,7 +182,9 @@
       "Bash(git -C \"D:\\\\dev\\\\soulaudio\\\\soul-player\" log --oneline -1)",
       "Bash(git -C \"D:\\\\dev\\\\soulaudio\\\\soul-player\" show 4048d08:applications/marketing/Dockerfile)",
       "Bash(git -C \"D:\\\\dev\\\\soulaudio\\\\soul-player\" show 4048d08~1:applications/marketing/Dockerfile)",
-      "Bash(git ls-tree:*)"
+      "Bash(git ls-tree:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ]
   },
   "hooks": {
