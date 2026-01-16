@@ -64,6 +64,9 @@ COPY Cargo.toml Cargo.lock ./
 COPY libraries ./libraries
 COPY applications/server ./applications/server
 
+# Copy desktop Cargo.toml (needed by workspace, but won't build it)
+COPY applications/desktop/src-tauri/Cargo.toml ./applications/desktop/src-tauri/
+
 # Build release binary
 RUN cargo build --release -p soul-server
 
