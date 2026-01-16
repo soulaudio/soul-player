@@ -41,10 +41,19 @@ Thumbs.db
 # Moon/CI files
 .moon/
 
-# Frontend applications (server doesn't need these)
-applications/desktop/
-applications/mobile/
-applications/marketing/
+# Frontend applications (server doesn't need full source, but needs package.json for Yarn workspace)
+applications/desktop/*
+!applications/desktop/package.json
+!applications/desktop/src-tauri/
+applications/desktop/src-tauri/*
+!applications/desktop/src-tauri/Cargo.toml
+
+applications/mobile/*
+!applications/mobile/package.json
+
+applications/marketing/*
+!applications/marketing/package.json
+
 # NOTE: applications/shared/ IS needed - it's used by applications/web/
 # NOTE: applications/web/ IS needed - it's bundled with the server for the web UI
 
