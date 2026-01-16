@@ -121,7 +121,7 @@ jobs:
 
       - name: Build installers (MSI + NSIS)
         if: steps.check-build.outputs.build_needed == 'true'
-        run: yarn build:desktop --bundles msi,nsis
+        run: yarn build:desktop --bundles msi nsis
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -206,9 +206,15 @@ jobs:
         if: steps.check-build.outputs.build_needed == 'true'
         run: yarn
 
-      - name: Build packages (DEB + RPM + AppImage)
+      - name: Build packages (DEB + RPM)
         if: steps.check-build.outputs.build_needed == 'true'
-        run: yarn build:desktop --bundles deb,rpm,appimage
+        run: yarn build:desktop --bundles deb rpm
+        continue-on-error: false
+
+      - name: Build AppImage (optional)
+        if: steps.check-build.outputs.build_needed == 'true'
+        run: yarn build:desktop --bundles appimage
+        continue-on-error: true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

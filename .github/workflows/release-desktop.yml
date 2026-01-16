@@ -49,7 +49,7 @@ jobs:
         run: yarn
 
       - name: Build Tauri app (MSI + NSIS)
-        run: yarn build:desktop --bundles msi,nsis
+        run: yarn build:desktop --bundles msi nsis
 
       - name: Get version
         id: version
@@ -120,8 +120,13 @@ jobs:
       - name: Install dependencies
         run: yarn
 
-      - name: Build Tauri app (DEB + RPM + AppImage)
-        run: yarn build:desktop --bundles deb,rpm,appimage
+      - name: Build Tauri app (DEB + RPM)
+        run: yarn build:desktop --bundles deb rpm
+        continue-on-error: false
+
+      - name: Build AppImage (optional)
+        run: yarn build:desktop --bundles appimage
+        continue-on-error: true
 
       - name: Get version
         id: version
