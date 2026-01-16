@@ -66,6 +66,9 @@ COPY applications/server ./applications/server
 
 # Copy desktop Cargo.toml (needed by workspace, but won't build it)
 COPY applications/desktop/src-tauri/Cargo.toml ./applications/desktop/src-tauri/
+# Create dummy main.rs to satisfy Cargo's requirement
+RUN mkdir -p ./applications/desktop/src-tauri/src && \
+    echo "fn main() {}" > ./applications/desktop/src-tauri/src/main.rs
 
 # Build release binary
 RUN cargo build --release -p soul-server
