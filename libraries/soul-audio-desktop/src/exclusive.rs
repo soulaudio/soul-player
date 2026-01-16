@@ -343,6 +343,10 @@ impl ExclusiveOutput {
         device: &Device,
         config: &ExclusiveConfig,
     ) -> Result<(StreamConfig, SampleFormat, BufferSize)> {
+        // Default buffer size for invalid (zero) buffer requests
+        // This follows WASAPI best practices: zero buffer is invalid and should use a safe default
+        const DEFAULT_BUFFER_FRAMES: u32 = 1024;
+
         let supported_configs = device
             .supported_output_configs()
             .map_err(|e| AudioOutputError::StreamBuildError(e.to_string()))?;
@@ -402,10 +406,7 @@ impl ExclusiveOutput {
         let sample_format = selected_config.sample_format();
 
         // Determine buffer size
-        // If zero buffer size is requested, fall back to a sensible default (1024 frames)
-        // This follows WASAPI best practices: zero buffer is invalid and should use a safe default
-        const DEFAULT_BUFFER_FRAMES: u32 = 1024;
-
+        // If zero buffer size is requested, fall back to DEFAULT_BUFFER_FRAMES
         let buffer_size = if let Some(frames) = config.buffer_frames {
             // Handle zero buffer specially - use default instead
             let requested_frames = if frames == 0 {

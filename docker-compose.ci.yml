@@ -1,0 +1,40 @@
+# docker-compose.ci.yml - Run CI tests locally
+# Usage: docker compose -f docker-compose.ci.yml up
+
+version: '3.9'
+
+services:
+  ci-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.ci
+    container_name: soul-player-ci-test
+    volumes:
+      # Mount project directory (read-only source, writable target for builds)
+      - .:/workspace:cached
+      # Persistent cargo registry cache (speeds up dependency downloads)
+      - cargo-registry:/root/.cargo/registry
+      # Persistent cargo git cache (speeds up git dependencies)
+      - cargo-git:/root/.cargo/git
+      # Persistent target directory (HUGE speed boost for incremental builds)
+      - cargo-target-ci:/workspace/target
+    environment:
+      # Override environment variables if needed
+      - CARGO_TERM_COLOR=always
+      - RUST_BACKTRACE=1
+      - CARGO_INCREMENTAL=0
+      - CARGO_NET_RETRY=10
+      - RUSTUP_MAX_RETRIES=10
+      - CARGO_PROFILE_TEST_OPT_LEVEL=3
+      - CARGO_PROFILE_TEST_DEBUG=0
+      - RUST_TEST_THREADS=4
+    # Allocate pseudo-TTY for colored output
+    tty: true
+    # Keep stdin open
+    stdin_open: true
+
+volumes:
+  # Named volumes persist between runs (much faster than rebuilding)
+  cargo-registry:
+  cargo-git:
+  cargo-target-ci:

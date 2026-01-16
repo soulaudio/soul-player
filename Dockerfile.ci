@@ -1,0 +1,63 @@
+# Dockerfile.ci - Exact replica of GitHub Actions CI environment
+# Based on: .github/workflows/ci.yml (ubuntu-latest, dtolnay/rust-toolchain@stable)
+
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# CI environment variables (from .github/workflows/ci.yml lines 14-20, 268-270)
+ENV CARGO_TERM_COLOR=always \
+    RUST_BACKTRACE=1 \
+    CARGO_INCREMENTAL=0 \
+    CARGO_NET_RETRY=10 \
+    RUSTUP_MAX_RETRIES=10 \
+    CARGO_PROFILE_TEST_OPT_LEVEL=3 \
+    CARGO_PROFILE_TEST_DEBUG=0 \
+    RUST_TEST_THREADS=4
+
+# Install system dependencies (CI line 305)
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libasound2-dev \
+    libglib2.0-dev \
+    libgtk-3-dev \
+    libwebkit2gtk-4.1-dev \
+    libssl-dev \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust stable (matches dtolnay/rust-toolchain@stable)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Verify Rust installation
+RUN rustc --version && cargo --version
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command: run integration tests like CI
+CMD ["bash", "-c", "\
+    echo '=== Creating mock frontend dist (CI line 310-311) ===' && \
+    mkdir -p applications/desktop/dist && \
+    echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id=\"root\">Loading...</div></body></html>' > applications/desktop/dist/index.html && \
+    echo '' && \
+    echo '=== Building integration tests (CI line 317-321) ===' && \
+    cargo test --tests --release --no-run \
+        -p soul-audio \
+        -p soul-audio-desktop \
+        -p soul-playback \
+        -p soul-storage && \
+    echo '' && \
+    echo '=== Running integration tests (CI line 330-335) ===' && \
+    cargo test --tests --release \
+        -p soul-audio \
+        -p soul-audio-desktop \
+        -p soul-playback \
+        -p soul-storage \
+        -- --test-threads=1 \
+    "]
