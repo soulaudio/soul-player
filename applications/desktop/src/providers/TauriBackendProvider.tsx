@@ -161,10 +161,13 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
     },
 
     async getUserSetting(key: string) {
-      return invoke<any>('get_user_setting', { key })
+      // Settings can be any JSON value, but we use string | null as the return type
+      // since settings are stored as JSON strings
+      return invoke<string | null>('get_user_setting', { key })
     },
 
-    async setUserSetting(key: string, value: any) {
+    async setUserSetting(key: string, value: unknown) {
+      // Value can be any JSON-serializable value
       await invoke('set_user_setting', { key, value })
     },
 

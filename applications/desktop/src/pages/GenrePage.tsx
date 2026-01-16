@@ -34,12 +34,7 @@ export function GenrePage() {
     title: string
   } | null>(null);
 
-  useEffect(() => {
-    if (!id) return;
-    loadGenre(parseInt(id, 10));
-  }, [id]);
-
-  const loadGenre = async (genreId: number) => {
+  const loadGenre = useCallback(async (genreId: number) => {
     setLoading(true);
     setError(null);
     try {
@@ -61,7 +56,12 @@ export function GenrePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    if (!id) return;
+    loadGenre(parseInt(id, 10));
+  }, [id, loadGenre]);
 
   const buildQueue = useCallback((allTracks: Track[], clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
     // allTracks is already deduplicated by TrackList's internal grouping

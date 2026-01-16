@@ -16,12 +16,7 @@ export function SettingsPage() {
   const [silentUpdate, setSilentUpdate] = useState(false);
   const [checking, setChecking] = useState(false);
 
-  // Load settings from backend
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       // Load auto-update settings
       const autoUpdateSetting = await invoke<string | null>('get_user_setting', {
@@ -49,7 +44,12 @@ export function SettingsPage() {
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
-  };
+  }, [i18n]);
+
+  // Load settings from backend
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const handleLanguageChange = useCallback(async (locale: string) => {
     try {
@@ -90,7 +90,8 @@ export function SettingsPage() {
   const checkForUpdates = useCallback(async () => {
     setChecking(true);
     try {
-      const update = await invoke<any>('check_for_updates');
+      // Update info from Tauri updater
+      const update = await invoke<{ version: string; body: string } | null>('check_for_updates');
       if (update) {
         alert(`Update available: ${update.version}\n\n${update.body}`);
       } else {

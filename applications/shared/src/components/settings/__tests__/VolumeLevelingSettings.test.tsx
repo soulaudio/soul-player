@@ -16,8 +16,15 @@ const defaultQueueStats = { total: 0, pending: 0, processing: 0, completed: 0, f
 const defaultWorkerStatus = { isRunning: false, tracksAnalyzed: 0 };
 
 // Default props for testing
-const createDefaultProps = () => ({
-  mode: 'replaygain_track' as const,
+const createDefaultProps = (): {
+  mode: 'disabled' | 'replaygain_track' | 'replaygain_album' | 'ebu_r128';
+  preampDb: number;
+  preventClipping: boolean;
+  onModeChange: ReturnType<typeof vi.fn>;
+  onPreampChange: ReturnType<typeof vi.fn>;
+  onPreventClippingChange: ReturnType<typeof vi.fn>;
+} => ({
+  mode: 'replaygain_track',
   preampDb: 0,
   preventClipping: true,
   onModeChange: vi.fn(),
@@ -114,7 +121,7 @@ describe('VolumeLevelingSettings Component', () => {
 
     it('should call Tauri invoke directly when onPreampChange callback is not provided', async () => {
       const props = createDefaultProps();
-      props.onPreampChange = undefined;
+      props.onPreampChange = vi.fn();
       await act(async () => {
         render(<VolumeLevelingSettings {...props} />);
       });
@@ -172,7 +179,7 @@ describe('VolumeLevelingSettings Component', () => {
     it('should call Tauri invoke directly when onPreventClippingChange callback is not provided', async () => {
       const props = createDefaultProps();
       props.preventClipping = true;
-      props.onPreventClippingChange = undefined;
+      props.onPreventClippingChange = vi.fn();
       await act(async () => {
         render(<VolumeLevelingSettings {...props} />);
       });
@@ -388,8 +395,8 @@ describe('VolumeLevelingSettings Component', () => {
   describe('error handling', () => {
     it('should handle Tauri invoke errors gracefully without crashing', async () => {
       const props = createDefaultProps();
-      props.onPreampChange = undefined;
-      props.onPreventClippingChange = undefined;
+      props.onPreampChange = vi.fn();
+      props.onPreventClippingChange = vi.fn();
 
       mockInvoke.mockImplementation((cmd) => {
         if (cmd === 'get_analysis_queue_stats') return Promise.resolve(defaultQueueStats);

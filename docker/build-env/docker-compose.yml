@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  linux-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux
+    image: soul-player-builder:linux
+    volumes:
+      - ../..:/workspace
+      # Cache Cargo dependencies
+      - cargo-cache:/root/.cargo/registry
+      - cargo-git:/root/.cargo/git
+      # Cache Yarn dependencies
+      - yarn-cache:/root/.yarn
+    working_dir: /workspace
+    environment:
+      - CARGO_HOME=/root/.cargo
+      - SQLX_OFFLINE=true
+    profiles:
+      - linux
+
+  windows-cross-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows-cross
+    image: soul-player-builder:windows-cross
+    volumes:
+      - ../..:/workspace
+      - cargo-cache:/root/.cargo/registry
+      - cargo-git:/root/.cargo/git
+      - yarn-cache:/root/.yarn
+    working_dir: /workspace
+    environment:
+      - CARGO_HOME=/root/.cargo
+      - SQLX_OFFLINE=true
+    profiles:
+      - windows
+
+volumes:
+  cargo-cache:
+  cargo-git:
+  yarn-cache:

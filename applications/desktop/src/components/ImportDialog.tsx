@@ -151,7 +151,8 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
           paths = payload;
         } else if (payload && typeof payload === 'object' && 'paths' in payload) {
           // Object with paths property
-          paths = Array.isArray((payload as any).paths) ? (payload as any).paths : [(payload as any).paths];
+          const payloadObj = payload as { paths: string | string[] };
+          paths = Array.isArray(payloadObj.paths) ? payloadObj.paths : [payloadObj.paths];
         } else {
           console.error('Unexpected payload format:', payload);
           setError('Unexpected drag and drop payload format');

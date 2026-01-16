@@ -20,11 +20,18 @@ const createMockCommands = () => ({
   seek: vi.fn().mockResolvedValue(undefined),
   setVolume: vi.fn().mockResolvedValue(undefined),
   setShuffle: vi.fn().mockResolvedValue(undefined),
+  cycleShuffle: vi.fn().mockResolvedValue('off' as 'off' | 'random' | 'smart'),
+  getShuffle: vi.fn().mockResolvedValue('off' as 'off' | 'random' | 'smart'),
   setRepeatMode: vi.fn().mockResolvedValue(undefined),
   getPlaybackCapabilities: vi.fn().mockResolvedValue({ hasNext: true, hasPrevious: true }),
   getQueue: vi.fn().mockResolvedValue([]),
   playQueue: vi.fn().mockResolvedValue(undefined),
+  playQueueWithContext: vi.fn().mockResolvedValue(undefined),
   skipToQueueIndex: vi.fn().mockResolvedValue(undefined),
+  addPlayNext: vi.fn().mockResolvedValue(undefined),
+  addToQueueEnd: vi.fn().mockResolvedValue(undefined),
+  clearPlayNext: vi.fn().mockResolvedValue(undefined),
+  clearAddToQueue: vi.fn().mockResolvedValue(undefined),
   getAllSources: vi.fn().mockResolvedValue([]),
 });
 
@@ -56,7 +63,7 @@ const renderWithProvider = (
 };
 
 // Default buildQueue implementation
-const defaultBuildQueue = (tracks: Track[], _clickedTrack: Track, clickedIndex: number): QueueTrack[] => {
+const defaultBuildQueue = (tracks: Track[], _clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
   return tracks.map((track, idx) => ({
     trackId: String(track.id),
     title: track.title,
@@ -143,7 +150,7 @@ describe('TrackList Component', () => {
       queue: [],
       queueIndex: -1,
       repeatMode: 'off',
-      shuffleEnabled: false,
+      shuffleMode: 'off',
     });
   });
 
@@ -587,7 +594,7 @@ describe('TrackList Component', () => {
 
       // Set the current track as playing
       usePlayerStore.setState({
-        currentTrack: { id: 1, title: 'Track', artist: 'Artist', album: '', filePath: '' },
+        currentTrack: { id: 1, title: 'Track', artist: 'Artist', album: '', filePath: '', duration: 180, addedAt: '2024-01-01T00:00:00Z' },
         isPlaying: true,
       });
 
@@ -603,7 +610,7 @@ describe('TrackList Component', () => {
       const mockContext = createMockContext();
 
       usePlayerStore.setState({
-        currentTrack: { id: 1, title: 'Track', artist: 'Artist', album: '', filePath: '' },
+        currentTrack: { id: 1, title: 'Track', artist: 'Artist', album: '', filePath: '', duration: 180, addedAt: '2024-01-01T00:00:00Z' },
         isPlaying: true,
       });
 
@@ -624,7 +631,7 @@ describe('TrackList Component', () => {
       const tracks = createSampleTracks();
 
       usePlayerStore.setState({
-        currentTrack: { id: 1, title: 'Lossless Track', artist: 'Test Artist', album: '', filePath: '' },
+        currentTrack: { id: 1, title: 'Lossless Track', artist: 'Test Artist', album: '', filePath: '', duration: 240, addedAt: '2024-01-01T00:00:00Z' },
         isPlaying: true,
       });
 

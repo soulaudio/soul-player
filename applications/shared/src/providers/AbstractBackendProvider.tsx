@@ -27,6 +27,7 @@
  * In practice, most backends will implement all methods from scratch.
  */
 
+import React, { useMemo } from 'react';
 import type {
   BackendInterface,
   BackendTrack,
@@ -38,6 +39,7 @@ import type {
   PlaybackContext,
   SetArtworkParams,
 } from '../contexts/BackendContext';
+import { BackendProvider } from '../contexts/BackendContext';
 
 export abstract class AbstractBackendProvider implements BackendInterface {
   // ============================================================================
@@ -259,9 +261,6 @@ export function createBackendProvider(
   backendClass: new () => BackendInterface
 ): React.ComponentType<{ children: React.ReactNode }> {
   return function BackendProviderComponent({ children }) {
-    const { useMemo } = require('react');
-    const { BackendProvider } = require('../contexts/BackendContext');
-
     const backend = useMemo(() => new backendClass(), []);
 
     return BackendProvider({ value: backend, children });

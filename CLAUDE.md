@@ -306,6 +306,7 @@ git commit --no-verify -m "WIP: work in progress"
 ### Key Documentation
 - **Architecture**: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
 - **Testing**: [docs/TESTING.md](./docs/TESTING.md)
+- **Local Build Testing**: [docs/LOCAL_BUILD_TESTING.md](./docs/LOCAL_BUILD_TESTING.md) - Test release builds locally with Docker
 - **Conventions**: [docs/CONVENTIONS.md](./docs/CONVENTIONS.md)
 - **SQLx Setup**: [docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md)
 - **Contributing**: [CONTRIBUTING.md](./CONTRIBUTING.md)

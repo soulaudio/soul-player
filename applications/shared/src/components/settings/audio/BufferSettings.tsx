@@ -271,12 +271,13 @@ function CrossfadeVisualization({ curve }: { curve: CrossfadeCurve }) {
         fadeOutValue = Math.pow(1 - t, 2);
         fadeInValue = Math.pow(t, 0.5);
         break;
-      case 's_curve':
+      case 's_curve': {
         // Smoothstep function
         const s = t * t * (3 - 2 * t);
         fadeOutValue = 1 - s;
         fadeInValue = s;
         break;
+      }
       case 'equal_power':
       default:
         // Equal power uses cosine/sine curves

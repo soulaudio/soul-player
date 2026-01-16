@@ -171,7 +171,12 @@
       "Bash(echo:*)",
       "Bash(powershell.exe -ExecutionPolicy Bypass -File test-ci.ps1 -Package soul-playback)",
       "Bash(powershell.exe -ExecutionPolicy Bypass -File test-ci.ps1)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(YARN_ENABLE_PROGRESS_BARS=false yarn install:*)",
+      "Bash(corepack prepare:*)",
+      "Bash(cmd //c \"yarn workspace @soul-player/shared run tsc --noEmit 2>&1\")",
+      "Bash(cmd //c \"yarn workspace soul-player-desktop run lint && yarn workspace @soul-player/shared run lint && echo ''✓ All lint checks passed'' 2>&1\")",
+      "Bash(cmd //c \"yarn workspace soul-player-desktop run lint && yarn workspace @soul-player/shared run lint 2>&1\")"
     ]
   },
   "hooks": {

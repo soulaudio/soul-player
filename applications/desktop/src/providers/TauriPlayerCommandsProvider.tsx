@@ -70,13 +70,18 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     });
 
     // Listen for track changes
-    const unlistenTrackChanged = listen<any>('playback:track-changed', (event) => {
-      const track = event.payload;
-      console.log('[TauriPlayerCommandsProvider] Track changed:', track);
-      console.log('[TauriPlayerCommandsProvider] coverArtPath:', track?.coverArtPath);
+    const unlistenTrackChanged = listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string }>('playback:track-changed', (event) => {
+      const trackPayload = event.payload;
+      console.log('[TauriPlayerCommandsProvider] Track changed:', trackPayload);
+      console.log('[TauriPlayerCommandsProvider] coverArtPath:', trackPayload?.coverArtPath);
       // Only update if track is valid - don't clear current track on null/undefined
       // (e.g., when skipPrevious is called at the start of queue)
-      if (track && track.id) {
+      if (trackPayload && trackPayload.id) {
+        // Convert id from string to number to match Track type
+        const track = {
+          ...trackPayload,
+          id: parseInt(trackPayload.id, 10),
+        };
         usePlayerStore.setState({
           currentTrack: track,
           duration: track.duration || 0,

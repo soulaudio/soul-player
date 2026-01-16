@@ -91,7 +91,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./crates/soul-server/Dockerfile
+          file: ./applications/server/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

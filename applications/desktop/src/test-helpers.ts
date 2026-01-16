@@ -5,26 +5,33 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
+interface QueueTrack {
+  trackId: string;
+  title: string;
+  artist: string;
+  [key: string]: unknown;
+}
+
 interface TestHelpers {
   skipToQueueIndex: (index: number) => Promise<void>;
   getQueueSize: () => Promise<number>;
   getPlaybackState: () => Promise<string>;
-  getCurrentTrack: () => Promise<any>;
+  getCurrentTrack: () => Promise<QueueTrack | undefined>;
 }
 
 export function initTestHelpers() {
-  // @ts-ignore - Vite sets import.meta.env at build time
+  // @ts-expect-error - Vite sets import.meta.env at build time
   if (import.meta.env?.MODE === 'test' || import.meta.env?.DEV) {
     console.log('[TestHelpers] Initializing test helpers...');
 
-    (window as any).__testHelpers = {
+    (window as unknown as Record<string, unknown>).__testHelpers = {
       async skipToQueueIndex(index: number) {
         console.log(`[TestHelpers] Skipping to queue index: ${index}`);
         return await invoke('skip_to_queue_index', { index });
       },
 
       async getQueueSize() {
-        const queue = await invoke<any[]>('get_queue');
+        const queue = await invoke<QueueTrack[]>('get_queue');
         console.log(`[TestHelpers] Current queue size: ${queue.length}`);
         return queue.length;
       },
@@ -37,7 +44,7 @@ export function initTestHelpers() {
 
       async getCurrentTrack() {
         // Get from player store
-        const queue = await invoke<any[]>('get_queue');
+        const queue = await invoke<QueueTrack[]>('get_queue');
         const currentTrack = queue[0];
         console.log(`[TestHelpers] Current track:`, currentTrack);
         return currentTrack;

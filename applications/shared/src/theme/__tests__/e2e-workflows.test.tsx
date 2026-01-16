@@ -80,7 +80,7 @@ describe('E2E Workflow Tests', () => {
 
       if (darkThemeCard) {
         act(() => {
-          darkThemeCard.click();
+          (darkThemeCard as HTMLElement).click();
         });
       }
 
@@ -113,7 +113,7 @@ describe('E2E Workflow Tests', () => {
       const darkCard = screen.getByText('Dark').closest('[role="button"]');
       if (darkCard) {
         act(() => {
-          darkCard.click();
+          (darkCard as HTMLElement).click();
         });
       }
 
@@ -184,7 +184,7 @@ describe('E2E Workflow Tests', () => {
       const customCard = screen.getByText('My Custom Theme').closest('[role="button"]');
       if (customCard) {
         act(() => {
-          customCard.click();
+          (customCard as HTMLElement).click();
         });
       }
 
@@ -209,7 +209,7 @@ describe('E2E Workflow Tests', () => {
       const removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation(() => mockLink);
 
       act(() => {
-        exportBtn.click();
+        (exportBtn as HTMLElement).click();
       });
 
       expect(clickSpy).toHaveBeenCalled();
@@ -221,14 +221,14 @@ describe('E2E Workflow Tests', () => {
       // 6. User deletes the custom theme
       const deleteBtn = screen.getByTitle('Delete theme');
       act(() => {
-        deleteBtn.click();
+        (deleteBtn as HTMLElement).click();
       });
 
       // 7. Confirm deletion
       await waitFor(() => {
         const confirmBtn = screen.getByText('Delete');
         act(() => {
-          confirmBtn.click();
+          (confirmBtn as HTMLElement).click();
         });
       });
 
@@ -281,7 +281,7 @@ describe('E2E Workflow Tests', () => {
       const darkCard = screen.getByText('Dark').closest('[role="button"]');
       if (darkCard) {
         act(() => {
-          darkCard.click();
+          (darkCard as HTMLElement).click();
         });
       }
 
@@ -344,7 +344,7 @@ describe('E2E Workflow Tests', () => {
       const darkCard = screen.getByText('Dark').closest('[role="button"]');
       if (darkCard) {
         act(() => {
-          darkCard.click();
+          (darkCard as HTMLElement).click();
         });
       }
 
@@ -385,7 +385,7 @@ describe('E2E Workflow Tests', () => {
 
       if (darkCard) {
         // Tab to focus (simulated)
-        darkCard.focus();
+        (darkCard as HTMLElement).focus();
 
         // Press Enter to select
         act(() => {
@@ -420,19 +420,19 @@ describe('E2E Workflow Tests', () => {
       // Rapidly switch between themes
       if (darkCard && oceanCard && lightCard) {
         act(() => {
-          darkCard.click();
+          (darkCard as HTMLElement).click();
         });
 
         act(() => {
-          oceanCard.click();
+          (oceanCard as HTMLElement).click();
         });
 
         act(() => {
-          lightCard.click();
+          (lightCard as HTMLElement).click();
         });
 
         act(() => {
-          darkCard.click();
+          (darkCard as HTMLElement).click();
         });
       }
 
@@ -455,7 +455,7 @@ describe('E2E Workflow Tests', () => {
       const darkCard = screen.getByText('Dark').closest('[role="button"]');
       if (darkCard) {
         act(() => {
-          darkCard.click();
+          (darkCard as HTMLElement).click();
         });
       }
 
@@ -522,7 +522,7 @@ describe('E2E Workflow Tests', () => {
       const customCard = screen.getByText('Cycle Test').closest('[role="button"]');
       if (customCard) {
         act(() => {
-          customCard.click();
+          (customCard as HTMLElement).click();
         });
       }
 
@@ -536,13 +536,13 @@ describe('E2E Workflow Tests', () => {
       // Delete the theme
       const deleteBtn = screen.getByTitle('Delete theme');
       act(() => {
-        deleteBtn.click();
+        (deleteBtn as HTMLElement).click();
       });
 
       await waitFor(() => {
         const confirmBtn = screen.getByText('Delete');
         act(() => {
-          confirmBtn.click();
+          (confirmBtn as HTMLElement).click();
         });
       });
 
@@ -593,7 +593,7 @@ describe('E2E Workflow Tests', () => {
       const oceanCard = screen.getByText('Ocean').closest('[role="button"]');
       if (oceanCard) {
         act(() => {
-          oceanCard.click();
+          (oceanCard as HTMLElement).click();
         });
       }
 

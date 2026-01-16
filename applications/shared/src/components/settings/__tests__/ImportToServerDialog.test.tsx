@@ -3,7 +3,7 @@
  * Tests server selection, upload modes, progress, errors, and state management
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ImportToServerDialog } from '../ImportToServerDialog';
 
@@ -233,7 +233,7 @@ describe('ImportToServerDialog Component', () => {
 
     it('should not render Entire Library option when onSyncLibrary is not provided', () => {
       const props = createDefaultProps();
-      props.onSyncLibrary = undefined;
+      props.onSyncLibrary = vi.fn();
       render(<ImportToServerDialog {...props} />);
 
       expect(screen.queryByText('Entire Library')).not.toBeInTheDocument();
@@ -249,8 +249,8 @@ describe('ImportToServerDialog Component', () => {
 
     it('should not render From Folder option when folder callbacks are not provided', () => {
       const props = createDefaultProps();
-      props.onSelectFolder = undefined;
-      props.onUploadFolder = undefined;
+      props.onSelectFolder = vi.fn();
+      props.onUploadFolder = vi.fn();
       render(<ImportToServerDialog {...props} />);
 
       expect(screen.queryByText('From Folder')).not.toBeInTheDocument();
@@ -436,7 +436,7 @@ describe('ImportToServerDialog Component', () => {
       const props = createDefaultProps();
       let resolveUpload: () => void;
       props.onUploadTracks = vi.fn().mockImplementation(
-        () => new Promise((resolve) => { resolveUpload = resolve; })
+        () => new Promise((resolve) => { resolveUpload = () => resolve(undefined); })
       );
       const { container } = render(<ImportToServerDialog {...props} />);
 
@@ -511,7 +511,7 @@ describe('ImportToServerDialog Component', () => {
       const props = createDefaultProps();
 
       // Force re-render to test edge case
-      const { rerender } = render(<ImportToServerDialog {...props} />);
+      render(<ImportToServerDialog {...props} />);
 
       // Remove server requirement by selecting then clearing
       // Actually, the button should be disabled so this shouldn't happen normally
@@ -570,7 +570,7 @@ describe('ImportToServerDialog Component', () => {
 
       // Find the close button (first button in header with just an icon)
       const headerDiv = container.querySelector('.border-b');
-      const closeButton = headerDiv?.querySelector('button')!;
+      const closeButton = headerDiv!.querySelector('button')!;
       fireEvent.click(closeButton);
 
       expect(props.onClose).toHaveBeenCalled();
@@ -597,7 +597,7 @@ describe('ImportToServerDialog Component', () => {
       const props = createDefaultProps();
       let resolveUpload: () => void;
       props.onUploadTracks = vi.fn().mockImplementation(
-        () => new Promise((resolve) => { resolveUpload = resolve; })
+        () => new Promise((resolve) => { resolveUpload = () => resolve(undefined); })
       );
       const { container } = render(<ImportToServerDialog {...props} />);
 
@@ -613,7 +613,7 @@ describe('ImportToServerDialog Component', () => {
 
       // Try to close via header button
       const headerDiv = container.querySelector('.border-b');
-      const closeButton = headerDiv?.querySelector('button')!;
+      const closeButton = headerDiv!.querySelector('button')!;
       fireEvent.click(closeButton);
 
       // Should not have called onClose because we're uploading

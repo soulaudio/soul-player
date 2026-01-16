@@ -2132,10 +2132,7 @@ describe('GraphicEqEditor', () => {
       // Wait for dropdown to close - after selecting, the dropdown should close
       // The selected preset "Rock" should now be shown in the main button
       await waitFor(() => {
-        // After selecting Rock, there should be fewer Bass Boost elements visible
-        // (the dropdown is closed, so only the preset name in button if selected, or none if different)
-        const bassBoostElements = screen.queryAllByText('Bass Boost');
-        // Since we selected Rock, Bass Boost should only appear if dropdown is still open
+        // After selecting Rock, the dropdown should close
         // We're mainly checking the component doesn't crash
         expect(screen.getByTestId('graphic-eq-editor')).toBeInTheDocument();
       });

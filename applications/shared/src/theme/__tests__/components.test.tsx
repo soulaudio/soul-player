@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 // import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '../ThemeProvider';
 import { ThemePicker } from '../components/ThemePicker';

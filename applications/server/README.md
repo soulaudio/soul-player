@@ -218,6 +218,27 @@ Configuration via environment variables (see `docker-compose.yml` and `.env.serv
 
 **IMPORTANT**: All Docker commands must be run from the **project root**, not from `applications/server/`. The build context requires access to workspace files (`Cargo.lock`, `libraries/`, `applications/shared/`, etc.).
 
+#### Testing Docker Build Locally
+
+To test the Docker build (same as CI):
+
+```bash
+# Unix/Linux/macOS
+./scripts/test-docker-build.sh
+
+# Windows (PowerShell)
+.\scripts\test-docker-build.ps1
+
+# Build without cache
+./scripts/test-docker-build.sh --no-cache
+
+# Test specific platform (as CI does)
+./scripts/test-docker-build.sh --platform linux/amd64
+./scripts/test-docker-build.sh --platform linux/arm64
+```
+
+#### Manual Build
+
 ```bash
 # Build from project root (⚠️ note the "." at the end - this is the build context)
 docker build -f applications/server/Dockerfile -t soul-server .

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, ReactNode } from 'react';
+import { useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, TauriEvent } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
@@ -44,7 +44,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
   }, []);
 
   // Helper to process file paths and show dialog (or auto-handle based on settings)
-  const processFilePaths = async (paths: string[]) => {
+  const processFilePaths = useCallback(async (paths: string[]) => {
     const audioExtensions = ['mp3', 'flac', 'wav', 'ogg', 'oga', 'm4a', 'mp4', 'aac', 'opus', 'wma', 'aiff', 'aif', 'ape', 'wv'];
 
     try {
@@ -85,7 +85,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
     } catch (err) {
       console.error('File processing error:', err);
     }
-  };
+  }, [playQueue]);
 
   // Tauri file drop events (dragDropEnabled: true)
   useEffect(() => {
@@ -136,7 +136,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
       if (unlistenHover) unlistenHover();
       if (unlistenCancel) unlistenCancel();
     };
-  }, []);
+  }, [processFilePaths]);
 
   // Listen for files opened via file association (double-click on audio files)
   useEffect(() => {
@@ -156,7 +156,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
     return () => {
       if (unlistenFilesOpened) unlistenFilesOpened();
     };
-  }, []);
+  }, [processFilePaths]);
 
   // Internal play handler that takes files directly
   const handlePlayInternal = async (files: DroppedFile[]) => {

@@ -117,25 +117,17 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install frontend dependencies
-        run: |
-          cd applications/desktop
-          npm install
+      - name: Enable Corepack for Yarn
+        run: corepack enable
 
-      - name: Build frontend
-        run: |
-          cd applications/desktop
-          npm run build
+      - name: Install dependencies
+        run: yarn
 
       - name: Create MSI installer
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles msi --target ${{ matrix.target }}
+        run: yarn build:desktop --bundles msi
 
       - name: Create EXE installer
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles nsis --target ${{ matrix.target }}
+        run: yarn build:desktop --bundles nsis
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -218,30 +210,20 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install frontend dependencies
-        run: |
-          cd applications/desktop
-          npm install
+      - name: Enable Corepack for Yarn
+        run: corepack enable
 
-      - name: Build frontend
-        run: |
-          cd applications/desktop
-          npm run build
+      - name: Install dependencies
+        run: yarn
 
       - name: Create DEB package
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles deb --target ${{ matrix.target }}
+        run: yarn build:desktop --bundles deb
 
       - name: Create RPM package
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles rpm --target ${{ matrix.target }}
+        run: yarn build:desktop --bundles rpm
 
       - name: Create AppImage
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles appimage --target ${{ matrix.target }}
+        run: yarn build:desktop --bundles appimage
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -310,26 +292,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install frontend dependencies
-        run: |
-          cd applications/desktop
-          npm install
+      - name: Enable Corepack for Yarn
+        run: corepack enable
 
-      - name: Build frontend
-        run: |
-          cd applications/desktop
-          npm run build
+      - name: Install dependencies
+        run: yarn
 
       - name: Create DMG
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles dmg --target ${{ matrix.target }}
+        run: yarn build:desktop --bundles dmg
 
       - name: Create universal binary
         if: matrix.target == 'aarch64-apple-darwin'
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles app --target universal-apple-darwin
+        run: yarn build:desktop --bundles app
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

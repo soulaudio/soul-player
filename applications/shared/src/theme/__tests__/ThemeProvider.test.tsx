@@ -3,6 +3,7 @@
  * Focus: React integration, context behavior, hook usage, state management
  */
 
+import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { ThemeProvider, useTheme } from '../ThemeProvider';
@@ -469,7 +470,7 @@ describe('ThemeProvider', () => {
     it('should return null when exporting non-existent theme', async () => {
       function ExportNonExistent() {
         const { exportTheme } = useTheme();
-        const [result, setResult] = React.useState<string | null>(undefined);
+        const [result, setResult] = React.useState<string | null | undefined>(undefined);
 
         const handleExport = () => {
           const json = exportTheme('non-existent');

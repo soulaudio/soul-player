@@ -314,16 +314,16 @@ describe('SourceIndicator Component', () => {
 
     it('should be visually distinct for different source types', () => {
       const { rerender, container } = render(<SourceIndicator sourceType="local" />);
-      const localClass = container.firstChild?.className;
+      const localClass = (container.firstChild as HTMLElement)?.className;
 
       rerender(<SourceIndicator sourceType="server" isOnline={true} />);
-      const serverOnlineClass = container.firstChild?.className;
+      const serverOnlineClass = (container.firstChild as HTMLElement)?.className;
 
       rerender(<SourceIndicator sourceType="server" isOnline={false} />);
-      const serverOfflineClass = container.firstChild?.className;
+      const serverOfflineClass = (container.firstChild as HTMLElement)?.className;
 
       rerender(<SourceIndicator sourceType="cached" />);
-      const cachedClass = container.firstChild?.className;
+      const cachedClass = (container.firstChild as HTMLElement)?.className;
 
       // All should be different
       expect(localClass).not.toBe(serverOnlineClass);
