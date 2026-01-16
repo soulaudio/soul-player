@@ -16,7 +16,6 @@ import {
   Server,
   Wifi,
   WifiOff,
-  Upload,
   Download,
   Folder,
 } from 'lucide-react';

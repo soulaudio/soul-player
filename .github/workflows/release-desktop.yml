@@ -42,15 +42,14 @@ jobs:
           choco install llvm -y
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-      - name: Install Tauri dependencies
-        run: |
-          cd applications/desktop
-          npm install
+      - name: Enable Corepack for Yarn
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn
 
       - name: Build Tauri app (MSI + NSIS)
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles msi,nsis
+        run: yarn build:desktop --bundles msi,nsis
 
       - name: Get version
         id: version
@@ -115,15 +114,14 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Tauri dependencies
-        run: |
-          cd applications/desktop
-          npm install
+      - name: Enable Corepack for Yarn
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn
 
       - name: Build Tauri app (DEB + RPM + AppImage)
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles deb,rpm,appimage
+        run: yarn build:desktop --bundles deb,rpm,appimage
 
       - name: Get version
         id: version
@@ -175,15 +173,14 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Tauri dependencies
-        run: |
-          cd applications/desktop
-          npm install
+      - name: Enable Corepack for Yarn
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn
 
       - name: Build Tauri app (DMG)
-        run: |
-          cd applications/desktop
-          npm run tauri build -- --bundles dmg
+        run: yarn build:desktop --bundles dmg
 
       - name: Get version
         id: version

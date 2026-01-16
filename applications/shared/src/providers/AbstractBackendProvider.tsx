@@ -64,27 +64,27 @@ export abstract class AbstractBackendProvider implements BackendInterface {
     throw new Error('getAllGenres() not implemented');
   }
 
-  async getRandomAlbums(limit: number): Promise<BackendAlbum[]> {
+  async getRandomAlbums(_limit: number): Promise<BackendAlbum[]> {
     throw new Error('getRandomAlbums() not implemented');
   }
 
-  async getRecentlyAddedAlbums(limit: number): Promise<BackendAlbum[]> {
+  async getRecentlyAddedAlbums(_limit: number): Promise<BackendAlbum[]> {
     throw new Error('getRecentlyAddedAlbums() not implemented');
   }
 
-  async getRecentlyAddedAlbumsWithinDays(days: number, limit: number): Promise<BackendAlbum[]> {
+  async getRecentlyAddedAlbumsWithinDays(_days: number, _limit: number): Promise<BackendAlbum[]> {
     throw new Error('getRecentlyAddedAlbumsWithinDays() not implemented');
   }
 
-  async getLeastPlayedAlbums(limit: number): Promise<BackendAlbum[]> {
+  async getLeastPlayedAlbums(_limit: number): Promise<BackendAlbum[]> {
     throw new Error('getLeastPlayedAlbums() not implemented');
   }
 
-  async getTimeCapsuleAlbums(limit: number): Promise<BackendAlbum[]> {
+  async getTimeCapsuleAlbums(_limit: number): Promise<BackendAlbum[]> {
     return []; // Optional feature, return empty by default
   }
 
-  async getGenreAlbums(genreId: number, limit: number): Promise<BackendAlbum[]> {
+  async getGenreAlbums(_genreId: number, _limit: number): Promise<BackendAlbum[]> {
     throw new Error('getGenreAlbums() not implemented');
   }
 
@@ -92,19 +92,19 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   // Single Item Lookups
   // ============================================================================
 
-  async getAlbumById(id: number): Promise<BackendAlbum | null> {
+  async getAlbumById(_id: number): Promise<BackendAlbum | null> {
     throw new Error('getAlbumById() not implemented');
   }
 
-  async getArtistById(id: number): Promise<BackendArtist | null> {
+  async getArtistById(_id: number): Promise<BackendArtist | null> {
     throw new Error('getArtistById() not implemented');
   }
 
-  async getPlaylistById(id: string): Promise<BackendPlaylist | null> {
+  async getPlaylistById(_id: string): Promise<BackendPlaylist | null> {
     throw new Error('getPlaylistById() not implemented');
   }
 
-  async getGenreById(id: number): Promise<BackendGenre | null> {
+  async getGenreById(_id: number): Promise<BackendGenre | null> {
     throw new Error('getGenreById() not implemented');
   }
 
@@ -112,27 +112,27 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   // Related Data
   // ============================================================================
 
-  async getAlbumTracks(albumId: number): Promise<BackendTrack[]> {
+  async getAlbumTracks(_albumId: number): Promise<BackendTrack[]> {
     throw new Error('getAlbumTracks() not implemented');
   }
 
-  async getArtistTracks(artistId: number): Promise<BackendTrack[]> {
+  async getArtistTracks(_artistId: number): Promise<BackendTrack[]> {
     throw new Error('getArtistTracks() not implemented');
   }
 
-  async getArtistAlbums(artistId: number): Promise<BackendAlbum[]> {
+  async getArtistAlbums(_artistId: number): Promise<BackendAlbum[]> {
     throw new Error('getArtistAlbums() not implemented');
   }
 
-  async getArtistTopTracks(artistId: number, limit?: number): Promise<BackendTrack[]> {
+  async getArtistTopTracks(_artistId: number, _limit?: number): Promise<BackendTrack[]> {
     throw new Error('getArtistTopTracks() not implemented');
   }
 
-  async getPlaylistTracks(playlistId: string): Promise<BackendTrack[]> {
+  async getPlaylistTracks(_playlistId: string): Promise<BackendTrack[]> {
     throw new Error('getPlaylistTracks() not implemented');
   }
 
-  async getGenreTracks(genreId: number): Promise<BackendTrack[]> {
+  async getGenreTracks(_genreId: number): Promise<BackendTrack[]> {
     throw new Error('getGenreTracks() not implemented');
   }
 
@@ -154,12 +154,12 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   // Playback Context (Jump Back In)
   // ============================================================================
 
-  async getRecentContexts(limit: number): Promise<PlaybackContext[]> {
+  async getRecentContexts(_limit: number): Promise<PlaybackContext[]> {
     // Default: no recent contexts
     return [];
   }
 
-  async recordContext(context: Omit<PlaybackContext, 'id' | 'playedAt'>): Promise<void> {
+  async recordContext(_context: Omit<PlaybackContext, 'id' | 'playedAt'>): Promise<void> {
     // Default: no-op
     console.log('[AbstractBackend] recordContext not implemented');
   }
@@ -168,24 +168,24 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   // Playlist Operations
   // ============================================================================
 
-  async createPlaylist(name: string, description?: string): Promise<BackendPlaylist> {
+  async createPlaylist(_name: string, _description?: string): Promise<BackendPlaylist> {
     throw new Error('createPlaylist() not supported');
   }
 
-  async deletePlaylist(id: string): Promise<void> {
+  async deletePlaylist(_id: string): Promise<void> {
     throw new Error('deletePlaylist() not supported');
   }
 
-  async getPlaylistsContainingTrack(trackId: number): Promise<string[]> {
+  async getPlaylistsContainingTrack(_trackId: number): Promise<string[]> {
     // Default: track not in any playlists
     return [];
   }
 
-  async addTrackToPlaylist(playlistId: string, trackId: number): Promise<void> {
+  async addTrackToPlaylist(_playlistId: string, _trackId: number): Promise<void> {
     throw new Error('addTrackToPlaylist() not supported');
   }
 
-  async removeTrackFromPlaylist(playlistId: string, trackId: number): Promise<void> {
+  async removeTrackFromPlaylist(_playlistId: string, _trackId: number): Promise<void> {
     throw new Error('removeTrackFromPlaylist() not supported');
   }
 
@@ -193,11 +193,11 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   // Track Operations
   // ============================================================================
 
-  async deleteTrack(id: number): Promise<void> {
+  async deleteTrack(_id: number): Promise<void> {
     throw new Error('deleteTrack() not supported');
   }
 
-  async showInFileExplorer(path: string): Promise<void> {
+  async showInFileExplorer(_path: string): Promise<void> {
     console.log('[AbstractBackend] showInFileExplorer not supported on this platform');
   }
 
@@ -210,11 +210,11 @@ export abstract class AbstractBackendProvider implements BackendInterface {
     return false;
   }
 
-  async getUserSetting(key: string): Promise<any> {
+  async getUserSetting(_key: string): Promise<any> {
     return null; // Default: no setting value
   }
 
-  async setUserSetting(key: string, value: any): Promise<void> {
+  async setUserSetting(_key: string, _value: any): Promise<void> {
     // Default: no-op
     console.log('[AbstractBackend] setUserSetting not implemented');
   }
@@ -223,19 +223,19 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   // Artwork Operations
   // ============================================================================
 
-  async setArtwork(params: SetArtworkParams): Promise<void> {
+  async setArtwork(_params: SetArtworkParams): Promise<void> {
     throw new Error('setArtwork() not supported');
   }
 
-  async removeArtwork(entityType: 'album' | 'artist' | 'playlist', entityId: string): Promise<void> {
+  async removeArtwork(_entityType: 'album' | 'artist' | 'playlist', _entityId: string): Promise<void> {
     throw new Error('removeArtwork() not supported');
   }
 
-  async getArtistArtwork(artistId: number): Promise<string | null> {
+  async getArtistArtwork(_artistId: number): Promise<string | null> {
     return null;
   }
 
-  async getPlaylistArtwork(playlistId: string): Promise<string | null> {
+  async getPlaylistArtwork(_playlistId: string): Promise<string | null> {
     return null;
   }
 }

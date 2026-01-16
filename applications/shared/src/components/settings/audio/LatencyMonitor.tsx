@@ -36,14 +36,13 @@ interface LatencyMonitorProps {
 }
 
 export function LatencyMonitor({
-  sampleRate = 44100,
+  sampleRate: _sampleRate = 44100,
   showExclusiveControls = true,
   onExclusiveModeChange,
 }: LatencyMonitorProps) {
   const { t } = useTranslation();
   const [latencyInfo, setLatencyInfo] = useState<LatencyInfo | null>(null);
   const [isExclusive, setIsExclusive] = useState(false);
-  const [bufferSizes, setBufferSizes] = useState<BufferSizeOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

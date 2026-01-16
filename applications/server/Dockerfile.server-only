@@ -3,7 +3,9 @@
 # =============================================================================
 # Use this if you only want the API server without the web interface
 #
-# Build: docker build -f applications/server/Dockerfile.server-only -t soul-server:api .
+# IMPORTANT: Must be run from the project root:
+# ✅ CORRECT:   docker build -f applications/server/Dockerfile.server-only -t soul-server:api .
+# ❌ INCORRECT: cd applications/server && docker build -f Dockerfile.server-only -t soul-server:api .
 # =============================================================================
 
 FROM rust:1.83-slim AS builder

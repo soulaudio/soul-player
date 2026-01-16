@@ -90,6 +90,38 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --workspace --lib --bins --release -- -D warnings
 
+  typescript:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable Corepack for Yarn
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn
+
+      - name: TypeScript check - Desktop
+        run: yarn workspace @soul-player/desktop run tsc --noEmit
+
+      - name: TypeScript check - Shared
+        run: yarn workspace @soul-player/shared run tsc --noEmit
+
+      - name: TypeScript check - Marketing
+        run: yarn workspace @soul-player/marketing run tsc --noEmit
+
+      - name: Lint - Desktop
+        run: yarn workspace @soul-player/desktop run lint
+
+      - name: Lint - Shared
+        run: yarn workspace @soul-player/shared run lint
+
   # ============================================================================
   # Security
   # ============================================================================

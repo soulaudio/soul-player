@@ -128,8 +128,6 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
     let cancelled = false;
 
     async function loadArtwork() {
-      const cacheKey = getCacheKey();
-
       // Parse artwork:// protocol URLs to extract IDs for Tauri invoke
       let effectiveTrackId = trackId;
       let effectiveAlbumId = albumId;

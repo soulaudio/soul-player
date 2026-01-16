@@ -239,6 +239,57 @@ cargo install wasm-pack
 
 ---
 
+## Pre-Commit Requirements (CRITICAL FOR AI AGENTS)
+
+**MANDATORY**: Before committing ANY code changes, ALL checks below MUST pass. CI will reject commits that fail these checks.
+
+### Rust Quality Checks
+```bash
+# 1. Format check (auto-fix: cargo fmt --all)
+cargo fmt --all --check
+
+# 2. Lint check (fix warnings manually)
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# 3. Tests (all must pass)
+cargo test --all
+```
+
+### TypeScript/Frontend Quality Checks
+```bash
+# 4. TypeScript type checking (fix errors manually)
+yarn workspace @soul-player/desktop run tsc --noEmit
+yarn workspace @soul-player/shared run tsc --noEmit
+yarn workspace @soul-player/marketing run tsc --noEmit
+
+# 5. ESLint (auto-fix: add --fix flag)
+yarn workspace @soul-player/desktop run lint
+yarn workspace @soul-player/shared run lint
+```
+
+### AI Agent Workflow
+1. Make code changes
+2. **Run ALL pre-commit checks** (use script below for convenience)
+3. **Fix ANY errors before proceeding**
+4. Only commit when ALL checks pass ✓
+
+**Quick Check Script**:
+```bash
+# Unix/Linux/macOS
+./scripts/pre-commit-check.sh
+
+# Windows (PowerShell)
+.\scripts\pre-commit-check.ps1
+```
+
+**Common Issues**:
+- **TypeScript TS6133**: Unused variables → prefix with `_` or remove
+- **TypeScript TS2722**: Possibly undefined → add `?.` optional chaining or null check
+- **Clippy warnings**: Follow suggestions or use `#[allow(...)]` with justification
+- **Format**: Run `cargo fmt --all` to auto-fix
+
+---
+
 ## Quick Reference
 
 ### Key Documentation

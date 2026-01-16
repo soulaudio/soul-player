@@ -135,7 +135,7 @@ export function useKeyboardShortcuts() {
         case 'play_pause': {
           // Query backend state directly to avoid race conditions
           // Frontend store is updated via events which can lag by 50ms+
-          const backendState = await commands.getPlaybackState();
+          const backendState = await commands.getPlaybackState?.();
           const isPlaying = backendState === 'Playing';
 
           if (isPlaying) {

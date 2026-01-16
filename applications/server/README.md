@@ -216,9 +216,14 @@ Configuration via environment variables (see `docker-compose.yml` and `.env.serv
 
 ### Docker (Manual)
 
+**IMPORTANT**: All Docker commands must be run from the **project root**, not from `applications/server/`. The build context requires access to workspace files (`Cargo.lock`, `libraries/`, `applications/shared/`, etc.).
+
 ```bash
-# Build from project root
+# Build from project root (⚠️ note the "." at the end - this is the build context)
 docker build -f applications/server/Dockerfile -t soul-server .
+
+# Or build server-only (no web UI)
+docker build -f applications/server/Dockerfile.server-only -t soul-server:api .
 
 # Run
 docker run -d -p 8080:8080 \

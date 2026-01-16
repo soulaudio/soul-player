@@ -1,4 +1,3 @@
-import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Grid3x3, List } from 'lucide-react'
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Info, Play, Square, RefreshCw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Info, Play, Square, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
 
 interface QueueStats {
   total: number;

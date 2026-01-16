@@ -112,7 +112,7 @@ export function DiscographyListView({ albums, onAlbumClick }: DiscographyListVie
                   <TrackList
                     tracks={tracks}
                     virtualized={false}
-                    buildQueue={(tracks, clickedTrack, clickedIndex) => {
+                    buildQueue={(tracks) => {
                       // Build queue from current album's tracks
                       // Lookup backend tracks to get file paths
                       return tracks.map(t => {

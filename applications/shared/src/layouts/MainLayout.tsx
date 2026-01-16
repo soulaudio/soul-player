@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useContext } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LeftSidebar } from '../components/LeftSidebar';
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext';

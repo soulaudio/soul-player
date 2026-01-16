@@ -34,7 +34,6 @@ export function HomePage() {
   const [recentAlbumIds, setRecentAlbumIds] = useState<Set<number>>(new Set())
   const [timeCapsuleAlbumIds, setTimeCapsuleAlbumIds] = useState<Set<number>>(new Set())
   const [onRepeatAlbumIds, setOnRepeatAlbumIds] = useState<number[]>([])
-  const [isLoading, setIsLoading] = useState(true)
 
   // Reset scroll visibility when HomePage mounts (fixes header hidden state from library pages)
   useEffect(() => {
@@ -45,7 +44,6 @@ export function HomePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        setIsLoading(true)
         const [albums, contexts] = await Promise.all([
           backend.getAllAlbums(),
           backend.getRecentContexts(100) // Get more contexts to find old ones
@@ -71,8 +69,6 @@ export function HomePage() {
         setOnRepeatAlbumIds(categories.onRepeatAlbumIds)
       } catch (err) {
         console.error('Failed to load data:', err)
-      } finally {
-        setIsLoading(false)
       }
     }
     loadData()
@@ -486,8 +482,8 @@ export function HomePage() {
 
     // Helper: Calculate how efficiently a template fills the available space
     const calculateSpaceEfficiency = (
-      startRow: number,
-      startCol: number,
+      _startRow: number,
+      _startCol: number,
       template: typeof sectionTemplates[0]
     ): number => {
       // Calculate the actual area the section would occupy
@@ -548,8 +544,8 @@ export function HomePage() {
 
     // Helper: Calculate "interestingness" score for visual variety
     const calculateInterestScore = (
-      row: number,
-      col: number,
+      _row: number,
+      _col: number,
       template: typeof sectionTemplates[0],
       placedSections: typeof sections
     ): number => {

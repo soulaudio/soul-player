@@ -264,7 +264,6 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
           type: file.type,
           // @ts-expect-error - Tauri adds path property to File objects
           path: file.path,
-          // @ts-expect-error - Browser adds webkitRelativePath for directory uploads
           webkitRelativePath: file.webkitRelativePath,
         });
 

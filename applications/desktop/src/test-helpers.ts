@@ -13,7 +13,8 @@ interface TestHelpers {
 }
 
 export function initTestHelpers() {
-  if (import.meta.env.MODE === 'test' || import.meta.env.DEV) {
+  // @ts-ignore - Vite sets import.meta.env at build time
+  if (import.meta.env?.MODE === 'test' || import.meta.env?.DEV) {
     console.log('[TestHelpers] Initializing test helpers...');
 
     (window as any).__testHelpers = {

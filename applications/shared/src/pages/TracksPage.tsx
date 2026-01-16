@@ -10,7 +10,7 @@ import { TrackMenu } from '../components/TrackMenu'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
-import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { removeConsecutiveDuplicates } from '../utils/queue'
 
 export function TracksPage() {
@@ -152,18 +152,18 @@ export function TracksPage() {
     }
   }, [commands, toQueueTrack])
 
-  // Create queue context for lazy loading
-  const queueContext = useMemo<QueueContext | undefined>(() => {
-    // Only use lazy loading for non-filtered views with > 100 tracks
-    if (searchQuery.trim() || filteredTracks.length <= 100) {
-      return undefined
-    }
-    return {
-      type: 'AllTracks',
-      userId: 1, // Default user ID for desktop
-      totalCount: filteredTracks.length,
-    }
-  }, [searchQuery, filteredTracks.length])
+  // Queue context for lazy loading (currently disabled pending backend implementation)
+  // const queueContext = useMemo<QueueContext | undefined>(() => {
+  //   // Only use lazy loading for non-filtered views with > 100 tracks
+  //   if (searchQuery.trim() || filteredTracks.length <= 100) {
+  //     return undefined
+  //   }
+  //   return {
+  //     type: 'AllTracks',
+  //     userId: 1, // Default user ID for desktop
+  //     totalCount: filteredTracks.length,
+  //   }
+  // }, [searchQuery, filteredTracks.length])
 
   // Show error in LibraryPageLayout if present
   const errorContent = error ? (

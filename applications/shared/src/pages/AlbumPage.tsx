@@ -22,7 +22,7 @@ import { getDeduplicatedTracks } from '../utils/trackGrouping'
 export function AlbumPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const { navigate, goBack, hasHistory } = useNavigateWithHistory()
+  const { goBack, hasHistory } = useNavigateWithHistory()
   const { isDesktop, features } = usePlatform()
   const backend = useBackend()
   const commands = usePlayerCommands()
@@ -164,12 +164,12 @@ export function AlbumPage() {
     }
   }
 
-  // Navigate to artist
-  const handleArtistClick = () => {
-    if (album?.artist_id) {
-      navigate(`/artists/${album.artist_id}`)
-    }
-  }
+  // Unused - artist click is handled by ArtistLink component
+  // const handleArtistClick = () => {
+  //   if (album?.artist_id) {
+  //     navigate(`/artists/${album.artist_id}`)
+  //   }
+  // }
 
   // Format duration
   const formatDuration = (seconds: number): string => {

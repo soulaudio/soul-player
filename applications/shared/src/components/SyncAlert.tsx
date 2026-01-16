@@ -15,7 +15,7 @@ export function SyncAlert() {
     }
   };
 
-  const getPhaseLabel = (phase?: string): string => {
+  const getPhaseLabel = (phase: string | null | undefined): string => {
     if (!phase) return t('sync.status.idle');
     const phaseMap: Record<string, string> = {
       Scanning: t('sync.phase.scanning'),
@@ -30,7 +30,7 @@ export function SyncAlert() {
     if (isSyncing && progress) {
       return t('sync.alert.syncing', {
         percentage: progress.percentage.toFixed(0),
-        phase: getPhaseLabel(progress.phase),
+        phase: getPhaseLabel(progress.phase ?? null),
       });
     }
     if (syncRequired) {

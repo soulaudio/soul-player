@@ -42,7 +42,7 @@ interface MockPlaylist {
   coverUrl?: string
 }
 
-function generateMockPlaylists(tracks: DemoTrack[], albums: DemoAlbum[]): MockPlaylist[] {
+function generateMockPlaylists(tracks: DemoTrack[], _albums: DemoAlbum[]): MockPlaylist[] {
   if (tracks.length === 0) return []
 
   const seed = Date.now() % 1000 // Session-based seed
@@ -243,7 +243,7 @@ export function MockBackendProvider({ storage, children }: MockBackendProviderPr
       return allAlbums.slice(-limit).reverse().map((a, i) => toBackendAlbum(a, i, artistIdMap))
     },
 
-    async getRecentlyAddedAlbumsWithinDays(days: number, limit: number) {
+    async getRecentlyAddedAlbumsWithinDays(_days: number, limit: number) {
       const artistIdMap = getArtistIdMap()
       const allAlbums = storage.getAllAlbums()
       // In demo mode, simulate recent albums (always return some to show the section)

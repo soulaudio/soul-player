@@ -1,4 +1,19 @@
 # =============================================================================
+# Soul Player Server + Web UI Dockerfile
+# =============================================================================
+# IMPORTANT: This Dockerfile MUST be run from the project root, not from applications/server/
+#
+# ✅ CORRECT:   docker build -f applications/server/Dockerfile -t soul-server .
+# ❌ INCORRECT: cd applications/server && docker build -t soul-server .
+#
+# The build context must be the project root to access:
+#   - Cargo.lock (workspace root)
+#   - libraries/* (workspace dependencies)
+#   - applications/shared (shared TypeScript code)
+#   - applications/web (web UI source)
+# =============================================================================
+
+# =============================================================================
 # Stage 1: Build the web frontend
 # =============================================================================
 FROM node:20-alpine AS web-builder

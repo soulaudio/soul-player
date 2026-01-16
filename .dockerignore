@@ -45,7 +45,8 @@ Thumbs.db
 applications/desktop/
 applications/mobile/
 applications/marketing/
-applications/shared/
+# NOTE: applications/shared/ IS needed - it's used by applications/web/
+# NOTE: applications/web/ IS needed - it's bundled with the server for the web UI
 
 # NOTE: .sqlx/ is REQUIRED for CI compilation (SQLx offline mode)
 # DO NOT exclude .sqlx/ - it's needed for compile-time query verification

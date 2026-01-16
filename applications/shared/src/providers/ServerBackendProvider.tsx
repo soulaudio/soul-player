@@ -228,7 +228,7 @@ export function ServerBackendProvider({ apiBase, authToken, children }: ServerBa
       )
     },
 
-    async showInFileExplorer(path: string) {
+    async showInFileExplorer(_path: string) {
       // Server-backed web apps can't show file explorer
       console.log('[ServerBackend] showInFileExplorer not supported in web')
     },
