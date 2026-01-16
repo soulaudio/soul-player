@@ -14,7 +14,8 @@ ENV CARGO_TERM_COLOR=always \
     RUSTUP_MAX_RETRIES=10 \
     CARGO_PROFILE_TEST_OPT_LEVEL=3 \
     CARGO_PROFILE_TEST_DEBUG=0 \
-    RUST_TEST_THREADS=4
+    RUST_TEST_THREADS=4 \
+    SQLX_OFFLINE=true
 
 # Install system dependencies (CI line 305)
 RUN apt-get update && apt-get install -y \

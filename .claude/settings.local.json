@@ -168,7 +168,9 @@
       "Bash(Select-String -Pattern \"test result\" -Context 2,10)",
       "Bash(tee:*)",
       "Bash(git checkout:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File test-ci.ps1 -Package soul-playback)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File test-ci.ps1)"
     ]
   },
   "hooks": {

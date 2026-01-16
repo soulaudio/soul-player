@@ -47,5 +47,5 @@ applications/mobile/
 applications/marketing/
 applications/shared/
 
-# SQLx offline data (not needed at runtime)
-.sqlx/
+# NOTE: .sqlx/ is REQUIRED for CI compilation (SQLx offline mode)
+# DO NOT exclude .sqlx/ - it's needed for compile-time query verification

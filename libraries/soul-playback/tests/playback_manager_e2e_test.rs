@@ -907,7 +907,11 @@ mod volume_control {
         }
 
         // 0% should be silence or near-silent (allow for DAC keepalive noise)
-        assert!(peaks[0] < 0.001, "0% volume should be near-silent, got peak = {:.6}", peaks[0]);
+        assert!(
+            peaks[0] < 0.001,
+            "0% volume should be near-silent, got peak = {:.6}",
+            peaks[0]
+        );
 
         // Volume increase should not be linear
         // At 50%, should be much less than 50% of max
