@@ -47,7 +47,8 @@ RUN yarn build
 # =============================================================================
 # Stage 2: Build the Rust server
 # =============================================================================
-FROM rust:1.84-slim AS server-builder
+# Use nightly for edition2024 support (required by base64ct, home, and other deps)
+FROM rustlang/rust:nightly-slim AS server-builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
