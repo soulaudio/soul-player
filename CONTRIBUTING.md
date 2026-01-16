@@ -29,12 +29,12 @@ cargo test --all
 ### TypeScript/Frontend Checks
 ```bash
 # TypeScript type checking
-yarn workspace @soul-player/desktop run tsc --noEmit
+yarn workspace soul-player-desktop run tsc --noEmit
 yarn workspace @soul-player/shared run tsc --noEmit
 yarn workspace @soul-player/marketing run tsc --noEmit
 
 # ESLint
-yarn workspace @soul-player/desktop run lint
+yarn workspace soul-player-desktop run lint
 yarn workspace @soul-player/shared run lint
 ```
 
@@ -59,10 +59,10 @@ cargo clippy --workspace --lib --bins --release -- -D warnings && \
 cargo test --all
 
 # TypeScript + ESLint
-yarn workspace @soul-player/desktop run tsc --noEmit && \
+yarn workspace soul-player-desktop run tsc --noEmit && \
 yarn workspace @soul-player/shared run tsc --noEmit && \
 yarn workspace @soul-player/marketing run tsc --noEmit && \
-yarn workspace @soul-player/desktop run lint && \
+yarn workspace soul-player-desktop run lint && \
 yarn workspace @soul-player/shared run lint
 ```
 

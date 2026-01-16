@@ -258,12 +258,12 @@ cargo test --all
 ### TypeScript/Frontend Quality Checks
 ```bash
 # 4. TypeScript type checking (fix errors manually)
-yarn workspace @soul-player/desktop run tsc --noEmit
+yarn workspace soul-player-desktop run tsc --noEmit
 yarn workspace @soul-player/shared run tsc --noEmit
 yarn workspace @soul-player/marketing run tsc --noEmit
 
 # 5. ESLint (auto-fix: add --fix flag)
-yarn workspace @soul-player/desktop run lint
+yarn workspace soul-player-desktop run lint
 yarn workspace @soul-player/shared run lint
 ```
 

@@ -3,7 +3,7 @@
  * Uses FeatureGate for platform-specific features
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ThemePicker } from '../theme'
 import { Kbd } from '../components/ui/Kbd'
@@ -60,6 +60,28 @@ export function SettingsPage({ handlers, ShortcutsSettingsComponent }: SettingsP
   const { features } = usePlatform()
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close mobile menu when clicking outside
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setMobileMenuOpen(false)
+      }
+    }
+
+    // Add listener after a brief delay to avoid closing immediately on open
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [mobileMenuOpen])
 
   // Build navigation items based on features
   const navigationItems: NavItem[] = [
@@ -114,7 +136,7 @@ export function SettingsPage({ handlers, ShortcutsSettingsComponent }: SettingsP
 
       {/* Mobile Header - visible only on mobile */}
       <div className="md:hidden">
-        <div className="relative">
+        <div className="relative" ref={mobileMenuRef}>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="w-full flex items-center justify-between px-4 py-3 text-left"
@@ -132,7 +154,7 @@ export function SettingsPage({ handlers, ShortcutsSettingsComponent }: SettingsP
 
           {/* Mobile Dropdown Menu */}
           {mobileMenuOpen && (
-            <div className="absolute top-full left-0 right-0 bg-background shadow-lg z-50">
+            <div className="absolute top-full left-0 right-0 bg-background shadow-lg z-50 border border-border">
               {visibleNavItems.map((item) => {
                 const Icon = item.icon
                 const isActive = activeTab === item.id

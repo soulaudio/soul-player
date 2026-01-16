@@ -27,7 +27,7 @@ echo ""
 
 # TypeScript checks
 echo "→ TypeScript check - Desktop..."
-yarn workspace @soul-player/desktop run tsc --noEmit
+yarn workspace soul-player-desktop run tsc --noEmit
 echo "✓ Desktop TypeScript OK"
 echo ""
 
@@ -42,7 +42,7 @@ echo "✓ Marketing TypeScript OK"
 echo ""
 
 echo "→ ESLint - Desktop..."
-yarn workspace @soul-player/desktop run lint
+yarn workspace soul-player-desktop run lint
 echo "✓ Desktop ESLint OK"
 echo ""
 

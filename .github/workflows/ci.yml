@@ -108,7 +108,7 @@ jobs:
         run: yarn
 
       - name: TypeScript check - Desktop
-        run: yarn workspace @soul-player/desktop run tsc --noEmit
+        run: yarn workspace soul-player-desktop run tsc --noEmit
 
       - name: TypeScript check - Shared
         run: yarn workspace @soul-player/shared run tsc --noEmit
@@ -117,7 +117,7 @@ jobs:
         run: yarn workspace @soul-player/marketing run tsc --noEmit
 
       - name: Lint - Desktop
-        run: yarn workspace @soul-player/desktop run lint
+        run: yarn workspace soul-player-desktop run lint
 
       - name: Lint - Shared
         run: yarn workspace @soul-player/shared run lint

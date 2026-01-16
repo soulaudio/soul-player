@@ -26,7 +26,7 @@ Write-Host ""
 
 # TypeScript checks
 Write-Host "→ TypeScript check - Desktop..." -ForegroundColor Yellow
-yarn workspace @soul-player/desktop run tsc --noEmit
+yarn workspace soul-player-desktop run tsc --noEmit
 Write-Host "✓ Desktop TypeScript OK" -ForegroundColor Green
 Write-Host ""
 
@@ -41,7 +41,7 @@ Write-Host "✓ Marketing TypeScript OK" -ForegroundColor Green
 Write-Host ""
 
 Write-Host "→ ESLint - Desktop..." -ForegroundColor Yellow
-yarn workspace @soul-player/desktop run lint
+yarn workspace soul-player-desktop run lint
 Write-Host "✓ Desktop ESLint OK" -ForegroundColor Green
 Write-Host ""
 
