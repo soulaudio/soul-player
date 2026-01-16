@@ -1,47 +1,63 @@
-# Multi-stage Dockerfile for Next.js marketing site
-# Optimized for Fly.io deployment
+# =============================================================================
+# Soul Player Marketing Site Dockerfile
+# =============================================================================
+# IMPORTANT: This Dockerfile MUST be run from the project root, not from applications/marketing/
+#
+# ✅ CORRECT:   docker build -f applications/marketing/Dockerfile -t soul-marketing .
+# ❌ INCORRECT: cd applications/marketing && docker build -t soul-marketing .
+#
+# The build context must be the project root to access:
+#   - package.json, yarn.lock (workspace root)
+#   - applications/shared (shared TypeScript code)
+#   - applications/marketing (marketing site source)
+# =============================================================================
 
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 
-WORKDIR /app
+WORKDIR /build
 
-# Copy package files
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+# Enable corepack for yarn
+RUN corepack enable
 
-# Install dependencies based on lockfile
-RUN \
-  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+# Copy workspace package files
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn ./.yarn
+
+# Copy relevant packages
+COPY applications/marketing/package.json ./applications/marketing/
+COPY applications/shared/package.json ./applications/shared/
+
+# Install dependencies
+RUN yarn install --immutable
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
-WORKDIR /app
+WORKDIR /build
+
+# Enable corepack for yarn
+RUN corepack enable
 
 # Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /build/node_modules ./node_modules
+COPY --from=deps /build/.yarn ./.yarn
+COPY --from=deps /build/.yarnrc.yml ./
 
-# Copy application code
-COPY . .
+# Copy workspace package files
+COPY package.json yarn.lock ./
 
-# Copy shared package (workspace dependency)
-COPY ../shared ../shared
+# Copy source code
+COPY applications/marketing ./applications/marketing
+COPY applications/shared ./applications/shared
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build the application
-RUN \
-  if [ -f yarn.lock ]; then yarn build; \
-  elif [ -f package-lock.json ]; then npm run build; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm build; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+# Build the marketing application
+WORKDIR /build/applications/marketing
+RUN yarn build
 
 # Stage 3: Runner
 FROM node:20-alpine AS runner
@@ -56,9 +72,9 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Copy built application
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /build/applications/marketing/public ./public
+COPY --from=builder --chown=nextjs:nodejs /build/applications/marketing/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /build/applications/marketing/.next/static ./.next/static
 
 USER nextjs
 

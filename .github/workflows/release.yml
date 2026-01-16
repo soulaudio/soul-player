@@ -105,29 +105,23 @@ jobs:
           choco install llvm -y
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-      - name: Build desktop app
-        if: steps.check-build.outputs.build_needed == 'true'
-        run: |
-          cd applications/desktop/src-tauri
-          cargo build --release --target ${{ matrix.target }}
-
-      # Build installers (always needed)
       - name: Setup Node.js
+        if: steps.check-build.outputs.build_needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Enable Corepack for Yarn
+        if: steps.check-build.outputs.build_needed == 'true'
         run: corepack enable
 
       - name: Install dependencies
+        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn
 
-      - name: Create MSI installer
-        run: yarn build:desktop --bundles msi
-
-      - name: Create EXE installer
-        run: yarn build:desktop --bundles nsis
+      - name: Build installers (MSI + NSIS)
+        if: steps.check-build.outputs.build_needed == 'true'
+        run: yarn build:desktop --bundles msi,nsis
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -188,7 +182,7 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -198,32 +192,23 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev
 
-      - name: Build desktop app
-        if: steps.check-build.outputs.build_needed == 'true'
-        run: |
-          cd applications/desktop/src-tauri
-          cargo build --release --target ${{ matrix.target }}
-
-      # Build packages (always needed)
       - name: Setup Node.js
+        if: steps.check-build.outputs.build_needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Enable Corepack for Yarn
+        if: steps.check-build.outputs.build_needed == 'true'
         run: corepack enable
 
       - name: Install dependencies
+        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn
 
-      - name: Create DEB package
-        run: yarn build:desktop --bundles deb
-
-      - name: Create RPM package
-        run: yarn build:desktop --bundles rpm
-
-      - name: Create AppImage
-        run: yarn build:desktop --bundles appimage
+      - name: Build packages (DEB + RPM + AppImage)
+        if: steps.check-build.outputs.build_needed == 'true'
+        run: yarn build:desktop --bundles deb,rpm,appimage
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -277,33 +262,26 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: brew install pkg-config
 
-      - name: Build desktop app
-        if: steps.check-build.outputs.build_needed == 'true'
-        run: |
-          cd applications/desktop/src-tauri
-          cargo build --release --target ${{ matrix.target }}
-
-      # Build packages (always needed)
       - name: Setup Node.js
+        if: steps.check-build.outputs.build_needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Enable Corepack for Yarn
+        if: steps.check-build.outputs.build_needed == 'true'
         run: corepack enable
 
       - name: Install dependencies
+        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn
 
-      - name: Create DMG
+      - name: Build DMG
+        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn build:desktop --bundles dmg
-
-      - name: Create universal binary
-        if: matrix.target == 'aarch64-apple-darwin'
-        run: yarn build:desktop --bundles app
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -333,8 +311,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          cd applications/server
-          docker build -t soul-server:latest .
+          docker build -f applications/server/Dockerfile -t soul-server:latest .
 
       - name: Save Docker image
         run: |
