@@ -71,7 +71,7 @@ jobs:
         if: needs.check-ci-artifacts.outputs.has_artifacts == 'true'
         uses: actions/download-artifact@v4
         with:
-          name: soul-player-${{ matrix.target }}
+          name: windows-${{ matrix.target }}
           path: target/${{ matrix.target }}/release
         continue-on-error: true
 
@@ -157,7 +157,7 @@ jobs:
         if: needs.check-ci-artifacts.outputs.has_artifacts == 'true'
         uses: actions/download-artifact@v4
         with:
-          name: soul-player-${{ matrix.target }}
+          name: linux-${{ matrix.target }}
           path: target/${{ matrix.target }}/release
         continue-on-error: true
 
@@ -243,7 +243,7 @@ jobs:
         if: needs.check-ci-artifacts.outputs.has_artifacts == 'true'
         uses: actions/download-artifact@v4
         with:
-          name: soul-player-${{ matrix.target }}
+          name: macos-${{ matrix.target }}
           path: target/${{ matrix.target }}/release
         continue-on-error: true
 
