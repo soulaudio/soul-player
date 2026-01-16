@@ -24,9 +24,12 @@ RUN corepack enable
 # Copy workspace package files
 COPY package.json yarn.lock .yarnrc.yml ./
 
-# Copy relevant packages
+# Copy ALL workspace package.json files (Yarn needs complete workspace structure)
 COPY applications/marketing/package.json ./applications/marketing/
 COPY applications/shared/package.json ./applications/shared/
+COPY applications/desktop/package.json ./applications/desktop/
+COPY applications/mobile/package.json ./applications/mobile/
+COPY applications/web/package.json ./applications/web/
 
 # Install dependencies
 RUN yarn install --immutable
