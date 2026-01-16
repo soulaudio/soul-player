@@ -77,7 +77,8 @@ RUN mkdir -p ./applications/desktop/src-tauri/src && \
 RUN mkdir -p ./libraries/soul-audio/tests && \
     echo "#[test]\nfn dummy() {}" > ./libraries/soul-audio/tests/pipeline_quality_test.rs
 
-# Build release binary
+# Build release binary with SQLx offline mode
+ENV SQLX_OFFLINE=true
 RUN cargo build --release -p soul-server
 
 # =============================================================================
