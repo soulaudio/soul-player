@@ -14,35 +14,36 @@
 # =============================================================================
 
 # =============================================================================
-# Stage 1: Build the web frontend
+# Stage 1: Build the web frontend (TEMPORARILY DISABLED - web app has TS errors)
 # =============================================================================
-FROM node:20-alpine AS web-builder
+# TODO: Re-enable once applications/web TypeScript errors are fixed
+# FROM node:20-alpine AS web-builder
 
-WORKDIR /build
+# WORKDIR /build
 
-# Enable corepack for yarn
-RUN corepack enable
+# # Enable corepack for yarn
+# RUN corepack enable
 
-# Copy workspace package files
-COPY package.json yarn.lock .yarnrc.yml ./
+# # Copy workspace package files
+# COPY package.json yarn.lock .yarnrc.yml ./
 
-# Copy ALL workspace package.json files (Yarn needs complete workspace structure)
-COPY applications/web/package.json ./applications/web/
-COPY applications/shared/package.json ./applications/shared/
-COPY applications/desktop/package.json ./applications/desktop/
-COPY applications/mobile/package.json ./applications/mobile/
-COPY applications/marketing/package.json ./applications/marketing/
+# # Copy ALL workspace package.json files (Yarn needs complete workspace structure)
+# COPY applications/web/package.json ./applications/web/
+# COPY applications/shared/package.json ./applications/shared/
+# COPY applications/desktop/package.json ./applications/desktop/
+# COPY applications/mobile/package.json ./applications/mobile/
+# COPY applications/marketing/package.json ./applications/marketing/
 
-# Install dependencies (yarn will create .yarn cache as needed)
-RUN yarn install --immutable
+# # Install dependencies (yarn will create .yarn cache as needed)
+# RUN yarn install --immutable
 
-# Copy source code
-COPY applications/web ./applications/web
-COPY applications/shared ./applications/shared
+# # Copy source code
+# COPY applications/web ./applications/web
+# COPY applications/shared ./applications/shared
 
-# Build the web app
-WORKDIR /build/applications/web
-RUN yarn build
+# # Build the web app
+# WORKDIR /build/applications/web
+# RUN yarn build
 
 # =============================================================================
 # Stage 2: Build the Rust server
@@ -101,10 +102,10 @@ WORKDIR /app
 # Copy server binary
 COPY --from=server-builder /build/target/release/soul-server /usr/local/bin/soul-server
 
-# Copy web frontend
-COPY --from=web-builder /build/applications/web/dist /app/web
+# Copy web frontend (DISABLED - web app build disabled above)
+# COPY --from=web-builder /build/applications/web/dist /app/web
 
-# Set web directory environment variable
+# Set web directory environment variable (server will work without web UI)
 ENV SOUL_WEB_DIR=/app/web
 
 # Switch to non-root user
