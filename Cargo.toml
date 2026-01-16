@@ -227,3 +227,9 @@ opt-level = 2
 inherits = "release"
 debug = true
 strip = false
+
+# Patch dependencies to fix compatibility issues
+# NOTE: Ubuntu build was failing with ashpd 0.11.0 due to trait bound issues
+# The error occurs in tauri's transitive dependencies
+# Workaround: Force update Cargo.lock to use ashpd 0.9.x
+# Command: cargo update -p ashpd --precise 0.9.2

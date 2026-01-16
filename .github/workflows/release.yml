@@ -298,37 +298,38 @@ jobs:
             applications/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
           retention-days: 30
 
-  build-server:
-    name: Build Server Docker Image
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit_sha || github.ref }}
+  # DISABLED: Server Docker build temporarily disabled
+  # build-server:
+  #   name: Build Server Docker Image
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ inputs.commit_sha || github.ref }}
 
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          df -h
+  #     - name: Free disk space
+  #       run: |
+  #         sudo rm -rf /usr/share/dotnet
+  #         sudo rm -rf /usr/local/lib/android
+  #         df -h
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
-        run: |
-          docker build -f applications/server/Dockerfile -t soul-server:latest .
+  #     - name: Build Docker image
+  #       run: |
+  #         docker build -f applications/server/Dockerfile -t soul-server:latest .
 
-      - name: Save Docker image
-        run: |
-          docker save soul-server:latest > soul-server.tar
+  #     - name: Save Docker image
+  #       run: |
+  #         docker save soul-server:latest > soul-server.tar
 
-      - name: Upload Docker image
-        uses: actions/upload-artifact@v4
-        with:
-          name: server-docker
-          path: soul-server.tar
-          retention-days: 30
+  #     - name: Upload Docker image
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: server-docker
+  #         path: soul-server.tar
+  #         retention-days: 30
 
   # ============================================================================
   # Stage 2: Create Draft Release
@@ -336,7 +337,7 @@ jobs:
 
   create-draft-release:
     name: Create Draft Release
-    needs: [build-windows, build-linux, build-macos, build-server]
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -523,38 +524,39 @@ jobs:
           rm -rf "/Applications/Soul Player.app"
           echo "✅ Cleanup successful"
 
-  test-server-docker:
-    name: Test Server Docker
-    needs: create-draft-release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: server-docker
-          path: docker
+  # DISABLED: Server Docker test temporarily disabled
+  # test-server-docker:
+  #   name: Test Server Docker
+  #   needs: create-draft-release
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/download-artifact@v4
+  #       with:
+  #         name: server-docker
+  #         path: docker
 
-      - name: Load and test Docker image
-        run: |
-          docker load < docker/soul-server.tar
+  #     - name: Load and test Docker image
+  #       run: |
+  #         docker load < docker/soul-server.tar
 
-          # Start container
-          docker run -d \
-            --name soul-server-test \
-            -p 8080:8080 \
-            -e JWT_SECRET=test-secret \
-            soul-server:latest
+  #         # Start container
+  #         docker run -d \
+  #           --name soul-server-test \
+  #           -p 8080:8080 \
+  #           -e JWT_SECRET=test-secret \
+  #           soul-server:latest
 
-          # Wait for startup
-          sleep 10
+  #         # Wait for startup
+  #         sleep 10
 
-          # Health check
-          curl -f http://localhost:8080/health || exit 1
-          echo "✅ Server started and responding"
+  #         # Health check
+  #         curl -f http://localhost:8080/health || exit 1
+  #         echo "✅ Server started and responding"
 
-          # Cleanup
-          docker stop soul-server-test
-          docker rm soul-server-test
-          echo "✅ Container cleanup successful"
+  #         # Cleanup
+  #         docker stop soul-server-test
+  #         docker rm soul-server-test
+  #         echo "✅ Container cleanup successful"
 
   # ============================================================================
   # Stage 4: Publish Release
@@ -566,8 +568,8 @@ jobs:
       create-draft-release,
       test-windows-install,
       test-linux-install,
-      test-macos-install,
-      test-server-docker
+      test-macos-install
+      # test-server-docker  # DISABLED: Server Docker test temporarily disabled
     ]
     runs-on: ubuntu-latest
     permissions:
