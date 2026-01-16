@@ -23,7 +23,6 @@ RUN corepack enable
 
 # Copy workspace package files
 COPY package.json yarn.lock .yarnrc.yml ./
-COPY .yarn ./.yarn
 
 # Copy relevant packages
 COPY applications/marketing/package.json ./applications/marketing/
