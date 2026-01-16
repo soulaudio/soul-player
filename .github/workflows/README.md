@@ -295,8 +295,8 @@ Edit `release.yml` → `Generate release notes` step:
 
 Create a test tag:
 ```bash
-git tag v0.0.1-test
-git push origin v0.0.1-test
+git tag v0.0.1-1
+git push origin v0.0.1-1
 ```
 
 This will:
