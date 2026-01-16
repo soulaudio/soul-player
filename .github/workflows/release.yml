@@ -426,7 +426,7 @@ jobs:
       - name: Test MSI installation
         shell: powershell
         run: |
-          $msi = Get-ChildItem -Path installers -Filter *.msi | Select-Object -First 1
+          $msi = Get-ChildItem -Path installers -Filter *.msi -Recurse | Select-Object -First 1
           Write-Host "Testing MSI: $($msi.FullName)"
 
           # Silent install
@@ -474,12 +474,11 @@ jobs:
 
       - name: Test DEB installation
         run: |
-          cd installers
-          DEB=$(ls *.deb | head -1)
+          DEB=$(find installers -name "*.deb" -type f | head -1)
           echo "Testing DEB: $DEB"
 
           # Install
-          sudo dpkg -i $DEB || sudo apt-get install -f -y
+          sudo dpkg -i "$DEB" || sudo apt-get install -f -y
           echo "✅ Installation successful"
 
           # Verify
@@ -504,8 +503,7 @@ jobs:
 
       - name: Test DMG installation
         run: |
-          cd installers
-          DMG=$(ls *.dmg | head -1)
+          DMG=$(find installers -name "*.dmg" -type f | head -1)
           echo "Testing DMG: $DMG"
 
           # Mount DMG
