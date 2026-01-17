@@ -2,6 +2,7 @@
   "productName": "Soul Player",
   "version": "0.0.1",
   "identifier": "soul-player",
+  "mainBinaryName": "soul-player",
   "build": {
     "beforeDevCommand": "yarn dev",
     "beforeBuildCommand": "yarn build",

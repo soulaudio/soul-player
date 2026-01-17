@@ -449,18 +449,31 @@ jobs:
           # Silent install with timeout and no-restart flag
           # /qn = No UI, /norestart = Don't reboot, /L*V = Verbose logging
           Write-Host "Starting MSI installation (silent mode with embedded WebView2)..."
+          $startTime = Get-Date
           $process = Start-Process msiexec.exe -ArgumentList "/i", $msi.FullName, "/qn", "/norestart", "/L*V", "install.log" -PassThru -NoNewWindow
-          $timeout = 180  # 3 minutes (should be faster with embedBootstrapper)
+          $timeout = 300  # 5 minutes for WebView2 installation
 
-          if (-not $process.WaitForExit($timeout * 1000)) {
-            Write-Error "Installation timed out after $timeout seconds"
-            Get-Content install.log -ErrorAction SilentlyContinue
-            $process.Kill()
-            exit 1
+          $elapsed = 0
+          while (-not $process.HasExited) {
+            Start-Sleep -Seconds 10
+            $elapsed = ((Get-Date) - $startTime).TotalSeconds
+            Write-Host "Installation in progress... $([math]::Round($elapsed))s elapsed"
+
+            if ($elapsed -gt $timeout) {
+              Write-Error "Installation timed out after $timeout seconds"
+              Write-Host "Last 50 lines of install log:"
+              Get-Content install.log -ErrorAction SilentlyContinue | Select-Object -Last 50
+              $process.Kill()
+              exit 1
+            }
           }
+
+          $elapsed = ((Get-Date) - $startTime).TotalSeconds
+          Write-Host "Installation completed in $([math]::Round($elapsed))s"
 
           if ($process.ExitCode -ne 0) {
             Write-Error "Installation failed with exit code: $($process.ExitCode)"
+            Write-Host "Install log:"
             Get-Content install.log
             exit 1
           }
@@ -469,11 +482,12 @@ jobs:
           $installed = Test-Path "C:\Program Files\Soul Player\soul-player.exe"
           if (-not $installed) {
             Write-Error "Installation failed: soul-player.exe not found"
+            Write-Host "Install log:"
             Get-Content install.log
             exit 1
           }
 
-          Write-Host "✅ Installation successful"
+          Write-Host "✅ Installation successful (took $([math]::Round($elapsed))s)"
 
           # Verify Start Menu shortcut
           $shortcut = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
