@@ -489,17 +489,47 @@ jobs:
 
           Write-Host "✅ Installation successful (took $([math]::Round($elapsed))s)"
 
-          # Verify Start Menu shortcut
-          $shortcut = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
-          if ($shortcut) {
-            Write-Host "✅ Start Menu shortcut created"
-          } else {
-            Write-Host "⚠️  Start Menu shortcut not found"
+          # List installed files
+          Write-Host "`nInstalled files:"
+          Get-ChildItem "C:\Program Files\Soul Player" -Recurse | Select-Object -First 20 | ForEach-Object {
+            Write-Host "  $($_.Name)"
           }
 
-          # Verify binary version
-          & "C:\Program Files\Soul Player\soul-player.exe" --version
-          Write-Host "✅ Application launches"
+          # Test app launch
+          Write-Host "`nTesting application launch..."
+          $appProcess = Start-Process "C:\Program Files\Soul Player\soul-player.exe" -PassThru -ErrorAction Stop
+
+          # Wait 10 seconds to see if app crashes
+          Start-Sleep -Seconds 10
+
+          if ($appProcess.HasExited) {
+            Write-Error "App crashed with exit code: $($appProcess.ExitCode)"
+
+            # Check for log files
+            $logPaths = @(
+              "$env:APPDATA\Soul Player\logs",
+              "$env:LOCALAPPDATA\Soul Player\logs"
+            )
+
+            foreach ($logPath in $logPaths) {
+              if (Test-Path $logPath) {
+                Write-Host "Logs found at: $logPath"
+                Get-ChildItem $logPath -Filter "*.log" | ForEach-Object {
+                  Write-Host "`n--- $($_.Name) ---"
+                  Get-Content $_.FullName | Select-Object -Last 50
+                }
+              }
+            }
+            exit 1
+          }
+
+          Write-Host "✅ App launched successfully (PID: $($appProcess.Id))"
+
+          # Kill the app
+          Write-Host "Stopping application..."
+          Stop-Process -Id $appProcess.Id -Force
+          Start-Sleep -Seconds 2
+          Write-Host "✅ App stopped"
 
           # Test uninstall (works for both NSIS and MSI)
           Write-Host "Testing uninstall..."
@@ -617,14 +647,58 @@ jobs:
           fi
 
           echo "✅ Binary installed and executable"
-          echo "Note: Skipping --version check (Tauri requires display/GTK)"
 
-          # Check desktop entry was created
-          test -f /usr/share/applications/soul-player.desktop || echo "⚠️  Desktop entry not found"
+          # List first 20 installed files to verify frontend bundling
+          echo ""
+          echo "Sample of installed files:"
+          dpkg -L soul-player | head -20
 
-          # Check uninstaller is present (if Tauri creates one)
-          dpkg -L soul-player | grep -q "bin/soul-player" || exit 1
-          echo "✅ Package files verified"
+          # Install xvfb for headless testing
+          echo ""
+          echo "Setting up headless display for app testing..."
+          sudo apt-get install -y xvfb
+
+          # Launch app with xvfb (headless X server)
+          echo "Testing application launch..."
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+          XVFB_PID=$!
+          sleep 2
+
+          # Start the app in background
+          soul-player > /tmp/soul-player.log 2>&1 &
+          APP_PID=$!
+          echo "App started with PID: $APP_PID"
+
+          # Wait 10 seconds and check if still running
+          sleep 10
+
+          if ! kill -0 $APP_PID 2>/dev/null; then
+            echo "❌ App crashed or exited"
+            echo "Exit code: $?"
+            echo ""
+            echo "App log:"
+            cat /tmp/soul-player.log || echo "No log found"
+
+            # Check for log files
+            if [ -d "$HOME/.config/soul-player/logs" ]; then
+              echo ""
+              echo "Application logs:"
+              find "$HOME/.config/soul-player/logs" -name "*.log" -exec echo "--- {} ---" \; -exec tail -50 {} \;
+            fi
+
+            kill $XVFB_PID 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "✅ App is running (PID: $APP_PID)"
+
+          # Kill the app and xvfb
+          echo "Stopping application..."
+          kill $APP_PID 2>/dev/null || true
+          kill $XVFB_PID 2>/dev/null || true
+          sleep 2
+          echo "✅ App stopped"
 
           # Uninstall
           sudo apt-get purge -y soul-player
@@ -662,12 +736,70 @@ jobs:
           test -f "/Applications/Soul Player.app/Contents/Info.plist" || exit 1
           echo "✅ App bundle structure verified"
 
-          # Verify binary (may fail on cross-arch, but try anyway)
-          /Applications/Soul\ Player.app/Contents/MacOS/soul-player --version || echo "⚠️  Version check skipped (cross-arch)"
+          # List Contents to verify frontend files
+          echo ""
+          echo "Sample of app bundle contents:"
+          find "/Applications/Soul Player.app/Contents" -type f | head -20
 
-          # Check if app would appear in Launchpad (Info.plist should exist)
+          # Check if app would appear in Launchpad
           plutil -p "/Applications/Soul Player.app/Contents/Info.plist" | grep -q "CFBundleIdentifier" || exit 1
           echo "✅ App metadata verified"
+
+          # Test app launch
+          echo ""
+          echo "Testing application launch..."
+          timeout=30
+
+          # Launch app in background and capture output
+          open -a "Soul Player" 2>&1 &
+          OPEN_PID=$!
+
+          # Wait a few seconds for app to start
+          sleep 5
+
+          # Check if app is running via process list
+          APP_RUNNING=$(ps aux | grep -i "Soul Player.app" | grep -v grep | wc -l)
+
+          if [ "$APP_RUNNING" -eq 0 ]; then
+            echo "❌ App failed to launch or crashed immediately"
+
+            # Check for log files
+            LOG_DIR="$HOME/Library/Logs/soul-player"
+            if [ -d "$LOG_DIR" ]; then
+              echo ""
+              echo "Application logs:"
+              find "$LOG_DIR" -name "*.log" -exec echo "--- {} ---" \; -exec tail -50 {} \;
+            fi
+
+            # Check Application Support
+            APP_SUPPORT="$HOME/Library/Application Support/soul-player"
+            if [ -d "$APP_SUPPORT/logs" ]; then
+              echo ""
+              echo "App Support logs:"
+              find "$APP_SUPPORT/logs" -name "*.log" -exec echo "--- {} ---" \; -exec tail -50 {} \;
+            fi
+
+            exit 1
+          fi
+
+          echo "✅ App launched successfully ($APP_RUNNING process(es) running)"
+
+          # Wait a bit more to ensure stability
+          sleep 5
+
+          APP_RUNNING=$(ps aux | grep -i "Soul Player.app" | grep -v grep | wc -l)
+          if [ "$APP_RUNNING" -eq 0 ]; then
+            echo "❌ App crashed after initial launch"
+            exit 1
+          fi
+
+          echo "✅ App stable after 10 seconds"
+
+          # Kill the app
+          echo "Stopping application..."
+          killall "soul-player" 2>/dev/null || true
+          sleep 2
+          echo "✅ App stopped"
 
           # Uninstall - just remove the app bundle
           hdiutil detach "/Volumes/$VOLUME"

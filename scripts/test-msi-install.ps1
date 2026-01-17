@@ -2,18 +2,50 @@
 # Run this in PowerShell as Administrator
 
 param(
-    [switch]$Debug
+    [switch]$Debug,
+    [string]$MsiPath
 )
 
 Write-Host "=== Soul Player MSI Local Test ===" -ForegroundColor Cyan
 
-# Find MSI file
-$msi = Get-ChildItem -Path target\*\release\bundle\msi -Filter "*.msi" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+# Find MSI file - check multiple locations
+if ($MsiPath) {
+    if (Test-Path $MsiPath) {
+        $msi = Get-Item $MsiPath
+        Write-Host "Using specified MSI: $MsiPath" -ForegroundColor Gray
+    } else {
+        Write-Error "Specified MSI path not found: $MsiPath"
+        exit 1
+    }
+} else {
+    $searchPaths = @(
+        "target\*\release\bundle\msi",
+        "$env:USERPROFILE\Downloads\windows-*\msi",
+        "$env:USERPROFILE\Downloads\*.msi"
+    )
 
-if (-not $msi) {
-    Write-Error "MSI file not found. Did you run 'yarn build:desktop'?"
-    Write-Host "Looking in: target\*\release\bundle\msi"
-    exit 1
+    $msi = $null
+    foreach ($path in $searchPaths) {
+        $msi = Get-ChildItem -Path $path -Filter "*.msi" -Recurse -ErrorAction SilentlyContinue |
+               Where-Object { $_.Name -like "*Soul Player*" } |
+               Select-Object -First 1
+        if ($msi) {
+            Write-Host "Found MSI in: $($path)" -ForegroundColor Gray
+            break
+        }
+    }
+
+    if (-not $msi) {
+        Write-Error "MSI file not found. Searched in:"
+        foreach ($path in $searchPaths) {
+            Write-Host "  - $path" -ForegroundColor Gray
+        }
+        Write-Host "`nOptions:" -ForegroundColor Yellow
+        Write-Host "1. Run 'yarn build:desktop' to build locally"
+        Write-Host "2. Download artifacts from GitHub Actions to ~/Downloads"
+        Write-Host "3. Specify path: .\test-msi-install.ps1 -MsiPath 'C:\path\to\file.msi'"
+        exit 1
+    }
 }
 
 Write-Host "`nFound MSI: $($msi.FullName)" -ForegroundColor Green

@@ -5,7 +5,7 @@
   "mainBinaryName": "soul-player",
   "build": {
     "beforeDevCommand": "yarn dev",
-    "beforeBuildCommand": "yarn build",
+    "beforeBuildCommand": "cd .. && yarn build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
