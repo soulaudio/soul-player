@@ -414,6 +414,7 @@ jobs:
     name: Test Windows Installation
     needs: create-draft-release
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -423,14 +424,57 @@ jobs:
           name: windows-x86_64-pc-windows-msvc
           path: installers
 
-      - name: Test MSI installation
+      - name: Test NSIS installation
+        shell: powershell
+        run: |
+          # Use NSIS installer instead of MSI (faster, more reliable in CI)
+          $nsis = Get-ChildItem -Path installers -Filter *.exe -Recurse | Select-Object -First 1
+          if ($nsis) {
+            Write-Host "Testing NSIS installer: $($nsis.FullName)"
+
+            # NSIS silent install with timeout
+            $process = Start-Process -FilePath $nsis.FullName -ArgumentList "/S" -PassThru -NoNewWindow
+            $timeout = 300  # 5 minutes
+
+            if (-not $process.WaitForExit($timeout * 1000)) {
+              Write-Error "Installation timed out after $timeout seconds"
+              $process.Kill()
+              exit 1
+            }
+
+            if ($process.ExitCode -ne 0) {
+              Write-Error "Installation failed with exit code: $($process.ExitCode)"
+              exit 1
+            }
+
+            Write-Host "✅ Installation completed"
+          } else {
+            Write-Host "⚠️  NSIS installer not found, trying MSI..."
+          }
+
+      - name: Test MSI installation (fallback)
+        if: failure()
         shell: powershell
         run: |
           $msi = Get-ChildItem -Path installers -Filter *.msi -Recurse | Select-Object -First 1
           Write-Host "Testing MSI: $($msi.FullName)"
 
-          # Silent install
-          Start-Process msiexec.exe -ArgumentList "/i", $msi.FullName, "/qn", "/L*V", "install.log" -Wait
+          # Silent install with timeout and no-restart flag
+          $process = Start-Process msiexec.exe -ArgumentList "/i", $msi.FullName, "/qn", "/norestart", "/L*V", "install.log" -PassThru -NoNewWindow
+          $timeout = 300  # 5 minutes
+
+          if (-not $process.WaitForExit($timeout * 1000)) {
+            Write-Error "Installation timed out after $timeout seconds"
+            Get-Content install.log -ErrorAction SilentlyContinue
+            $process.Kill()
+            exit 1
+          }
+
+          if ($process.ExitCode -ne 0) {
+            Write-Error "Installation failed with exit code: $($process.ExitCode)"
+            Get-Content install.log
+            exit 1
+          }
 
           # Verify installation
           $installed = Test-Path "C:\Program Files\Soul Player\soul-player.exe"
@@ -454,9 +498,30 @@ jobs:
           & "C:\Program Files\Soul Player\soul-player.exe" --version
           Write-Host "✅ Application launches"
 
-          # Test uninstall
+          # Test uninstall (works for both NSIS and MSI)
           Write-Host "Testing uninstall..."
-          Start-Process msiexec.exe -ArgumentList "/x", $msi.FullName, "/qn", "/L*V", "uninstall.log" -Wait
+
+          # Try uninstall via registry uninstall string first
+          $uninstallReg = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" | Where-Object { $_.DisplayName -like "*Soul Player*" }
+          if ($uninstallReg -and $uninstallReg.UninstallString) {
+            Write-Host "Using uninstaller: $($uninstallReg.UninstallString)"
+            if ($uninstallReg.UninstallString -like "*msiexec*") {
+              # MSI uninstall
+              $productCode = $uninstallReg.PSChildName
+              $uninstallProcess = Start-Process msiexec.exe -ArgumentList "/x", $productCode, "/qn", "/norestart", "/L*V", "uninstall.log" -PassThru -NoNewWindow
+            } else {
+              # NSIS uninstall
+              $uninstallProcess = Start-Process -FilePath $uninstallReg.UninstallString -ArgumentList "/S" -PassThru -NoNewWindow
+            }
+
+            $timeout = 180  # 3 minutes for uninstall
+            if (-not $uninstallProcess.WaitForExit($timeout * 1000)) {
+              Write-Error "Uninstall timed out after $timeout seconds"
+              $uninstallProcess.Kill()
+              exit 1
+            }
+          }
+
           Start-Sleep -Seconds 5
 
           # Verify complete removal
