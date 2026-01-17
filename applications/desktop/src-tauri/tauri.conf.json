@@ -123,6 +123,18 @@
       "deb": {
         "depends": []
       }
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "compression": "lzma"
+      }
     }
   },
   "plugins": {

@@ -414,7 +414,7 @@ jobs:
     name: Test Windows Installation
     needs: create-draft-release
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -424,51 +424,18 @@ jobs:
           name: windows-x86_64-pc-windows-msvc
           path: installers
 
-      - name: Test NSIS installation
-        shell: powershell
-        run: |
-          # Use NSIS installer instead of MSI (faster, more reliable in CI)
-          $nsis = Get-ChildItem -Path installers -Filter *.exe -Recurse | Select-Object -First 1
-          if ($nsis) {
-            Write-Host "Testing NSIS installer: $($nsis.FullName)"
-            Write-Host "File size: $([math]::Round($nsis.Length / 1MB, 2)) MB"
-
-            # NSIS silent install with timeout and elevated permissions
-            # /S = Silent mode
-            # /NCRC = Skip CRC check (can help in CI environments)
-            # /D= sets installation directory (must be last parameter if used)
-            Write-Host "Starting installation with /S flag..."
-            $process = Start-Process -FilePath $nsis.FullName -ArgumentList "/S" -PassThru -Verb RunAs -Wait
-
-            Write-Host "Process finished with exit code: $($process.ExitCode)"
-
-            if ($process.ExitCode -ne 0) {
-              Write-Error "Installation failed with exit code: $($process.ExitCode)"
-
-              # Check if installation partially succeeded
-              if (Test-Path "C:\Program Files\Soul Player\soul-player.exe") {
-                Write-Host "⚠️  Installation reported failure but binary exists - continuing with tests"
-              } else {
-                Write-Error "Installation failed and binary not found"
-                exit 1
-              }
-            } else {
-              Write-Host "✅ Installation completed successfully"
-            }
-          } else {
-            Write-Host "⚠️  NSIS installer not found, trying MSI..."
-          }
-
-      - name: Test MSI installation (fallback)
-        if: failure()
+      - name: Test MSI installation
         shell: powershell
         run: |
           $msi = Get-ChildItem -Path installers -Filter *.msi -Recurse | Select-Object -First 1
           Write-Host "Testing MSI: $($msi.FullName)"
+          Write-Host "File size: $([math]::Round($msi.Length / 1MB, 2)) MB"
 
           # Silent install with timeout and no-restart flag
+          # /qn = No UI, /norestart = Don't reboot, /L*V = Verbose logging
+          Write-Host "Starting MSI installation (silent mode with embedded WebView2)..."
           $process = Start-Process msiexec.exe -ArgumentList "/i", $msi.FullName, "/qn", "/norestart", "/L*V", "install.log" -PassThru -NoNewWindow
-          $timeout = 300  # 5 minutes
+          $timeout = 180  # 3 minutes (should be faster with embedBootstrapper)
 
           if (-not $process.WaitForExit($timeout * 1000)) {
             Write-Error "Installation timed out after $timeout seconds"
