@@ -568,36 +568,55 @@ jobs:
 
       - name: Test DEB installation
         run: |
+          set +e  # Don't exit on error, we'll handle it manually
+
           DEB=$(find installers -name "*.deb" -type f | head -1)
           echo "Testing DEB: $DEB"
 
           # Update package index before installing dependencies
           sudo apt-get update
 
-          # Install
-          sudo dpkg -i "$DEB" || sudo apt-get install -f -y
+          # Install - dpkg may fail with dependencies, apt-get will fix them
+          sudo dpkg -i "$DEB"
+          if [ $? -ne 0 ]; then
+            echo "dpkg reported dependency issues, fixing with apt-get..."
+            sudo apt-get install -f -y
+            if [ $? -ne 0 ]; then
+              echo "ERROR: apt-get install -f failed"
+              exit 1
+            fi
+          fi
+
+          # Verify package is installed
+          if ! dpkg -l soul-player | grep -q '^ii'; then
+            echo "ERROR: Package soul-player not installed properly"
+            dpkg -l | grep soul
+            exit 1
+          fi
+
           echo "✅ Installation successful"
+          set -e  # Re-enable exit on error
 
           # Debug: List installed files
           echo "DEBUG: Installed files from soul-player package:"
-          dpkg -L soul-player || {
-            echo "ERROR: Package 'soul-player' not found in dpkg"
-            echo "Installed packages:"
-            dpkg -l | grep -i soul
-            exit 1
-          }
+          dpkg -L soul-player
 
           echo "DEBUG: Checking /usr/bin for soul-player binary:"
           ls -la /usr/bin/ | grep -i soul || echo "No soul-player binary found in /usr/bin"
 
           # Verify binary exists and is executable
-          command -v soul-player || {
+          if ! command -v soul-player; then
             echo "ERROR: soul-player not found in PATH"
             echo "PATH: $PATH"
+            echo "All installed files:"
+            dpkg -L soul-player
+            exit 1
+          fi
+
+          soul-player --version || {
+            echo "ERROR: soul-player --version failed"
             exit 1
           }
-
-          soul-player --version || exit 1
           echo "✅ Application launches"
 
           # Check desktop entry was created
