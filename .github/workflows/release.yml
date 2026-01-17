@@ -128,8 +128,8 @@ jobs:
         with:
           name: windows-${{ matrix.target }}
           path: |
-            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
-            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            target/${{ matrix.target }}/release/bundle/msi/*.msi
+            target/${{ matrix.target }}/release/bundle/nsis/*.exe
           retention-days: 30
 
   build-linux:
@@ -221,9 +221,9 @@ jobs:
         with:
           name: linux-${{ matrix.target }}
           path: |
-            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
-            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
-            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+            target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
           retention-days: 30
 
   build-macos:
@@ -294,8 +294,8 @@ jobs:
         with:
           name: macos-${{ matrix.target }}
           path: |
-            applications/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            applications/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+            target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            target/universal-apple-darwin/release/bundle/macos/*.app
           retention-days: 30
 
   # DISABLED: Server Docker build temporarily disabled
