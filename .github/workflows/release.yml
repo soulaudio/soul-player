@@ -121,7 +121,7 @@ jobs:
 
       - name: Build installers (MSI + NSIS)
         if: steps.check-build.outputs.build_needed == 'true'
-        run: yarn build:desktop --bundles msi nsis
+        run: yarn build:desktop --target ${{ matrix.target }} --bundles msi nsis
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -208,12 +208,12 @@ jobs:
 
       - name: Build packages (DEB + RPM)
         if: steps.check-build.outputs.build_needed == 'true'
-        run: yarn build:desktop --bundles deb rpm
+        run: yarn build:desktop --target ${{ matrix.target }} --bundles deb rpm
         continue-on-error: false
 
       - name: Build AppImage (optional)
         if: steps.check-build.outputs.build_needed == 'true'
-        run: yarn build:desktop --bundles appimage
+        run: yarn build:desktop --target ${{ matrix.target }} --bundles appimage
         continue-on-error: true
 
       - name: Upload artifacts
@@ -287,7 +287,7 @@ jobs:
 
       - name: Build DMG
         if: steps.check-build.outputs.build_needed == 'true'
-        run: yarn build:desktop --bundles dmg
+        run: yarn build:desktop --target ${{ matrix.target }} --bundles dmg
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
