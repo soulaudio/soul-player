@@ -442,17 +442,39 @@ jobs:
 
           Write-Host "✅ Installation successful"
 
+          # Verify Start Menu shortcut
+          $shortcut = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
+          if ($shortcut) {
+            Write-Host "✅ Start Menu shortcut created"
+          } else {
+            Write-Host "⚠️  Start Menu shortcut not found"
+          }
+
+          # Verify binary version
+          & "C:\Program Files\Soul Player\soul-player.exe" --version
+          Write-Host "✅ Application launches"
+
           # Test uninstall
-          Start-Process msiexec.exe -ArgumentList "/x", $msi.FullName, "/qn" -Wait
+          Write-Host "Testing uninstall..."
+          Start-Process msiexec.exe -ArgumentList "/x", $msi.FullName, "/qn", "/L*V", "uninstall.log" -Wait
           Start-Sleep -Seconds 5
 
+          # Verify complete removal
           $stillInstalled = Test-Path "C:\Program Files\Soul Player"
           if ($stillInstalled) {
             Write-Error "Uninstall failed: files still present"
+            Get-Content uninstall.log
             exit 1
           }
 
-          Write-Host "✅ Uninstall successful"
+          # Verify shortcut removed
+          $shortcutRemains = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
+          if ($shortcutRemains) {
+            Write-Error "Uninstall incomplete: Start Menu shortcut still exists"
+            exit 1
+          }
+
+          Write-Host "✅ Uninstall successful - all files and shortcuts removed"
 
       - name: Upload test logs
         if: always()
@@ -477,19 +499,32 @@ jobs:
           DEB=$(find installers -name "*.deb" -type f | head -1)
           echo "Testing DEB: $DEB"
 
+          # Update package index before installing dependencies
+          sudo apt-get update
+
           # Install
           sudo dpkg -i "$DEB" || sudo apt-get install -f -y
           echo "✅ Installation successful"
 
-          # Verify
+          # Verify binary exists and is executable
           command -v soul-player || exit 1
           soul-player --version || exit 1
           echo "✅ Application launches"
 
+          # Check desktop entry was created
+          test -f /usr/share/applications/soul-player.desktop || echo "⚠️  Desktop entry not found"
+
+          # Check uninstaller is present (if Tauri creates one)
+          dpkg -L soul-player | grep -q "bin/soul-player" || exit 1
+          echo "✅ Package files verified"
+
           # Uninstall
           sudo apt-get purge -y soul-player
+
+          # Verify complete removal
           ! command -v soul-player || exit 1
-          echo "✅ Uninstall successful"
+          ! test -f /usr/share/applications/soul-player.desktop || exit 1
+          echo "✅ Uninstall successful - all files removed"
 
   test-macos-install:
     name: Test macOS Installation
@@ -510,17 +545,35 @@ jobs:
           hdiutil attach "$DMG"
           VOLUME=$(ls /Volumes | grep -i "soul" | head -1)
 
-          # Copy app
+          # Copy app to Applications
           cp -R "/Volumes/$VOLUME/Soul Player.app" /Applications/
           echo "✅ Installation successful"
 
-          # Verify (may fail on ARM runner, continue anyway)
+          # Verify app bundle structure
+          test -d "/Applications/Soul Player.app/Contents/MacOS" || exit 1
+          test -f "/Applications/Soul Player.app/Contents/Info.plist" || exit 1
+          echo "✅ App bundle structure verified"
+
+          # Verify binary (may fail on cross-arch, but try anyway)
           /Applications/Soul\ Player.app/Contents/MacOS/soul-player --version || echo "⚠️  Version check skipped (cross-arch)"
 
-          # Cleanup
+          # Check if app would appear in Launchpad (Info.plist should exist)
+          plutil -p "/Applications/Soul Player.app/Contents/Info.plist" | grep -q "CFBundleIdentifier" || exit 1
+          echo "✅ App metadata verified"
+
+          # Uninstall - just remove the app bundle
           hdiutil detach "/Volumes/$VOLUME"
           rm -rf "/Applications/Soul Player.app"
-          echo "✅ Cleanup successful"
+
+          # Verify complete removal
+          ! test -d "/Applications/Soul Player.app" || exit 1
+          echo "✅ Uninstall successful - app bundle removed"
+
+          # Note: On macOS, users may need to manually remove:
+          # - ~/Library/Application Support/soul-player
+          # - ~/Library/Preferences/com.soul-player.plist
+          # - ~/Library/Caches/soul-player
+          echo "ℹ️  User data would remain in ~/Library (as expected on macOS)"
 
   # DISABLED: Server Docker test temporarily disabled
   # test-server-docker:
