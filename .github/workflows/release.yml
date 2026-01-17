@@ -349,6 +349,20 @@ jobs:
         with:
           ref: ${{ inputs.commit_sha || github.ref }}
 
+      - name: Generate release tag
+        id: gen-tag
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            TAG="${{ inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            # For workflow_dispatch without version, use timestamp
+            TAG="test-$(date +%Y%m%d-%H%M%S)"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Using tag: $TAG"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -400,7 +414,8 @@ jobs:
         with:
           draft: true
           prerelease: false
-          name: Release ${{ inputs.version || github.ref_name }}
+          tag_name: ${{ steps.gen-tag.outputs.tag }}
+          name: Release ${{ steps.gen-tag.outputs.tag }}
           body_path: release-notes.md
           files: |
             artifacts/**/*
