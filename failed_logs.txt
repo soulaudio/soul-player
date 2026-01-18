@@ -1,0 +1,407 @@
+Test Windows Installation	Test MSI installation	﻿2026-01-18T10:49:02.0946559Z ##[group]Run $msi = Get-ChildItem -Path installers -Filter *.msi -Recurse | Select-Object -First 1
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0947739Z [36;1m$msi = Get-ChildItem -Path installers -Filter *.msi -Recurse | Select-Object -First 1[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0948202Z [36;1mWrite-Host "Testing MSI: $($msi.FullName)"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0948580Z [36;1mWrite-Host "File size: $([math]::Round($msi.Length / 1MB, 2)) MB"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0948896Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0949105Z [36;1m# Silent install with timeout and no-restart flag[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0949454Z [36;1m# /qn = No UI, /norestart = Don't reboot, /L*V = Verbose logging[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0949905Z [36;1mWrite-Host "Starting MSI installation (silent mode with embedded WebView2)..."[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0950295Z [36;1m$startTime = Get-Date[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0950846Z [36;1m$process = Start-Process msiexec.exe -ArgumentList "/i", $msi.FullName, "/qn", "/norestart", "/L*V", "install.log" -PassThru -NoNewWindow[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0951652Z [36;1m$timeout = 600  # 10 minutes for WebView2 installation (embedBootstrapper can be slow in CI)[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0952056Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0952191Z [36;1m$elapsed = 0[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0952396Z [36;1mwhile (-not $process.HasExited) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0952645Z [36;1m  Start-Sleep -Seconds 10[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0952912Z [36;1m  $elapsed = ((Get-Date) - $startTime).TotalSeconds[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0953689Z [36;1m  Write-Host "Installation in progress... $([math]::Round($elapsed))s elapsed"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0954151Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0954310Z [36;1m  if ($elapsed -gt $timeout) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0954621Z [36;1m    Write-Error "Installation timed out after $timeout seconds"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0954977Z [36;1m    Write-Host "Last 50 lines of install log:"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0955395Z [36;1m    Get-Content install.log -ErrorAction SilentlyContinue | Select-Object -Last 50[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0955787Z [36;1m    $process.Kill()[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0955970Z [36;1m    exit 1[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0956413Z [36;1m  }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0956572Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0956698Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0956895Z [36;1m$elapsed = ((Get-Date) - $startTime).TotalSeconds[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0957278Z [36;1mWrite-Host "Installation completed in $([math]::Round($elapsed))s"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0957606Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0957763Z [36;1mif ($process.ExitCode -ne 0) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0958106Z [36;1m  Write-Error "Installation failed with exit code: $($process.ExitCode)"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0958465Z [36;1m  Write-Host "Install log:"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0958674Z [36;1m  Get-Content install.log[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0958871Z [36;1m  exit 1[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0959010Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0959142Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0959284Z [36;1m# Verify installation[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0959601Z [36;1m$installed = Test-Path "C:\Program Files\Soul Player\soul-player.exe"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0959957Z [36;1mif (-not $installed) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0960253Z [36;1m  Write-Error "Installation failed: soul-player.exe not found"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0960578Z [36;1m  Write-Host "Install log:"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0960788Z [36;1m  Get-Content install.log[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0960985Z [36;1m  exit 1[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0961130Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0961252Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0961528Z [36;1mWrite-Host "✅ Installation successful (took $([math]::Round($elapsed))s)"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0961878Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0962041Z [36;1m# Verify frontend files are bundled[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0962339Z [36;1mWrite-Host "`nVerifying frontend files are bundled..."[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0962758Z [36;1m$allFiles = Get-ChildItem "C:\Program Files\Soul Player" -Recurse -File[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0963265Z [36;1m$frontendFiles = $allFiles | Where-Object { $_.Extension -match '\.(html|js|css)$' }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0965296Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0965483Z [36;1mif ($frontendFiles.Count -eq 0) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0965840Z [36;1m  Write-Host "⚠️  WARNING: No frontend files detected in installation"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0966222Z [36;1m  Write-Host "First 30 installed files:"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0966538Z [36;1m  $allFiles | Select-Object -First 30 | ForEach-Object {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0966844Z [36;1m    Write-Host "  $($_.FullName)"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0967060Z [36;1m  }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0967198Z [36;1m} else {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0967480Z [36;1m  Write-Host "✅ Frontend files detected ($($frontendFiles.Count) files)"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0967856Z [36;1m  Write-Host "Sample frontend files:"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0968194Z [36;1m  $frontendFiles | Select-Object -First 10 | ForEach-Object {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0968515Z [36;1m    Write-Host "  $($_.Name)"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0968748Z [36;1m  }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0968886Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0969008Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0969165Z [36;1m# Test app launch[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0969395Z [36;1mWrite-Host "`nTesting application launch..."[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0969971Z [36;1m$appProcess = Start-Process "C:\Program Files\Soul Player\soul-player.exe" -ArgumentList "--logs" -PassThru -ErrorAction Stop[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0970497Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0970659Z [36;1m# Wait 10 seconds to see if app crashes[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0970913Z [36;1mStart-Sleep -Seconds 10[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0971101Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0971255Z [36;1mif ($appProcess.HasExited) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0971578Z [36;1m  Write-Error "App crashed with exit code: $($appProcess.ExitCode)"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0971900Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0972033Z [36;1m  # Check for log files[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0972234Z [36;1m  $logPaths = @([0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0972452Z [36;1m    "$env:APPDATA\Soul Player\logs",[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0972738Z [36;1m    "$env:LOCALAPPDATA\Soul Player\logs"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0974233Z [36;1m  )[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0974385Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0974560Z [36;1m  foreach ($logPath in $logPaths) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0974814Z [36;1m    if (Test-Path $logPath) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0975082Z [36;1m      Write-Host "Logs found at: $logPath"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0975426Z [36;1m      Get-ChildItem $logPath -Filter "*.log" | ForEach-Object {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0975764Z [36;1m        Write-Host "`n--- $($_.Name) ---"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0976066Z [36;1m        Get-Content $_.FullName | Select-Object -Last 50[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0976336Z [36;1m      }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0976479Z [36;1m    }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0976612Z [36;1m  }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0976752Z [36;1m  exit 1[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0976891Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0977021Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0977274Z [36;1mWrite-Host "✅ App launched successfully (PID: $($appProcess.Id))"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0977614Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0977827Z [36;1m# Check logs for errors/warnings even if app is running[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0978187Z [36;1mWrite-Host "`nChecking application logs for errors..."[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0978485Z [36;1m$logPaths = @([0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0978682Z [36;1m  "$env:APPDATA\Soul Player\logs",[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0978938Z [36;1m  "$env:LOCALAPPDATA\Soul Player\logs"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0979158Z [36;1m)[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0979284Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0979424Z [36;1m$errorsFound = $false[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0979633Z [36;1mforeach ($logPath in $logPaths) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0979874Z [36;1m  if (Test-Path $logPath) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0980534Z [36;1m    $errors = Get-ChildItem $logPath -Filter "*.log" | Get-Content | Select-String -Pattern "error|fatal|panic" -CaseSensitive:$false | Select-Object -First 10[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0981751Z [36;1m    if ($errors) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0982058Z [36;1m      Write-Host "⚠️  Errors found in logs at $logPath (app still running):"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0982460Z [36;1m      $errors | ForEach-Object { Write-Host "  $_" }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0982736Z [36;1m      $errorsFound = $true[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0982927Z [36;1m    }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0983067Z [36;1m  }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0983199Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0983326Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0983463Z [36;1mif (-not $errorsFound) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0983686Z [36;1m  Write-Host "✅ No errors in logs"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0983896Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0984025Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0984160Z [36;1m# Kill the app[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0984362Z [36;1mWrite-Host "Stopping application..."[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0984640Z [36;1mStop-Process -Id $appProcess.Id -Force[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0984888Z [36;1mStart-Sleep -Seconds 2[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0985109Z [36;1mWrite-Host "✅ App stopped"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0985302Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0985492Z [36;1m# Test uninstall (works for both NSIS and MSI)[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0985762Z [36;1mWrite-Host "Testing uninstall..."[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0985980Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0986176Z [36;1m# Try uninstall via registry uninstall string first[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0986844Z [36;1m$uninstallReg = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" | Where-Object { $_.DisplayName -like "*Soul Player*" }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0987550Z [36;1mif ($uninstallReg -and $uninstallReg.UninstallString) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0987967Z [36;1m  Write-Host "Using uninstaller: $($uninstallReg.UninstallString)"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0988391Z [36;1m  if ($uninstallReg.UninstallString -like "*msiexec*") {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0988696Z [36;1m    # MSI uninstall[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0988923Z [36;1m    $productCode = $uninstallReg.PSChildName[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0989577Z [36;1m    $uninstallProcess = Start-Process msiexec.exe -ArgumentList "/x", $productCode, "/qn", "/norestart", "/L*V", "uninstall.log" -PassThru -NoNewWindow[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0990269Z [36;1m  } else {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0990435Z [36;1m    # NSIS uninstall[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0990932Z [36;1m    $uninstallProcess = Start-Process -FilePath $uninstallReg.UninstallString -ArgumentList "/S" -PassThru -NoNewWindow[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0991449Z [36;1m  }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0991587Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0991758Z [36;1m  $timeout = 180  # 3 minutes for uninstall[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0992090Z [36;1m  if (-not $uninstallProcess.WaitForExit($timeout * 1000)) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0992468Z [36;1m    Write-Error "Uninstall timed out after $timeout seconds"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0992776Z [36;1m    $uninstallProcess.Kill()[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0992981Z [36;1m    exit 1[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0993129Z [36;1m  }[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0993265Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.0993386Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1049092Z [36;1mStart-Sleep -Seconds 5[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1049341Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1049510Z [36;1m# Verify complete removal[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1049866Z [36;1m$stillInstalled = Test-Path "C:\Program Files\Soul Player"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1050203Z [36;1mif ($stillInstalled) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1050488Z [36;1m  Write-Error "Uninstall failed: files still present"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1050785Z [36;1m  Get-Content uninstall.log[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1050998Z [36;1m  exit 1[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1051141Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1051276Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1051424Z [36;1m# Verify shortcut removed[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1051880Z [36;1m$shortcutRemains = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1052368Z [36;1mif ($shortcutRemains) {[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1053035Z [36;1m  Write-Error "Uninstall incomplete: Start Menu shortcut still exists"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1053392Z [36;1m  exit 1[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1053536Z [36;1m}[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1053671Z [36;1m[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1053945Z [36;1mWrite-Host "✅ Uninstall successful - all files and shortcuts removed"[0m
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1129145Z shell: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.EXE -command ". '{0}'"
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1129553Z env:
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1129708Z   CARGO_TERM_COLOR: always
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1129909Z   RUST_BACKTRACE: 1
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1130071Z   CARGO_INCREMENTAL: 0
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1130254Z   CARGO_PROFILE_RELEASE_LTO: thin
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1130470Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.1130698Z ##[endgroup]
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.5389841Z Testing MSI: D:\a\soul-player\soul-player\installers\msi\Soul Player_0.0.1_x64_en-US.msi
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.5510551Z File size: 13.54 MB
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:02.5519398Z Starting MSI installation (silent mode with embedded WebView2)...
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:12.6120993Z Installation in progress... 10s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:22.6243993Z Installation in progress... 20s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:32.6282960Z Installation in progress... 30s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:42.6315464Z Installation in progress... 40s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:49:52.6441512Z Installation in progress... 50s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:50:02.6580833Z Installation in progress... 60s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:50:12.6609906Z Installation in progress... 70s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:50:22.6753151Z Installation in progress... 80s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:50:32.6775853Z Installation in progress... 90s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:50:42.6931853Z Installation in progress... 100s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:50:52.6937825Z Installation in progress... 110s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:51:02.7090536Z Installation in progress... 120s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:51:12.7129583Z Installation in progress... 130s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:51:22.7168389Z Installation in progress... 140s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:51:32.7288881Z Installation in progress... 150s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:51:42.7288456Z Installation in progress... 160s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:51:52.7422145Z Installation in progress... 170s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:52:02.7455949Z Installation in progress... 180s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:52:12.7608501Z Installation in progress... 190s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:52:22.7758068Z Installation in progress... 200s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:52:32.7779045Z Installation in progress... 210s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:52:42.7805201Z Installation in progress... 220s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:52:52.7816259Z Installation in progress... 230s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:53:02.7965064Z Installation in progress... 240s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:53:12.7973824Z Installation in progress... 250s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:53:22.7995425Z Installation in progress... 260s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:53:32.7999686Z Installation in progress... 270s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:53:42.8003687Z Installation in progress... 280s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:53:52.8005486Z Installation in progress... 290s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:54:02.8098574Z Installation in progress... 300s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:54:12.8186925Z Installation in progress... 310s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:54:22.8207623Z Installation in progress... 320s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:54:32.8223193Z Installation in progress... 330s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:54:42.8227195Z Installation in progress... 340s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:54:52.8263790Z Installation in progress... 350s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:55:02.8289211Z Installation in progress... 360s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:55:12.8203167Z Installation in progress... 370s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:55:22.8220674Z Installation in progress... 380s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:55:32.8219658Z Installation in progress... 390s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:55:42.8296117Z Installation in progress... 400s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:55:52.8347209Z Installation in progress... 410s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:56:02.8393377Z Installation in progress... 420s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:56:12.8406699Z Installation in progress... 430s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:56:22.8438152Z Installation in progress... 440s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:56:32.8498651Z Installation in progress... 450s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:56:42.8513429Z Installation in progress... 460s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:56:52.8724387Z Installation in progress... 470s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:57:02.8744069Z Installation in progress... 480s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:57:12.8848831Z Installation in progress... 490s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:57:22.8849084Z Installation in progress... 500s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:57:32.8892330Z Installation in progress... 510s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:57:42.9007917Z Installation in progress... 520s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:57:52.9129228Z Installation in progress... 530s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:58:02.9141106Z Installation in progress... 540s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:58:12.9157983Z Installation in progress... 550s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:58:22.9175788Z Installation in progress... 560s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:58:32.9325296Z Installation in progress... 570s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:58:42.9459108Z Installation in progress... 580s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:58:52.9470184Z Installation in progress... 590s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:02.9620036Z Installation in progress... 600s elapsed
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:03.1127070Z D:\a\_temp\f401f4cb-c68a-4fd5-953b-ff9fccb86d8e.ps1 : Installation timed out after 600 seconds
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:03.1128021Z At line:1 char:1
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:03.1128518Z + . 'D:\a\_temp\f401f4cb-c68a-4fd5-953b-ff9fccb86d8e.ps1'
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:03.1129194Z + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:03.1129791Z     + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:03.1131243Z     + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,f401f4cb-c68a-4fd5-953b-ff9fccb86d8e.p 
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:03.1132112Z    s1
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:03.1132373Z  
+Test Windows Installation	Test MSI installation	2026-01-18T10:59:08.1600199Z ##[error]Process completed with exit code 1.
+Test macOS Installation	Test DMG installation	﻿2026-01-18T10:48:54.2256980Z ##[group]Run DMG=$(find installers -name "*.dmg" -type f | head -1)
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2257520Z [36;1mDMG=$(find installers -name "*.dmg" -type f | head -1)[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2257860Z [36;1mecho "Testing DMG: $DMG"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2258230Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2258420Z [36;1m# Mount DMG[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2258590Z [36;1mhdiutil attach "$DMG"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2258950Z [36;1mVOLUME=$(ls /Volumes | grep -i "soul" | head -1)[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2259500Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2259670Z [36;1m# Copy app to Applications[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2259930Z [36;1mcp -R "/Volumes/$VOLUME/Soul Player.app" /Applications/[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2260210Z [36;1mecho "✅ Installation successful"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2260470Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2260630Z [36;1m# Verify app bundle structure[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2260910Z [36;1mtest -d "/Applications/Soul Player.app/Contents/MacOS" || exit 1[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2261370Z [36;1mtest -f "/Applications/Soul Player.app/Contents/Info.plist" || exit 1[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2261850Z [36;1mecho "✅ App bundle structure verified"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2262110Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2262380Z [36;1m# Verify frontend files are bundled[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2262620Z [36;1mecho ""[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2262830Z [36;1mecho "Verifying frontend files are bundled..."[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2263430Z [36;1mFRONTEND_FILES=$(find "/Applications/Soul Player.app/Contents/Resources" -type f \( -name "*.html" -o -name "*.js" -o -name "*.css" \) 2>/dev/null || true)[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2263970Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2264110Z [36;1mif [ -z "$FRONTEND_FILES" ]; then[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2264430Z [36;1m  echo "⚠️  WARNING: No frontend files detected in app bundle"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2264750Z [36;1m  echo "Contents/Resources directory:"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2265080Z [36;1m  find "/Applications/Soul Player.app/Contents/Resources" -type f | head -20[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2265460Z [36;1melse[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2265640Z [36;1m  echo "✅ Frontend files detected"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2265870Z [36;1m  echo "Sample frontend files:"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2266080Z [36;1m  echo "$FRONTEND_FILES" | head -10[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2266280Z [36;1mfi[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2266420Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2267390Z [36;1m# Check if app would appear in Launchpad[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2267860Z [36;1mplutil -p "/Applications/Soul Player.app/Contents/Info.plist" | grep -q "CFBundleIdentifier" || exit 1[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2268310Z [36;1mecho "✅ App metadata verified"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2268520Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2268650Z [36;1m# Test app launch[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2268810Z [36;1mecho ""[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2268980Z [36;1mecho "Testing application launch..."[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2269190Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2269360Z [36;1m# Launch app in background with --logs flag[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2269640Z [36;1mopen -a "Soul Player" --args --logs 2>&1 &[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2269920Z [36;1mOPEN_PID=$![0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2270060Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2270220Z [36;1m# Wait a few seconds for app to start[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2270420Z [36;1msleep 5[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2270550Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2270700Z [36;1m# Check if app is running via process list[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2271040Z [36;1mAPP_RUNNING=$(ps aux | grep -i "Soul Player.app" | grep -v grep | wc -l)[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2271340Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2271490Z [36;1mif [ "$APP_RUNNING" -eq 0 ]; then[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2271750Z [36;1m  echo "❌ App failed to launch or crashed immediately"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2271980Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2272120Z [36;1m  # Check for log files[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2272320Z [36;1m  LOG_DIR="$HOME/Library/Logs/soul-player"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2272570Z [36;1m  if [ -d "$LOG_DIR" ]; then[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2272750Z [36;1m    echo ""[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2273210Z [36;1m    echo "Application logs in ~/Library/Logs:"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2273550Z [36;1m    find "$LOG_DIR" -name "*.log" -exec echo "--- {} ---" \; -exec tail -50 {} \;[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2273840Z [36;1m  fi[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2273960Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2274100Z [36;1m  # Check Application Support[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2274380Z [36;1m  APP_SUPPORT="$HOME/Library/Application Support/soul-player"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2274670Z [36;1m  if [ -d "$APP_SUPPORT/logs" ]; then[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2275040Z [36;1m    echo ""[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2275210Z [36;1m    echo "App Support logs:"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2275520Z [36;1m    find "$APP_SUPPORT/logs" -name "*.log" -exec echo "--- {} ---" \; -exec tail -50 {} \;[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2275850Z [36;1m  fi[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2275970Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2276090Z [36;1m  exit 1[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2276220Z [36;1mfi[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2276340Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2276560Z [36;1mecho "✅ App launched successfully ($APP_RUNNING process(es) running)"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2276860Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2277010Z [36;1m# Wait a bit more to ensure stability[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2277200Z [36;1msleep 5[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2277340Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2277560Z [36;1mAPP_RUNNING=$(ps aux | grep -i "Soul Player.app" | grep -v grep | wc -l)[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2277860Z [36;1mif [ "$APP_RUNNING" -eq 0 ]; then[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2278110Z [36;1m  echo "❌ App crashed after initial launch"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2278330Z [36;1m  exit 1[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2278460Z [36;1mfi[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2278580Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2278730Z [36;1mecho "✅ App stable after 10 seconds"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2278930Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2279110Z [36;1m# Check logs for errors/warnings even if app is running[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2279340Z [36;1mecho ""[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2279540Z [36;1mecho "Checking application logs for errors..."[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2279870Z [36;1mLOG_DIR="$HOME/Library/Application Support/soul-player/logs"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2280140Z [36;1mif [ -d "$LOG_DIR" ]; then[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2280560Z [36;1m  if find "$LOG_DIR" -name "*.log" -exec grep -i -E "error|fatal|panic" {} \; | head -10; then[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2280950Z [36;1m    echo "⚠️  Errors found in logs (app still running)"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2281190Z [36;1m  else[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2281340Z [36;1m    echo "✅ No errors in logs"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2281560Z [36;1m  fi[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2281680Z [36;1melse[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2281900Z [36;1m  echo "ℹ️  No log directory found (app may not have logging enabled)"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2282170Z [36;1mfi[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2282290Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2282410Z [36;1m# Kill the app[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2282590Z [36;1mecho "Stopping application..."[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2282830Z [36;1mkillall "soul-player" 2>/dev/null || true[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2283060Z [36;1msleep 2[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2283200Z [36;1mecho "✅ App stopped"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2283360Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2283530Z [36;1m# Uninstall - just remove the app bundle[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2283760Z [36;1mhdiutil detach "/Volumes/$VOLUME"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2283990Z [36;1mrm -rf "/Applications/Soul Player.app"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2284200Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2284330Z [36;1m# Verify complete removal[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2284610Z [36;1m! test -d "/Applications/Soul Player.app" || exit 1[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2284900Z [36;1mecho "✅ Uninstall successful - app bundle removed"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2285140Z [36;1m[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2285310Z [36;1m# Note: On macOS, users may need to manually remove:[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2285580Z [36;1m# - ~/Library/Application Support/soul-player[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2285870Z [36;1m# - ~/Library/Preferences/com.soul-player.plist[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2286120Z [36;1m# - ~/Library/Caches/soul-player[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2286580Z [36;1mecho "ℹ️  User data would remain in ~/Library (as expected on macOS)"[0m
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2317430Z shell: /bin/bash -e {0}
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2317590Z env:
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2317740Z   CARGO_TERM_COLOR: always
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2317900Z   RUST_BACKTRACE: 1
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2318040Z   CARGO_INCREMENTAL: 0
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2318210Z   CARGO_PROFILE_RELEASE_LTO: thin
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2318400Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2318740Z ##[endgroup]
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.2683890Z Testing DMG: installers/aarch64-apple-darwin/release/bundle/dmg/Soul Player_0.0.1_aarch64.dmg
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:54.4311260Z Checksumming Protective Master Boot Record (MBR : 0)…
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:55.0064690Z Protective Master Boot Record (MBR :: verified   CRC32 $2FCB2E9C
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:55.0065520Z Checksumming GPT Header (Primary GPT Header : 1)…
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:55.0066000Z  GPT Header (Primary GPT Header : 1): verified   CRC32 $3809A0A5
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:55.0066520Z Checksumming GPT Partition Data (Primary GPT Table : 2)…
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:56.0523580Z GPT Partition Data (Primary GPT Tabl: verified   CRC32 $DBA8E3AD
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:56.0524620Z Checksumming  (Apple_Free : 3)…
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:57.0709880Z                     (Apple_Free : 3): verified   CRC32 $00000000
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:57.0712120Z Checksumming disk image (Apple_HFS : 4)…
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:57.1132780Z           disk image (Apple_HFS : 4): verified   CRC32 $7E387798
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:57.1133580Z Checksumming  (Apple_Free : 5)…
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:58.0862510Z                     (Apple_Free : 5): verified   CRC32 $00000000
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:58.0866010Z Checksumming GPT Partition Data (Backup GPT Table : 6)…
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:58.0877680Z GPT Partition Data (Backup GPT Table: verified   CRC32 $DBA8E3AD
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:58.0881710Z Checksumming GPT Header (Backup GPT Header : 7)…
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.0800900Z   GPT Header (Backup GPT Header : 7): verified   CRC32 $A55D480B
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.0819850Z verified   CRC32 $C85B7640
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.2280740Z /dev/disk6          	GUID_partition_scheme          	
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.2393990Z /dev/disk6s1        	Apple_HFS                      	/Volumes/Soul Player
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4220020Z ✅ Installation successful
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4232730Z ✅ App bundle structure verified
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4233750Z 
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4234920Z Verifying frontend files are bundled...
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4286830Z ⚠️  WARNING: No frontend files detected in app bundle
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4287330Z Contents/Resources directory:
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4331960Z /Applications/Soul Player.app/Contents/Resources/icon.icns
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4478460Z ✅ App metadata verified
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4478670Z 
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4478990Z Testing application launch...
+Test macOS Installation	Test DMG installation	2026-01-18T10:48:59.4592850Z Unable to find application named 'Soul Player'
+Test macOS Installation	Test DMG installation	2026-01-18T10:49:04.5039030Z ❌ App failed to launch or crashed immediately
+Test macOS Installation	Test DMG installation	2026-01-18T10:49:04.5049610Z ##[error]Process completed with exit code 1.

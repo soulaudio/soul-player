@@ -66,62 +66,68 @@ jobs:
         with:
           ref: ${{ inputs.commit_sha || github.ref }}
 
-      # Try to download CI artifacts first
-      - name: Download CI artifacts
-        if: needs.check-ci-artifacts.outputs.has_artifacts == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release
-        continue-on-error: true
-
-      # Only build if artifacts weren't downloaded
-      - name: Check if build needed
-        id: check-build
-        shell: bash
-        run: |
-          if [ -f "target/${{ matrix.target }}/release/soul-player.exe" ]; then
-            echo "build_needed=false" >> $GITHUB_OUTPUT
-            echo "✅ Using CI build artifacts"
-          else
-            echo "build_needed=true" >> $GITHUB_OUTPUT
-            echo "ℹ️  Building from source"
-          fi
-
       - uses: dtolnay/rust-toolchain@stable
-        if: steps.check-build.outputs.build_needed == 'true'
         with:
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
-        if: steps.check-build.outputs.build_needed == 'true'
         with:
           cache-on-failure: true
 
       # Install LLVM for ASIO support
       - name: Install LLVM
-        if: steps.check-build.outputs.build_needed == 'true'
         run: |
           choco install llvm -y
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
       - name: Setup Node.js
-        if: steps.check-build.outputs.build_needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Enable Corepack for Yarn
-        if: steps.check-build.outputs.build_needed == 'true'
         run: corepack enable
 
       - name: Install dependencies
-        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn
 
       - name: Build installers (MSI + NSIS)
-        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn build:desktop --target ${{ matrix.target }} --bundles msi nsis
+
+      - name: Validate MSI contains frontend files
+        shell: bash
+        run: |
+          echo "Validating MSI bundle contains frontend files..."
+          MSI=$(find target/${{ matrix.target }}/release/bundle/msi -name "*.msi" | head -1)
+
+          if [ -z "$MSI" ]; then
+            echo "❌ ERROR: No MSI file found"
+            exit 1
+          fi
+
+          # Extract MSI to temp directory for inspection
+          TEMP_DIR=$(mktemp -d)
+          echo "Extracting MSI to: $TEMP_DIR"
+
+          # Use msiexec to extract (requires admin, so we'll use alternative method)
+          # Instead, check if the dist folder exists before bundling
+          if [ ! -d "applications/desktop/dist" ]; then
+            echo "❌ ERROR: Frontend dist folder not found before bundling"
+            exit 1
+          fi
+
+          # Check for HTML files in dist
+          HTML_FILES=$(find applications/desktop/dist -name "*.html" | wc -l)
+          JS_FILES=$(find applications/desktop/dist -name "*.js" | wc -l)
+
+          if [ "$HTML_FILES" -eq 0 ] || [ "$JS_FILES" -eq 0 ]; then
+            echo "❌ ERROR: Frontend files missing from dist folder"
+            echo "HTML files: $HTML_FILES, JS files: $JS_FILES"
+            exit 1
+          fi
+
+          echo "✅ Frontend validation passed"
+          echo "Found $HTML_FILES HTML files and $JS_FILES JS files"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -152,33 +158,11 @@ jobs:
           sudo rm -rf /opt/ghc
           df -h
 
-      # Try to download CI artifacts first
-      - name: Download CI artifacts
-        if: needs.check-ci-artifacts.outputs.has_artifacts == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release
-        continue-on-error: true
-
-      - name: Check if build needed
-        id: check-build
-        run: |
-          if [ -f "target/${{ matrix.target }}/release/soul-player" ]; then
-            echo "build_needed=false" >> $GITHUB_OUTPUT
-            echo "✅ Using CI build artifacts"
-          else
-            echo "build_needed=true" >> $GITHUB_OUTPUT
-            echo "ℹ️  Building from source"
-          fi
-
       - uses: dtolnay/rust-toolchain@stable
-        if: steps.check-build.outputs.build_needed == 'true'
         with:
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
-        if: steps.check-build.outputs.build_needed == 'true'
         with:
           cache-on-failure: true
 
@@ -193,28 +177,46 @@ jobs:
             libayatana-appindicator3-dev
 
       - name: Setup Node.js
-        if: steps.check-build.outputs.build_needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Enable Corepack for Yarn
-        if: steps.check-build.outputs.build_needed == 'true'
         run: corepack enable
 
       - name: Install dependencies
-        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn
 
       - name: Build packages (DEB + RPM)
-        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn build:desktop --target ${{ matrix.target }} --bundles deb rpm
         continue-on-error: false
 
       - name: Build AppImage (optional)
-        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn build:desktop --target ${{ matrix.target }} --bundles appimage
         continue-on-error: true
+
+      - name: Validate packages contain frontend files
+        run: |
+          echo "Validating packages contain frontend files..."
+
+          # Check if frontend dist folder exists
+          if [ ! -d "applications/desktop/dist" ]; then
+            echo "❌ ERROR: Frontend dist folder not found"
+            exit 1
+          fi
+
+          # Check for HTML and JS files in dist
+          HTML_FILES=$(find applications/desktop/dist -name "*.html" | wc -l)
+          JS_FILES=$(find applications/desktop/dist -name "*.js" | wc -l)
+
+          if [ "$HTML_FILES" -eq 0 ] || [ "$JS_FILES" -eq 0 ]; then
+            echo "❌ ERROR: Frontend files missing from dist folder"
+            echo "HTML files: $HTML_FILES, JS files: $JS_FILES"
+            exit 1
+          fi
+
+          echo "✅ Frontend validation passed"
+          echo "Found $HTML_FILES HTML files and $JS_FILES JS files"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -238,33 +240,11 @@ jobs:
         with:
           ref: ${{ inputs.commit_sha || github.ref }}
 
-      # Try to download CI artifacts first
-      - name: Download CI artifacts
-        if: needs.check-ci-artifacts.outputs.has_artifacts == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release
-        continue-on-error: true
-
-      - name: Check if build needed
-        id: check-build
-        run: |
-          if [ -f "target/${{ matrix.target }}/release/soul-player" ]; then
-            echo "build_needed=false" >> $GITHUB_OUTPUT
-            echo "✅ Using CI build artifacts"
-          else
-            echo "build_needed=true" >> $GITHUB_OUTPUT
-            echo "ℹ️  Building from source"
-          fi
-
       - uses: dtolnay/rust-toolchain@stable
-        if: steps.check-build.outputs.build_needed == 'true'
         with:
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
-        if: steps.check-build.outputs.build_needed == 'true'
         with:
           cache-on-failure: true
 
@@ -272,22 +252,67 @@ jobs:
         run: brew install pkg-config
 
       - name: Setup Node.js
-        if: steps.check-build.outputs.build_needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Enable Corepack for Yarn
-        if: steps.check-build.outputs.build_needed == 'true'
         run: corepack enable
 
       - name: Install dependencies
-        if: steps.check-build.outputs.build_needed == 'true'
         run: yarn
 
       - name: Build DMG
-        if: steps.check-build.outputs.build_needed == 'true'
-        run: yarn build:desktop --target ${{ matrix.target }} --bundles dmg
+        run: |
+          # Build DMG with Tauri (builds both Rust binary and frontend via beforeBuildCommand)
+          yarn build:desktop --target ${{ matrix.target }} --bundles dmg
+
+      - name: Validate DMG contains frontend files
+        run: |
+          echo "Validating DMG bundle contains frontend files..."
+          DMG=$(find target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" | head -1)
+
+          if [ -z "$DMG" ]; then
+            echo "❌ ERROR: No DMG file found"
+            exit 1
+          fi
+
+          # Check if frontend dist folder exists
+          if [ ! -d "applications/desktop/dist" ]; then
+            echo "❌ ERROR: Frontend dist folder not found"
+            exit 1
+          fi
+
+          # Check for HTML and JS files in dist
+          HTML_FILES=$(find applications/desktop/dist -name "*.html" | wc -l)
+          JS_FILES=$(find applications/desktop/dist -name "*.js" | wc -l)
+
+          if [ "$HTML_FILES" -eq 0 ] || [ "$JS_FILES" -eq 0 ]; then
+            echo "❌ ERROR: Frontend files missing from dist folder"
+            echo "HTML files: $HTML_FILES, JS files: $JS_FILES"
+            exit 1
+          fi
+
+          echo "✅ Frontend validation passed"
+          echo "Found $HTML_FILES HTML files and $JS_FILES JS files"
+
+          # Also check the .app bundle if possible
+          APP_BUNDLE=$(find target/${{ matrix.target }}/release/bundle/macos -name "*.app" -type d | head -1)
+          if [ -n "$APP_BUNDLE" ]; then
+            echo ""
+            echo "Checking .app bundle structure..."
+            if [ -d "$APP_BUNDLE/Contents/Resources" ]; then
+              BUNDLE_HTML=$(find "$APP_BUNDLE/Contents/Resources" -name "*.html" | wc -l)
+              BUNDLE_JS=$(find "$APP_BUNDLE/Contents/Resources" -name "*.js" | wc -l)
+              echo "App bundle contains $BUNDLE_HTML HTML files and $BUNDLE_JS JS files"
+
+              if [ "$BUNDLE_HTML" -eq 0 ] || [ "$BUNDLE_JS" -eq 0 ]; then
+                echo "⚠️  WARNING: App bundle may not contain frontend files"
+              else
+                echo "✅ App bundle contains frontend files"
+              fi
+            fi
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -519,23 +544,27 @@ jobs:
 
           Write-Host "✅ Installation successful (took $([math]::Round($elapsed))s)"
 
-          # Verify frontend files are bundled
+          # Verify frontend files are bundled (CRITICAL CHECK)
           Write-Host "`nVerifying frontend files are bundled..."
           $allFiles = Get-ChildItem "C:\Program Files\Soul Player" -Recurse -File
-          $frontendFiles = $allFiles | Where-Object { $_.Extension -match '\.(html|js|css)$' }
+          $htmlFiles = $allFiles | Where-Object { $_.Extension -eq '.html' }
+          $jsFiles = $allFiles | Where-Object { $_.Extension -eq '.js' }
 
-          if ($frontendFiles.Count -eq 0) {
-            Write-Host "⚠️  WARNING: No frontend files detected in installation"
-            Write-Host "First 30 installed files:"
+          Write-Host "Found $($htmlFiles.Count) HTML files and $($jsFiles.Count) JS files"
+
+          if ($htmlFiles.Count -eq 0 -or $jsFiles.Count -eq 0) {
+            Write-Error "❌ ERROR: Frontend files missing from installation"
+            Write-Host "`nAll installed files:"
             $allFiles | Select-Object -First 30 | ForEach-Object {
               Write-Host "  $($_.FullName)"
             }
-          } else {
-            Write-Host "✅ Frontend files detected ($($frontendFiles.Count) files)"
-            Write-Host "Sample frontend files:"
-            $frontendFiles | Select-Object -First 10 | ForEach-Object {
-              Write-Host "  $($_.Name)"
-            }
+            exit 1
+          }
+
+          Write-Host "✅ Frontend files detected in installation"
+          Write-Host "Sample frontend files:"
+          ($htmlFiles + $jsFiles) | Select-Object -First 10 | ForEach-Object {
+            Write-Host "  $($_.Name)"
           }
 
           # Test app launch
@@ -884,20 +913,30 @@ jobs:
           test -f "/Applications/Soul Player.app/Contents/Info.plist" || exit 1
           echo "✅ App bundle structure verified"
 
-          # Verify frontend files are bundled
+          # Print Info.plist for debugging
+          echo ""
+          echo "Info.plist contents:"
+          plutil -p "/Applications/Soul Player.app/Contents/Info.plist"
+
+          # Verify frontend files are bundled (CRITICAL CHECK)
           echo ""
           echo "Verifying frontend files are bundled..."
-          FRONTEND_FILES=$(find "/Applications/Soul Player.app/Contents/Resources" -type f \( -name "*.html" -o -name "*.js" -o -name "*.css" \) 2>/dev/null || true)
+          FRONTEND_HTML=$(find "/Applications/Soul Player.app/Contents/Resources" -name "*.html" 2>/dev/null | wc -l)
+          FRONTEND_JS=$(find "/Applications/Soul Player.app/Contents/Resources" -name "*.js" 2>/dev/null | wc -l)
 
-          if [ -z "$FRONTEND_FILES" ]; then
-            echo "⚠️  WARNING: No frontend files detected in app bundle"
+          echo "Found $FRONTEND_HTML HTML files and $FRONTEND_JS JS files in bundle"
+
+          if [ "$FRONTEND_HTML" -eq 0 ] || [ "$FRONTEND_JS" -eq 0 ]; then
+            echo "❌ ERROR: Frontend files missing from app bundle"
+            echo ""
             echo "Contents/Resources directory:"
             find "/Applications/Soul Player.app/Contents/Resources" -type f | head -20
-          else
-            echo "✅ Frontend files detected"
-            echo "Sample frontend files:"
-            echo "$FRONTEND_FILES" | head -10
+            exit 1
           fi
+
+          echo "✅ Frontend files detected in bundle"
+          echo "Sample frontend files:"
+          find "/Applications/Soul Player.app/Contents/Resources" -type f \( -name "*.html" -o -name "*.js" \) | head -10
 
           # Check if app would appear in Launchpad
           plutil -p "/Applications/Soul Player.app/Contents/Info.plist" | grep -q "CFBundleIdentifier" || exit 1
@@ -907,15 +946,16 @@ jobs:
           echo ""
           echo "Testing application launch..."
 
-          # Launch app in background with --logs flag
-          open -a "Soul Player" --args --logs 2>&1 &
-          OPEN_PID=$!
+          # Launch app using direct path (more reliable than 'open -a')
+          # macOS requires the binary to be in Contents/MacOS/
+          "/Applications/Soul Player.app/Contents/MacOS/soul-player" --logs 2>&1 &
+          APP_PID=$!
 
           # Wait a few seconds for app to start
           sleep 5
 
-          # Check if app is running via process list
-          APP_RUNNING=$(ps aux | grep -i "Soul Player.app" | grep -v grep | wc -l)
+          # Check if app is running via process list (look for the binary name)
+          APP_RUNNING=$(ps aux | grep -E "soul-player|Soul Player" | grep -v grep | wc -l)
 
           if [ "$APP_RUNNING" -eq 0 ]; then
             echo "❌ App failed to launch or crashed immediately"
@@ -944,7 +984,7 @@ jobs:
           # Wait a bit more to ensure stability
           sleep 5
 
-          APP_RUNNING=$(ps aux | grep -i "Soul Player.app" | grep -v grep | wc -l)
+          APP_RUNNING=$(ps aux | grep -E "soul-player|Soul Player" | grep -v grep | wc -l)
           if [ "$APP_RUNNING" -eq 0 ]; then
             echo "❌ App crashed after initial launch"
             exit 1

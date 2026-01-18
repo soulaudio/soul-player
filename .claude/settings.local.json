@@ -185,7 +185,21 @@
       "Bash(git ls-tree:*)",
       "Bash(git commit:*)",
       "Bash(git push)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run:*)",
+      "Bash(gh api:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh release delete:*)",
+      "Bash(cmd /c \"cd ..\\\\.. && yarn workspace soul-player-desktop run build\")",
+      "Bash(npx vite build)",
+      "Bash(./node_modules/.bin/vite build:*)",
+      "Bash(npx vite build:*)",
+      "Bash(npx --version:*)",
+      "Bash(if [ -d \"D:\\\\dev\\\\soulaudio\\\\soul-player\\\\applications\\\\desktop\\\\dist\" ])",
+      "Bash(then ls -laR \"D:\\\\dev\\\\soulaudio\\\\soul-player\\\\applications\\\\desktop\\\\dist\")",
+      "WebFetch(domain:schema.tauri.app)",
+      "Bash(node_modules/.bin/vite:*)"
     ]
   },
   "hooks": {
