@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { resolve } from 'path';
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -9,6 +10,16 @@ export default defineConfig({
 
   // Vite options tailored for Tauri
   clearScreen: false,
+
+  // Build configuration for multiple HTML entry points
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        splash: resolve(__dirname, 'splash.html'),
+      },
+    },
+  },
 
   server: {
     port: 1420,
