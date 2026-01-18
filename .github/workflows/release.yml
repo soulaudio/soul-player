@@ -91,8 +91,40 @@ jobs:
       - name: Install dependencies
         run: yarn
 
+      - name: Debug - Check dist folder before build
+        shell: bash
+        run: |
+          echo "=== Checking if dist folder will be created correctly ==="
+          echo "Current directory: $(pwd)"
+          echo "Listing applications/desktop:"
+          ls -la applications/desktop/ || echo "applications/desktop not found"
+
+          echo ""
+          echo "Checking from src-tauri perspective (where frontendDist is relative to):"
+          cd applications/desktop/src-tauri
+          echo "Current directory: $(pwd)"
+          echo "frontendDist path (../dist) resolves to: $(realpath ../dist || echo 'path does not exist yet')"
+          cd ../../..
+
       - name: Build installers (MSI + NSIS)
         run: yarn build:desktop --target ${{ matrix.target }} --bundles msi nsis
+
+      - name: Debug - Verify dist folder after build
+        shell: bash
+        run: |
+          echo "=== Checking dist folder after Tauri build ==="
+          if [ -d "applications/desktop/dist" ]; then
+            echo "✅ dist folder exists"
+            echo "Contents:"
+            find applications/desktop/dist -type f -exec echo "  {}" \;
+            echo ""
+            echo "HTML files:"
+            find applications/desktop/dist -name "*.html" -exec ls -lh {} \;
+          else
+            echo "❌ dist folder NOT found!"
+            echo "Listing applications/desktop:"
+            ls -la applications/desktop/
+          fi
 
       - name: Validate MSI contains frontend files
         shell: bash
