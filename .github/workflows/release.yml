@@ -126,6 +126,20 @@ jobs:
             ls -la applications/desktop/
           fi
 
+          echo ""
+          echo "=== Checking src-tauri/dist (where Tauri reads from) ==="
+          if [ -d "applications/desktop/src-tauri/dist" ]; then
+            echo "✅ src-tauri/dist folder exists"
+            echo "Contents:"
+            find applications/desktop/src-tauri/dist -type f -exec echo "  {}" \;
+            echo ""
+            echo "HTML files:"
+            find applications/desktop/src-tauri/dist -name "*.html" -exec ls -lh {} \;
+          else
+            echo "❌ src-tauri/dist folder NOT found!"
+            echo "This is the critical issue - Tauri can't embed files if they're not here"
+          fi
+
       - name: Validate MSI contains frontend files
         shell: bash
         run: |

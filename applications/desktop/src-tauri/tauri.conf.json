@@ -5,7 +5,7 @@
   "mainBinaryName": "soul-player",
   "build": {
     "beforeDevCommand": "yarn dev",
-    "beforeBuildCommand": "yarn build && cp -r dist src-tauri/",
+    "beforeBuildCommand": "yarn build && node copy-dist.js",
     "devUrl": "http://localhost:1420",
     "frontendDist": "dist"
   },
