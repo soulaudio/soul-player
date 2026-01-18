@@ -5,10 +5,7 @@
   "mainBinaryName": "soul-player",
   "build": {
     "beforeDevCommand": "yarn dev",
-    "beforeBuildCommand": {
-      "script": "yarn workspace soul-player-desktop run build && cp -r applications/desktop/dist applications/desktop/src-tauri/",
-      "cwd": "../.."
-    },
+    "beforeBuildCommand": "yarn build && cp -r dist src-tauri/",
     "devUrl": "http://localhost:1420",
     "frontendDist": "dist"
   },
