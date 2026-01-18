@@ -1,0 +1,77 @@
+{
+  "version": "0.0.1",
+  "repository": "soulaudio/soul-player",
+  "artifacts": {
+    "windows": {
+      "msi": {
+        "name": "Soul Player_{version}_x64_en-US.msi",
+        "artifactName": "windows-x86_64-pc-windows-msvc",
+        "path": "msi",
+        "displayName": "Windows Installer (MSI)",
+        "platform": "Windows",
+        "arch": "x64",
+        "recommended": true
+      },
+      "nsis": {
+        "name": "Soul Player_{version}_x64-setup.exe",
+        "artifactName": "windows-x86_64-pc-windows-msvc",
+        "path": "nsis",
+        "displayName": "Windows Portable (NSIS)",
+        "platform": "Windows",
+        "arch": "x64",
+        "recommended": false
+      }
+    },
+    "linux": {
+      "deb": {
+        "name": "soul-player_{version}_amd64.deb",
+        "artifactName": "linux-x86_64-unknown-linux-gnu",
+        "path": "deb",
+        "displayName": "Debian/Ubuntu Package",
+        "platform": "Linux",
+        "arch": "x64",
+        "recommended": true
+      },
+      "rpm": {
+        "name": "soul-player-{version}-1.x86_64.rpm",
+        "artifactName": "linux-x86_64-unknown-linux-gnu",
+        "path": "rpm",
+        "displayName": "Fedora/RHEL Package",
+        "platform": "Linux",
+        "arch": "x64",
+        "recommended": false
+      },
+      "appimage": {
+        "name": "soul-player_{version}_amd64.AppImage",
+        "artifactName": "linux-x86_64-unknown-linux-gnu",
+        "path": "appimage",
+        "displayName": "Universal Linux Binary",
+        "platform": "Linux",
+        "arch": "x64",
+        "recommended": false
+      }
+    },
+    "macos": {
+      "dmg-arm": {
+        "name": "Soul Player_{version}_aarch64.dmg",
+        "artifactName": "macos-aarch64-apple-darwin",
+        "path": "dmg",
+        "displayName": "macOS Disk Image (Apple Silicon)",
+        "platform": "macOS",
+        "arch": "arm64",
+        "recommended": true
+      },
+      "dmg-intel": {
+        "name": "Soul Player_{version}_x64.dmg",
+        "artifactName": "macos-x86_64-apple-darwin",
+        "path": "dmg",
+        "displayName": "macOS Disk Image (Intel)",
+        "platform": "macOS",
+        "arch": "x64",
+        "recommended": false
+      }
+    }
+  },
+  "downloadBaseUrl": "https://github.com/{repository}/releases/download/{tag}/{filename}",
+  "latestReleaseUrl": "https://api.github.com/repos/{repository}/releases/latest"
+}

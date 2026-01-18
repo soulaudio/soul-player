@@ -432,12 +432,42 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
         with:
-          name: windows-x86_64-pc-windows-msvc
-          path: installers
+          ref: ${{ github.ref }}
+
+      - name: Download installer (Release or Artifact)
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ needs.create-draft-release.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Read release config
+          $config = Get-Content .github/release-config.json | ConvertFrom-Json
+          $version = $config.version
+          $msiName = $config.artifacts.windows.msi.name -replace '\{version\}', $version
+          $artifactName = $config.artifacts.windows.msi.artifactName
+
+          Write-Host "Expected MSI name: $msiName"
+          Write-Host "Release tag: $env:RELEASE_TAG"
+
+          # Try to download from GitHub Release first (real user experience)
+          $downloadUrl = "https://github.com/$($config.repository)/releases/download/$env:RELEASE_TAG/$msiName"
+          Write-Host "`nAttempting to download from release: $downloadUrl"
+
+          try {
+            $response = Invoke-WebRequest -Uri $downloadUrl -Method Head -ErrorAction Stop
+            Write-Host "✅ Release file exists, downloading..."
+            New-Item -ItemType Directory -Force -Path installers | Out-Null
+            Invoke-WebRequest -Uri $downloadUrl -OutFile "installers/$msiName"
+            Write-Host "✅ Downloaded from release (testing real user experience)"
+          } catch {
+            Write-Host "⚠️  Release not available yet, falling back to workflow artifacts"
+            Write-Host "Error: $($_.Exception.Message)"
+
+            # Fall back to workflow artifacts
+            gh run download ${{ github.run_id }} -n $artifactName -D installers
+            Write-Host "✅ Downloaded from workflow artifacts"
+          }
 
       - name: Test MSI installation
         shell: powershell
@@ -623,10 +653,40 @@ jobs:
     needs: create-draft-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: linux-x86_64-unknown-linux-gnu
-          path: installers
+          ref: ${{ github.ref }}
+
+      - name: Download installer (Release or Artifact)
+        env:
+          RELEASE_TAG: ${{ needs.create-draft-release.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Read release config
+          CONFIG=$(cat .github/release-config.json)
+          VERSION=$(echo "$CONFIG" | jq -r '.version')
+          DEB_NAME=$(echo "$CONFIG" | jq -r '.artifacts.linux.deb.name' | sed "s/{version}/$VERSION/")
+          ARTIFACT_NAME=$(echo "$CONFIG" | jq -r '.artifacts.linux.deb.artifactName')
+          REPO=$(echo "$CONFIG" | jq -r '.repository')
+
+          echo "Expected DEB name: $DEB_NAME"
+          echo "Release tag: $RELEASE_TAG"
+
+          # Try to download from GitHub Release first (real user experience)
+          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$RELEASE_TAG/$DEB_NAME"
+          echo ""
+          echo "Attempting to download from release: $DOWNLOAD_URL"
+
+          mkdir -p installers
+          if curl -fsSL -o "installers/$DEB_NAME" "$DOWNLOAD_URL" 2>/dev/null; then
+            echo "✅ Downloaded from release (testing real user experience)"
+          else
+            echo "⚠️  Release not available yet, falling back to workflow artifacts"
+
+            # Fall back to workflow artifacts
+            gh run download ${{ github.run_id }} -n "$ARTIFACT_NAME" -D installers
+            echo "✅ Downloaded from workflow artifacts"
+          fi
 
       - name: Test DEB installation
         run: |
@@ -771,10 +831,40 @@ jobs:
     needs: create-draft-release
     runs-on: macos-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: macos-aarch64-apple-darwin
-          path: installers
+          ref: ${{ github.ref }}
+
+      - name: Download installer (Release or Artifact)
+        env:
+          RELEASE_TAG: ${{ needs.create-draft-release.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Read release config
+          CONFIG=$(cat .github/release-config.json)
+          VERSION=$(echo "$CONFIG" | jq -r '.version')
+          DMG_NAME=$(echo "$CONFIG" | jq -r '.artifacts.macos."dmg-arm".name' | sed "s/{version}/$VERSION/")
+          ARTIFACT_NAME=$(echo "$CONFIG" | jq -r '.artifacts.macos."dmg-arm".artifactName')
+          REPO=$(echo "$CONFIG" | jq -r '.repository')
+
+          echo "Expected DMG name: $DMG_NAME"
+          echo "Release tag: $RELEASE_TAG"
+
+          # Try to download from GitHub Release first (real user experience)
+          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$RELEASE_TAG/$DMG_NAME"
+          echo ""
+          echo "Attempting to download from release: $DOWNLOAD_URL"
+
+          mkdir -p installers
+          if curl -fsSL -o "installers/$DMG_NAME" "$DOWNLOAD_URL" 2>/dev/null; then
+            echo "✅ Downloaded from release (testing real user experience)"
+          else
+            echo "⚠️  Release not available yet, falling back to workflow artifacts"
+
+            # Fall back to workflow artifacts
+            gh run download ${{ github.run_id }} -n "$ARTIFACT_NAME" -D installers
+            echo "✅ Downloaded from workflow artifacts"
+          fi
 
       - name: Test DMG installation
         run: |
