@@ -3,23 +3,14 @@
   "repository": "soulaudio/soul-player",
   "artifacts": {
     "windows": {
-      "msi": {
-        "name": "Soul Player_{version}_x64_en-US.msi",
-        "artifactName": "windows-x86_64-pc-windows-msvc",
-        "path": "msi",
-        "displayName": "Windows Installer (MSI)",
-        "platform": "Windows",
-        "arch": "x64",
-        "recommended": true
-      },
       "nsis": {
         "name": "Soul Player_{version}_x64-setup.exe",
         "artifactName": "windows-x86_64-pc-windows-msvc",
         "path": "nsis",
-        "displayName": "Windows Portable (NSIS)",
+        "displayName": "Windows Installer",
         "platform": "Windows",
         "arch": "x64",
-        "recommended": false
+        "recommended": true
       }
     },
     "linux": {
