@@ -594,12 +594,40 @@ jobs:
             exit 1
           }
 
+          # Get installation path from registry (NSIS currentUser installs to HKCU, not HKLM)
+          Write-Host "`nFinding installation path from registry..."
+          $uninstallReg = $null
+
+          # Check HKCU first (currentUser mode - default for NSIS)
+          $uninstallReg = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like "*Soul Player*" } | Select-Object -First 1
+
+          if (-not $uninstallReg) {
+            # Fallback to HKLM (perMachine mode)
+            $uninstallReg = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
+              Where-Object { $_.DisplayName -like "*Soul Player*" } | Select-Object -First 1
+          }
+
+          if (-not $uninstallReg -or -not $uninstallReg.InstallLocation) {
+            Write-Error "Installation failed: App not found in registry"
+            Write-Host "`nChecking common installation paths:"
+            Write-Host "  HKCU path: $(Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Soul Player')"
+            Write-Host "  HKLM path: $(Test-Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Soul Player')"
+            Write-Host "  AppData: $(Test-Path "$env:LOCALAPPDATA\Soul Player")"
+            Write-Host "  Program Files: $(Test-Path "C:\Program Files\Soul Player")"
+            exit 1
+          }
+
+          $installPath = $uninstallReg.InstallLocation.TrimEnd('\')
+          Write-Host "✅ Found installation at: $installPath"
+          Write-Host "   Registry key: $($uninstallReg.PSPath)"
+
           # Verify installation
-          $installed = Test-Path "C:\Program Files\Soul Player\soul-player.exe"
-          if (-not $installed) {
-            Write-Error "Installation failed: soul-player.exe not found"
-            Write-Host "Install log:"
-            Get-Content install.log
+          $exePath = Join-Path $installPath "soul-player.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Error "Installation failed: soul-player.exe not found at $exePath"
+            Write-Host "`nInstallation directory contents:"
+            Get-ChildItem $installPath -Recurse | Select-Object -First 30
             exit 1
           }
 
@@ -607,7 +635,7 @@ jobs:
 
           # Verify frontend files are bundled (CRITICAL CHECK)
           Write-Host "`nVerifying frontend files are bundled..."
-          $allFiles = Get-ChildItem "C:\Program Files\Soul Player" -Recurse -File
+          $allFiles = Get-ChildItem $installPath -Recurse -File
           $htmlFiles = $allFiles | Where-Object { $_.Extension -eq '.html' }
           $jsFiles = $allFiles | Where-Object { $_.Extension -eq '.js' }
 
@@ -630,7 +658,7 @@ jobs:
 
           # Test app launch
           Write-Host "`nTesting application launch..."
-          $appProcess = Start-Process "C:\Program Files\Soul Player\soul-player.exe" -ArgumentList "--logs" -PassThru -ErrorAction Stop
+          $appProcess = Start-Process $exePath -ArgumentList "--logs" -PassThru -ErrorAction Stop
 
           # Wait 10 seconds to see if app crashes
           Start-Sleep -Seconds 10
@@ -690,8 +718,7 @@ jobs:
           # Test uninstall (works for both NSIS and MSI)
           Write-Host "Testing uninstall..."
 
-          # Try uninstall via registry uninstall string first
-          $uninstallReg = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" | Where-Object { $_.DisplayName -like "*Soul Player*" }
+          # Use the uninstaller from the registry entry we found during installation check
           if ($uninstallReg -and $uninstallReg.UninstallString) {
             Write-Host "Using uninstaller: $($uninstallReg.UninstallString)"
             if ($uninstallReg.UninstallString -like "*msiexec*") {
@@ -709,22 +736,29 @@ jobs:
               $uninstallProcess.Kill()
               exit 1
             }
+          } else {
+            Write-Error "Cannot uninstall: No uninstaller found in registry"
+            exit 1
           }
 
           Start-Sleep -Seconds 5
 
-          # Verify complete removal
-          $stillInstalled = Test-Path "C:\Program Files\Soul Player"
+          # Verify complete removal (use the actual install path we found)
+          $stillInstalled = Test-Path $installPath
           if ($stillInstalled) {
             Write-Error "Uninstall failed: files still present"
             Get-Content uninstall.log
             exit 1
           }
 
-          # Verify shortcut removed
-          $shortcutRemains = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
-          if ($shortcutRemains) {
+          # Verify shortcuts removed (check both per-user and per-machine locations)
+          $perUserShortcut = Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
+          $perMachineShortcut = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
+
+          if ($perUserShortcut -or $perMachineShortcut) {
             Write-Error "Uninstall incomplete: Start Menu shortcut still exists"
+            Write-Host "  Per-user shortcut: $perUserShortcut"
+            Write-Host "  Per-machine shortcut: $perMachineShortcut"
             exit 1
           }
 
