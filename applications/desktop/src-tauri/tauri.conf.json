@@ -5,7 +5,7 @@
   "mainBinaryName": "soul-player",
   "build": {
     "beforeDevCommand": "yarn dev",
-    "beforeBuildCommand": "cd applications/desktop && npm run build && node copy-dist.cjs",
+    "beforeBuildCommand": "",
     "devUrl": "http://localhost:1420",
     "frontendDist": "dist"
   },

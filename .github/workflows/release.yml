@@ -106,6 +106,12 @@ jobs:
           echo "frontendDist path (../dist) resolves to: $(realpath ../dist || echo 'path does not exist yet')"
           cd ../../..
 
+      - name: Build frontend
+        run: |
+          cd applications/desktop
+          yarn build
+          node copy-dist.cjs
+
       - name: Build installers (MSI + NSIS)
         run: yarn build:desktop --target ${{ matrix.target }} --bundles msi nsis
 
@@ -233,6 +239,12 @@ jobs:
       - name: Install dependencies
         run: yarn
 
+      - name: Build frontend
+        run: |
+          cd applications/desktop
+          yarn build
+          node copy-dist.cjs
+
       - name: Build packages (DEB + RPM)
         run: yarn build:desktop --target ${{ matrix.target }} --bundles deb rpm
         continue-on-error: false
@@ -308,9 +320,15 @@ jobs:
       - name: Install dependencies
         run: yarn
 
+      - name: Build frontend
+        run: |
+          cd applications/desktop
+          yarn build
+          node copy-dist.cjs
+
       - name: Build DMG
         run: |
-          # Build DMG with Tauri (builds both Rust binary and frontend via beforeBuildCommand)
+          # Build DMG with Tauri (Rust binary only, frontend already built)
           yarn build:desktop --target ${{ matrix.target }} --bundles dmg
 
       - name: Validate DMG contains frontend files
