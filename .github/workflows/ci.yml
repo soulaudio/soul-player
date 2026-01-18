@@ -86,6 +86,8 @@ jobs:
         run: |
           mkdir -p applications/desktop/dist
           echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+          mkdir -p applications/desktop/src-tauri/dist
+          cp applications/desktop/dist/index.html applications/desktop/src-tauri/dist/
 
       - name: Run Clippy
         run: cargo clippy --workspace --lib --bins --release -- -D warnings
@@ -266,6 +268,8 @@ jobs:
         run: |
           mkdir -p applications/desktop/dist
           echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+          mkdir -p applications/desktop/src-tauri/dist
+          cp applications/desktop/dist/index.html applications/desktop/src-tauri/dist/
 
       # Build in release mode on main, debug mode elsewhere
       - name: Build workspace (Release)
@@ -354,6 +358,8 @@ jobs:
         run: |
           mkdir -p applications/desktop/dist
           echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+          mkdir -p applications/desktop/src-tauri/dist
+          cp applications/desktop/dist/index.html applications/desktop/src-tauri/dist/
 
       # Build only integration tests incrementally to manage disk space
       - name: Build integration tests (libraries only)
