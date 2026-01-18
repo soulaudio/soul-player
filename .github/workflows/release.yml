@@ -564,6 +564,12 @@ jobs:
           Write-Host "Starting NSIS installation (silent mode with embedded WebView2 bootstrapper)..."
           $startTime = Get-Date
           $process = Start-Process $nsis.FullName -ArgumentList "/S" -PassThru -NoNewWindow
+
+          # CRITICAL WORKAROUND: Cache process handle to enable ExitCode property
+          # Without this, $process.ExitCode is always $null with -NoNewWindow
+          # See: https://github.com/PowerShell/PowerShell/issues/5421
+          $null = $process.Handle
+
           $timeout = 300  # 5 minutes (embedBootstrapper downloads ~2MB WebView2 bootstrapper)
 
           $elapsed = 0
@@ -585,13 +591,23 @@ jobs:
             }
           }
 
+          # Ensure process has fully exited and ExitCode is populated
+          $process.WaitForExit()
+
           $elapsed = ((Get-Date) - $startTime).TotalSeconds
           Write-Host "Installation completed in $([math]::Round($elapsed))s"
 
-          if ($process.ExitCode -ne 0) {
+          # Check exit code with better null handling
+          if ($null -eq $process.ExitCode) {
+            Write-Error "Installation failed: Exit code is null (process handle bug)"
+            Write-Host "`nThis is a PowerShell bug with -NoNewWindow. Process may have succeeded."
+            Write-Host "Checking if app was actually installed..."
+          } elseif ($process.ExitCode -ne 0) {
             Write-Error "Installation failed with exit code: $($process.ExitCode)"
             Write-Host "`nNote: NSIS exit codes: 0=success, 1=install error, 2=user cancelled"
             exit 1
+          } else {
+            Write-Host "✅ NSIS installation exited successfully (code: $($process.ExitCode))"
           }
 
           # Get installation path from registry (NSIS currentUser installs to HKCU, not HKLM)
@@ -730,12 +746,17 @@ jobs:
               $uninstallProcess = Start-Process -FilePath $uninstallReg.UninstallString -ArgumentList "/S" -PassThru -NoNewWindow
             }
 
+            # WORKAROUND: Cache handle for ExitCode (same PowerShell bug as install)
+            $null = $uninstallProcess.Handle
+
             $timeout = 180  # 3 minutes for uninstall
             if (-not $uninstallProcess.WaitForExit($timeout * 1000)) {
               Write-Error "Uninstall timed out after $timeout seconds"
               $uninstallProcess.Kill()
               exit 1
             }
+
+            Write-Host "Uninstall process exited with code: $($uninstallProcess.ExitCode)"
           } else {
             Write-Error "Cannot uninstall: No uninstaller found in registry"
             exit 1
