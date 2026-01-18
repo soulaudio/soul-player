@@ -6,11 +6,11 @@
   "build": {
     "beforeDevCommand": "yarn dev",
     "beforeBuildCommand": {
-      "script": "yarn workspace soul-player-desktop run build",
+      "script": "yarn workspace soul-player-desktop run build && cp -r applications/desktop/dist applications/desktop/src-tauri/",
       "cwd": "../.."
     },
     "devUrl": "http://localhost:1420",
-    "frontendDist": "../dist"
+    "frontendDist": "dist"
   },
   "app": {
     "windows": [
