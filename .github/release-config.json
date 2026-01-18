@@ -31,15 +31,6 @@
         "platform": "Linux",
         "arch": "x64",
         "recommended": false
-      },
-      "appimage": {
-        "name": "soul-player_{version}_amd64.AppImage",
-        "artifactName": "linux-x86_64-unknown-linux-gnu",
-        "path": "appimage",
-        "displayName": "Universal Linux Binary",
-        "platform": "Linux",
-        "arch": "x64",
-        "recommended": false
       }
     },
     "macos": {
