@@ -58,6 +58,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "dist/**"
+    ],
     "fileAssociations": [
       {
         "ext": ["mp3"],
