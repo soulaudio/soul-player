@@ -5,7 +5,10 @@
   "mainBinaryName": "soul-player",
   "build": {
     "beforeDevCommand": "yarn dev",
-    "beforeBuildCommand": "cd ../.. && yarn workspace soul-player-desktop run build",
+    "beforeBuildCommand": {
+      "script": "yarn workspace soul-player-desktop run build",
+      "cwd": "../.."
+    },
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
