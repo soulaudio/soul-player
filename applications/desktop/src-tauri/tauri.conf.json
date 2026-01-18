@@ -7,7 +7,7 @@
     "beforeDevCommand": "yarn dev",
     "beforeBuildCommand": "",
     "devUrl": "http://localhost:1420",
-    "frontendDist": "dist"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
@@ -57,9 +57,6 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "resources": [
-      "dist/**"
     ],
     "fileAssociations": [
       {
