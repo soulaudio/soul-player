@@ -752,30 +752,25 @@ jobs:
           VERSION=$(jq -r '.version' .github/release-config.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Delete existing draft releases
+      - name: Delete all existing releases with same tag
         run: |
           TAG="${{ steps.gen-tag.outputs.tag }}"
-          echo "Checking for existing draft releases with tag: $TAG"
+          echo "Checking for existing releases with tag: $TAG"
 
-          # Get all draft releases for this tag
-          DRAFT_RELEASES=$(gh release list --limit 100 --json tagName,isDraft,id | \
-            jq -r --arg tag "$TAG" '.[] | select(.isDraft == true and .tagName == $tag) | .id')
+          # Get ALL releases (draft or published) with this tag
+          EXISTING_RELEASES=$(gh release list --limit 100 --json tagName,id | \
+            jq -r --arg tag "$TAG" '.[] | select(.tagName == $tag) | .id')
 
-          if [ -n "$DRAFT_RELEASES" ]; then
-            echo "Found draft release(s) to delete:"
-            echo "$DRAFT_RELEASES"
+          if [ -n "$EXISTING_RELEASES" ]; then
+            echo "Found existing release(s) to delete (ensuring clean plate):"
+            echo "$EXISTING_RELEASES"
 
-            # Delete each draft release by ID (not by tag)
-            echo "$DRAFT_RELEASES" | while read -r release_id; do
-              if [ -n "$release_id" ]; then
-                echo "Deleting draft release ID: $release_id (tag: $TAG)"
-                # Delete by tag which removes both the release and tag
-                gh release delete "$TAG" --yes --cleanup-tag
-                echo "✅ Deleted draft release: $release_id"
-              fi
-            done
+            # Delete by tag (removes both release and tag)
+            echo "Deleting release with tag: $TAG"
+            gh release delete "$TAG" --yes --cleanup-tag || echo "Tag may not exist yet, continuing..."
+            echo "✅ Deleted all releases with tag: $TAG"
           else
-            echo "No existing draft releases found for tag $TAG"
+            echo "No existing releases found for tag $TAG - clean plate ready"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
