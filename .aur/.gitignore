@@ -1,0 +1,7 @@
+# AUR build artifacts
+*.tar.gz
+*.deb
+*.rpm
+*.pkg.tar.zst
+src/
+pkg/

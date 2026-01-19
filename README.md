@@ -57,6 +57,15 @@ Soul Player is a modern, open-source music player for desktop. Play your local m
 > **Note:** The app uses ad-hoc code signing (free, without Apple Developer account). This is safe - the warning is just macOS being cautious about apps not notarized by Apple. After the first open, the app will launch normally.
 
 #### Linux
+**Arch Linux:**
+```bash
+# Using an AUR helper (yay, paru, etc.)
+yay -S soul-player-bin
+
+# Or build from source
+yay -S soul-player
+```
+
 **Debian/Ubuntu:**
 ```bash
 # Download the .deb file, then:

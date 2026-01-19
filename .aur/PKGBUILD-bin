@@ -1,0 +1,21 @@
+# Maintainer: Your Name <your.email@example.com>
+pkgname=soul-player-bin
+pkgver=0.1.1
+pkgrel=1
+pkgdesc="Modern, privacy-first music player for local audio files"
+arch=('x86_64')
+url="https://github.com/soulaudio/soul-player"
+license=('AGPL3')
+depends=('gtk3' 'webkit2gtk' 'libayatana-appindicator')
+provides=('soul-player')
+conflicts=('soul-player')
+source=("${pkgname}-${pkgver}.deb::https://github.com/soulaudio/soul-player/releases/download/v${pkgver}/soul_player_${pkgver}_amd64.deb")
+sha256sums=('SKIP')  # Update with actual SHA256 after first release
+
+package() {
+    # Extract DEB package
+    tar -xf data.tar.gz -C "${pkgdir}"
+
+    # Fix permissions
+    chmod -R go-w "${pkgdir}"
+}
