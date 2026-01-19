@@ -13,13 +13,13 @@ export interface DownloadConfig {
  */
 export const DOWNLOAD_CONFIGS: Record<Exclude<Platform, 'unknown'>, DownloadConfig> = {
   windows: {
-    filePattern: 'soul_player_{version}_x64-setup.exe',
+    filePattern: 'Soul.Player_{version}_x64-setup.exe',
     displayName: 'Windows Installer',
     description: 'For Windows 10/11 (x64)',
     recommended: true,
   },
   macos: {
-    filePattern: 'soul_player_{version}_aarch64.dmg',
+    filePattern: 'Soul.Player_{version}_aarch64.dmg',
     displayName: 'macOS Disk Image (Apple Silicon)',
     description: 'For Apple Silicon (M1/M2/M3/M4)',
     recommended: true,
@@ -63,14 +63,14 @@ export const LINUX_DOWNLOADS: LinuxDownload[] = [
   },
   {
     id: 'deb',
-    filePattern: 'soul_player_{version}_amd64.deb',
+    filePattern: 'Soul.Player_{version}_amd64.deb',
     displayName: 'Debian/Ubuntu (.deb)',
     description: 'For Debian, Ubuntu, Linux Mint, Pop!_OS',
     recommended: false,
   },
   {
     id: 'rpm',
-    filePattern: 'soul_player-{version}-1.x86_64.rpm',
+    filePattern: 'Soul.Player-{version}-1.x86_64.rpm',
     displayName: 'Fedora/RHEL (.rpm)',
     description: 'For Fedora, RHEL, CentOS, openSUSE',
     recommended: false,
@@ -99,7 +99,7 @@ export interface AlternateDownload {
 export const ALTERNATE_DOWNLOADS: AlternateDownload[] = [
   {
     platform: 'macos',
-    filePattern: 'soul_player_{version}_x64.dmg',
+    filePattern: 'Soul.Player_{version}_x64.dmg',
     label: 'macOS Intel',
     description: 'For Intel-based Macs',
   },
