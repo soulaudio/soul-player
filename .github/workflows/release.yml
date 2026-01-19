@@ -453,18 +453,13 @@ jobs:
     needs: [check-release-exists]
     if: needs.check-release-exists.outputs.should_continue == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-46
+      options: --privileged
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.commit_sha || github.ref }}
-
-      # Free up disk space for Flatpak build
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          df -h
 
       # Install Rust for cargo vendor
       - uses: dtolnay/rust-toolchain@stable
@@ -525,34 +520,20 @@ jobs:
           node -e "const pkg=require('./package.json'); delete pkg.packageManager; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
           echo "✅ package.json patched for Flatpak build"
 
-      - name: Install Flatpak build dependencies
-        run: |
-          echo "Installing Flatpak build tools..."
-
-          # Install flatpak and flatpak-builder
-          sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder
-
-          # Add Flathub repository
-          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-
-          # Don't pre-install runtime - flatpak-builder will automatically download it
-          # This avoids permission issues and follows best practices
-          echo "✅ Flatpak build environment ready"
-          echo "Note: Runtime will be downloaded automatically by flatpak-builder"
-
+      # Use official Flatpak GitHub Actions for building (no manual setup needed)
       - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: io.github.soulaudio.SoulPlayer.flatpak
+          manifest-path: .flatpak/io.github.soulaudio.SoulPlayer.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+
+      - name: Generate checksum and rename
         run: |
-          echo "Building Flatpak with vendored dependencies..."
-
-          # Get version from release config
           VERSION=$(jq -r '.version' .github/release-config.json)
-
-          # Build Flatpak using our script (it will use existing vendor.tar.gz)
-          chmod +x .flatpak/build-flatpak.sh
-          echo "n" | ./.flatpak/build-flatpak.sh "$VERSION"
-
-          echo "✅ Flatpak created"
+          sha256sum io.github.soulaudio.SoulPlayer.flatpak > io.github.soulaudio.SoulPlayer_${VERSION}_x86_64.flatpak.sha256
+          mv io.github.soulaudio.SoulPlayer.flatpak io.github.soulaudio.SoulPlayer_${VERSION}_x86_64.flatpak
+          echo "✅ Flatpak bundle created: io.github.soulaudio.SoulPlayer_${VERSION}_x86_64.flatpak"
 
       - name: Upload Flatpak artifacts
         uses: actions/upload-artifact@v4
@@ -781,13 +762,14 @@ jobs:
   create-draft-release:
     name: Create Draft Release
     needs: [check-release-exists, build-windows, build-linux-tauri, build-linux-appimage, build-linux-flatpak, build-macos]
-    # Continue even if optional Flatpak build fails (it has network sandbox issues)
+    # All builds must succeed before creating draft release
     if: |
       always() &&
       needs.check-release-exists.outputs.should_continue == 'true' &&
       needs.build-windows.result == 'success' &&
       needs.build-linux-tauri.result == 'success' &&
       needs.build-linux-appimage.result == 'success' &&
+      needs.build-linux-flatpak.result == 'success' &&
       needs.build-macos.result == 'success'
     runs-on: ubuntu-latest
     permissions:
