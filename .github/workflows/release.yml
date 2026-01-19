@@ -1715,7 +1715,7 @@ jobs:
           cat .SRCINFO
 
       - name: Publish to AUR
-        uses: KSXGitHub/github-actions-deploy-aur@v4
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
         with:
           pkgname: soul-player-bin
           pkgbuild: .aur/PKGBUILD
