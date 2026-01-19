@@ -45,10 +45,9 @@ modules:
       - mkdir -p .cargo
       - cp cargo-config.toml .cargo/config.toml
 
-      # Enable Corepack for Yarn
-      - corepack enable
-
-      # Install Node dependencies (requires network, but that's acceptable)
+      # Install Node dependencies
+      # Note: yarn is available in PATH from node20 SDK extension
+      # Skip corepack enable as it tries to write to read-only filesystem
       - yarn install --frozen-lockfile
 
       # Build frontend
