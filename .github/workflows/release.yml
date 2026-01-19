@@ -509,7 +509,7 @@ jobs:
               },
               "linux-x86_64": {
                 "signature": "${LINUX_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul-player_${VERSION}_amd64.deb"
+                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul_player_${VERSION}_amd64.deb"
               },
               "darwin-aarch64": {
                 "signature": "${MACOS_ARM_SIG}",

@@ -15,7 +15,7 @@
     },
     "linux": {
       "deb": {
-        "name": "soul-player_{version}_amd64.deb",
+        "name": "soul_player_{version}_amd64.deb",
         "artifactName": "linux-x86_64-unknown-linux-gnu",
         "path": "deb",
         "displayName": "Debian/Ubuntu Package",
@@ -24,7 +24,7 @@
         "recommended": true
       },
       "rpm": {
-        "name": "soul-player-{version}-1.x86_64.rpm",
+        "name": "soul_player-{version}-1.x86_64.rpm",
         "artifactName": "linux-x86_64-unknown-linux-gnu",
         "path": "rpm",
         "displayName": "Fedora/RHEL Package",

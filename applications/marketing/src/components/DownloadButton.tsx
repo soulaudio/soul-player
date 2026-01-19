@@ -30,7 +30,7 @@ const PLATFORMS: Record<Platform, PlatformInfo> = {
   linux: {
     name: 'Linux',
     Icon: Boxes,
-    downloadUrl: `${RELEASE_LATEST}/soul-player_0.1.0_amd64.deb`
+    downloadUrl: `${RELEASE_LATEST}/soul_player_0.1.0_amd64.deb`
   },
   unknown: {
     name: 'Download',
