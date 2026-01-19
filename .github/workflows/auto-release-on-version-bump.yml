@@ -7,6 +7,11 @@ on:
     paths:
       - 'Cargo.toml'  # Only run when workspace Cargo.toml changes
 
+# Prevent concurrent version bump detection
+concurrency:
+  group: auto-release-version-bump
+  cancel-in-progress: false
+
 permissions:
   contents: write  # Required to create and push tags
 
