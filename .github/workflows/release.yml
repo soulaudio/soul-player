@@ -503,6 +503,22 @@ jobs:
           echo "   Dependencies: $SOURCE_COUNT"
           echo ""
 
+      # Install Node.js dependencies to vendor them for Flatpak
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable Corepack for Yarn
+        run: corepack enable
+
+      - name: Install Node.js dependencies
+        run: |
+          echo "Installing Node.js dependencies for vendoring..."
+          yarn install --frozen-lockfile
+          echo "✅ Node.js dependencies installed"
+          echo "   node_modules will be included in Flatpak sources"
+
       - name: Install Flatpak build dependencies
         run: |
           echo "Installing Flatpak build tools..."
