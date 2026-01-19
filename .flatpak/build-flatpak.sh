@@ -9,12 +9,46 @@ APP_ID="io.github.soulaudio.SoulPlayer"
 
 echo "Building Flatpak for Soul Player v${VERSION}..."
 
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Check if flatpak-builder is installed
 if ! command -v flatpak-builder &> /dev/null; then
     echo "Error: flatpak-builder not found"
     echo "Install with: sudo apt-get install flatpak-builder"
     echo "or: sudo dnf install flatpak-builder"
     exit 1
+fi
+
+# Check if cargo-sources.json exists, if not, generate it
+if [ ! -f "$SCRIPT_DIR/cargo-sources.json" ]; then
+    echo ""
+    echo "⚠️  cargo-sources.json not found. Generating vendored dependencies..."
+    echo "   This is required for Flatpak builds (network sandbox restriction)"
+    echo ""
+
+    # Check if Rust is installed
+    if ! command -v cargo &> /dev/null; then
+        echo "Error: cargo not found. Please install Rust toolchain."
+        echo "Install with: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        exit 1
+    fi
+
+    # Check if Python 3 is installed
+    if ! command -v python3 &> /dev/null; then
+        echo "Error: python3 not found. Required for flatpak-cargo-generator.py"
+        exit 1
+    fi
+
+    # Run vendor script
+    chmod +x "$SCRIPT_DIR/vendor-cargo.sh"
+    "$SCRIPT_DIR/vendor-cargo.sh"
+
+    echo ""
+    echo "✅ Vendored dependencies generated"
+    echo ""
+else
+    echo "✅ Using existing cargo-sources.json"
 fi
 
 # Install required runtimes and SDKs
@@ -35,7 +69,7 @@ flatpak-builder \
     --force-clean \
     --repo=repo \
     build-dir \
-    .flatpak/${APP_ID}.yml
+    "$SCRIPT_DIR/${APP_ID}.yml"
 
 # Export to single-file bundle for distribution
 echo "Creating Flatpak bundle..."
@@ -59,7 +93,7 @@ fi
 read -p "Install locally for testing? (y/N) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    flatpak-builder --user --install --force-clean build-dir .flatpak/${APP_ID}.yml
+    flatpak-builder --user --install --force-clean build-dir "$SCRIPT_DIR/${APP_ID}.yml"
     echo "✅ Installed locally. Run with: flatpak run ${APP_ID}"
 fi
 

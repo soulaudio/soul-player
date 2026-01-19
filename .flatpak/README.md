@@ -1,25 +1,40 @@
-# Flatpak Build System
+# Flatpak Packaging for Soul Player
 
-This directory contains files for building Soul Player as a Flatpak package for universal Linux distribution.
+This directory contains the configuration and scripts needed to build Soul Player as a Flatpak package for universal Linux distribution.
 
 ## Overview
 
-Flatpak builds run in a sandboxed environment with **no network access** during the build phase. This means cargo cannot fetch dependencies from crates.io during compilation. To work around this, we use **cargo vendoring** to bundle all Rust dependencies with the source code.
+Flatpak is a universal Linux packaging format that works across all distributions. It provides a sandboxed environment and dependency isolation for applications.
 
 ## Files
 
-- **`io.github.soulaudio.SoulPlayer.yml`** - Flatpak manifest (defines the build process)
-- **`io.github.soulaudio.SoulPlayer.metainfo.xml`** - AppStream metadata (for app stores)
-- **`build-flatpak.sh`** - Build script (generates vendored dependencies automatically)
-- **`vendor-cargo.sh`** - Vendoring script (downloads all Rust dependencies)
+- **`io.github.soulaudio.SoulPlayer.yml`** - Main Flatpak manifest (app configuration)
+- **`io.github.soulaudio.SoulPlayer.metainfo.xml`** - AppStream metadata (app store information)
+- **`cargo-sources.json`** - Generated file containing all Rust dependencies (493KB, ~11,500 lines)
+- **`cargo-config.toml`** - Cargo configuration for offline builds with vendored dependencies
+- **`flatpak-cargo-generator.py`** - Official tool from flatpak-builder-tools to generate cargo-sources.json
+- **`vendor-cargo.sh`** - Script to generate cargo-sources.json and cargo-config.toml
+- **`build-flatpak.sh`** - Local build script for testing
+
+## How Flatpak Handles Rust Dependencies
+
+Flatpak builds run in a **network sandbox** - they cannot access the internet during the build process. This is a security feature to ensure reproducible builds and prevent dependency hijacking.
+
+However, Cargo (Rust's build tool) needs to download dependencies from crates.io. To solve this:
+
+1. **flatpak-cargo-generator.py** reads `Cargo.lock` and generates `cargo-sources.json`
+2. `cargo-sources.json` contains all Rust dependencies as Flatpak sources (URLs to crate tarballs)
+3. Flatpak downloads all sources **before** the build starts (with network access)
+4. During the build, Cargo uses the pre-downloaded sources (offline mode)
 
 ## Building Locally
 
 ### Prerequisites
 
 ```bash
-# Install Flatpak build tools
-sudo apt-get install flatpak flatpak-builder
+# Install Flatpak and flatpak-builder
+sudo apt-get install flatpak flatpak-builder  # Debian/Ubuntu
+sudo dnf install flatpak flatpak-builder      # Fedora
 
 # Add Flathub repository
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
@@ -30,174 +45,150 @@ flatpak install flathub org.freedesktop.Sdk.Extension.rust-stable//23.08
 flatpak install flathub org.freedesktop.Sdk.Extension.node20//23.08
 ```
 
-### Build Command
+### Build Steps
 
 ```bash
-# From project root:
-./.flatpak/build-flatpak.sh 0.1.1
+# 1. Generate cargo-sources.json (if not already generated)
+./vendor-cargo.sh
+
+# 2. Build the Flatpak
+./build-flatpak.sh
+
+# 3. Install locally for testing
+flatpak install --user io.github.soulaudio.SoulPlayer_0.1.1_x86_64.flatpak
+
+# 4. Run the application
+flatpak run io.github.soulaudio.SoulPlayer
 ```
 
-The script will:
-1. Check if `vendor.tar.gz` exists
-2. If not, run `vendor-cargo.sh` to generate vendored dependencies
-3. Build the Flatpak using `flatpak-builder`
-4. Create a `.flatpak` bundle file for distribution
-
-## CI/CD Pipeline
+## CI/CD Integration
 
 The GitHub Actions workflow (`.github/workflows/release.yml`) automatically:
-1. Vendors Cargo dependencies using `vendor-cargo.sh`
-2. Builds the Flatpak with vendored dependencies (offline mode)
-3. Uploads the `.flatpak` bundle as a release artifact
 
-**Key Steps:**
-```yaml
-# Vendor dependencies (runs outside Flatpak sandbox)
-- name: Vendor Cargo dependencies
-  run: |
-    chmod +x .flatpak/vendor-cargo.sh
-    ./.flatpak/vendor-cargo.sh
+1. Installs Python dependencies (tomlkit, aiohttp)
+2. Runs `vendor-cargo.sh` to generate `cargo-sources.json`
+3. Verifies the file was created successfully
+4. Builds the Flatpak using `build-flatpak.sh`
+5. Uploads the `.flatpak` bundle as a release artifact
 
-# Build Flatpak (runs inside sandbox with vendored deps)
-- name: Build Flatpak
-  run: |
-    chmod +x .flatpak/build-flatpak.sh
-    echo "n" | ./.flatpak/build-flatpak.sh "$VERSION"
+## Regenerating cargo-sources.json
+
+You need to regenerate `cargo-sources.json` whenever Rust dependencies change (i.e., when `Cargo.lock` is updated):
+
+```bash
+# Install Python dependencies (one-time setup)
+pip3 install --user tomlkit aiohttp
+
+# Regenerate cargo-sources.json
+./vendor-cargo.sh
 ```
 
-## How Cargo Vendoring Works
+**Important:** `cargo-sources.json` should be committed to the repository. It's a large file (493KB) but necessary for Flatpak builds.
 
-### Problem
-Flatpak builds have **no network access** during the build phase. This prevents `cargo fetch` from downloading dependencies from crates.io.
+## How It Works
 
-### Solution
-**Cargo vendoring** pre-downloads all dependencies and bundles them with the source code:
+### 1. Manifest Structure
 
-1. **Outside sandbox** (before Flatpak build):
-   ```bash
-   cargo vendor .flatpak/vendor  # Download all crates
-   tar -czf vendor.tar.gz vendor/  # Create tarball
-   ```
-
-2. **Inside sandbox** (during Flatpak build):
-   ```bash
-   tar -xzf vendor.tar.gz  # Extract vendored crates
-   cp cargo-config.toml .cargo/config.toml  # Tell cargo to use vendored deps
-   cargo build --offline  # Build without network
-   ```
-
-### Generated Files (Gitignored)
-
-These files are automatically generated by `vendor-cargo.sh`:
-
-- **`vendor/`** - Directory containing all vendored crates
-- **`vendor.tar.gz`** - Compressed tarball (included in Flatpak sources)
-- **`cargo-config.toml`** - Cargo config pointing to vendored deps
-- **`cargo-sources.json`** - (Optional) JSON manifest for Flatpak
-- **`generate-cargo-sources.py`** - (Optional) Script to generate sources JSON
-
-**Why gitignored?**
-- Large size (can be 100+ MB)
-- Generated from `Cargo.lock` (reproducible)
-- Regenerated on each build to ensure freshness
-
-## Manifest Structure
-
-The Flatpak manifest (`io.github.soulaudio.SoulPlayer.yml`) defines two key sources:
+The Flatpak manifest (`io.github.soulaudio.SoulPlayer.yml`) includes:
 
 ```yaml
-sources:
-  # Main source code (excluding vendor files)
-  - type: dir
-    path: ../
-    skip:
-      - .flatpak/vendor
-      - .flatpak/vendor.tar.gz
-
-  # Vendored Cargo dependencies
-  - type: file
-    path: vendor.tar.gz
-    dest-filename: vendor.tar.gz
-
-  # Cargo config for vendored dependencies
-  - type: file
-    path: cargo-config.toml
-    dest-filename: cargo-config.toml
+modules:
+  - name: soul-player
+    buildsystem: simple
+    build-options:
+      env:
+        CARGO_HOME: /run/build/soul-player/cargo
+    build-commands:
+      - mkdir -p .cargo
+      - cp cargo-config.toml .cargo/config.toml
+      - cargo build --release --offline
+    sources:
+      - type: dir
+        path: ../
+      - type: file
+        path: cargo-config.toml
+      - cargo-sources.json  # Generated by flatpak-cargo-generator.py
 ```
 
-**Build commands:**
-```yaml
-build-commands:
-  # Extract vendored dependencies
-  - tar -xzf vendor.tar.gz -C .
+### 2. Cargo Configuration
 
-  # Configure cargo for offline mode
-  - mkdir -p .cargo
-  - cp cargo-config.toml .cargo/config.toml
+The `cargo-config.toml` file tells Cargo to use vendored sources:
 
-  # Build Rust binary (offline)
-  - cargo build --release --package soul-player-desktop --offline
+```toml
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "cargo/vendor"
 ```
+
+### 3. Build Process
+
+1. Flatpak reads the manifest and downloads all sources (including crate tarballs from cargo-sources.json)
+2. Sources are extracted to the build directory
+3. `cargo-config.toml` is copied to `.cargo/config.toml`
+4. Cargo builds the project with `--offline` flag, using pre-downloaded sources
+5. The resulting binary is installed to `/app/bin/`
+
+## Best Practices
+
+### ✅ DO
+
+- Commit `cargo-sources.json` to git (it's tracked in the repository)
+- Regenerate `cargo-sources.json` whenever `Cargo.lock` changes
+- Use `cargo build --offline` in the manifest
+- Keep `flatpak-cargo-generator.py` updated from upstream
+
+### ❌ DON'T
+
+- Try to build Flatpak without cargo-sources.json (it will fail with network errors)
+- Manually edit cargo-sources.json (always regenerate with the script)
+- Use `cargo vendor` tarball approach (cargo-sources.json is the modern standard)
 
 ## Troubleshooting
 
-### Error: "failed to download dependency"
-**Cause:** Vendored dependencies are missing or incomplete.
+### Error: "failed to download from crates.io"
 
-**Solution:**
+This means Cargo tried to access the network during the build. Solutions:
+
+1. Ensure `cargo-sources.json` is included in the manifest
+2. Verify `cargo-config.toml` is copied to `.cargo/config.toml`
+3. Check that `--offline` flag is used in cargo build command
+
+### Error: "ModuleNotFoundError: No module named 'tomlkit'"
+
+Install Python dependencies:
+
 ```bash
-rm -rf .flatpak/vendor.tar.gz
-./.flatpak/vendor-cargo.sh  # Regenerate vendor tarball
+pip3 install --user tomlkit aiohttp
 ```
 
-### Error: "source directory not found"
-**Cause:** `cargo-config.toml` or `vendor.tar.gz` not found during build.
+### Large cargo-sources.json file
 
-**Solution:**
-Ensure `vendor-cargo.sh` ran successfully before `build-flatpak.sh`:
-```bash
-ls -lh .flatpak/vendor.tar.gz
-ls -lh .flatpak/cargo-config.toml
-```
-
-### Error: "network access blocked"
-**Cause:** Cargo is trying to fetch dependencies during build.
-
-**Solution:**
-Ensure `--offline` flag is present in Flatpak manifest:
-```yaml
-- cargo build --release --package soul-player-desktop --offline
-```
-
-## Testing Locally
-
-### Option 1: Build and Run Bundle
-```bash
-./.flatpak/build-flatpak.sh 0.1.1
-flatpak install --user io.github.soulaudio.SoulPlayer_0.1.1_x86_64.flatpak
-flatpak run io.github.soulaudio.SoulPlayer
-```
-
-### Option 2: Build and Install Directly
-```bash
-flatpak-builder --user --install --force-clean build-dir .flatpak/io.github.soulaudio.SoulPlayer.yml
-flatpak run io.github.soulaudio.SoulPlayer
-```
-
-### Uninstall
-```bash
-flatpak uninstall io.github.soulaudio.SoulPlayer
-```
+This is expected. Soul Player has many Rust dependencies (400+ crates). The file size is:
+- **493KB** (compressed in git)
+- **11,499 lines** (one source entry per file in each crate)
 
 ## References
 
-- [Flatpak Documentation](https://docs.flatpak.org/)
-- [Flatpak Builder](https://docs.flatpak.org/en/latest/flatpak-builder.html)
-- [Flathub - Rust Applications](https://github.com/flathub/flathub/wiki/Rust-Applications)
-- [Cargo Vendor Documentation](https://doc.rust-lang.org/cargo/commands/cargo-vendor.html)
+- [Flatpak Rust Applications Guide](https://belmoussaoui.com/blog/8-how-to-flatpak-a-rust-application/)
+- [flatpak-builder-tools Repository](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo)
+- [Flatpak Builder Documentation](https://docs.flatpak.org/en/latest/flatpak-builder.html)
+- [KDE Rust Flatpak Guide](https://develop.kde.org/docs/getting-started/rust/rust-flatpak/)
 
-## Notes
+## Publishing to Flathub
 
-- **Node dependencies** (Yarn) still require network access during build. Flatpak manifest includes `--share=network` permission for Yarn install.
-- **Vendor tarball size**: Typically 50-150 MB compressed (depending on dependencies).
-- **Build time**: First build takes 10-20 minutes (runtime/SDK download + compilation). Subsequent builds are faster (~5 minutes).
+To publish Soul Player on Flathub:
+
+1. Fork https://github.com/flathub/flathub
+2. Submit a pull request with this manifest
+3. Flathub reviewers will test the build
+4. Once approved, releases are automatically built from GitHub releases
+
+See: https://docs.flathub.org/docs/for-app-authors/submission/
+
+---
+
+**Last Updated:** 2026-01-19
+**Flatpak Manifest Version:** 1.0
+**Generated with:** [flatpak-cargo-generator.py](https://github.com/flatpak/flatpak-builder-tools/blob/master/cargo/flatpak-cargo-generator.py)

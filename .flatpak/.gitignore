@@ -4,3 +4,7 @@
 build-dir/
 repo/
 .flatpak-builder/
+
+# Temporary vendoring files (cargo-sources.json is tracked)
+vendor/
+vendor.tar.gz
