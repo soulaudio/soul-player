@@ -75,16 +75,22 @@ echo "Building AppImage..."
     --icon-file "AppDir/${APP_ID}.png" \
     --output appimage
 
-# Rename to consistent naming
-if [ -f "${APP_NAME}-${ARCH}.AppImage" ]; then
-    mv "${APP_NAME}-${ARCH}.AppImage" "${APP_ID}_${VERSION}_${ARCH}.AppImage"
-    echo "✅ AppImage created: ${APP_ID}_${VERSION}_${ARCH}.AppImage"
+# Find the created AppImage (appimagetool replaces spaces with underscores)
+# Could be "Soul_Player-x86_64.AppImage" or "Soul Player-x86_64.AppImage"
+APPIMAGE_FILE=$(find . -maxdepth 1 -name "*.AppImage" -type f | head -1)
+
+if [ -n "$APPIMAGE_FILE" ]; then
+    # Rename to consistent naming
+    TARGET_NAME="${APP_ID}_${VERSION}_${ARCH}.AppImage"
+    mv "$APPIMAGE_FILE" "$TARGET_NAME"
+    echo "✅ AppImage created: $TARGET_NAME"
 
     # Calculate SHA256
-    sha256sum "${APP_ID}_${VERSION}_${ARCH}.AppImage" > "${APP_ID}_${VERSION}_${ARCH}.AppImage.sha256"
-    echo "✅ Checksum created: ${APP_ID}_${VERSION}_${ARCH}.AppImage.sha256"
+    sha256sum "$TARGET_NAME" > "${TARGET_NAME}.sha256"
+    echo "✅ Checksum created: ${TARGET_NAME}.sha256"
 else
     echo "❌ Error: AppImage was not created"
+    ls -la .
     exit 1
 fi
 
