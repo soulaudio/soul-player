@@ -46,12 +46,12 @@ modules:
       - cp cargo-config.toml .cargo/config.toml
 
       # Install Node dependencies
-      # Note: yarn is available in PATH from node20 SDK extension
-      # Skip corepack enable as it tries to write to read-only filesystem
-      - yarn install --frozen-lockfile
+      # Use npm instead of yarn (project requires yarn@4 but Flatpak SDK has yarn@1)
+      # npm works fine with yarn workspaces
+      - npm install
 
       # Build frontend
-      - cd applications/desktop && yarn build && node copy-dist.cjs && cd ../..
+      - cd applications/desktop && npm run build && node copy-dist.cjs && cd ../..
 
       # Build Rust binary (offline using vendored dependencies)
       - cargo build --release --package soul-player-desktop --offline
