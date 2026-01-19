@@ -129,9 +129,7 @@
     },
     "macOS": {
       "minimumSystemVersion": "10.15",
-      "signingIdentity": "-",
-      "entitlements": "./entitlements.plist",
-      "hardenedRuntime": true
+      "signingIdentity": "-"
     },
     "windows": {
       "webviewInstallMode": {
