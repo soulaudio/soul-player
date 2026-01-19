@@ -13,6 +13,7 @@ import {
 } from '@/utils/downloads'
 import { getDownloadUrl, getReleasesPageUrl } from '@/utils/github'
 import { LinuxDownloadModal } from './LinuxDownloadModal'
+import { MacosDownloadModal } from './MacosDownloadModal'
 
 interface PlatformInfo {
   name: string
@@ -42,6 +43,7 @@ export function DownloadButton() {
   const [platform, setPlatform] = useState<Platform>('unknown')
   const [showDropdown, setShowDropdown] = useState(false)
   const [showLinuxModal, setShowLinuxModal] = useState(false)
+  const [showMacosModal, setShowMacosModal] = useState(false)
   const [mounted, setMounted] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { version, isLoading } = useGitHubRelease()
@@ -91,6 +93,9 @@ export function DownloadButton() {
     if (platform === 'linux') {
       e.preventDefault()
       setShowLinuxModal(true)
+    } else if (platform === 'macos') {
+      e.preventDefault()
+      setShowMacosModal(true)
     }
   }
 
@@ -142,6 +147,10 @@ export function DownloadButton() {
                       e.preventDefault()
                       setShowDropdown(false)
                       setShowLinuxModal(true)
+                    } else if (key === 'macos') {
+                      e.preventDefault()
+                      setShowDropdown(false)
+                      setShowMacosModal(true)
                     } else {
                       setShowDropdown(false)
                     }
@@ -192,6 +201,13 @@ export function DownloadButton() {
       <LinuxDownloadModal
         isOpen={showLinuxModal}
         onClose={() => setShowLinuxModal(false)}
+        version={currentVersion}
+      />
+
+      {/* macOS Download Modal */}
+      <MacosDownloadModal
+        isOpen={showMacosModal}
+        onClose={() => setShowMacosModal(false)}
         version={currentVersion}
       />
     </>

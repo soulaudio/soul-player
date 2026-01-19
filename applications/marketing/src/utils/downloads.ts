@@ -75,15 +75,16 @@ export const LINUX_DOWNLOADS: LinuxDownload[] = [
     description: 'For Fedora, RHEL, CentOS, openSUSE',
     recommended: false,
   },
-  {
-    id: 'aur',
-    filePattern: '',
-    displayName: 'Arch Linux (AUR)',
-    description: 'For Arch Linux users',
-    recommended: false,
-    installCommand: 'yay -S soul-player-bin',
-    isAur: true,
-  },
+  // AUR package not yet published - will be added in future release
+  // {
+  //   id: 'aur',
+  //   filePattern: '',
+  //   displayName: 'Arch Linux (AUR)',
+  //   description: 'For Arch Linux users',
+  //   recommended: false,
+  //   installCommand: 'yay -S soul-player-bin',
+  //   isAur: true,
+  // },
 ]
 
 export interface AlternateDownload {

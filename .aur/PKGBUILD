@@ -1,0 +1,31 @@
+# Maintainer: Soul Player Contributors <noreply@github.com>
+pkgname=soul-player-bin
+pkgver=0.1.1
+pkgrel=1
+pkgdesc="Modern, privacy-first music player for local audio files"
+arch=('x86_64')
+url="https://github.com/soulaudio/soul-player"
+license=('AGPL3')
+depends=('webkit2gtk' 'gtk3' 'libayatana-appindicator')
+provides=('soul-player')
+conflicts=('soul-player')
+source=("soul-player-${pkgver}::https://github.com/soulaudio/soul-player/releases/download/v${pkgver}/soul-player")
+sha256sums=('SKIP')  # Updated by makepkg or maintainer
+
+package() {
+    # Install binary
+    install -Dm755 "${srcdir}/soul-player-${pkgver}" "${pkgdir}/usr/bin/soul-player"
+
+    # Install desktop file (if available)
+    if [ -f "${srcdir}/soul-player.desktop" ]; then
+        install -Dm644 "${srcdir}/soul-player.desktop" "${pkgdir}/usr/share/applications/soul-player.desktop"
+    fi
+
+    # Install icons (if available)
+    for size in 32 128 256; do
+        if [ -f "${srcdir}/${size}x${size}.png" ]; then
+            install -Dm644 "${srcdir}/${size}x${size}.png" \
+                "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps/soul-player.png"
+        fi
+    done
+}
