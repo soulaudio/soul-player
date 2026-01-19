@@ -20,10 +20,10 @@ on:
         required: false
         type: string
 
-# Prevent concurrent release builds
+# Prevent concurrent release builds - cancel old runs when new one starts
 concurrency:
   group: release-${{ github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
