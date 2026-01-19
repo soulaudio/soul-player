@@ -384,9 +384,6 @@ pub fn apply_a_weighting(samples: &[f32], sample_rate: u32) -> Vec<f32> {
 
     // Pre-warped frequencies for bilinear transform
     let f1: f64 = 20.598997;
-    let _f2: f64 = 107.65265;
-    let _f3: f64 = 737.86223;
-    let _f4: f64 = 12194.217;
 
     // High-pass: two zeros at DC, one pole at f1
     // Low-pass: pole at f4 (doubled)
@@ -1187,7 +1184,6 @@ fn test_compressor_attack_accuracy() {
     comp.process(&mut output, SAMPLE_RATE);
 
     // Find transition from quiet to loud
-    let _input_mono = extract_mono(&input, 0);
     let output_mono = extract_mono(&output, 0);
 
     // Measure attack behavior

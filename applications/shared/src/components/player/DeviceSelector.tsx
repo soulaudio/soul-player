@@ -78,6 +78,8 @@ export function DeviceSelector() {
   // Use ref to track isOpen state for event handler (avoids stale closure)
   const isOpenRef = useRef(false);
   isOpenRef.current = isOpen;
+  // Use ref to track loading state to prevent infinite loop in useCallback
+  const isLoadingRef = useRef(false);
 
   // Check if we're in browser demo mode (no real device commands)
   const isBrowserDemo = !commands?.getCurrentAudioDevice;
@@ -104,8 +106,10 @@ export function DeviceSelector() {
       return;
     }
 
-    if (isLoading) return;
+    // Use ref to check loading state to prevent infinite loop
+    if (isLoadingRef.current) return;
 
+    isLoadingRef.current = true;
     setIsLoading(true);
     try {
       if (commands?.getAudioBackends) {
@@ -130,9 +134,10 @@ export function DeviceSelector() {
     } catch (error) {
       console.error('[DeviceSelector] Failed to load devices:', error);
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [isBrowserDemo, commands, isLoading]);
+  }, [isBrowserDemo, commands]);
 
   // Load current device on mount and listen for sample rate changes
   useEffect(() => {

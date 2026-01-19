@@ -10,20 +10,86 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     if let Some(window) = app.get_webview_window("main") {
-        // Set position if available
-        if let (Some(x), Some(y)) = (ws.x, ws.y) {
-            let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
+        tracing::info!(
+            "[window_state] Restoring window state: {}x{} at ({:?}, {:?}), maximized={}",
+            ws.width,
+            ws.height,
+            ws.x,
+            ws.y,
+            ws.maximized
+        );
+
+        // On macOS with frameless windows (decorations: false), there's a known Tauri v2 bug
+        // where set_size() doesn't work reliably (GitHub issue #12168).
+        // We try multiple approaches to work around this.
+        #[cfg(target_os = "macos")]
+        {
+            // Try setting size multiple times with small delays
+            // This is a workaround for the Tauri bug where the first call may be ignored
+            for attempt in 1..=3 {
+                match window.set_size(Size::Physical(PhysicalSize {
+                    width: ws.width as u32,
+                    height: ws.height as u32,
+                })) {
+                    Ok(_) => {
+                        tracing::debug!(
+                            "[window_state] macOS: set_size succeeded on attempt {}",
+                            attempt
+                        );
+                        break;
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "[window_state] macOS: set_size failed on attempt {}: {}",
+                            attempt,
+                            e
+                        );
+                        if attempt < 3 {
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                    }
+                }
+            }
         }
 
-        // Set size
-        let _ = window.set_size(Size::Physical(PhysicalSize {
-            width: ws.width as u32,
-            height: ws.height as u32,
-        }));
+        // On other platforms, set size normally
+        #[cfg(not(target_os = "macos"))]
+        {
+            if let Err(e) = window.set_size(Size::Physical(PhysicalSize {
+                width: ws.width as u32,
+                height: ws.height as u32,
+            })) {
+                tracing::warn!("[window_state] Failed to set window size: {}", e);
+            }
+        }
+
+        // Set position if available
+        if let (Some(x), Some(y)) = (ws.x, ws.y) {
+            if let Err(e) = window.set_position(Position::Physical(PhysicalPosition { x, y })) {
+                tracing::warn!("[window_state] Failed to set window position: {}", e);
+            } else {
+                tracing::debug!("[window_state] Window position set to ({}, {})", x, y);
+            }
+        }
 
         // Set maximized
         if ws.maximized {
-            let _ = window.maximize();
+            if let Err(e) = window.maximize() {
+                tracing::warn!("[window_state] Failed to maximize window: {}", e);
+            } else {
+                tracing::debug!("[window_state] Window maximized");
+            }
+        }
+
+        // Verify the size was actually applied (log for debugging)
+        if let Ok(size) = window.outer_size() {
+            tracing::info!(
+                "[window_state] Final window size: {}x{} (requested: {}x{})",
+                size.width,
+                size.height,
+                ws.width,
+                ws.height
+            );
         }
     }
 
@@ -49,6 +115,15 @@ pub async fn save_window_state(app: &AppHandle) -> Result<(), String> {
         maximized,
         last_route: None, // Will be set from frontend if needed
     };
+
+    tracing::info!(
+        "[window_state] Saving window state: {}x{} at ({:?}, {:?}), maximized={}",
+        ws.width,
+        ws.height,
+        ws.x,
+        ws.y,
+        ws.maximized
+    );
 
     window_state::save_window_state(&state.pool, &state.user_id, &ws)
         .await
@@ -82,8 +157,18 @@ pub async fn save_window_state_with_route(
         width: size.map(|s| s.width as i32).unwrap_or(1200),
         height: size.map(|s| s.height as i32).unwrap_or(800),
         maximized,
-        last_route: Some(route),
+        last_route: Some(route.clone()),
     };
+
+    tracing::info!(
+        "[window_state] Saving window state with route '{}': {}x{} at ({:?}, {:?}), maximized={}",
+        route,
+        ws.width,
+        ws.height,
+        ws.x,
+        ws.y,
+        ws.maximized
+    );
 
     window_state::save_window_state(&state.pool, &state.user_id, &ws)
         .await
