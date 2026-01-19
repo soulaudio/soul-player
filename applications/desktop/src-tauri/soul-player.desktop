@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Soul Player
+GenericName=Music Player
+Comment=A beautiful music player built with Tauri
+Exec=soul-player
+Icon=io.github.soulaudio.SoulPlayer
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Player;
+MimeType=audio/mpeg;audio/flac;audio/wav;audio/ogg;audio/mp4;audio/opus;audio/x-ms-wma;audio/aiff;audio/x-ape;audio/x-wavpack;
+Keywords=music;audio;player;sound;
+StartupWMClass=soul-player
