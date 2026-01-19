@@ -626,15 +626,33 @@ jobs:
         run: |
           echo "Verifying code signature of built app..."
 
-          # Find the .app bundle
-          APP_BUNDLE=$(find target/${{ matrix.target }}/release/bundle/macos -name "*.app" -type d | head -1)
+          # Find the DMG file (Tauri cleans up the .app bundle after packaging it into the DMG)
+          DMG=$(find target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" | head -1)
 
-          if [ -z "$APP_BUNDLE" ]; then
-            echo "❌ ERROR: No .app bundle found"
+          if [ -z "$DMG" ]; then
+            echo "❌ ERROR: No DMG file found"
             exit 1
           fi
 
-          echo "Found app bundle: $APP_BUNDLE"
+          echo "Found DMG: $DMG"
+          echo "Extracting .app bundle from DMG for verification..."
+
+          # Create a temporary directory for mounting the DMG
+          MOUNT_DIR=$(mktemp -d)
+
+          # Mount the DMG
+          hdiutil attach "$DMG" -mountpoint "$MOUNT_DIR" -quiet
+
+          # Find the .app bundle inside the mounted DMG
+          APP_BUNDLE=$(find "$MOUNT_DIR" -name "*.app" -type d | head -1)
+
+          if [ -z "$APP_BUNDLE" ]; then
+            hdiutil detach "$MOUNT_DIR" -quiet
+            echo "❌ ERROR: No .app bundle found in DMG"
+            exit 1
+          fi
+
+          echo "Found app bundle in DMG: $APP_BUNDLE"
           echo ""
 
           # Verify signature
@@ -650,6 +668,7 @@ jobs:
               echo "✅ Ad-hoc signature detected (expected for free signing)"
             else
               echo "❌ ERROR: No signature found at all"
+              hdiutil detach "$MOUNT_DIR" -quiet
               exit 1
             fi
           }
@@ -663,6 +682,10 @@ jobs:
           echo ""
           echo "Checking entitlements..."
           codesign -d --entitlements :- "$APP_BUNDLE" || echo "⚠️  No entitlements found (may be okay for ad-hoc signing)"
+
+          # Unmount the DMG
+          hdiutil detach "$MOUNT_DIR" -quiet
+          rm -rf "$MOUNT_DIR"
 
           echo ""
           echo "✅ Code signature verification complete"
