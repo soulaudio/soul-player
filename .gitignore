@@ -79,3 +79,9 @@ libraries/soul-storage/.tmp/
 **/WASM_PLAYBACK_*.md
 **/NEXTJS_*_FIX.md
 clippy-errors.txt
+
+# Flatpak vendored dependencies
+# cargo-sources.json and cargo-config.toml are committed (Flatpak standard)
+# Only the vendor/ directory and tarball are ignored
+.flatpak/vendor/
+.flatpak/vendor.tar.gz
