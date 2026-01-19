@@ -46,15 +46,45 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
 
-          # Check if release exists
+          echo "Checking if release exists for tag: $TAG"
+          echo ""
+
+          # Check if release exists (draft or published)
           if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
-            echo "Release already exists for tag $TAG"
-            echo "Stopping workflow to avoid duplicate work"
+            # Get release details
+            RELEASE_INFO=$(gh release view "$TAG" --repo ${{ github.repository }} --json isDraft,isPrerelease,publishedAt,createdAt)
+            IS_DRAFT=$(echo "$RELEASE_INFO" | jq -r '.isDraft')
+            IS_PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.isPrerelease')
+            PUBLISHED_AT=$(echo "$RELEASE_INFO" | jq -r '.publishedAt')
+            CREATED_AT=$(echo "$RELEASE_INFO" | jq -r '.createdAt')
+
+            echo "⚠️  Release already exists for tag $TAG"
+            echo ""
+            echo "Release details:"
+            echo "  - Created: $CREATED_AT"
+
+            if [ "$IS_DRAFT" = "true" ]; then
+              echo "  - Status: DRAFT (not yet published)"
+            elif [ "$IS_PRERELEASE" = "true" ]; then
+              echo "  - Status: PRE-RELEASE"
+              echo "  - Published: $PUBLISHED_AT"
+            else
+              echo "  - Status: PUBLISHED"
+              echo "  - Published: $PUBLISHED_AT"
+            fi
+
+            echo ""
+            echo "🛑 Stopping workflow to avoid duplicate work"
+            echo "   If this is unexpected, delete the release with:"
+            echo "   gh release delete $TAG --yes --cleanup-tag"
+            echo ""
+            echo "View release: https://github.com/${{ github.repository }}/releases/tag/$TAG"
+
             echo "should_continue=false" >> $GITHUB_OUTPUT
             exit 0
           else
-            echo "No existing release found for tag $TAG"
-            echo "Proceeding with release creation"
+            echo "✅ No existing release found for tag $TAG"
+            echo "✅ Proceeding with release creation"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           fi
 

@@ -68,23 +68,55 @@ jobs:
             echo "✓ Version bumped: $LATEST → $CURRENT"
           fi
 
-      - name: Check if tag already exists
+      - name: Check if tag or release already exists
         if: steps.compare.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v${{ steps.current.outputs.version }}"
+          VERSION="${{ steps.current.outputs.version }}"
 
+          # Check if tag exists in git
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Error: Tag $TAG already exists!"
+            echo "❌ Error: Tag $TAG already exists in git!"
+            echo ""
             echo "This usually means:"
             echo "  1. A release was already created for this version"
             echo "  2. The tag was manually created"
             echo ""
-            echo "To fix: Bump version to a newer one or delete the existing tag:"
-            echo "  git tag -d $TAG && git push origin :refs/tags/$TAG"
+            echo "To fix, choose one:"
+            echo "  1. Bump version to a newer one (e.g., $VERSION -> $(echo $VERSION | awk -F. '{print $1"."$2"."$3+1}'))"
+            echo "  2. Delete the existing tag: git tag -d $TAG && git push origin :refs/tags/$TAG"
+            exit 1
+          fi
+
+          # Check if GitHub release exists (draft or published)
+          if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            RELEASE_INFO=$(gh release view "$TAG" --repo ${{ github.repository }} --json isDraft,isPrerelease,tagName)
+            IS_DRAFT=$(echo "$RELEASE_INFO" | jq -r '.isDraft')
+            IS_PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.isPrerelease')
+
+            echo "❌ Error: GitHub release already exists for $TAG!"
+            echo ""
+            echo "Release status:"
+            if [ "$IS_DRAFT" = "true" ]; then
+              echo "  - Status: DRAFT (not published yet)"
+            elif [ "$IS_PRERELEASE" = "true" ]; then
+              echo "  - Status: PRE-RELEASE"
+            else
+              echo "  - Status: PUBLISHED"
+            fi
+            echo ""
+            echo "To fix, choose one:"
+            echo "  1. Bump version to a newer one (recommended)"
+            echo "  2. Delete the release: gh release delete $TAG --yes --cleanup-tag"
+            echo ""
+            echo "View release: https://github.com/${{ github.repository }}/releases/tag/$TAG"
             exit 1
           fi
 
           echo "✓ Tag $TAG does not exist - safe to create"
+          echo "✓ No GitHub release found for $TAG"
 
       - name: Create and push release tag
         if: steps.compare.outputs.changed == 'true'
