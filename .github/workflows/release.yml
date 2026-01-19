@@ -815,17 +815,32 @@ jobs:
           echo "Checking for existing releases with tag: $TAG"
 
           # Get ALL releases (draft or published) with this tag
-          EXISTING_RELEASES=$(gh release list --limit 100 --json tagName,id | \
-            jq -r --arg tag "$TAG" '.[] | select(.tagName == $tag) | .id')
+          EXISTING_RELEASES=$(gh release list --limit 100 --json tagName,id,isDraft | \
+            jq -r --arg tag "$TAG" '.[] | select(.tagName == $tag)')
 
           if [ -n "$EXISTING_RELEASES" ]; then
-            echo "Found existing release(s) to delete (ensuring clean plate):"
-            echo "$EXISTING_RELEASES"
+            echo "Found existing release(s) to delete:"
+            echo "$EXISTING_RELEASES" | jq '.'
 
             # Delete by tag (removes both release and tag)
             echo "Deleting release with tag: $TAG"
-            gh release delete "$TAG" --yes --cleanup-tag || echo "Tag may not exist yet, continuing..."
-            echo "✅ Deleted all releases with tag: $TAG"
+            if gh release delete "$TAG" --yes --cleanup-tag; then
+              echo "✅ Successfully deleted release and tag: $TAG"
+
+              # Wait for GitHub API to process the deletion
+              echo "Waiting 3 seconds for GitHub API to process deletion..."
+              sleep 3
+
+              # Verify deletion
+              if gh release view "$TAG" 2>/dev/null; then
+                echo "⚠️ WARNING: Release still exists after deletion attempt!"
+                exit 1
+              else
+                echo "✅ Verified: Release and tag fully deleted"
+              fi
+            else
+              echo "ℹ️ Release/tag does not exist (already clean)"
+            fi
           else
             echo "No existing releases found for tag $TAG - clean plate ready"
           fi
