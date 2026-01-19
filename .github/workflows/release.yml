@@ -766,7 +766,14 @@ jobs:
   create-draft-release:
     name: Create Draft Release
     needs: [check-release-exists, build-windows, build-linux-tauri, build-linux-appimage, build-linux-flatpak, build-macos]
-    if: needs.check-release-exists.outputs.should_continue == 'true'
+    # Continue even if optional Flatpak build fails (it has network sandbox issues)
+    if: |
+      always() &&
+      needs.check-release-exists.outputs.should_continue == 'true' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-linux-tauri.result == 'success' &&
+      needs.build-linux-appimage.result == 'success' &&
+      needs.build-macos.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -839,6 +846,7 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/**/*
+          # Flatpak currently disabled due to network sandbox limitations
           fail_on_unmatched_files: false
 
       - name: Generate latest.json for Tauri updater
