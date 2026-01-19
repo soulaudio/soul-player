@@ -61,9 +61,9 @@ fn measure_thd_n_aes17(samples: &[f32], sample_rate: u32, fundamental_freq: f32)
     let mut fft_input: Vec<f32> = mono.iter().take(fft_size).copied().collect();
 
     // Apply Hann window to reduce spectral leakage
-    for i in 0..fft_size {
+    for (i, sample) in fft_input.iter_mut().enumerate().take(fft_size) {
         let window = 0.5 * (1.0 - (2.0 * PI * i as f32 / fft_size as f32).cos());
-        fft_input[i] *= window;
+        *sample *= window;
     }
 
     // Compute power spectrum using manual DFT for fundamental and harmonics
@@ -79,7 +79,6 @@ fn measure_thd_n_aes17(samples: &[f32], sample_rate: u32, fundamental_freq: f32)
 
     // Calculate DFT magnitudes for relevant bins
     for bin in 1..(fft_size / 2) {
-        let _freq = bin as f32 * bin_width;
         let mut real = 0.0_f32;
         let mut imag = 0.0_f32;
 
@@ -468,8 +467,8 @@ fn test_compressor_attack_time_accuracy() {
     let mut buffer = vec![0.0; (silence_samples + loud_samples) * 2];
 
     // Fill with loud signal after silence
-    for i in (silence_samples * 2)..(buffer.len()) {
-        buffer[i] = 0.9; // -0.9 dBFS, well above threshold
+    for sample in buffer.iter_mut().skip(silence_samples * 2) {
+        *sample = 0.9; // -0.9 dBFS, well above threshold
     }
 
     compressor.process(&mut buffer, sample_rate);

@@ -33,6 +33,7 @@ import {
 import { cn } from '../lib/utils';
 import { usePlatform } from '../contexts/PlatformContext';
 import { useBackend } from '../contexts/BackendContext';
+import { useResizableSidebar } from '../hooks/useResizableSidebar';
 
 interface NavItem {
   id: string;
@@ -164,6 +165,13 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   } = usePlayerStore();
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
+
+  // Resizable sidebar hook
+  const { width, isResizing, handleMouseDown, resizableRef } = useResizableSidebar({
+    minWidth: 240,
+    maxWidth: 480,
+    defaultWidth: 288,
+  });
 
   const [isMuted, setIsMuted] = useState(false);
   const [volumeBeforeMute, setVolumeBeforeMute] = useState(volume);
@@ -496,7 +504,28 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   });
 
   return (
-    <div className="w-72 bg-card border-r border-border flex flex-col h-full">
+    <div
+      ref={resizableRef}
+      className="bg-card border-r border-border flex flex-col h-full relative"
+      style={{ width: `${width}px` }}
+    >
+      {/* Resize Handle */}
+      <div
+        className={cn(
+          "absolute top-0 right-0 w-1 h-full cursor-ew-resize group z-50",
+          isResizing && "bg-primary/50"
+        )}
+        onMouseDown={handleMouseDown}
+        title={t('sidebar.resize', 'Resize sidebar')}
+      >
+        <div
+          className={cn(
+            "absolute inset-y-0 right-0 w-[3px] bg-primary/0 group-hover:bg-primary/30 transition-colors",
+            isResizing && "bg-primary/50"
+          )}
+        />
+      </div>
+
       {/* Navigation */}
       <nav className="p-4 pt-6">
         <ul className="space-y-0">

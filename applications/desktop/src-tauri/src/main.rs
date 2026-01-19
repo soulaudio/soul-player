@@ -1791,19 +1791,28 @@ async fn test_artwork_extraction(
 }
 
 /// Get platform-specific app data directory
-/// Windows: %APPDATA%\Soul Player\
-/// macOS: ~/Library/Application Support/soul-player/
-/// Linux: ~/.config/soul-player/
+///
+/// Debug builds use separate directories to avoid conflicts with production:
+/// - Windows: %APPDATA%\Soul Player Dev\ (debug) or %APPDATA%\Soul Player\ (release)
+/// - macOS: ~/Library/Application Support/soul-player-dev/ (debug) or ~/Library/Application Support/soul-player/ (release)
+/// - Linux: ~/.config/soul-player-dev/ (debug) or ~/.config/soul-player/ (release)
 fn get_app_data_dir() -> std::path::PathBuf {
+    // Use different directory names for debug vs release builds
+    let (windows_dir, unix_dir) = if cfg!(debug_assertions) {
+        ("Soul Player Dev", "soul-player-dev")
+    } else {
+        ("Soul Player", "soul-player")
+    };
+
     if cfg!(target_os = "windows") {
         let roaming = std::env::var("APPDATA").expect("APPDATA environment variable not found");
-        std::path::PathBuf::from(roaming).join("Soul Player")
+        std::path::PathBuf::from(roaming).join(windows_dir)
     } else if cfg!(target_os = "macos") {
         let home = std::env::var("HOME").expect("HOME environment variable not found");
         std::path::PathBuf::from(home)
             .join("Library")
             .join("Application Support")
-            .join("soul-player")
+            .join(unix_dir)
     } else {
         let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
             std::path::PathBuf::from(xdg_config)
@@ -1811,7 +1820,7 @@ fn get_app_data_dir() -> std::path::PathBuf {
             let home = std::env::var("HOME").expect("HOME environment variable not found");
             std::path::PathBuf::from(home).join(".config")
         };
-        config_dir.join("soul-player")
+        config_dir.join(unix_dir)
     }
 }
 

@@ -33,7 +33,8 @@
     "upNext": "次に再生",
     "noTrackPlaying": "再生中のトラックはありません",
     "emptyQueue": "キューは空です",
-    "tracksInQueue": "キューに{{count}}曲"
+    "tracksInQueue": "キューに{{count}}曲",
+    "resize": "サイドバーのサイズを変更"
   },
   "playback": {
     "play": "再生",
@@ -95,6 +96,8 @@
     "themeOcean": "オーシャン",
     "themeAuto": "自動（デバイスに合わせる）",
     "language": "言語",
+    "hideWindowControls": "ウィンドウコントロールを自動非表示",
+    "hideWindowControlsDescription": "スクロール時にウィンドウコントロール（最小化、最大化、閉じる）を自動的に非表示にします。上にスクロールするか、新しいページに移動すると再表示されます。",
     "showShortcuts": "キーボードショートカットを表示",
     "showShortcutsDescription": "ツールチップやUI要素にキーボードショートカットを表示します。例：",
     "audio": {

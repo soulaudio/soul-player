@@ -86,7 +86,7 @@ async fn test_create_server_source() {
             assert_eq!(username, "user");
             assert_eq!(token, Some("test-token".to_string()));
         }
-        _ => panic!("Expected Server config"),
+        SourceConfig::Local => panic!("Expected Server config"),
     }
 }
 
@@ -388,7 +388,7 @@ async fn test_update_server_credentials() {
             assert_eq!(username, "new_user");
             assert_eq!(token, Some("new_token_abc".to_string()));
         }
-        _ => panic!("Expected Server config"),
+        SourceConfig::Local => panic!("Expected Server config"),
     }
 }
 
@@ -427,7 +427,7 @@ async fn test_update_server_credentials_clear_token() {
         SourceConfig::Server { token, .. } => {
             assert!(token.is_none());
         }
-        _ => panic!("Expected Server config"),
+        SourceConfig::Local => panic!("Expected Server config"),
     }
 }
 
@@ -506,7 +506,7 @@ async fn test_add_server_source_for_user() {
         SourceConfig::Server { url, .. } => {
             assert_eq!(url, "https://user.server.example.com");
         }
-        _ => panic!("Expected Server config"),
+        SourceConfig::Local => panic!("Expected Server config"),
     }
 }
 

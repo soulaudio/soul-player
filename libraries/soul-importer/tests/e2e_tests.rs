@@ -174,7 +174,7 @@ async fn test_e2e_import_creates_library_file() {
     let importer = MusicImporter::new(pool.clone(), config);
     let (mut progress_rx, handle) = importer.import_files(&[source_file.clone()]).await.unwrap();
 
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary = handle.await.unwrap().unwrap();
 
     // If import succeeded, verify file was copied to library
@@ -223,7 +223,7 @@ async fn test_e2e_import_multiple_genres() {
     let importer = MusicImporter::new(pool.clone(), config);
     let (mut progress_rx, handle) = importer.import_files(&[mp3_path]).await.unwrap();
 
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary = handle.await.unwrap().unwrap();
 
     // If successful, should have created multiple genre associations
@@ -259,12 +259,12 @@ async fn test_e2e_duplicate_detection_by_hash() {
 
     // Import first file
     let (mut progress_rx, handle) = importer.import_files(&[file1]).await.unwrap();
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary1 = handle.await.unwrap().unwrap();
 
     // Import duplicate
     let (mut progress_rx, handle) = importer.import_files(&[file2]).await.unwrap();
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary2 = handle.await.unwrap().unwrap();
 
     // If first succeeded, second should be skipped as duplicate
@@ -304,7 +304,7 @@ async fn test_e2e_batch_import_with_mixed_results() {
     let importer = MusicImporter::new(pool.clone(), config);
     let (mut progress_rx, handle) = importer.import_files(&files).await.unwrap();
 
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary = handle.await.unwrap().unwrap();
 
     // Should process all 3 files
@@ -345,7 +345,7 @@ async fn test_e2e_import_with_special_characters_in_metadata() {
     let importer = MusicImporter::new(pool.clone(), config);
     let (mut progress_rx, handle) = importer.import_files(&[mp3_path]).await.unwrap();
 
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary = handle.await.unwrap().unwrap();
 
     // Should process without crashing

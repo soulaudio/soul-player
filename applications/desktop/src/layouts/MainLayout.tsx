@@ -1,10 +1,12 @@
 /**
  * Desktop MainLayout - wrapper around shared MainLayout
  */
-import { ReactNode, useState, useCallback } from 'react';
+import { ReactNode, useState, useCallback, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { MainLayout as SharedMainLayout, usePlayerStore, AddToPlaylistDialog, ScrollVisibilityProvider, useScrollVisibility } from '@soul-player/shared';
 import { ScanProgressIndicator } from '../components/ScanProgressIndicator';
 import { WindowControls } from '../components/WindowControls';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -13,13 +15,20 @@ interface MainLayoutProps {
 function MainLayoutContent({ children }: MainLayoutProps) {
   const { currentTrack } = usePlayerStore();
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
-  const { showHeader } = useScrollVisibility();
+  const { showHeader, setShowHeader } = useScrollVisibility();
+  const { hideWindowControls } = useSettings();
+  const location = useLocation();
 
   const handleAddToPlaylist = useCallback(() => {
     if (currentTrack) {
       setShowAddToPlaylist(true);
     }
   }, [currentTrack]);
+
+  // Show header when navigating to a new page
+  useEffect(() => {
+    setShowHeader(true);
+  }, [location.pathname, setShowHeader]);
 
   return (
     <div className="relative h-screen overflow-hidden">
@@ -30,10 +39,10 @@ function MainLayoutContent({ children }: MainLayoutProps) {
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       />
 
-      {/* Window controls - auto-hide on scroll, positioned over drag region */}
+      {/* Window controls - auto-hide on scroll (if setting enabled), positioned over drag region */}
       <div
         className={`absolute top-0 right-0 z-50 flex items-center transition-all duration-300 pointer-events-none ${
-          showHeader ? 'translate-y-0' : '-translate-y-full'
+          hideWindowControls ? (showHeader ? 'translate-y-0' : '-translate-y-full') : 'translate-y-0'
         }`}
       >
         {/* Small drag region next to buttons (visible state) */}

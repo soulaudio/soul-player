@@ -111,12 +111,12 @@ async fn test_import_skips_duplicates() {
 
     // First import
     let (mut progress_rx, handle) = importer.import_files(&[audio_file.clone()]).await.unwrap();
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary1 = handle.await.unwrap().unwrap();
 
     // Second import (should skip duplicate)
     let (mut progress_rx, handle) = importer.import_files(&[audio_file]).await.unwrap();
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary2 = handle.await.unwrap().unwrap();
 
     // First import might fail due to fake metadata, but second should definitely skip
@@ -195,7 +195,7 @@ async fn test_import_handles_nested_directories() {
     let importer = MusicImporter::new(pool.clone(), config);
     let (mut progress_rx, handle) = importer.import_directory(temp_dir.path()).await.unwrap();
 
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary = handle.await.unwrap().unwrap();
 
     // Should find files in nested directories
@@ -257,7 +257,7 @@ async fn test_import_with_confidence_threshold() {
     let importer = MusicImporter::new(pool.clone(), config);
     let (mut progress_rx, handle) = importer.import_files(&[audio_file]).await.unwrap();
 
-    while let Some(_) = progress_rx.recv().await {}
+    while (progress_rx.recv().await).is_some() {}
     let summary = handle.await.unwrap().unwrap();
 
     // Check if any imports required review due to confidence threshold

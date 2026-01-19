@@ -96,6 +96,8 @@
     "themeDark": "ダーク",
     "themeOcean": "オーシャン",
     "language": "言語",
+    "hideWindowControls": "ウィンドウコントロールを自動非表示",
+    "hideWindowControlsDescription": "スクロール時にウィンドウコントロール（最小化、最大化、閉じる）を自動的に非表示にします。上にスクロールするか、新しいページに移動すると再表示されます。",
     "showShortcuts": "キーボードショートカットを表示",
     "showShortcutsDescription": "ツールチップやUI要素にキーボードショートカットを表示します。例：",
     "audio": "オーディオ",

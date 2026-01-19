@@ -40,6 +40,8 @@ export interface SettingsHandlers {
   checkForUpdates?: () => Promise<void>
   showKeyboardShortcuts?: boolean
   setShowKeyboardShortcuts?: (show: boolean) => void
+  hideWindowControls?: boolean
+  setHideWindowControls?: (hide: boolean) => void
   autoUpdate?: boolean
   silentUpdate?: boolean
   checking?: boolean
@@ -337,6 +339,23 @@ function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
                 {t('settings.demoDisabled')}
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="flex items-start space-x-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={handlers?.hideWindowControls ?? false}
+                onChange={(e) => handlers?.setHideWindowControls?.(e.target.checked)}
+                className="w-4 h-4 mt-0.5"
+              />
+              <div>
+                <span className="text-sm font-medium block">{t('settings.hideWindowControls')}</span>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('settings.hideWindowControlsDescription')}
+                </p>
+              </div>
+            </label>
           </div>
 
           <div>

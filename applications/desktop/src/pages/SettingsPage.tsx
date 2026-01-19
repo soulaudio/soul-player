@@ -11,7 +11,7 @@ import { ShortcutsSettings } from '../components/ShortcutsSettings';
 
 export function SettingsPage() {
   const { i18n } = useTranslation();
-  const { showKeyboardShortcuts, setShowKeyboardShortcuts } = useSettings();
+  const { showKeyboardShortcuts, setShowKeyboardShortcuts, hideWindowControls, setHideWindowControls } = useSettings();
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [silentUpdate, setSilentUpdate] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -113,6 +113,8 @@ export function SettingsPage() {
     checkForUpdates,
     showKeyboardShortcuts,
     setShowKeyboardShortcuts,
+    hideWindowControls,
+    setHideWindowControls,
     autoUpdate,
     silentUpdate,
     checking,

@@ -89,6 +89,8 @@ export function LibraryPageLayout({
     if (isLoading) {
       setShowSearchBar(true)
       hiddenByIdleRef.current = false
+      // Hide gradient when header is visible during loading
+      setTopGradientOpacity(0)
     }
   }, [isLoading, setShowSearchBar])
 
@@ -103,6 +105,8 @@ export function LibraryPageLayout({
     if (hiddenByIdleRef.current) {
       setShowSearchBar(true)
       hiddenByIdleRef.current = false
+      // Hide gradient when header appears
+      setTopGradientOpacity(0)
     }
 
     // Set new timer to hide after 3 seconds of inactivity
@@ -232,6 +236,8 @@ export function LibraryPageLayout({
       if (mouseY >= 0 && mouseY <= 100 && !showSearchBarRef.current) {
         setShowSearchBar(true)
         hiddenByIdleRef.current = false
+        // Hide gradient when header appears on hover
+        setTopGradientOpacity(0)
       }
 
       // Always reset idle timer on mouse movement

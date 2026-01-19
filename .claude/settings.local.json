@@ -199,7 +199,24 @@
       "Bash(if [ -d \"D:\\\\dev\\\\soulaudio\\\\soul-player\\\\applications\\\\desktop\\\\dist\" ])",
       "Bash(then ls -laR \"D:\\\\dev\\\\soulaudio\\\\soul-player\\\\applications\\\\desktop\\\\dist\")",
       "WebFetch(domain:schema.tauri.app)",
-      "Bash(node_modules/.bin/vite:*)"
+      "Bash(node_modules/.bin/vite:*)",
+      "Bash(Select-Object -First 30)",
+      "Bash(pwsh:*)",
+      "Bash(du -sh:*)",
+      "Bash(dpkg-deb:*)",
+      "Bash(ConvertFrom-Json)",
+      "Bash(Select-Object -First 1)",
+      "Bash(Format-List)",
+      "Bash(do sleep 60)",
+      "Bash(gh release view:*)",
+      "Bash(gh release:*)",
+      "Bash(git tag:*)",
+      "Bash(npx @tauri-apps/cli@latest signer generate:*)",
+      "Bash(cargo tauri signer:*)",
+      "Bash(npx @tauri-apps/cli signer:*)",
+      "Bash(npx --yes @tauri-apps/cli@latest signer generate:*)",
+      "Bash(printf:*)",
+      "Bash(npx:*)"
     ]
   },
   "hooks": {

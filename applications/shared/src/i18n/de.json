@@ -33,7 +33,8 @@
     "upNext": "Als Nächstes",
     "noTrackPlaying": "Kein Titel wird abgespielt",
     "emptyQueue": "Warteschlange ist leer",
-    "tracksInQueue": "{{count}} Titel in der Warteschlange"
+    "tracksInQueue": "{{count}} Titel in der Warteschlange",
+    "resize": "Seitenleiste anpassen"
   },
   "playback": {
     "play": "Abspielen",
@@ -95,6 +96,8 @@
     "themeOcean": "Ozean",
     "themeAuto": "Automatisch (Gerät folgen)",
     "language": "Sprache",
+    "hideWindowControls": "Fenstersteuerelemente automatisch ausblenden",
+    "hideWindowControlsDescription": "Fenstersteuerelemente (Minimieren, Maximieren, Schließen) beim Scrollen automatisch ausblenden. Die Steuerelemente werden beim Hochscrollen oder beim Navigieren zu einer neuen Seite wieder angezeigt.",
     "showShortcuts": "Tastenkombinationen anzeigen",
     "showShortcutsDescription": "Tastenkombinationen in Tooltips und UI-Elementen anzeigen. Zum Beispiel:",
     "audio": {

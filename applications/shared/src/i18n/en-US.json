@@ -44,7 +44,8 @@
     "upNext": "Up Next",
     "noTrackPlaying": "No track playing",
     "emptyQueue": "Queue is empty",
-    "tracksInQueue": "{{count}} tracks in queue"
+    "tracksInQueue": "{{count}} tracks in queue",
+    "resize": "Resize sidebar"
   },
   "playback": {
     "play": "Play",
@@ -113,6 +114,8 @@
     "themeOcean": "Ocean",
     "themeAuto": "Auto (Match Device)",
     "language": "Language",
+    "hideWindowControls": "Auto-hide window controls",
+    "hideWindowControlsDescription": "Automatically hide window controls (minimize, maximize, close) when scrolling. Controls reappear when scrolling up or navigating to a new page.",
     "showShortcuts": "Show keyboard shortcuts",
     "showShortcutsDescription": "Display keyboard shortcuts in tooltips and UI elements. For example:",
     "homePage": "Home Page",

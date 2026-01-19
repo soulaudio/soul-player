@@ -3,6 +3,8 @@
 //! This module provides an `AudioTestContainer` that creates an isolated Linux
 //! environment with `PulseAudio` and virtual audio devices for comprehensive
 //! audio testing without requiring physical hardware.
+
+#![allow(clippy::unused_async)]
 //!
 //! # Features
 //!

@@ -1781,11 +1781,8 @@ fn test_no_degradation_over_time() {
             );
 
             // Record baseline from first interval
-            if baseline_mean.is_none() {
-                baseline_mean = Some(mean);
-            } else {
+            if let Some(baseline) = baseline_mean {
                 // Check for degradation (> 50% slower than baseline)
-                let baseline = baseline_mean.unwrap();
                 let degradation = mean.as_nanos() as f64 / baseline.as_nanos() as f64;
                 if degradation > 1.5 {
                     println!(
@@ -1794,6 +1791,8 @@ fn test_no_degradation_over_time() {
                         i + 1
                     );
                 }
+            } else {
+                baseline_mean = Some(mean);
             }
 
             interval_stats = TimingStats::new();
