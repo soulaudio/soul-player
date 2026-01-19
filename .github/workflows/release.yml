@@ -720,6 +720,7 @@ jobs:
     outputs:
       release-id: ${{ steps.create-release.outputs.id }}
       upload-url: ${{ steps.create-release.outputs.upload_url }}
+      tag: ${{ steps.gen-tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
