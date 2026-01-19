@@ -536,14 +536,10 @@ jobs:
           # Add Flathub repository
           sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-          # Install GNOME runtime and SDK (version 46 has newer Rust toolchain)
-          sudo flatpak install -y flathub org.gnome.Platform//46 org.gnome.Sdk//46
-
-          # Install SDK extensions for Rust and Node.js (24.08 is for GNOME 46)
-          sudo flatpak install -y flathub org.freedesktop.Sdk.Extension.rust-stable//24.08 || true
-          sudo flatpak install -y flathub org.freedesktop.Sdk.Extension.node20//24.08 || true
-
+          # Don't pre-install runtime - flatpak-builder will automatically download it
+          # This avoids permission issues and follows best practices
           echo "✅ Flatpak build environment ready"
+          echo "Note: Runtime will be downloaded automatically by flatpak-builder"
 
       - name: Build Flatpak
         run: |
