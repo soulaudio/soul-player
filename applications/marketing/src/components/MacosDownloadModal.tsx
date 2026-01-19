@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { X, Download, Apple, Cpu } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { DOWNLOAD_CONFIGS, ALTERNATE_DOWNLOADS, fillVersionPattern } from '@/utils/downloads'
