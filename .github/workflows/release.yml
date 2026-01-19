@@ -151,6 +151,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'yarn'
 
       - name: Enable Corepack for Yarn
         run: corepack enable
@@ -257,8 +258,8 @@ jobs:
             target/${{ matrix.target }}/release/bundle/nsis/*.exe.sig
           retention-days: 30
 
-  build-linux:
-    name: Build Linux Packages
+  build-linux-tauri:
+    name: Build Linux Base (DEB + RPM)
     needs: [check-release-exists, check-ci-artifacts]
     if: needs.check-release-exists.outputs.should_continue == 'true'
     runs-on: ubuntu-latest
@@ -300,6 +301,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'yarn'
 
       - name: Enable Corepack for Yarn
         run: corepack enable
@@ -343,6 +345,52 @@ jobs:
           echo "✅ Frontend validation passed"
           echo "Found $HTML_FILES HTML files and $JS_FILES JS files"
 
+      - name: Upload binary for AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/soul-player
+          retention-days: 1
+
+      - name: Upload DEB + RPM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-tauri-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/deb/*.deb.sig
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm.sig
+          retention-days: 30
+
+  build-linux-appimage:
+    name: Build Linux AppImage
+    needs: [check-release-exists, build-linux-tauri]
+    if: needs.check-release-exists.outputs.should_continue == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha || github.ref }}
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binary-${{ matrix.target }}
+          path: target/release/
+
+      - name: Make binary executable
+        run: chmod +x target/release/soul-player
+
+      - name: Cache linuxdeploy
+        uses: actions/cache@v4
+        with:
+          path: linuxdeploy-x86_64.AppImage
+          key: linuxdeploy-continuous
+
       - name: Build AppImage
         run: |
           echo "Building AppImage..."
@@ -350,12 +398,7 @@ jobs:
           # Get version from release config
           VERSION=$(jq -r '.version' .github/release-config.json)
 
-          # Copy binary to expected location for AppImage script
-          # Tauri builds to target/${{ matrix.target }}/release but AppImage script expects target/release
-          mkdir -p target/release
-          cp target/${{ matrix.target }}/release/soul-player target/release/soul-player
-          echo "✅ Binary copied to target/release/"
-
+          # Binary is already in target/release/ from artifact download
           # Install linuxdeploy if needed
           if [ ! -f "linuxdeploy-x86_64.AppImage" ]; then
             wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
@@ -367,6 +410,33 @@ jobs:
           ./.appimage/build-appimage.sh "$VERSION"
 
           echo "✅ AppImage created"
+
+      - name: Upload AppImage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage-${{ matrix.target }}
+          path: |
+            soul-player_*.AppImage
+            soul-player_*.AppImage.sha256
+          retention-days: 30
+
+  build-linux-flatpak:
+    name: Build Linux Flatpak
+    needs: [check-release-exists]
+    if: needs.check-release-exists.outputs.should_continue == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha || github.ref }}
+
+      # Free up disk space for Flatpak build
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          df -h
 
       - name: Install Flatpak build dependencies
         run: |
@@ -400,17 +470,11 @@ jobs:
 
           echo "✅ Flatpak created"
 
-      - name: Upload artifacts
+      - name: Upload Flatpak artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ matrix.target }}
+          name: linux-flatpak
           path: |
-            target/${{ matrix.target }}/release/bundle/deb/*.deb
-            target/${{ matrix.target }}/release/bundle/deb/*.deb.sig
-            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
-            target/${{ matrix.target }}/release/bundle/rpm/*.rpm.sig
-            soul-player_*.AppImage
-            soul-player_*.AppImage.sha256
             io.github.soulaudio.SoulPlayer_*.flatpak
             io.github.soulaudio.SoulPlayer_*.flatpak.sha256
           retention-days: 30
@@ -443,6 +507,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'yarn'
 
       - name: Enable Corepack for Yarn
         run: corepack enable
@@ -610,7 +675,7 @@ jobs:
 
   create-draft-release:
     name: Create Draft Release
-    needs: [check-release-exists, build-windows, build-linux, build-macos]
+    needs: [check-release-exists, build-windows, build-linux-tauri, build-linux-appimage, build-linux-flatpak, build-macos]
     if: needs.check-release-exists.outputs.should_continue == 'true'
     runs-on: ubuntu-latest
     permissions:
