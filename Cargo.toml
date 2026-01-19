@@ -31,7 +31,7 @@ members = [
 version = "0.1.1"
 edition = "2021"
 authors = ["Soul Player Contributors"]
-license = "AGPL-3.0"
+license = "AGPL-3.0-only"
 repository = "https://github.com/yourusername/soul-player"
 rust-version = "1.75"
 
