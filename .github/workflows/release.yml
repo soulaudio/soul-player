@@ -350,6 +350,12 @@ jobs:
           # Get version from release config
           VERSION=$(jq -r '.version' .github/release-config.json)
 
+          # Copy binary to expected location for AppImage script
+          # Tauri builds to target/${{ matrix.target }}/release but AppImage script expects target/release
+          mkdir -p target/release
+          cp target/${{ matrix.target }}/release/soul-player target/release/soul-player
+          echo "✅ Binary copied to target/release/"
+
           # Install linuxdeploy if needed
           if [ ! -f "linuxdeploy-x86_64.AppImage" ]; then
             wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
