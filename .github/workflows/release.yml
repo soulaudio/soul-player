@@ -30,11 +30,42 @@ env:
 
 jobs:
   # ============================================================================
-  # Stage 0: Try to Download CI Artifacts (if triggered by CI)
+  # Stage 0a: Check if Release Already Exists
+  # ============================================================================
+
+  check-release-exists:
+    name: Check if Release Exists
+    runs-on: ubuntu-latest
+    outputs:
+      should_continue: ${{ steps.check-release.outputs.should_continue }}
+    steps:
+      - name: Check if release already exists for this tag
+        id: check-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+
+          # Check if release exists
+          if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "Release already exists for tag $TAG"
+            echo "Stopping workflow to avoid duplicate work"
+            echo "should_continue=false" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "No existing release found for tag $TAG"
+            echo "Proceeding with release creation"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          fi
+
+  # ============================================================================
+  # Stage 0b: Try to Download CI Artifacts (if triggered by CI)
   # ============================================================================
 
   check-ci-artifacts:
     name: Check CI Artifacts
+    needs: check-release-exists
+    if: needs.check-release-exists.outputs.should_continue == 'true'
     runs-on: ubuntu-latest
     outputs:
       has_artifacts: ${{ steps.check.outputs.has_artifacts }}
@@ -56,7 +87,8 @@ jobs:
 
   build-windows:
     name: Build Windows Installers
-    needs: check-ci-artifacts
+    needs: [check-release-exists, check-ci-artifacts]
+    if: needs.check-release-exists.outputs.should_continue == 'true'
     runs-on: windows-latest
     strategy:
       matrix:
@@ -192,7 +224,8 @@ jobs:
 
   build-linux:
     name: Build Linux Packages
-    needs: check-ci-artifacts
+    needs: [check-release-exists, check-ci-artifacts]
+    if: needs.check-release-exists.outputs.should_continue == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -288,7 +321,8 @@ jobs:
 
   build-macos:
     name: Build macOS Packages
-    needs: check-ci-artifacts
+    needs: [check-release-exists, check-ci-artifacts]
+    if: needs.check-release-exists.outputs.should_continue == 'true'
     runs-on: macos-latest
     strategy:
       matrix:
@@ -432,7 +466,8 @@ jobs:
 
   create-draft-release:
     name: Create Draft Release
-    needs: [build-windows, build-linux, build-macos]
+    needs: [check-release-exists, build-windows, build-linux, build-macos]
+    if: needs.check-release-exists.outputs.should_continue == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
