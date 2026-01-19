@@ -4,7 +4,7 @@
   "artifacts": {
     "windows": {
       "nsis": {
-        "name": "soul_player_{version}_x64-setup.exe",
+        "name": "Soul.Player_{version}_x64-setup.exe",
         "artifactName": "windows-x86_64-pc-windows-msvc",
         "path": "nsis",
         "displayName": "Windows Installer",
@@ -35,7 +35,7 @@
         "description": "Sandboxed universal package. Install: flatpak install <file>"
       },
       "deb": {
-        "name": "soul_player_{version}_amd64.deb",
+        "name": "Soul.Player_{version}_amd64.deb",
         "artifactName": "linux-tauri-x86_64-unknown-linux-gnu",
         "path": "deb",
         "displayName": "Debian/Ubuntu (.deb)",
@@ -45,7 +45,7 @@
         "description": "For Debian, Ubuntu, Linux Mint, Pop!_OS"
       },
       "rpm": {
-        "name": "soul_player-{version}-1.x86_64.rpm",
+        "name": "Soul.Player-{version}-1.x86_64.rpm",
         "artifactName": "linux-tauri-x86_64-unknown-linux-gnu",
         "path": "rpm",
         "displayName": "Fedora/RHEL (.rpm)",
@@ -69,7 +69,7 @@
     },
     "macos": {
       "dmg-arm": {
-        "name": "soul_player_{version}_aarch64.dmg",
+        "name": "Soul.Player_{version}_aarch64.dmg",
         "artifactName": "macos-aarch64-apple-darwin",
         "path": "dmg",
         "displayName": "macOS Disk Image (Apple Silicon)",
@@ -78,7 +78,7 @@
         "recommended": true
       },
       "dmg-intel": {
-        "name": "soul_player_{version}_x64.dmg",
+        "name": "Soul.Player_{version}_x64.dmg",
         "artifactName": "macos-x86_64-apple-darwin",
         "path": "dmg",
         "displayName": "macOS Disk Image (Intel)",
