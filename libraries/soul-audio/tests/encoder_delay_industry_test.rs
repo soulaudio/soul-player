@@ -446,7 +446,7 @@ fn test_gapless_album_playback_simulation() {
 
     let sample_rate = 44100;
     let encoder_delay = 576; // LAME default
-    let _decoder_delay = 529; // MP3 decoder delay (unused in simulation)
+    // Note: MP3 decoder delay (529 samples) is unused in this simulation
 
     struct Track {
         // Raw decoded samples (includes padding)
@@ -472,9 +472,7 @@ fn test_gapless_album_playback_simulation() {
         let mut samples = Vec::with_capacity(total_samples * 2); // Stereo
 
         // Pre-padding (encoder delay + decoder delay noise, simulated as zeros)
-        for _ in 0..(encoder_delay as usize * 2) {
-            samples.push(0.0);
-        }
+        samples.resize(encoder_delay as usize * 2, 0.0);
 
         // Valid audio content
         let phase = start_phase;
@@ -491,9 +489,8 @@ fn test_gapless_album_playback_simulation() {
             % (2.0 * PI);
 
         // End padding (simulated as trailing zeros)
-        for _ in 0..(end_padding as usize * 2) {
-            samples.push(0.0);
-        }
+        let current_len = samples.len();
+        samples.resize(current_len + end_padding as usize * 2, 0.0);
 
         let track = Track {
             decoded_samples: samples,
@@ -986,7 +983,7 @@ fn test_corrupted_lame_header_ff() {
 /// Test frame boundary alignment
 #[test]
 fn test_frame_boundary_alignment() {
-    let _sample_rate = 44100; // Standard CD sample rate
+    // Sample rate: 44100 (Standard CD sample rate)
     let mp3_frame_samples = 1152;
 
     // Original samples that don't align to frame boundary
@@ -1019,7 +1016,7 @@ fn test_frame_boundary_alignment() {
 #[test]
 fn test_cd_sector_alignment() {
     let cd_sector_samples = 588u64;
-    let _sample_rate = 44100; // CD standard sample rate
+    // Sample rate: 44100 (CD standard sample rate)
 
     // CD audio is always aligned to sector boundaries
     let cd_track_sectors = 1000;

@@ -8,6 +8,12 @@
 //! ### Academic Papers
 //! - Lipshitz, S.P. & Vanderkooy, J. (1987). "Dithering in Digital Audio"
 //!   Journal of the Audio Engineering Society, Vol. 35, pp. 966-975
+
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::map_clone)]
+#![allow(clippy::unnecessary_cast)]
+#![allow(clippy::absurd_extreme_comparisons)]
+#![allow(clippy::cloned_instead_of_copied)]
 //!   https://www.semanticscholar.org/paper/Dither-in-Digital-Audio-Vanderkooy-Lipshitz/79e0eebaa3ebe93a47721abb70ab6f43c979ad83
 //!
 //! - Lipshitz, S.P., Wannamaker, R.A. & Vanderkooy, J. "Quantization and Dither:
@@ -1822,9 +1828,7 @@ mod edge_case_tests {
         for &val in &test_values {
             let sample = dither.dither_to_i16(val);
             println!("  Input {:.4e}: output {}", val, sample);
-
-            // Should be clipped to valid range
-            assert!(sample >= i16::MIN && sample <= i16::MAX);
+            // dither_to_i16 returns i16, so output is always in valid range by type
 
             // For large positive values, should be near max
             if val > 1.0 {
@@ -1865,9 +1869,7 @@ mod edge_case_tests {
         for (val, name) in &test_values {
             let sample = dither.dither_to_i16(*val);
             println!("  {}: {} -> {}", name, val, sample);
-
-            // Should produce valid output
-            assert!(sample >= i16::MIN && sample <= i16::MAX);
+            // dither_to_i16 returns i16, so output is always valid by type
         }
 
         // NaN and infinity should be handled gracefully

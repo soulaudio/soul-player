@@ -401,7 +401,6 @@ fn test_all_effects_rapid_parameter_changes() {
     let mut buffer = generate_pink_noise(sample_rate, 2.0, amplitude);
 
     let chunk_size = 128;
-    let mut i = 0;
 
     // Create all effects
     let mut eq = ParametricEq::new();
@@ -411,7 +410,7 @@ fn test_all_effects_rapid_parameter_changes() {
     let mut stereo = StereoEnhancer::new();
     let mut crossfeed = Crossfeed::new();
 
-    for chunk in buffer.chunks_mut(chunk_size) {
+    for (i, chunk) in buffer.chunks_mut(chunk_size).enumerate() {
         // Vary parameters on all effects
         let phase = i as f32 * 0.05;
 
@@ -438,8 +437,6 @@ fn test_all_effects_rapid_parameter_changes() {
         // Crossfeed
         crossfeed.set_level_db(-6.0 + phase.cos() * 2.0);
         crossfeed.process(chunk, sample_rate);
-
-        i += 1;
     }
 
     // Check for RMS discontinuities

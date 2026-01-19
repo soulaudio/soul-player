@@ -1846,7 +1846,7 @@ fn test_memory_stability_sustained() {
 // ============================================================================
 
 #[test]
-#[ignore]
+#[ignore = "long-running test: 1-hour sustained load test"]
 fn test_sustained_processing_1_hour() {
     // Full 1-hour sustained load test
     // Run with: cargo test --package soul-audio test_sustained_processing_1_hour -- --ignored

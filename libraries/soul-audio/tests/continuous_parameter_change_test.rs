@@ -94,7 +94,6 @@ fn calculate_distortion(buffer: &[f32], fundamental_freq: f32, sample_rate: u32)
 
     // Generate ideal sine wave at same frequency and phase-match
     let mut ideal = Vec::with_capacity(left.len());
-    let _period_samples = sample_rate as f32 / fundamental_freq;
 
     // Find best phase alignment by checking first zero crossing
     let mut best_phase = 0.0_f32;

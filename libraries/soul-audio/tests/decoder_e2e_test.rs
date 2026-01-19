@@ -1224,7 +1224,7 @@ fn test_zero_sample_rate() {
 
     // Both panic and error are acceptable for invalid sample rate
     match result {
-        Ok(Ok(_)) | Ok(Err(_)) | Err(_) => {
+        Ok(Ok(_) | Err(_)) | Err(_) => {
             // All outcomes acceptable: success, error, or panic
         }
     }

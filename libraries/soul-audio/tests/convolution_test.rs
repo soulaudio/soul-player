@@ -137,7 +137,7 @@ fn test_fft_convolution_quality() {
     let ir: Vec<f32> = (0..ir_length * 2)
         .map(|i| {
             let frame = i / 2;
-            (-(frame as f32) / 20.0).exp() * if i % 2 == 0 { 1.0 } else { 1.0 }
+            (-(frame as f32) / 20.0).exp()
         })
         .collect();
 

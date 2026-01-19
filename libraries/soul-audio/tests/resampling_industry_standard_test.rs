@@ -976,8 +976,7 @@ fn test_sample_rate_mode_verification() {
         for &track_rate in &track_rates {
             let (should_resample, target_rate) = match mode {
                 SampleRateMode::MatchDevice => (track_rate != device_rate, device_rate),
-                SampleRateMode::MatchTrack => (false, track_rate),
-                SampleRateMode::Passthrough => (false, track_rate),
+                SampleRateMode::MatchTrack | SampleRateMode::Passthrough => (false, track_rate),
                 SampleRateMode::Fixed(fixed_rate) => (track_rate != fixed_rate, fixed_rate),
             };
 

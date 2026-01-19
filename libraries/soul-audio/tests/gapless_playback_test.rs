@@ -8,6 +8,10 @@
 //! - Sample rate transitions: 44.1kHz->48kHz, 96kHz->44.1kHz
 //! - Crossfade accuracy: Fade curve correctness at boundaries
 //! - Discontinuity detection: No clicks/pops at transition points
+
+#![allow(clippy::no_effect_underscore_binding)]
+#![allow(clippy::trivially_copy_pass_by_ref)]
+#![allow(clippy::assigning_clones)]
 //! - Album playback simulation: Multiple consecutive tracks
 //! - Queue manipulation: Add/remove/reorder during playback
 //! - Pre-buffering: Next track ready before current ends
