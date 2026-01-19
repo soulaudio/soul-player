@@ -46,9 +46,9 @@ modules:
       - cp cargo-config.toml .cargo/config.toml
 
       # Install Node dependencies
-      # Use corepack to activate yarn@4 (required by package.json)
-      # This doesn't modify system directories, just sets up yarn in the build environment
-      - corepack prepare yarn@4.0.2 --activate
+      # Temporarily remove packageManager field to allow yarn@1 (from SDK) to work
+      # yarn@1 fully supports yarn workspaces with workspace:* protocol
+      - node -e "const pkg=require('./package.json'); delete pkg.packageManager; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
       - yarn install --frozen-lockfile
 
       # Build frontend
