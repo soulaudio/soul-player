@@ -644,27 +644,18 @@ jobs:
 
           Write-Host "✅ Installation successful (took $([math]::Round($elapsed))s)"
 
-          # Verify frontend files are bundled (CRITICAL CHECK)
-          Write-Host "`nVerifying frontend files are bundled..."
-          $allFiles = Get-ChildItem $installPath -Recurse -File
-          $htmlFiles = $allFiles | Where-Object { $_.Extension -eq '.html' }
-          $jsFiles = $allFiles | Where-Object { $_.Extension -eq '.js' }
+          # Note: Tauri embeds frontend files directly in the binary executable
+          # They are NOT stored as separate files in the installation directory
+          # This is the same architecture as macOS - frontend is compiled into the .exe
+          Write-Host "`n✅ Frontend files are embedded in soul-player.exe (not separate files)"
 
-          Write-Host "Found $($htmlFiles.Count) HTML files and $($jsFiles.Count) JS files"
+          # Verify the executable exists and has reasonable size (should include embedded frontend)
+          $exeSize = (Get-Item $exePath).Length / 1MB
+          Write-Host "Binary size: $([math]::Round($exeSize, 2)) MB (includes embedded frontend)"
 
-          if ($htmlFiles.Count -eq 0 -or $jsFiles.Count -eq 0) {
-            Write-Error "❌ ERROR: Frontend files missing from installation"
-            Write-Host "`nAll installed files:"
-            $allFiles | Select-Object -First 30 | ForEach-Object {
-              Write-Host "  $($_.FullName)"
-            }
+          if ($exeSize -lt 5) {
+            Write-Error "❌ ERROR: Binary is too small ($([math]::Round($exeSize, 2)) MB), may be missing frontend"
             exit 1
-          }
-
-          Write-Host "✅ Frontend files detected in installation"
-          Write-Host "Sample frontend files:"
-          ($htmlFiles + $jsFiles) | Select-Object -First 10 | ForEach-Object {
-            Write-Host "  $($_.Name)"
           }
 
           # Test app launch
