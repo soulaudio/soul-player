@@ -12,26 +12,31 @@ interface PlatformInfo {
   downloadUrl: string
 }
 
+// GitHub release URLs - update version when creating new releases
+const LATEST_VERSION = '0.0.1'
+const GITHUB_REPO = 'soulaudio/soul-player'
+const RELEASE_BASE = `https://github.com/${GITHUB_REPO}/releases/download/v${LATEST_VERSION}`
+
 const PLATFORMS: Record<Platform, PlatformInfo> = {
   windows: {
     name: 'Windows',
     Icon: Monitor,
-    downloadUrl: '#download-windows'
+    downloadUrl: `${RELEASE_BASE}/Soul Player_${LATEST_VERSION}_x64-setup.exe`
   },
   macos: {
     name: 'macOS',
     Icon: Apple,
-    downloadUrl: '#download-macos'
+    downloadUrl: `${RELEASE_BASE}/Soul Player_${LATEST_VERSION}_aarch64.dmg` // Default to Apple Silicon
   },
   linux: {
     name: 'Linux',
     Icon: Boxes,
-    downloadUrl: '#download-linux'
+    downloadUrl: `${RELEASE_BASE}/soul-player_${LATEST_VERSION}_amd64.deb`
   },
   unknown: {
     name: 'Download',
     Icon: Download,
-    downloadUrl: '#download'
+    downloadUrl: `https://github.com/${GITHUB_REPO}/releases/latest`
   }
 }
 
@@ -129,18 +134,6 @@ export function DownloadButton() {
                   </a>
                 )
               })}
-            </div>
-
-            <div data-dropdown-divider className="p-1.5 border-t border-border">
-              <a
-                href="#download-server"
-                onClick={() => setShowDropdown(false)}
-                data-dropdown-item
-                className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-muted text-foreground"
-              >
-                <Boxes className="w-4 h-4 transition-colors duration-200 text-muted-foreground group-hover:text-primary" />
-                <span className="font-medium">Server (Docker)</span>
-              </a>
             </div>
           </div>
         )}
