@@ -110,7 +110,10 @@ async fn test_import_skips_duplicates() {
     let importer = MusicImporter::new(pool.clone(), config);
 
     // First import
-    let (mut progress_rx, handle) = importer.import_files(&[audio_file.clone()]).await.unwrap();
+    let (mut progress_rx, handle) = importer
+        .import_files(std::slice::from_ref(&audio_file))
+        .await
+        .unwrap();
     while (progress_rx.recv().await).is_some() {}
     let summary1 = handle.await.unwrap().unwrap();
 

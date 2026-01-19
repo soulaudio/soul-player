@@ -3,59 +3,48 @@
 import { useState, useEffect, useRef } from 'react'
 import { Download, ChevronDown, Monitor, Apple, Boxes } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-
-type Platform = 'windows' | 'macos' | 'linux' | 'unknown'
+import { useGitHubRelease } from '@/hooks/useGitHubRelease'
+import {
+  detectPlatform,
+  DOWNLOAD_CONFIGS,
+  ALTERNATE_DOWNLOADS,
+  fillVersionPattern,
+  type Platform
+} from '@/utils/downloads'
+import { getDownloadUrl, getReleasesPageUrl } from '@/utils/github'
+import { LinuxDownloadModal } from './LinuxDownloadModal'
 
 interface PlatformInfo {
   name: string
   Icon: LucideIcon
-  downloadUrl: string
 }
 
-// GitHub release URLs - automatically uses latest release
-const GITHUB_REPO = 'soulaudio/soul-player'
-const RELEASE_LATEST = `https://github.com/${GITHUB_REPO}/releases/latest/download`
-
-const PLATFORMS: Record<Platform, PlatformInfo> = {
+const PLATFORM_INFO: Record<Platform, PlatformInfo> = {
   windows: {
     name: 'Windows',
     Icon: Monitor,
-    downloadUrl: `${RELEASE_LATEST}/soul_player_0.1.0_x64-setup.exe`
   },
   macos: {
     name: 'macOS',
     Icon: Apple,
-    downloadUrl: `${RELEASE_LATEST}/soul_player_0.1.0_aarch64.dmg` // Default to Apple Silicon
   },
   linux: {
     name: 'Linux',
     Icon: Boxes,
-    downloadUrl: `${RELEASE_LATEST}/soul_player_0.1.0_amd64.deb`
   },
   unknown: {
     name: 'Download',
     Icon: Download,
-    downloadUrl: `https://github.com/${GITHUB_REPO}/releases/latest`
   }
-}
-
-function detectPlatform(): Platform {
-  if (typeof window === 'undefined') return 'unknown'
-
-  const ua = window.navigator.userAgent.toLowerCase()
-
-  if (ua.includes('win')) return 'windows'
-  if (ua.includes('mac')) return 'macos'
-  if (ua.includes('linux')) return 'linux'
-
-  return 'unknown'
 }
 
 export function DownloadButton() {
   const [platform, setPlatform] = useState<Platform>('unknown')
   const [showDropdown, setShowDropdown] = useState(false)
+  const [showLinuxModal, setShowLinuxModal] = useState(false)
   const [mounted, setMounted] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const { version, isLoading } = useGitHubRelease()
 
   useEffect(() => {
     setPlatform(detectPlatform())
@@ -85,58 +74,126 @@ export function DownloadButton() {
     }
   }, [showDropdown])
 
-  const currentPlatform = PLATFORMS[platform]
-  const otherPlatforms = Object.entries(PLATFORMS).filter(([key]) => key !== platform && key !== 'unknown')
+  const currentVersion = version || '0.1.1' // Fallback version
+  const currentPlatform = PLATFORM_INFO[platform]
+  const downloadConfig = platform !== 'unknown' ? DOWNLOAD_CONFIGS[platform] : null
+
+  // Get download URL for current platform
+  const getDownloadUrlForPlatform = (): string => {
+    if (!downloadConfig) {
+      return getReleasesPageUrl()
+    }
+    const filename = fillVersionPattern(downloadConfig.filePattern, currentVersion)
+    return getDownloadUrl(filename)
+  }
+
+  const handlePrimaryDownload = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (platform === 'linux') {
+      e.preventDefault()
+      setShowLinuxModal(true)
+    }
+  }
+
+  // Get alternate platforms for dropdown
+  const alternatePlatforms = Object.entries(PLATFORM_INFO)
+    .filter(([key]) => key !== platform && key !== 'unknown')
+    .map(([key, info]) => ({ key: key as Platform, ...info }))
 
   return (
-    <div className="relative inline-block">
-      <a
-        href={currentPlatform.downloadUrl}
-        data-download-button
-        className="group inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 bg-primary text-primary-foreground rounded-full font-semibold transition-all duration-700 text-sm sm:text-base md:text-lg shadow-lg hover:scale-105"
-      >
-        <Download className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-y-0.5 transition-transform" />
-        <span className="whitespace-nowrap">
-          Download for {currentPlatform.name}
-        </span>
-      </a>
-
-      <div className="mt-2 text-center relative" ref={dropdownRef}>
-        <button
-          onClick={() => setShowDropdown(!showDropdown)}
-          data-other-platforms
-          className="text-sm transition-colors duration-700 inline-flex items-center gap-1 hover:opacity-80 text-muted-foreground"
+    <>
+      <div className="relative inline-block">
+        <a
+          href={getDownloadUrlForPlatform()}
+          onClick={handlePrimaryDownload}
+          data-download-button
+          className="group inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 bg-primary text-primary-foreground rounded-full font-semibold transition-all duration-700 text-sm sm:text-base md:text-lg shadow-lg hover:scale-105"
         >
-          Other platforms
-          <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
-        </button>
+          <Download className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-y-0.5 transition-transform" />
+          <span className="whitespace-nowrap">
+            {isLoading ? 'Loading...' : `Download for ${currentPlatform.name}`}
+          </span>
+        </a>
 
-        {/* Dropdown menu - positioned absolutely below the button */}
-        {showDropdown && mounted && (
-          <div
-            data-platforms-dropdown
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-2 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden min-w-[220px] z-[9999] transition-colors duration-700 animate-in fade-in slide-in-from-top-2 bg-card border border-border"
+        <div className="mt-2 text-center relative" ref={dropdownRef}>
+          <button
+            onClick={() => setShowDropdown(!showDropdown)}
+            data-other-platforms
+            className="text-sm transition-colors duration-700 inline-flex items-center gap-1 hover:opacity-80 text-muted-foreground"
           >
-            <div className="p-1.5">
-              {otherPlatforms.map(([key, info]) => {
-                const PlatformIcon = info.Icon
-                return (
-                  <a
-                    key={key}
-                    href={info.downloadUrl}
-                    onClick={() => setShowDropdown(false)}
-                    data-dropdown-item
-                    className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-muted text-foreground"
-                  >
-                    <PlatformIcon className="w-4 h-4 transition-colors duration-200 text-muted-foreground group-hover:text-primary" />
-                    <span className="font-medium">{info.name}</span>
-                  </a>
-                )
-              })}
+            Other platforms
+            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Dropdown menu */}
+          {showDropdown && mounted && (
+            <div
+              data-platforms-dropdown
+              className="absolute top-full left-1/2 -translate-x-1/2 mt-2 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden min-w-[220px] z-[9999] transition-colors duration-700 animate-in fade-in slide-in-from-top-2 bg-card border border-border"
+            >
+              <div className="p-1.5">
+                {alternatePlatforms.map(({ key, name, Icon }) => {
+                  const config = DOWNLOAD_CONFIGS[key]
+                  const url = config
+                    ? getDownloadUrl(fillVersionPattern(config.filePattern, currentVersion))
+                    : getReleasesPageUrl()
+
+                  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+                    if (key === 'linux') {
+                      e.preventDefault()
+                      setShowDropdown(false)
+                      setShowLinuxModal(true)
+                    } else {
+                      setShowDropdown(false)
+                    }
+                  }
+
+                  return (
+                    <a
+                      key={key}
+                      href={url}
+                      onClick={handleClick}
+                      data-dropdown-item
+                      className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-muted text-foreground"
+                    >
+                      <Icon className="w-4 h-4 transition-colors duration-200 text-muted-foreground group-hover:text-primary" />
+                      <span className="font-medium">{name}</span>
+                    </a>
+                  )
+                })}
+
+                {/* Alternate downloads (e.g., macOS Intel) */}
+                {ALTERNATE_DOWNLOADS
+                  .filter(alt => alt.platform !== platform)
+                  .map((alt) => {
+                    const url = getDownloadUrl(fillVersionPattern(alt.filePattern, currentVersion))
+                    return (
+                      <a
+                        key={alt.label}
+                        href={url}
+                        onClick={() => setShowDropdown(false)}
+                        data-dropdown-item
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-muted text-foreground"
+                      >
+                        <div className="w-4 h-4 rounded bg-muted-foreground/20" />
+                        <div className="flex-1">
+                          <div className="font-medium text-xs">{alt.label}</div>
+                          <div className="text-xs text-muted-foreground">{alt.description}</div>
+                        </div>
+                      </a>
+                    )
+                  })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Linux Download Modal */}
+      <LinuxDownloadModal
+        isOpen={showLinuxModal}
+        onClose={() => setShowLinuxModal(false)}
+        version={currentVersion}
+      />
+    </>
   )
 }

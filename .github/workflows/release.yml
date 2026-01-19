@@ -343,6 +343,57 @@ jobs:
           echo "✅ Frontend validation passed"
           echo "Found $HTML_FILES HTML files and $JS_FILES JS files"
 
+      - name: Build AppImage
+        run: |
+          echo "Building AppImage..."
+
+          # Get version from release config
+          VERSION=$(jq -r '.version' .github/release-config.json)
+
+          # Install linuxdeploy if needed
+          if [ ! -f "linuxdeploy-x86_64.AppImage" ]; then
+            wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+            chmod +x linuxdeploy-x86_64.AppImage
+          fi
+
+          # Build AppImage using our script
+          chmod +x .appimage/build-appimage.sh
+          ./.appimage/build-appimage.sh "$VERSION"
+
+          echo "✅ AppImage created"
+
+      - name: Install Flatpak build dependencies
+        run: |
+          echo "Installing Flatpak build tools..."
+
+          # Install flatpak and flatpak-builder
+          sudo apt-get install -y flatpak flatpak-builder
+
+          # Add Flathub repository
+          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+          # Install GNOME runtime and SDK
+          sudo flatpak install -y flathub org.gnome.Platform//45 org.gnome.Sdk//45
+
+          # Install SDK extensions for Rust and Node.js
+          sudo flatpak install -y flathub org.freedesktop.Sdk.Extension.rust-stable//23.08 || true
+          sudo flatpak install -y flathub org.freedesktop.Sdk.Extension.node20//23.08 || true
+
+          echo "✅ Flatpak build environment ready"
+
+      - name: Build Flatpak
+        run: |
+          echo "Building Flatpak..."
+
+          # Get version from release config
+          VERSION=$(jq -r '.version' .github/release-config.json)
+
+          # Build Flatpak using our script
+          chmod +x .flatpak/build-flatpak.sh
+          echo "n" | ./.flatpak/build-flatpak.sh "$VERSION" || true
+
+          echo "✅ Flatpak created"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -352,6 +403,10 @@ jobs:
             target/${{ matrix.target }}/release/bundle/deb/*.deb.sig
             target/${{ matrix.target }}/release/bundle/rpm/*.rpm
             target/${{ matrix.target }}/release/bundle/rpm/*.rpm.sig
+            soul-player_*.AppImage
+            soul-player_*.AppImage.sha256
+            io.github.soulaudio.SoulPlayer_*.flatpak
+            io.github.soulaudio.SoulPlayer_*.flatpak.sha256
           retention-days: 30
 
   build-macos:

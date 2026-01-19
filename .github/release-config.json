@@ -14,23 +14,57 @@
       }
     },
     "linux": {
+      "appimage": {
+        "name": "soul-player_{version}_x86_64.AppImage",
+        "artifactName": "linux-x86_64-unknown-linux-gnu",
+        "path": "",
+        "displayName": "AppImage (Universal)",
+        "platform": "Linux",
+        "arch": "x64",
+        "recommended": true,
+        "description": "Works on all Linux distributions. No installation required."
+      },
+      "flatpak": {
+        "name": "io.github.soulaudio.SoulPlayer_{version}_x86_64.flatpak",
+        "artifactName": "linux-x86_64-unknown-linux-gnu",
+        "path": "",
+        "displayName": "Flatpak",
+        "platform": "Linux",
+        "arch": "x64",
+        "recommended": false,
+        "description": "Sandboxed universal package. Install: flatpak install <file>"
+      },
       "deb": {
         "name": "soul_player_{version}_amd64.deb",
         "artifactName": "linux-x86_64-unknown-linux-gnu",
         "path": "deb",
-        "displayName": "Debian/Ubuntu Package",
+        "displayName": "Debian/Ubuntu (.deb)",
         "platform": "Linux",
         "arch": "x64",
-        "recommended": true
+        "recommended": false,
+        "description": "For Debian, Ubuntu, Linux Mint, Pop!_OS"
       },
       "rpm": {
         "name": "soul_player-{version}-1.x86_64.rpm",
         "artifactName": "linux-x86_64-unknown-linux-gnu",
         "path": "rpm",
-        "displayName": "Fedora/RHEL Package",
+        "displayName": "Fedora/RHEL (.rpm)",
         "platform": "Linux",
         "arch": "x64",
-        "recommended": false
+        "recommended": false,
+        "description": "For Fedora, RHEL, CentOS, openSUSE"
+      },
+      "aur": {
+        "name": "soul-player-bin",
+        "artifactName": "",
+        "path": "",
+        "displayName": "Arch Linux (AUR)",
+        "platform": "Linux",
+        "arch": "x64",
+        "recommended": false,
+        "description": "For Arch Linux: yay -S soul-player-bin",
+        "installCommand": "yay -S soul-player-bin",
+        "isAur": true
       }
     },
     "macos": {
