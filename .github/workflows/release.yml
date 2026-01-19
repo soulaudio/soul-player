@@ -628,7 +628,8 @@ jobs:
             exit 1
           }
 
-          $installPath = $uninstallReg.InstallLocation.TrimEnd('\')
+          # Remove quotes and trailing backslashes from registry path
+          $installPath = $uninstallReg.InstallLocation.Trim('"').TrimEnd('\')
           Write-Host "✅ Found installation at: $installPath"
           Write-Host "   Registry key: $($uninstallReg.PSPath)"
 
