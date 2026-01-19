@@ -1,0 +1,68 @@
+changelog:
+  exclude:
+    labels:
+      - dependencies
+      - chore
+      - internal
+      - skip-changelog
+    authors:
+      - dependabot
+      - dependabot[bot]
+
+  categories:
+    - title: Audio & Playback
+      labels:
+        - audio
+        - playback
+        - player
+
+    - title: Database & Storage
+      labels:
+        - database
+        - storage
+        - migration
+
+    - title: UI & User Experience
+      labels:
+        - ui
+        - ux
+        - frontend
+        - design
+
+    - title: New Features
+      labels:
+        - feature
+        - enhancement
+
+    - title: Bug Fixes
+      labels:
+        - bug
+        - fix
+        - bugfix
+
+    - title: Performance Improvements
+      labels:
+        - performance
+        - optimization
+
+    - title: Breaking Changes
+      labels:
+        - breaking-change
+        - breaking
+
+    - title: Documentation
+      labels:
+        - documentation
+        - docs
+
+    - title: Testing & CI/CD
+      labels:
+        - test
+        - testing
+        - ci
+        - cd
+        - github-actions
+
+    - title: Other Changes
+      labels:
+        - "*"

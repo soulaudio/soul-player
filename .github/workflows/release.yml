@@ -113,6 +113,9 @@ jobs:
           node copy-dist.cjs
 
       - name: Build NSIS installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: yarn build:desktop --target ${{ matrix.target }} --bundles nsis
 
       - name: Debug - Verify dist folder after build
@@ -182,7 +185,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          path: |
+            target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            target/${{ matrix.target }}/release/bundle/nsis/*.exe.sig
           retention-days: 30
 
   build-linux:
@@ -241,6 +246,9 @@ jobs:
           node copy-dist.cjs
 
       - name: Build packages (DEB + RPM)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: yarn build:desktop --target ${{ matrix.target }} --bundles deb rpm
         continue-on-error: false
 
@@ -273,7 +281,9 @@ jobs:
           name: linux-${{ matrix.target }}
           path: |
             target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/deb/*.deb.sig
             target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm.sig
           retention-days: 30
 
   build-macos:
@@ -317,6 +327,9 @@ jobs:
           node copy-dist.cjs
 
       - name: Build DMG
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           # Build DMG with Tauri (Rust binary only, frontend already built)
           yarn build:desktop --target ${{ matrix.target }} --bundles dmg
@@ -374,6 +387,9 @@ jobs:
           name: macos-${{ matrix.target }}
           path: |
             target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            target/${{ matrix.target }}/release/bundle/dmg/*.dmg.sig
+            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
+            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
             target/universal-apple-darwin/release/bundle/macos/*.app
           retention-days: 30
 
@@ -432,12 +448,13 @@ jobs:
         id: gen-tag
         run: |
           if [ -n "${{ inputs.version }}" ]; then
-            TAG="${{ inputs.version }}"
+            TAG="v${{ inputs.version }}"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${{ github.ref_name }}"
           else
-            # For workflow_dispatch without version, use timestamp
-            TAG="test-$(date +%Y%m%d-%H%M%S)"
+            # For workflow_dispatch without version, use version from config
+            VERSION=$(jq -r '.version' .github/release-config.json)
+            TAG="v${VERSION}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Using tag: $TAG"
@@ -447,43 +464,11 @@ jobs:
         with:
           path: artifacts
 
-      - name: Generate release notes
-        id: release-notes
+      - name: Prepare release info
+        id: release-info
         run: |
-          VERSION="${{ inputs.version || github.ref_name }}"
-          cat > release-notes.md << EOF
-          ## Soul Player Release $VERSION
-
-          ### 📦 Downloads
-
-          #### Desktop Applications
-          - **Windows**:
-            - \`.exe\` - Windows Installer (NSIS)
-          - **Linux**:
-            - \`.deb\` - Debian/Ubuntu package
-            - \`.rpm\` - Fedora/RHEL package
-          - **macOS**:
-            - \`.dmg\` - macOS disk image
-            - Universal binary (Intel + Apple Silicon)
-
-          #### Server
-          - **Docker**: \`soul-server:latest\`
-
-          ### 🚀 Installation
-
-          See [docs/LINUX_PACKAGING.md](https://github.com/yourusername/soul-player/blob/main/docs/LINUX_PACKAGING.md) for installation instructions.
-
-          ### 📝 Changelog
-
-          See [CHANGELOG.md](https://github.com/yourusername/soul-player/blob/main/CHANGELOG.md) for detailed changes.
-
-          ---
-
-          **Build Info**:
-          - Built with: Rust \`stable\`, release mode
-          - Optimizations: LTO enabled, codegen-units=1
-          - Tested on: Windows 11, Ubuntu 22.04, macOS 14+
-          EOF
+          VERSION=$(jq -r '.version' .github/release-config.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create draft release
         id: create-release
@@ -492,11 +477,59 @@ jobs:
           draft: true
           prerelease: false
           tag_name: ${{ steps.gen-tag.outputs.tag }}
-          name: Release ${{ steps.gen-tag.outputs.tag }}
-          body_path: release-notes.md
+          name: Soul Player ${{ steps.release-info.outputs.version }}
+          generate_release_notes: true
           files: |
             artifacts/**/*
           fail_on_unmatched_files: false
+
+      - name: Generate latest.json for Tauri updater
+        run: |
+          VERSION=$(jq -r '.version' .github/release-config.json)
+          REPO=$(jq -r '.repository' .github/release-config.json)
+          TAG="${{ steps.gen-tag.outputs.tag }}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Read signatures from .sig files
+          WINDOWS_SIG=$(cat artifacts/windows-x86_64-pc-windows-msvc/*.exe.sig | tr -d '\n')
+          LINUX_SIG=$(cat artifacts/linux-x86_64-unknown-linux-gnu/*.deb.sig | tr -d '\n')
+          MACOS_ARM_SIG=$(cat artifacts/macos-aarch64-apple-darwin/*.app.tar.gz.sig | tr -d '\n')
+          MACOS_INTEL_SIG=$(cat artifacts/macos-x86_64-apple-darwin/*.app.tar.gz.sig | tr -d '\n')
+
+          # Generate latest.json
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See release notes for details",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${WINDOWS_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul_player_${VERSION}_x64-setup.exe"
+              },
+              "linux-x86_64": {
+                "signature": "${LINUX_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul-player_${VERSION}_amd64.deb"
+              },
+              "darwin-aarch64": {
+                "signature": "${MACOS_ARM_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul_player_${VERSION}_aarch64.app.tar.gz"
+              },
+              "darwin-x86_64": {
+                "signature": "${MACOS_INTEL_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul_player_${VERSION}_x64.app.tar.gz"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+
+      - name: Upload latest.json to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ steps.gen-tag.outputs.tag }} latest.json --clobber
 
   # ============================================================================
   # Stage 3: Installation Tests (Critical Platforms Only)
@@ -1180,6 +1213,6 @@ jobs:
 
       - name: Notify success
         run: |
-          echo "🎉 Release ${{ inputs.version || github.ref_name }} published!"
-          echo "✅ All installation tests passed"
-          echo "📦 Artifacts available on GitHub Releases"
+          echo "Release ${{ inputs.version || github.ref_name }} published!"
+          echo "All installation tests passed"
+          echo "Artifacts available on GitHub Releases"

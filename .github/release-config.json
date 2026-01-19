@@ -4,7 +4,7 @@
   "artifacts": {
     "windows": {
       "nsis": {
-        "name": "Soul Player_{version}_x64-setup.exe",
+        "name": "soul_player_{version}_x64-setup.exe",
         "artifactName": "windows-x86_64-pc-windows-msvc",
         "path": "nsis",
         "displayName": "Windows Installer",
@@ -35,7 +35,7 @@
     },
     "macos": {
       "dmg-arm": {
-        "name": "Soul Player_{version}_aarch64.dmg",
+        "name": "soul_player_{version}_aarch64.dmg",
         "artifactName": "macos-aarch64-apple-darwin",
         "path": "dmg",
         "displayName": "macOS Disk Image (Apple Silicon)",
@@ -44,7 +44,7 @@
         "recommended": true
       },
       "dmg-intel": {
-        "name": "Soul Player_{version}_x64.dmg",
+        "name": "soul_player_{version}_x64.dmg",
         "artifactName": "macos-x86_64-apple-darwin",
         "path": "dmg",
         "displayName": "macOS Disk Image (Intel)",

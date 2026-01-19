@@ -48,6 +48,11 @@ coverage/
 !.env.example
 !.env.server
 
+# Tauri signing keys (NEVER commit private keys!)
+.tauri-keys/
+*.key
+*.pem
+
 # Databases (development, test, temp)
 # All .db files are ignored - use system temp or .tmp/ directories for test DBs
 *.db

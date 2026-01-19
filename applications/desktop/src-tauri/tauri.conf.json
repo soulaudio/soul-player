@@ -1,5 +1,5 @@
 {
-  "productName": "Soul Player",
+  "productName": "soul_player",
   "version": "0.0.1",
   "identifier": "soul-player",
   "mainBinaryName": "soul-player",
@@ -51,6 +51,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
