@@ -76,21 +76,33 @@ echo "Building AppImage..."
     --output appimage
 
 # Find the created AppImage (appimagetool replaces spaces with underscores)
-# Could be "Soul_Player-x86_64.AppImage" or "Soul Player-x86_64.AppImage"
-APPIMAGE_FILE=$(find . -maxdepth 1 -name "*.AppImage" -type f | head -1)
+# Output is "Soul_Player-x86_64.AppImage" or similar pattern
+echo "Searching for created AppImage..."
+ls -la *.AppImage 2>/dev/null || true
 
-if [ -n "$APPIMAGE_FILE" ]; then
+# Look for the app-specific AppImage (not linuxdeploy)
+APPIMAGE_FILE=""
+for file in Soul_Player-*.AppImage "Soul Player-"*.AppImage; do
+    if [ -f "$file" ]; then
+        APPIMAGE_FILE="$file"
+        break
+    fi
+done
+
+if [ -n "$APPIMAGE_FILE" ] && [ -f "$APPIMAGE_FILE" ]; then
     # Rename to consistent naming
     TARGET_NAME="${APP_ID}_${VERSION}_${ARCH}.AppImage"
     mv "$APPIMAGE_FILE" "$TARGET_NAME"
-    echo "✅ AppImage created: $TARGET_NAME"
+    echo "✅ AppImage created: $TARGET_NAME (from $APPIMAGE_FILE)"
 
     # Calculate SHA256
     sha256sum "$TARGET_NAME" > "${TARGET_NAME}.sha256"
     echo "✅ Checksum created: ${TARGET_NAME}.sha256"
 else
     echo "❌ Error: AppImage was not created"
+    echo "Current directory contents:"
     ls -la .
+    echo "Looking for patterns: Soul_Player-*.AppImage or 'Soul Player-'*.AppImage"
     exit 1
 fi
 
