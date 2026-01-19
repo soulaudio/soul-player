@@ -1,0 +1,6 @@
+# Flatpak build artifacts
+*.flatpak
+*.flatpak.sha256
+build-dir/
+repo/
+.flatpak-builder/

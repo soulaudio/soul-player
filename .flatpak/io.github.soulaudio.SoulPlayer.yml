@@ -1,0 +1,75 @@
+app-id: io.github.soulaudio.SoulPlayer
+runtime: org.gnome.Platform
+runtime-version: '45'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node20
+command: soul-player
+
+finish-args:
+  # X11 + Wayland display access
+  - --socket=x11
+  - --socket=wayland
+  - --share=ipc
+
+  # Audio access (PulseAudio/PipeWire)
+  - --socket=pulseaudio
+
+  # File system access for music library
+  - --filesystem=home
+
+  # Network access (for future metadata fetching)
+  - --share=network
+
+  # Device access (for audio devices)
+  - --device=all
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - '*.a'
+  - '*.la'
+
+modules:
+  - name: soul-player
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node20/bin
+      env:
+        CARGO_HOME: /run/build/soul-player/cargo
+        npm_config_cache: /run/build/soul-player/npm-cache
+    build-commands:
+      # Install Rust dependencies
+      - cargo fetch --manifest-path Cargo.toml
+
+      # Enable Corepack for Yarn
+      - corepack enable
+
+      # Install Node dependencies
+      - yarn install --frozen-lockfile
+
+      # Build frontend
+      - cd applications/desktop && yarn build && node copy-dist.cjs && cd ../..
+
+      # Build Rust binary
+      - cargo build --release --package soul-player-desktop
+
+      # Install binary
+      - install -Dm755 target/release/soul-player /app/bin/soul-player
+
+      # Install desktop file
+      - install -Dm644 applications/desktop/src-tauri/soul-player.desktop /app/share/applications/io.github.soulaudio.SoulPlayer.desktop
+
+      # Install icons
+      - install -Dm644 applications/desktop/src-tauri/icons/32x32.png /app/share/icons/hicolor/32x32/apps/io.github.soulaudio.SoulPlayer.png
+      - install -Dm644 applications/desktop/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/io.github.soulaudio.SoulPlayer.png
+      - install -Dm644 applications/desktop/src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/io.github.soulaudio.SoulPlayer.png
+
+      # Install metainfo
+      - install -Dm644 .flatpak/io.github.soulaudio.SoulPlayer.metainfo.xml /app/share/metainfo/io.github.soulaudio.SoulPlayer.metainfo.xml
+
+    sources:
+      - type: dir
+        path: ../../

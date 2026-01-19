@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.soulaudio.SoulPlayer</id>
+  <name>Soul Player</name>
+  <summary>Modern, privacy-first music player for local audio files</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+
+  <description>
+    <p>
+      Soul Player is a modern, open-source music player for desktop that puts your privacy first.
+      Play your local music library with advanced audio features, no cloud uploads, no tracking,
+      and no subscriptions required.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Gapless playback and crossfade</li>
+      <li>Advanced audio DSP: EQ, compressor, crossfeed, convolution</li>
+      <li>Bit-perfect output with WASAPI/ASIO exclusive mode</li>
+      <li>High-quality resampling and DSD playback</li>
+      <li>ReplayGain normalization</li>
+      <li>Multiple audio formats: MP3, FLAC, OGG, WAV, AAC, OPUS</li>
+      <li>Customizable keyboard shortcuts</li>
+      <li>Privacy-first: no cloud uploads, no tracking, no telemetry</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.soulaudio.SoulPlayer.desktop</launchable>
+
+  <url type="homepage">https://github.com/soulaudio/soul-player</url>
+  <url type="bugtracker">https://github.com/soulaudio/soul-player/issues</url>
+  <url type="help">https://github.com/soulaudio/soul-player/blob/main/README.md</url>
+
+  <developer_name>Soul Audio Contributors</developer_name>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.1" date="2026-01-19">
+      <description>
+        <p>Initial public release</p>
+        <ul>
+          <li>Gapless playback and crossfade</li>
+          <li>Advanced audio DSP effects</li>
+          <li>ReplayGain support</li>
+          <li>Multiple audio formats</li>
+          <li>Customizable keyboard shortcuts</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Main player interface</caption>
+      <!-- Add screenshot URL when available -->
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+  </categories>
+
+  <keywords>
+    <keyword>music</keyword>
+    <keyword>audio</keyword>
+    <keyword>player</keyword>
+    <keyword>mp3</keyword>
+    <keyword>flac</keyword>
+  </keywords>
+</component>

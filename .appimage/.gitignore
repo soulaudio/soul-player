@@ -1,0 +1,5 @@
+# AppImage build artifacts
+*.AppImage
+*.AppImage.sha256
+AppDir/
+linuxdeploy-*.AppImage
