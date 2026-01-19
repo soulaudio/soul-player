@@ -815,7 +815,7 @@ jobs:
           echo "Checking for existing releases with tag: $TAG"
 
           # Get ALL releases (draft or published) with this tag
-          EXISTING_RELEASES=$(gh release list --limit 100 --json tagName,id,isDraft | \
+          EXISTING_RELEASES=$(gh release list --limit 100 --json tagName,isDraft | \
             jq -r --arg tag "$TAG" '.[] | select(.tagName == $tag)')
 
           if [ -n "$EXISTING_RELEASES" ]; then
