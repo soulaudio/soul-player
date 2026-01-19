@@ -519,6 +519,12 @@ jobs:
           echo "✅ Node.js dependencies installed"
           echo "   node_modules will be included in Flatpak sources"
 
+          # Remove packageManager field from package.json to allow yarn@1 to run
+          # This is needed because Flatpak SDK has yarn@1 which doesn't understand packageManager field
+          echo "Removing packageManager field from package.json for Flatpak compatibility..."
+          node -e "const pkg=require('./package.json'); delete pkg.packageManager; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
+          echo "✅ package.json patched for Flatpak build"
+
       - name: Install Flatpak build dependencies
         run: |
           echo "Installing Flatpak build tools..."
