@@ -20,17 +20,17 @@ const PLATFORMS: Record<Platform, PlatformInfo> = {
   windows: {
     name: 'Windows',
     Icon: Monitor,
-    downloadUrl: `${RELEASE_LATEST}/soul_player_0.0.1_x64-setup.exe`
+    downloadUrl: `${RELEASE_LATEST}/soul_player_0.1.0_x64-setup.exe`
   },
   macos: {
     name: 'macOS',
     Icon: Apple,
-    downloadUrl: `${RELEASE_LATEST}/soul_player_0.0.1_aarch64.dmg` // Default to Apple Silicon
+    downloadUrl: `${RELEASE_LATEST}/soul_player_0.1.0_aarch64.dmg` // Default to Apple Silicon
   },
   linux: {
     name: 'Linux',
     Icon: Boxes,
-    downloadUrl: `${RELEASE_LATEST}/soul-player_0.0.1_amd64.deb`
+    downloadUrl: `${RELEASE_LATEST}/soul-player_0.1.0_amd64.deb`
   },
   unknown: {
     name: 'Download',

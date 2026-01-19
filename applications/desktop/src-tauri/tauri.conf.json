@@ -1,6 +1,6 @@
 {
   "productName": "soul_player",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "identifier": "soul-player",
   "mainBinaryName": "soul-player",
   "build": {
