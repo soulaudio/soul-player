@@ -100,7 +100,7 @@ impl ImportManager {
         user_id: String,
         default_library_path: PathBuf,
     ) -> Result<Self, String> {
-        eprintln!("[ImportManager] Initializing for user_id: {}", user_id);
+        tracing::debug!("Initializing for user_id: {}", user_id);
 
         // Load config from database (or defaults for new users)
         use soul_importer::FileManagementStrategy;
@@ -145,9 +145,10 @@ impl ImportManager {
             skip_duplicates,
         };
 
-        eprintln!(
-            "[ImportManager] Loaded config: strategy={:?}, library_path={:?}",
-            config.file_strategy, config.library_path
+        tracing::debug!(
+            "Loaded config: strategy={:?}, library_path={:?}",
+            config.file_strategy,
+            config.library_path
         );
 
         Ok(Self {
@@ -174,10 +175,7 @@ impl ImportManager {
     pub async fn update_config(&self, config: ImportConfig) {
         use soul_importer::FileManagementStrategy;
 
-        eprintln!(
-            "[ImportManager] Updating config: strategy={:?}",
-            config.file_strategy
-        );
+        tracing::debug!("Updating config: strategy={:?}", config.file_strategy);
 
         // Persist to database FIRST - save individual settings
         let strategy_str = match config.file_strategy {
@@ -195,7 +193,7 @@ impl ImportManager {
         )
         .await
         {
-            eprintln!("[ImportManager] ERROR: Failed to persist strategy: {}", e);
+            tracing::error!("Failed to persist strategy: {}", e);
             return;
         }
 
@@ -207,10 +205,7 @@ impl ImportManager {
         )
         .await
         {
-            eprintln!(
-                "[ImportManager] ERROR: Failed to persist library path: {}",
-                e
-            );
+            tracing::error!("Failed to persist library path: {}", e);
             return;
         }
 
@@ -222,10 +217,7 @@ impl ImportManager {
         )
         .await
         {
-            eprintln!(
-                "[ImportManager] ERROR: Failed to persist confidence threshold: {}",
-                e
-            );
+            tracing::error!("Failed to persist confidence threshold: {}", e);
             return;
         }
 
@@ -237,10 +229,7 @@ impl ImportManager {
         )
         .await
         {
-            eprintln!(
-                "[ImportManager] ERROR: Failed to persist file naming pattern: {}",
-                e
-            );
+            tracing::error!("Failed to persist file naming pattern: {}", e);
             return;
         }
 
@@ -252,30 +241,24 @@ impl ImportManager {
         )
         .await
         {
-            eprintln!(
-                "[ImportManager] ERROR: Failed to persist skip duplicates: {}",
-                e
-            );
+            tracing::error!("Failed to persist skip duplicates: {}", e);
             return;
         }
 
-        eprintln!("[ImportManager] ✓ Config persisted to database");
+        tracing::debug!("Config persisted to database");
 
         // Update in-memory cache
         *self.config.write().await = config;
 
-        eprintln!("[ImportManager] ✓ Config updated in memory");
+        tracing::debug!("Config updated in memory");
     }
 
     pub async fn import_files(&self, app: AppHandle, files: Vec<PathBuf>) -> Result<(), String> {
-        eprintln!(
-            "[ImportManager::import_files] Starting import of {} files",
-            files.len()
-        );
+        tracing::debug!("Starting import of {} files", files.len());
 
         // Check if already importing
         if self.is_importing().await {
-            eprintln!("[ImportManager::import_files] Import already in progress, queueing not supported yet");
+            tracing::warn!("Import already in progress, queueing not supported yet");
             return Err(
                 "Import already in progress. Please wait for current import to complete."
                     .to_string(),
@@ -291,12 +274,12 @@ impl ImportManager {
             duplicates: 0,
             is_running: true,
         });
-        eprintln!("[ImportManager::import_files] Import state set");
+        tracing::debug!("Import state set");
 
         // IMPORTANT: Reload config from database to ensure we have the latest settings
         // This prevents race conditions where the UI updates the config but import starts
         // before the async update completes
-        eprintln!("[ImportManager::import_files] Reloading config from database...");
+        tracing::debug!("Reloading config from database...");
 
         let strategy_str: String =
             soul_storage::settings::get_import_strategy(&self.pool, &self.user_id)
@@ -345,20 +328,14 @@ impl ImportManager {
             skip_duplicates,
         };
 
-        eprintln!(
-            "[ImportManager::import_files] Using strategy: {:?}",
-            config.file_strategy
-        );
-        eprintln!(
-            "[ImportManager::import_files] Library path: {:?}",
-            config.library_path
-        );
+        tracing::debug!("Using strategy: {:?}", config.file_strategy);
+        tracing::debug!("Library path: {:?}", config.library_path);
 
         let importer = MusicImporter::new(self.pool.clone(), config);
 
-        eprintln!("[ImportManager::import_files] Creating importer and starting import");
+        tracing::debug!("Creating importer and starting import");
         let (mut progress_rx, handle) = importer.import_files(&files).await.map_err(|e| {
-            eprintln!("[ImportManager::import_files] Importer error: {}", e);
+            tracing::error!("Importer error: {}", e);
             // Clear state on error
             let current_import = self.current_import.clone();
             tokio::spawn(async move {
@@ -367,71 +344,69 @@ impl ImportManager {
             e.to_string()
         })?;
 
-        eprintln!("[ImportManager::import_files] Import started, spawning progress listener");
+        tracing::debug!("Import started, spawning progress listener");
 
         // Spawn task to handle progress updates
         let app_clone = app.clone();
         tokio::spawn(async move {
-            eprintln!("[ImportManager::progress_listener] Starting progress listener");
+            tracing::debug!("Starting progress listener");
             while let Some(progress) = progress_rx.recv().await {
                 let update = ImportProgressUpdate::from(progress);
-                eprintln!(
-                    "[ImportManager::progress_listener] Progress: {}/{} files",
-                    update.processed_files, update.total_files
+                tracing::debug!(
+                    "Progress: {}/{} files",
+                    update.processed_files,
+                    update.total_files
                 );
                 // Emit progress to frontend
                 let _ = app_clone.emit("import-progress", update);
             }
-            eprintln!("[ImportManager::progress_listener] Progress channel closed");
+            tracing::debug!("Progress channel closed");
         });
 
         // Wait for import to complete in background
         let current_import = self.current_import.clone();
         tokio::spawn(async move {
-            eprintln!("[ImportManager::completion_handler] Waiting for import to complete");
+            tracing::debug!("Waiting for import to complete");
             match handle.await {
                 Ok(Ok(summary)) => {
-                    eprintln!("[ImportManager::completion_handler] Import completed successfully: {} successful, {} failed",
-                             summary.successful, summary.failed);
+                    tracing::debug!(
+                        "Import completed successfully: {} successful, {} failed",
+                        summary.successful,
+                        summary.failed
+                    );
                     // Emit completion
                     let response = ImportSummaryResponse::from(summary);
                     let _ = app.emit("import-complete", response);
                 }
                 Ok(Err(e)) => {
-                    eprintln!("[ImportManager::completion_handler] Import error: {}", e);
+                    tracing::error!("Import error: {}", e);
                     let _ = app.emit("import-error", e.to_string());
                 }
                 Err(e) => {
-                    eprintln!("[ImportManager::completion_handler] Task panicked: {}", e);
+                    tracing::error!("Task panicked: {}", e);
                     let _ = app.emit("import-error", format!("Task panicked: {}", e));
                 }
             }
             // Clear import state
-            eprintln!("[ImportManager::completion_handler] Clearing import state");
+            tracing::debug!("Clearing import state");
             *current_import.lock().await = None;
         });
 
-        eprintln!("[ImportManager::import_files] Background tasks spawned, returning Ok");
+        tracing::debug!("Background tasks spawned, returning Ok");
         Ok(())
     }
 
     pub async fn import_directory(&self, app: AppHandle, directory: PathBuf) -> Result<(), String> {
-        eprintln!(
-            "[ImportManager::import_directory] Scanning directory: {:?}",
-            directory
-        );
+        tracing::debug!("Scanning directory: {:?}", directory);
 
         // Scan directory first
         let scanner = soul_importer::scanner::FileScanner::new();
         let files = scanner.scan_directory(&directory).map_err(|e| {
-            eprintln!("[ImportManager::import_directory] Scan error: {}", e);
+            tracing::error!("Scan error: {}", e);
             e.to_string()
         })?;
 
-        eprintln!(
-            "[ImportManager::import_directory] Found {} files",
-            files.len()
-        );
+        tracing::debug!("Found {} files", files.len());
 
         self.import_files(app, files).await
     }
@@ -455,17 +430,17 @@ pub async fn import_files(
     files: Vec<String>,
     manager: tauri::State<'_, ImportManager>,
 ) -> Result<(), String> {
-    eprintln!("[import_files] Received {} files", files.len());
+    tracing::debug!("Received {} files", files.len());
     for (i, file) in files.iter().enumerate() {
-        eprintln!("[import_files] File {}: {}", i + 1, file);
+        tracing::debug!("File {}: {}", i + 1, file);
     }
 
     let paths: Vec<PathBuf> = files.into_iter().map(PathBuf::from).collect();
     let result = manager.import_files(app, paths).await;
 
     match &result {
-        Ok(_) => eprintln!("[import_files] Import started successfully"),
-        Err(e) => eprintln!("[import_files] Import failed: {}", e),
+        Ok(_) => tracing::debug!("Import started successfully"),
+        Err(e) => tracing::error!("Import failed: {}", e),
     }
 
     result
@@ -477,15 +452,15 @@ pub async fn import_directory(
     directory: String,
     manager: tauri::State<'_, ImportManager>,
 ) -> Result<(), String> {
-    eprintln!("[import_directory] Received directory: {}", directory);
+    tracing::debug!("Received directory: {}", directory);
 
     let result = manager
         .import_directory(app, PathBuf::from(directory))
         .await;
 
     match &result {
-        Ok(_) => eprintln!("[import_directory] Import started successfully"),
-        Err(e) => eprintln!("[import_directory] Import failed: {}", e),
+        Ok(_) => tracing::debug!("Import started successfully"),
+        Err(e) => tracing::error!("Import failed: {}", e),
     }
 
     result

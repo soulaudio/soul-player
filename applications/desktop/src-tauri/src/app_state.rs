@@ -1,8 +1,16 @@
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use crate::artwork::ArtworkManager;
+
+/// Cache key for artwork - can be either a track ID or album ID
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ArtworkCacheKey {
+    Track(String),
+    Album(i64),
+}
 
 /// Shared application state
 pub struct AppState {
@@ -10,6 +18,10 @@ pub struct AppState {
     pub user_id: String,
     pub library_path: PathBuf,
     pub artwork_manager: Arc<ArtworkManager>,
+    /// LRU cache for base64-encoded artwork data URLs
+    /// Key: ArtworkCacheKey (track ID or album ID)
+    /// Value: base64 data URL string (e.g., "data:image/jpeg;base64,...")
+    pub artwork_cache: Arc<Mutex<lru::LruCache<ArtworkCacheKey, String>>>,
 }
 
 impl AppState {
@@ -20,16 +32,16 @@ impl AppState {
     /// - Run all migrations
     /// - Create a default user if needed
     pub async fn new(db_path: PathBuf) -> Result<Self, String> {
-        eprintln!("Initializing database at: {}", db_path.display());
+        tracing::debug!("Initializing database at: {}", db_path.display());
 
         // Ensure we have an absolute path
         let db_path = if db_path.is_relative() {
-            eprintln!("⚠ WARNING: Database path is relative, attempting to make absolute");
+            tracing::debug!("⚠ WARNING: Database path is relative, attempting to make absolute");
             std::env::current_dir()
                 .ok()
                 .map(|cwd| {
                     let abs = cwd.join(&db_path);
-                    eprintln!("Converted {} to {}", db_path.display(), abs.display());
+                    tracing::debug!("Converted {} to {}", db_path.display(), abs.display());
                     abs
                 })
                 .unwrap_or(db_path)
@@ -39,7 +51,7 @@ impl AppState {
 
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
-            eprintln!("Creating directory: {}", parent.display());
+            tracing::debug!("Creating directory: {}", parent.display());
             std::fs::create_dir_all(parent).map_err(|e| {
                 format!(
                     "Failed to create database directory '{}': {}",
@@ -47,13 +59,13 @@ impl AppState {
                     e
                 )
             })?;
-            eprintln!("✓ Directory created/verified");
+            tracing::debug!("✓ Directory created/verified");
 
             // Test write permissions by creating a test file
             let test_file = parent.join(".write_test");
             match std::fs::write(&test_file, b"test") {
                 Ok(_) => {
-                    eprintln!("✓ Write permissions verified");
+                    tracing::debug!("✓ Write permissions verified");
                     let _ = std::fs::remove_file(&test_file); // Clean up
                 }
                 Err(e) => {
@@ -65,7 +77,7 @@ impl AppState {
                 }
             }
         } else {
-            eprintln!("⚠ WARNING: No parent directory for database path");
+            tracing::debug!("⚠ WARNING: No parent directory for database path");
         }
 
         // Convert PathBuf to SQLite connection string
@@ -88,8 +100,8 @@ impl AppState {
             )
         };
 
-        eprintln!("Database URL: {}", db_url);
-        eprintln!("Database file path: {}", db_path.display());
+        tracing::debug!("Database URL: {}", db_url);
+        tracing::debug!("Database file path: {}", db_path.display());
 
         let pool = soul_storage::create_pool(&db_url).await.map_err(|e| {
             format!(
@@ -116,7 +128,7 @@ impl AppState {
             .await
             .map_err(|e| format!("Failed to create default user: {}", e))?;
 
-        eprintln!(
+        tracing::debug!(
             "Database initialized successfully at: {}",
             db_path.display()
         );
@@ -127,7 +139,7 @@ impl AppState {
             .unwrap_or_else(|| std::path::Path::new("."))
             .join("library");
 
-        eprintln!("Library path: {}", library_path.display());
+        tracing::debug!("Library path: {}", library_path.display());
 
         // Calculate artwork storage path
         let artwork_storage_path = db_path
@@ -135,74 +147,81 @@ impl AppState {
             .unwrap_or_else(|| std::path::Path::new("."))
             .join("artwork");
 
-        eprintln!("Artwork storage path: {}", artwork_storage_path.display());
+        tracing::debug!("Artwork storage path: {}", artwork_storage_path.display());
 
         // Create artwork manager with cache for 100 images (~50-100MB)
         let artwork_manager = ArtworkManager::new(pool.clone(), 100, artwork_storage_path);
+
+        // Create LRU cache for base64-encoded artwork (150 entries)
+        // Each entry is ~50-200KB (base64 encoded), so ~7.5-30MB total
+        let artwork_cache = Arc::new(Mutex::new(lru::LruCache::new(
+            std::num::NonZeroUsize::new(150).unwrap(),
+        )));
 
         Ok(Self {
             pool: Arc::new(pool),
             user_id: user_id.to_string(),
             library_path,
             artwork_manager: Arc::new(artwork_manager),
+            artwork_cache,
         })
     }
 
     /// Create AppState from environment variable or default path
     pub async fn from_env_or_default(default_path: PathBuf) -> Result<Self, String> {
-        eprintln!("=== Database Path Resolution ===");
-        eprintln!("Default path provided: {}", default_path.display());
+        tracing::debug!("=== Database Path Resolution ===");
+        tracing::debug!("Default path provided: {}", default_path.display());
 
         // Try to load .env file (for development)
         match dotenvy::dotenv() {
-            Ok(path) => eprintln!("Loaded .env from: {}", path.display()),
-            Err(e) => eprintln!("No .env file loaded: {}", e),
+            Ok(path) => tracing::debug!("Loaded .env from: {}", path.display()),
+            Err(e) => tracing::debug!("No .env file loaded: {}", e),
         }
 
         // Check for custom database path in environment
         let db_path = if let Ok(custom_path) = std::env::var("DATABASE_PATH") {
-            eprintln!("Found DATABASE_PATH in environment: {}", custom_path);
+            tracing::debug!("Found DATABASE_PATH in environment: {}", custom_path);
             let path = PathBuf::from(&custom_path);
 
             // If relative path, make it absolute relative to current exe directory
             if path.is_relative() {
-                eprintln!("Path is relative, resolving...");
+                tracing::debug!("Path is relative, resolving...");
                 if let Ok(exe_dir) = std::env::current_exe() {
-                    eprintln!("Executable location: {}", exe_dir.display());
+                    tracing::debug!("Executable location: {}", exe_dir.display());
                     if let Some(parent) = exe_dir.parent() {
                         let absolute = parent.join(&path);
-                        eprintln!(
+                        tracing::debug!(
                             "✓ Resolved relative path '{}' to: {}",
                             custom_path,
                             absolute.display()
                         );
                         absolute
                     } else {
-                        eprintln!(
+                        tracing::debug!(
                             "⚠ Could not get parent directory of exe, using relative path as-is"
                         );
                         path
                     }
                 } else {
-                    eprintln!("⚠ Could not get exe location, using relative path as-is");
+                    tracing::debug!("⚠ Could not get exe location, using relative path as-is");
                     path
                 }
             } else {
-                eprintln!(
+                tracing::debug!(
                     "✓ Using absolute custom database path from env: {}",
                     path.display()
                 );
                 path
             }
         } else {
-            eprintln!(
+            tracing::debug!(
                 "✓ No DATABASE_PATH in environment, using default: {}",
                 default_path.display()
             );
             default_path
         };
 
-        eprintln!("=== Final database path: {} ===", db_path.display());
+        tracing::debug!("=== Final database path: {} ===", db_path.display());
         Self::new(db_path).await
     }
 }

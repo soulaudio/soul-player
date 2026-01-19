@@ -105,7 +105,7 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
     use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
     use std::str::FromStr;
 
-    eprintln!("[soul-storage] Creating pool with URL: {}", database_url);
+    tracing::debug!("[soul-storage] Creating pool with URL: {}", database_url);
 
     // Parse the URL into options so we can configure SQLite behavior
     let options = SqliteConnectOptions::from_str(database_url)?
@@ -114,7 +114,7 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
         .busy_timeout(std::time::Duration::from_secs(30)); // Wait up to 30s for locks
                                                            // Note: SQLite defaults to UTF-8 encoding on all modern systems
 
-    eprintln!("[soul-storage] ✓ Options configured");
+    tracing::debug!("[soul-storage] Options configured");
 
     // Create pool with the configured options
     let pool = SqlitePoolOptions::new()
@@ -122,7 +122,7 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
         .connect_with(options)
         .await?;
 
-    eprintln!("[soul-storage] ✓ Pool created successfully");
+    tracing::debug!("[soul-storage] Pool created successfully");
 
     Ok(pool)
 }

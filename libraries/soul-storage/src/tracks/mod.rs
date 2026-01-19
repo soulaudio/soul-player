@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 
 /// Get all tracks with denormalized artist/album names
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Track>> {
+    // First, fetch all track data with artist/album info
     let rows = sqlx::query!(
         r#"
         SELECT
@@ -22,38 +23,70 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Track>> {
     .fetch_all(pool)
     .await?;
 
-    let mut tracks = Vec::new();
-    for row in rows {
-        let track_id = TrackId::new(row.id.to_string());
-        let availability = get_availability(pool, track_id.clone()).await?;
+    // Batch fetch availability data for all tracks
+    let availability_rows = sqlx::query!(
+        r#"
+        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
+        FROM track_sources
+        "#
+    )
+    .fetch_all(pool)
+    .await?;
 
-        tracks.push(Track {
-            id: track_id,
-            title: row.title,
-            artist_id: row.artist_id,
-            artist_name: row.artist_name,
-            album_id: row.album_id,
-            album_title: row.album_title,
-            album_artist_id: row.album_artist_id,
-            track_number: row.track_number.map(|x| x as i32),
-            disc_number: row.disc_number.map(|x| x as i32),
-            year: row.year.map(|x| x as i32),
-            duration_seconds: row.duration_seconds,
-            bitrate: row.bitrate.map(|x| x as i32),
-            sample_rate: row.sample_rate.map(|x| x as i32),
-            channels: row.channels.map(|x| x as i32),
-            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
-            origin_source_id: row.origin_source_id,
-            musicbrainz_recording_id: row.musicbrainz_recording_id,
-            fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(
-                row.metadata_source.as_deref().unwrap_or("file"),
-            ),
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            availability,
-        });
+    // Group availability by track_id
+    let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
+        std::collections::HashMap::new();
+    for avail_row in availability_rows {
+        availability_map
+            .entry(avail_row.track_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(TrackAvailability {
+                source_id: avail_row.source_id,
+                status: parse_availability_status(&avail_row.status),
+                local_file_path: avail_row.local_file_path,
+                server_path: avail_row.server_path,
+                local_file_size: avail_row.local_file_size,
+            });
     }
+
+    // Build track objects with availability data
+    let tracks = rows
+        .into_iter()
+        .map(|row| {
+            let track_id = TrackId::new(row.id.to_string());
+            let availability = availability_map
+                .get(track_id.as_str())
+                .cloned()
+                .unwrap_or_default();
+
+            Track {
+                id: track_id,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: row.artist_name,
+                album_id: row.album_id,
+                album_title: row.album_title,
+                album_artist_id: row.album_artist_id,
+                track_number: row.track_number.map(|x| x as i32),
+                disc_number: row.disc_number.map(|x| x as i32),
+                year: row.year.map(|x| x as i32),
+                duration_seconds: row.duration_seconds,
+                bitrate: row.bitrate.map(|x| x as i32),
+                sample_rate: row.sample_rate.map(|x| x as i32),
+                channels: row.channels.map(|x| x as i32),
+                file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+                origin_source_id: row.origin_source_id,
+                musicbrainz_recording_id: row.musicbrainz_recording_id,
+                fingerprint: row.fingerprint,
+                metadata_source: parse_metadata_source(
+                    row.metadata_source.as_deref().unwrap_or("file"),
+                ),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                availability,
+            }
+        })
+        .collect();
 
     Ok(tracks)
 }
@@ -62,6 +95,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Track>> {
 pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
     let search_pattern = format!("%{}%", query);
 
+    // First, fetch all matching track data with artist/album info
     let rows = sqlx::query!(
         r#"
         SELECT
@@ -87,44 +121,86 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
     .fetch_all(pool)
     .await?;
 
-    let mut tracks = Vec::new();
-    for row in rows {
-        let track_id = TrackId::new(row.id.to_string());
-        let availability = get_availability(pool, track_id.clone()).await?;
-
-        tracks.push(Track {
-            id: track_id,
-            title: row.title,
-            artist_id: row.artist_id,
-            artist_name: row.artist_name,
-            album_id: row.album_id,
-            album_title: row.album_title,
-            album_artist_id: row.album_artist_id,
-            track_number: row.track_number.map(|x| x as i32),
-            disc_number: row.disc_number.map(|x| x as i32),
-            year: row.year.map(|x| x as i32),
-            duration_seconds: row.duration_seconds,
-            bitrate: row.bitrate.map(|x| x as i32),
-            sample_rate: row.sample_rate.map(|x| x as i32),
-            channels: row.channels.map(|x| x as i32),
-            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
-            origin_source_id: row.origin_source_id,
-            musicbrainz_recording_id: row.musicbrainz_recording_id,
-            fingerprint: row.fingerprint,
-            metadata_source: row
-                .metadata_source
-                .and_then(|s| match s.as_str() {
-                    "file" => Some(MetadataSource::File),
-                    "enriched" => Some(MetadataSource::Enriched),
-                    "user_edited" => Some(MetadataSource::UserEdited),
-                    _ => None,
-                })
-                .unwrap_or(MetadataSource::File),
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            availability,
-        });
+    if rows.is_empty() {
+        return Ok(Vec::new());
     }
+
+    // Collect track IDs for batch availability lookup
+    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
+
+    // Batch fetch availability data for matched tracks
+    let availability_rows = sqlx::query!(
+        r#"
+        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
+        FROM track_sources
+        WHERE track_id IN (SELECT value FROM json_each(?))
+        "#,
+        track_ids_json
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // Group availability by track_id
+    let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
+        std::collections::HashMap::new();
+    for avail_row in availability_rows {
+        availability_map
+            .entry(avail_row.track_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(TrackAvailability {
+                source_id: avail_row.source_id,
+                status: parse_availability_status(&avail_row.status),
+                local_file_path: avail_row.local_file_path,
+                server_path: avail_row.server_path,
+                local_file_size: avail_row.local_file_size,
+            });
+    }
+
+    // Build track objects with availability data
+    let tracks = rows
+        .into_iter()
+        .map(|row| {
+            let track_id = TrackId::new(row.id.to_string());
+            let availability = availability_map
+                .get(track_id.as_str())
+                .cloned()
+                .unwrap_or_default();
+
+            Track {
+                id: track_id,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: row.artist_name,
+                album_id: row.album_id,
+                album_title: row.album_title,
+                album_artist_id: row.album_artist_id,
+                track_number: row.track_number.map(|x| x as i32),
+                disc_number: row.disc_number.map(|x| x as i32),
+                year: row.year.map(|x| x as i32),
+                duration_seconds: row.duration_seconds,
+                bitrate: row.bitrate.map(|x| x as i32),
+                sample_rate: row.sample_rate.map(|x| x as i32),
+                channels: row.channels.map(|x| x as i32),
+                file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+                origin_source_id: row.origin_source_id,
+                musicbrainz_recording_id: row.musicbrainz_recording_id,
+                fingerprint: row.fingerprint,
+                metadata_source: row
+                    .metadata_source
+                    .and_then(|s| match s.as_str() {
+                        "file" => Some(MetadataSource::File),
+                        "enriched" => Some(MetadataSource::Enriched),
+                        "user_edited" => Some(MetadataSource::UserEdited),
+                        _ => None,
+                    })
+                    .unwrap_or(MetadataSource::File),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                availability,
+            }
+        })
+        .collect();
 
     Ok(tracks)
 }
@@ -254,6 +330,7 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
 
 /// Get tracks by artist
 pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec<Track>> {
+    // First, fetch all track data for the artist
     let rows = sqlx::query!(
         r#"
         SELECT
@@ -275,44 +352,87 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
     .fetch_all(pool)
     .await?;
 
-    let mut tracks = Vec::new();
-    for row in rows {
-        let track_id = TrackId::new(row.id.to_string());
-        let availability = get_availability(pool, track_id.clone()).await?;
-
-        tracks.push(Track {
-            id: track_id,
-            title: row.title,
-            artist_id: row.artist_id,
-            artist_name: Some(row.artist_name),
-            album_id: row.album_id,
-            album_title: Some(row.album_title),
-            album_artist_id: row.album_artist_id,
-            track_number: row.track_number.map(|x| x as i32),
-            disc_number: row.disc_number.map(|x| x as i32),
-            year: row.year.map(|x| x as i32),
-            duration_seconds: row.duration_seconds,
-            bitrate: row.bitrate.map(|x| x as i32),
-            sample_rate: row.sample_rate.map(|x| x as i32),
-            channels: row.channels.map(|x| x as i32),
-            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
-            origin_source_id: row.origin_source_id,
-            musicbrainz_recording_id: row.musicbrainz_recording_id,
-            fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(
-                row.metadata_source.as_deref().unwrap_or("file"),
-            ),
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            availability,
-        });
+    if rows.is_empty() {
+        return Ok(Vec::new());
     }
+
+    // Collect track IDs for batch availability lookup
+    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
+
+    // Batch fetch availability data for these tracks
+    let availability_rows = sqlx::query!(
+        r#"
+        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
+        FROM track_sources
+        WHERE track_id IN (SELECT value FROM json_each(?))
+        "#,
+        track_ids_json
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // Group availability by track_id
+    let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
+        std::collections::HashMap::new();
+    for avail_row in availability_rows {
+        availability_map
+            .entry(avail_row.track_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(TrackAvailability {
+                source_id: avail_row.source_id,
+                status: parse_availability_status(&avail_row.status),
+                local_file_path: avail_row.local_file_path,
+                server_path: avail_row.server_path,
+                local_file_size: avail_row.local_file_size,
+            });
+    }
+
+    // Build track objects with availability data
+    let tracks = rows
+        .into_iter()
+        .map(|row| {
+            let track_id = TrackId::new(row.id.to_string());
+            let availability = availability_map
+                .get(track_id.as_str())
+                .cloned()
+                .unwrap_or_default();
+
+            Track {
+                id: track_id,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: Some(row.artist_name),
+                album_id: row.album_id,
+                album_title: Some(row.album_title),
+                album_artist_id: row.album_artist_id,
+                track_number: row.track_number.map(|x| x as i32),
+                disc_number: row.disc_number.map(|x| x as i32),
+                year: row.year.map(|x| x as i32),
+                duration_seconds: row.duration_seconds,
+                bitrate: row.bitrate.map(|x| x as i32),
+                sample_rate: row.sample_rate.map(|x| x as i32),
+                channels: row.channels.map(|x| x as i32),
+                file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+                origin_source_id: row.origin_source_id,
+                musicbrainz_recording_id: row.musicbrainz_recording_id,
+                fingerprint: row.fingerprint,
+                metadata_source: parse_metadata_source(
+                    row.metadata_source.as_deref().unwrap_or("file"),
+                ),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                availability,
+            }
+        })
+        .collect();
 
     Ok(tracks)
 }
 
 /// Get tracks by album
 pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Track>> {
+    // First, fetch all track data for the album
     let rows = sqlx::query!(
         r#"
         SELECT
@@ -334,38 +454,80 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
     .fetch_all(pool)
     .await?;
 
-    let mut tracks = Vec::new();
-    for row in rows {
-        let track_id = TrackId::new(row.id.to_string());
-        let availability = get_availability(pool, track_id.clone()).await?;
-
-        tracks.push(Track {
-            id: track_id,
-            title: row.title,
-            artist_id: row.artist_id,
-            artist_name: Some(row.artist_name),
-            album_id: row.album_id,
-            album_title: Some(row.album_title),
-            album_artist_id: row.album_artist_id,
-            track_number: row.track_number.map(|x| x as i32),
-            disc_number: row.disc_number.map(|x| x as i32),
-            year: row.year.map(|x| x as i32),
-            duration_seconds: row.duration_seconds,
-            bitrate: row.bitrate.map(|x| x as i32),
-            sample_rate: row.sample_rate.map(|x| x as i32),
-            channels: row.channels.map(|x| x as i32),
-            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
-            origin_source_id: row.origin_source_id,
-            musicbrainz_recording_id: row.musicbrainz_recording_id,
-            fingerprint: row.fingerprint,
-            metadata_source: parse_metadata_source(
-                row.metadata_source.as_deref().unwrap_or("file"),
-            ),
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            availability,
-        });
+    if rows.is_empty() {
+        return Ok(Vec::new());
     }
+
+    // Collect track IDs for batch availability lookup
+    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
+
+    // Batch fetch availability data for these tracks
+    let availability_rows = sqlx::query!(
+        r#"
+        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
+        FROM track_sources
+        WHERE track_id IN (SELECT value FROM json_each(?))
+        "#,
+        track_ids_json
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // Group availability by track_id
+    let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
+        std::collections::HashMap::new();
+    for avail_row in availability_rows {
+        availability_map
+            .entry(avail_row.track_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(TrackAvailability {
+                source_id: avail_row.source_id,
+                status: parse_availability_status(&avail_row.status),
+                local_file_path: avail_row.local_file_path,
+                server_path: avail_row.server_path,
+                local_file_size: avail_row.local_file_size,
+            });
+    }
+
+    // Build track objects with availability data
+    let tracks = rows
+        .into_iter()
+        .map(|row| {
+            let track_id = TrackId::new(row.id.to_string());
+            let availability = availability_map
+                .get(track_id.as_str())
+                .cloned()
+                .unwrap_or_default();
+
+            Track {
+                id: track_id,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: Some(row.artist_name),
+                album_id: row.album_id,
+                album_title: Some(row.album_title),
+                album_artist_id: row.album_artist_id,
+                track_number: row.track_number.map(|x| x as i32),
+                disc_number: row.disc_number.map(|x| x as i32),
+                year: row.year.map(|x| x as i32),
+                duration_seconds: row.duration_seconds,
+                bitrate: row.bitrate.map(|x| x as i32),
+                sample_rate: row.sample_rate.map(|x| x as i32),
+                channels: row.channels.map(|x| x as i32),
+                file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+                origin_source_id: row.origin_source_id,
+                musicbrainz_recording_id: row.musicbrainz_recording_id,
+                fingerprint: row.fingerprint,
+                metadata_source: parse_metadata_source(
+                    row.metadata_source.as_deref().unwrap_or("file"),
+                ),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                availability,
+            }
+        })
+        .collect();
 
     Ok(tracks)
 }

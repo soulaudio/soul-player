@@ -61,15 +61,18 @@ impl StreamStartEnvelope {
 
         // Debug: log first buffer
         if self.position == 0 {
-            eprintln!(
+            tracing::debug!(
                 "[StreamEnvelope] Processing FIRST buffer: {} samples, duration: {} samples",
                 buffer.len(),
                 self.duration
             );
             if buffer.len() >= 4 {
-                eprintln!(
+                tracing::debug!(
                     "[StreamEnvelope] Input samples: [{:.6}, {:.6}, {:.6}, {:.6}]",
-                    buffer[0], buffer[1], buffer[2], buffer[3]
+                    buffer[0],
+                    buffer[1],
+                    buffer[2],
+                    buffer[3]
                 );
             }
         }
@@ -90,7 +93,7 @@ impl StreamStartEnvelope {
 
         if self.position >= self.duration {
             self.completed = true;
-            eprintln!(
+            tracing::debug!(
                 "[StreamEnvelope] Fade COMPLETED after {} samples",
                 self.position
             );
@@ -159,14 +162,15 @@ struct CallbackDropGuard {
 
 impl Drop for CallbackDropGuard {
     fn drop(&mut self) {
-        eprintln!(
+        tracing::error!(
             "[CallbackDropGuard] !!! {} stream {:?} callback closure is being DROPPED !!!",
-            self.sample_format, self.stream_id
+            self.sample_format,
+            self.stream_id
         );
-        eprintln!(
+        tracing::error!(
             "[CallbackDropGuard] This means the ASIO/audio callback will no longer be called."
         );
-        eprintln!("[CallbackDropGuard] The command_rx receiver will be dropped, causing channel disconnect.");
+        tracing::error!("[CallbackDropGuard] The command_rx receiver will be dropped, causing channel disconnect.");
     }
 }
 
@@ -608,7 +612,7 @@ impl DesktopPlayback {
             mgr.set_output_channels(channels);
         }
 
-        eprintln!("[CPAL] Building output stream with config: sample_rate={}, channels={}, buffer_size={:?}, format={:?}",
+        tracing::debug!("[CPAL] Building output stream with config: sample_rate={}, channels={}, buffer_size={:?}, format={:?}",
             config.sample_rate, config.channels, config.buffer_size, sample_format);
 
         // Build stream with the appropriate sample format
@@ -624,7 +628,7 @@ impl DesktopPlayback {
                 // Track if we've already requested a load for the current Loading state
                 // This prevents flooding the track loader with duplicate requests
                 let mut load_requested = false;
-                eprintln!(
+                tracing::debug!(
                     "[CPAL] Creating F32 stream callback (stream_id: {:?})",
                     stream_id
                 );
@@ -645,7 +649,7 @@ impl DesktopPlayback {
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process(data);
                     },
-                    |err| eprintln!("[CPAL] Audio stream error callback: {}", err),
+                    |err| tracing::error!("[CPAL] Audio stream error callback: {}", err),
                     None,
                 )?
             }
@@ -663,7 +667,7 @@ impl DesktopPlayback {
                 // Track if we've already requested a load for the current Loading state
                 // This prevents flooding the track loader with duplicate requests
                 let mut load_requested = false;
-                eprintln!(
+                tracing::debug!(
                     "[CPAL] Creating I32 stream callback (stream_id: {:?})",
                     stream_id
                 );
@@ -702,9 +706,9 @@ impl DesktopPlayback {
                         stream_envelope.process_i32(data);
                     },
                     move |err| {
-                        eprintln!("[CPAL] !!! AUDIO STREAM ERROR CALLBACK !!!");
-                        eprintln!("[CPAL]   Error: {}", err);
-                        eprintln!("[CPAL]   This may cause the stream to be dropped!");
+                        tracing::error!("[CPAL] !!! AUDIO STREAM ERROR CALLBACK !!!");
+                        tracing::error!("[CPAL]   Error: {}", err);
+                        tracing::error!("[CPAL]   This may cause the stream to be dropped!");
                         let _ = error_event_tx
                             .try_send(PlaybackEvent::Error(format!("Stream error: {}", err)));
                     },
@@ -724,7 +728,7 @@ impl DesktopPlayback {
                 // Track if we've already requested a load for the current Loading state
                 // This prevents flooding the track loader with duplicate requests
                 let mut load_requested = false;
-                eprintln!(
+                tracing::debug!(
                     "[CPAL] Creating I16 stream callback (stream_id: {:?})",
                     stream_id
                 );
@@ -751,12 +755,12 @@ impl DesktopPlayback {
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i16(data);
                     },
-                    |err| eprintln!("[CPAL] Audio stream error callback: {}", err),
+                    |err| tracing::error!("[CPAL] Audio stream error callback: {}", err),
                     None,
                 )?
             }
             _ => {
-                eprintln!(
+                tracing::error!(
                     "[CPAL] ERROR: Unsupported sample format: {:?}",
                     sample_format
                 );
@@ -767,32 +771,32 @@ impl DesktopPlayback {
             }
         };
 
-        eprintln!("[CPAL] Stream built successfully, calling play()...");
+        tracing::debug!("[CPAL] Stream built successfully, calling play()...");
 
         match stream.play() {
             Ok(()) => {
-                eprintln!("[CPAL] stream.play() returned Ok - stream should now be running");
+                tracing::debug!("[CPAL] stream.play() returned Ok - stream should now be running");
             }
             Err(e) => {
-                eprintln!("[CPAL] ERROR: Failed to start stream: {}", e);
-                eprintln!("[CPAL] This may indicate:");
-                eprintln!("  - Sample rate mismatch with driver settings");
-                eprintln!("  - Buffer size not supported by driver");
-                eprintln!("  - Another application has exclusive access to the device");
-                eprintln!("  - Driver requires specific initialization");
+                tracing::error!("[CPAL] ERROR: Failed to start stream: {}", e);
+                tracing::error!("[CPAL] This may indicate:");
+                tracing::error!("  - Sample rate mismatch with driver settings");
+                tracing::error!("  - Buffer size not supported by driver");
+                tracing::error!("  - Another application has exclusive access to the device");
+                tracing::error!("  - Driver requires specific initialization");
                 return Err(e.into());
             }
         }
 
-        eprintln!("[CPAL] ==========================================");
-        eprintln!("[CPAL] Stream created successfully!");
-        eprintln!("[CPAL]   Device: {}", actual_device_name);
-        eprintln!("[CPAL]   Sample rate: {} Hz", sample_rate);
-        eprintln!("[CPAL]   Channels: {}", channels);
-        eprintln!("[CPAL]   Sample format: {:?}", sample_format);
-        eprintln!("[CPAL]   Buffer size: {:?}", config.buffer_size);
-        eprintln!("[CPAL] ==========================================");
-        eprintln!("[CPAL] Audio callbacks should start momentarily...");
+        tracing::debug!("[CPAL] ==========================================");
+        tracing::debug!("[CPAL] Stream created successfully!");
+        tracing::debug!("[CPAL]   Device: {}", actual_device_name);
+        tracing::debug!("[CPAL]   Sample rate: {} Hz", sample_rate);
+        tracing::debug!("[CPAL]   Channels: {}", channels);
+        tracing::debug!("[CPAL]   Sample format: {:?}", sample_format);
+        tracing::debug!("[CPAL]   Buffer size: {:?}", config.buffer_size);
+        tracing::debug!("[CPAL] ==========================================");
+        tracing::debug!("[CPAL] Audio callbacks should start momentarily...");
 
         Ok((stream, actual_device_name, sample_rate))
     }
@@ -815,25 +819,25 @@ impl DesktopPlayback {
         let default_config = device.default_output_config()?;
         let actual_sample_rate = default_config.sample_rate();
 
-        eprintln!(
+        tracing::debug!(
             "[CPAL] Device's actual sample rate: {:?}",
             actual_sample_rate
         );
-        eprintln!(
+        tracing::debug!(
             "[CPAL] Device's default config: channels={}, format={:?}",
             default_config.channels(),
             default_config.sample_format()
         );
 
         // Also log supported configs for debugging
-        eprintln!("[CPAL] Checking supported output configurations...");
+        tracing::debug!("[CPAL] Checking supported output configurations...");
         let supported_configs: Vec<_> = device
             .supported_output_configs()
             .map(|configs| configs.collect())
             .unwrap_or_default();
 
         for cfg in &supported_configs {
-            eprintln!(
+            tracing::debug!(
                 "[CPAL]   Supported: channels={}, sample_rate={:?}-{:?}, format={:?}",
                 cfg.channels(),
                 cfg.min_sample_rate(),
@@ -877,20 +881,20 @@ impl DesktopPlayback {
             (*cfg).with_sample_rate(actual_sample_rate)
         } else {
             // Fall back to default config (which already has the actual sample rate)
-            eprintln!("[CPAL] No matching config found, using default");
+            tracing::debug!("[CPAL] No matching config found, using default");
             default_config
         };
 
         let sample_format = config.sample_format();
 
-        eprintln!("[CPAL] Selected config:");
-        eprintln!(
+        tracing::debug!("[CPAL] Selected config:");
+        tracing::debug!(
             "  - Sample rate: {:?} (device's actual rate)",
             config.sample_rate()
         );
-        eprintln!("  - Channels: {}", config.channels());
-        eprintln!("  - Sample format: {:?}", sample_format);
-        eprintln!("  - Buffer size: {:?}", config.buffer_size());
+        tracing::debug!("  - Channels: {}", config.channels());
+        tracing::debug!("  - Sample format: {:?}", sample_format);
+        tracing::debug!("  - Buffer size: {:?}", config.buffer_size());
 
         // Convert to StreamConfig
         let mut stream_config: StreamConfig = config.clone().into();
@@ -909,15 +913,17 @@ impl DesktopPlayback {
                     .unwrap_or(*min.max(&16));
 
                 stream_config.buffer_size = cpal::BufferSize::Fixed(buffer_size);
-                eprintln!(
+                tracing::debug!(
                     "[CPAL] Using fixed buffer size: {} frames (range: {}-{})",
-                    buffer_size, min, max
+                    buffer_size,
+                    min,
+                    max
                 );
             }
             cpal::SupportedBufferSize::Unknown => {
                 // For unknown buffer size, try a common default
                 // Many ASIO drivers work well with 256 or 512
-                eprintln!("[CPAL] Buffer size unknown, trying default of 512 frames");
+                tracing::debug!("[CPAL] Buffer size unknown, trying default of 512 frames");
                 stream_config.buffer_size = cpal::BufferSize::Fixed(512);
             }
         }
@@ -960,7 +966,7 @@ impl DesktopPlayback {
         };
 
         if track_loader.request_load(request) {
-            eprintln!(
+            tracing::debug!(
                 "[prepare_next_track] Requested preload for crossfade: {}",
                 next_track.title
             );
@@ -990,13 +996,13 @@ impl DesktopPlayback {
             };
 
             if track_loader.request_load(request) {
-                eprintln!(
+                tracing::debug!(
                     "[load_next_track] Requested load for next track: {}",
                     track.title
                 );
                 // Result will be handled by poll_track_loader in next callback
             } else {
-                eprintln!("[load_next_track] Load request queue full");
+                tracing::debug!("[load_next_track] Load request queue full");
                 // Queue full - emit error and stop
                 let _ =
                     event_tx.try_send(PlaybackEvent::Error("Track load queue full".to_string()));
@@ -1024,24 +1030,24 @@ impl DesktopPlayback {
     ) {
         // Debug: log callback invocation with per-stream counter
         if callback_count == 1 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_f32] *** FIRST CALLBACK FOR STREAM {:?} ***",
                 stream_id
             );
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_f32]   Buffer size: {} samples ({} frames stereo)",
                 data.len(),
                 data.len() / 2
             );
         } else if callback_count <= 5 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_f32] Stream {:?} call #{}, buffer: {} samples",
                 stream_id,
                 callback_count,
                 data.len()
             );
         } else if callback_count == 6 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_f32] Stream {:?}: further callback logs suppressed",
                 stream_id
             );
@@ -1118,22 +1124,22 @@ impl DesktopPlayback {
         // Debug: log callback invocation with per-stream counter
         // Log first 10 callbacks for each new stream
         if callback_count == 1 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i32] *** FIRST CALLBACK FOR STREAM {:?} (global #{}) ***",
                 stream_id,
                 global_count + 1
             );
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i32]   Thread ID: {:?}",
                 std::thread::current().id()
             );
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i32]   Buffer size: {} samples ({} frames stereo)",
                 data.len(),
                 data.len() / 2
             );
         } else if callback_count <= 10 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i32] Stream {:?} call #{} (global #{}), buffer: {} samples",
                 stream_id,
                 callback_count,
@@ -1141,14 +1147,14 @@ impl DesktopPlayback {
                 data.len()
             );
         } else if callback_count == 11 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i32] Stream {:?}: further callback logs suppressed (global #{})",
                 stream_id,
                 global_count + 1
             );
         } else if callback_count.is_multiple_of(1000) {
             // Log every 1000 callbacks to show the stream is still alive
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i32] Stream {:?} still alive: {} callbacks (global #{})",
                 stream_id,
                 callback_count,
@@ -1158,7 +1164,7 @@ impl DesktopPlayback {
 
         // Process any pending commands
         while let Ok(command) = command_rx.try_recv() {
-            eprintln!("[audio_callback_i32] Received command: {:?}", command);
+            tracing::trace!("[audio_callback_i32] Received command: {:?}", command);
             if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
             {
                 let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
@@ -1235,24 +1241,24 @@ impl DesktopPlayback {
     ) {
         // Debug: log callback invocation with per-stream counter
         if callback_count == 1 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i16] *** FIRST CALLBACK FOR STREAM {:?} ***",
                 stream_id
             );
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i16]   Buffer size: {} samples ({} frames stereo)",
                 data.len(),
                 data.len() / 2
             );
         } else if callback_count <= 5 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i16] Stream {:?} call #{}, buffer: {} samples",
                 stream_id,
                 callback_count,
                 data.len()
             );
         } else if callback_count == 6 {
-            eprintln!(
+            tracing::trace!(
                 "[audio_callback_i16] Stream {:?}: further callback logs suppressed",
                 stream_id
             );
@@ -1432,20 +1438,20 @@ impl DesktopPlayback {
             if let Some(source) = result.source {
                 if result.is_preload {
                     // Pre-loaded next track for crossfade/gapless
-                    eprintln!(
+                    tracing::debug!(
                         "[poll_track_loader] Next track ready for crossfade: {}",
                         result.track.title
                     );
                     mgr.set_next_source(source, result.track);
                 } else {
                     // Current track loaded (initial load or track change)
-                    eprintln!("[poll_track_loader] Track loaded: {}", result.track.title);
-                    eprintln!(
+                    tracing::debug!("[poll_track_loader] Track loaded: {}", result.track.title);
+                    tracing::debug!(
                         "[poll_track_loader] State BEFORE set_audio_source: {:?}",
                         mgr.get_state()
                     );
                     mgr.set_audio_source(source);
-                    eprintln!(
+                    tracing::debug!(
                         "[poll_track_loader] State AFTER set_audio_source: {:?}",
                         mgr.get_state()
                     );
@@ -1454,9 +1460,10 @@ impl DesktopPlayback {
                     let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
                 }
             } else if let Some(error) = result.error {
-                eprintln!(
+                tracing::error!(
                     "[poll_track_loader] Failed to load '{}': {}",
-                    result.track.title, error
+                    result.track.title,
+                    error
                 );
                 if !result.is_preload {
                     // Only emit error for current track loads, not preloads
@@ -1482,22 +1489,22 @@ impl DesktopPlayback {
 
         match command {
             PlaybackCommand::Play => {
-                eprintln!("[PlaybackCommand::Play] Received");
+                tracing::debug!("[PlaybackCommand::Play] Received");
                 mgr.play()?;
 
                 let state = mgr.get_state();
-                eprintln!("[PlaybackCommand::Play] State after play(): {:?}", state);
+                tracing::debug!("[PlaybackCommand::Play] State after play(): {:?}", state);
 
                 // If state is Loading, request track load via background loader
                 if state == soul_playback::PlaybackState::Loading {
                     if let Some(track) = mgr.get_current_track().cloned() {
-                        eprintln!(
+                        tracing::debug!(
                             "[PlaybackCommand::Play] Requesting track load: {} from {}",
                             track.title,
                             track.path.display()
                         );
                         let target_sample_rate = mgr.get_sample_rate();
-                        eprintln!(
+                        tracing::debug!(
                             "[PlaybackCommand::Play] Target sample rate: {}",
                             target_sample_rate
                         );
@@ -1509,14 +1516,14 @@ impl DesktopPlayback {
                             is_preload: false,
                         };
                         if !track_loader.request_load(request) {
-                            eprintln!("[PlaybackCommand::Play] Load request queue full");
+                            tracing::debug!("[PlaybackCommand::Play] Load request queue full");
                         }
                         // Result will be handled by poll_track_loader in next callback
                     } else {
-                        eprintln!("[PlaybackCommand::Play] No current track to load");
+                        tracing::debug!("[PlaybackCommand::Play] No current track to load");
                     }
                 } else {
-                    eprintln!(
+                    tracing::debug!(
                         "[PlaybackCommand::Play] State is {:?}, not loading audio",
                         state
                     );
@@ -1526,12 +1533,12 @@ impl DesktopPlayback {
                 }
             }
             PlaybackCommand::Pause => {
-                eprintln!(
+                tracing::debug!(
                     "[PlaybackCommand::Pause] Received, current state: {:?}",
                     mgr.get_state()
                 );
                 mgr.pause();
-                eprintln!(
+                tracing::debug!(
                     "[PlaybackCommand::Pause] After pause(), state: {:?}",
                     mgr.get_state()
                 );
@@ -1559,7 +1566,7 @@ impl DesktopPlayback {
                             is_preload: false,
                         };
                         if !track_loader.request_load(request) {
-                            eprintln!("[PlaybackCommand::Next] Load request queue full");
+                            tracing::debug!("[PlaybackCommand::Next] Load request queue full");
                         }
                         // Result will be handled by poll_track_loader in next callback
                     }
@@ -1587,7 +1594,7 @@ impl DesktopPlayback {
                             is_preload: false,
                         };
                         if !track_loader.request_load(request) {
-                            eprintln!("[PlaybackCommand::Previous] Load request queue full");
+                            tracing::debug!("[PlaybackCommand::Previous] Load request queue full");
                         }
                         // Result will be handled by poll_track_loader in next callback
                     }
@@ -1664,7 +1671,7 @@ impl DesktopPlayback {
                             is_preload: false,
                         };
                         if !track_loader.request_load(request) {
-                            eprintln!(
+                            tracing::debug!(
                                 "[PlaybackCommand::SkipToQueueIndex] Load request queue full"
                             );
                         }
@@ -1697,7 +1704,7 @@ impl DesktopPlayback {
             PlaybackCommand::SwitchDevice(_, _) => {
                 // Device switching is handled externally via switch_device() method
                 // This command shouldn't reach here, but log if it does
-                eprintln!("[WARN] SwitchDevice command received in audio callback - should be handled externally");
+                tracing::warn!("[WARN] SwitchDevice command received in audio callback - should be handled externally");
             }
         }
 
@@ -1712,7 +1719,7 @@ impl DesktopPlayback {
     /// audio callbacks aren't running). Commands may be dropped if the
     /// channel is full - this prevents deadlocks when switching audio devices.
     pub fn send_command(&self, command: PlaybackCommand) -> Result<()> {
-        eprintln!("[DesktopPlayback] Sending command: {:?}", command);
+        tracing::debug!("[DesktopPlayback] Sending command: {:?}", command);
 
         // Debug: Check if stream is still alive and channel state
         let stream_alive = {
@@ -1724,26 +1731,31 @@ impl DesktopPlayback {
         let channel_is_empty = self.command_tx.is_empty();
         let channel_is_full = self.command_tx.is_full();
 
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Stream alive: {}, Channel: len={}, cap={}, empty={}, full={}",
-            stream_alive, channel_len, channel_capacity, channel_is_empty, channel_is_full
+            stream_alive,
+            channel_len,
+            channel_capacity,
+            channel_is_empty,
+            channel_is_full
         );
 
         // Get current backend for context
         let backend = *self.current_backend.lock().unwrap();
         let device = self.current_device.lock().unwrap().clone();
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Current backend: {:?}, device: {}",
-            backend, device
+            backend,
+            device
         );
 
         match self.command_tx.try_send(command.clone()) {
             Ok(()) => {
-                eprintln!("[DesktopPlayback] Command sent successfully");
+                tracing::debug!("[DesktopPlayback] Command sent successfully");
                 Ok(())
             }
             Err(crossbeam_channel::TrySendError::Full(_)) => {
-                eprintln!(
+                tracing::debug!(
                     "[DesktopPlayback] WARNING: Command channel FULL, dropping command: {:?}",
                     command
                 );
@@ -1752,22 +1764,26 @@ impl DesktopPlayback {
                 Ok(())
             }
             Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
-                eprintln!("[DesktopPlayback] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                eprintln!("[DesktopPlayback] ERROR: Command channel disconnected!");
-                eprintln!("[DesktopPlayback] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                eprintln!("[DesktopPlayback] Stream is_some: {}", stream_alive);
-                eprintln!("[DesktopPlayback] Backend: {:?}", backend);
-                eprintln!("[DesktopPlayback] Device: {}", device);
-                eprintln!("[DesktopPlayback] This means the stream's command receiver (command_rx) was dropped.");
-                eprintln!("[DesktopPlayback] Possible causes:");
-                eprintln!("[DesktopPlayback]   1. ASIO driver silently terminated the stream");
-                eprintln!("[DesktopPlayback]   2. Stream error callback was triggered");
-                eprintln!("[DesktopPlayback]   3. Stream was dropped elsewhere");
-                eprintln!("[DesktopPlayback]   4. command_tx was not updated after device switch");
+                tracing::error!("[DesktopPlayback] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                tracing::error!("[DesktopPlayback] ERROR: Command channel disconnected!");
+                tracing::error!("[DesktopPlayback] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                tracing::error!("[DesktopPlayback] Stream is_some: {}", stream_alive);
+                tracing::error!("[DesktopPlayback] Backend: {:?}", backend);
+                tracing::error!("[DesktopPlayback] Device: {}", device);
+                tracing::error!("[DesktopPlayback] This means the stream's command receiver (command_rx) was dropped.");
+                tracing::error!("[DesktopPlayback] Possible causes:");
+                tracing::error!(
+                    "[DesktopPlayback]   1. ASIO driver silently terminated the stream"
+                );
+                tracing::error!("[DesktopPlayback]   2. Stream error callback was triggered");
+                tracing::error!("[DesktopPlayback]   3. Stream was dropped elsewhere");
+                tracing::error!(
+                    "[DesktopPlayback]   4. command_tx was not updated after device switch"
+                );
 
                 // Get the global callback counter for diagnostics
                 let global_count = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-                eprintln!(
+                tracing::error!(
                     "[DesktopPlayback] Global I32 callback count: {}",
                     global_count
                 );
@@ -1787,6 +1803,14 @@ impl DesktopPlayback {
     /// Receive next event (blocking)
     pub fn recv_event(&self) -> Option<PlaybackEvent> {
         self.event_rx.recv().ok()
+    }
+
+    /// Receive next event with timeout (blocking with timeout)
+    ///
+    /// Returns Some(event) if an event arrives within the timeout,
+    /// None if the timeout expires.
+    pub fn recv_event_timeout(&self, timeout: std::time::Duration) -> Option<PlaybackEvent> {
+        self.event_rx.recv_timeout(timeout).ok()
     }
 
     /// Get current playback state
@@ -1872,15 +1896,15 @@ impl DesktopPlayback {
         backend: crate::AudioBackend,
         device_name: Option<String>,
     ) -> Result<()> {
-        eprintln!("[DesktopPlayback] ==========================================");
-        eprintln!("[DesktopPlayback] SWITCHING AUDIO DEVICE");
-        eprintln!(
+        tracing::debug!("[DesktopPlayback] ==========================================");
+        tracing::debug!("[DesktopPlayback] SWITCHING AUDIO DEVICE");
+        tracing::debug!(
             "[DesktopPlayback]   Thread ID: {:?}",
             std::thread::current().id()
         );
-        eprintln!("[DesktopPlayback]   Backend: {:?}", backend);
-        eprintln!("[DesktopPlayback]   Device: {:?}", device_name);
-        eprintln!("[DesktopPlayback] ==========================================");
+        tracing::debug!("[DesktopPlayback]   Backend: {:?}", backend);
+        tracing::debug!("[DesktopPlayback]   Device: {:?}", device_name);
+        tracing::debug!("[DesktopPlayback] ==========================================");
 
         // Save current state
         let (was_playing, position) = {
@@ -1890,9 +1914,10 @@ impl DesktopPlayback {
             (state == soul_playback::PlaybackState::Playing, pos)
         };
 
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Current state: playing={}, position={:?}",
-            was_playing, position
+            was_playing,
+            position
         );
 
         // Stop and drop the old stream
@@ -1900,33 +1925,33 @@ impl DesktopPlayback {
         {
             let mut stream_guard = self.stream.lock().unwrap();
             if let Some(stream) = stream_guard.take() {
-                eprintln!("[DesktopPlayback] Pausing old stream before drop...");
+                tracing::debug!("[DesktopPlayback] Pausing old stream before drop...");
                 // Try to pause the stream first (some drivers need this)
                 if let Err(e) = stream.pause() {
-                    eprintln!(
+                    tracing::debug!(
                         "[DesktopPlayback] Warning: Failed to pause old stream: {}",
                         e
                     );
                 }
-                eprintln!("[DesktopPlayback] Dropping old stream...");
+                tracing::debug!("[DesktopPlayback] Dropping old stream...");
                 drop(stream);
-                eprintln!("[DesktopPlayback] Old stream dropped");
+                tracing::debug!("[DesktopPlayback] Old stream dropped");
             }
         }
 
         // Longer delay for ASIO - drivers often need time to release resources
-        eprintln!("[DesktopPlayback] Waiting for driver to release resources...");
+        tracing::debug!("[DesktopPlayback] Waiting for driver to release resources...");
         std::thread::sleep(std::time::Duration::from_millis(200));
-        eprintln!("[DesktopPlayback] Resource release wait complete");
+        tracing::debug!("[DesktopPlayback] Resource release wait complete");
 
         // Create new command channel for the new stream
-        eprintln!("[DesktopPlayback] Creating new command channel...");
+        tracing::debug!("[DesktopPlayback] Creating new command channel...");
         let (new_command_tx, new_command_rx) = bounded(32);
 
         // Update command_tx for this instance
-        eprintln!("[DesktopPlayback] Updating command_tx to new channel...");
+        tracing::debug!("[DesktopPlayback] Updating command_tx to new channel...");
         self.command_tx = new_command_tx.clone();
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] command_tx updated, channel capacity: {}",
             self.command_tx.capacity().unwrap_or(0)
         );
@@ -1944,9 +1969,10 @@ impl DesktopPlayback {
         // Check if sample rate changed
         let old_sample_rate = self.current_sample_rate.load(Ordering::SeqCst);
         if old_sample_rate != new_sample_rate {
-            eprintln!(
+            tracing::debug!(
                 "[DesktopPlayback] Sample rate changed: {} Hz -> {} Hz",
-                old_sample_rate, new_sample_rate
+                old_sample_rate,
+                new_sample_rate
             );
             self.current_sample_rate
                 .store(new_sample_rate, Ordering::SeqCst);
@@ -1956,20 +1982,21 @@ impl DesktopPlayback {
             ));
         }
 
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] New stream created for device: {} at {} Hz",
-            actual_device_name, new_sample_rate
+            actual_device_name,
+            new_sample_rate
         );
 
         // Check callbacks before storing
         let callbacks_before_store = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Callbacks before storing stream: {}",
             callbacks_before_store
         );
 
         // Store new stream
-        eprintln!("[DesktopPlayback] Storing new stream...");
+        tracing::debug!("[DesktopPlayback] Storing new stream...");
         {
             let mut stream_guard = self.stream.lock().unwrap();
             *stream_guard = Some(new_stream);
@@ -1977,19 +2004,19 @@ impl DesktopPlayback {
 
         // Check callbacks immediately after storing
         let callbacks_after_store = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Stream stored. Callbacks: {} (diff: {})",
             callbacks_after_store,
             callbacks_after_store - callbacks_before_store
         );
-        eprintln!("[DesktopPlayback] Waiting 100ms for callbacks to start...");
+        tracing::debug!("[DesktopPlayback] Waiting 100ms for callbacks to start...");
 
         // Give the new stream a moment to start callbacks
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Check callbacks after sleep
         let callbacks_after_sleep = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] After 100ms sleep. Callbacks: {} (diff: {})",
             callbacks_after_sleep,
             callbacks_after_sleep - callbacks_after_store
@@ -1999,17 +2026,17 @@ impl DesktopPlayback {
         let channel_len = self.command_tx.len();
         let channel_cap = self.command_tx.capacity().unwrap_or(0);
         let callbacks_so_far = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-        eprintln!("[DesktopPlayback] Channel verification after stream creation:");
-        eprintln!("[DesktopPlayback]   Queue length: {}", channel_len);
-        eprintln!("[DesktopPlayback]   Capacity: {}", channel_cap);
-        eprintln!(
+        tracing::debug!("[DesktopPlayback] Channel verification after stream creation:");
+        tracing::debug!("[DesktopPlayback]   Queue length: {}", channel_len);
+        tracing::debug!("[DesktopPlayback]   Capacity: {}", channel_cap);
+        tracing::debug!(
             "[DesktopPlayback]   Global I32 callbacks: {}",
             callbacks_so_far
         );
 
         // Check callbacks before updating backend
         let callbacks_before_backend = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Callbacks before backend update: {}",
             callbacks_before_backend
         );
@@ -2022,8 +2049,8 @@ impl DesktopPlayback {
 
         // Check callbacks after updating backend
         let callbacks_after_backend = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-        eprintln!("[DesktopPlayback] Backend and device name updated");
-        eprintln!(
+        tracing::debug!("[DesktopPlayback] Backend and device name updated");
+        tracing::debug!(
             "[DesktopPlayback] Callbacks after backend update: {} (diff: {})",
             callbacks_after_backend,
             callbacks_after_backend - callbacks_before_backend
@@ -2108,9 +2135,9 @@ impl DesktopPlayback {
         if was_playing {
             let mut mgr = self.manager.lock().unwrap();
             if let Err(e) = mgr.play() {
-                eprintln!("[DesktopPlayback] Failed to resume playback: {}", e);
+                tracing::debug!("[DesktopPlayback] Failed to resume playback: {}", e);
             } else {
-                eprintln!("[DesktopPlayback] Playback resumed");
+                tracing::debug!("[DesktopPlayback] Playback resumed");
             }
         }
 
@@ -2120,7 +2147,7 @@ impl DesktopPlayback {
             let mgr = self.manager.lock().unwrap();
             mgr.get_state()
         };
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Emitting StateChanged after device switch: {:?}",
             current_state
         );
@@ -2131,19 +2158,19 @@ impl DesktopPlayback {
             std::time::Duration::from_millis(100),
         ) {
             Ok(()) => {
-                eprintln!("[DesktopPlayback] StateChanged event sent successfully");
+                tracing::debug!("[DesktopPlayback] StateChanged event sent successfully");
             }
             Err(crossbeam_channel::SendTimeoutError::Timeout(_)) => {
-                eprintln!("[DesktopPlayback] WARNING: StateChanged event timed out, frontend may be out of sync");
+                tracing::debug!("[DesktopPlayback] WARNING: StateChanged event timed out, frontend may be out of sync");
             }
             Err(crossbeam_channel::SendTimeoutError::Disconnected(_)) => {
-                eprintln!("[DesktopPlayback] ERROR: Event channel disconnected");
+                tracing::debug!("[DesktopPlayback] ERROR: Event channel disconnected");
             }
         }
 
         // Final callback check before returning
         let callbacks_at_end = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Device switch complete. Final callback count: {}",
             callbacks_at_end
         );
@@ -2205,7 +2232,7 @@ impl DesktopPlayback {
         let device_rate = match self.query_device_sample_rate() {
             Ok(rate) => rate,
             Err(e) => {
-                eprintln!(
+                tracing::debug!(
                     "[DesktopPlayback] Failed to query device sample rate: {}",
                     e
                 );
@@ -2220,9 +2247,10 @@ impl DesktopPlayback {
             return Ok(false);
         }
 
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Device sample rate changed: {} Hz -> {} Hz",
-            current_rate, device_rate
+            current_rate,
+            device_rate
         );
 
         // Sample rate has changed - need to recreate the stream
@@ -2376,7 +2404,7 @@ impl DesktopPlayback {
         &mut self,
         config: crate::ExclusiveConfig,
     ) -> Result<crate::LatencyInfo> {
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Setting exclusive mode with config: {:?}",
             config
         );
@@ -2403,7 +2431,7 @@ impl DesktopPlayback {
     ///
     /// Switches back to the default shared mode output.
     pub fn disable_exclusive_mode(&mut self) -> Result<()> {
-        eprintln!("[DesktopPlayback] Disabling exclusive mode");
+        tracing::debug!("[DesktopPlayback] Disabling exclusive mode");
 
         // Switch back to default device with default backend
         self.switch_device(crate::AudioBackend::Default, None)?;
@@ -2507,7 +2535,7 @@ impl DesktopPlayback {
 
         let mut settings = self.resampling_settings.lock().unwrap();
         settings.quality = quality.to_string();
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Resampling quality set to '{}' (sinc_len={}, f_cutoff={})",
             quality,
             settings.sinc_len(),
@@ -2538,7 +2566,7 @@ impl DesktopPlayback {
 
         let mut settings = self.resampling_settings.lock().unwrap();
         settings.target_rate = rate;
-        eprintln!(
+        tracing::debug!(
             "[DesktopPlayback] Resampling target rate set to {} (0=auto)",
             rate
         );
@@ -2583,7 +2611,7 @@ impl DesktopPlayback {
 
         let mut settings = self.resampling_settings.lock().unwrap();
         settings.backend = backend.to_string();
-        eprintln!("[DesktopPlayback] Resampling backend set to '{}'", backend);
+        tracing::debug!("[DesktopPlayback] Resampling backend set to '{}'", backend);
         Ok(())
     }
 

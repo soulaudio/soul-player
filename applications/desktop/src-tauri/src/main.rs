@@ -259,7 +259,7 @@ async fn play_queue(
     start_index: usize,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    tracing::info!(
+    tracing::debug!(
         "[play_queue] Called with {} tracks, start_index: {}",
         queue.len(),
         start_index
@@ -275,7 +275,7 @@ async fn play_queue(
 
     // Debug: print first track info
     if let Some(first) = queue.first() {
-        tracing::info!(
+        tracing::debug!(
             "[play_queue] First track: {}, path: {}",
             first.title,
             first.file_path
@@ -288,7 +288,7 @@ async fn play_queue(
         .map(|track_data| track_data.to_queue_track())
         .collect();
 
-    tracing::info!(
+    tracing::debug!(
         "[play_queue] Loading {} tracks as playlist (source queue)",
         tracks.len()
     );
@@ -314,7 +314,7 @@ async fn play_queue(
     let play_result = playback.play();
     tracing::debug!("[play_queue] play() returned: {:?}", play_result);
     play_result?;
-    tracing::info!("[play_queue] All commands sent successfully");
+    tracing::debug!("[play_queue] All commands sent successfully");
 
     Ok(())
 }
@@ -327,7 +327,7 @@ async fn play_queue_with_context(
     enable_shuffle: bool,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    tracing::info!(
+    tracing::debug!(
         "[play_queue_with_context] Context: {:?}, batch size: {}, start_index: {}, shuffle: {}",
         context.type_name(),
         initial_batch.len(),
@@ -352,7 +352,7 @@ async fn play_queue_with_context(
             .duration_since(UNIX_EPOCH)
             .map_err(|e| e.to_string())?
             .as_secs();
-        tracing::info!("[play_queue_with_context] Generated shuffle seed: {}", seed);
+        tracing::debug!("[play_queue_with_context] Generated shuffle seed: {}", seed);
         Some(seed)
     } else {
         None
@@ -380,7 +380,7 @@ async fn play_queue_with_context(
     // Start playback
     playback.play()?;
 
-    tracing::info!(
+    tracing::debug!(
         "[play_queue_with_context] Lazy queue initialized: context={:?}, total_count={}",
         context.type_name(),
         context.total_count()
@@ -647,14 +647,18 @@ async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String>
     tracing::debug!("[delete_track] Library path: {:?}", state.library_path);
 
     // Determine if file should be deleted (library-owned vs external)
-    let should_delete_file = if let Some(ref path) = file_path {
+    let file_to_delete = if let Some(ref path) = file_path {
         let path_buf = std::path::PathBuf::from(path);
         let is_library_owned = path_buf.starts_with(&state.library_path);
         tracing::debug!("[delete_track] Is library-owned: {}", is_library_owned);
-        is_library_owned
+        if is_library_owned {
+            Some(path_buf)
+        } else {
+            None
+        }
     } else {
         tracing::debug!("[delete_track] No file path found, skipping file deletion");
-        false
+        None
     };
 
     // Start database transaction
@@ -677,47 +681,36 @@ async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String>
 
     tracing::debug!("[delete_track] Database record deleted");
 
-    // If library-owned file, attempt deletion
-    if should_delete_file {
-        if let Some(path) = file_path {
-            tracing::info!("[delete_track] Attempting to delete file: {}", path);
+    // Commit transaction BEFORE file deletion to avoid holding database locks during I/O
+    tracing::debug!("[delete_track] Committing transaction");
+    tx.commit().await.map_err(|e| {
+        tracing::error!("[delete_track] Transaction commit failed: {}", e);
+        format!("Failed to commit transaction: {}", e)
+    })?;
 
-            match std::fs::remove_file(&path) {
-                Ok(_) => {
-                    tracing::info!("[delete_track] File deleted successfully");
-                    // Commit transaction
-                    tx.commit().await.map_err(|e| {
-                        tracing::error!("[delete_track] Transaction commit failed: {}", e);
-                        format!("Failed to commit transaction: {}", e)
-                    })?;
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "[delete_track] File deletion failed: {}, rolling back transaction",
-                        e
-                    );
+    // Now delete the file asynchronously (if library-owned)
+    // Note: We can't roll back the database changes if file deletion fails,
+    // so we just log a warning and continue
+    if let Some(path) = file_to_delete {
+        tracing::info!(
+            "[delete_track] Attempting to delete file: {}",
+            path.display()
+        );
 
-                    // Rollback transaction
-                    tx.rollback().await.map_err(|e| {
-                        tracing::error!("[delete_track] Rollback failed: {}", e);
-                        format!("Rollback failed: {}", e)
-                    })?;
-
-                    // Return error with context
-                    return Err(format!(
-                        "Failed to delete file '{}': {}. Database changes were rolled back.",
-                        path, e
-                    ));
-                }
+        match tokio::fs::remove_file(&path).await {
+            Ok(_) => {
+                tracing::info!("[delete_track] File deleted successfully");
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "[delete_track] File deletion failed: {} (track already removed from database)",
+                    e
+                );
+                // Don't return error - database deletion succeeded and we can't roll back
             }
         }
     } else {
-        // External file - just commit database changes
-        tracing::debug!("[delete_track] External file, only removing from database");
-        tx.commit().await.map_err(|e| {
-            tracing::error!("[delete_track] Transaction commit failed: {}", e);
-            format!("Failed to commit transaction: {}", e)
-        })?;
+        tracing::debug!("[delete_track] No file to delete (external or missing)");
     }
 
     tracing::info!("[delete_track] Track deletion completed successfully");
@@ -906,28 +899,24 @@ async fn get_all_artists(state: State<'_, AppState>) -> Result<Vec<FrontendArtis
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut frontend_artists = Vec::new();
-    for artist in artists {
-        // Count tracks for this artist
-        let tracks = soul_storage::tracks::get_by_artist(&state.pool, artist.id)
-            .await
-            .map_err(|e| e.to_string())?;
-        let track_count = tracks.len() as i32;
+    // Batch query for track and album counts (avoids N+1 query problem)
+    let track_counts = soul_storage::artists::get_track_counts(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let album_counts = soul_storage::artists::get_album_counts(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
-        // Count albums for this artist
-        let albums = soul_storage::albums::get_by_artist(&state.pool, artist.id)
-            .await
-            .map_err(|e| e.to_string())?;
-        let album_count = albums.len() as i32;
-
-        frontend_artists.push(FrontendArtist {
+    let frontend_artists = artists
+        .into_iter()
+        .map(|artist| FrontendArtist {
             id: artist.id,
             name: artist.name,
             sort_name: artist.sort_name,
-            track_count,
-            album_count,
-        });
-    }
+            track_count: *track_counts.get(&artist.id).unwrap_or(&0),
+            album_count: *album_counts.get(&artist.id).unwrap_or(&0),
+        })
+        .collect();
 
     Ok(frontend_artists)
 }
@@ -1384,6 +1373,21 @@ async fn get_track_artwork(
     track_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, String> {
+    use crate::app_state::ArtworkCacheKey;
+
+    let cache_key = ArtworkCacheKey::Track(track_id.clone());
+
+    // Check cache first
+    {
+        let mut cache = state.artwork_cache.lock().await;
+        if let Some(cached_data_url) = cache.get(&cache_key) {
+            tracing::debug!("[get_track_artwork] Cache hit for track {}", track_id);
+            return Ok(Some(cached_data_url.clone()));
+        }
+    }
+
+    // Cache miss - fetch from artwork manager
+    tracing::debug!("[get_track_artwork] Cache miss for track {}", track_id);
     let track_id_parsed = soul_core::types::TrackId::new(track_id);
 
     match state
@@ -1396,6 +1400,13 @@ async fn get_track_artwork(
             let base64_data =
                 base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
             let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+
+            // Store in cache
+            {
+                let mut cache = state.artwork_cache.lock().await;
+                cache.put(cache_key, data_url.clone());
+            }
+
             Ok(Some(data_url))
         }
         Ok(None) => Ok(None),
@@ -1412,6 +1423,21 @@ async fn get_album_artwork(
     album_id: i64,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, String> {
+    use crate::app_state::ArtworkCacheKey;
+
+    let cache_key = ArtworkCacheKey::Album(album_id);
+
+    // Check cache first
+    {
+        let mut cache = state.artwork_cache.lock().await;
+        if let Some(cached_data_url) = cache.get(&cache_key) {
+            tracing::debug!("[get_album_artwork] Cache hit for album {}", album_id);
+            return Ok(Some(cached_data_url.clone()));
+        }
+    }
+
+    // Cache miss - fetch from artwork manager
+    tracing::debug!("[get_album_artwork] Cache miss for album {}", album_id);
     match state
         .artwork_manager
         .get_album_artwork_with_mime(album_id)
@@ -1422,6 +1448,13 @@ async fn get_album_artwork(
             let base64_data =
                 base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
             let data_url = format!("data:{};base64,{}", mime_type, base64_data);
+
+            // Store in cache
+            {
+                let mut cache = state.artwork_cache.lock().await;
+                cache.put(cache_key, data_url.clone());
+            }
+
             Ok(Some(data_url))
         }
         Ok(None) => Ok(None),
@@ -1850,8 +1883,14 @@ fn init_logging(enable_file_logging: bool) {
         std::mem::forget(guard);
 
         // Set up layers: console + file
-        let env_filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("info,soul_importer=debug"));
+        // Use different default log levels for debug vs release builds
+        let default_filter = if cfg!(debug_assertions) {
+            "info,soul_importer=debug"
+        } else {
+            "warn"
+        };
+        let env_filter =
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
 
         tracing_subscriber::registry()
             .with(env_filter)
@@ -1859,6 +1898,7 @@ fn init_logging(enable_file_logging: bool) {
             .with(fmt::layer().with_writer(non_blocking).with_ansi(false)) // File output (no colors)
             .init();
 
+        // These eprintln! are OK here since logging is just being initialized
         eprintln!("[LOGGING] File logging enabled: {}", logs_dir.display());
         eprintln!("[LOGGING] Log files are saved as: soul-player.log.YYYY-MM-DD");
     } else {
@@ -1870,8 +1910,14 @@ fn init_logging(enable_file_logging: bool) {
 fn init_console_logging() {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,soul_importer=debug"));
+    // Use different default log levels for debug vs release builds
+    let default_filter = if cfg!(debug_assertions) {
+        "info,soul_importer=debug"
+    } else {
+        "warn"
+    };
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
 
     tracing_subscriber::registry()
         .with(env_filter)

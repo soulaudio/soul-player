@@ -87,21 +87,24 @@ impl ArtworkManager {
         };
 
         // Remove any existing artwork for this entity
-        self.remove_custom_artwork_files(entity_type, id)?;
+        self.remove_custom_artwork_files(entity_type, id).await?;
 
         let path = dir.join(format!("{}.{}", id, ext));
-        std::fs::write(&path, data).map_err(|e| format!("Failed to write artwork: {}", e))?;
+        tokio::fs::write(&path, data)
+            .await
+            .map_err(|e| format!("Failed to write artwork: {}", e))?;
 
         Ok(path)
     }
 
     /// Remove custom artwork files for an entity
-    fn remove_custom_artwork_files(&self, entity_type: &str, id: &str) -> Result<(), String> {
+    async fn remove_custom_artwork_files(&self, entity_type: &str, id: &str) -> Result<(), String> {
         let dir = self.get_artwork_dir(entity_type);
         for ext in ["jpg", "jpeg", "png", "webp", "gif"] {
             let path = dir.join(format!("{}.{}", id, ext));
             if path.exists() {
-                std::fs::remove_file(&path)
+                tokio::fs::remove_file(&path)
+                    .await
                     .map_err(|e| format!("Failed to remove old artwork: {}", e))?;
             }
         }
@@ -460,7 +463,8 @@ impl ArtworkManager {
 
             // Write as cover.{ext} in album folder
             let cover_path = album_folder.join(format!("cover.{}", ext));
-            std::fs::write(&cover_path, &data)
+            tokio::fs::write(&cover_path, &data)
+                .await
                 .map_err(|e| format!("Failed to write artwork to album folder: {}", e))?;
 
             tracing::info!("Saved artwork to album folder: {}", cover_path.display());
@@ -521,7 +525,8 @@ impl ArtworkManager {
 
     /// Remove custom artwork from an album
     pub async fn remove_album_artwork(&self, album_id: AlbumId) -> Result<(), String> {
-        self.remove_custom_artwork_files("albums", &album_id.to_string())?;
+        self.remove_custom_artwork_files("albums", &album_id.to_string())
+            .await?;
 
         // Clear artwork source from database (will fall back to folder or embedded)
         soul_storage::albums::set_artwork_source(&self.pool, album_id, "", "")
@@ -584,7 +589,8 @@ impl ArtworkManager {
 
     /// Remove artwork from an artist
     pub async fn remove_artist_artwork(&self, artist_id: ArtistId) -> Result<(), String> {
-        self.remove_custom_artwork_files("artists", &artist_id.to_string())?;
+        self.remove_custom_artwork_files("artists", &artist_id.to_string())
+            .await?;
 
         soul_storage::artists::update_cover_art_path(&self.pool, artist_id, None)
             .await
@@ -647,7 +653,8 @@ impl ArtworkManager {
         user_id: &UserId,
         playlist_id: &PlaylistId,
     ) -> Result<(), String> {
-        self.remove_custom_artwork_files("playlists", playlist_id.as_str())?;
+        self.remove_custom_artwork_files("playlists", playlist_id.as_str())
+            .await?;
 
         soul_storage::playlists::update_cover_art_path(
             &self.pool,

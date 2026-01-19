@@ -99,3 +99,51 @@ pub async fn update_cover_art_path(
     .await?;
     Ok(())
 }
+
+/// Get track counts for all artists in a single query
+pub async fn get_track_counts(
+    pool: &SqlitePool,
+) -> Result<std::collections::HashMap<ArtistId, i32>> {
+    let rows = sqlx::query!(
+        "SELECT artist_id, COUNT(*) as count
+         FROM tracks
+         WHERE artist_id IS NOT NULL
+         GROUP BY artist_id"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.artist_id.expect("artist_id should not be null"),
+                row.count as i32,
+            )
+        })
+        .collect())
+}
+
+/// Get album counts for all artists in a single query
+pub async fn get_album_counts(
+    pool: &SqlitePool,
+) -> Result<std::collections::HashMap<ArtistId, i32>> {
+    let rows = sqlx::query!(
+        "SELECT artist_id, COUNT(*) as count
+         FROM albums
+         WHERE artist_id IS NOT NULL
+         GROUP BY artist_id"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.artist_id.expect("artist_id should not be null"),
+                row.count as i32,
+            )
+        })
+        .collect())
+}

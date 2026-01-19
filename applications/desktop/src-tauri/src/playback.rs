@@ -164,19 +164,30 @@ impl PlaybackManager {
 
     /// Event emission loop that runs in background thread
     ///
-    /// Polls for playback events and emits them to the frontend via Tauri events.
-    /// Also polls for device sample rate changes periodically.
-    /// Tracks play statistics and records them to the database.
+    /// Uses channel-based blocking with timeout instead of busy-waiting.
+    /// Wakes up immediately when events arrive, or when periodic tasks are due (250ms position, 2s sample rate).
+    /// This significantly reduces CPU usage and power consumption compared to fixed 50ms polling.
     fn event_emission_loop(playback: Arc<Mutex<DesktopPlayback>>, app_handle: AppHandle) {
         let mut last_position_emit = std::time::Instant::now();
         let mut last_sample_rate_check = std::time::Instant::now();
         let mut tracker = PlaybackTracker::new();
 
         loop {
-            // Poll for events
+            // Calculate time until next periodic task
+            let time_until_position =
+                Duration::from_millis(250).saturating_sub(last_position_emit.elapsed());
+            let time_until_sample_rate =
+                Duration::from_secs(2).saturating_sub(last_sample_rate_check.elapsed());
+
+            // Wait for event with timeout = next periodic task (or 1ms minimum)
+            let timeout = time_until_position
+                .min(time_until_sample_rate)
+                .max(Duration::from_millis(1));
+
+            // Block until event arrives or timeout expires (efficient channel-based waiting)
             let event = {
                 let pb = playback.lock().unwrap();
-                pb.try_recv_event()
+                pb.recv_event_timeout(timeout)
             };
 
             if let Some(event) = event {
@@ -406,8 +417,8 @@ impl PlaybackManager {
                 last_sample_rate_check = std::time::Instant::now();
             }
 
-            // Sleep briefly to avoid busy-waiting
-            thread::sleep(Duration::from_millis(50));
+            // No explicit sleep needed - recv_event_timeout() blocks efficiently
+            // The loop continues immediately after timeout or event arrival
         }
     }
 
@@ -427,7 +438,7 @@ impl PlaybackManager {
             let track_id_obj = soul_core::types::TrackId::new(track_id.clone());
             let user_id = soul_core::types::UserId::new(app_state.user_id.clone());
 
-            tracing::info!(
+            tracing::debug!(
                 track_id = %track_id,
                 user_id = %app_state.user_id,
                 duration_secs = duration_secs,
