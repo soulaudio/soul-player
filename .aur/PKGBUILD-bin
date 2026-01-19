@@ -1,4 +1,4 @@
-# Maintainer: Your Name <your.email@example.com>
+# Maintainer: Soul Player Contributors <noreply@github.com>
 pkgname=soul-player-bin
 pkgver=0.1.1
 pkgrel=1
@@ -9,8 +9,8 @@ license=('AGPL3')
 depends=('gtk3' 'webkit2gtk' 'libayatana-appindicator')
 provides=('soul-player')
 conflicts=('soul-player')
-source=("${pkgname}-${pkgver}.deb::https://github.com/soulaudio/soul-player/releases/download/v${pkgver}/soul_player_${pkgver}_amd64.deb")
-sha256sums=('SKIP')  # Update with actual SHA256 after first release
+source=("${pkgname}-${pkgver}.deb::https://github.com/soulaudio/soul-player/releases/download/v${pkgver}/Soul.Player_${pkgver}_amd64.deb")
+sha256sums=('SKIP')  # Updated automatically by CI workflow
 
 package() {
     # Extract DEB package

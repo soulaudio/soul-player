@@ -466,11 +466,49 @@ jobs:
           sudo rm -rf /opt/ghc
           df -h
 
+      # Install Rust for cargo vendor
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # Generate Cargo sources for Flatpak (required for Flatpak network sandbox)
+      - name: Generate Cargo sources for Flatpak
+        run: |
+          echo "Generating cargo-sources.json for Flatpak build..."
+          echo "This is required because Flatpak builds run in a network sandbox"
+          echo "Using official flatpak-cargo-generator from flatpak-builder-tools"
+          echo ""
+
+          # Install Python dependencies for flatpak-cargo-generator
+          pip3 install aiohttp toml
+
+          # Generate cargo-sources.json
+          chmod +x .flatpak/vendor-cargo.sh
+          ./.flatpak/vendor-cargo.sh
+
+          # Verify cargo-sources.json was created
+          if [ ! -f .flatpak/cargo-sources.json ]; then
+            echo "❌ Error: cargo-sources.json was not created"
+            exit 1
+          fi
+
+          SOURCES_SIZE=$(du -h .flatpak/cargo-sources.json | cut -f1)
+          SOURCE_COUNT=$(python3 -c "import json; print(len(json.load(open('.flatpak/cargo-sources.json'))))" || echo "unknown")
+          echo ""
+          echo "✅ Cargo sources ready"
+          echo "   File: cargo-sources.json"
+          echo "   Size: $SOURCES_SIZE"
+          echo "   Dependencies: $SOURCE_COUNT"
+          echo ""
+
       - name: Install Flatpak build dependencies
         run: |
           echo "Installing Flatpak build tools..."
 
           # Install flatpak and flatpak-builder
+          sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
 
           # Add Flathub repository
@@ -487,12 +525,12 @@ jobs:
 
       - name: Build Flatpak
         run: |
-          echo "Building Flatpak..."
+          echo "Building Flatpak with vendored dependencies..."
 
           # Get version from release config
           VERSION=$(jq -r '.version' .github/release-config.json)
 
-          # Build Flatpak using our script
+          # Build Flatpak using our script (it will use existing vendor.tar.gz)
           chmod +x .flatpak/build-flatpak.sh
           echo "n" | ./.flatpak/build-flatpak.sh "$VERSION"
 
@@ -1577,3 +1615,105 @@ jobs:
           echo "Release ${{ inputs.version || github.ref_name }} published!"
           echo "All installation tests passed"
           echo "Artifacts available on GitHub Releases"
+
+  # ============================================================================
+  # Stage 5: Publish to AUR (Arch User Repository)
+  # ============================================================================
+
+  publish-aur:
+    name: Publish to AUR
+    needs: [create-draft-release, publish-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Get release version and DEB checksum
+        id: get-info
+        env:
+          RELEASE_TAG: ${{ needs.create-draft-release.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Extract version from tag (v0.1.1 -> 0.1.1)
+          VERSION="${RELEASE_TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+          # Get release config
+          CONFIG=$(cat .github/release-config.json)
+          DEB_NAME=$(echo "$CONFIG" | jq -r '.artifacts.linux.deb.name' | sed "s/{version}/$VERSION/")
+          REPO=$(echo "$CONFIG" | jq -r '.repository')
+
+          echo "DEB file: $DEB_NAME"
+
+          # Download DEB file to calculate checksum
+          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$RELEASE_TAG/$DEB_NAME"
+          echo "Downloading: $DOWNLOAD_URL"
+
+          mkdir -p temp-aur
+          wget -q "$DOWNLOAD_URL" -O "temp-aur/$DEB_NAME"
+
+          # Calculate SHA256
+          SHA256=$(sha256sum "temp-aur/$DEB_NAME" | awk '{print $1}')
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "SHA256: $SHA256"
+
+          # Clean up
+          rm -rf temp-aur
+
+      - name: Update PKGBUILD-bin
+        run: |
+          chmod +x .aur/update-pkgbuild.sh
+          ./.aur/update-pkgbuild.sh \
+            "${{ steps.get-info.outputs.version }}" \
+            "${{ steps.get-info.outputs.sha256 }}"
+
+      - name: Generate .SRCINFO
+        run: |
+          cd .aur
+
+          # Install pacman tools for makepkg (if needed)
+          # Note: GitHub Actions Ubuntu runners don't have makepkg by default
+          # We'll generate .SRCINFO manually or use a Docker container
+
+          # Copy PKGBUILD-bin to PKGBUILD for processing
+          cp PKGBUILD-bin PKGBUILD
+
+          # Use Docker to run makepkg in an Arch Linux container
+          docker run --rm -v "$PWD:/pkg" archlinux:latest bash -c "
+            pacman -Sy --noconfirm --needed base-devel git
+            cd /pkg
+            # Create a non-root user for makepkg (it refuses to run as root)
+            useradd -m builder
+            chown -R builder:builder /pkg
+            su builder -c 'makepkg --printsrcinfo > .SRCINFO'
+          "
+
+          # Verify .SRCINFO was created
+          if [ ! -f .SRCINFO ]; then
+            echo "Error: .SRCINFO generation failed"
+            exit 1
+          fi
+
+          echo "✅ .SRCINFO generated successfully"
+          cat .SRCINFO
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4
+        with:
+          pkgname: soul-player-bin
+          pkgbuild: .aur/PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ steps.get-info.outputs.version }}"
+          ssh_keyscan_types: rsa,ecdsa,ed25519
+          assets: .aur/.SRCINFO
+
+      - name: Notify AUR publish success
+        run: |
+          echo "✅ AUR package published successfully!"
+          echo "Package: soul-player-bin"
+          echo "Version: ${{ steps.get-info.outputs.version }}"
+          echo "AUR link: https://aur.archlinux.org/packages/soul-player-bin"
