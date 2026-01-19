@@ -34,6 +34,44 @@ Soul Player is a modern, open-source music player for desktop. Play your local m
 
 **Server** - Multi-user streaming server is in development
 
+### Installation Instructions
+
+#### Windows
+1. Download the `.exe` installer from [Releases](https://github.com/soulaudio/soul-player/releases)
+2. Run the installer and follow the setup wizard
+3. Launch Soul Player from the Start Menu
+
+#### macOS
+1. Download the `.dmg` file from [Releases](https://github.com/soulaudio/soul-player/releases)
+2. Open the DMG and drag Soul Player to your Applications folder
+3. **Important:** Due to macOS Gatekeeper security, you'll see a warning on first launch
+
+**To open Soul Player:**
+- **Method 1 (Recommended):** Right-click (or Control+click) the app → Select "Open" → Click "Open" in the dialog
+- **Method 2 (Terminal):** Run this command:
+  ```bash
+  xattr -cr /Applications/Soul\ Player.app
+  ```
+  Then open the app normally
+
+> **Note:** The app uses ad-hoc code signing (free, without Apple Developer account). This is safe - the warning is just macOS being cautious about apps not notarized by Apple. After the first open, the app will launch normally.
+
+#### Linux
+**Debian/Ubuntu:**
+```bash
+# Download the .deb file, then:
+sudo dpkg -i soul_player_*_amd64.deb
+sudo apt-get install -f  # Fix any dependency issues
+```
+
+**Fedora/RHEL:**
+```bash
+# Download the .rpm file, then:
+sudo rpm -i soul_player-*.x86_64.rpm
+```
+
+**After installation:** Launch from your application menu or run `soul-player` in terminal
+
 ### Join the Community
 
 - [Discord](https://discord.gg/pCkTFbY9hC) - Chat with the community, get help, share feedback

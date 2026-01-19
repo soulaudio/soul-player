@@ -390,12 +390,60 @@ jobs:
           yarn build
           node copy-dist.cjs
 
-      - name: Build DMG
+      - name: Build DMG with ad-hoc code signing
         env:
+          # Tauri updater signing (for auto-updates, not macOS code signing)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          # Build DMG with Tauri (Rust binary only, frontend already built)
+          # ============================================================================
+          # macOS Code Signing Strategy: Ad-Hoc Signing (Free, No Apple Developer Account)
+          # ============================================================================
+          #
+          # CURRENT APPROACH: Ad-Hoc Signing
+          # - Tauri v2 automatically uses ad-hoc signing when no Apple credentials provided
+          # - App is signed locally, but NOT notarized by Apple
+          # - Users see Gatekeeper warning on first launch (expected behavior)
+          # - Users must right-click → Open to bypass the warning
+          # - After first open, app launches normally
+          #
+          # WHY THIS APPROACH:
+          # - Free (no $99/year Apple Developer Program required)
+          # - Better than unsigned (prevents "app is damaged" error)
+          # - Suitable for open-source projects with manual installation
+          #
+          # UPGRADING TO NOTARIZATION (Future):
+          # To fully remove warnings, add these secrets and uncomment below:
+          #   - APPLE_CERTIFICATE (base64 encoded .p12 Developer ID cert)
+          #   - APPLE_CERTIFICATE_PASSWORD
+          #   - APPLE_ID (Apple account email)
+          #   - APPLE_PASSWORD (app-specific password)
+          #   - APPLE_TEAM_ID (from App Store Connect)
+          #
+          # Then add before this step:
+          #   - name: Import Code Signing Certificate
+          #     env:
+          #       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          #       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          #     run: |
+          #       echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          #       security create-keychain -p actions build.keychain
+          #       security default-keychain -s build.keychain
+          #       security unlock-keychain -p actions build.keychain
+          #       security import certificate.p12 -k build.keychain -P $APPLE_CERTIFICATE_PASSWORD -T /usr/bin/codesign
+          #       security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          #
+          # And add these environment variables to this step:
+          #   APPLE_SIGNING_IDENTITY: "Developer ID Application: Your Name (TEAMID)"
+          #   APPLE_ID: ${{ secrets.APPLE_ID }}
+          #   APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          #
+          # REFERENCE: https://v2.tauri.app/distribute/sign/macos/
+          # ============================================================================
+
+          # Build DMG (Rust binary with embedded frontend)
+          # Ad-hoc signing happens automatically in Tauri v2 when no credentials provided
           yarn build:desktop --target ${{ matrix.target }} --bundles dmg
 
       - name: Validate DMG contains frontend files
