@@ -97,7 +97,7 @@ export function DownloadButton() {
   // Get alternate platforms for dropdown
   const alternatePlatforms = Object.entries(PLATFORM_INFO)
     .filter(([key]) => key !== platform && key !== 'unknown')
-    .map(([key, info]) => ({ key: key as Platform, ...info }))
+    .map(([key, info]) => ({ key: key as Exclude<Platform, 'unknown'>, ...info }))
 
   return (
     <>
