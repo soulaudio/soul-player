@@ -13,7 +13,7 @@ interface PlatformInfo {
 }
 
 // GitHub release URLs - update version when creating new releases
-const LATEST_VERSION = '0.0.1'
+const LATEST_VERSION = '0.0.2'
 const GITHUB_REPO = 'soulaudio/soul-player'
 const RELEASE_BASE = `https://github.com/${GITHUB_REPO}/releases/download/v${LATEST_VERSION}`
 
