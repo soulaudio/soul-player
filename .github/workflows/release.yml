@@ -643,21 +643,21 @@ jobs:
 
           # Check HKCU first (currentUser mode - default for NSIS)
           $uninstallReg = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
-            Where-Object { $_.DisplayName -like "*Soul Player*" } | Select-Object -First 1
+            Where-Object { $_.DisplayName -like "*soul_player*" } | Select-Object -First 1
 
           if (-not $uninstallReg) {
             # Fallback to HKLM (perMachine mode)
             $uninstallReg = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
-              Where-Object { $_.DisplayName -like "*Soul Player*" } | Select-Object -First 1
+              Where-Object { $_.DisplayName -like "*soul_player*" } | Select-Object -First 1
           }
 
           if (-not $uninstallReg -or -not $uninstallReg.InstallLocation) {
             Write-Error "Installation failed: App not found in registry"
             Write-Host "`nChecking common installation paths:"
-            Write-Host "  HKCU path: $(Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Soul Player')"
-            Write-Host "  HKLM path: $(Test-Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Soul Player')"
-            Write-Host "  AppData: $(Test-Path "$env:LOCALAPPDATA\Soul Player")"
-            Write-Host "  Program Files: $(Test-Path "C:\Program Files\Soul Player")"
+            Write-Host "  HKCU path: $(Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\soul_player')"
+            Write-Host "  HKLM path: $(Test-Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\soul_player')"
+            Write-Host "  AppData: $(Test-Path "$env:LOCALAPPDATA\soul_player")"
+            Write-Host "  Program Files: $(Test-Path "C:\Program Files\soul_player")"
             exit 1
           }
 
@@ -1028,18 +1028,18 @@ jobs:
           VOLUME=$(ls /Volumes | grep -i "soul" | head -1)
 
           # Copy app to Applications
-          cp -R "/Volumes/$VOLUME/Soul Player.app" /Applications/
+          cp -R "/Volumes/$VOLUME/soul_player.app" /Applications/
           echo "✅ Installation successful"
 
           # Verify app bundle structure
-          test -d "/Applications/Soul Player.app/Contents/MacOS" || exit 1
-          test -f "/Applications/Soul Player.app/Contents/Info.plist" || exit 1
+          test -d "/Applications/soul_player.app/Contents/MacOS" || exit 1
+          test -f "/Applications/soul_player.app/Contents/Info.plist" || exit 1
           echo "✅ App bundle structure verified"
 
           # Print Info.plist for debugging
           echo ""
           echo "Info.plist contents:"
-          plutil -p "/Applications/Soul Player.app/Contents/Info.plist"
+          plutil -p "/Applications/soul_player.app/Contents/Info.plist"
 
           # Note: Tauri embeds frontend files directly in the binary executable
           # They are NOT stored as separate files in Contents/Resources
@@ -1048,13 +1048,13 @@ jobs:
           echo "✅ Frontend files are embedded in the binary (not in Resources folder)"
           echo ""
           echo "App bundle structure:"
-          find "/Applications/Soul Player.app/Contents" -maxdepth 2 -type d | sort
+          find "/Applications/soul_player.app/Contents" -maxdepth 2 -type d | sort
           echo ""
           echo "Binary size (should be larger due to embedded frontend):"
-          ls -lh "/Applications/Soul Player.app/Contents/MacOS/soul-player"
+          ls -lh "/Applications/soul_player.app/Contents/MacOS/soul-player"
 
           # Check if app would appear in Launchpad
-          plutil -p "/Applications/Soul Player.app/Contents/Info.plist" | grep -q "CFBundleIdentifier" || exit 1
+          plutil -p "/Applications/soul_player.app/Contents/Info.plist" | grep -q "CFBundleIdentifier" || exit 1
           echo "✅ App metadata verified"
 
           # Test app launch
@@ -1063,7 +1063,7 @@ jobs:
 
           # Launch app using direct path (more reliable than 'open -a')
           # macOS requires the binary to be in Contents/MacOS/
-          "/Applications/Soul Player.app/Contents/MacOS/soul-player" --logs 2>&1 &
+          "/Applications/soul_player.app/Contents/MacOS/soul-player" --logs 2>&1 &
           APP_PID=$!
 
           # Wait a few seconds for app to start
