@@ -46,12 +46,13 @@ modules:
       - cp cargo-config.toml .cargo/config.toml
 
       # Install Node dependencies
-      # Use npm instead of yarn (project requires yarn@4 but Flatpak SDK has yarn@1)
-      # npm works fine with yarn workspaces
-      - npm install
+      # Use corepack to activate yarn@4 (required by package.json)
+      # This doesn't modify system directories, just sets up yarn in the build environment
+      - corepack prepare yarn@4.0.2 --activate
+      - yarn install --frozen-lockfile
 
       # Build frontend
-      - cd applications/desktop && npm run build && node copy-dist.cjs && cd ../..
+      - cd applications/desktop && yarn build && node copy-dist.cjs && cd ../..
 
       # Build Rust binary (offline using vendored dependencies)
       - cargo build --release --package soul-player-desktop --offline
