@@ -1,6 +1,6 @@
 # Maintainer: Soul Player Contributors <noreply@github.com>
 pkgname=soul-player-bin
-pkgver=0.1.1
+pkgver=0.1.2
 pkgrel=1
 pkgdesc="Modern, privacy-first music player for local audio files"
 arch=('x86_64')

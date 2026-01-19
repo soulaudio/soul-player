@@ -1,6 +1,6 @@
 {
   "productName": "Soul Player",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "soul-player",
   "mainBinaryName": "soul-player",
   "build": {
@@ -126,6 +126,12 @@
       "deb": {
         "depends": []
       }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-",
+      "entitlements": "./entitlements.plist",
+      "hardenedRuntime": true
     },
     "windows": {
       "webviewInstallMode": {
