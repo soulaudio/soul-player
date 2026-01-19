@@ -764,13 +764,15 @@ jobs:
             echo "Found draft release(s) to delete:"
             echo "$DRAFT_RELEASES"
 
-            # Delete each draft release
+            # Delete each draft release by ID (not by tag)
             echo "$DRAFT_RELEASES" | while read -r release_id; do
-              echo "Deleting draft release: $release_id"
-              gh release delete "$TAG" --yes --cleanup-tag || true
+              if [ -n "$release_id" ]; then
+                echo "Deleting draft release ID: $release_id (tag: $TAG)"
+                # Delete by tag which removes both the release and tag
+                gh release delete "$TAG" --yes --cleanup-tag
+                echo "✅ Deleted draft release: $release_id"
+              fi
             done
-
-            echo "✅ Deleted existing draft releases"
           else
             echo "No existing draft releases found for tag $TAG"
           fi
