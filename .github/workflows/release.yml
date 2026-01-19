@@ -643,6 +643,32 @@ jobs:
           VERSION=$(jq -r '.version' .github/release-config.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Delete existing draft releases
+        run: |
+          TAG="${{ steps.gen-tag.outputs.tag }}"
+          echo "Checking for existing draft releases with tag: $TAG"
+
+          # Get all draft releases for this tag
+          DRAFT_RELEASES=$(gh release list --limit 100 --json tagName,isDraft,id | \
+            jq -r --arg tag "$TAG" '.[] | select(.isDraft == true and .tagName == $tag) | .id')
+
+          if [ -n "$DRAFT_RELEASES" ]; then
+            echo "Found draft release(s) to delete:"
+            echo "$DRAFT_RELEASES"
+
+            # Delete each draft release
+            echo "$DRAFT_RELEASES" | while read -r release_id; do
+              echo "Deleting draft release: $release_id"
+              gh release delete "$TAG" --yes --cleanup-tag || true
+            done
+
+            echo "✅ Deleted existing draft releases"
+          else
+            echo "No existing draft releases found for tag $TAG"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create draft release
         id: create-release
         uses: softprops/action-gh-release@v1
