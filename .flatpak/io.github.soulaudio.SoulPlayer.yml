@@ -55,7 +55,7 @@ modules:
       - cargo build --release --package soul-player-desktop --offline
 
       # Install binary
-      - install -Dm755 target/release/soul-player /app/bin/soul-player
+      - install -Dm755 target/release/soul-player-desktop /app/bin/soul-player
 
       # Install desktop file
       - install -Dm644 applications/desktop/src-tauri/soul-player.desktop /app/share/applications/io.github.soulaudio.SoulPlayer.desktop
