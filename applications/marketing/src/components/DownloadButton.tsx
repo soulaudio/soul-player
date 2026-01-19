@@ -12,26 +12,25 @@ interface PlatformInfo {
   downloadUrl: string
 }
 
-// GitHub release URLs - update version when creating new releases
-const LATEST_VERSION = '0.0.2'
+// GitHub release URLs - automatically uses latest release
 const GITHUB_REPO = 'soulaudio/soul-player'
-const RELEASE_BASE = `https://github.com/${GITHUB_REPO}/releases/download/v${LATEST_VERSION}`
+const RELEASE_LATEST = `https://github.com/${GITHUB_REPO}/releases/latest/download`
 
 const PLATFORMS: Record<Platform, PlatformInfo> = {
   windows: {
     name: 'Windows',
     Icon: Monitor,
-    downloadUrl: `${RELEASE_BASE}/soul_player_${LATEST_VERSION}_x64-setup.exe`
+    downloadUrl: `${RELEASE_LATEST}/soul_player_0.0.1_x64-setup.exe`
   },
   macos: {
     name: 'macOS',
     Icon: Apple,
-    downloadUrl: `${RELEASE_BASE}/soul_player_${LATEST_VERSION}_aarch64.dmg` // Default to Apple Silicon
+    downloadUrl: `${RELEASE_LATEST}/soul_player_0.0.1_aarch64.dmg` // Default to Apple Silicon
   },
   linux: {
     name: 'Linux',
     Icon: Boxes,
-    downloadUrl: `${RELEASE_BASE}/soul-player_${LATEST_VERSION}_amd64.deb`
+    downloadUrl: `${RELEASE_LATEST}/soul-player_0.0.1_amd64.deb`
   },
   unknown: {
     name: 'Download',
