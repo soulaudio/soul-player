@@ -241,31 +241,34 @@ cargo install wasm-pack
 
 **IMPORTANT**: Version numbers MUST be synchronized across all configuration files. Use the automated script to prevent mismatches.
 
-**Version Bump Procedure:**
+**Automated Version Bump Procedure:**
 ```bash
-# 1. Run the version bump script (handles all files automatically)
+# Run the version bump script - it handles EVERYTHING automatically:
 ./scripts/bump-version.sh 0.1.3
 
-# 2. Review the changes
-git diff
+# That's it! The script will:
+# 1. Update all version files (Cargo.toml, package.json, tauri.conf.json)
+# 2. Validate that all versions match
+# 3. Stage all changes (git add -A)
+# 4. Create commit with conventional message
+# 5. Create and push tag (v0.1.3)
+# 6. Push to main branch
+# 7. Trigger GitHub Actions release workflow
 
-# 3. Commit and push to main
-git add -A
-git commit -m "chore: bump version to v0.1.3"
-git push origin main
-
-# 4. CI will automatically:
-#    - Detect the version bump in Cargo.toml
-#    - Create and push the tag v0.1.3
-#    - Trigger the release workflow
-#    - Build installers for all platforms
-#    - Publish the release to GitHub
+# Monitor release progress at:
+# https://github.com/soulaudio/soul-player/actions
 ```
+
+**Implementation Details:**
+- The script is Node.js-based (`bump-version.mjs`) for cross-platform reliability
+- Works consistently on Windows, macOS, and Linux
+- No platform-specific dependencies (sed, jq, etc.)
+- `bump-version.sh` is a lightweight wrapper that calls the Node.js script
 
 **What the script updates:**
 - ✅ Workspace `Cargo.toml` (line 31: `version = "X.Y.Z"`)
-- ✅ All library `Cargo.toml` files in `libraries/*/Cargo.toml`
-- ✅ All application `Cargo.toml` files in `applications/*/src-tauri/Cargo.toml`
+- ✅ All library `Cargo.toml` files in `libraries/*/Cargo.toml` (use `version.workspace = true`)
+- ✅ All application `Cargo.toml` files in `applications/*/src-tauri/Cargo.toml` (use `version.workspace = true`)
 - ✅ Root `package.json` and all `applications/*/package.json`
 - ✅ **CRITICAL**: `applications/desktop/src-tauri/tauri.conf.json` (line 3: `"version": "X.Y.Z"`)
 
