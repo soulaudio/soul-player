@@ -31,7 +31,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
   }, [location.pathname, setShowHeader]);
 
   return (
-    <div className="relative h-screen overflow-hidden">
+    <div className="fixed inset-0 overflow-hidden">
       {/* Invisible drag region - always present at top for dragging window, doesn't take layout space */}
       <div
         data-tauri-drag-region
@@ -57,9 +57,11 @@ function MainLayoutContent({ children }: MainLayoutProps) {
       </div>
 
       {/* Main layout - full height, sidebar stretches to top */}
-      <SharedMainLayout onAddToPlaylist={handleAddToPlaylist}>
-        {children}
-      </SharedMainLayout>
+      <div className="h-full w-full">
+        <SharedMainLayout onAddToPlaylist={handleAddToPlaylist}>
+          {children}
+        </SharedMainLayout>
+      </div>
 
       {/* Scan progress indicator (shows when scanning library sources) */}
       <ScanProgressIndicator position="footer" />

@@ -237,6 +237,104 @@ cargo install wasm-pack
 
 **Note**: All WASM builds are cross-platform (Windows/macOS/Linux). See [applications/marketing/WASM_BUILD_INTEGRATION.md](./applications/marketing/WASM_BUILD_INTEGRATION.md) for details.
 
+### Version Management (CRITICAL)
+
+**IMPORTANT**: Version numbers MUST be synchronized across all configuration files. Use the automated script to prevent mismatches.
+
+**Version Bump Procedure:**
+```bash
+# 1. Run the version bump script (handles all files automatically)
+./scripts/bump-version.sh 0.1.3
+
+# 2. Review the changes
+git diff
+
+# 3. Commit and push to main
+git add -A
+git commit -m "chore: bump version to v0.1.3"
+git push origin main
+
+# 4. CI will automatically:
+#    - Detect the version bump in Cargo.toml
+#    - Create and push the tag v0.1.3
+#    - Trigger the release workflow
+#    - Build installers for all platforms
+#    - Publish the release to GitHub
+```
+
+**What the script updates:**
+- ✅ Workspace `Cargo.toml` (line 31: `version = "X.Y.Z"`)
+- ✅ All library `Cargo.toml` files in `libraries/*/Cargo.toml`
+- ✅ All application `Cargo.toml` files in `applications/*/src-tauri/Cargo.toml`
+- ✅ Root `package.json` and all `applications/*/package.json`
+- ✅ **CRITICAL**: `applications/desktop/src-tauri/tauri.conf.json` (line 3: `"version": "X.Y.Z"`)
+
+**Version Resolution in Tauri:**
+- Tauri's `getVersion()` API reads from **`tauri.conf.json` first** (primary source)
+- Falls back to `Cargo.toml` only if `tauri.conf.json` has no version
+- The bump script ensures both are synchronized to prevent UI version mismatch
+
+**Manual Version Updates (NOT RECOMMENDED):**
+If you must update versions manually, you MUST update ALL files listed above. Missing even one file will cause version mismatches in the UI or build artifacts.
+
+**Validation:**
+After running the bump script:
+```bash
+# Verify all versions match
+grep -r "\"version\":" package.json applications/*/package.json applications/desktop/src-tauri/tauri.conf.json
+grep "^version = " Cargo.toml libraries/*/Cargo.toml
+```
+
+### Windows Installer Caching Issues (TROUBLESHOOTING)
+
+**Known Issue:** Windows may show old version after installing new release due to caching or incomplete uninstall.
+
+**Common Causes:**
+- AppData directories not cleaned during uninstall (Tauri preserves user data by default)
+- Background processes still running after uninstall
+- Installer using `quiet` mode without admin privileges (silent failure)
+
+**Solutions:**
+
+1. **Clean Installation (Recommended):**
+   ```powershell
+   # Stop all processes
+   Get-Process -Name "soul-player" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+   # Uninstall via Windows Settings
+   # Settings > Apps > Installed apps > Soul Player > Uninstall
+
+   # Clean AppData cache
+   Remove-Item "$env:APPDATA\Soul Player" -Recurse -Force -ErrorAction SilentlyContinue
+   Remove-Item "$env:LOCALAPPDATA\Soul Player" -Recurse -Force -ErrorAction SilentlyContinue
+
+   # Reinstall fresh installer
+   # Right-click Soul.Player_X.X.X_x64-setup.exe > Run as Administrator
+   ```
+
+2. **Automated Cleanup Script:**
+   - Run `cleanup-soul-player.ps1` (generated during development)
+   - Handles process termination, cache cleanup, and verification
+
+3. **Verify Installation:**
+   ```powershell
+   # Check installed version
+   & "C:\Program Files\Soul Player\Soul Player.exe" --version
+
+   # Or check in app: Settings > About
+   ```
+
+**Prevention (Configuration):**
+- ✅ `installMode: "currentUser"` - Default, no admin required, avoids silent failures
+- ✅ WebView2 embedded bootstrapper - Ensures consistent runtime
+- ✅ Proper uninstall hooks - Cleans up application data when user opts in
+
+**References:**
+- [Tauri Issue #5861](https://github.com/tauri-apps/tauri/issues/5861) - Old version after update
+- [Tauri Issue #6113](https://github.com/tauri-apps/tauri/issues/6113) - AppData leftover after uninstall
+- [Tauri Issue #8875](https://github.com/tauri-apps/tauri/issues/8875) - App continues running after uninstall
+- [Windows Installer Docs](https://v2.tauri.app/distribute/windows-installer/)
+
 ---
 
 ## Pre-Commit Requirements (CRITICAL FOR AI AGENTS)
@@ -321,6 +419,52 @@ Core tables: `users`, `tracks`, `albums`, `artists`, `playlists`, `playlist_trac
 - Zustand (state)
 - TailwindCSS (styling)
 - Lucide React (icons)
+
+### macOS Code Signing (Ad-Hoc Signing)
+
+Soul Player uses **ad-hoc code signing** for macOS builds - a free alternative to paid Apple Developer Program membership.
+
+**Configuration Files:**
+- `applications/desktop/src-tauri/tauri.conf.json` - Bundle configuration with macOS signing settings
+- `applications/desktop/src-tauri/entitlements.plist` - App entitlements for hardened runtime
+
+**Key Settings (tauri.conf.json):**
+```json
+{
+  "bundle": {
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-",
+      "entitlements": "./entitlements.plist",
+      "hardenedRuntime": true
+    }
+  }
+}
+```
+
+**What This Provides:**
+- ✅ Ad-hoc code signature (prevents "app is damaged" errors)
+- ✅ Hardened runtime for macOS security
+- ✅ Proper entitlements for audio playback, file access, network
+- ❌ Not notarized (users see Gatekeeper warning on first launch)
+
+**User Experience:**
+- First launch: Users must right-click → Open (or run `xattr -cr "/Applications/Soul Player.app"`)
+- Subsequent launches: App opens normally like any other app
+
+**Upgrading to Notarization:**
+To fully remove Gatekeeper warnings, add these GitHub secrets and update workflow:
+- `APPLE_CERTIFICATE` - Developer ID certificate (.p12 base64 encoded)
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_ID` - Apple account email
+- `APPLE_PASSWORD` - App-specific password
+- `APPLE_TEAM_ID` - Team ID from App Store Connect
+
+See `.github/workflows/release.yml` (macOS build section) for detailed upgrade instructions.
+
+**Documentation:**
+- User guide: `docs/MACOS_INSTALLATION.md`
+- Tauri docs: https://v2.tauri.app/distribute/sign/macos/
 
 ### Keyboard Shortcuts System
 
@@ -641,9 +785,11 @@ cargo check -p soul-storage         # Verify compile-time queries
 8. **Keyboard shortcuts**: Add to app-level shortcuts in useKeyboardShortcuts.ts (NOT global/OS-level)
 9. **Shared pages**: Use `useBackend()` hook, never direct `invoke()` calls - ensures desktop/marketing parity
 10. **Playback architecture**: Data fetching → BackendContext, Playback control → PlayerCommandsContext. NEVER mix or duplicate.
+11. **Version bumps**: ALWAYS use `./scripts/bump-version.sh` - never manually edit version numbers (prevents UI version mismatch)
+12. **Windows version issues**: If UI shows old version after update, clean AppData cache and reinstall (see "Windows Installer Caching Issues" section)
 
 ---
 
-**Last Updated**: 2026-01-14
+**Last Updated**: 2026-01-20
 **Rust Edition**: 2021
 **Platforms**: Windows, macOS, Linux

@@ -181,6 +181,9 @@
     "silentUpdate": "Install updates silently",
     "checkNow": "Check Now",
     "checking": "Checking...",
+    "upToDate": "You're on the latest version!",
+    "updateAvailable": "Update available",
+    "checkFailed": "Failed to check for updates",
     "shortcuts": "Keyboard Shortcuts",
     "resetShortcuts": "Reset to Defaults",
     "reportBug": "Report Bug",
@@ -721,6 +724,15 @@
     "organizationStyle": "Organization style",
     "allSet": "You're All Set!",
     "allSetDescription": "Your library is being set up. This may take a moment..."
+  },
+  "updateDialog": {
+    "title": "Update Available",
+    "versionAvailable": "A new version is available",
+    "releaseNotes": "What's New",
+    "downloading": "Downloading update",
+    "installing": "Installing...",
+    "installNow": "Install Now",
+    "later": "Later"
   },
   "marketing": {
     "hero": {

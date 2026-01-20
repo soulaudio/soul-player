@@ -271,7 +271,7 @@ mod noise_floor_tests {
 
         // Generate dithered silence
         let mut samples = vec![0i16; FFT_SIZE];
-        for sample in samples.iter_mut() {
+        for sample in &mut samples {
             *sample = dither.dither_to_i16(0.0);
         }
 

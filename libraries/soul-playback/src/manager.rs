@@ -363,7 +363,7 @@ impl StartFadeEnvelope {
 
         // Debug: log first process call with detailed sample analysis
         if self.wait_samples == 0 && self.position_samples == 0 {
-            eprintln!(
+            tracing::debug!(
                 "[StartFade] Starting amplitude-triggered fade: fade duration {} samples ({:.1}ms), threshold {:.6}",
                 self.duration_samples,
                 self.duration_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0,
@@ -373,10 +373,10 @@ impl StartFadeEnvelope {
             // Log first 20 samples to see resampler ramp-up pattern
             let samples_to_log = buffer.len().min(40);
             if samples_to_log >= 4 {
-                eprintln!("[StartFade] First {} input samples:", samples_to_log);
+                tracing::debug!("[StartFade] First {} input samples:", samples_to_log);
                 for i in (0..samples_to_log).step_by(4) {
                     if i + 3 < buffer.len() {
-                        eprintln!(
+                        tracing::debug!(
                             "  [{:3}..{:3}]: L={:+.6} R={:+.6} | L={:+.6} R={:+.6}",
                             i,
                             i + 3,
@@ -394,9 +394,11 @@ impl StartFadeEnvelope {
                     .take(samples_to_log)
                     .map(|s| s.abs())
                     .fold(0.0f32, f32::max);
-                eprintln!(
+                tracing::debug!(
                     "[StartFade] Max amplitude in first {} samples: {:.6} (threshold: {:.6})",
-                    samples_to_log, max_amp, AUDIO_DETECT_THRESHOLD
+                    samples_to_log,
+                    max_amp,
+                    AUDIO_DETECT_THRESHOLD
                 );
             }
         }
@@ -442,14 +444,14 @@ impl StartFadeEnvelope {
                     // Audio detected (or timeout)! Start the fade
                     self.audio_detected = true;
                     if has_audio {
-                        eprintln!(
+                        tracing::debug!(
                             "[StartFade] Audio DETECTED at sample {}, amplitude: L={:.6} R={:.6}",
                             self.wait_samples,
                             blocked_l.abs(),
                             blocked_r.abs()
                         );
                     } else {
-                        eprintln!(
+                        tracing::debug!(
                             "[StartFade] Timeout after {} samples ({:.1}ms), forcing fade start",
                             self.wait_samples,
                             self.wait_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0
@@ -473,7 +475,7 @@ impl StartFadeEnvelope {
         // Check if fade completed
         if self.audio_detected && self.position_samples >= self.duration_samples {
             self.active = false;
-            eprintln!(
+            tracing::debug!(
                 "[StartFade] Fade COMPLETED: waited {} samples ({:.1}ms), faded {} samples ({:.1}ms)",
                 self.wait_samples,
                 self.wait_samples as f32 / (self.sample_rate as f32 * 2.0) * 1000.0,

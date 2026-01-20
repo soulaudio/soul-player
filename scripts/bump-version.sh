@@ -132,15 +132,16 @@ update_tauri_conf() {
     # Check if jq is available
     if command -v jq &> /dev/null; then
         # Use jq for JSON manipulation (safer)
+        # Note: tauri.conf.json has version at root level, not under .package
         local temp_file=$(mktemp)
-        jq ".package.version = \"$new_version\"" "$file" > "$temp_file"
+        jq ".version = \"$new_version\"" "$file" > "$temp_file"
         mv "$temp_file" "$file"
     else
-        # Fallback to sed (less reliable for nested JSON)
+        # Fallback to sed - update the first "version" field
         if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s/\"version\": \".*\"/\"version\": \"$new_version\"/" "$file"
+            sed -i '' "0,/\"version\":/s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" "$file"
         else
-            sed -i "s/\"version\": \".*\"/\"version\": \"$new_version\"/" "$file"
+            sed -i "0,/\"version\":/s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" "$file"
         fi
     fi
 
@@ -187,19 +188,6 @@ main() {
 
     print_info "Current version: $current_version"
     print_info "New version:     $new_version"
-    echo ""
-
-    # Confirm with user
-    echo -n "Continue with version bump? [y/N] "
-    read -n 1 -r
-    echo ""  # New line after single character input
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_warning "Version bump cancelled"
-        echo ""
-        read -p "Press Enter to exit..."
-        exit 0
-    fi
-
     echo ""
     print_info "Updating version numbers..."
     echo ""
@@ -279,61 +267,126 @@ main() {
     fi
 
     echo ""
+    print_info "Validating version updates..."
+    echo ""
+
+    # Verify tauri.conf.json version (CRITICAL)
+    local tauri_version=""
+    if command -v jq &> /dev/null; then
+        tauri_version=$(jq -r '.version' "$tauri_conf")
+    else
+        # Fallback: use grep
+        tauri_version=$(grep -m 1 '"version":' "$tauri_conf" | sed 's/.*"version": "\([^"]*\)".*/\1/')
+    fi
+
+    if [ "$tauri_version" != "$new_version" ]; then
+        print_error "VALIDATION FAILED: tauri.conf.json version mismatch!"
+        print_error "  Expected: $new_version"
+        print_error "  Actual:   $tauri_version"
+        print_warning "This will cause UI to show wrong version!"
+        ((files_failed++))
+    else
+        print_success "Validation: tauri.conf.json version = $tauri_version ✓"
+    fi
+
+    # Verify workspace Cargo.toml version
+    local cargo_version=$(grep -m 1 '^version = ' "$PROJECT_ROOT/Cargo.toml" | sed 's/version = "\(.*\)"/\1/')
+    if [ "$cargo_version" != "$new_version" ]; then
+        print_error "VALIDATION FAILED: Cargo.toml version mismatch!"
+        print_error "  Expected: $new_version"
+        print_error "  Actual:   $cargo_version"
+        ((files_failed++))
+    else
+        print_success "Validation: Cargo.toml version = $cargo_version ✓"
+    fi
+
+    echo ""
     echo "═══════════════════════════════════════════════════════"
 
     if [ $files_failed -eq 0 ]; then
         print_success "Version bump complete!"
         print_info "Updated $files_updated file(s)"
     else
-        print_warning "Version bump completed with warnings"
-        print_info "Updated $files_updated file(s)"
+        print_error "Version bump failed - cannot proceed with commit"
         print_warning "Failed to update $files_failed file(s)"
+        exit 1
     fi
 
     echo ""
-    print_info "Next steps:"
-    echo "  1. Review changes: git diff"
-    echo "  2. Commit changes: git add -A && git commit -m 'chore: bump version to v$new_version'"
-    echo "  3. Push to main: git push origin main"
+    print_info "Committing changes and creating tag..."
     echo ""
-    print_success "Automation will then:"
-    echo "  • Detect the version bump in Cargo.toml"
-    echo "  • Create and push the tag v$new_version"
+
+    # Stage all changes
+    print_info "Staging all changes..."
+    git add -A
+
+    # Show what will be committed
+    echo ""
+    echo "=== Changes to commit ==="
+    git status --short
+    echo ""
+
+    # Commit with conventional commit message
+    local commit_message="chore: bump version to v$new_version
+
+- Updated all Cargo.toml files to v$new_version
+- Updated all package.json files to v$new_version
+- Updated tauri.conf.json to v$new_version
+- Includes previous fixes and improvements"
+
+    print_info "Creating commit..."
+    if git commit -m "$commit_message"; then
+        print_success "Commit created successfully"
+    else
+        print_error "Failed to create commit"
+        exit 1
+    fi
+
+    # Create and push tag
+    local tag_name="v$new_version"
+    print_info "Creating tag: $tag_name"
+    if git tag -a "$tag_name" -m "Release $new_version"; then
+        print_success "Tag created: $tag_name"
+    else
+        print_error "Failed to create tag"
+        exit 1
+    fi
+
+    # Push commits and tags
+    echo ""
+    print_info "Pushing to origin..."
+    if git push origin main && git push origin "$tag_name"; then
+        print_success "Successfully pushed commits and tag!"
+    else
+        print_error "Failed to push to origin"
+        print_warning "You may need to push manually:"
+        echo "  git push origin main"
+        echo "  git push origin $tag_name"
+        exit 1
+    fi
+
+    echo ""
+    echo "═══════════════════════════════════════════════════════"
+    print_success "Release v$new_version initiated!"
+    echo ""
+    print_info "GitHub Actions will now:"
+    echo "  • Detect the new tag v$new_version"
     echo "  • Trigger the release workflow"
     echo "  • Build installers for Windows, macOS, Linux"
-    echo "  • Run installation tests"
-    echo "  • Publish the release to GitHub"
+    echo "  • Build Flatpak package"
+    echo "  • Publish to AUR"
+    echo "  • Create GitHub release"
     echo ""
     print_info "Monitor release progress at:"
     echo "  https://github.com/soulaudio/soul-player/actions"
     echo ""
-
-    # Optionally show git diff
-    echo -n "Show git diff? [y/N] "
-    read -n 1 -r
-    echo ""  # New line after single character input
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo ""
-        git diff
-        echo ""
-    fi
-
-    echo ""
     print_success "Script complete!"
-    echo ""
-    echo "=== Summary of changes ==="
-    echo ""
-    git status --short | grep -E "\.json$|Cargo\.toml$" || echo "No files changed"
-    echo ""
-    read -p "Press Enter to exit..."
 }
 
 # Check if running from project root or scripts directory
 if [ ! -f "$PROJECT_ROOT/Cargo.toml" ]; then
     print_error "Could not find project root (Cargo.toml not found)"
     print_info "Please run this script from the project root or scripts directory"
-    echo ""
-    read -p "Press Enter to exit..."
     exit 1
 fi
 

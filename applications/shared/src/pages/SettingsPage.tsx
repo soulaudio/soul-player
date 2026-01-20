@@ -497,6 +497,18 @@ function DefaultShortcutsSettings({ disabled }: ShortcutsSettingsProps) {
 function AboutSettings() {
   const { t } = useTranslation()
   const { isWeb } = usePlatform()
+  const backend = useBackend()
+  const [version, setVersion] = useState<string>('...')
+
+  // Load version on mount
+  useEffect(() => {
+    backend.getVersion()
+      .then(v => setVersion(v))
+      .catch(err => {
+        console.error('Failed to load version:', err)
+        setVersion('Unknown')
+      })
+  }, [backend])
 
   return (
     <div className="space-y-8">
@@ -508,7 +520,7 @@ function AboutSettings() {
           <div>
             <h3 className="text-lg font-semibold">{t('app.title', 'Soul Player')}</h3>
             <p className="text-sm text-muted-foreground">
-              {t('settings.version')} 0.1.0{isWeb ? ' (Demo)' : ''}
+              {t('settings.version')} {version}
             </p>
           </div>
         </div>

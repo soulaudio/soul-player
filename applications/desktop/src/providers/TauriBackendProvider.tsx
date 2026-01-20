@@ -5,6 +5,7 @@
 
 import { ReactNode, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { getVersion } from '@tauri-apps/api/app'
 import {
   BackendProvider,
   type BackendInterface,
@@ -186,6 +187,11 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
 
     async getPlaylistArtwork(playlistId: string) {
       return invoke<string | null>('get_playlist_artwork', { playlistId })
+    },
+
+    // App metadata
+    async getVersion() {
+      return getVersion()
     },
   }), [])
 

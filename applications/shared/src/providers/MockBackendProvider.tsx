@@ -543,6 +543,11 @@ export function MockBackendProvider({ storage, children }: MockBackendProviderPr
     async getPlaylistArtwork() {
       return null
     },
+
+    // App metadata
+    async getVersion() {
+      return '0.1.1 (Demo)'
+    },
   }), [storage, getArtistsFromTracks, getArtistIdMap, getMockPlaylists])
 
   return (

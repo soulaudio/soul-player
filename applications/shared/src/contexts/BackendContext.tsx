@@ -170,6 +170,9 @@ export interface BackendInterface {
   removeArtwork: (entityType: 'album' | 'artist' | 'playlist', entityId: string) => Promise<void>
   getArtistArtwork: (artistId: number) => Promise<string | null>
   getPlaylistArtwork: (playlistId: string) => Promise<string | null>
+
+  // App metadata
+  getVersion: () => Promise<string>
 }
 
 // =============================================================================

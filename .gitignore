@@ -85,3 +85,6 @@ clippy-errors.txt
 # Only the vendor/ directory and tarball are ignored
 .flatpak/vendor/
 .flatpak/vendor.tar.gz
+
+# Windows cleanup scripts (developer utility)
+cleanup-soul-player.ps1

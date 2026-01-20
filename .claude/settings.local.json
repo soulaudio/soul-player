@@ -216,7 +216,18 @@
       "Bash(npx @tauri-apps/cli signer:*)",
       "Bash(npx --yes @tauri-apps/cli@latest signer generate:*)",
       "Bash(printf:*)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(cargo deny check:*)",
+      "Bash(git show:*)",
+      "Bash(git reset:*)",
+      "Bash(xmllint:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(python -c:*)",
+      "Bash(wait)",
+      "Bash(if gh release view v0.1.2)",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(git fetch:*)"
     ]
   },
   "hooks": {

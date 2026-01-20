@@ -1,6 +1,6 @@
 {
   "productName": "Soul Player",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "identifier": "soul-player",
   "mainBinaryName": "soul-player",
   "build": {
@@ -141,7 +141,8 @@
       },
       "nsis": {
         "installerIcon": "icons/icon.ico",
-        "compression": "lzma"
+        "compression": "lzma",
+        "installMode": "currentUser"
       }
     }
   },

@@ -152,6 +152,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const backend = useBackend();
   const [queue, setQueue] = useState<QueueTrack[]>([]);
   const [homeEnabled, setHomeEnabled] = useState(true);
+  const [version, setVersion] = useState<string>('');
   const {
     currentTrack,
     isPlaying,
@@ -253,6 +254,13 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     return () => {
       window.removeEventListener('home-enabled-changed', handleHomeEnabledChanged)
     }
+  }, [backend]);
+
+  // Load version
+  useEffect(() => {
+    backend.getVersion()
+      .then(v => setVersion(v))
+      .catch(err => console.error('Failed to load version:', err))
   }, [backend]);
 
   const loadCurrentDevice = async () => {
@@ -856,19 +864,24 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         </div>
 
         {/* Settings - bottom of sidebar */}
-        <div className="border-t border-border">
+        <div className="border-t border-border px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => navigate('/settings')}
             className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors",
+              "p-2 rounded-lg transition-colors",
               location.pathname === '/settings'
                 ? 'text-primary bg-accent/20'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
             )}
+            title={t('nav.settings')}
           >
             <Settings className="w-4 h-4" />
-            <span>{t('nav.settings')}</span>
           </button>
+          {version && (
+            <div className="text-sm text-muted-foreground/60 font-mono">
+              v{version}
+            </div>
+          )}
         </div>
       </div>
     </div>

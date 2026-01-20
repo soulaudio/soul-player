@@ -5,16 +5,29 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { SettingsPage as SharedSettingsPage, type SettingsHandlers } from '@soul-player/shared';
 import { useSettings } from '../contexts/SettingsContext';
 import { ShortcutsSettings } from '../components/ShortcutsSettings';
+import { UpdateDialog } from '../components/UpdateDialog';
+import { toast } from 'sonner';
+
+interface UpdateInfo {
+  version: string;
+  date?: string;
+  body?: string;
+}
 
 export function SettingsPage() {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const { showKeyboardShortcuts, setShowKeyboardShortcuts, hideWindowControls, setHideWindowControls } = useSettings();
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [silentUpdate, setSilentUpdate] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [installProgress, setInstallProgress] = useState(0);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -50,6 +63,23 @@ export function SettingsPage() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Listen for update events from backend
+  useEffect(() => {
+    const unlistenUpdateAvailable = listen<UpdateInfo>('update-available', (event) => {
+      setUpdateInfo(event.payload);
+      setShowUpdateDialog(true);
+    });
+
+    const unlistenUpdateProgress = listen<number>('update-progress', (event) => {
+      setInstallProgress(event.payload);
+    });
+
+    return () => {
+      unlistenUpdateAvailable.then((fn) => fn());
+      unlistenUpdateProgress.then((fn) => fn());
+    };
+  }, []);
 
   const handleLanguageChange = useCallback(async (locale: string) => {
     try {
@@ -90,20 +120,44 @@ export function SettingsPage() {
   const checkForUpdates = useCallback(async () => {
     setChecking(true);
     try {
-      // Update info from Tauri updater
-      const update = await invoke<{ version: string; body: string } | null>('check_for_updates');
+      const update = await invoke<UpdateInfo | null>('check_for_updates');
       if (update) {
-        alert(`Update available: ${update.version}\n\n${update.body}`);
+        setUpdateInfo(update);
+        setShowUpdateDialog(true);
       } else {
-        alert('You are on the latest version!');
+        toast.success(t('settings.upToDate'));
       }
     } catch (error) {
       console.error('Failed to check for updates:', error);
-      alert('Failed to check for updates');
+      toast.error(t('settings.checkFailed'));
     } finally {
       setChecking(false);
     }
+  }, [t]);
+
+  const handleInstallUpdate = useCallback(async () => {
+    setIsInstalling(true);
+    setInstallProgress(0);
+    try {
+      await invoke('install_update');
+      // If we reach here, restart failed - app should have restarted automatically
+      toast.success('Update installed. Restarting app...');
+      setShowUpdateDialog(false);
+    } catch (error) {
+      console.error('Failed to install update:', error);
+      toast.error('Failed to install update');
+      setIsInstalling(false);
+      setInstallProgress(0);
+    }
   }, []);
+
+  const handleCloseUpdateDialog = useCallback(() => {
+    if (!isInstalling) {
+      setShowUpdateDialog(false);
+      setUpdateInfo(null);
+      setInstallProgress(0);
+    }
+  }, [isInstalling]);
 
   const handlers: SettingsHandlers = {
     loadSettings,
@@ -121,9 +175,19 @@ export function SettingsPage() {
   };
 
   return (
-    <SharedSettingsPage
-      handlers={handlers}
-      ShortcutsSettingsComponent={ShortcutsSettings}
-    />
+    <>
+      <SharedSettingsPage
+        handlers={handlers}
+        ShortcutsSettingsComponent={ShortcutsSettings}
+      />
+      <UpdateDialog
+        open={showUpdateDialog}
+        onClose={handleCloseUpdateDialog}
+        onInstall={handleInstallUpdate}
+        updateInfo={updateInfo}
+        isInstalling={isInstalling}
+        progress={installProgress}
+      />
+    </>
   );
 }

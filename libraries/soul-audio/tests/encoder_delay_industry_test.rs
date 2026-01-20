@@ -446,7 +446,7 @@ fn test_gapless_album_playback_simulation() {
 
     let sample_rate = 44100;
     let encoder_delay = 576; // LAME default
-    // Note: MP3 decoder delay (529 samples) is unused in this simulation
+                             // Note: MP3 decoder delay (529 samples) is unused in this simulation
 
     struct Track {
         // Raw decoded samples (includes padding)
