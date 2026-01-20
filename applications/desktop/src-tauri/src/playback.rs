@@ -278,7 +278,7 @@ impl PlaybackManager {
                     PlaybackEvent::QueueUpdated => app_handle.emit("playback:queue-updated", ()),
                     PlaybackEvent::Error(error) => app_handle.emit("playback:error", error),
                     PlaybackEvent::SampleRateChanged(from, to) => {
-                        eprintln!("[playback] Sample rate changed: {}Hz -> {}Hz", from, to);
+                        tracing::debug!(from = from, to = to, "Sample rate changed");
                         app_handle.emit(
                             "playback:sample-rate-changed",
                             serde_json::json!({
@@ -292,9 +292,11 @@ impl PlaybackManager {
                         to_track_id,
                         duration_ms,
                     } => {
-                        eprintln!(
-                            "[playback] Crossfade started: {} -> {} ({}ms)",
-                            from_track_id, to_track_id, duration_ms
+                        tracing::debug!(
+                            from_track_id = %from_track_id,
+                            to_track_id = %to_track_id,
+                            duration_ms = duration_ms,
+                            "Crossfade started"
                         );
                         app_handle.emit(
                             "playback:crossfade-started",
@@ -320,14 +322,11 @@ impl PlaybackManager {
                         )
                     }
                     PlaybackEvent::CrossfadeCompleted => {
-                        eprintln!("[playback] Crossfade completed");
+                        tracing::debug!("Crossfade completed");
                         app_handle.emit("playback:crossfade-completed", ())
                     }
                     PlaybackEvent::BatchLoadRequested { offset, limit } => {
-                        eprintln!(
-                            "[BatchLoader] Batch load requested: offset={}, limit={}",
-                            offset, limit
-                        );
+                        tracing::debug!(offset = offset, limit = limit, "Batch load requested");
 
                         // Extract values before spawning async task (for 'static lifetime)
                         let offset_val = *offset;
@@ -352,10 +351,7 @@ impl PlaybackManager {
                         continue;
                     }
                     PlaybackEvent::JumpLoadRequested { offset, limit } => {
-                        eprintln!(
-                            "[BatchLoader] Jump load requested: offset={}, limit={}",
-                            offset, limit
-                        );
+                        tracing::debug!(offset = offset, limit = limit, "Jump load requested");
 
                         // Extract values before spawning async task (for 'static lifetime)
                         let offset_val = *offset;
@@ -403,14 +399,14 @@ impl PlaybackManager {
                 let mut pb = playback.lock().unwrap();
                 match pb.check_and_update_sample_rate() {
                     Ok(true) => {
-                        eprintln!("[playback] Device sample rate changed, stream recreated");
+                        tracing::debug!("Device sample rate changed, stream recreated");
                     }
                     Ok(false) => {
                         // No change, nothing to do
                     }
                     Err(e) => {
                         // Don't spam errors, just log once per failure
-                        eprintln!("[playback] Failed to check sample rate: {}", e);
+                        tracing::warn!(error = %e, "Failed to check sample rate");
                     }
                 }
                 drop(pb);
@@ -474,9 +470,11 @@ impl PlaybackManager {
         limit: usize,
         is_jump: bool,
     ) {
-        eprintln!(
-            "[BatchLoader] Loading batch: offset={}, limit={}, is_jump={}",
-            offset, limit, is_jump
+        tracing::debug!(
+            offset = offset,
+            limit = limit,
+            is_jump = is_jump,
+            "Loading batch"
         );
 
         // Get lazy state from playback manager
@@ -487,7 +485,7 @@ impl PlaybackManager {
         };
 
         let Some(state) = lazy_state else {
-            eprintln!("[BatchLoader] No lazy state found, skipping batch load");
+            tracing::debug!("No lazy state found, skipping batch load");
             return;
         };
 
@@ -533,7 +531,7 @@ impl PlaybackManager {
                 .await
             }
             QueueContext::Search { .. } => {
-                eprintln!("[BatchLoader] Search pagination not supported yet");
+                tracing::debug!("Search pagination not supported yet");
                 return;
             }
         };
@@ -541,12 +539,12 @@ impl PlaybackManager {
         let tracks = match tracks_result {
             Ok(tracks) => tracks,
             Err(e) => {
-                eprintln!("[BatchLoader] Failed to load batch: {}", e);
+                tracing::error!(error = %e, "Failed to load batch");
                 return;
             }
         };
 
-        eprintln!("[BatchLoader] Loaded {} tracks from database", tracks.len());
+        tracing::debug!(track_count = tracks.len(), "Loaded tracks from database");
 
         // Convert to QueueTrack (inline to avoid needing Track type)
         let queue_tracks: Vec<QueueTrack> = tracks
@@ -581,27 +579,24 @@ impl PlaybackManager {
         // Send AppendToSource command
         let pb = playback.lock().unwrap();
         if let Err(e) = pb.send_command(PlaybackCommand::AppendToSource(queue_tracks.clone())) {
-            eprintln!("[BatchLoader] Failed to append tracks: {}", e);
+            tracing::error!(error = %e, "Failed to append tracks");
             return;
         }
 
         if is_jump {
             // Jump load: retry the skip to the target index
-            eprintln!(
-                "[BatchLoader] Retrying skip to index {} after jump batch load",
-                offset
+            tracing::debug!(
+                offset = offset,
+                "Retrying skip to index after jump batch load"
             );
             if let Err(e) = pb.send_command(PlaybackCommand::SkipToQueueIndex(offset)) {
-                eprintln!("[BatchLoader] Failed to retry skip after jump load: {}", e);
+                tracing::error!(error = %e, "Failed to retry skip after jump load");
             }
         } else {
             // Forward pagination: resume playback by playing next track
-            eprintln!("[BatchLoader] Resuming playback after forward pagination batch load");
+            tracing::debug!("Resuming playback after forward pagination batch load");
             if let Err(e) = pb.send_command(PlaybackCommand::Next) {
-                eprintln!(
-                    "[BatchLoader] Failed to resume playback after forward pagination: {}",
-                    e
-                );
+                tracing::error!(error = %e, "Failed to resume playback after forward pagination");
             }
         }
     }
@@ -726,7 +721,7 @@ impl PlaybackManager {
         // Emit queue updated event
         playback.emit_queue_updated();
 
-        eprintln!("[PlaybackManager] Cycled shuffle to: {}", new_mode.as_str());
+        tracing::debug!(mode = new_mode.as_str(), "Cycled shuffle");
         Ok(new_mode.as_str().to_string())
     }
 
@@ -877,16 +872,15 @@ impl PlaybackManager {
         backend: soul_audio_desktop::AudioBackend,
         device_name: Option<String>,
     ) -> Result<(), String> {
-        eprintln!("[PlaybackManager] switch_device called, acquiring lock...");
+        tracing::debug!("Acquiring lock for device switch");
         let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
-        eprintln!("[PlaybackManager] Lock acquired, calling DesktopPlayback::switch_device...");
+        tracing::debug!("Lock acquired, switching device");
         let result = playback
             .switch_device(backend, device_name)
             .map_err(|e| e.to_string());
-        eprintln!("[PlaybackManager] DesktopPlayback::switch_device returned, releasing lock...");
+        tracing::debug!("Device switch completed, releasing lock");
         // Explicitly drop the guard to release the lock
         drop(playback);
-        eprintln!("[PlaybackManager] Lock released, returning result");
         result
     }
 
@@ -1163,15 +1157,16 @@ impl PlaybackManager {
                                         conv.set_dry_wet_mix(settings.wet_dry_mix);
                                         // Note: pre_delay_ms and decay are UI-only for now
                                         // The ConvolutionEngine applies full IR as-is
-                                        eprintln!(
-                                            "[rebuild_effect_chain] Loaded IR: {}",
-                                            settings.ir_file_path
+                                        tracing::debug!(
+                                            ir_file_path = %settings.ir_file_path,
+                                            "Loaded IR"
                                         );
                                     }
                                     Err(e) => {
-                                        eprintln!(
-                                            "[rebuild_effect_chain] Failed to load IR file '{}': {}",
-                                            settings.ir_file_path, e
+                                        tracing::error!(
+                                            ir_file_path = %settings.ir_file_path,
+                                            error = %e,
+                                            "Failed to load IR file"
                                         );
                                         // Keep the engine but it won't process anything
                                     }

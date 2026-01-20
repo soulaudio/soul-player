@@ -65,10 +65,10 @@ impl Queue {
     /// Track will play immediately after current track.
     /// Multiple calls result in LIFO order (last added plays first).
     pub fn add_next(&mut self, track: QueueTrack) {
-        eprintln!(
-            "[Queue] add_next: '{}' (Play Next queue now has {} items)",
-            track.title,
-            self.play_next.len() + 1
+        tracing::debug!(
+            title = %track.title,
+            new_queue_len = self.play_next.len() + 1,
+            "Adding track to Play Next queue"
         );
         self.play_next.insert(0, track);
     }
@@ -78,10 +78,10 @@ impl Queue {
     /// Track will play after all Play Next and Source queue tracks.
     /// Multiple calls result in FIFO order (first added plays first).
     pub fn add_to_end(&mut self, track: QueueTrack) {
-        eprintln!(
-            "[Queue] add_to_end: '{}' (Add to Queue now has {} items)",
-            track.title,
-            self.queued_later.len() + 1
+        tracing::debug!(
+            title = %track.title,
+            new_queue_len = self.queued_later.len() + 1,
+            "Adding track to Add to Queue"
         );
         self.queued_later.push(track);
     }
