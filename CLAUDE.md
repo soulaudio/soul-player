@@ -241,29 +241,57 @@ cargo install wasm-pack
 
 **IMPORTANT**: Version numbers MUST be synchronized across all configuration files. Use the automated script to prevent mismatches.
 
-**Automated Version Bump Procedure:**
+#### Quick Start
+
 ```bash
-# Run the version bump script - it handles EVERYTHING automatically:
-./scripts/bump-version.sh 0.1.3
+# Standard release (with pre-flight checks, validation, git operations)
+./scripts/bump-version.sh 0.1.5
 
-# That's it! The script will:
-# 1. Update all version files (Cargo.toml, package.json, tauri.conf.json)
-# 2. Validate that all versions match
-# 3. Stage all changes (git add -A)
-# 4. Create commit with conventional message
-# 5. Create and push tag (v0.1.3)
-# 6. Push to main branch
-# 7. Trigger GitHub Actions release workflow
+# Preview changes without making them (dry-run)
+./scripts/bump-version.sh 0.1.5 --dry-run
 
-# Monitor release progress at:
-# https://github.com/soulaudio/soul-player/actions
+# Skip git operations (for testing)
+./scripts/bump-version.sh 0.1.5 --skip-git
+
+# Pre-release versions
+./scripts/bump-version.sh 1.0.0-beta.1
+./scripts/bump-version.sh 0.2.0-rc.1
 ```
 
-**Implementation Details:**
-- The script is Node.js-based (`bump-version.mjs`) for cross-platform reliability
-- Works consistently on Windows, macOS, and Linux
-- No platform-specific dependencies (sed, jq, etc.)
-- `bump-version.sh` is a lightweight wrapper that calls the Node.js script
+#### Best Practices (Following Rust Monorepo + Tauri Standards)
+
+The script follows industry best practices researched from:
+- [Rust Workspace Versioning](https://earthly.dev/blog/cargo-workspace-crates/) - Centralized version management
+- [Tauri Configuration](https://v2.tauri.app/develop/configuration-files/) - Version sync requirements
+- [Conventional Commits](https://www.conventionalcommits.org/) - Standardized commit messages
+- [Semantic Versioning](https://semver.org/) - Version comparison and validation
+
+**Key Features:**
+
+1. **Pre-flight Checks** (skip with `--dry-run`)
+   - ✅ Git working directory is clean
+   - ✅ On main/master branch (warns if not)
+   - ✅ Tauri dependency versions in sync (`tauri`, `tauri-build`, `@tauri-apps/api`)
+
+2. **Semver Validation**
+   - ✅ Validates version format (X.Y.Z or X.Y.Z-prerelease)
+   - ✅ Compares versions to prevent downgrades
+   - ✅ Detects identical versions
+
+3. **Automatic Backup & Rollback**
+   - ✅ Backs up all files before modification
+   - ✅ Automatic rollback on any failure
+   - ✅ Clean backups on success
+
+4. **Dry-Run Mode**
+   - ✅ Preview all changes without modifying files
+   - ✅ Test version bumps safely
+   - ✅ Validate before committing
+
+5. **Conventional Commits**
+   - ✅ Standardized commit messages (`chore: bump version to vX.Y.Z`)
+   - ✅ Detailed changelog in commit body
+   - ✅ Compatible with automated changelog tools
 
 **What the script updates:**
 - ✅ Workspace `Cargo.toml` (line 31: `version = "X.Y.Z"`)
@@ -272,6 +300,12 @@ cargo install wasm-pack
 - ✅ Root `package.json` and all `applications/*/package.json`
 - ✅ **CRITICAL**: `applications/desktop/src-tauri/tauri.conf.json` (line 3: `"version": "X.Y.Z"`)
 - ✅ **CRITICAL**: `.github/release-config.json` (line 2: `"version": "X.Y.Z"`) - used by CI to generate `latest.json` for auto-updates
+
+**Implementation Details:**
+- The script is Node.js-based (`bump-version.mjs`) for cross-platform reliability
+- Works consistently on Windows, macOS, and Linux
+- No platform-specific dependencies (sed, jq, etc.)
+- `bump-version.sh` is a lightweight wrapper that calls the Node.js script
 
 **Version Resolution in Tauri:**
 - Tauri's `getVersion()` API reads from **`tauri.conf.json` first** (primary source)
@@ -286,6 +320,12 @@ cargo install wasm-pack
 5. CI generates `latest.json` using filenames from `release-config.json`
 6. CI uploads `latest.json` to GitHub release
 7. Users on older versions receive update notifications automatically
+
+**Tauri Dependency Sync (Automatic Check):**
+The script automatically checks that Tauri dependencies are in sync:
+- `tauri` (Cargo.toml) and `tauri-build` (Cargo.toml) must have same minor version
+- `@tauri-apps/api` (package.json) should match Rust tauri minor version
+- Warns if versions don't match but doesn't fail (allows you to proceed)
 
 **Manual Version Updates (NOT RECOMMENDED):**
 If you must update versions manually, you MUST update ALL files listed above. Missing even one file will cause version mismatches in the UI or build artifacts.
