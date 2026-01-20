@@ -55,15 +55,15 @@
         "description": "For Fedora, RHEL, CentOS, openSUSE"
       },
       "aur": {
-        "name": "soul-player-bin",
+        "name": "soul-player",
         "artifactName": "",
         "path": "",
         "displayName": "Arch Linux (AUR)",
         "platform": "Linux",
         "arch": "x64",
         "recommended": false,
-        "description": "For Arch Linux: yay -S soul-player-bin",
-        "installCommand": "yay -S soul-player-bin",
+        "description": "For Arch Linux: yay -S soul-player",
+        "installCommand": "yay -S soul-player",
         "isAur": true
       }
     },

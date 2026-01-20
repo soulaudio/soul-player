@@ -60,9 +60,6 @@ Soul Player is a modern, open-source music player for desktop. Play your local m
 **Arch Linux:**
 ```bash
 # Using an AUR helper (yay, paru, etc.)
-yay -S soul-player-bin
-
-# Or build from source
 yay -S soul-player
 ```
 

@@ -1,5 +1,5 @@
 # Maintainer: Soul Player Contributors <noreply@github.com>
-pkgname=soul-player-bin
+pkgname=soul-player
 pkgver=0.1.1
 pkgrel=1
 pkgdesc="Modern, privacy-first music player for local audio files"
@@ -7,8 +7,6 @@ arch=('x86_64')
 url="https://github.com/soulaudio/soul-player"
 license=('AGPL3')
 depends=('webkit2gtk' 'gtk3' 'libayatana-appindicator')
-provides=('soul-player')
-conflicts=('soul-player')
 source=("soul-player-${pkgver}::https://github.com/soulaudio/soul-player/releases/download/v${pkgver}/soul-player")
 sha256sums=('SKIP')  # Updated by makepkg or maintainer
 

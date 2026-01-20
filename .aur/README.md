@@ -1,18 +1,13 @@
-# Soul Player AUR Packages
+# Soul Player AUR Package
 
-This directory contains PKGBUILD files for publishing Soul Player to the AUR (Arch User Repository).
+This directory contains the PKGBUILD file for publishing Soul Player to the AUR (Arch User Repository).
 
-## Packages
+## Package
 
-### soul-player-bin (Binary Package)
-- Downloads pre-built DEB package from GitHub releases
-- Extracts and installs the binary
-- **Recommended for most users** (faster installation)
-
-### soul-player (Source Package)
-- Builds from source code
-- Requires Rust, Node.js, and build dependencies
-- Takes longer but builds from scratch
+### soul-player (Official Binary Package)
+- Downloads pre-built binary from GitHub releases
+- Official package maintained by Soul Player team
+- Fast installation with pre-compiled binaries
 
 ## Publishing to AUR
 
@@ -21,20 +16,15 @@ This directory contains PKGBUILD files for publishing Soul Player to the AUR (Ar
 2. Add your SSH key to your AUR account
 3. Install AUR tools: `sudo pacman -S git base-devel`
 
-### Initial Setup (Binary Package)
+### Initial Setup
 
 ```bash
 # Clone AUR repository (first time only)
-git clone ssh://aur@aur.archlinux.org/soul-player-bin.git
-cd soul-player-bin
+git clone ssh://aur@aur.archlinux.org/soul-player.git
+cd soul-player
 
 # Copy PKGBUILD
-cp ../.aur/PKGBUILD-bin PKGBUILD
-
-# Update SHA256 sum
-wget https://github.com/soulaudio/soul-player/releases/download/v0.1.1/soul_player_0.1.1_amd64.deb
-sha256sum soul_player_0.1.1_amd64.deb
-# Update sha256sums=('...') in PKGBUILD
+cp ../.aur/PKGBUILD PKGBUILD
 
 # Generate .SRCINFO
 makepkg --printsrcinfo > .SRCINFO
@@ -51,12 +41,11 @@ git push origin master
 ### Updating Package (New Release)
 
 ```bash
-cd soul-player-bin
+cd soul-player
 
 # Update PKGBUILD
 # - Change pkgver=0.1.2
 # - Change pkgrel=1 (reset to 1 for new version)
-# - Update sha256sum
 
 # Regenerate .SRCINFO
 makepkg --printsrcinfo > .SRCINFO
@@ -76,14 +65,14 @@ After publishing to AUR, users can install with:
 
 ```bash
 # Using yay (most common AUR helper)
-yay -S soul-player-bin
+yay -S soul-player
 
 # Using paru
-paru -S soul-player-bin
+paru -S soul-player
 
 # Manual installation
-git clone https://aur.archlinux.org/soul-player-bin.git
-cd soul-player-bin
+git clone https://aur.archlinux.org/soul-player.git
+cd soul-player
 makepkg -si
 ```
 
@@ -91,11 +80,10 @@ makepkg -si
 
 AUR publishing is **fully automated** via GitHub Actions. When a new release is published, the workflow automatically:
 
-1. Downloads the DEB package from GitHub releases
-2. Calculates the SHA256 checksum
-3. Updates `PKGBUILD-bin` with the new version and checksum
-4. Generates `.SRCINFO` using Docker with Arch Linux
-5. Commits and pushes to the AUR repository
+1. Downloads the binary from GitHub releases
+2. Updates `PKGBUILD` with the new version
+3. Generates `.SRCINFO` using Docker with Arch Linux
+4. Commits and pushes to the AUR repository
 
 ### Required GitHub Secrets
 
@@ -130,23 +118,8 @@ cat ~/.ssh/aur
 The `publish-aur` job in `.github/workflows/release.yml`:
 - Runs after the release is published
 - Uses `KSXGitHub/github-actions-deploy-aur@v4` action
-- Updates the `soul-player-bin` package on AUR
+- Updates the `soul-player` package on AUR
 - Automatically handles `.SRCINFO` generation
-
-### Testing Updates Locally
-
-You can manually test the update script:
-
-```bash
-# Calculate SHA256 of a DEB file
-SHA256=$(sha256sum path/to/soul_player_0.1.2_amd64.deb | awk '{print $1}')
-
-# Update PKGBUILD-bin
-./.aur/update-pkgbuild.sh 0.1.2 "$SHA256"
-
-# Verify changes
-cat .aur/PKGBUILD-bin
-```
 
 ## Links
 

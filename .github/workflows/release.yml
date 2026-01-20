@@ -1717,7 +1717,7 @@ jobs:
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
         with:
-          pkgname: soul-player-bin
+          pkgname: soul-player
           pkgbuild: .aur/PKGBUILD
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
@@ -1729,6 +1729,6 @@ jobs:
       - name: Notify AUR publish success
         run: |
           echo "✅ AUR package published successfully!"
-          echo "Package: soul-player-bin"
+          echo "Package: soul-player"
           echo "Version: ${{ steps.get-info.outputs.version }}"
-          echo "AUR link: https://aur.archlinux.org/packages/soul-player-bin"
+          echo "AUR link: https://aur.archlinux.org/packages/soul-player"

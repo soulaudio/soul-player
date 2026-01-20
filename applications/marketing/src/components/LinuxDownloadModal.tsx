@@ -72,7 +72,7 @@ export function LinuxDownloadModal({ isOpen, onClose, version }: LinuxDownloadMo
 
   const getDownloadUrlForLinux = (download: LinuxDownload): string => {
     if (download.isAur) {
-      return 'https://aur.archlinux.org/packages/soul-player-bin'
+      return 'https://aur.archlinux.org/packages/soul-player'
     }
     const filename = fillVersionPattern(download.filePattern, version || '0.1.1')
     return getDownloadUrl(filename)

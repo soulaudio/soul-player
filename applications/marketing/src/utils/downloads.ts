@@ -81,7 +81,7 @@ export const LINUX_DOWNLOADS: LinuxDownload[] = [
     displayName: 'Arch Linux (AUR)',
     description: 'Install via your favorite AUR helper (yay, paru, etc.)',
     recommended: false,
-    installCommand: 'yay -S soul-player-bin',
+    installCommand: 'yay -S soul-player',
     isAur: true,
   },
 ]
