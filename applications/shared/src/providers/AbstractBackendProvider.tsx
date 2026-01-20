@@ -240,6 +240,14 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   async getPlaylistArtwork(_playlistId: string): Promise<string | null> {
     return null;
   }
+
+  // ============================================================================
+  // App Metadata
+  // ============================================================================
+
+  async getVersion(): Promise<string> {
+    throw new Error('getVersion() not implemented');
+  }
 }
 
 /**

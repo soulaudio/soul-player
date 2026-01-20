@@ -285,6 +285,10 @@ export function ServerBackendProvider({ apiBase, authToken, children }: ServerBa
         authToken
       )
     },
+
+    async getVersion() {
+      return apiFetch<string>(`${apiBase}/version`, {}, authToken)
+    },
   }), [apiBase, authToken])
 
   return (
