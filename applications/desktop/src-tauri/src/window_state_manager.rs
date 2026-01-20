@@ -20,12 +20,28 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
         );
 
         // On macOS with frameless windows (decorations: false), there's a known Tauri v2 bug
-        // where set_size() doesn't work reliably (GitHub issue #12168).
-        // We try multiple approaches to work around this.
+        // where set_size() doesn't work reliably on hidden windows (GitHub issue #12168).
+        // The window will be shown first in main.rs, then this function will be called again
+        // to apply the size. For now, we only set position on hidden windows.
         #[cfg(target_os = "macos")]
         {
-            // Try setting size multiple times with small delays
-            // This is a workaround for the Tauri bug where the first call may be ignored
+            if !window.is_visible().unwrap_or(false) {
+                tracing::debug!(
+                    "[window_state] macOS: Window is hidden, deferring size until after show()"
+                );
+                // Only set position while hidden, size will be set after show()
+                if let (Some(x), Some(y)) = (ws.x, ws.y) {
+                    if let Err(e) = window.set_position(Position::Physical(PhysicalPosition { x, y })) {
+                        tracing::warn!("[window_state] Failed to set window position: {}", e);
+                    } else {
+                        tracing::debug!("[window_state] Window position set to ({}, {})", x, y);
+                    }
+                }
+                return Ok(());
+            }
+
+            // Window is visible, now set the size with retries
+            tracing::debug!("[window_state] macOS: Window is visible, setting size");
             for attempt in 1..=3 {
                 match window.set_size(Size::Physical(PhysicalSize {
                     width: ws.width as u32,
@@ -63,7 +79,8 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
             }
         }
 
-        // Set position if available
+        // Set position if available (on non-macOS or visible macOS windows)
+        #[cfg(not(target_os = "macos"))]
         if let (Some(x), Some(y)) = (ws.x, ws.y) {
             if let Err(e) = window.set_position(Position::Physical(PhysicalPosition { x, y })) {
                 tracing::warn!("[window_state] Failed to set window position: {}", e);

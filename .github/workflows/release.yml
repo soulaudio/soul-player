@@ -861,6 +861,28 @@ jobs:
           # Flatpak currently disabled due to network sandbox limitations
           fail_on_unmatched_files: false
 
+      - name: Validate version consistency
+        run: |
+          VERSION=$(jq -r '.version' .github/release-config.json)
+          TAG="${{ steps.gen-tag.outputs.tag }}"
+          EXPECTED_TAG="v${VERSION}"
+
+          echo "Version from release-config.json: ${VERSION}"
+          echo "Git tag: ${TAG}"
+          echo "Expected tag: ${EXPECTED_TAG}"
+
+          if [ "${TAG}" != "${EXPECTED_TAG}" ]; then
+            echo "❌ ERROR: Version mismatch detected!"
+            echo "   release-config.json has version ${VERSION}"
+            echo "   but git tag is ${TAG}"
+            echo ""
+            echo "This usually means release-config.json wasn't updated by bump-version.sh"
+            echo "Please run: ./scripts/bump-version.sh ${VERSION} to fix this"
+            exit 1
+          fi
+
+          echo "✅ Version consistency check passed"
+
       - name: Generate latest.json for Tauri updater
         run: |
           VERSION=$(jq -r '.version' .github/release-config.json)
@@ -868,13 +890,48 @@ jobs:
           TAG="${{ steps.gen-tag.outputs.tag }}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          # Read signatures from .sig files
-          WINDOWS_SIG=$(cat artifacts/windows-x86_64-pc-windows-msvc/*.exe.sig | tr -d '\n')
-          LINUX_SIG=$(cat artifacts/linux-x86_64-unknown-linux-gnu/*.deb.sig | tr -d '\n')
-          MACOS_ARM_SIG=$(cat artifacts/macos-aarch64-apple-darwin/*.app.tar.gz.sig | tr -d '\n')
-          MACOS_INTEL_SIG=$(cat artifacts/macos-x86_64-apple-darwin/*.app.tar.gz.sig | tr -d '\n')
+          echo "Generating latest.json for version ${VERSION}"
+          echo "Repository: ${REPO}"
+          echo "Tag: ${TAG}"
+          echo ""
 
-          # Generate latest.json
+          # Get artifact filenames from release-config.json (with {version} placeholder replaced)
+          WINDOWS_NSIS_NAME=$(jq -r '.artifacts.windows.nsis.name' .github/release-config.json | sed "s/{version}/${VERSION}/g")
+          LINUX_DEB_NAME=$(jq -r '.artifacts.linux.deb.name' .github/release-config.json | sed "s/{version}/${VERSION}/g")
+
+          echo "Windows installer: ${WINDOWS_NSIS_NAME}"
+          echo "Linux .deb: ${LINUX_DEB_NAME}"
+          echo ""
+
+          # Read signatures from .sig files (if they exist)
+          # Use find to locate signature files in case directory structure changes
+          WINDOWS_SIG_FILE=$(find artifacts/windows-* -name "${WINDOWS_NSIS_NAME}.sig" -type f 2>/dev/null | head -n 1)
+          if [ -n "$WINDOWS_SIG_FILE" ] && [ -f "$WINDOWS_SIG_FILE" ]; then
+            WINDOWS_SIG=$(cat "$WINDOWS_SIG_FILE" | tr -d '\n')
+            echo "✅ Found Windows signature: $WINDOWS_SIG_FILE"
+          else
+            WINDOWS_SIG=""
+            echo "⚠️  Windows signature not found (will use empty string)"
+            echo "   Searched for: ${WINDOWS_NSIS_NAME}.sig in artifacts/windows-*"
+          fi
+
+          LINUX_SIG_FILE=$(find artifacts/linux-* -name "${LINUX_DEB_NAME}.sig" -type f 2>/dev/null | head -n 1)
+          if [ -n "$LINUX_SIG_FILE" ] && [ -f "$LINUX_SIG_FILE" ]; then
+            LINUX_SIG=$(cat "$LINUX_SIG_FILE" | tr -d '\n')
+            echo "✅ Found Linux .deb signature: $LINUX_SIG_FILE"
+          else
+            LINUX_SIG=""
+            echo "⚠️  Linux .deb signature not found (will use empty string)"
+            echo "   Searched for: ${LINUX_DEB_NAME}.sig in artifacts/linux-*"
+          fi
+
+          echo ""
+          echo "Generating latest.json..."
+
+          # Generate latest.json with correct filenames
+          # Note: macOS is excluded because Tauri updater requires .app.tar.gz files,
+          # but our build only produces .dmg files. This is a known limitation.
+          # See: https://github.com/tauri-apps/tauri/issues/13878
           cat > latest.json << EOF
           {
             "version": "${VERSION}",
@@ -883,24 +940,19 @@ jobs:
             "platforms": {
               "windows-x86_64": {
                 "signature": "${WINDOWS_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul_player_${VERSION}_x64-setup.exe"
+                "url": "https://github.com/${REPO}/releases/download/${TAG}/${WINDOWS_NSIS_NAME}"
               },
               "linux-x86_64": {
                 "signature": "${LINUX_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul_player_${VERSION}_amd64.deb"
-              },
-              "darwin-aarch64": {
-                "signature": "${MACOS_ARM_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul_player_${VERSION}_aarch64.app.tar.gz"
-              },
-              "darwin-x86_64": {
-                "signature": "${MACOS_INTEL_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/${TAG}/soul_player_${VERSION}_x64.app.tar.gz"
+                "url": "https://github.com/${REPO}/releases/download/${TAG}/${LINUX_DEB_NAME}"
               }
             }
           }
           EOF
 
+          echo "✅ latest.json generated successfully"
+          echo ""
+          echo "Contents:"
           cat latest.json
 
       - name: Upload latest.json to release

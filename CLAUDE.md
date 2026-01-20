@@ -271,11 +271,21 @@ cargo install wasm-pack
 - ✅ All application `Cargo.toml` files in `applications/*/src-tauri/Cargo.toml` (use `version.workspace = true`)
 - ✅ Root `package.json` and all `applications/*/package.json`
 - ✅ **CRITICAL**: `applications/desktop/src-tauri/tauri.conf.json` (line 3: `"version": "X.Y.Z"`)
+- ✅ **CRITICAL**: `.github/release-config.json` (line 2: `"version": "X.Y.Z"`) - used by CI to generate `latest.json` for auto-updates
 
 **Version Resolution in Tauri:**
 - Tauri's `getVersion()` API reads from **`tauri.conf.json` first** (primary source)
 - Falls back to `Cargo.toml` only if `tauri.conf.json` has no version
 - The bump script ensures both are synchronized to prevent UI version mismatch
+
+**Auto-Update Workflow (CI/CD):**
+1. Bump script updates all version files including `.github/release-config.json`
+2. Commit and tag are pushed to GitHub (tag triggers release workflow)
+3. CI validates that `release-config.json` version matches the git tag
+4. CI builds installers for Windows, macOS, Linux
+5. CI generates `latest.json` using filenames from `release-config.json`
+6. CI uploads `latest.json` to GitHub release
+7. Users on older versions receive update notifications automatically
 
 **Manual Version Updates (NOT RECOMMENDED):**
 If you must update versions manually, you MUST update ALL files listed above. Missing even one file will cause version mismatches in the UI or build artifacts.

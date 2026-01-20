@@ -2230,6 +2230,17 @@ fn main() {
                 }
                 if let Some(main) = app_handle.get_webview_window("main") {
                     let _ = main.show();
+
+                    // On macOS, we need to set the window size AFTER showing it due to a Tauri bug
+                    // with frameless windows. Call load_window_state again to apply the size.
+                    #[cfg(target_os = "macos")]
+                    {
+                        tracing::debug!("[startup] macOS: Re-applying window state after show()");
+                        if let Err(e) = window_state_manager::load_window_state(&app_handle).await
+                        {
+                            tracing::warn!("Failed to re-apply window state on macOS: {}", e);
+                        }
+                    }
                 }
             });
 
