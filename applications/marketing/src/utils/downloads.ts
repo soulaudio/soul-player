@@ -95,15 +95,9 @@ export interface AlternateDownload {
 
 /**
  * Alternate download options for Windows and macOS
+ * Note: macOS Intel is now included in the macOS download modal instead
  */
-export const ALTERNATE_DOWNLOADS: AlternateDownload[] = [
-  {
-    platform: 'macos',
-    filePattern: 'Soul.Player_{version}_x64.dmg',
-    label: 'macOS Intel',
-    description: 'For Intel-based Macs',
-  },
-]
+export const ALTERNATE_DOWNLOADS: AlternateDownload[] = []
 
 export interface DockerDownload {
   filePattern: string
