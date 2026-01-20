@@ -9,6 +9,7 @@
  * - Workspace Cargo.toml
  * - All package.json files (root + applications)
  * - Tauri tauri.conf.json
+ * - .github/release-config.json (for latest.json generation)
  * - Commits, tags, and pushes to origin
  */
 
@@ -113,6 +114,21 @@ function updateTauriConf(newVersion) {
   }
 }
 
+// Update release-config.json
+function updateReleaseConfig(newVersion) {
+  const filePath = join(PROJECT_ROOT, '.github/release-config.json');
+  try {
+    const content = JSON.parse(readFileSync(filePath, 'utf8'));
+    content.version = newVersion;
+    writeFileSync(filePath, JSON.stringify(content, null, 2) + '\n', 'utf8');
+    printSuccess(`Updated: .github/release-config.json`);
+    return true;
+  } catch (err) {
+    printError(`Failed to update .github/release-config.json: ${err.message}`);
+    return false;
+  }
+}
+
 // Find all package.json files in applications directory
 function findPackageJsonFiles() {
   const packageJsonFiles = [join(PROJECT_ROOT, 'package.json')];
@@ -175,6 +191,24 @@ function validateUpdates(newVersion) {
     }
   } catch (err) {
     printError(`Failed to validate Cargo.toml: ${err.message}`);
+    allValid = false;
+  }
+
+  // Validate release-config.json
+  const releaseConfigPath = join(PROJECT_ROOT, '.github/release-config.json');
+  try {
+    const releaseConfig = JSON.parse(readFileSync(releaseConfigPath, 'utf8'));
+    if (releaseConfig.version !== newVersion) {
+      printError(`VALIDATION FAILED: release-config.json version mismatch!`);
+      printError(`  Expected: ${newVersion}`);
+      printError(`  Actual:   ${releaseConfig.version}`);
+      printWarning('This will cause wrong version in latest.json for auto-updates!');
+      allValid = false;
+    } else {
+      printSuccess(`Validation: release-config.json version = ${releaseConfig.version} ✓`);
+    }
+  } catch (err) {
+    printError(`Failed to validate release-config.json: ${err.message}`);
     allValid = false;
   }
 
@@ -261,6 +295,13 @@ async function main() {
     filesFailed++;
   }
 
+  // Update release config
+  if (updateReleaseConfig(newVersion)) {
+    filesUpdated++;
+  } else {
+    filesFailed++;
+  }
+
   console.log('');
   printInfo('Validating version updates...');
   console.log('');
@@ -307,6 +348,7 @@ async function main() {
 - Updated all Cargo.toml files to v${newVersion}
 - Updated all package.json files to v${newVersion}
 - Updated tauri.conf.json to v${newVersion}
+- Updated .github/release-config.json to v${newVersion}
 - Includes previous fixes and improvements`;
 
   if (!runGitCommand(`git commit -m "${commitMessage}"`, 'Creating commit...')) {

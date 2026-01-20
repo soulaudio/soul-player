@@ -26,6 +26,7 @@
     "core:webview:default",
     "core:webview:allow-webview-position",
     "core:webview:allow-webview-size",
-    "core:webview:allow-internal-toggle-devtools"
+    "core:webview:allow-internal-toggle-devtools",
+    "updater:default"
   ]
 }
