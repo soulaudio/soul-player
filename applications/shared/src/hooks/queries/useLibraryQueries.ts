@@ -299,13 +299,6 @@ export function useLibraryData() {
       artistsQuery.error ||
       playlistsQuery.error ||
       healthQuery.error,
-    refetch: () => {
-      tracksQuery.refetch()
-      albumsQuery.refetch()
-      artistsQuery.refetch()
-      playlistsQuery.refetch()
-      healthQuery.refetch()
-    },
   }
 }
 
@@ -322,9 +315,5 @@ export function usePlaylistWithTracks(id: string | undefined) {
     isLoading: playlistQuery.isLoading || tracksQuery.isLoading,
     isError: playlistQuery.isError || tracksQuery.isError,
     error: playlistQuery.error || tracksQuery.error,
-    refetch: () => {
-      playlistQuery.refetch()
-      tracksQuery.refetch()
-    },
   }
 }

@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { useBackend, type BackendAlbum } from '../contexts/BackendContext'
+import type { BackendAlbum } from '../contexts/BackendContext'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
 import { AlbumCard } from '../components/AlbumCard'
 import { SkeletonGrid } from '../components/SkeletonGrid'

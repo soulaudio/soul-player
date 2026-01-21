@@ -79,7 +79,7 @@ export function ArtistPage() {
 
   // React Query hooks - replaces manual loading state
   const artistId = id ? parseInt(id, 10) : 0
-  const { artist, tracks = [], albums = [], topTracks = [], isLoading, isError, error, refetch } = useArtistWithData(artistId)
+  const { artist, tracks = [], albums = [], topTracks = [], isLoading, isError, error } = useArtistWithData(artistId)
   const deleteTrackMutation = useDeleteTrack()
 
   // Load artist artwork separately (only for desktop)

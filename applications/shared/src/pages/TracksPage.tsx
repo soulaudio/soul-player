@@ -19,7 +19,6 @@ import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
 
 export function TracksPage() {
   const { t } = useTranslation()
-  const backend = useBackend()
   const commands = usePlayerCommands()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -31,7 +30,7 @@ export function TracksPage() {
   } | null>(null)
 
   // Fetch data using React Query hooks
-  const { data: tracks = [], isLoading, isError, error, refetch } = useTracks()
+  const { data: tracks = [], isLoading, isError, error } = useTracks()
   const { data: health } = useDatabaseHealth()
   const deleteTrackMutation = useDeleteTrack()
 

@@ -29,7 +29,7 @@ export function PlaylistPage() {
   const { features, isDesktop } = usePlatform()
 
   // React Query hooks - replaces manual loading state
-  const { playlist, tracks = [], isLoading, isError, error, refetch } = usePlaylistWithTracks(id)
+  const { playlist, tracks = [], isLoading, isError, error } = usePlaylistWithTracks(id)
   const deleteTrackMutation = useDeleteTrack()
 
   // Load playlist artwork separately (only for desktop)

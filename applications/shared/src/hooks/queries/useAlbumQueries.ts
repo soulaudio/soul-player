@@ -5,10 +5,9 @@
  * @see https://tanstack.com/query/v5/docs/framework/react/guides/query-options
  */
 
-import { queryOptions, useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useBackend } from '../../contexts/BackendContext'
 import { albumKeys } from './queryKeys'
-import type { BackendAlbum, BackendTrack } from '../../contexts/BackendContext'
 
 /**
  * Query options for fetching a single album by ID
@@ -228,9 +227,5 @@ export function useAlbumWithTracks(id: number | undefined) {
     isLoading: albumQuery.isLoading || tracksQuery.isLoading,
     isError: albumQuery.isError || tracksQuery.isError,
     error: albumQuery.error || tracksQuery.error,
-    refetch: () => {
-      albumQuery.refetch()
-      tracksQuery.refetch()
-    },
   }
 }

@@ -6,7 +6,6 @@
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useBackend } from '../../contexts/BackendContext'
 import { artistKeys } from './queryKeys'
-import type { BackendArtist, BackendTrack, BackendAlbum } from '../../contexts/BackendContext'
 
 /**
  * Query options for fetching a single artist by ID
@@ -179,11 +178,5 @@ export function useArtistWithData(id: number | undefined) {
     isError:
       artistQuery.isError || tracksQuery.isError || albumsQuery.isError || topTracksQuery.isError,
     error: artistQuery.error || tracksQuery.error || albumsQuery.error || topTracksQuery.error,
-    refetch: () => {
-      artistQuery.refetch()
-      tracksQuery.refetch()
-      albumsQuery.refetch()
-      topTracksQuery.refetch()
-    },
   }
 }

@@ -32,7 +32,7 @@ export function AlbumPage() {
 
   // React Query hook - replaces manual loading state
   const albumId = id ? parseInt(id, 10) : 0
-  const { album, tracks = [], isLoading, isError, error, refetch } = useAlbumWithTracks(albumId)
+  const { album, tracks = [], isLoading, isError, error } = useAlbumWithTracks(albumId)
   const deleteTrackMutation = useDeleteTrack()
 
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)

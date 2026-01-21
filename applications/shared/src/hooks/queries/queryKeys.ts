@@ -70,6 +70,7 @@ export const playlistKeys = {
 export const genreKeys = {
   all: () => ['genres'] as const,
   lists: () => [...genreKeys.all(), 'list'] as const,
+  list: (filters?: Record<string, unknown>) => [...genreKeys.lists(), filters] as const,
   details: () => [...genreKeys.all(), 'detail'] as const,
   detail: (id: number) => [...genreKeys.details(), id] as const,
   tracks: (id: number) => [...genreKeys.detail(id), 'tracks'] as const,
