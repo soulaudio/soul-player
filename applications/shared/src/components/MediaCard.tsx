@@ -4,7 +4,7 @@
  * Has play/pause functionality based on current playback context
  */
 
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, memo, type ReactNode } from 'react'
 import { Play, Pause, Disc3, Users, ListMusic } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -16,6 +16,7 @@ import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 import { ArtistLink } from './ArtistLink'
+import { debug } from '../utils/debug'
 
 export type MediaType = 'album' | 'artist' | 'playlist'
 
@@ -64,7 +65,7 @@ function getRoute(type: MediaType, id: number | string): string {
   }
 }
 
-export function MediaCard({
+const MediaCardComponent = ({
   type,
   id,
   title,
@@ -74,7 +75,7 @@ export function MediaCard({
   className = 'w-40',
   additionalInfo,
   priority = false,
-}: MediaCardProps) {
+}: MediaCardProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { isPlaying, currentTrack } = usePlayerStore()
@@ -85,7 +86,7 @@ export function MediaCard({
 
   // Debug logging for album cards
   if (type === 'album') {
-    console.log('[MediaCard] Album card props:', { id, title, subtitle, artistId, type })
+    debug.log('[MediaCard] Album card props:', { id, title, subtitle, artistId, type })
   }
 
   const isCircle = type === 'artist'
@@ -126,7 +127,7 @@ export function MediaCard({
           await commands.resumePlayback()
         }
       } catch (err) {
-        console.error(`[MediaCard] Failed to pause/resume:`, err)
+        debug.error(`[MediaCard] Failed to pause/resume:`, err)
       }
       return
     }
@@ -152,7 +153,7 @@ export function MediaCard({
       const deduplicatedTracks = getDeduplicatedTracks(tracksWithPath)
 
       if (deduplicatedTracks.length === 0) {
-        console.warn(`[MediaCard] No playable tracks found for ${type} ${id}`)
+        debug.warn(`[MediaCard] No playable tracks found for ${type} ${id}`)
         return
       }
 
@@ -201,7 +202,7 @@ export function MediaCard({
 
       await commands.playQueue(queue, 0, context)
     } catch (err) {
-      console.error(`[MediaCard] Failed to play ${type}:`, err)
+      debug.error(`[MediaCard] Failed to play ${type}:`, err)
     }
   }
 
@@ -313,3 +314,6 @@ export function MediaCard({
     </div>
   )
 }
+
+export const MediaCard = memo(MediaCardComponent)
+MediaCard.displayName = 'MediaCard'

@@ -20,9 +20,11 @@ initTestHelpers();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 30, // 30 minutes (formerly cacheTime)
+      staleTime: 1000 * 60 * 10, // 10 minutes - library data rarely changes
+      gcTime: 1000 * 60 * 60, // 1 hour - keep in cache longer
       refetchOnWindowFocus: false,
+      refetchOnReconnect: false, // Don't refetch on network reconnect (desktop app)
+      retry: 1, // Only retry once instead of 3 times
     },
   },
 });

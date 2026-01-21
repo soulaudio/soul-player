@@ -129,7 +129,7 @@ async fn test_get_by_id_performance() {
     let (pool, _temp_dir) = setup_test_db().await;
     let (_user_id, _, _) = insert_test_data(&pool, 100).await;
 
-    let all_tracks = tracks::get_all(&pool)
+    let all_tracks = tracks::get_all(&pool, None, None)
         .await
         .expect("Failed to get all tracks");
     let track_id = all_tracks[0].id.clone();

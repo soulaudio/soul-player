@@ -31,7 +31,9 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
                 );
                 // Only set position while hidden, size will be set after show()
                 if let (Some(x), Some(y)) = (ws.x, ws.y) {
-                    if let Err(e) = window.set_position(Position::Physical(PhysicalPosition { x, y })) {
+                    if let Err(e) =
+                        window.set_position(Position::Physical(PhysicalPosition { x, y }))
+                    {
                         tracing::warn!("[window_state] Failed to set window position: {}", e);
                     } else {
                         tracing::debug!("[window_state] Window position set to ({}, {})", x, y);
@@ -61,7 +63,9 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
                             e
                         );
                         if attempt < 3 {
-                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            // Reduced from 50ms to 25ms - still allows WKWebView to settle
+                            // while reducing max blocking time from 150ms to 75ms
+                            std::thread::sleep(std::time::Duration::from_millis(25));
                         }
                     }
                 }

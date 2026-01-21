@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { debug } from '../utils/debug';
 
 interface UseResizableSidebarOptions {
   /** Minimum width in pixels */
@@ -51,7 +52,7 @@ export function useResizableSidebar(
         }
       }
     } catch (error) {
-      console.error('[useResizableSidebar] Failed to load width from storage:', error);
+      debug.error('[useResizableSidebar] Failed to load width from storage:', error);
     }
     return defaultWidth;
   });
@@ -61,7 +62,7 @@ export function useResizableSidebar(
     try {
       localStorage.setItem(storageKey, String(newWidth));
     } catch (error) {
-      console.error('[useResizableSidebar] Failed to save width to storage:', error);
+      debug.error('[useResizableSidebar] Failed to save width to storage:', error);
     }
   }, [storageKey]);
 

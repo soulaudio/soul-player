@@ -3,6 +3,7 @@ import { MoreVertical, Trash, ListPlus, FolderOpen, ListEnd, ArrowUpCircle } fro
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
+import { debug } from '../utils/debug';
 
 interface TrackMenuProps {
   track: BackendTrack
@@ -28,7 +29,7 @@ export function TrackMenu({
     try {
       await backend.showInFileExplorer(track.file_path)
     } catch (error) {
-      console.error('Failed to show file in explorer:', error)
+      debug.error('Failed to show file in explorer:', error)
     }
   }
 

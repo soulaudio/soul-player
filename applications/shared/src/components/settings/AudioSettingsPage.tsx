@@ -20,6 +20,7 @@ import { UpsamplingSettings } from './audio/UpsamplingSettings';
 import { VolumeLevelingSettings } from './audio/VolumeLevelingSettings';
 import { HeadroomSettings } from './audio/HeadroomSettings';
 import { BufferSettings } from './audio/BufferSettings';
+import { debug } from '../../utils/debug';
 
 export interface AudioBackend {
   backend: 'default' | 'asio' | 'jack';
@@ -241,7 +242,7 @@ function AudioSettingsDesktop() {
           }
           setSettings(migrated);
         } catch (e) {
-          console.error('Failed to parse audio settings:', e);
+          debug.error('Failed to parse audio settings:', e);
         }
       }
 
@@ -253,7 +254,7 @@ function AudioSettingsDesktop() {
         setR8brainAvailable(false);
       }
     } catch (error) {
-      console.error('Failed to load audio settings:', error);
+      debug.error('Failed to load audio settings:', error);
     } finally {
       setLoading(false);
     }
@@ -271,7 +272,7 @@ function AudioSettingsDesktop() {
         value: JSON.stringify(newSettings)
       });
     } catch (error) {
-      console.error('Failed to save audio settings:', error);
+      debug.error('Failed to save audio settings:', error);
     }
   };
 
@@ -284,7 +285,7 @@ function AudioSettingsDesktop() {
       const devicesData = await invoke<AudioDevice[]>('get_audio_devices', { backendStr: backend });
       setDevices(devicesData);
     } catch (error) {
-      console.error('Failed to load devices:', error);
+      debug.error('Failed to load devices:', error);
     }
   };
 
@@ -299,7 +300,7 @@ function AudioSettingsDesktop() {
       });
       showNotification('success', `Switched to audio device: ${deviceName}`);
     } catch (error) {
-      console.error('Failed to set audio device:', error);
+      debug.error('Failed to set audio device:', error);
       showNotification('error', `Failed to switch audio device: ${error}`);
     }
   };
@@ -357,7 +358,7 @@ function AudioSettingsDesktop() {
         curve: 'equal_power',
       });
     } catch (error) {
-      console.error('Failed to reset audio settings:', error);
+      debug.error('Failed to reset audio settings:', error);
     }
     setShowResetDialog(false);
   };
@@ -385,7 +386,7 @@ function AudioSettingsDesktop() {
     try {
       await invoke('set_volume_leveling_preamp', { preampDb });
     } catch (error) {
-      console.error('Failed to set preamp:', error);
+      debug.error('Failed to set preamp:', error);
     }
   };
 
@@ -396,7 +397,7 @@ function AudioSettingsDesktop() {
     try {
       await invoke('set_volume_leveling_prevent_clipping', { prevent });
     } catch (error) {
-      console.error('Failed to set prevent clipping:', error);
+      debug.error('Failed to set prevent clipping:', error);
     }
   };
 
@@ -430,7 +431,7 @@ function AudioSettingsDesktop() {
         curve: curveMapping[crossfade.curve] || 'equal_power',
       });
     } catch (error) {
-      console.error('Failed to apply crossfade settings:', error);
+      debug.error('Failed to apply crossfade settings:', error);
       showNotification('error', 'Failed to apply crossfade settings');
     }
   };
@@ -446,7 +447,7 @@ function AudioSettingsDesktop() {
       await invoke('set_resampling_quality', { quality });
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
-      console.error('Failed to apply resampling quality:', error);
+      debug.error('Failed to apply resampling quality:', error);
       showNotification('error', 'Failed to apply resampling quality');
     }
   };
@@ -464,7 +465,7 @@ function AudioSettingsDesktop() {
       await invoke('set_resampling_target_rate', { rate: targetRate });
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
-      console.error('Failed to apply resampling target rate:', error);
+      debug.error('Failed to apply resampling target rate:', error);
       showNotification('error', 'Failed to apply resampling target rate');
     }
   };
@@ -480,7 +481,7 @@ function AudioSettingsDesktop() {
       await invoke('set_resampling_backend', { backend });
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
-      console.error('Failed to apply resampling backend:', error);
+      debug.error('Failed to apply resampling backend:', error);
       showNotification('error', 'Failed to apply resampling backend');
     }
   };
@@ -630,7 +631,7 @@ function AudioSettingsDesktop() {
               try {
                 await invoke('set_volume_leveling_mode', { mode });
               } catch (error) {
-                console.error('Failed to set volume leveling mode:', error);
+                debug.error('Failed to set volume leveling mode:', error);
               }
               // Then persist to settings
               updateSettings({ volume_leveling_mode: mode });

@@ -2,6 +2,7 @@ import { usePlayerStore } from '../../stores/player';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
 import { Shuffle, Repeat, Repeat1, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { debug } from '../../utils/debug';
 
 interface ShuffleRepeatControlsProps {
   /** Callback when the "Add to Playlist" button is clicked */
@@ -14,27 +15,27 @@ export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControls
   const commands = usePlayerCommands();
 
   const handleShuffleToggle = async () => {
-    console.log('[ShuffleRepeatControls] Current shuffle mode:', shuffleMode);
+    debug.log('[ShuffleRepeatControls] Current shuffle mode:', shuffleMode);
     try {
       const newMode = await commands.cycleShuffle();
-      console.log('[ShuffleRepeatControls] New shuffle mode from backend:', newMode);
+      debug.log('[ShuffleRepeatControls] New shuffle mode from backend:', newMode);
       setShuffleMode(newMode);
     } catch (error) {
-      console.error('[ShuffleRepeatControls] Cycle shuffle failed:', error);
+      debug.error('[ShuffleRepeatControls] Cycle shuffle failed:', error);
     }
   };
 
   const handleRepeatToggle = async () => {
     // Cycle through: off → all → one → off
-    console.log('[ShuffleRepeatControls] Current repeat mode:', repeatMode);
+    debug.log('[ShuffleRepeatControls] Current repeat mode:', repeatMode);
     const nextMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
-    console.log('[ShuffleRepeatControls] Cycling to:', nextMode);
+    debug.log('[ShuffleRepeatControls] Cycling to:', nextMode);
     setRepeatMode(nextMode);
     try {
       await commands.setRepeatMode(nextMode);
-      console.log('[ShuffleRepeatControls] Repeat mode set successfully');
+      debug.log('[ShuffleRepeatControls] Repeat mode set successfully');
     } catch (error) {
-      console.error('[ShuffleRepeatControls] Set repeat mode failed:', error);
+      debug.error('[ShuffleRepeatControls] Set repeat mode failed:', error);
       // Revert on error
       const prevMode = nextMode === 'off' ? 'one' : nextMode === 'all' ? 'off' : 'all';
       setRepeatMode(prevMode);

@@ -13,6 +13,7 @@ soul-loudness.workspace = true
 symphonia = { workspace = true, features = ["mp3", "isomp4", "flac", "vorbis", "wav", "aac", "ogg"] }
 cpal = { workspace = true, optional = true }
 thiserror.workspace = true
+tracing.workspace = true
 rand = { version = "0.8", optional = true }
 hound = "3.5"  # WAV file reading for convolution IR loading
 rustfft.workspace = true  # FFT for convolution engine

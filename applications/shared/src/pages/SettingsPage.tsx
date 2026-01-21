@@ -13,6 +13,7 @@ import { AudioSettingsPage } from '../components/settings/AudioSettingsPage'
 import { LibrarySettingsPage } from '../components/settings/LibrarySettingsPage'
 import { ReportBugSettingsPage } from '../components/settings/ReportBugSettingsPage'
 import {
+import { debug } from '../utils/debug';
   Settings,
   Volume2,
   Keyboard,
@@ -226,7 +227,7 @@ function HomePageSettings() {
         setHomeEnabled(enabled ?? true)
         setRefreshMinutes(minutes !== null && minutes !== undefined ? String(minutes) : '')
       })
-      .catch(err => console.error('Failed to load home settings:', err))
+      .catch(err => debug.error('Failed to load home settings:', err))
   }, [backend])
 
   const handleEnabledChange = (enabled: boolean) => {
@@ -236,7 +237,7 @@ function HomePageSettings() {
         // Dispatch event to notify LeftSidebar to refresh
         window.dispatchEvent(new CustomEvent('home-enabled-changed', { detail: { enabled } }))
       })
-      .catch(err => console.error('Failed to save home enabled:', err))
+      .catch(err => debug.error('Failed to save home enabled:', err))
   }
 
   const handleRefreshChange = (value: string) => {
@@ -244,7 +245,7 @@ function HomePageSettings() {
     const minutes = value === '' ? null : parseInt(value, 10)
     if (value === '' || !isNaN(minutes!)) {
       backend.setUserSetting('home.refresh_minutes', minutes)
-        .catch(err => console.error('Failed to save refresh minutes:', err))
+        .catch(err => debug.error('Failed to save refresh minutes:', err))
     }
   }
 
@@ -505,7 +506,7 @@ function AboutSettings() {
     backend.getVersion()
       .then(v => setVersion(v))
       .catch(err => {
-        console.error('Failed to load version:', err)
+        debug.error('Failed to load version:', err)
         setVersion('Unknown')
       })
   }, [backend])

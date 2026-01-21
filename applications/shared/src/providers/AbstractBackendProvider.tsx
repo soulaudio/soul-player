@@ -40,6 +40,7 @@ import type {
   SetArtworkParams,
 } from '../contexts/BackendContext';
 import { BackendProvider } from '../contexts/BackendContext';
+import { debug } from '../utils/debug';
 
 export abstract class AbstractBackendProvider implements BackendInterface {
   // ============================================================================
@@ -163,7 +164,7 @@ export abstract class AbstractBackendProvider implements BackendInterface {
 
   async recordContext(_context: Omit<PlaybackContext, 'id' | 'playedAt'>): Promise<void> {
     // Default: no-op
-    console.log('[AbstractBackend] recordContext not implemented');
+    debug.log('[AbstractBackend] recordContext not implemented');
   }
 
   // ============================================================================
@@ -200,7 +201,7 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   }
 
   async showInFileExplorer(_path: string): Promise<void> {
-    console.log('[AbstractBackend] showInFileExplorer not supported on this platform');
+    debug.log('[AbstractBackend] showInFileExplorer not supported on this platform');
   }
 
   // ============================================================================
@@ -218,7 +219,7 @@ export abstract class AbstractBackendProvider implements BackendInterface {
 
   async setUserSetting(_key: string, _value: any): Promise<void> {
     // Default: no-op
-    console.log('[AbstractBackend] setUserSetting not implemented');
+    debug.log('[AbstractBackend] setUserSetting not implemented');
   }
 
   // ============================================================================

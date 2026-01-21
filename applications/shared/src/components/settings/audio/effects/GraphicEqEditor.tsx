@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, ChevronDown, Check } from 'lucide-react';
+import { debug } from '../../../../utils/debug';
 
 // ISO standard 10-band center frequencies (Hz)
 const ISO_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const;
@@ -283,7 +284,7 @@ export function GraphicEqEditor({
           }
         }
       } catch (error) {
-        console.error('Failed to load presets, using defaults:', error);
+        debug.error('Failed to load presets, using defaults:', error);
         // Keep using builtin presets
       }
     };

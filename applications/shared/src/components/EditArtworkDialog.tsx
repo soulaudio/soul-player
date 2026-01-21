@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter } from '.
 import { Button } from './ui/button';
 import { ImageCropper } from './ImageCropper';
 import { clearArtworkCache } from './ArtworkImage';
+import { debug } from '../utils/debug';
 
 export type ArtworkEntityType = 'album' | 'artist' | 'playlist';
 
@@ -90,7 +91,7 @@ export function EditArtworkDialog({
           setIsCustomArtwork(artworkResponse?.isCustom || false);
         }
       } catch (err) {
-        console.error('[EditArtworkDialog] Failed to load artwork:', err);
+        debug.error('[EditArtworkDialog] Failed to load artwork:', err);
       } finally {
         if (!cancelled) {
           setLoadingArtwork(false);
@@ -179,7 +180,7 @@ export function EditArtworkDialog({
       onArtworkChanged?.();
       closeAndReset();
     } catch (err) {
-      console.error('[EditArtworkDialog] Failed to save artwork:', err);
+      debug.error('[EditArtworkDialog] Failed to save artwork:', err);
       setError(t('artwork.errors.saveFailed'));
       setState('select');
     } finally {
@@ -223,7 +224,7 @@ export function EditArtworkDialog({
       onArtworkChanged?.();
       closeAndReset();
     } catch (err) {
-      console.error('[EditArtworkDialog] Failed to remove artwork:', err);
+      debug.error('[EditArtworkDialog] Failed to remove artwork:', err);
       setError(t('artwork.errors.removeFailed'));
     } finally {
       setSaving(false);

@@ -318,13 +318,13 @@ async fn persist_dsp_chain(pool: &SqlitePool, user_id: &str, slots: &[Option<Eff
                 soul_storage::settings::set_setting(pool, user_id, DSP_CHAIN_SETTING_KEY, &value)
                     .await
             {
-                eprintln!("[persist_dsp_chain] Failed to save DSP chain: {}", e);
+                tracing::error!(error = %e, user_id = %user_id, "[persist_dsp_chain] Failed to save DSP chain");
             } else {
-                eprintln!("[persist_dsp_chain] DSP chain saved successfully");
+                tracing::info!(user_id = %user_id, slot_count = slots.iter().filter(|s| s.is_some()).count(), "[persist_dsp_chain] DSP chain saved successfully");
             }
         }
         Err(e) => {
-            eprintln!("[persist_dsp_chain] Failed to serialize DSP chain: {}", e);
+            tracing::error!(error = %e, user_id = %user_id, "[persist_dsp_chain] Failed to serialize DSP chain");
         }
     }
 }
@@ -334,7 +334,11 @@ async fn load_persisted_dsp_chain(
     pool: &SqlitePool,
     user_id: &str,
 ) -> Option<[Option<EffectSlotState>; 4]> {
-    match soul_storage::settings::get_setting(pool, user_id, DSP_CHAIN_SETTING_KEY).await {
+    let start = std::time::Instant::now();
+
+    let result = match soul_storage::settings::get_setting(pool, user_id, DSP_CHAIN_SETTING_KEY)
+        .await
+    {
         Ok(Some(value)) => match serde_json::from_value::<PersistedDspChain>(value) {
             Ok(chain) => {
                 let mut slots: [Option<EffectSlotState>; 4] = Default::default();
@@ -350,29 +354,38 @@ async fn load_persisted_dsp_chain(
                     }
                 }
 
-                eprintln!("[load_persisted_dsp_chain] DSP chain loaded successfully");
+                tracing::info!(
+                    user_id = %user_id,
+                    slot_count = slots.iter().filter(|s| s.is_some()).count(),
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    "[load_persisted_dsp_chain] DSP chain loaded successfully"
+                );
                 Some(slots)
             }
             Err(e) => {
-                eprintln!(
-                    "[load_persisted_dsp_chain] Failed to deserialize DSP chain: {}",
-                    e
+                tracing::error!(
+                    error = %e,
+                    user_id = %user_id,
+                    "[load_persisted_dsp_chain] Failed to deserialize DSP chain"
                 );
                 None
             }
         },
         Ok(None) => {
-            eprintln!("[load_persisted_dsp_chain] No saved DSP chain found");
+            tracing::debug!(user_id = %user_id, "[load_persisted_dsp_chain] No saved DSP chain found");
             None
         }
         Err(e) => {
-            eprintln!(
-                "[load_persisted_dsp_chain] Failed to load DSP chain setting: {}",
-                e
+            tracing::error!(
+                error = %e,
+                user_id = %user_id,
+                "[load_persisted_dsp_chain] Failed to load DSP chain setting"
             );
             None
         }
-    }
+    };
+
+    result
 }
 
 /// Restore the DSP chain from database on startup
@@ -386,23 +399,31 @@ pub async fn restore_dsp_chain_from_database(
 ) {
     #[cfg(feature = "effects")]
     {
+        let start = std::time::Instant::now();
+
         if let Some(slots) = load_persisted_dsp_chain(pool, user_id).await {
             let mut restored_count = 0;
             for (index, slot) in slots.into_iter().enumerate() {
                 if let Some(slot_state) = slot {
                     if let Err(e) = playback.set_effect_slot(index, Some(slot_state)) {
-                        eprintln!(
-                            "[restore_dsp_chain_from_database] Failed to restore slot {}: {}",
-                            index, e
+                        tracing::error!(
+                            error = %e,
+                            slot_index = index,
+                            "[restore_dsp_chain_from_database] Failed to restore slot"
                         );
                     } else {
                         restored_count += 1;
+                        tracing::debug!(
+                            slot_index = index,
+                            "[restore_dsp_chain_from_database] Slot restored"
+                        );
                     }
                 }
             }
-            eprintln!(
-                "[restore_dsp_chain_from_database] Restored {} effect slots",
-                restored_count
+            tracing::info!(
+                restored_count,
+                duration_ms = start.elapsed().as_millis() as u64,
+                "[restore_dsp_chain_from_database] Restored effect slots"
             );
         }
     }
@@ -410,7 +431,7 @@ pub async fn restore_dsp_chain_from_database(
     #[cfg(not(feature = "effects"))]
     {
         let _ = (playback, pool, user_id);
-        eprintln!("[restore_dsp_chain_from_database] Effects feature not enabled");
+        tracing::debug!("[restore_dsp_chain_from_database] Effects feature not enabled");
     }
 }
 
@@ -423,7 +444,7 @@ async fn persist_current_chain(playback: &PlaybackManager, app_state: &AppState)
                 persist_dsp_chain(&app_state.pool, &app_state.user_id, &slots).await;
             }
             Err(e) => {
-                eprintln!("[persist_current_chain] Failed to get effect slots: {}", e);
+                tracing::error!(error = %e, "[persist_current_chain] Failed to get effect slots");
             }
         }
     }
@@ -508,6 +529,16 @@ pub async fn add_effect_to_chain(
 
     #[cfg(feature = "effects")]
     {
+        let effect_type = match &effect {
+            EffectType::Eq { .. } => "eq",
+            EffectType::Compressor { .. } => "compressor",
+            EffectType::Limiter { .. } => "limiter",
+            EffectType::Crossfeed { .. } => "crossfeed",
+            EffectType::Stereo { .. } => "stereo",
+            EffectType::GraphicEq { .. } => "graphic_eq",
+            EffectType::Convolution { .. } => "convolution",
+        };
+
         playback.set_effect_slot(
             slot_index,
             Some(EffectSlotState {
@@ -515,7 +546,11 @@ pub async fn add_effect_to_chain(
                 enabled: true,
             }),
         )?;
-        eprintln!("[add_effect_to_chain] Slot {}: effect added", slot_index);
+        tracing::info!(
+            slot_index,
+            effect_type,
+            "[add_effect_to_chain] Effect added"
+        );
 
         // Persist the updated chain
         persist_current_chain(&playback, &app_state).await;
@@ -523,7 +558,7 @@ pub async fn add_effect_to_chain(
 
     #[cfg(not(feature = "effects"))]
     {
-        eprintln!("[add_effect_to_chain] Effects feature not enabled");
+        tracing::debug!("[add_effect_to_chain] Effects feature not enabled");
     }
 
     Ok(())
@@ -544,10 +579,7 @@ pub async fn remove_effect_from_chain(
     #[cfg(feature = "effects")]
     {
         playback.set_effect_slot(slot_index, None)?;
-        eprintln!(
-            "[remove_effect_from_chain] Slot {}: effect removed",
-            slot_index
-        );
+        tracing::info!(slot_index, "[remove_effect_from_chain] Effect removed");
 
         // Persist the updated chain
         persist_current_chain(&playback, &app_state).await;
@@ -555,7 +587,7 @@ pub async fn remove_effect_from_chain(
 
     #[cfg(not(feature = "effects"))]
     {
-        eprintln!("[remove_effect_from_chain] Effects feature not enabled");
+        tracing::debug!("[remove_effect_from_chain] Effects feature not enabled");
     }
 
     Ok(())
@@ -580,10 +612,10 @@ pub async fn toggle_effect(
         if let Some(mut slot_state) = slots[slot_index].clone() {
             slot_state.enabled = enabled;
             playback.set_effect_slot(slot_index, Some(slot_state))?;
-            eprintln!(
-                "[toggle_effect] Slot {}: {}",
-                slot_index,
-                if enabled { "enabled" } else { "disabled" }
+            tracing::info!(
+                slot_index = slot_index,
+                enabled = enabled,
+                "[toggle_effect] Effect slot toggled"
             );
 
             // Persist the updated chain
@@ -595,7 +627,7 @@ pub async fn toggle_effect(
 
     #[cfg(not(feature = "effects"))]
     {
-        eprintln!("[toggle_effect] Effects feature not enabled");
+        tracing::warn!("[toggle_effect] Effects feature not enabled");
     }
 
     Ok(())
@@ -627,9 +659,10 @@ pub async fn update_effect_parameters(
                 playback.update_effect_parameters_in_place(slot_index, &effect)?;
 
             if updated_in_place {
-                eprintln!(
-                    "[update_effect_parameters] Slot {}: parameters updated in-place (smooth)",
-                    slot_index
+                tracing::info!(
+                    slot_index = slot_index,
+                    method = "in-place",
+                    "[update_effect_parameters] Parameters updated smoothly"
                 );
             } else {
                 // Fall back to full rebuild (effect type mismatch or effect not found)
@@ -640,9 +673,10 @@ pub async fn update_effect_parameters(
                         enabled: slot_state.enabled,
                     }),
                 )?;
-                eprintln!(
-                    "[update_effect_parameters] Slot {}: parameters updated (rebuilt)",
-                    slot_index
+                tracing::info!(
+                    slot_index = slot_index,
+                    method = "rebuilt",
+                    "[update_effect_parameters] Parameters updated"
                 );
             }
 
@@ -655,7 +689,7 @@ pub async fn update_effect_parameters(
 
     #[cfg(not(feature = "effects"))]
     {
-        eprintln!("[update_effect_parameters] Effects feature not enabled");
+        tracing::warn!("[update_effect_parameters] Effects feature not enabled");
     }
 
     Ok(())
@@ -672,7 +706,7 @@ pub async fn clear_dsp_chain(
         for i in 0..4 {
             playback.set_effect_slot(i, None)?;
         }
-        eprintln!("[clear_dsp_chain] All effects cleared");
+        tracing::info!("[clear_dsp_chain] All effects cleared");
 
         // Persist the cleared chain
         persist_current_chain(&playback, &app_state).await;
@@ -680,7 +714,7 @@ pub async fn clear_dsp_chain(
 
     #[cfg(not(feature = "effects"))]
     {
-        eprintln!("[clear_dsp_chain] Effects feature not enabled");
+        tracing::warn!("[clear_dsp_chain] Effects feature not enabled");
     }
 
     Ok(())

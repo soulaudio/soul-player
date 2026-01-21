@@ -84,20 +84,28 @@ impl MusicImporter {
 
             match Self::import_single_file(&file_path, &pool, &config, &fuzzy_matcher).await {
                 Ok(result) => {
-                    eprintln!("[Importer] Successfully imported: {:?}", file_path);
+                    tracing::info!(
+                        file_path = ?file_path,
+                        "[Importer] Successfully imported"
+                    );
                     if result.requires_review {
                         require_review.push(result);
                     }
                     progress.successful_imports += 1;
                 }
                 Err(ImportError::Duplicate(msg)) => {
-                    eprintln!("[Importer] Skipping duplicate: {}", msg);
-                    tracing::debug!("Skipping duplicate: {}", msg);
+                    tracing::debug!(
+                        message = %msg,
+                        "[Importer] Skipping duplicate"
+                    );
                     progress.skipped_duplicates += 1;
                 }
                 Err(e) => {
-                    eprintln!("[Importer] FAILED to import {:?}: {}", file_path, e);
-                    tracing::error!("Failed to import {:?}: {}", file_path, e);
+                    tracing::error!(
+                        file_path = ?file_path,
+                        error = %e,
+                        "[Importer] FAILED to import"
+                    );
                     errors.push((file_path.clone(), e.to_string()));
                     progress.failed_imports += 1;
                 }
@@ -151,27 +159,42 @@ impl MusicImporter {
         }
 
         // Handle file according to strategy (move/copy/reference)
-        eprintln!("[Importer] Processing: {:?}", file_path);
-        eprintln!("[Importer] Strategy: {:?}", config.file_strategy);
-        eprintln!("[Importer] Library path: {:?}", config.library_path);
+        tracing::debug!(
+            file_path = ?file_path,
+            strategy = ?config.file_strategy,
+            library_path = ?config.library_path,
+            "[Importer] Processing file"
+        );
 
         let library_path = match config.file_strategy {
             FileManagementStrategy::Copy => {
-                eprintln!("[Importer] COPY: {} -> library", file_path.display());
+                tracing::info!(
+                    source = %file_path.display(),
+                    "[Importer] COPY to library"
+                );
                 copy::copy_to_library(file_path, &config.library_path, &metadata)?
             }
             FileManagementStrategy::Move => {
-                eprintln!("[Importer] MOVE: {} -> library", file_path.display());
+                tracing::info!(
+                    source = %file_path.display(),
+                    "[Importer] MOVE to library"
+                );
                 copy::move_to_library(file_path, &config.library_path, &metadata)?
             }
             FileManagementStrategy::Reference => {
-                eprintln!("[Importer] REFERENCE: Keeping at {}", file_path.display());
+                tracing::info!(
+                    file_path = %file_path.display(),
+                    "[Importer] REFERENCE - keeping in original location"
+                );
                 // Keep file in original location - just reference it
                 file_path.to_path_buf()
             }
         };
 
-        eprintln!("[Importer] Result path: {:?}", library_path);
+        tracing::debug!(
+            result_path = ?library_path,
+            "[Importer] File placed in library"
+        );
 
         // Fuzzy match artist
         let artist_match = if let Some(ref artist_name) = metadata.artist {

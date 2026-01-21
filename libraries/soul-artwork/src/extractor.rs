@@ -121,11 +121,11 @@ impl ArtworkExtractor {
         // Check size limit
         let data = picture.data();
         if data.len() > MAX_ARTWORK_SIZE {
-            eprintln!(
-                "Warning: Artwork in {} is too large ({} bytes, max {} bytes), skipping",
-                path.display(),
-                data.len(),
-                MAX_ARTWORK_SIZE
+            tracing::warn!(
+                path = %path.display(),
+                size_bytes = data.len(),
+                max_bytes = MAX_ARTWORK_SIZE,
+                "Artwork size exceeds limit, skipping"
             );
             return Err(ArtworkError::TooLarge(data.len(), MAX_ARTWORK_SIZE));
         }

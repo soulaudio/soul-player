@@ -16,6 +16,7 @@ import { useResponsiveColumns } from '../hooks/useResponsiveColumns'
 import { usePlaylists } from '../hooks/queries/useLibraryQueries'
 import { useDatabaseHealth } from '../hooks/queries/useLibraryQueries'
 import { useCreatePlaylist } from '../hooks/queries/usePlaylistMutations'
+import { debug } from '../utils/debug';
 
 export function PlaylistsPage() {
   const { t } = useTranslation()
@@ -83,7 +84,7 @@ export function PlaylistsPage() {
           navigate(`/playlists/${playlist.id}`)
         },
         onError: (err) => {
-          console.error('Failed to create playlist:', err)
+          debug.error('Failed to create playlist:', err)
         },
       }
     )

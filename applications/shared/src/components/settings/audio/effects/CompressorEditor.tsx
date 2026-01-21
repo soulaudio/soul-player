@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, RotateCcw } from 'lucide-react';
+import { debug } from '../../../../utils/debug';
 
 // Types matching backend (from DspConfig.tsx)
 export interface CompressorSettings {
@@ -83,7 +84,7 @@ export function CompressorEditor({
         const presets = await invoke<[string, CompressorSettings][]>('get_compressor_presets');
         setBackendPresets(presets.map(([name, settings]) => ({ name, settings })));
       } catch (error) {
-        console.error('Failed to load compressor presets:', error);
+        debug.error('Failed to load compressor presets:', error);
       }
     };
     loadPresets();

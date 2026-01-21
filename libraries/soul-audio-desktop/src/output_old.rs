@@ -158,7 +158,7 @@ impl CpalOutput {
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     Self::audio_callback(data, &state_for_callback);
                 },
-                |err| eprintln!("Audio stream error: {}", err),
+                |err| tracing::error!(error = %err, "[OutputOld] Audio stream error"),
                 None,
             )
             .map_err(|e| AudioOutputError::StreamBuildError(e.to_string()))?;

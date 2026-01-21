@@ -423,39 +423,21 @@ pub async fn check_onboarding_needed(state: State<'_, AppState>) -> Result<bool,
     let device_id = get_device_id();
     tracing::debug!("[check_onboarding_needed] Device ID: {}", device_id);
 
-    // Check if user has any library sources configured
-    tracing::debug!("[check_onboarding_needed] Checking library sources...");
-    let sources =
-        soul_storage::library_sources::get_by_user_device(&state.pool, &state.user_id, &device_id)
-            .await
-            .map_err(|e| {
-                tracing::error!(
-                    "[check_onboarding_needed] Failed to check library sources: {}",
-                    e
-                );
-                format!("Failed to check library sources: {}", e)
-            })?;
-    tracing::debug!("[check_onboarding_needed] Found {} sources", sources.len());
+    // Use optimized single-query version
+    let needs_onboarding = soul_storage::library_sources::check_onboarding_needed(
+        &state.pool,
+        &state.user_id,
+        &device_id,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(
+            "[check_onboarding_needed] Failed to check onboarding status: {}",
+            e
+        );
+        format!("Failed to check onboarding status: {}", e)
+    })?;
 
-    // Check if managed library is configured
-    tracing::debug!("[check_onboarding_needed] Checking managed library settings...");
-    let managed =
-        soul_storage::managed_library_settings::get(&state.pool, &state.user_id, &device_id)
-            .await
-            .map_err(|e| {
-                tracing::error!(
-                    "[check_onboarding_needed] Failed to check managed settings: {}",
-                    e
-                );
-                format!("Failed to check managed settings: {}", e)
-            })?;
-    tracing::debug!(
-        "[check_onboarding_needed] Managed library configured: {}",
-        managed.is_some()
-    );
-
-    // Onboarding needed if no sources AND no managed library configured
-    let needs_onboarding = sources.is_empty() && managed.is_none();
     tracing::info!(
         "[check_onboarding_needed] Result: needs_onboarding={}",
         needs_onboarding

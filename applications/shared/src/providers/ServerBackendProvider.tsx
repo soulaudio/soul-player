@@ -6,6 +6,7 @@
 import { ReactNode, useMemo } from 'react'
 import { BackendProvider } from '../contexts/BackendContext'
 import type {
+import { debug } from '../utils/debug';
   BackendInterface,
   BackendTrack,
   BackendAlbum,
@@ -230,7 +231,7 @@ export function ServerBackendProvider({ apiBase, authToken, children }: ServerBa
 
     async showInFileExplorer(_path: string) {
       // Server-backed web apps can't show file explorer
-      console.log('[ServerBackend] showInFileExplorer not supported in web')
+      debug.log('[ServerBackend] showInFileExplorer not supported in web')
     },
 
     // Onboarding

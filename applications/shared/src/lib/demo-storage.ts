@@ -84,7 +84,7 @@ export class DemoStorage {
 
       this.loaded = true
     } catch (error) {
-      console.error('Failed to load demo data:', error)
+      debug.error('Failed to load demo data:', error)
       throw error
     }
   }

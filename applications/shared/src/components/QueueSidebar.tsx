@@ -5,6 +5,7 @@ import { usePlayerStore } from '../stores/player';
 import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext';
 import { ArtworkImage } from './ArtworkImage';
 import { X, Music } from 'lucide-react';
+import { debug } from '../utils/debug';
 
 interface QueueSidebarProps {
   isOpen: boolean;
@@ -51,7 +52,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
       // Reset display limit when queue updates
       setDisplayLimit(INITIAL_LOAD_COUNT);
     } catch (error) {
-      console.error('[QueueSidebar] Failed to load queue:', error);
+      debug.error('[QueueSidebar] Failed to load queue:', error);
     }
   };
 
@@ -63,7 +64,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
     try {
       await commands.skipToQueueIndex(index);
     } catch (error) {
-      console.error('[QueueSidebar] Failed to skip to queue index:', error);
+      debug.error('[QueueSidebar] Failed to skip to queue index:', error);
     }
   };
 

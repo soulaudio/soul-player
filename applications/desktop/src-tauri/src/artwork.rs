@@ -134,6 +134,9 @@ impl ArtworkManager {
     /// # Arguments
     /// * `track_id` - Track ID
     pub async fn get_track_artwork(&self, track_id: TrackId) -> Result<Option<Vec<u8>>, String> {
+        // Clone track_id for error logging
+        let track_id_str = track_id.to_string();
+
         // Get track file path
         let file_path = self.get_track_file_path(track_id).await?;
 
@@ -143,7 +146,12 @@ impl ArtworkManager {
                 Ok(Some(artwork)) => Ok(Some(artwork.data)),
                 Ok(None) => Ok(None),
                 Err(e) => {
-                    eprintln!("Failed to extract artwork from {}: {}", path.display(), e);
+                    tracing::error!(
+                        track_id = %track_id_str,
+                        file_path = %path.display(),
+                        error = %e,
+                        "[artwork] Failed to extract artwork from track"
+                    );
                     Ok(None)
                 }
             }
@@ -279,6 +287,9 @@ impl ArtworkManager {
         &self,
         track_id: TrackId,
     ) -> Result<Option<(Vec<u8>, String)>, String> {
+        // Clone track_id for error logging
+        let track_id_str = track_id.to_string();
+
         let file_path = self.get_track_file_path(track_id).await?;
 
         if let Some(path) = file_path {
@@ -286,7 +297,12 @@ impl ArtworkManager {
                 Ok(Some(artwork)) => Ok(Some((artwork.data, artwork.mime_type))),
                 Ok(None) => Ok(None),
                 Err(e) => {
-                    eprintln!("Failed to extract artwork from {}: {}", path.display(), e);
+                    tracing::error!(
+                        track_id = %track_id_str,
+                        file_path = %path.display(),
+                        error = %e,
+                        "[artwork] Failed to extract artwork from track"
+                    );
                     Ok(None)
                 }
             }
@@ -678,93 +694,104 @@ pub async fn handle_artwork_request(
     manager: &ArtworkManager,
     uri: &str,
 ) -> Result<Response<Vec<u8>>, Box<dyn std::error::Error>> {
-    eprintln!("[artwork] Handling request: {}", uri);
+    tracing::debug!(uri = %uri, "[artwork] Handling request");
 
     // Parse URI: artwork://album/123 or artwork://track/456
     let path = uri
         .strip_prefix("artwork://")
         .ok_or("Invalid artwork URI")?;
 
-    eprintln!("[artwork] Path after prefix: {}", path);
+    tracing::debug!(path = %path, "[artwork] URI path after prefix");
 
     let parts: Vec<&str> = path.split('/').collect();
     if parts.len() != 2 {
-        eprintln!(
-            "[artwork] ERROR: Invalid URI format, expected 2 parts, got {}",
-            parts.len()
+        tracing::error!(
+            parts_count = parts.len(),
+            expected = 2,
+            path = %path,
+            "[artwork] Invalid URI format"
         );
         return Err("Invalid artwork URI format".into());
     }
 
     let (entity_type, id_str) = (parts[0], parts[1]);
-    eprintln!(
-        "[artwork] Entity type: {}, ID string: {}",
-        entity_type, id_str
+    tracing::debug!(
+        entity_type = %entity_type,
+        id = %id_str,
+        "[artwork] Parsed URI components"
     );
 
     let artwork = match entity_type {
         "album" => {
             let id: i64 = id_str.parse().map_err(|e| {
-                eprintln!(
-                    "[artwork] ERROR: Failed to parse album ID '{}': {:?}",
-                    id_str, e
+                tracing::error!(
+                    id_str = %id_str,
+                    error = ?e,
+                    "[artwork] Failed to parse album ID"
                 );
                 "Invalid album ID"
             })?;
-            eprintln!("[artwork] Fetching artwork for album {}", id);
+            tracing::info!(album_id = %id, "[artwork] Fetching album artwork");
             manager.get_album_artwork_with_mime(id).await?
         }
         "track" => {
             let id: i64 = id_str.parse().map_err(|e| {
-                eprintln!(
-                    "[artwork] ERROR: Failed to parse track ID '{}': {:?}",
-                    id_str, e
+                tracing::error!(
+                    id_str = %id_str,
+                    error = ?e,
+                    "[artwork] Failed to parse track ID"
                 );
                 "Invalid track ID"
             })?;
-            eprintln!("[artwork] Fetching artwork for track {}", id);
+            tracing::info!(track_id = %id, "[artwork] Fetching track artwork");
             let result = manager
                 .get_track_artwork_with_mime(TrackId::new(id.to_string()))
                 .await?;
-            eprintln!(
-                "[artwork] Track artwork result: {}",
-                if result.is_some() {
-                    "found"
-                } else {
-                    "not found"
-                }
-            );
+            if result.is_some() {
+                tracing::debug!(track_id = %id, "[artwork] Track artwork found");
+            } else {
+                tracing::warn!(track_id = %id, "[artwork] Track artwork not found");
+            }
             result
         }
         "artist" => {
             let id: i64 = id_str.parse().map_err(|e| {
-                eprintln!(
-                    "[artwork] ERROR: Failed to parse artist ID '{}': {:?}",
-                    id_str, e
+                tracing::error!(
+                    artist_id_str = %id_str,
+                    error = ?e,
+                    "[artwork] Failed to parse artist ID"
                 );
                 "Invalid artist ID"
             })?;
-            eprintln!("[artwork] Fetching artwork for artist {}", id);
+            tracing::info!(artist_id = id, "[artwork] Fetching artwork for artist");
             manager.get_artist_artwork_with_mime(id).await?
         }
         "playlist" => {
             // Playlist IDs are UUIDs, not numeric
-            eprintln!("[artwork] Fetching artwork for playlist {}", id_str);
+            tracing::info!(
+                playlist_id = %id_str,
+                "[artwork] Fetching artwork for playlist"
+            );
             manager
                 .get_playlist_artwork_with_mime(&PlaylistId::new(id_str.to_string()))
                 .await?
         }
         _ => {
-            eprintln!("[artwork] ERROR: Unknown entity type: {}", entity_type);
+            tracing::error!(
+                entity_type = %entity_type,
+                "[artwork] Unknown entity type"
+            );
             return Err("Unknown entity type".into());
         }
     };
 
     if let Some((data, mime_type)) = artwork {
-        eprintln!(
-            "[artwork] SUCCESS: Returning {} bytes of {}",
-            data.len(),
-            mime_type
+        tracing::info!(
+            entity_type = %entity_type,
+            entity_id = %id_str,
+            bytes = data.len(),
+            mime_type = %mime_type,
+            "[artwork] Returning artwork"
         );
         // Return image with proper MIME type and caching headers
         Response::builder()
@@ -774,7 +801,11 @@ pub async fn handle_artwork_request(
             .body(data)
             .map_err(|e| e.into())
     } else {
-        eprintln!("[artwork] No artwork found for {} {}", entity_type, id_str);
+        tracing::warn!(
+            entity_type = %entity_type,
+            entity_id = %id_str,
+            "[artwork] No artwork found"
+        );
         // No artwork found - return 404
         Response::builder()
             .status(404)

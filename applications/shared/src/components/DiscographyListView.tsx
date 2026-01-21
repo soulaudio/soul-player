@@ -4,6 +4,7 @@ import { useBackend } from '../contexts/BackendContext'
 import { TrackList } from './TrackList'
 import { ArtworkImage } from './ArtworkImage'
 import type { BackendAlbum, BackendTrack } from '../contexts/BackendContext'
+import { debug } from '../utils/debug';
 
 interface DiscographyListViewProps {
   albums: BackendAlbum[]
@@ -27,7 +28,7 @@ export function DiscographyListView({ albums, onAlbumClick }: DiscographyListVie
           backend.getAlbumTracks(album.id)
             .then(tracks => ({ albumId: album.id, tracks }))
             .catch(error => {
-              console.error(`Failed to load tracks for album ${album.id}:`, error)
+              debug.error(`Failed to load tracks for album ${album.id}:`, error)
               return { albumId: album.id, tracks: [] }
             })
         )

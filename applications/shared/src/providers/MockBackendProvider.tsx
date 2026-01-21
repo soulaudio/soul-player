@@ -16,6 +16,7 @@ import type {
   PlaybackContext,
 } from '../contexts/BackendContext'
 import { DemoStorage, DemoTrack, DemoAlbum } from '../lib/demo-storage'
+import { debug } from '../utils/debug';
 
 // Seeded random for consistent demo experience per session
 function seededRandom(seed: number) {
@@ -159,7 +160,7 @@ export function MockBackendProvider({ storage, children }: MockBackendProviderPr
         })
       })
 
-      console.log('[MockBackendProvider] Initialized', mockPlaylists.length, 'default playlists')
+      debug.log('[MockBackendProvider] Initialized', mockPlaylists.length, 'default playlists')
     }
   }, [storage, storageLoaded])
 
@@ -508,7 +509,7 @@ export function MockBackendProvider({ storage, children }: MockBackendProviderPr
     },
 
     async showInFileExplorer(_path: string) {
-      console.log('[MockBackend] showInFileExplorer not supported in demo mode')
+      debug.log('[MockBackend] showInFileExplorer not supported in demo mode')
     },
 
     // Onboarding - not needed for mock
@@ -529,11 +530,11 @@ export function MockBackendProvider({ storage, children }: MockBackendProviderPr
 
     // Artwork editing - not supported in mock
     async setArtwork() {
-      console.log('[MockBackend] Artwork editing not supported in demo mode')
+      debug.log('[MockBackend] Artwork editing not supported in demo mode')
     },
 
     async removeArtwork() {
-      console.log('[MockBackend] Artwork removal not supported in demo mode')
+      debug.log('[MockBackend] Artwork removal not supported in demo mode')
     },
 
     async getArtistArtwork() {

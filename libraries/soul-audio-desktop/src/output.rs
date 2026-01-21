@@ -233,7 +233,7 @@ impl CpalOutput {
                         move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                             Self::audio_callback(data, &state_for_callback);
                         },
-                        |err| eprintln!("Audio stream error: {}", err),
+                        |err| tracing::error!(error = %err, "[Output] Audio stream error"),
                         None,
                     ) {
                         Ok(s) => {
@@ -242,7 +242,7 @@ impl CpalOutput {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Failed to build stream: {}", e);
+                            tracing::error!(error = %e, "[Output] Failed to build stream");
                         }
                     }
                 }

@@ -196,7 +196,7 @@ fn parse_backend(backend_str: &str) -> Result<AudioBackend, String> {
 /// Get all available audio backends
 #[tauri::command]
 pub async fn get_audio_backends() -> Result<Vec<FrontendBackendInfo>, String> {
-    eprintln!("[audio_settings] Getting available backends");
+    tracing::debug!("[audio_settings] Getting available backends");
 
     let backends = backend::get_backend_info();
     let frontend_backends: Vec<FrontendBackendInfo> = backends
@@ -204,14 +204,17 @@ pub async fn get_audio_backends() -> Result<Vec<FrontendBackendInfo>, String> {
         .map(FrontendBackendInfo::from)
         .collect();
 
-    eprintln!(
-        "[audio_settings] Found {} backends",
-        frontend_backends.len()
+    tracing::info!(
+        backend_count = frontend_backends.len(),
+        "[audio_settings] Found backends"
     );
     for b in &frontend_backends {
-        eprintln!(
-            "  - {} ({}): available={}, devices={}",
-            b.name, b.backend, b.available, b.device_count
+        tracing::debug!(
+            backend_name = %b.name,
+            backend_type = %b.backend,
+            available = b.available,
+            device_count = b.device_count,
+            "[audio_settings] Backend details"
         );
     }
 
@@ -221,9 +224,9 @@ pub async fn get_audio_backends() -> Result<Vec<FrontendBackendInfo>, String> {
 /// Get all audio devices for a specific backend
 #[tauri::command]
 pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDeviceInfo>, String> {
-    eprintln!(
-        "[audio_settings] Getting devices for backend: {}",
-        backend_str
+    tracing::debug!(
+        backend = %backend_str,
+        "[audio_settings] Getting devices for backend"
     );
 
     let backend = parse_backend(&backend_str)?;
@@ -232,22 +235,18 @@ pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDevice
     let frontend_devices: Vec<FrontendDeviceInfo> =
         devices.into_iter().map(FrontendDeviceInfo::from).collect();
 
-    eprintln!(
-        "[audio_settings] Found {} devices for {}",
-        frontend_devices.len(),
-        backend_str
+    tracing::info!(
+        device_count = frontend_devices.len(),
+        backend = %backend_str,
+        "[audio_settings] Found devices"
     );
     for d in &frontend_devices {
-        eprintln!(
-            "  - {}: {}Hz, {}ch{}",
-            d.name,
-            d.sample_rate
-                .map(|r| r.to_string())
-                .unwrap_or_else(|| "?".to_string()),
-            d.channels
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| "?".to_string()),
-            if d.is_default { " [DEFAULT]" } else { "" }
+        tracing::debug!(
+            device_name = %d.name,
+            sample_rate_hz = d.sample_rate,
+            channels = d.channels,
+            is_default = d.is_default,
+            "[audio_settings] Device details"
         );
     }
 
@@ -265,23 +264,30 @@ pub async fn set_audio_device(
     playback_manager: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
-    eprintln!(
-        "[audio_settings] Setting audio device: backend={}, device={}",
-        backend_str, device_name
+    let start = std::time::Instant::now();
+    tracing::info!(
+        backend = %backend_str,
+        device_name = %device_name,
+        "[audio_settings] Setting audio device"
     );
 
     let backend = parse_backend(&backend_str)?;
 
     // Verify device exists
     let _device = device::find_device_by_name(backend, &device_name).map_err(|e| e.to_string())?;
-    eprintln!("[audio_settings] Found device: {}", device_name);
+    tracing::debug!(device_name = %device_name, "[audio_settings] Device found");
 
     // Switch the playback device
     playback_manager
         .switch_device(backend, Some(device_name.clone()))
         .map_err(|e| format!("Failed to switch device: {}", e))?;
 
-    eprintln!("[audio_settings] Device switched successfully");
+    let elapsed_ms = start.elapsed().as_millis();
+    tracing::info!(
+        device_name = %device_name,
+        elapsed_ms = elapsed_ms,
+        "[audio_settings] Device switched successfully"
+    );
 
     // Save to settings for persistence
     let user_id = &app_state.user_id;
@@ -307,7 +313,7 @@ pub async fn set_audio_device(
     .await
     .map_err(|e| format!("Failed to save device setting: {}", e))?;
 
-    eprintln!("[audio_settings] Device setting saved to database");
+    tracing::debug!("[audio_settings] Device setting saved to database");
 
     Ok(())
 }
@@ -319,7 +325,7 @@ pub async fn initialize_audio_device(
     playback: &PlaybackManager,
     app_state: &AppState,
 ) -> Result<(), String> {
-    eprintln!("[audio_settings] Initializing audio device from settings...");
+    tracing::info!("[audio_settings] Initializing audio device from settings");
 
     // Try to load saved device setting
     let saved_setting = sqlx::query_as::<_, (String,)>(
@@ -347,9 +353,10 @@ pub async fn initialize_audio_device(
                 Some(device_name.to_string())
             };
 
-            eprintln!(
-                "[audio_settings] Restoring device: backend={:?}, device={:?}",
-                backend, device_name
+            tracing::info!(
+                backend = ?backend,
+                device_name = ?device_name,
+                "[audio_settings] Restoring saved device"
             );
 
             // Switch to saved device
@@ -357,12 +364,12 @@ pub async fn initialize_audio_device(
                 .switch_device(backend, device_name)
                 .map_err(|e| format!("Failed to restore device: {}", e))?;
 
-            eprintln!("[audio_settings] Device restored successfully");
+            tracing::info!("[audio_settings] Device restored successfully");
             return Ok(());
         }
     }
 
-    eprintln!("[audio_settings] No saved device found, using default");
+    tracing::info!("[audio_settings] No saved device found, using default");
     Ok(())
 }
 
@@ -371,7 +378,7 @@ pub async fn initialize_audio_device(
 pub async fn get_current_audio_device(
     playback: State<'_, PlaybackManager>,
 ) -> Result<FrontendDeviceInfo, String> {
-    eprintln!("[audio_settings] Getting current audio device from playback manager");
+    tracing::debug!("[audio_settings] Getting current audio device from playback manager");
 
     let backend = playback.get_current_backend();
     let device_name = playback.get_current_device();
@@ -399,9 +406,11 @@ pub async fn get_current_audio_device(
         Err(_) => (None, false),
     };
 
-    eprintln!(
-        "[audio_settings] Current device: {} ({}) at {} Hz",
-        device_name, backend_str, active_sample_rate
+    tracing::debug!(
+        device_name = %device_name,
+        backend = %backend_str,
+        sample_rate_hz = active_sample_rate,
+        "[audio_settings] Current device retrieved"
     );
 
     Ok(FrontendDeviceInfo {
@@ -422,12 +431,22 @@ pub async fn get_current_audio_device(
 /// (e.g., via ASIO control panel) and wants to immediately update.
 #[tauri::command]
 pub async fn refresh_sample_rate(playback: State<'_, PlaybackManager>) -> Result<bool, String> {
-    eprintln!("[audio_settings] Refreshing sample rate...");
+    let start = std::time::Instant::now();
+    tracing::debug!("[audio_settings] Refreshing sample rate");
+
     let result = playback.refresh_sample_rate()?;
+    let duration = start.elapsed();
+
     if result {
-        eprintln!("[audio_settings] Sample rate changed, stream recreated");
+        tracing::info!(
+            duration_ms = duration.as_millis(),
+            "[audio_settings] Sample rate changed, stream recreated"
+        );
     } else {
-        eprintln!("[audio_settings] Sample rate unchanged");
+        tracing::debug!(
+            duration_ms = duration.as_millis(),
+            "[audio_settings] Sample rate unchanged"
+        );
     }
     Ok(result)
 }
@@ -456,9 +475,10 @@ pub async fn get_device_capabilities(
     backend_str: String,
     device_name: String,
 ) -> Result<FrontendDeviceCapabilities, String> {
-    eprintln!(
-        "[audio_settings] Getting capabilities for device: {} ({})",
-        device_name, backend_str
+    tracing::debug!(
+        device_name = %device_name,
+        backend = %backend_str,
+        "[audio_settings] Getting device capabilities"
     );
 
     let backend = parse_backend(&backend_str)?;
@@ -466,11 +486,12 @@ pub async fn get_device_capabilities(
 
     let frontend_caps = FrontendDeviceCapabilities::from(caps);
 
-    eprintln!(
-        "[audio_settings] Device capabilities: {} sample rates, {} bit depths, DSD={}",
-        frontend_caps.sample_rates.len(),
-        frontend_caps.bit_depths.len(),
-        frontend_caps.supports_dsd
+    tracing::info!(
+        sample_rate_count = frontend_caps.sample_rates.len(),
+        bit_depth_count = frontend_caps.bit_depths.len(),
+        supports_dsd = frontend_caps.supports_dsd,
+        device_name = %device_name,
+        "[audio_settings] Device capabilities retrieved"
     );
 
     Ok(frontend_caps)
@@ -484,9 +505,9 @@ pub async fn get_device_capabilities(
 pub async fn get_audio_devices_with_capabilities(
     backend_str: String,
 ) -> Result<Vec<FrontendDeviceInfo>, String> {
-    eprintln!(
-        "[audio_settings] Getting devices with capabilities for backend: {}",
-        backend_str
+    tracing::debug!(
+        backend = %backend_str,
+        "[audio_settings] Getting devices with capabilities"
     );
 
     let backend = parse_backend(&backend_str)?;
@@ -496,9 +517,10 @@ pub async fn get_audio_devices_with_capabilities(
     let frontend_devices: Vec<FrontendDeviceInfo> =
         devices.into_iter().map(FrontendDeviceInfo::from).collect();
 
-    eprintln!(
-        "[audio_settings] Found {} devices with capabilities",
-        frontend_devices.len()
+    tracing::info!(
+        device_count = frontend_devices.len(),
+        backend = %backend_str,
+        "[audio_settings] Devices with capabilities retrieved"
     );
 
     Ok(frontend_devices)
@@ -657,14 +679,17 @@ impl TryFrom<FrontendExclusiveConfig> for ExclusiveConfig {
 pub async fn get_latency_info(
     playback: State<'_, PlaybackManager>,
 ) -> Result<FrontendLatencyInfo, String> {
-    eprintln!("[audio_settings] Getting latency info");
+    tracing::debug!("[audio_settings] Getting latency info");
 
     let latency = playback.get_latency_info();
 
     let info = FrontendLatencyInfo::from(latency);
-    eprintln!(
-        "[audio_settings] Latency: {} samples, {:.2}ms buffer, {:.2}ms total, exclusive={}",
-        info.buffer_samples, info.buffer_ms, info.total_ms, info.exclusive
+    tracing::info!(
+        buffer_samples = info.buffer_samples,
+        buffer_ms = info.buffer_ms,
+        total_ms = info.total_ms,
+        exclusive = info.exclusive,
+        "[audio_settings] Latency info retrieved"
     );
 
     Ok(info)
@@ -679,7 +704,12 @@ pub async fn set_exclusive_mode(
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<FrontendLatencyInfo, String> {
-    eprintln!("[audio_settings] Setting exclusive mode: {:?}", config);
+    let start = std::time::Instant::now();
+    tracing::info!(
+        buffer_frames = config.buffer_frames,
+        bit_depth = %config.bit_depth,
+        "[audio_settings] Setting exclusive mode"
+    );
 
     let exclusive_config: ExclusiveConfig = config.clone().try_into()?;
 
@@ -716,9 +746,16 @@ pub async fn set_exclusive_mode(
     .await
     .map_err(|e| format!("Failed to save exclusive mode setting: {}", e))?;
 
-    eprintln!("[audio_settings] Exclusive mode configured successfully");
+    let duration = start.elapsed();
+    let info = FrontendLatencyInfo::from(latency);
+    tracing::info!(
+        duration_ms = duration.as_millis(),
+        buffer_ms = info.buffer_ms,
+        total_ms = info.total_ms,
+        "[audio_settings] Exclusive mode configured successfully"
+    );
 
-    Ok(FrontendLatencyInfo::from(latency))
+    Ok(info)
 }
 
 /// Disable exclusive mode (return to shared mode)
@@ -727,7 +764,8 @@ pub async fn disable_exclusive_mode(
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
-    eprintln!("[audio_settings] Disabling exclusive mode");
+    let start = std::time::Instant::now();
+    tracing::info!("[audio_settings] Disabling exclusive mode");
 
     playback
         .disable_exclusive_mode()
@@ -752,7 +790,11 @@ pub async fn disable_exclusive_mode(
     .await
     .map_err(|e| format!("Failed to save exclusive mode setting: {}", e))?;
 
-    eprintln!("[audio_settings] Exclusive mode disabled");
+    let duration = start.elapsed();
+    tracing::info!(
+        duration_ms = duration.as_millis(),
+        "[audio_settings] Exclusive mode disabled"
+    );
     Ok(())
 }
 
@@ -770,9 +812,10 @@ pub async fn get_available_buffer_sizes(
     backend_str: String,
     device_name: String,
 ) -> Result<Vec<BufferSizeOption>, String> {
-    eprintln!(
-        "[audio_settings] Getting buffer sizes for {} ({})",
-        device_name, backend_str
+    tracing::debug!(
+        device_name = %device_name,
+        backend = %backend_str,
+        "[audio_settings] Getting buffer sizes"
     );
 
     let backend = parse_backend(&backend_str)?;
@@ -802,9 +845,10 @@ pub async fn get_available_buffer_sizes(
         })
         .collect();
 
-    eprintln!(
-        "[audio_settings] Found {} buffer size options",
-        options.len()
+    tracing::info!(
+        option_count = options.len(),
+        device_name = %device_name,
+        "[audio_settings] Buffer size options retrieved"
     );
 
     Ok(options)
@@ -831,7 +875,11 @@ pub async fn get_exclusive_preset(
     backend_str: Option<String>,
     device_name: Option<String>,
 ) -> Result<FrontendExclusiveConfig, String> {
-    eprintln!("[audio_settings] Getting exclusive preset: {}", preset);
+    tracing::debug!(
+        preset = %preset,
+        device_name = ?device_name,
+        "[audio_settings] Getting exclusive preset"
+    );
 
     let backend = backend_str.unwrap_or_else(|| "default".to_string());
 
@@ -898,7 +946,10 @@ pub async fn set_crossfade_enabled(
     enabled: bool,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    eprintln!("[audio_settings] Setting crossfade enabled: {}", enabled);
+    tracing::info!(
+        enabled = enabled,
+        "[audio_settings] Setting crossfade enabled"
+    );
     playback.set_crossfade_enabled(enabled);
     Ok(())
 }
@@ -919,9 +970,9 @@ pub async fn set_crossfade_duration(
     duration_ms: u32,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    eprintln!(
-        "[audio_settings] Setting crossfade duration: {}ms",
-        duration_ms
+    tracing::info!(
+        duration_ms = duration_ms,
+        "[audio_settings] Setting crossfade duration"
     );
     playback.set_crossfade_duration(duration_ms);
     Ok(())
@@ -946,7 +997,10 @@ pub async fn set_crossfade_curve(
     curve: String,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    eprintln!("[audio_settings] Setting crossfade curve: {}", curve);
+    tracing::info!(
+        curve = %curve,
+        "[audio_settings] Setting crossfade curve"
+    );
 
     let fade_curve = match curve.as_str() {
         "linear" => soul_playback::FadeCurve::Linear,
@@ -986,9 +1040,11 @@ pub async fn set_crossfade_settings(
     curve: String,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    eprintln!(
-        "[audio_settings] Setting crossfade settings: enabled={}, duration={}ms, curve={}",
-        enabled, duration_ms, curve
+    tracing::info!(
+        enabled = enabled,
+        duration_ms = duration_ms,
+        curve = %curve,
+        "[audio_settings] Setting crossfade settings"
     );
 
     // Set curve first
@@ -1004,7 +1060,7 @@ pub async fn set_crossfade_settings(
     playback.set_crossfade_duration(duration_ms);
     playback.set_crossfade_enabled(enabled);
 
-    eprintln!("[audio_settings] Crossfade settings applied successfully");
+    tracing::info!("[audio_settings] Crossfade settings applied successfully");
     Ok(())
 }
 
@@ -1077,7 +1133,10 @@ pub async fn set_resampling_quality(
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
-    eprintln!("[audio_settings] Setting resampling quality: {}", quality);
+    tracing::info!(
+        quality = %quality,
+        "[audio_settings] Setting resampling quality"
+    );
 
     // Validate quality value
     let valid_qualities = ["fast", "balanced", "high", "maximum"];
@@ -1133,9 +1192,9 @@ pub async fn set_resampling_quality(
     .await
     .map_err(|e| format!("Failed to save resampling quality: {}", e))?;
 
-    eprintln!(
-        "[audio_settings] Resampling quality set to '{}'. Will apply to next track.",
-        quality
+    tracing::info!(
+        quality = %quality,
+        "[audio_settings] Resampling quality saved, will apply to next track"
     );
     Ok(())
 }
@@ -1161,9 +1220,10 @@ pub async fn set_resampling_target_rate(
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
-    eprintln!(
-        "[audio_settings] Setting resampling target rate: {} (0=auto)",
-        rate
+    tracing::info!(
+        target_rate = rate,
+        mode = if rate == 0 { "auto" } else { "fixed" },
+        "[audio_settings] Setting resampling target rate"
     );
 
     // Validate rate (0 = auto, otherwise must be a reasonable sample rate)
@@ -1218,7 +1278,10 @@ pub async fn set_resampling_target_rate(
     .await
     .map_err(|e| format!("Failed to save resampling target rate: {}", e))?;
 
-    eprintln!("[audio_settings] Resampling target rate set. Will apply to next track.");
+    tracing::info!(
+        target_rate = rate,
+        "[audio_settings] Resampling target rate saved, will apply to next track"
+    );
     Ok(())
 }
 
@@ -1246,7 +1309,10 @@ pub async fn set_resampling_backend(
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
-    eprintln!("[audio_settings] Setting resampling backend: {}", backend);
+    tracing::info!(
+        backend = %backend,
+        "[audio_settings] Setting resampling backend"
+    );
 
     // Validate backend value
     let valid_backends = ["auto", "rubato", "r8brain"];
@@ -1294,6 +1360,8 @@ pub async fn set_resampling_backend(
             })
         });
 
+    // Clone backend before moving it
+    let backend_copy = backend.clone();
     settings["backend"] = serde_json::Value::String(backend);
 
     sqlx::query(
@@ -1311,7 +1379,10 @@ pub async fn set_resampling_backend(
     .await
     .map_err(|e| format!("Failed to save resampling backend: {}", e))?;
 
-    eprintln!("[audio_settings] Resampling backend set. Will apply to next track.");
+    tracing::info!(
+        backend = %backend_copy,
+        "[audio_settings] Resampling backend saved, will apply to next track"
+    );
     Ok(())
 }
 
@@ -1335,9 +1406,11 @@ pub async fn set_resampling_settings(
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
-    eprintln!(
-        "[audio_settings] Setting resampling settings: quality={}, target_rate={}, backend={}",
-        quality, target_rate, backend
+    tracing::info!(
+        quality = %quality,
+        target_rate = target_rate,
+        backend = %backend,
+        "[audio_settings] Setting resampling settings"
     );
 
     // Validate all values
@@ -1396,7 +1469,12 @@ pub async fn set_resampling_settings(
     .await
     .map_err(|e| format!("Failed to save resampling settings: {}", e))?;
 
-    eprintln!("[audio_settings] Resampling settings saved. Will apply to next track.");
+    tracing::info!(
+        quality = %quality,
+        target_rate = target_rate,
+        backend = %backend,
+        "[audio_settings] Resampling settings saved, will apply to next track"
+    );
     Ok(())
 }
 
@@ -1485,7 +1563,10 @@ pub async fn set_headroom_mode(
     };
 
     playback.set_headroom_mode(headroom_mode);
-    eprintln!("[audio_settings] Headroom mode set to: {:?}", mode);
+    tracing::info!(
+        mode = %mode,
+        "[audio_settings] Headroom mode set"
+    );
     Ok(())
 }
 
@@ -1496,7 +1577,10 @@ pub async fn set_headroom_enabled(
     enabled: bool,
 ) -> Result<(), String> {
     playback.set_headroom_enabled(enabled);
-    eprintln!("[audio_settings] Headroom enabled: {}", enabled);
+    tracing::info!(
+        enabled = enabled,
+        "[audio_settings] Headroom enabled state changed"
+    );
     Ok(())
 }
 

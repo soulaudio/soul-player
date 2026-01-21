@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePlayerCommands, type Source } from '../contexts/PlayerCommandsContext';
+import { debug } from '../utils/debug';
 
 interface SourcesDialogProps {
   open: boolean;
@@ -23,7 +24,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
       const result = await commands.getAllSources();
       setSources(result);
     } catch (err) {
-      console.error('[SourcesDialog] Failed to load sources:', err);
+      debug.error('[SourcesDialog] Failed to load sources:', err);
     } finally {
       setLoading(false);
     }

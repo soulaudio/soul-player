@@ -914,9 +914,10 @@ impl PlaybackManager {
         // CRITICAL: Check if we need to load next batch BEFORE trying to get next track
         // Otherwise, if the track doesn't exist yet, we return QueueEmpty before batch loading!
         if let Some((offset, limit)) = self.check_batch_loading() {
-            eprintln!(
-                "[PlaybackManager] Forward pagination triggered: loading batch offset={}, limit={}",
-                offset, limit
+            tracing::info!(
+                offset = offset,
+                limit = limit,
+                "[PlaybackManager] Forward pagination triggered"
             );
             self.pending_events
                 .push(PlaybackEvent::BatchLoadRequested { offset, limit });
@@ -1202,9 +1203,10 @@ impl PlaybackManager {
         if let Some(ref mut lazy_state) = self.lazy_state {
             // If target is beyond current window, load batch containing it
             if target_index >= lazy_state.window_end {
-                eprintln!(
-                    "[PlaybackManager] Jump beyond window: target={}, window_end={}",
-                    target_index, lazy_state.window_end
+                tracing::info!(
+                    target_index = target_index,
+                    window_end = lazy_state.window_end,
+                    "[PlaybackManager] Jump beyond window"
                 );
 
                 // Calculate which batch contains target_index
@@ -1220,8 +1222,11 @@ impl PlaybackManager {
             }
             // Also trigger forward pagination if jumping near end of window
             else if lazy_state.should_load_next_batch(target_index) {
-                eprintln!("[PlaybackManager] Jump near window end: target={}, window_end={}, triggering forward pagination",
-                         target_index, lazy_state.window_end);
+                tracing::info!(
+                    target_index = target_index,
+                    window_end = lazy_state.window_end,
+                    "[PlaybackManager] Jump near window end, triggering forward pagination"
+                );
 
                 let (offset, limit) = lazy_state.next_batch_range();
                 lazy_state.extend_window(limit);

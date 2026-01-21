@@ -6,6 +6,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { usePlayerStore } from '../../stores/player';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
 import { Volume2, VolumeX } from 'lucide-react';
+import { debug } from '../../utils/debug';
 
 const SCROLL_VOLUME_STEP = 0.05;
 
@@ -39,7 +40,7 @@ export function VolumeControl() {
     debounceTimerRef.current = setTimeout(() => {
       commands.setVolume(clampedVolume)
         .catch((error) => {
-          console.error('[VolumeControl] Set volume failed:', error);
+          debug.error('[VolumeControl] Set volume failed:', error);
         });
     }, 150);
   }, [commands, isMuted]);
@@ -83,7 +84,7 @@ export function VolumeControl() {
         setIsMuted(true);
       }
     } catch (error) {
-      console.error('[VolumeControl] Mute toggle failed:', error);
+      debug.error('[VolumeControl] Mute toggle failed:', error);
     }
   };
 

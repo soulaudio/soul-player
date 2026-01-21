@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Activity, Zap, Lock, Unlock, RefreshCw, Settings2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
+import { debug } from '../../../utils/debug';
 
 export interface LatencyInfo {
   bufferSamples: number;
@@ -54,7 +55,7 @@ export function LatencyMonitor({
       setIsExclusive(info.exclusive);
       setError(null);
     } catch (e) {
-      console.error('Failed to fetch latency info:', e);
+      debug.error('Failed to fetch latency info:', e);
       setError(String(e));
     }
   }, []);
@@ -65,7 +66,7 @@ export function LatencyMonitor({
       const exclusive = await invoke<boolean>('is_exclusive_mode');
       setIsExclusive(exclusive);
     } catch (e) {
-      console.error('Failed to fetch exclusive mode status:', e);
+      debug.error('Failed to fetch exclusive mode status:', e);
     }
   }, []);
 
@@ -110,7 +111,7 @@ export function LatencyMonitor({
         onExclusiveModeChange?.(true);
       }
     } catch (e) {
-      console.error('Failed to toggle exclusive mode:', e);
+      debug.error('Failed to toggle exclusive mode:', e);
       setError(String(e));
     }
   };

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Info, Play, Square, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
+import { debug } from '../../../utils/debug';
 
 interface QueueStats {
   total: number;
@@ -85,7 +86,7 @@ export function VolumeLevelingSettings({
       try {
         await invoke('set_volume_leveling_preamp', { preampDb: value });
       } catch (error) {
-        console.error('Failed to set preamp:', error);
+        debug.error('Failed to set preamp:', error);
       }
     }
   };
@@ -99,7 +100,7 @@ export function VolumeLevelingSettings({
       try {
         await invoke('set_volume_leveling_prevent_clipping', { prevent: checked });
       } catch (error) {
-        console.error('Failed to set prevent clipping:', error);
+        debug.error('Failed to set prevent clipping:', error);
       }
     }
   };
@@ -139,7 +140,7 @@ export function VolumeLevelingSettings({
       const stats = await invoke<QueueStats>('get_analysis_queue_stats');
       setQueueStats(stats);
     } catch (error) {
-      console.error('Failed to load queue stats:', error);
+      debug.error('Failed to load queue stats:', error);
     }
   };
 
@@ -148,7 +149,7 @@ export function VolumeLevelingSettings({
       const status = await invoke<WorkerStatus>('get_analysis_worker_status');
       setWorkerStatus(status);
     } catch (error) {
-      console.error('Failed to load worker status:', error);
+      debug.error('Failed to load worker status:', error);
     }
   };
 
@@ -158,7 +159,7 @@ export function VolumeLevelingSettings({
       await invoke('start_analysis_worker');
       setWorkerStatus({ ...workerStatus, isRunning: true });
     } catch (error) {
-      console.error('Failed to start analysis:', error);
+      debug.error('Failed to start analysis:', error);
     } finally {
       setIsLoading(false);
     }
@@ -169,7 +170,7 @@ export function VolumeLevelingSettings({
     try {
       await invoke('stop_analysis_worker');
     } catch (error) {
-      console.error('Failed to stop analysis:', error);
+      debug.error('Failed to stop analysis:', error);
     } finally {
       setIsLoading(false);
     }
@@ -185,7 +186,7 @@ export function VolumeLevelingSettings({
         await handleStartAnalysis();
       }
     } catch (error) {
-      console.error('Failed to queue tracks:', error);
+      debug.error('Failed to queue tracks:', error);
     } finally {
       setIsLoading(false);
     }
@@ -196,7 +197,7 @@ export function VolumeLevelingSettings({
       await invoke('clear_completed_analysis');
       await loadQueueStats();
     } catch (error) {
-      console.error('Failed to clear completed:', error);
+      debug.error('Failed to clear completed:', error);
     }
   };
 

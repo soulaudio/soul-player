@@ -3,6 +3,7 @@
  * Maintains backward compatibility with existing usage
  */
 
+import { memo } from 'react'
 import { MediaCard } from './MediaCard'
 
 export interface AlbumCardAlbum {
@@ -25,7 +26,7 @@ interface AlbumCardProps {
   priority?: boolean
 }
 
-export function AlbumCard({ album, className = 'w-full', showArtist = true, priority = false }: AlbumCardProps) {
+const AlbumCardComponent = ({ album, className = 'w-full', showArtist = true, priority = false }: AlbumCardProps) => {
   return (
     <MediaCard
       type="album"
@@ -40,3 +41,6 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true, prio
     />
   )
 }
+
+export const AlbumCard = memo(AlbumCardComponent)
+AlbumCard.displayName = 'AlbumCard'

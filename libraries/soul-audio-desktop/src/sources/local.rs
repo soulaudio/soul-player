@@ -338,35 +338,25 @@ impl LocalAudioSource {
 
         tracing::debug!("[LocalAudioSource] Background decoder thread started");
 
-        // Wait for buffer to have sufficient data (up to 1 second)
-        // This ensures the source is immediately playable without underrun
-        // 1000ms buffer (MIN_BUFFER_SAMPLES) prevents jitter on first play
-        let min_initial_samples = MIN_BUFFER_SAMPLES;
-        let mut buffer_filled = false;
-        for _ in 0..100 {
-            let buffer_len = {
-                let state = shared.lock().unwrap();
-                state.output_buffer.len()
-            };
-            if buffer_len >= min_initial_samples {
-                tracing::info!(
-                    "[LocalAudioSource] Initial buffer filled: {} samples (~{}ms)",
-                    buffer_len,
-                    buffer_len * 1000 / (target_sample_rate as usize * channels as usize)
-                );
-                buffer_filled = true;
-                break;
-            }
-            thread::sleep(Duration::from_millis(10));
-        }
-
-        if !buffer_filled {
-            let buffer_len = shared.lock().unwrap().output_buffer.len();
-            tracing::warn!(
-                "[LocalAudioSource] Initial buffer not fully filled ({} samples, wanted {}). May cause jitter.",
-                buffer_len, min_initial_samples
-            );
-        }
+        // NOTE: We do NOT wait for buffer to fill here anymore!
+        // This was causing 50-200ms delay on playback start.
+        //
+        // The buffer will fill in the background decoder thread while we return immediately.
+        // The TrackLoader and PlaybackManager will check `is_ready()` before starting playback,
+        // ensuring smooth, glitch-free playback without blocking the play command.
+        //
+        // Old behavior (REMOVED):
+        // - Block for up to 1 second waiting for 1000ms of audio to buffer
+        // - Caused 50-200ms delay on every track load (especially with "Maximum" resampling quality)
+        //
+        // New behavior (CURRENT):
+        // - Return immediately after spawning decoder thread
+        // - Decoder fills buffer in background (decoding + resampling)
+        // - `is_ready()` returns true when MIN_BUFFER_SAMPLES (1000ms) is buffered
+        // - TrackLoader waits for `is_ready()` AFTER returning the source (non-blocking)
+        // - PlaybackManager checks `is_ready()` before starting audio output
+        //
+        // This eliminates the blocking delay while maintaining buffer safety.
 
         Ok(Self {
             path,
@@ -586,6 +576,7 @@ impl LocalAudioSource {
             }
 
             // Decode next packet
+            let decode_start = std::time::Instant::now();
             let packet = match format_reader.next_packet() {
                 Ok(packet) => packet,
                 Err(symphonia::core::errors::Error::IoError(e))
@@ -610,7 +601,10 @@ impl LocalAudioSource {
                     continue;
                 }
                 Err(e) => {
-                    tracing::warn!("[DecoderThread] Error reading packet: {}", e);
+                    tracing::warn!(
+                        error = %e,
+                        "[DecoderThread] Error reading packet"
+                    );
                     thread::sleep(Duration::from_millis(10));
                     continue;
                 }
@@ -625,7 +619,11 @@ impl LocalAudioSource {
             let decoded = match decoder.decode(&packet) {
                 Ok(d) => d,
                 Err(e) => {
-                    tracing::warn!("[DecoderThread] Decode error: {}", e);
+                    tracing::warn!(
+                        error = %e,
+                        decode_time_us = decode_start.elapsed().as_micros(),
+                        "[DecoderThread] Decode error"
+                    );
                     continue;
                 }
             };
@@ -634,10 +632,23 @@ impl LocalAudioSource {
             let samples = match Self::convert_to_f32_interleaved(decoded, channels) {
                 Ok(s) => s,
                 Err(e) => {
-                    tracing::error!("[DecoderThread] Conversion error: {}", e);
+                    tracing::error!(
+                        error = %e,
+                        "[DecoderThread] Conversion error"
+                    );
                     continue;
                 }
             };
+
+            let decode_time_us = decode_start.elapsed().as_micros();
+            if decode_time_us > 10000 {
+                // Log slow decodes (>10ms)
+                tracing::warn!(
+                    decode_time_us = decode_time_us,
+                    samples_decoded = samples.len(),
+                    "[DecoderThread] Slow packet decode detected"
+                );
+            }
 
             if needs_resampling {
                 // Skip encoder delay BEFORE resampling

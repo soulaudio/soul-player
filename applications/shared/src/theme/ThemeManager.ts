@@ -5,6 +5,7 @@
 import type { Theme, ThemeExport, ThemeValidationResult } from './types';
 import { builtInThemes, defaultTheme } from './themes';
 import { validateTheme } from './validators';
+import { debug } from '../utils/debug';
 
 const STORAGE_KEY_CURRENT_THEME = 'soul-player-current-theme';
 const STORAGE_KEY_CUSTOM_THEMES = 'soul-player-custom-themes';
@@ -206,7 +207,7 @@ export class ThemeManager {
         this.customThemes = JSON.parse(customThemesJson);
       }
     } catch (error) {
-      console.error('Failed to load custom themes from storage:', error);
+      debug.error('Failed to load custom themes from storage:', error);
     }
 
     // Load current theme
@@ -223,7 +224,7 @@ export class ThemeManager {
         this.applyTheme(this.currentTheme);
       }
     } catch (error) {
-      console.error('Failed to load current theme from storage:', error);
+      debug.error('Failed to load current theme from storage:', error);
       this.applyTheme(this.currentTheme);
     }
   }
@@ -239,7 +240,7 @@ export class ThemeManager {
     try {
       localStorage.setItem(STORAGE_KEY_CURRENT_THEME, this.currentTheme.id);
     } catch (error) {
-      console.error('Failed to save current theme to storage:', error);
+      debug.error('Failed to save current theme to storage:', error);
     }
   }
 
@@ -257,7 +258,7 @@ export class ThemeManager {
         JSON.stringify(this.customThemes)
       );
     } catch (error) {
-      console.error('Failed to save custom themes to storage:', error);
+      debug.error('Failed to save custom themes to storage:', error);
     }
   }
 

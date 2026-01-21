@@ -15,6 +15,7 @@ import { ArtistLink } from '../components/ArtistLink'
 import { groupTracks } from '../utils/trackGrouping'
 import type { TrackForGrouping, GroupedTrack } from '../utils/trackGrouping'
 import {
+import { debug } from '../utils/debug';
   Music,
   Library,
   Disc3,
@@ -291,7 +292,7 @@ export function NowPlayingPage() {
 
         setTracks(fetchedTracks)
       } catch (err) {
-        console.error('Failed to load tracks:', err)
+        debug.error('Failed to load tracks:', err)
         setTracks([])
       } finally {
         setLoading(false)
@@ -326,7 +327,7 @@ export function NowPlayingPage() {
       try {
         await commands.playTrack(track.id)
       } catch (err) {
-        console.error('Failed to switch format:', err)
+        debug.error('Failed to switch format:', err)
       }
     }
   }
@@ -337,7 +338,7 @@ export function NowPlayingPage() {
     try {
       await commands.playTrack(activeVersion.id)
     } catch (err) {
-      console.error('Failed to play track:', err)
+      debug.error('Failed to play track:', err)
     }
   }
 

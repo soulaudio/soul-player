@@ -259,17 +259,25 @@ async fn play_queue(
     start_index: usize,
     playback: State<'_, PlaybackManager>,
 ) -> Result<(), String> {
-    tracing::debug!(
-        "[play_queue] Called with {} tracks, start_index: {}",
-        queue.len(),
-        start_index
+    let start = std::time::Instant::now();
+
+    tracing::info!(
+        queue_size = queue.len(),
+        start_index = start_index,
+        "[play_queue] Starting playback"
     );
 
     if queue.is_empty() {
+        tracing::error!("[play_queue] Queue is empty");
         return Err("Queue is empty".to_string());
     }
 
     if start_index >= queue.len() {
+        tracing::error!(
+            start_index = start_index,
+            queue_size = queue.len(),
+            "[play_queue] Start index out of bounds"
+        );
         return Err("Start index out of bounds".to_string());
     }
 
@@ -305,16 +313,35 @@ async fn play_queue(
         "[play_queue] Calling load_playlist() with {} tracks...",
         tracks.len()
     );
+    let load_start = std::time::Instant::now();
     let load_result = playback.load_playlist(tracks);
-    tracing::debug!("[play_queue] load_playlist() returned: {:?}", load_result);
+    let load_duration = load_start.elapsed();
+    tracing::debug!(
+        load_duration_ms = load_duration.as_millis(),
+        result = ?load_result,
+        "[play_queue] load_playlist() completed"
+    );
     load_result?;
 
     // Start playback (will play first track in source queue)
     tracing::debug!("[play_queue] Calling play()...");
+    let play_start = std::time::Instant::now();
     let play_result = playback.play();
-    tracing::debug!("[play_queue] play() returned: {:?}", play_result);
+    let play_duration = play_start.elapsed();
+    tracing::debug!(
+        play_duration_ms = play_duration.as_millis(),
+        result = ?play_result,
+        "[play_queue] play() completed"
+    );
     play_result?;
-    tracing::debug!("[play_queue] All commands sent successfully");
+
+    let total_duration = start.elapsed();
+    tracing::info!(
+        total_duration_ms = total_duration.as_millis(),
+        queue_size = queue.len(),
+        start_index = start_index,
+        "[play_queue] All commands sent successfully"
+    );
 
     Ok(())
 }
@@ -411,12 +438,36 @@ async fn stop_playback(playback: State<'_, PlaybackManager>) -> Result<(), Strin
 
 #[tauri::command]
 async fn next_track(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.next()
+    let start = std::time::Instant::now();
+    tracing::debug!("[next_track] Skipping to next track");
+
+    let result = playback.next();
+
+    let duration = start.elapsed();
+    tracing::info!(
+        duration_ms = duration.as_millis(),
+        result = ?result,
+        "[next_track] Completed"
+    );
+
+    result
 }
 
 #[tauri::command]
 async fn previous_track(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.previous()
+    let start = std::time::Instant::now();
+    tracing::debug!("[previous_track] Skipping to previous track");
+
+    let result = playback.previous();
+
+    let duration = start.elapsed();
+    tracing::info!(
+        duration_ms = duration.as_millis(),
+        result = ?result,
+        "[previous_track] Completed"
+    );
+
+    result
 }
 
 #[tauri::command]
@@ -576,13 +627,28 @@ async fn get_playback_state(playback: State<'_, PlaybackManager>) -> Result<Stri
 
 #[tauri::command]
 async fn get_all_tracks(state: State<'_, AppState>) -> Result<Vec<FrontendTrack>, String> {
-    let tracks = soul_storage::tracks::get_all(&state.pool)
+    let start = std::time::Instant::now();
+
+    tracing::info!("[get_all_tracks] Loading all tracks from database");
+
+    let db_start = std::time::Instant::now();
+    let tracks = soul_storage::tracks::get_all(&state.pool, None, None)
         .await
         .map_err(|e| e.to_string())?;
+    let db_duration = db_start.elapsed();
+
+    tracing::debug!(
+        db_duration_ms = db_duration.as_millis(),
+        track_count = tracks.len(),
+        "[get_all_tracks] Database query completed"
+    );
+
+    let conversion_start = std::time::Instant::now();
     let frontend_tracks: Vec<FrontendTrack> = tracks
         .into_iter()
         .map(|t| FrontendTrack::from_track_with_library_path(t, &state.library_path))
         .collect();
+    let conversion_duration = conversion_start.elapsed();
 
     // Debug: Log tracks without file paths
     let tracks_without_paths = frontend_tracks
@@ -591,16 +657,20 @@ async fn get_all_tracks(state: State<'_, AppState>) -> Result<Vec<FrontendTrack>
         .count();
     if tracks_without_paths > 0 {
         tracing::warn!(
-            "[get_all_tracks] WARNING: {} out of {} tracks have no file path",
-            tracks_without_paths,
-            frontend_tracks.len()
-        );
-    } else {
-        tracing::debug!(
-            "[get_all_tracks] All {} tracks have file paths",
-            frontend_tracks.len()
+            tracks_without_paths = tracks_without_paths,
+            total_tracks = frontend_tracks.len(),
+            "[get_all_tracks] Some tracks missing file paths"
         );
     }
+
+    let total_duration = start.elapsed();
+    tracing::info!(
+        total_duration_ms = total_duration.as_millis(),
+        db_duration_ms = db_duration.as_millis(),
+        conversion_duration_ms = conversion_duration.as_millis(),
+        track_count = frontend_tracks.len(),
+        "[get_all_tracks] Completed"
+    );
 
     Ok(frontend_tracks)
 }
@@ -777,7 +847,7 @@ async fn show_in_file_explorer(path: String) -> Result<(), String> {
 /// Diagnostic command to check database state
 #[tauri::command]
 async fn check_database_health(state: State<'_, AppState>) -> Result<DatabaseHealthReport, String> {
-    let tracks = soul_storage::tracks::get_all(&state.pool)
+    let tracks = soul_storage::tracks::get_all(&state.pool, None, None)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -1281,7 +1351,7 @@ async fn get_playlists_containing_track(
 #[tauri::command]
 async fn scan_library(path: String) -> Result<(), String> {
     // TODO: Integrate with soul-metadata
-    println!("Scanning library at: {}", path);
+    tracing::info!(path = %path, "[SCAN] Starting library scan");
     Ok(())
 }
 
@@ -2024,9 +2094,9 @@ fn main() {
         .setup(|app| {
             let app_handle = app.handle().clone();
 
-            // Handle file associations from command line args (Windows/Linux)
+            // Collect file associations from command line args (Windows/Linux)
             #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-            {
+            let command_line_files = {
                 let mut files = Vec::new();
                 for maybe_file in std::env::args().skip(1) {
                     // Skip flags and options
@@ -2043,13 +2113,12 @@ fn main() {
                         files.push(PathBuf::from(maybe_file));
                     }
                 }
-                if !files.is_empty() {
-                    handle_file_associations(app_handle.clone(), files);
-                }
-            }
+                files
+            };
 
-            // Initialize app state with progress tracking
-            tauri::async_runtime::block_on(async move {
+            // Spawn async initialization task (non-blocking)
+            // This allows the splash window to render immediately and show progress
+            tauri::async_runtime::spawn(async move {
                 use splash::emit_init_progress;
 
                 emit_init_progress(&app_handle, "Initializing database...", 10).await;
@@ -2223,8 +2292,7 @@ fn main() {
 
                 emit_init_progress(&app_handle, "Ready!", 100).await;
 
-                // Close splash screen and show main window after a short delay
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                // Close splash screen and show main window immediately
                 if let Some(splash) = app_handle.get_webview_window("splash") {
                     let _ = splash.close();
                 }
@@ -2236,11 +2304,16 @@ fn main() {
                     #[cfg(target_os = "macos")]
                     {
                         tracing::debug!("[startup] macOS: Re-applying window state after show()");
-                        if let Err(e) = window_state_manager::load_window_state(&app_handle).await
-                        {
+                        if let Err(e) = window_state_manager::load_window_state(&app_handle).await {
                             tracing::warn!("Failed to re-apply window state on macOS: {}", e);
                         }
                     }
+                }
+
+                // Handle file associations from command line (Windows/Linux)
+                #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+                if !command_line_files.is_empty() {
+                    handle_file_associations(app_handle.clone(), command_line_files);
                 }
             });
 

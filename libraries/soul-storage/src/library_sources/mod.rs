@@ -371,6 +371,33 @@ pub async fn set_enabled(pool: &SqlitePool, id: i64, enabled: bool) -> Result<bo
     Ok(result.rows_affected() > 0)
 }
 
+/// Check if onboarding is needed (no library sources AND no managed library configured)
+///
+/// This is an optimized version that uses a single SQL query instead of two separate queries.
+/// Onboarding is needed if the user has zero library sources AND no managed library settings.
+pub async fn check_onboarding_needed(
+    pool: &SqlitePool,
+    user_id: &str,
+    device_id: &str,
+) -> Result<bool> {
+    let result = sqlx::query!(
+        r#"
+        SELECT
+            (SELECT COUNT(*) FROM library_sources WHERE user_id = ? AND device_id = ?) as source_count,
+            (SELECT COUNT(*) FROM managed_library_settings WHERE user_id = ? AND device_id = ?) as managed_count
+        "#,
+        user_id,
+        device_id,
+        user_id,
+        device_id
+    )
+    .fetch_one(pool)
+    .await?;
+
+    // Onboarding needed if both counts are 0
+    Ok(result.source_count == 0 && result.managed_count == 0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

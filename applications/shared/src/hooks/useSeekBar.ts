@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import { usePlayerStore } from '../stores/player';
+import { debug } from '../utils/debug';
 
 interface UseSeekBarReturn {
   isDragging: boolean;
@@ -27,7 +28,7 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
    * Called when user starts dragging the seek bar
    */
   const handleSeekStart = useCallback((position: number) => {
-    console.log('[useSeekBar] handleSeekStart:', position);
+    debug.log('[useSeekBar] handleSeekStart:', position);
     setIsDragging(true);
     setSeekPosition(position);
   }, []);
@@ -66,13 +67,13 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
     // Use provided position or fall back to state
     const targetPosition = finalPosition ?? seekPosition;
 
-    console.log('[useSeekBar] handleSeekEnd called with:', { finalPosition, seekPosition, targetPosition });
+    debug.log('[useSeekBar] handleSeekEnd called with:', { finalPosition, seekPosition, targetPosition });
 
     // Send final position to backend
     if (targetPosition !== null) {
       const { duration } = usePlayerStore.getState();
 
-      console.log('[useSeekBar] Seeking to position:', targetPosition);
+      debug.log('[useSeekBar] Seeking to position:', targetPosition);
 
       // Set flag to ignore position updates from backend for 500ms
       // This prevents the seek bar from jumping back due to race conditions
@@ -87,20 +88,20 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
       // Send seek command to backend
       commands.seek(targetPosition)
         .then(() => {
-          console.log('[useSeekBar] Seek command succeeded');
+          debug.log('[useSeekBar] Seek command succeeded');
         })
         .catch((error) => {
-          console.error('[useSeekBar] Seek failed:', error);
+          debug.error('[useSeekBar] Seek failed:', error);
         });
 
       // Re-enable position updates after 500ms
       // This gives the backend time to process the seek
       setTimeout(() => {
         setIgnorePositionUpdates(false);
-        console.log('[useSeekBar] Re-enabled position updates');
+        debug.log('[useSeekBar] Re-enabled position updates');
       }, 500);
     } else {
-      console.warn('[useSeekBar] handleSeekEnd called but no position available');
+      debug.warn('[useSeekBar] handleSeekEnd called but no position available');
     }
 
     // Reset dragging state

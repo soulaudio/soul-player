@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
+import { debug } from '../../../../utils/debug';
   FolderOpen,
   X,
   Volume2,
@@ -201,7 +202,7 @@ export function ConvolutionEditor({
         generateMockWaveform(filePath);
       }
     } catch (err) {
-      console.error('Failed to load IR file:', err);
+      debug.error('Failed to load IR file:', err);
       setError(t('convolution.errors.loadFailed'));
     } finally {
       setLoading(false);

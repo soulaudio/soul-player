@@ -300,12 +300,13 @@ pub async fn set_volume_leveling_mode(
 
     // Set the mode on the playback manager (runtime)
     playback.set_volume_leveling_mode(normalization_mode);
-    eprintln!(
-        "[set_volume_leveling_mode] Mode set to: {:?}",
-        normalization_mode
+    tracing::info!(
+        mode = ?normalization_mode,
+        "[set_volume_leveling_mode] Mode set"
     );
 
     // Persist to database for restoration on app restart
+    let db_start = std::time::Instant::now();
     soul_storage::settings::set_setting(
         &state.pool,
         &state.user_id,
@@ -315,7 +316,10 @@ pub async fn set_volume_leveling_mode(
     .await
     .map_err(|e| format!("Failed to save volume leveling mode: {}", e))?;
 
-    eprintln!("[set_volume_leveling_mode] Mode persisted to database");
+    tracing::debug!(
+        duration_ms = db_start.elapsed().as_millis(),
+        "[set_volume_leveling_mode] Mode persisted to database"
+    );
     Ok(())
 }
 
@@ -331,12 +335,13 @@ pub async fn set_volume_leveling_preamp(
 
     // Set on playback manager (runtime)
     playback.set_loudness_preamp(clamped);
-    eprintln!(
-        "[set_volume_leveling_preamp] Pre-amp set to: {} dB",
-        clamped
+    tracing::info!(
+        preamp_db = clamped,
+        "[set_volume_leveling_preamp] Pre-amp set"
     );
 
     // Persist to database
+    let db_start = std::time::Instant::now();
     soul_storage::settings::set_setting(
         &state.pool,
         &state.user_id,
@@ -346,6 +351,10 @@ pub async fn set_volume_leveling_preamp(
     .await
     .map_err(|e| format!("Failed to save preamp setting: {}", e))?;
 
+    tracing::debug!(
+        duration_ms = db_start.elapsed().as_millis(),
+        "[set_volume_leveling_preamp] Preamp persisted to database"
+    );
     Ok(())
 }
 
@@ -358,12 +367,13 @@ pub async fn set_volume_leveling_prevent_clipping(
 ) -> Result<(), String> {
     // Set on playback manager (runtime)
     playback.set_prevent_clipping(prevent);
-    eprintln!(
-        "[set_volume_leveling_prevent_clipping] Prevent clipping set to: {}",
-        prevent
+    tracing::info!(
+        prevent_clipping = prevent,
+        "[set_volume_leveling_prevent_clipping] Prevent clipping set"
     );
 
     // Persist to database
+    let db_start = std::time::Instant::now();
     soul_storage::settings::set_setting(
         &state.pool,
         &state.user_id,
@@ -373,6 +383,10 @@ pub async fn set_volume_leveling_prevent_clipping(
     .await
     .map_err(|e| format!("Failed to save prevent clipping setting: {}", e))?;
 
+    tracing::debug!(
+        duration_ms = db_start.elapsed().as_millis(),
+        "[set_volume_leveling_prevent_clipping] Prevent clipping persisted to database"
+    );
     Ok(())
 }
 
@@ -462,7 +476,7 @@ async fn analyze_audio_file(file_path: &str) -> Result<LoudnessInfo, String> {
                     break;
                 }
                 Err(e) => {
-                    eprintln!("[analyze_audio_file] Error reading packet: {}", e);
+                    tracing::warn!(error = %e, "[analyze_audio_file] Error reading packet");
                     break;
                 }
             };
@@ -474,7 +488,7 @@ async fn analyze_audio_file(file_path: &str) -> Result<LoudnessInfo, String> {
             let decoded = match decoder.decode(&packet) {
                 Ok(d) => d,
                 Err(e) => {
-                    eprintln!("[analyze_audio_file] Decode error: {}", e);
+                    tracing::warn!(error = %e, "[analyze_audio_file] Decode error");
                     continue;
                 }
             };
@@ -491,7 +505,7 @@ async fn analyze_audio_file(file_path: &str) -> Result<LoudnessInfo, String> {
 
             // Add samples to analyzer
             if let Err(e) = analyzer.add_frames(buf.samples()) {
-                eprintln!("[analyze_audio_file] Analysis error: {}", e);
+                tracing::warn!(error = %e, "[analyze_audio_file] Analysis error");
             }
         }
 
@@ -510,14 +524,14 @@ async fn run_analysis_worker(
     worker: Arc<Mutex<AnalysisWorker>>,
     app: tauri::AppHandle,
 ) {
-    eprintln!("[analysis_worker] Starting background analysis");
+    tracing::info!("[analysis_worker] Starting background analysis");
 
     loop {
         // Check for cancellation
         {
             let w = worker.lock().await;
             if w.cancel_requested.load(Ordering::SeqCst) {
-                eprintln!("[analysis_worker] Cancel requested, stopping");
+                tracing::info!("[analysis_worker] Cancel requested, stopping");
                 w.is_running.store(false, Ordering::SeqCst);
                 let _ = app.emit("analysis-worker-stopped", ());
                 return;
@@ -528,24 +542,27 @@ async fn run_analysis_worker(
         let item = match soul_storage::loudness::get_next_queue_item(&pool).await {
             Ok(Some(item)) => item,
             Ok(None) => {
-                eprintln!("[analysis_worker] Queue empty, stopping");
+                tracing::info!("[analysis_worker] Queue empty, stopping");
                 let w = worker.lock().await;
                 w.is_running.store(false, Ordering::SeqCst);
                 let _ = app.emit("analysis-worker-complete", ());
                 return;
             }
             Err(e) => {
-                eprintln!("[analysis_worker] Error getting queue item: {}", e);
+                tracing::error!(error = %e, "[analysis_worker] Error getting queue item");
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 continue;
             }
         };
 
-        eprintln!("[analysis_worker] Processing track {}", item.track_id);
+        tracing::info!(
+            track_id = item.track_id,
+            "[analysis_worker] Processing track"
+        );
 
         // Mark as processing
         if let Err(e) = soul_storage::loudness::mark_queue_processing(&pool, item.id).await {
-            eprintln!("[analysis_worker] Failed to mark processing: {}", e);
+            tracing::error!(error = %e, queue_id = item.id, "[analysis_worker] Failed to mark processing");
         }
 
         // Get track file path
@@ -618,7 +635,11 @@ async fn run_analysis_worker(
                 )
                 .await
                 {
-                    eprintln!("[analysis_worker] Failed to store results: {}", e);
+                    tracing::error!(
+                        track_id = %item.track_id,
+                        error = %e,
+                        "[analysis_worker] Failed to store loudness results"
+                    );
                     let _ =
                         soul_storage::loudness::mark_queue_failed(&pool, item.id, &e.to_string())
                             .await;
@@ -645,15 +666,18 @@ async fn run_analysis_worker(
                     }),
                 );
 
-                eprintln!(
-                    "[analysis_worker] Track {} analyzed: {:.1} LUFS, {:.2} dB gain",
-                    item.track_id, loudness_info.integrated_lufs, track_gain.gain_db
+                tracing::info!(
+                    track_id = %item.track_id,
+                    lufs_integrated = loudness_info.integrated_lufs,
+                    gain_db = track_gain.gain_db,
+                    "[analysis_worker] Track analyzed successfully"
                 );
             }
             Err(e) => {
-                eprintln!(
-                    "[analysis_worker] Analysis failed for track {}: {}",
-                    item.track_id, e
+                tracing::error!(
+                    track_id = %item.track_id,
+                    error = %e,
+                    "[analysis_worker] Analysis failed"
                 );
                 let _ = soul_storage::loudness::mark_queue_failed(&pool, item.id, &e).await;
             }
@@ -672,7 +696,7 @@ pub async fn initialize_volume_leveling_mode(
     playback: &PlaybackManager,
     app_state: &AppState,
 ) -> Result<(), String> {
-    eprintln!("[loudness] Initializing volume leveling settings from database...");
+    tracing::info!("[loudness] Initializing volume leveling settings from database");
 
     // Restore volume leveling mode
     let saved_mode = soul_storage::settings::get_setting(
@@ -692,22 +716,22 @@ pub async fn initialize_volume_leveling_mode(
                 "ebu_r128" => NormalizationMode::EbuR128Broadcast,
                 "streaming" => NormalizationMode::EbuR128Streaming,
                 _ => {
-                    eprintln!(
-                        "[loudness] Unknown saved mode '{}', using default (Disabled)",
-                        mode_str
+                    tracing::warn!(
+                        saved_mode = %mode_str,
+                        "[loudness] Unknown saved mode, using default (Disabled)"
                     );
                     NormalizationMode::Disabled
                 }
             };
 
             playback.set_volume_leveling_mode(normalization_mode);
-            eprintln!(
-                "[loudness] Volume leveling mode restored to: {:?}",
-                normalization_mode
+            tracing::info!(
+                mode = ?normalization_mode,
+                "[loudness] Volume leveling mode restored"
             );
         }
     } else {
-        eprintln!("[loudness] No saved volume leveling mode found, using default (Disabled)");
+        tracing::debug!("[loudness] No saved volume leveling mode found, using default (Disabled)");
     }
 
     // Restore pre-amp gain
@@ -723,7 +747,7 @@ pub async fn initialize_volume_leveling_mode(
         if let Some(preamp_db) = preamp_value.as_f64() {
             let clamped = preamp_db.clamp(-12.0, 12.0);
             playback.set_loudness_preamp(clamped);
-            eprintln!("[loudness] Pre-amp restored to: {} dB", clamped);
+            tracing::info!(preamp_db = clamped, "[loudness] Pre-amp restored");
         }
     }
 
@@ -739,7 +763,10 @@ pub async fn initialize_volume_leveling_mode(
     if let Some(prevent_value) = saved_prevent_clipping {
         if let Some(prevent) = prevent_value.as_bool() {
             playback.set_prevent_clipping(prevent);
-            eprintln!("[loudness] Prevent clipping restored to: {}", prevent);
+            tracing::info!(
+                prevent_clipping = prevent,
+                "[loudness] Prevent clipping restored"
+            );
         }
     }
 

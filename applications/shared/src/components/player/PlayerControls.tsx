@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../../stores/player';
 import { usePlayerCommands, usePlaybackEvents } from '../../contexts/PlayerCommandsContext';
 import { SkipBack, Play, Pause, SkipForward } from 'lucide-react';
+import { debug } from '../../utils/debug';
 
 export function PlayerControls() {
   const { isPlaying, currentTrack } = usePlayerStore();
@@ -36,18 +37,18 @@ export function PlayerControls() {
       setHasNext(caps.hasNext);
       setHasPrevious(caps.hasPrevious);
     } catch (error) {
-      console.error('[PlayerControls] Failed to load capabilities:', error);
+      debug.error('[PlayerControls] Failed to load capabilities:', error);
     }
   };
 
   const handlePrevious = async () => {
-    console.log('[PlayerControls] Previous clicked, hasPrevious:', hasPrevious);
+    debug.log('[PlayerControls] Previous clicked, hasPrevious:', hasPrevious);
     if (!hasPrevious) return;
     try {
       await commands.skipPrevious();
-      console.log('[PlayerControls] Previous command succeeded');
+      debug.log('[PlayerControls] Previous command succeeded');
     } catch (error) {
-      console.error('[PlayerControls] Skip previous failed:', error);
+      debug.error('[PlayerControls] Skip previous failed:', error);
     }
   };
 
@@ -59,18 +60,18 @@ export function PlayerControls() {
         await commands.resumePlayback();
       }
     } catch (error) {
-      console.error('[PlayerControls] Play/Pause failed:', error);
+      debug.error('[PlayerControls] Play/Pause failed:', error);
     }
   };
 
   const handleNext = async () => {
-    console.log('[PlayerControls] Next clicked, hasNext:', hasNext);
+    debug.log('[PlayerControls] Next clicked, hasNext:', hasNext);
     if (!hasNext) return;
     try {
       await commands.skipNext();
-      console.log('[PlayerControls] Next command succeeded');
+      debug.log('[PlayerControls] Next command succeeded');
     } catch (error) {
-      console.error('[PlayerControls] Skip next failed:', error);
+      debug.error('[PlayerControls] Skip next failed:', error);
     }
   };
 

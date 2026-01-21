@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, X, Check, AlertCircle, Headphones, SlidersHorizontal, Volume2, Activity, Gauge, Waves, Settings2, ChevronUp, AudioWaveform } from 'lucide-react';
 import { ConfirmDialog } from '../../ui/Dialog';
 import {
+import { debug } from '../../../utils/debug';
   ParametricEqEditor,
   GraphicEqEditor,
   CompressorEditor,
@@ -171,7 +172,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
       const chainData = await invoke<EffectSlot[]>('get_dsp_chain');
       setChain(chainData);
     } catch (error) {
-      console.error('Failed to load DSP chain:', error);
+      debug.error('Failed to load DSP chain:', error);
       showNotificationMsg('error', 'Failed to load DSP chain');
     } finally {
       setLoading(false);
@@ -271,7 +272,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
       onChainChange?.();
       setExpandedSlot(null);
     } catch (error) {
-      console.error('Failed to add effect:', error);
+      debug.error('Failed to add effect:', error);
       showNotificationMsg('error', `Failed to add effect: ${error}`);
     }
   };
@@ -284,7 +285,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
       onChainChange?.();
       setExpandedSlot(null);
     } catch (error) {
-      console.error('Failed to remove effect:', error);
+      debug.error('Failed to remove effect:', error);
       showNotificationMsg('error', `Failed to remove effect: ${error}`);
     }
   };
@@ -296,7 +297,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
       showNotificationMsg('success', `${enabled ? 'Enabled' : 'Disabled'} effect in slot ${slotIndex + 1}`);
       onChainChange?.();
     } catch (error) {
-      console.error('Failed to toggle effect:', error);
+      debug.error('Failed to toggle effect:', error);
       showNotificationMsg('error', `Failed to toggle effect: ${error}`);
     }
   };
@@ -308,7 +309,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
       showNotificationMsg('success', 'Cleared DSP chain');
       onChainChange?.();
     } catch (error) {
-      console.error('Failed to clear chain:', error);
+      debug.error('Failed to clear chain:', error);
       showNotificationMsg('error', `Failed to clear chain: ${error}`);
     }
     setShowClearDialog(false);
@@ -333,7 +334,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
       });
       onChainChange?.();
     } catch (error) {
-      console.error('Failed to update effect parameters:', error);
+      debug.error('Failed to update effect parameters:', error);
       // Don't show notification for parameter updates to avoid interrupting UX
     }
   }, [onChainChange]);

@@ -5,6 +5,7 @@
 
 import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { debug } from '../utils/debug';
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -43,8 +44,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     // Log error details
     const boundaryName = this.props.name || 'ErrorBoundary'
-    console.error(`[${boundaryName}] Caught error:`, error)
-    console.error(`[${boundaryName}] Error info:`, errorInfo)
+    debug.error(`[${boundaryName}] Caught error:`, error)
+    debug.error(`[${boundaryName}] Error info:`, errorInfo)
 
     // Update state with error info
     this.setState({ errorInfo })

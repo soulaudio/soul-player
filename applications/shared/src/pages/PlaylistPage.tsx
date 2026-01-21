@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ArrowLeft, Play, ListMusic, Clock, Trash2, Pencil } from 'lucide-react'
 import { SkeletonDetailPage } from '../components/SkeletonDetailPage'
+import { TrackList } from '../components/TrackList'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
@@ -18,7 +19,7 @@ import { ConfirmDialog } from '../components/ui/Dialog'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { TrackMenu } from '../components/TrackMenu'
-import { ArtistLink } from '../components/ArtistLink'
+import { debug } from '../utils/debug';
 
 export function PlaylistPage() {
   const { t } = useTranslation()
@@ -64,7 +65,7 @@ export function PlaylistPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addPlayNext(queueTrack)
     } catch (error) {
-      console.error('[PlaylistPage] Failed to add track to play next:', error)
+      debug.error('[PlaylistPage] Failed to add track to play next:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -73,7 +74,7 @@ export function PlaylistPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addToQueueEnd(queueTrack)
     } catch (error) {
-      console.error('[PlaylistPage] Failed to add track to queue:', error)
+      debug.error('[PlaylistPage] Failed to add track to queue:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -116,7 +117,7 @@ export function PlaylistPage() {
 
       await commands.playQueue(queue, 0, context)
     } catch (err) {
-      console.error('Failed to play playlist:', err)
+      debug.error('Failed to play playlist:', err)
     }
   }
 
@@ -127,7 +128,7 @@ export function PlaylistPage() {
       await backend.deletePlaylist(playlist.id)
       goBack('/library?tab=playlists')
     } catch (err) {
-      console.error('Failed to delete playlist:', err)
+      debug.error('Failed to delete playlist:', err)
     }
     setDeleteConfirm(null)
   }
@@ -259,63 +260,67 @@ export function PlaylistPage() {
             <p className="text-sm mt-1">{t('playlist.emptyHint', 'Add tracks from your library')}</p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-sm text-muted-foreground border-b">
-                <th className="pb-2 w-12">#</th>
-                <th className="pb-2">{t('common.title', 'Title')}</th>
-                <th className="pb-2">{t('common.artist', 'Artist')}</th>
-                <th className="pb-2 w-20 text-right">{t('common.duration', 'Duration')}</th>
-                <th className="pb-2 w-12"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {tracks.map((track, index) => (
-                <tr
-                  key={track.id}
-                  className="group hover:bg-muted/50 cursor-pointer"
-                  onClick={async () => {
-                    try {
-                      await commands.playTrack(track.id)
-                    } catch (err) {
-                      console.error('Failed to play track:', err)
-                    }
+          <TrackList
+            tracks={tracks.map(t => ({
+              id: t.id,
+              title: String(t.title || 'Unknown'),
+              artist: t.artist_name,
+              artistId: t.artist_id,
+              album: t.album_title,
+              albumId: t.album_id,
+              duration: t.duration_seconds,
+              trackNumber: t.track_number,
+              isAvailable: !!t.file_path,
+              format: t.file_format,
+              bitrate: t.bit_rate,
+              sampleRate: t.sample_rate,
+              channels: t.channels,
+            }))}
+            buildQueue={(allTracks, clickedTrack, clickedIndex) => {
+              // Build queue from all tracks, starting at clicked position
+              const queue = tracks
+                .filter((t) => t.file_path)
+                .map((t) => ({
+                  trackId: String(t.id),
+                  title: t.title || 'Unknown',
+                  artist: t.artist_name || 'Unknown Artist',
+                  album: t.album_title || null,
+                  albumId: t.album_id,
+                  filePath: t.file_path || '',
+                  durationSeconds: t.duration_seconds || null,
+                  trackNumber: t.track_number || null,
+                }))
+
+              // Reorder so clicked track is first
+              const clickedTrackIdx = queue.findIndex((t) => t.trackId === String(clickedTrack.id))
+              if (clickedTrackIdx > 0) {
+                return [...queue.slice(clickedTrackIdx), ...queue.slice(0, clickedTrackIdx)]
+              }
+              return queue
+            }}
+            virtualized={tracks.length > 50}
+            virtualItemSize={56}
+            renderMenu={(track) => {
+              const backendTrack = tracks.find(t => t.id === track.id)
+              if (!backendTrack) return null
+              return (
+                <TrackMenu
+                  track={backendTrack}
+                  onPlayNext={() => handlePlayNext(backendTrack)}
+                  onAddToQueue={() => handleAddToQueue(backendTrack)}
+                  onAddToPlaylist={() => {
+                    setSelectedTrackForPlaylist({
+                      id: backendTrack.id,
+                      title: backendTrack.title,
+                    })
                   }}
-                >
-                  <td className="py-3 text-muted-foreground">{index + 1}</td>
-                  <td className="py-3 font-medium">{track.title || 'Unknown'}</td>
-                  <td className="py-3 text-muted-foreground">
-                    <ArtistLink
-                      artistId={track.artist_id}
-                      artistName={track.artist_name}
-                      className="text-muted-foreground hover:text-foreground"
-                    />
-                  </td>
-                  <td className="py-3 text-right text-muted-foreground">
-                    {formatTrackDuration(track.duration_seconds)}
-                  </td>
-                  <td className="py-3">
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <TrackMenu
-                        track={track}
-                        onPlayNext={() => handlePlayNext(track)}
-                        onAddToQueue={() => handleAddToQueue(track)}
-                        onAddToPlaylist={() => {
-                          setSelectedTrackForPlaylist({
-                            id: track.id,
-                            title: track.title,
-                          })
-                        }}
-                        onDelete={() => {
-                          deleteTrackMutation.mutate(track.id)
-                        }}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  onDelete={() => {
+                    deleteTrackMutation.mutate(backendTrack.id)
+                  }}
+                />
+              )
+            }}
+          />
         )}
       </div>
 

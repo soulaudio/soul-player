@@ -165,17 +165,18 @@ impl PlaybackManager {
     /// Event emission loop that runs in background thread
     ///
     /// Uses channel-based blocking with timeout instead of busy-waiting.
-    /// Wakes up immediately when events arrive, or when periodic tasks are due (250ms position, 2s sample rate).
+    /// Wakes up immediately when events arrive, or when periodic tasks are due (500ms position, 2s sample rate).
     /// This significantly reduces CPU usage and power consumption compared to fixed 50ms polling.
     fn event_emission_loop(playback: Arc<Mutex<DesktopPlayback>>, app_handle: AppHandle) {
         let mut last_position_emit = std::time::Instant::now();
         let mut last_sample_rate_check = std::time::Instant::now();
+        let mut last_crossfade_progress_emit = std::time::Instant::now();
         let mut tracker = PlaybackTracker::new();
 
         loop {
             // Calculate time until next periodic task
             let time_until_position =
-                Duration::from_millis(250).saturating_sub(last_position_emit.elapsed());
+                Duration::from_millis(500).saturating_sub(last_position_emit.elapsed());
             let time_until_sample_rate =
                 Duration::from_secs(2).saturating_sub(last_sample_rate_check.elapsed());
 
@@ -311,15 +312,21 @@ impl PlaybackManager {
                         progress,
                         metadata_switched,
                     } => {
-                        // Only emit occasionally to avoid flooding the frontend
-                        // The actual track change is emitted via TrackChanged at 50%
-                        app_handle.emit(
-                            "playback:crossfade-progress",
-                            serde_json::json!({
-                                "progress": progress,
-                                "metadata_switched": metadata_switched
-                            }),
-                        )
+                        // Throttle to max 20 updates/second (50ms minimum interval)
+                        // This prevents event flooding during transitions while still providing smooth updates
+                        if last_crossfade_progress_emit.elapsed() >= Duration::from_millis(50) {
+                            last_crossfade_progress_emit = std::time::Instant::now();
+                            app_handle.emit(
+                                "playback:crossfade-progress",
+                                serde_json::json!({
+                                    "progress": progress,
+                                    "metadata_switched": metadata_switched
+                                }),
+                            )
+                        } else {
+                            // Skip emission - too soon after last one
+                            continue;
+                        }
                     }
                     PlaybackEvent::CrossfadeCompleted => {
                         tracing::debug!("Crossfade completed");
@@ -378,8 +385,8 @@ impl PlaybackManager {
                 };
             }
 
-            // Emit position updates every 250ms during playback
-            if last_position_emit.elapsed() >= Duration::from_millis(250) {
+            // Emit position updates every 500ms during playback
+            if last_position_emit.elapsed() >= Duration::from_millis(500) {
                 let pb = playback.lock().unwrap();
                 let position = pb.get_position();
                 let state = pb.get_state();

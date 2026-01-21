@@ -22,16 +22,19 @@ import { usePlatform } from '../contexts/PlatformContext'
 import { useArtistWithData, useArtistArtwork } from '../hooks/queries/useArtistQueries'
 import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
+import { debug } from '../utils/debug';
 
 // Album Card for artist page
 function ArtistAlbumCard({
   album,
   onClick,
   isDesktop,
+  priority = false,
 }: {
   album: BackendAlbum
   onClick: () => void
   isDesktop: boolean
+  priority?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -49,6 +52,7 @@ function ArtistAlbumCard({
             albumId={album.id}
             alt={album.title}
             className="w-full h-full object-cover"
+            priority={priority}
           />
         ) : coverUrl ? (
           <img
@@ -159,7 +163,7 @@ export function ArtistPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addPlayNext(queueTrack)
     } catch (error) {
-      console.error('[ArtistPage] Failed to add track to play next:', error)
+      debug.error('[ArtistPage] Failed to add track to play next:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -168,7 +172,7 @@ export function ArtistPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addToQueueEnd(queueTrack)
     } catch (error) {
-      console.error('[ArtistPage] Failed to add track to queue:', error)
+      debug.error('[ArtistPage] Failed to add track to queue:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -199,7 +203,7 @@ export function ArtistPage() {
 
       await commands.playQueue(queue, 0, context)
     } catch (err) {
-      console.error('Failed to play all tracks:', err)
+      debug.error('Failed to play all tracks:', err)
     }
   }
 
@@ -350,12 +354,13 @@ export function ArtistPage() {
           {albums.length > 0 ? (
             discographyView === 'grid' ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {albums.map((album) => (
+                {albums.map((album, index) => (
                   <ArtistAlbumCard
                     key={album.id}
                     album={album}
                     onClick={() => handleAlbumClick(album)}
                     isDesktop={isDesktop}
+                    priority={index < 20}
                   />
                 ))}
               </div>

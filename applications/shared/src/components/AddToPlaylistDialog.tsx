@@ -4,6 +4,7 @@ import { Search, ListMusic, Plus, Check, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter } from './ui/Dialog';
 import { useBackend, type BackendPlaylist } from '../contexts/BackendContext';
 import { useAddTrackToPlaylist, useRemoveTrackFromPlaylist, useCreatePlaylist } from '../hooks/queries/usePlaylistMutations';
+import { debug } from '../utils/debug';
 
 interface AddToPlaylistDialogProps {
   open: boolean;
@@ -42,7 +43,7 @@ export function AddToPlaylistDialog({
       try {
         // Check if backend methods exist
         if (!backend.getAllPlaylists || !backend.getPlaylistsContainingTrack) {
-          console.error('[AddToPlaylistDialog] Backend methods missing');
+          debug.error('[AddToPlaylistDialog] Backend methods missing');
           setIsLoading(false);
           return;
         }
@@ -58,7 +59,7 @@ export function AddToPlaylistDialog({
         // Pre-select playlists that already contain the track
         setSelectedIds(new Set(containingSet));
       } catch (error) {
-        console.error('[AddToPlaylistDialog] Failed to load playlists:', error);
+        debug.error('[AddToPlaylistDialog] Failed to load playlists:', error);
       } finally {
         setIsLoading(false);
       }
@@ -108,7 +109,7 @@ export function AddToPlaylistDialog({
           setShowNewPlaylistInput(false);
         },
         onError: (error) => {
-          console.error('Failed to create playlist:', error);
+          debug.error('Failed to create playlist:', error);
         },
       }
     );
@@ -132,7 +133,7 @@ export function AddToPlaylistDialog({
 
     const onError = (error: unknown) => {
       hasError = true;
-      console.error('Failed to save playlist changes:', error);
+      debug.error('Failed to save playlist changes:', error);
       if (pendingCount === 1) {
         // Last mutation failed, don't close dialog
         pendingCount--;

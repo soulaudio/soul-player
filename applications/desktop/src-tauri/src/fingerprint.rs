@@ -204,7 +204,7 @@ pub async fn find_duplicates(
         .map_err(|e| format!("Invalid source fingerprint: {}", e))?;
 
     // Get all tracks with fingerprints
-    let all_tracks = soul_storage::tracks::get_with_fingerprints(&state.pool)
+    let all_tracks = soul_storage::tracks::get_with_fingerprints(&state.pool, None, None)
         .await
         .map_err(|e| e.to_string())?;
 

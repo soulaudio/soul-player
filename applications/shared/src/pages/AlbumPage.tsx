@@ -21,6 +21,7 @@ import { usePlatform } from '../contexts/PlatformContext'
 import { useAlbumWithTracks } from '../hooks/queries/useAlbumQueries'
 import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
+import { debug } from '../utils/debug';
 
 export function AlbumPage() {
   const { t } = useTranslation()
@@ -98,7 +99,7 @@ export function AlbumPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addPlayNext(queueTrack)
     } catch (error) {
-      console.error('[AlbumPage] Failed to add track to play next:', error)
+      debug.error('[AlbumPage] Failed to add track to play next:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -107,7 +108,7 @@ export function AlbumPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addToQueueEnd(queueTrack)
     } catch (error) {
-      console.error('[AlbumPage] Failed to add track to queue:', error)
+      debug.error('[AlbumPage] Failed to add track to queue:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -138,7 +139,7 @@ export function AlbumPage() {
 
       await commands.playQueue(queue, 0, context)
     } catch (err) {
-      console.error('Failed to play all tracks:', err)
+      debug.error('Failed to play all tracks:', err)
     }
   }
 
@@ -289,6 +290,8 @@ export function AlbumPage() {
             channels: t.channels,
           }))}
           buildQueue={buildQueue}
+          virtualized={tracks.length > 50}
+          virtualItemSize={56}
           renderMenu={(track) => {
             const backendTrack = tracks.find(t => t.id === track.id)
             if (!backendTrack) return null

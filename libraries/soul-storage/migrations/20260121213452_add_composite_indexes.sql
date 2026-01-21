@@ -28,3 +28,34 @@ ON playback_contexts(user_id, context_type, last_played_at DESC);
 -- Note: track_sources queries primarily use IN clauses on track_id, which benefit from
 -- the existing idx_track_sources_track index. No composite index provides significant
 -- additional benefit for these access patterns.
+
+-- For albums by artist with date sorting:
+-- Used by: Artist detail pages showing recent albums
+-- Supports: WHERE artist_id = ? ORDER BY created_at DESC
+-- Replaces separate scans on idx_albums_artist_id and idx_albums_created_at
+CREATE INDEX IF NOT EXISTS idx_albums_artist_created
+ON albums(artist_id, created_at DESC);
+
+-- For tracks by album with track number ordering:
+-- Used by: Album detail pages showing sorted track lists
+-- Supports: WHERE album_id = ? ORDER BY track_number
+-- The existing idx_tracks_album_id only covers album filtering, not sorting
+CREATE INDEX IF NOT EXISTS idx_tracks_album_number
+ON tracks(album_id, track_number);
+
+-- For playlists by owner with favorite filtering:
+-- Used by: Library page filtering/sorting playlists by favorite status
+-- Supports: WHERE owner_id = ? ORDER BY is_favorite DESC
+-- Allows efficient favorite-first sorting for user's playlists
+CREATE INDEX IF NOT EXISTS idx_playlists_owner_favorite
+ON playlists(owner_id, is_favorite DESC);
+
+-- For tracks by artist with date sorting:
+-- Used by: Artist detail pages showing recent tracks
+-- Supports: WHERE artist_id = ? ORDER BY created_at DESC
+-- Allows efficient chronological listing of artist's tracks
+CREATE INDEX IF NOT EXISTS idx_tracks_artist_created
+ON tracks(artist_id, created_at DESC);
+
+-- Note: Playlist tracks already has idx_playlist_tracks_playlist (playlist_id, position)
+-- from migration 20250105000004, which covers playlist track ordering.

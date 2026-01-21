@@ -162,10 +162,14 @@ export function useAlbumTracks(id: number | undefined) {
 
 /**
  * Hook to fetch all albums
+ * @param options - Optional React Query options (e.g., { enabled: false })
  */
-export function useAlbums() {
+export function useAlbums(options?: { enabled?: boolean }) {
   const backend = useBackend()
-  return useQuery(albumsListOptions(backend))
+  return useQuery({
+    ...albumsListOptions(backend),
+    ...options,
+  })
 }
 
 /**

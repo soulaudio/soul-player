@@ -3,9 +3,15 @@
  * Uses queryOptions pattern for reusability and type safety
  */
 
+import { useMemo } from 'react'
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useBackend } from '../../contexts/BackendContext'
 import { trackKeys, playlistKeys, genreKeys, libraryKeys, contextKeys } from './queryKeys'
+import { albumsListOptions } from './useAlbumQueries'
+import { artistsListOptions } from './useArtistQueries'
+
+// Re-export for convenience (avoids having to import from multiple files)
+export { albumsListOptions, artistsListOptions }
 
 // ============================================================================
 // Tracks Query Options
@@ -19,6 +25,9 @@ export function tracksListOptions(backend: ReturnType<typeof useBackend>) {
     gcTime: 1000 * 60 * 10, // 10 minutes
   })
 }
+
+// NOTE: albumsListOptions and artistsListOptions are imported from their
+// dedicated query files (useAlbumQueries, useArtistQueries) to avoid duplication
 
 // ============================================================================
 // Playlists Query Options
@@ -175,6 +184,16 @@ export function useTracks() {
   return useQuery(tracksListOptions(backend))
 }
 
+export function useAlbums() {
+  const backend = useBackend()
+  return useQuery(albumsListOptions(backend))
+}
+
+export function useArtists() {
+  const backend = useBackend()
+  return useQuery(artistsListOptions(backend))
+}
+
 export function usePlaylists() {
   const backend = useBackend()
   return useQuery(playlistsListOptions(backend))
@@ -246,47 +265,60 @@ export function useDatabaseHealth() {
   return useQuery(databaseHealthOptions(backend))
 }
 
-export function useRecentContexts(limit: number) {
+export function useRecentContexts(limit: number, options?: { enabled?: boolean }) {
   const backend = useBackend()
-  return useQuery(recentContextsOptions(backend, limit))
+  return useQuery({
+    ...recentContextsOptions(backend, limit),
+    ...options,
+  })
 }
 
 /**
  * Combined hook for full library data (used in LibraryPage)
+ * Returns individual loading states for progressive rendering
+ *
+ * Performance: Uses centralized query options (albumsListOptions, artistsListOptions)
+ * to ensure proper cache reuse across the app. Previously used inline queries
+ * which prevented cache sharing between LibraryPage and other pages.
+ *
+ * Memoizes array references to prevent unnecessary re-renders when data
+ * hasn't actually changed (React Query structural sharing).
  */
 export function useLibraryData() {
   const tracksQuery = useTracks()
-  const albumsQuery = useQuery(
-    queryOptions({
-      queryKey: ['albums', 'list'],
-      queryFn: () => useBackend().getAllAlbums(),
-      staleTime: 1000 * 60 * 2,
-      gcTime: 1000 * 60 * 10,
-    })
-  )
-  const artistsQuery = useQuery(
-    queryOptions({
-      queryKey: ['artists', 'list'],
-      queryFn: () => useBackend().getAllArtists(),
-      staleTime: 1000 * 60 * 2,
-      gcTime: 1000 * 60 * 10,
-    })
-  )
+  const albumsQuery = useAlbums()
+  const artistsQuery = useArtists()
   const playlistsQuery = usePlaylists()
   const healthQuery = useDatabaseHealth()
 
+  // Memoize arrays to prevent unnecessary re-renders
+  // React Query's structural sharing ensures data reference only changes when content changes
+  // But we need to stabilize the fallback empty arrays
+  const tracks = useMemo(() => tracksQuery.data ?? [], [tracksQuery.data])
+  const albums = useMemo(() => albumsQuery.data ?? [], [albumsQuery.data])
+  const artists = useMemo(() => artistsQuery.data ?? [], [artistsQuery.data])
+  const playlists = useMemo(() => playlistsQuery.data ?? [], [playlistsQuery.data])
+
   return {
-    tracks: tracksQuery.data ?? [],
-    albums: albumsQuery.data ?? [],
-    artists: artistsQuery.data ?? [],
-    playlists: playlistsQuery.data ?? [],
+    tracks,
+    albums,
+    artists,
+    playlists,
     health: healthQuery.data,
-    isLoading:
+    // Individual loading states for progressive rendering
+    isTracksLoading: tracksQuery.isLoading,
+    isAlbumsLoading: albumsQuery.isLoading,
+    isArtistsLoading: artistsQuery.isLoading,
+    isPlaylistsLoading: playlistsQuery.isLoading,
+    isHealthLoading: healthQuery.isLoading,
+    // Combined loading state for initial page load (any query loading)
+    isAnyLoading:
       tracksQuery.isLoading ||
       albumsQuery.isLoading ||
       artistsQuery.isLoading ||
       playlistsQuery.isLoading ||
       healthQuery.isLoading,
+    // Error states
     isError:
       tracksQuery.isError ||
       albumsQuery.isError ||

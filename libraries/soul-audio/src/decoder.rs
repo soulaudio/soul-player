@@ -534,7 +534,10 @@ impl AudioDecoderTrait for SymphoniaDecoder {
                 Ok(decoded) => decoded,
                 Err(symphonia::core::errors::Error::DecodeError(e)) => {
                     // Some decode errors can be recovered from
-                    eprintln!("[SymphoniaDecoder] Decode error (recoverable): {}", e);
+                    tracing::warn!(
+                        error = %e,
+                        "[SymphoniaDecoder] Decode error (recoverable)"
+                    );
                     continue;
                 }
                 Err(e) => {

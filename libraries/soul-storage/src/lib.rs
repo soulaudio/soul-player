@@ -111,8 +111,13 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
     let options = SqliteConnectOptions::from_str(database_url)?
         .create_if_missing(true) // Create database file if it doesn't exist
         .journal_mode(SqliteJournalMode::Wal) // Use WAL mode for better concurrency
-        .busy_timeout(std::time::Duration::from_secs(30)); // Wait up to 30s for locks
-                                                           // Note: SQLite defaults to UTF-8 encoding on all modern systems
+        .busy_timeout(std::time::Duration::from_secs(30)) // Wait up to 30s for locks
+        // Performance optimizations for desktop use:
+        .pragma("synchronous", "NORMAL") // Reduce fsync calls (safe with WAL, ~2x faster writes)
+        .pragma("cache_size", "-64000") // 64MB page cache (negative = KB, default ~2MB)
+        .pragma("temp_store", "MEMORY") // Keep temp tables in RAM for faster operations
+        .pragma("mmap_size", "268435456"); // Enable 256MB memory-mapped I/O for faster reads
+                                           // Note: SQLite defaults to UTF-8 encoding on all modern systems
 
     tracing::debug!("[soul-storage] Options configured");
 

@@ -3,6 +3,7 @@ import { Bug, ExternalLink, FileText, CheckCircle, AlertCircle } from 'lucide-re
 import { usePlatform } from '../../contexts/PlatformContext';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { debug } from '../../utils/debug';
 
 export function ReportBugSettingsPage() {
   const { t } = useTranslation();
@@ -23,7 +24,7 @@ export function ReportBugSettingsPage() {
           setLoggingEnabled(JSON.parse(value));
         }
       } catch (error) {
-        console.error('Failed to load logging setting:', error);
+        debug.error('Failed to load logging setting:', error);
       }
     };
 
@@ -44,7 +45,7 @@ export function ReportBugSettingsPage() {
       // Hide restart message after 5 seconds
       setTimeout(() => setShowRestartMessage(false), 5000);
     } catch (error) {
-      console.error('Failed to save logging setting:', error);
+      debug.error('Failed to save logging setting:', error);
     }
   };
 

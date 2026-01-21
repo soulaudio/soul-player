@@ -54,6 +54,7 @@ export type { Platform } from './lib/platform';
 export { removeConsecutiveDuplicates, removeAllDuplicates } from './utils/queue';
 export { groupTracks, getDeduplicatedTracks, getFormatQualityScore } from './utils/trackGrouping';
 export type { TrackForGrouping, GroupedTrack } from './utils/trackGrouping';
+export { debug } from './utils/debug';
 // export { commands, playerCommands, libraryCommands, playlistCommands } from './lib/tauri'; // Temporarily disabled
 
 // Theme system

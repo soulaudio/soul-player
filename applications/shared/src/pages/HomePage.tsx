@@ -11,6 +11,8 @@ import { SkeletonGrid } from '../components/SkeletonGrid'
 import { categorizeAlbumsByPlayback, selectAlbumsFromOrderedIds } from '../lib/homePageUtils'
 import { useAlbums } from '../hooks/queries/useAlbumQueries'
 import { useRecentContexts } from '../hooks/queries/useLibraryQueries'
+import { debounce } from '../utils/debounce'
+import { debug } from '../utils/debug';
 
 // Section type definition
 interface BentoSection {
@@ -32,16 +34,34 @@ export function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [gridDimensions, setGridDimensions] = useState({ rows: 0, cols: 0 })
 
-  // Fetch data using React Query hooks
-  const { data: allAlbums = [], isLoading: albumsLoading } = useAlbums()
-  const { data: contexts = [], isLoading: contextsLoading } = useRecentContexts(100)
+  // Performance: Defer expensive queries until component is visible
+  // This prevents blocking the initial app render on macOS/Linux
+  const [shouldLoadData, setShouldLoadData] = useState(false)
 
-  const isLoading = albumsLoading || contextsLoading
+  useEffect(() => {
+    // Defer loading slightly to let UI render first
+    const timer = setTimeout(() => setShouldLoadData(true), 100)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Fetch data using React Query hooks with deferred loading
+  const { data: allAlbums = [], isLoading: albumsLoading } = useAlbums({
+    enabled: shouldLoadData,
+  })
+  // Performance: Reduced from 100 to 30 - we only need recent history for home page sections
+  const { data: contexts = [], isLoading: contextsLoading } = useRecentContexts(30, {
+    enabled: shouldLoadData,
+  })
+
+  const isLoading = !shouldLoadData || albumsLoading || contextsLoading
 
   // Reset scroll visibility when HomePage mounts (fixes header hidden state from library pages)
   useEffect(() => {
     setShowHeader(true)
   }, [setShowHeader])
+
+  // Performance: Create a Map for O(1) album lookups instead of O(n) array.find()
+  const albumMap = useMemo(() => new Map(allAlbums.map(a => [a.id, a])), [allAlbums])
 
   // Categorize albums based on playback contexts
   const { recentAlbums, recentAlbumIds, timeCapsuleAlbumIds, onRepeatAlbumIds } = useMemo(() => {
@@ -57,12 +77,18 @@ export function HomePage() {
     // Use utility function to categorize albums
     const categories = categorizeAlbumsByPlayback(contexts)
 
-    // Build recent albums array
+    // Performance: Build recent albums array using Map lookup (O(1)) instead of array.find() (O(n))
+    // This avoids O(n²) complexity when processing many recent albums
     const recentAlbumData: BackendAlbum[] = []
+    const seenAlbumIds = new Set<number>()
+
     for (const albumId of categories.recentAlbumIds) {
-      const album = allAlbums.find(a => a.id === albumId)
-      if (album && !recentAlbumData.find(a => a.id === album.id)) {
-        recentAlbumData.push(album)
+      if (!seenAlbumIds.has(albumId)) {
+        const album = albumMap.get(albumId)
+        if (album) {
+          recentAlbumData.push(album)
+          seenAlbumIds.add(albumId)
+        }
       }
     }
 
@@ -72,7 +98,7 @@ export function HomePage() {
       timeCapsuleAlbumIds: categories.timeCapsuleAlbumIds,
       onRepeatAlbumIds: categories.onRepeatAlbumIds,
     }
-  }, [allAlbums, contexts])
+  }, [allAlbums, contexts, albumMap])
 
   useEffect(() => {
     const calculateGrid = () => {
@@ -109,9 +135,13 @@ export function HomePage() {
       setGridDimensions({ rows: Math.max(1, rows), cols: Math.max(1, cols) })
     }
 
-    calculateGrid()
+    // Performance: Debounce resize calculations to prevent excessive recalculations
+    // 150ms is enough to smooth out window resize but still feel responsive
+    const debouncedCalculateGrid = debounce(calculateGrid, 150)
 
-    const resizeObserver = new ResizeObserver(calculateGrid)
+    calculateGrid() // Initial calculation (immediate)
+
+    const resizeObserver = new ResizeObserver(debouncedCalculateGrid)
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current)
     }
@@ -145,7 +175,7 @@ export function HomePage() {
     // Mark as used
     albums.forEach(album => usedAlbumIds.current.add(album.id))
     return albums
-  }, [recentAlbums, allAlbums, cols])
+  }, [recentAlbums, allAlbums]) // Performance: Removed cols - not used in computation
 
   // Get albums for "On repeat" section - albums played 3+ times in last 2 weeks
   // Generate larger pool (30) to support bigger viewports and resizes
@@ -155,7 +185,7 @@ export function HomePage() {
     // Use ordered selection to maintain play count order - generate pool of 30
     const selected = selectAlbumsFromOrderedIds(allAlbums, onRepeatAlbumIds, 30, usedAlbumIds.current)
     return selected
-  }, [allAlbums, onRepeatAlbumIds, cols])
+  }, [allAlbums, onRepeatAlbumIds]) // Performance: Removed cols - not used in computation
 
   // Get albums for "Time capsule" section - albums played 2-6 months ago but not recently
   // Generate larger pool (30) to support bigger viewports and resizes
@@ -172,7 +202,7 @@ export function HomePage() {
     // Mark as used
     selected.forEach(album => usedAlbumIds.current.add(album.id))
     return selected
-  }, [allAlbums, timeCapsuleAlbumIds, cols])
+  }, [allAlbums, timeCapsuleAlbumIds]) // Performance: Removed cols - not used in computation
 
   // Get albums for "Don't forget about" section - albums NOT in recent history
   // Generate larger pool (30) to support bigger viewports and resizes
@@ -191,22 +221,16 @@ export function HomePage() {
     // Mark as used
     selected.forEach(album => usedAlbumIds.current.add(album.id))
     return selected
-  }, [allAlbums, recentAlbumIds, timeCapsuleAlbums, cols])
+  }, [allAlbums, recentAlbumIds, timeCapsuleAlbums]) // Performance: Removed cols - not used in computation
 
   // Get random albums for the bottom section - exclude already used albums
   // Generate larger pool (100) to support very wide viewports and resizes
-  const crateDiggingAlbums = useMemo(() => {
+  const crateDiggingAlbumsPool = useMemo(() => {
     if (allAlbums.length === 0) return []
 
-    // Calculate maximum albums needed for bottom section
-    // On very wide viewports (4K), we might need 70+ albums
-    const albumRows = bottomSectionRows - 1 // Subtract heading row
-    const albumsPerRow = Math.floor(cols / 2) // 2×2 albums
-    const albumRowsAvailable = Math.floor(albumRows / 2)
-    const albumsNeeded = albumsPerRow * albumRowsAvailable
-
-    // Generate larger pool (up to 100) to handle viewport resizes
-    const maxAlbumsToGenerate = Math.max(albumsNeeded * 2, 100)
+    // Generate fixed pool of 100 albums to handle any viewport size
+    // This avoids recalculation on window resize
+    const maxAlbumsToGenerate = 100
 
     // Filter out already used albums
     const availableAlbums = allAlbums.filter(album => !usedAlbumIds.current.has(album.id))
@@ -216,7 +240,14 @@ export function HomePage() {
     // Mark as used
     selected.forEach(album => usedAlbumIds.current.add(album.id))
     return selected
-  }, [allAlbums, cols, bottomSectionRows, jumpBackAlbums, onRepeatAlbums, timeCapsuleAlbums, forgottenAlbums])
+  }, [allAlbums, jumpBackAlbums, onRepeatAlbums, timeCapsuleAlbums, forgottenAlbums]) // Performance: Removed cols - not used in computation
+
+  // Slice pool to actual needed size during render (not in memo)
+  const albumRows = bottomSectionRows - 1 // Subtract heading row
+  const albumsPerRow = Math.floor(cols / 2) // 2×2 albums
+  const albumRowsAvailable = Math.floor(albumRows / 2)
+  const albumsNeeded = albumsPerRow * albumRowsAvailable
+  const crateDiggingAlbums = crateDiggingAlbumsPool.slice(0, albumsNeeded)
 
   // Generate bento sections based on grid dimensions
   const sections = useMemo(() => {
@@ -670,7 +701,7 @@ export function HomePage() {
     const spaceUsagePercent = ((occupiedSpaceInAvailable / totalAvailableSpace) * 100).toFixed(1)
 
     // Log section count and space usage for debugging
-    console.log(`Generated ${sections.length} sections (min: ${MIN_SECTIONS}, max: ${MAX_SECTIONS}) - Space usage: ${spaceUsagePercent}%`)
+    debug.log(`Generated ${sections.length} sections (min: ${MIN_SECTIONS}, max: ${MAX_SECTIONS}) - Space usage: ${spaceUsagePercent}%`)
 
     return sections
   }, [rows, cols])
@@ -918,7 +949,7 @@ export function HomePage() {
                           }}
                           onClick={() => {
                             // TODO: Navigate to album page or play
-                            console.log('Clicked album:', album.id)
+                            debug.log('Clicked album:', album.id)
                           }}
                         >
                           <AlbumCard
@@ -951,7 +982,7 @@ export function HomePage() {
                           }}
                           onClick={() => {
                             // TODO: Navigate to album page or play
-                            console.log('Clicked album:', album.id)
+                            debug.log('Clicked album:', album.id)
                           }}
                         >
                           <AlbumCard
@@ -984,7 +1015,7 @@ export function HomePage() {
                           }}
                           onClick={() => {
                             // TODO: Navigate to album page or play
-                            console.log('Clicked album:', album.id)
+                            debug.log('Clicked album:', album.id)
                           }}
                         >
                           <AlbumCard
@@ -1017,7 +1048,7 @@ export function HomePage() {
                           }}
                           onClick={() => {
                             // TODO: Navigate to album page or play
-                            console.log('Clicked album:', album.id)
+                            debug.log('Clicked album:', album.id)
                           }}
                         >
                           <AlbumCard
@@ -1050,7 +1081,7 @@ export function HomePage() {
                           }}
                           onClick={() => {
                             // TODO: Navigate to album page or play
-                            console.log('Clicked album:', album.id)
+                            debug.log('Clicked album:', album.id)
                           }}
                         >
                           <AlbumCard

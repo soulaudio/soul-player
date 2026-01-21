@@ -50,25 +50,10 @@ impl Database {
 
     /// Run database migrations
     async fn run_migrations(pool: &SqlitePool) -> Result<()> {
-        // Embedded migrations for reliability
-        const MIGRATIONS: &[&str] = &[
-            include_str!("../migrations/20250105000001_create_users.sql"),
-            include_str!("../migrations/20250105000002_create_tracks.sql"),
-            include_str!("../migrations/20250105000003_create_playlists.sql"),
-            include_str!("../migrations/20250105000004_create_playlist_tracks.sql"),
-            include_str!("../migrations/20250105000005_create_playlist_shares.sql"),
-            include_str!("../migrations/20250105000006_create_user_credentials.sql"),
-            include_str!("../migrations/20250105000007_create_track_variants.sql"),
-            include_str!("../migrations/20250105000008_create_sync_log.sql"),
-        ];
-
-        for migration in MIGRATIONS {
-            sqlx::query(migration)
-                .execute(pool)
-                .await
-                .map_err(|e| StorageError::Migration(e.to_string()))?;
-        }
-
+        sqlx::migrate!("./migrations")
+            .run(pool)
+            .await
+            .map_err(|e| StorageError::Migration(e.to_string()))?;
         Ok(())
     }
 }

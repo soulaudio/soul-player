@@ -3,9 +3,10 @@
  * Uses BackendContext for data operations
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { Music, Disc3, ListMusic, Users, Search, X, Plus } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
@@ -15,11 +16,13 @@ import { PlaylistCard } from '../components/PlaylistCard'
 import { ArtistCard } from '../components/ArtistCard'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { FeatureGate, usePlatform } from '../contexts/PlatformContext'
-import { useBackend, type BackendAlbum, type BackendArtist, type BackendTrack, type BackendPlaylist } from '../contexts/BackendContext'
+import { type BackendTrack } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { removeConsecutiveDuplicates } from '../utils/queue'
 import { useCreatePlaylist } from '../hooks/queries/usePlaylistMutations'
 import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
+import { useLibraryData } from '../hooks/queries/useLibraryQueries'
+import { debug } from '../utils/debug';
 
 type TabId = 'albums' | 'playlists' | 'artists' | 'tracks'
 
@@ -42,21 +45,30 @@ export function LibraryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as TabId | null
 
-  const backend = useBackend()
+  const queryClient = useQueryClient()
   const commands = usePlayerCommands()
   const { features } = usePlatform()
   const createPlaylistMutation = useCreatePlaylist()
   const deleteTrackMutation = useDeleteTrack()
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [healthWarning, setHealthWarning] = useState<string | null>(null)
-  const [tracks, setTracks] = useState<BackendTrack[]>([])
-  const [albums, setAlbums] = useState<BackendAlbum[]>([])
-  const [artists, setArtists] = useState<BackendArtist[]>([])
-  const [playlists, setPlaylists] = useState<BackendPlaylist[]>([])
+  // Load library data with React Query - progressive loading
+  const {
+    tracks,
+    albums,
+    artists,
+    playlists,
+    health,
+    isTracksLoading,
+    isAlbumsLoading,
+    isArtistsLoading,
+    isPlaylistsLoading,
+    error,
+  } = useLibraryData()
+
   const [activeTab, setActiveTab] = useState<TabId>(tabParam || 'albums')
   const [searchQuery, setSearchQuery] = useState('')
+  // Debounce search query to prevent filtering on every keystroke
+  const deferredSearchQuery = useDeferredValue(searchQuery)
 
   // Add to playlist dialog state
   const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
@@ -64,40 +76,20 @@ export function LibraryPage() {
     title: string
   } | null>(null)
 
-  // Load library data
-  const loadLibrary = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    setHealthWarning(null)
-    try {
-      const [tracksData, albumsData, artistsData, playlistsData, health] = await Promise.all([
-        backend.getAllTracks(),
-        backend.getAllAlbums(),
-        backend.getAllArtists(),
-        backend.getAllPlaylists(),
-        backend.checkDatabaseHealth(),
-      ])
+  // Derive health warning from health data
+  const healthWarning = useMemo(() => {
+    if (!health || health.issues.length === 0) return null
+    return health.issues.join(' ')
+  }, [health])
 
-      setTracks(tracksData)
-      setAlbums(albumsData)
-      setArtists(artistsData)
-      setPlaylists(playlistsData)
-
-      // Check for issues
-      if (health.issues.length > 0) {
-        setHealthWarning(health.issues.join(' '))
-      }
-    } catch (err) {
-      console.error('Failed to load library:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load library')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [backend])
-
-  useEffect(() => {
-    loadLibrary()
-  }, [loadLibrary])
+  // Refresh library data (invalidate queries)
+  const refreshLibrary = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['tracks'] })
+    queryClient.invalidateQueries({ queryKey: ['albums'] })
+    queryClient.invalidateQueries({ queryKey: ['artists'] })
+    queryClient.invalidateQueries({ queryKey: ['playlists'] })
+    queryClient.invalidateQueries({ queryKey: ['library'] })
+  }, [queryClient])
 
   // Update active tab when URL param changes
   useEffect(() => {
@@ -117,39 +109,39 @@ export function LibraryPage() {
     }
   }
 
-  // Filter data by search query
+  // Filter data by search query (using deferred value for debouncing)
   const filteredAlbums = useMemo(() => {
-    if (!searchQuery.trim()) return albums
-    const query = searchQuery.toLowerCase()
+    if (!deferredSearchQuery.trim()) return albums
+    const query = deferredSearchQuery.toLowerCase()
     return albums.filter(
       a =>
         a.title.toLowerCase().includes(query) ||
         (a.artist_name || '').toLowerCase().includes(query)
     )
-  }, [albums, searchQuery])
+  }, [albums, deferredSearchQuery])
 
   const filteredArtists = useMemo(() => {
-    if (!searchQuery.trim()) return artists
-    const query = searchQuery.toLowerCase()
+    if (!deferredSearchQuery.trim()) return artists
+    const query = deferredSearchQuery.toLowerCase()
     return artists.filter(a => a.name.toLowerCase().includes(query))
-  }, [artists, searchQuery])
+  }, [artists, deferredSearchQuery])
 
   const filteredTracks = useMemo(() => {
-    if (!searchQuery.trim()) return tracks
-    const query = searchQuery.toLowerCase()
+    if (!deferredSearchQuery.trim()) return tracks
+    const query = deferredSearchQuery.toLowerCase()
     return tracks.filter(
       t =>
         t.title?.toLowerCase().includes(query) ||
         (t.artist_name || '').toLowerCase().includes(query) ||
         (t.album_title || '').toLowerCase().includes(query)
     )
-  }, [tracks, searchQuery])
+  }, [tracks, deferredSearchQuery])
 
   const filteredPlaylists = useMemo(() => {
-    if (!searchQuery.trim()) return playlists
-    const query = searchQuery.toLowerCase()
+    if (!deferredSearchQuery.trim()) return playlists
+    const query = deferredSearchQuery.toLowerCase()
     return playlists.filter(p => p.name.toLowerCase().includes(query))
-  }, [playlists, searchQuery])
+  }, [playlists, deferredSearchQuery])
 
   // Build queue from tracks
   const buildQueueFromTracks = useCallback((
@@ -207,7 +199,7 @@ export function LibraryPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addPlayNext(queueTrack)
     } catch (error) {
-      console.error('[LibraryPage] Failed to add track to play next:', error)
+      debug.error('[LibraryPage] Failed to add track to play next:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -216,7 +208,7 @@ export function LibraryPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addToQueueEnd(queueTrack)
     } catch (error) {
-      console.error('[LibraryPage] Failed to add track to queue:', error)
+      debug.error('[LibraryPage] Failed to add track to queue:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -228,33 +220,21 @@ export function LibraryPage() {
           navigate(`/playlists/${playlist.id}`)
         },
         onError: (err) => {
-          console.error('Failed to create playlist:', err)
+          debug.error('Failed to create playlist:', err)
         },
       }
     )
   }
 
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">{t('common.loading')}</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Error state
-  if (error) {
+  // Error state - only show if ALL queries have failed
+  if (error && !tracks.length && !albums.length && !artists.length && !playlists.length) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-destructive">
           <p className="font-medium mb-2">{t('library.loadFailed')}</p>
-          <p className="text-sm">{error}</p>
+          <p className="text-sm">{error instanceof Error ? error.message : String(error)}</p>
           <button
-            onClick={loadLibrary}
+            onClick={refreshLibrary}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
           >
             {t('common.retry')}
@@ -262,6 +242,22 @@ export function LibraryPage() {
         </div>
       </div>
     )
+  }
+
+  // Helper to determine if current tab is loading
+  const isCurrentTabLoading = () => {
+    switch (activeTab) {
+      case 'albums':
+        return isAlbumsLoading
+      case 'playlists':
+        return isPlaylistsLoading
+      case 'artists':
+        return isArtistsLoading
+      case 'tracks':
+        return isTracksLoading
+      default:
+        return false
+    }
   }
 
   return (
@@ -351,9 +347,19 @@ export function LibraryPage() {
       <div className="flex-1 overflow-auto">
         {/* Albums Tab */}
         {activeTab === 'albums' && (
-          filteredAlbums.length > 0 ? (
+          isAlbumsLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-              {filteredAlbums.map((album) => (
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="aspect-square bg-muted rounded-lg mb-2"></div>
+                  <div className="h-4 bg-muted rounded w-3/4 mb-1"></div>
+                  <div className="h-3 bg-muted rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          ) : filteredAlbums.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+              {filteredAlbums.map((album, index) => (
                 <AlbumCard
                   key={album.id}
                   album={{
@@ -366,6 +372,7 @@ export function LibraryPage() {
                   }}
                   showArtist={true}
                   className="w-full"
+                  priority={index < 20}
                 />
               ))}
             </div>
@@ -384,13 +391,24 @@ export function LibraryPage() {
 
         {/* Playlists Tab */}
         {activeTab === 'playlists' && (
-          filteredPlaylists.length > 0 ? (
+          isPlaylistsLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-              {filteredPlaylists.map((playlist) => (
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="aspect-square bg-muted rounded-lg mb-2"></div>
+                  <div className="h-4 bg-muted rounded w-3/4 mb-1"></div>
+                  <div className="h-3 bg-muted rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          ) : filteredPlaylists.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+              {filteredPlaylists.map((playlist, index) => (
                 <PlaylistCard
                   key={playlist.id}
                   playlist={playlist}
                   className="w-full"
+                  priority={index < 20}
                 />
               ))}
             </div>
@@ -417,12 +435,23 @@ export function LibraryPage() {
 
         {/* Artists Tab */}
         {activeTab === 'artists' && (
-          filteredArtists.length > 0 ? (
+          isArtistsLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-              {filteredArtists.map((artist) => (
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="aspect-square bg-muted rounded-full mb-2"></div>
+                  <div className="h-4 bg-muted rounded w-3/4 mb-1"></div>
+                  <div className="h-3 bg-muted rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          ) : filteredArtists.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+              {filteredArtists.map((artist, index) => (
                 <ArtistCard
                   key={artist.id}
                   artist={artist}
+                  priority={index < 20}
                 />
               ))}
             </div>
@@ -441,7 +470,20 @@ export function LibraryPage() {
 
         {/* Tracks Tab */}
         {activeTab === 'tracks' && (
-          filteredTracks.length > 0 ? (
+          isTracksLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 p-3 animate-pulse">
+                  <div className="w-10 h-10 bg-muted rounded"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-muted rounded w-1/3 mb-2"></div>
+                    <div className="h-3 bg-muted rounded w-1/4"></div>
+                  </div>
+                  <div className="h-3 bg-muted rounded w-16"></div>
+                </div>
+              ))}
+            </div>
+          ) : filteredTracks.length > 0 ? (
             <TrackList
               tracks={filteredTracks.map(t => ({
                 id: t.id,
@@ -459,6 +501,8 @@ export function LibraryPage() {
                 channels: t.channels,
               }))}
               buildQueue={buildQueue}
+              virtualized={filteredTracks.length > 100}
+              virtualItemSize={56}
               renderMenu={(track) => {
                 const backendTrack = filteredTracks.find(t => t.id === track.id)
                 if (!backendTrack) return null
@@ -475,7 +519,7 @@ export function LibraryPage() {
                     }}
                     onDelete={() => {
                       deleteTrackMutation.mutate(backendTrack.id, {
-                        onSuccess: () => loadLibrary()
+                        onSuccess: () => refreshLibrary()
                       })
                     }}
                   />

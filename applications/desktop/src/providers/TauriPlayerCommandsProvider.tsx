@@ -30,6 +30,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
   useEffect(() => {
     console.log('[TauriPlayerCommandsProvider] Setting up playback event listeners');
 
+    // Store unlisten functions for cleanup
+    const unlistenFunctions: (() => void)[] = [];
+    let isMounted = true;
+
     // Sync initial state from backend on mount
     // This ensures the UI reflects the actual audio layer state
     const syncInitialState = async () => {
@@ -39,6 +43,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           invoke<string>('get_shuffle'),
           invoke<string>('get_repeat')
         ]);
+
+        // Only update if component is still mounted
+        if (!isMounted) return;
+
         const isPlaying = state === 'Playing';
         console.log('[TauriPlayerCommandsProvider] Initial state sync:', state, '-> isPlaying:', isPlaying, 'shuffle:', shuffleMode, 'repeat:', repeatMode);
         usePlayerStore.setState({
@@ -50,76 +58,88 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         console.error('[TauriPlayerCommandsProvider] Failed to sync initial state:', error);
       }
     };
-    syncInitialState();
 
-    // Listen for playback state changes
-    const unlistenStateChanged = listen<string>('playback:state-changed', (event) => {
-      const isPlaying = event.payload === 'Playing';
-      console.log('[TauriPlayerCommandsProvider] State changed event:', event.payload, '-> isPlaying:', isPlaying);
-      usePlayerStore.setState({ isPlaying });
-    });
-
-    // Listen for position updates
-    const unlistenPositionUpdated = listen<number>('playback:position-updated', (event) => {
-      if (shouldIgnorePositionUpdates()) return;
-
-      const positionInSeconds = event.payload;
-      const { duration } = usePlayerStore.getState();
-      const progressPercentage = duration > 0 ? Math.min(100, (positionInSeconds / duration) * 100) : 0;
-      usePlayerStore.setState({ progress: progressPercentage });
-    });
-
-    // Listen for track changes
-    const unlistenTrackChanged = listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string }>('playback:track-changed', (event) => {
-      const trackPayload = event.payload;
-      console.log('[TauriPlayerCommandsProvider] Track changed:', trackPayload);
-      console.log('[TauriPlayerCommandsProvider] coverArtPath:', trackPayload?.coverArtPath);
-      // Only update if track is valid - don't clear current track on null/undefined
-      // (e.g., when skipPrevious is called at the start of queue)
-      if (trackPayload && trackPayload.id) {
-        // Convert id from string to number to match Track type
-        const track = {
-          ...trackPayload,
-          id: parseInt(trackPayload.id, 10),
-        };
-        usePlayerStore.setState({
-          currentTrack: track,
-          duration: track.duration || 0,
-          progress: 0
-        });
-      }
-    });
-
-    // Listen for volume changes (0-100 from backend)
-    const unlistenVolumeChanged = listen<number>('playback:volume-changed', (event) => {
-      usePlayerStore.setState({ volume: event.payload / 100 }); // Convert to 0-1
-    });
-
-    // Listen for queue updates (shuffle changes emit this event)
-    const unlistenQueueUpdated = listen('playback:queue-updated', async () => {
-      // Query and update shuffle mode when queue changes
+    const setupListeners = async () => {
       try {
-        const shuffleMode = await invoke<string>('get_shuffle');
-        usePlayerStore.setState({ shuffleMode: shuffleMode as 'off' | 'random' | 'smart' });
+        // Listen for playback state changes
+        const unlistenStateChanged = await listen<string>('playback:state-changed', (event) => {
+          const isPlaying = event.payload === 'Playing';
+          console.log('[TauriPlayerCommandsProvider] State changed event:', event.payload, '-> isPlaying:', isPlaying);
+          usePlayerStore.setState({ isPlaying });
+        });
+        unlistenFunctions.push(unlistenStateChanged);
+
+        // Listen for position updates
+        const unlistenPositionUpdated = await listen<number>('playback:position-updated', (event) => {
+          if (shouldIgnorePositionUpdates()) return;
+
+          const positionInSeconds = event.payload;
+          const { duration } = usePlayerStore.getState();
+          const progressPercentage = duration > 0 ? Math.min(100, (positionInSeconds / duration) * 100) : 0;
+          usePlayerStore.setState({ progress: progressPercentage });
+        });
+        unlistenFunctions.push(unlistenPositionUpdated);
+
+        // Listen for track changes
+        const unlistenTrackChanged = await listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string }>('playback:track-changed', (event) => {
+          const trackPayload = event.payload;
+          console.log('[TauriPlayerCommandsProvider] Track changed:', trackPayload);
+          console.log('[TauriPlayerCommandsProvider] coverArtPath:', trackPayload?.coverArtPath);
+          // Only update if track is valid - don't clear current track on null/undefined
+          // (e.g., when skipPrevious is called at the start of queue)
+          if (trackPayload && trackPayload.id) {
+            // Convert id from string to number to match Track type
+            const track = {
+              ...trackPayload,
+              id: parseInt(trackPayload.id, 10),
+            };
+            usePlayerStore.setState({
+              currentTrack: track,
+              duration: track.duration || 0,
+              progress: 0
+            });
+          }
+        });
+        unlistenFunctions.push(unlistenTrackChanged);
+
+        // Listen for volume changes (0-100 from backend)
+        const unlistenVolumeChanged = await listen<number>('playback:volume-changed', (event) => {
+          usePlayerStore.setState({ volume: event.payload / 100 }); // Convert to 0-1
+        });
+        unlistenFunctions.push(unlistenVolumeChanged);
+
+        // Listen for queue updates (shuffle changes emit this event)
+        const unlistenQueueUpdated = await listen('playback:queue-updated', async () => {
+          // Query and update shuffle mode when queue changes
+          try {
+            const shuffleMode = await invoke<string>('get_shuffle');
+            usePlayerStore.setState({ shuffleMode: shuffleMode as 'off' | 'random' | 'smart' });
+          } catch (error) {
+            console.error('[TauriPlayerCommandsProvider] Failed to get shuffle mode:', error);
+          }
+        });
+        unlistenFunctions.push(unlistenQueueUpdated);
+
+        // Listen for errors
+        const unlistenError = await listen<string>('playback:error', (event) => {
+          console.error('[TauriPlayerCommandsProvider] Playback error:', event.payload);
+        });
+        unlistenFunctions.push(unlistenError);
+
+        console.log('[TauriPlayerCommandsProvider] All event listeners registered successfully');
       } catch (error) {
-        console.error('[TauriPlayerCommandsProvider] Failed to get shuffle mode:', error);
+        console.error('[TauriPlayerCommandsProvider] Failed to set up event listeners:', error);
       }
-    });
+    };
 
-    // Listen for errors
-    const unlistenError = listen<string>('playback:error', (event) => {
-      console.error('[TauriPlayerCommandsProvider] Playback error:', event.payload);
-    });
+    // Initialize listeners and state in parallel
+    void Promise.all([setupListeners(), syncInitialState()]);
 
-    // Cleanup
+    // Cleanup function
     return () => {
       console.log('[TauriPlayerCommandsProvider] Cleaning up event listeners');
-      unlistenStateChanged.then((fn) => fn());
-      unlistenPositionUpdated.then((fn) => fn());
-      unlistenTrackChanged.then((fn) => fn());
-      unlistenVolumeChanged.then((fn) => fn());
-      unlistenQueueUpdated.then((fn) => fn());
-      unlistenError.then((fn) => fn());
+      isMounted = false;
+      unlistenFunctions.forEach(fn => fn());
     };
   }, []);
 

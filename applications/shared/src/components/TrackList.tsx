@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import { Play, Pause, Music, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { usePlayerStore } from '../stores/player';
@@ -9,6 +9,7 @@ import type { QueueTrack } from '../contexts/PlayerCommandsContext';
 import { Tooltip } from './ui/Tooltip';
 import { ArtistLink } from './ArtistLink';
 import { AlbumLink } from './AlbumLink';
+import { debug } from '../utils/debug';
 
 export type SourceType = 'local' | 'server' | 'cached';
 
@@ -287,7 +288,7 @@ function FormatDropdown({
 }
 
 /** Single track row component - memoized for performance */
-function TrackRow({
+const TrackRowComponent = ({
   group,
   getActiveVersion,
   onVersionSelect,
@@ -366,7 +367,7 @@ function TrackRow({
       <div
         className="flex items-center text-sm text-muted-foreground truncate"
         onClick={(e) => {
-          console.log('[TrackList] Artist cell clicked', {
+          debug.log('[TrackList] Artist cell clicked', {
             artistId: activeVersion.artistId,
             artist: activeVersion.artist
           })
@@ -384,7 +385,7 @@ function TrackRow({
       <div
         className="flex items-center text-sm text-muted-foreground truncate"
         onClick={(e) => {
-          console.log('[TrackList] Album cell clicked', {
+          debug.log('[TrackList] Album cell clicked', {
             albumId: activeVersion.albumId,
             album: activeVersion.album
           })
@@ -417,6 +418,9 @@ function TrackRow({
     </div>
   );
 }
+
+const TrackRow = memo(TrackRowComponent)
+TrackRow.displayName = 'TrackRow'
 
 export function TrackList({
   tracks,
@@ -474,13 +478,13 @@ export function TrackList({
 
     const queue = buildQueue(activeTracks, activeVersion, clickedIndex);
 
-    console.log('[TrackList] Playing queue with', queue.length, 'tracks');
+    debug.log('[TrackList] Playing queue with', queue.length, 'tracks');
 
     try {
       await commands.playQueue(queue, 0);
       onTrackAction?.(activeVersion);
     } catch (error) {
-      console.error('[TrackList] Failed to play track:', error);
+      debug.error('[TrackList] Failed to play track:', error);
     }
   }, [groupedTracks, getActiveVersion, buildQueue, commands, onTrackAction]);
 
@@ -488,7 +492,7 @@ export function TrackList({
     try {
       await commands.pausePlayback();
     } catch (error) {
-      console.error('[TrackList] Failed to pause:', error);
+      debug.error('[TrackList] Failed to pause:', error);
     }
   }, [commands]);
 

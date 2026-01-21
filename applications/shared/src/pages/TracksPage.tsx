@@ -16,6 +16,7 @@ import { removeConsecutiveDuplicates } from '../utils/queue'
 import { useTracks } from '../hooks/queries/useLibraryQueries'
 import { useDatabaseHealth } from '../hooks/queries/useLibraryQueries'
 import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
+import { debug } from '../utils/debug';
 
 export function TracksPage() {
   const { t } = useTranslation()
@@ -120,7 +121,7 @@ export function TracksPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addPlayNext(queueTrack)
     } catch (error) {
-      console.error('[TracksPage] Failed to add track to play next:', error)
+      debug.error('[TracksPage] Failed to add track to play next:', error)
     }
   }, [commands, toQueueTrack])
 
@@ -129,7 +130,7 @@ export function TracksPage() {
       const queueTrack = toQueueTrack(track)
       await commands.addToQueueEnd(queueTrack)
     } catch (error) {
-      console.error('[TracksPage] Failed to add track to queue:', error)
+      debug.error('[TracksPage] Failed to add track to queue:', error)
     }
   }, [commands, toQueueTrack])
 

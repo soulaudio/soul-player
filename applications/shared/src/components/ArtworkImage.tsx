@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, memo, useRef } from 'react';
 import { Music, Users, ListMusic } from 'lucide-react';
 import { ProgressiveImage } from './ProgressiveImage';
+import { debug } from '../utils/debug';
 
 interface ArtworkImageProps {
   trackId?: string | number;
@@ -218,7 +219,7 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
           }
         }
       } catch (err) {
-        console.error('[ArtworkImage] Failed to load artwork:', err);
+        debug.error('[ArtworkImage] Failed to load artwork:', err);
         if (!cancelled) {
           setError(true);
         }

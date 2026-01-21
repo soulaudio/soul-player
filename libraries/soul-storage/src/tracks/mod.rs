@@ -1,5 +1,51 @@
 use soul_core::{error::Result, types::*};
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
+
+/// Helper function to batch fetch track availability data using native IN clause
+/// This is more efficient than JSON serialization + json_each()
+async fn fetch_track_availability(
+    pool: &SqlitePool,
+    track_ids: &[String],
+) -> Result<Vec<(i64, i64, String, Option<String>, Option<String>, Option<i64>)>> {
+    if track_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Build dynamic IN clause with proper parameter binding
+    // e.g., "WHERE track_id IN (?, ?, ?)"
+    let placeholders = track_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "SELECT track_id, source_id, status, local_file_path, server_path, local_file_size \
+         FROM track_sources WHERE track_id IN ({})",
+        placeholders
+    );
+
+    // Build query and bind all track IDs
+    let mut query = sqlx::query(&sql);
+    for track_id in track_ids {
+        // Parse to i64 for binding (track IDs are stored as integers)
+        let track_id_int: i64 = track_id.parse().unwrap_or(0);
+        query = query.bind(track_id_int);
+    }
+
+    // Execute and map results to tuple format matching the old query! output
+    let rows = query.fetch_all(pool).await?;
+    let results = rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<i64, _>("track_id"),
+                row.get::<i64, _>("source_id"),
+                row.get::<String, _>("status"),
+                row.get::<Option<String>, _>("local_file_path"),
+                row.get::<Option<String>, _>("server_path"),
+                row.get::<Option<i64>, _>("local_file_size"),
+            )
+        })
+        .collect();
+
+    Ok(results)
+}
 
 /// Get all tracks with denormalized artist/album names
 /// Supports optional pagination via limit and after_id (cursor-based)
@@ -194,33 +240,25 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for matched tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for matched tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -365,33 +403,25 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -467,33 +497,25 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -569,33 +591,25 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -995,33 +1009,25 @@ pub async fn get_top_tracks_by_artist(
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -1104,33 +1110,25 @@ pub async fn get_recently_played(
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -1307,33 +1305,25 @@ pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Re
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -1416,33 +1406,25 @@ pub async fn get_by_artist_paginated(
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -1525,33 +1507,25 @@ pub async fn get_by_album_paginated(
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -1635,33 +1609,25 @@ pub async fn get_by_playlist_paginated(
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -2012,33 +1978,25 @@ pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Ve
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -2126,33 +2084,25 @@ pub async fn get_with_fingerprints(
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -2230,33 +2180,25 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 
@@ -2332,33 +2274,25 @@ pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Resu
 
     // Collect track IDs for batch availability lookup
     let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
-    let track_ids_json = serde_json::to_string(&track_ids).unwrap();
 
-    // Batch fetch availability data for these tracks
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (SELECT value FROM json_each(?))
-        "#,
-        track_ids_json
-    )
-    .fetch_all(pool)
-    .await?;
+    // Batch fetch availability data for these tracks using native IN clause
+    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
         std::collections::HashMap::new();
-    for avail_row in availability_rows {
+    for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
+        availability_rows
+    {
         availability_map
-            .entry(avail_row.track_id.to_string())
+            .entry(track_id.to_string())
             .or_insert_with(Vec::new)
             .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+                source_id,
+                status: parse_availability_status(&status),
+                local_file_path,
+                server_path,
+                local_file_size,
             });
     }
 

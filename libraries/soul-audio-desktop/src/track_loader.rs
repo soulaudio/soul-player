@@ -96,11 +96,11 @@ impl TrackLoader {
         match self.request_tx.try_send(request) {
             Ok(()) => true,
             Err(crossbeam_channel::TrySendError::Full(_)) => {
-                eprintln!("[TrackLoader] Load request queue full, dropping request");
+                tracing::warn!("[TrackLoader] Load request queue full, dropping request");
                 false
             }
             Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
-                eprintln!("[TrackLoader] Load request channel disconnected");
+                tracing::error!("[TrackLoader] Load request channel disconnected");
                 false
             }
         }
@@ -114,7 +114,7 @@ impl TrackLoader {
             Ok(result) => Some(result),
             Err(TryRecvError::Empty) => None,
             Err(TryRecvError::Disconnected) => {
-                eprintln!("[TrackLoader] Result channel disconnected");
+                tracing::error!("[TrackLoader] Result channel disconnected");
                 None
             }
         }
@@ -140,12 +140,12 @@ impl TrackLoader {
         result_tx: Sender<LoadResult>,
         shutdown: Arc<Mutex<bool>>,
     ) {
-        eprintln!("[TrackLoader] Background thread started");
+        tracing::debug!("[TrackLoader] Background thread started");
 
         loop {
             // Check for shutdown
             if *shutdown.lock().unwrap() {
-                eprintln!("[TrackLoader] Shutdown requested, exiting");
+                tracing::debug!("[TrackLoader] Shutdown requested, exiting");
                 break;
             }
 
@@ -153,75 +153,78 @@ impl TrackLoader {
             match request_rx.recv_timeout(std::time::Duration::from_millis(100)) {
                 Ok(request) => {
                     let start = std::time::Instant::now();
-                    eprintln!(
-                        "[TrackLoader] Loading track: {} (preload: {})",
-                        request.track.title, request.is_preload
+                    tracing::info!(
+                        track_title = %request.track.title,
+                        is_preload = request.is_preload,
+                        file_path = %request.path.display(),
+                        "[TrackLoader] Loading track"
                     );
 
                     // This is the slow part - disk I/O!
-                    let result = match LocalAudioSource::new(
-                        &request.path,
-                        request.target_sample_rate,
-                    ) {
-                        Ok(source) => {
-                            let load_duration = start.elapsed();
-                            eprintln!(
-                                "[TrackLoader] Source created for '{}' in {}ms, waiting for buffer...",
-                                request.track.title,
-                                load_duration.as_millis()
-                            );
-
-                            // Wait for buffer to be ready (critical for preventing playback artifacts)
-                            // This blocks until the decoder thread has filled ~500ms of audio
-                            let wait_start = std::time::Instant::now();
-                            let max_wait = std::time::Duration::from_secs(5); // Safety timeout
-
-                            while !source.is_ready() && wait_start.elapsed() < max_wait {
-                                std::thread::sleep(std::time::Duration::from_millis(10));
-                            }
-
-                            let buffer_duration = wait_start.elapsed();
-                            let total_duration = start.elapsed();
-
-                            if source.is_ready() {
-                                eprintln!(
-                                    "[TrackLoader] Buffer ready for '{}' (waited {}ms, total {}ms)",
-                                    request.track.title,
-                                    buffer_duration.as_millis(),
-                                    total_duration.as_millis()
+                    let result =
+                        match LocalAudioSource::new(&request.path, request.target_sample_rate) {
+                            Ok(source) => {
+                                let load_duration = start.elapsed();
+                                tracing::info!(
+                                    track_title = %request.track.title,
+                                    load_duration_ms = load_duration.as_millis(),
+                                    "[TrackLoader] Source created, waiting for buffer"
                                 );
-                            } else {
-                                eprintln!(
-                                    "[TrackLoader] Warning: Buffer timeout for '{}' after {}ms",
-                                    request.track.title,
-                                    buffer_duration.as_millis()
-                                );
-                            }
 
-                            LoadResult {
-                                source: Some(Box::new(source)),
-                                track: request.track,
-                                error: None,
-                                is_preload: request.is_preload,
+                                // Wait for buffer to be ready (critical for preventing playback artifacts)
+                                // This blocks until the decoder thread has filled ~500ms of audio
+                                let wait_start = std::time::Instant::now();
+                                let max_wait = std::time::Duration::from_secs(5); // Safety timeout
+
+                                while !source.is_ready() && wait_start.elapsed() < max_wait {
+                                    std::thread::sleep(std::time::Duration::from_millis(10));
+                                }
+
+                                let buffer_duration = wait_start.elapsed();
+                                let total_duration = start.elapsed();
+
+                                if source.is_ready() {
+                                    tracing::info!(
+                                        track_title = %request.track.title,
+                                        buffer_wait_ms = buffer_duration.as_millis(),
+                                        total_duration_ms = total_duration.as_millis(),
+                                        "[TrackLoader] Buffer ready"
+                                    );
+                                } else {
+                                    tracing::warn!(
+                                        track_title = %request.track.title,
+                                        buffer_wait_ms = buffer_duration.as_millis(),
+                                        "[TrackLoader] Buffer timeout"
+                                    );
+                                }
+
+                                LoadResult {
+                                    source: Some(Box::new(source)),
+                                    track: request.track,
+                                    error: None,
+                                    is_preload: request.is_preload,
+                                }
                             }
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "[TrackLoader] Failed to load '{}': {}",
-                                request.track.title, e
-                            );
-                            LoadResult {
-                                source: None,
-                                track: request.track,
-                                error: Some(e.to_string()),
-                                is_preload: request.is_preload,
+                            Err(e) => {
+                                let total_duration = start.elapsed();
+                                tracing::error!(
+                                    track_title = %request.track.title,
+                                    error = %e,
+                                    duration_ms = total_duration.as_millis(),
+                                    "[TrackLoader] Failed to load track"
+                                );
+                                LoadResult {
+                                    source: None,
+                                    track: request.track,
+                                    error: Some(e.to_string()),
+                                    is_preload: request.is_preload,
+                                }
                             }
-                        }
-                    };
+                        };
 
                     // Send result back
                     if result_tx.send(result).is_err() {
-                        eprintln!("[TrackLoader] Failed to send load result, channel closed");
+                        tracing::error!("[TrackLoader] Failed to send load result, channel closed");
                         break;
                     }
                 }
@@ -229,13 +232,13 @@ impl TrackLoader {
                     // No request, continue loop (will check shutdown flag)
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                    eprintln!("[TrackLoader] Request channel disconnected, exiting");
+                    tracing::debug!("[TrackLoader] Request channel disconnected, exiting");
                     break;
                 }
             }
         }
 
-        eprintln!("[TrackLoader] Background thread exiting");
+        tracing::debug!("[TrackLoader] Background thread exiting");
     }
 }
 

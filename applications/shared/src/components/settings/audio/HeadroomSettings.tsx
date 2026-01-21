@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Info, AlertTriangle, Volume2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { debug } from '../../../utils/debug';
 
 interface HeadroomMode {
   mode: string; // 'auto' | 'manual' | 'disabled'
@@ -65,7 +66,7 @@ export function HeadroomSettings({
         setLocalManualDb(result.mode.manualDb);
       }
     } catch (error) {
-      console.error('Failed to load headroom settings:', error);
+      debug.error('Failed to load headroom settings:', error);
     }
   };
 
@@ -95,7 +96,7 @@ export function HeadroomSettings({
 
       await loadSettings();
     } catch (error) {
-      console.error('Failed to set headroom mode:', error);
+      debug.error('Failed to set headroom mode:', error);
     } finally {
       setIsLoading(false);
     }
@@ -112,7 +113,7 @@ export function HeadroomSettings({
         }
         await loadSettings();
       } catch (error) {
-        console.error('Failed to set manual headroom:', error);
+        debug.error('Failed to set manual headroom:', error);
       }
     }
   };
@@ -125,7 +126,7 @@ export function HeadroomSettings({
       }
       await loadSettings();
     } catch (error) {
-      console.error('Failed to toggle headroom:', error);
+      debug.error('Failed to toggle headroom:', error);
     }
   };
 

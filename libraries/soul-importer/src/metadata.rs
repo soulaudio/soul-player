@@ -305,20 +305,20 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
             }
 
             if has_corrupted_data {
-                eprintln!(
-                    "[metadata] Corrupted encoding detected (contains '?') for {:?}, using folder fallback: folder='{}' -> artist={:?}, album={:?}",
-                    path.file_name(),
-                    name,
-                    parsed.artist,
-                    parsed.album
+                tracing::warn!(
+                    file = ?path.file_name(),
+                    folder = %name,
+                    artist = ?parsed.artist,
+                    album = ?parsed.album,
+                    "[metadata] Corrupted encoding detected (contains '?'), using folder fallback"
                 );
             } else {
-                eprintln!(
-                    "[metadata] Folder fallback for {:?}: folder='{}' -> artist={:?}, album={:?}",
-                    path.file_name(),
-                    name,
-                    parsed.artist,
-                    parsed.album
+                tracing::debug!(
+                    file = ?path.file_name(),
+                    folder = %name,
+                    artist = ?parsed.artist,
+                    album = ?parsed.album,
+                    "[metadata] Folder fallback"
                 );
             }
             Some(parsed)
@@ -326,11 +326,11 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
             None
         }
     } else {
-        eprintln!(
-            "[metadata] Tags found for {:?}: artist={:?}, album={:?}",
-            path.file_name(),
-            artist,
-            album
+        tracing::debug!(
+            file = ?path.file_name(),
+            artist = ?artist,
+            album = ?album,
+            "[metadata] Tags found"
         );
         None
     };

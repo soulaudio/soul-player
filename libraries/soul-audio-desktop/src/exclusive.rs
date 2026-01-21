@@ -522,7 +522,7 @@ impl ExclusiveOutput {
         device.build_output_stream(
             config,
             move |data: &mut [i16], _| Self::callback_i16(data, &state),
-            |err| eprintln!("Audio error: {}", err),
+            |err| tracing::error!(error = %err, "[Exclusive] Audio stream error"),
             None,
         )
     }
@@ -537,7 +537,7 @@ impl ExclusiveOutput {
         device.build_output_stream(
             config,
             move |data: &mut [i32], _| Self::callback_i32(data, &state),
-            |err| eprintln!("Audio error: {}", err),
+            |err| tracing::error!(error = %err, "[Exclusive] Audio stream error"),
             None,
         )
     }
@@ -552,7 +552,7 @@ impl ExclusiveOutput {
         device.build_output_stream(
             config,
             move |data: &mut [f32], _| Self::callback_f32(data, &state),
-            |err| eprintln!("Audio error: {}", err),
+            |err| tracing::error!(error = %err, "[Exclusive] Audio stream error"),
             None,
         )
     }
@@ -567,7 +567,7 @@ impl ExclusiveOutput {
         device.build_output_stream(
             config,
             move |data: &mut [f64], _| Self::callback_f64(data, &state),
-            |err| eprintln!("Audio error: {}", err),
+            |err| tracing::error!(error = %err, "[Exclusive] Audio stream error"),
             None,
         )
     }
@@ -985,7 +985,10 @@ mod tests {
             }
             Err(e) => {
                 // Other errors might be acceptable in CI
-                eprintln!("Exclusive output creation error (expected in CI): {}", e);
+                tracing::warn!(
+                    error = %e,
+                    "[Test] Exclusive output creation error (expected in CI)"
+                );
             }
         }
     }

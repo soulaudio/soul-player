@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Info, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { debug } from '../../../../utils/debug';
 
 export interface LimiterSettings {
   thresholdDb: number;
@@ -47,7 +48,7 @@ export function LimiterEditor({ settings, onSettingsChange, slotIndex: _slotInde
         const backendPresets = await invoke<[string, LimiterSettings][]>('get_limiter_presets');
         setPresets(backendPresets.map(([name, settings]) => ({ name, settings })));
       } catch (error) {
-        console.error('Failed to load limiter presets:', error);
+        debug.error('Failed to load limiter presets:', error);
       }
     };
     loadPresets();

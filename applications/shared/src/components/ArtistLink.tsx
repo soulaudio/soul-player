@@ -5,6 +5,7 @@
 
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
+import { debug } from '../utils/debug';
 
 export interface ArtistLinkProps {
   /** Artist ID - if missing, link will be disabled */
@@ -33,20 +34,20 @@ export function ArtistLink({
   const isClickable = !!artistId
 
   const handleClick = (e: React.MouseEvent) => {
-    console.log('[ArtistLink] handleClick called!', { artistId, artistName, isClickable })
+    debug.log('[ArtistLink] handleClick called!', { artistId, artistName, isClickable })
 
     if (onClick) {
-      console.log('[ArtistLink] Custom onClick provided')
+      debug.log('[ArtistLink] Custom onClick provided')
       onClick(e)
       return
     }
 
     if (!isClickable) {
-      console.log('[ArtistLink] Not clickable - no artistId')
+      debug.log('[ArtistLink] Not clickable - no artistId')
       return
     }
 
-    console.log('[ArtistLink] Navigating to /artists/' + artistId)
+    debug.log('[ArtistLink] Navigating to /artists/' + artistId)
     navigate(`/artists/${artistId}`)
   }
 

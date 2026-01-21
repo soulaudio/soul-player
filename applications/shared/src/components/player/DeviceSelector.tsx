@@ -12,6 +12,7 @@ import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
 import { usePlayerStore } from '../../stores/player';
+import { debug } from '../../utils/debug';
 
 interface AudioDevice {
   name: string;
@@ -88,10 +89,10 @@ export function DeviceSelector() {
     try {
       if (!commands?.getCurrentAudioDevice) return;
       const device = await commands.getCurrentAudioDevice();
-      console.log('[DeviceSelector] Loaded current device:', device?.name, 'at', device?.sampleRate, 'Hz');
+      debug.log('[DeviceSelector] Loaded current device:', device?.name, 'at', device?.sampleRate, 'Hz');
       setCurrentDevice(device);
     } catch (error) {
-      console.error('[DeviceSelector] Failed to load current device:', error);
+      debug.error('[DeviceSelector] Failed to load current device:', error);
     }
   }, [commands]);
 
@@ -124,7 +125,7 @@ export function DeviceSelector() {
               const backendDevices = await commands.getAudioDevices(backend.backend);
               deviceMap.set(backend.backend, backendDevices);
             } catch (error) {
-              console.error(`[DeviceSelector] Failed to load devices for ${backend.backend}:`, error);
+              debug.error(`[DeviceSelector] Failed to load devices for ${backend.backend}:`, error);
             }
           }
         }
@@ -132,7 +133,7 @@ export function DeviceSelector() {
         setDevices(deviceMap);
       }
     } catch (error) {
-      console.error('[DeviceSelector] Failed to load devices:', error);
+      debug.error('[DeviceSelector] Failed to load devices:', error);
     } finally {
       isLoadingRef.current = false;
       setIsLoading(false);
@@ -162,12 +163,12 @@ export function DeviceSelector() {
 
         const unlisten = await listen<{ from: number; to: number }>('playback:sample-rate-changed', (event) => {
           if (!mounted) return;
-          console.log('[DeviceSelector] Sample rate changed:', event.payload.from, 'Hz ->', event.payload.to, 'Hz');
+          debug.log('[DeviceSelector] Sample rate changed:', event.payload.from, 'Hz ->', event.payload.to, 'Hz');
           // Refresh current device to get updated sample rate
           loadCurrentDevice();
           // Also refresh device list if dropdown is open (using ref to get current value)
           if (isOpenRef.current) {
-            console.log('[DeviceSelector] Dropdown is open, refreshing device list');
+            debug.log('[DeviceSelector] Dropdown is open, refreshing device list');
             loadDevicesCallback();
           }
         });
@@ -175,7 +176,7 @@ export function DeviceSelector() {
         unlistenFn = unlisten;
       } catch (error) {
         // Tauri not available (browser mode), ignore
-        console.log('[DeviceSelector] Tauri event listener not available');
+        debug.log('[DeviceSelector] Tauri event listener not available');
       }
     };
 
@@ -210,13 +211,13 @@ export function DeviceSelector() {
       if (commands?.getPlaybackState) {
         const state = await commands.getPlaybackState();
         const isPlaying = state === 'Playing';
-        console.log('[DeviceSelector] Syncing playback state after device switch:', state, '-> isPlaying:', isPlaying);
+        debug.log('[DeviceSelector] Syncing playback state after device switch:', state, '-> isPlaying:', isPlaying);
         usePlayerStore.setState({ isPlaying });
       }
 
-      console.log('[DeviceSelector] Switched to:', backend, deviceName);
+      debug.log('[DeviceSelector] Switched to:', backend, deviceName);
     } catch (error) {
-      console.error('[DeviceSelector] Failed to switch device:', error);
+      debug.error('[DeviceSelector] Failed to switch device:', error);
     }
   };
 

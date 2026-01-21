@@ -5,6 +5,7 @@
 
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
+import { debug } from '../utils/debug';
 
 export interface AlbumLinkProps {
   /** Album ID - if missing, link will be disabled */
@@ -30,7 +31,7 @@ export function AlbumLink({
   const isClickable = !!albumId
 
   const handleClick = (e: React.MouseEvent) => {
-    console.log('[AlbumLink] Click detected', { albumId, albumName })
+    debug.log('[AlbumLink] Click detected', { albumId, albumName })
 
     e.stopPropagation() // Prevent triggering parent click handlers (e.g., row click)
 
@@ -40,11 +41,11 @@ export function AlbumLink({
     }
 
     if (!isClickable) {
-      console.log('[AlbumLink] Not clickable - no albumId')
+      debug.log('[AlbumLink] Not clickable - no albumId')
       return
     }
 
-    console.log('[AlbumLink] Navigating to album:', albumId)
+    debug.log('[AlbumLink] Navigating to album:', albumId)
     navigate(`/albums/${albumId}`)
   }
 

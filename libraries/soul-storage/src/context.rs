@@ -52,7 +52,7 @@ impl StorageContext for LocalStorageContext {
 
     // Tracks
     async fn get_all_tracks(&self) -> Result<Vec<Track>> {
-        tracks::get_all(&self.pool).await
+        tracks::get_all(&self.pool, None, None).await
     }
 
     async fn get_track_by_id(&self, id: TrackId) -> Result<Option<Track>> {

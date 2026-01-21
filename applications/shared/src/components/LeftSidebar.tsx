@@ -34,6 +34,7 @@ import { cn } from '../lib/utils';
 import { usePlatform } from '../contexts/PlatformContext';
 import { useBackend } from '../contexts/BackendContext';
 import { useResizableSidebar } from '../hooks/useResizableSidebar';
+import { debug } from '../utils/debug';
 
 interface NavItem {
   id: string;
@@ -237,7 +238,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         .then((value) => {
           setHomeEnabled(value ?? true)
         })
-        .catch(err => console.error('Failed to load home.enabled setting:', err))
+        .catch(err => debug.error('Failed to load home.enabled setting:', err))
     }
 
     // Load on mount
@@ -260,7 +261,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   useEffect(() => {
     backend.getVersion()
       .then(v => setVersion(v))
-      .catch(err => console.error('Failed to load version:', err))
+      .catch(err => debug.error('Failed to load version:', err))
   }, [backend]);
 
   const loadCurrentDevice = async () => {
@@ -269,7 +270,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
       const device = await commands.getCurrentAudioDevice();
       setCurrentDevice(device);
     } catch (error) {
-      console.error('[LeftSidebar] Failed to load current device:', error);
+      debug.error('[LeftSidebar] Failed to load current device:', error);
     }
   };
 
@@ -298,14 +299,14 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
               const backendDevices = await commands.getAudioDevices(backend.backend);
               deviceMap.set(backend.backend, backendDevices);
             } catch (error) {
-              console.error(`[LeftSidebar] Failed to load devices for ${backend.backend}:`, error);
+              debug.error(`[LeftSidebar] Failed to load devices for ${backend.backend}:`, error);
             }
           }
         }
         setDevices(deviceMap);
       }
     } catch (error) {
-      console.error('[LeftSidebar] Failed to load devices:', error);
+      debug.error('[LeftSidebar] Failed to load devices:', error);
     } finally {
       setIsLoadingDevices(false);
     }
@@ -324,7 +325,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
       await commands.setAudioDevice(backend, deviceName);
       await loadCurrentDevice();
     } catch (error) {
-      console.error('[LeftSidebar] Failed to switch device:', error);
+      debug.error('[LeftSidebar] Failed to switch device:', error);
     }
   };
 
@@ -333,7 +334,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
       const queueData = await commands.getQueue();
       setQueue(queueData);
     } catch (error) {
-      console.error('[LeftSidebar] Failed to load queue:', error);
+      debug.error('[LeftSidebar] Failed to load queue:', error);
     }
   };
 
@@ -341,7 +342,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     try {
       await commands.skipToQueueIndex(originalIndex);
     } catch (error) {
-      console.error('[LeftSidebar] Failed to skip to queue index:', error);
+      debug.error('[LeftSidebar] Failed to skip to queue index:', error);
     }
   };
 
@@ -353,7 +354,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         await commands.resumePlayback();
       }
     } catch (error) {
-      console.error('[LeftSidebar] Failed to toggle playback:', error);
+      debug.error('[LeftSidebar] Failed to toggle playback:', error);
     }
   }, [isPlaying, commands]);
 
@@ -361,7 +362,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     try {
       await commands.skipPrevious();
     } catch (error) {
-      console.error('[LeftSidebar] Failed to skip previous:', error);
+      debug.error('[LeftSidebar] Failed to skip previous:', error);
     }
   }, [commands]);
 
@@ -369,7 +370,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     try {
       await commands.skipNext();
     } catch (error) {
-      console.error('[LeftSidebar] Failed to skip next:', error);
+      debug.error('[LeftSidebar] Failed to skip next:', error);
     }
   }, [commands]);
 
@@ -383,33 +384,33 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
       try {
         await commands.seek(newPosition);
       } catch (error) {
-        console.error('[LeftSidebar] Failed to seek:', error);
+        debug.error('[LeftSidebar] Failed to seek:', error);
       }
     },
     [duration, commands]
   );
 
   const handleShuffleToggle = async () => {
-    console.log('[LeftSidebar] Current shuffle mode:', shuffleMode);
+    debug.log('[LeftSidebar] Current shuffle mode:', shuffleMode);
     try {
       const newMode = await commands.cycleShuffle();
-      console.log('[LeftSidebar] New shuffle mode from backend:', newMode);
+      debug.log('[LeftSidebar] New shuffle mode from backend:', newMode);
       setShuffleMode(newMode);
     } catch (error) {
-      console.error('[LeftSidebar] Cycle shuffle failed:', error);
+      debug.error('[LeftSidebar] Cycle shuffle failed:', error);
     }
   };
 
   const handleRepeatToggle = async () => {
-    console.log('[LeftSidebar] Current repeat mode:', repeatMode);
+    debug.log('[LeftSidebar] Current repeat mode:', repeatMode);
     const nextMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
-    console.log('[LeftSidebar] Cycling to:', nextMode);
+    debug.log('[LeftSidebar] Cycling to:', nextMode);
     setRepeatMode(nextMode);
     try {
       await commands.setRepeatMode(nextMode);
-      console.log('[LeftSidebar] Repeat mode set successfully');
+      debug.log('[LeftSidebar] Repeat mode set successfully');
     } catch (error) {
-      console.error('[LeftSidebar] Set repeat mode failed:', error);
+      debug.error('[LeftSidebar] Set repeat mode failed:', error);
       const prevMode = nextMode === 'off' ? 'one' : nextMode === 'all' ? 'off' : 'all';
       setRepeatMode(prevMode);
     }
@@ -430,7 +431,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
 
       debounceTimerRef.current = setTimeout(() => {
         commands.setVolume(clampedVolume).catch((error) => {
-          console.error('[LeftSidebar] Set volume failed:', error);
+          debug.error('[LeftSidebar] Set volume failed:', error);
         });
       }, 150);
     },
@@ -454,7 +455,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         setIsMuted(true);
       }
     } catch (error) {
-      console.error('[LeftSidebar] Mute toggle failed:', error);
+      debug.error('[LeftSidebar] Mute toggle failed:', error);
     }
   };
 
