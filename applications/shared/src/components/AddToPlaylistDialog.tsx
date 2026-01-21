@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, ListMusic, Plus, Check, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter } from './ui/Dialog';
 import { useBackend, type BackendPlaylist } from '../contexts/BackendContext';
+import { useAddTrackToPlaylist, useRemoveTrackFromPlaylist, useCreatePlaylist } from '../hooks/queries/usePlaylistMutations';
 
 interface AddToPlaylistDialogProps {
   open: boolean;
@@ -24,9 +25,13 @@ export function AddToPlaylistDialog({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [showNewPlaylistInput, setShowNewPlaylistInput] = useState(false);
+
+  // Mutation hooks with optimistic updates
+  const addTrackMutation = useAddTrackToPlaylist();
+  const removeTrackMutation = useRemoveTrackFromPlaylist();
+  const createPlaylistMutation = useCreatePlaylist();
 
   // Load playlists and which ones contain this track
   useEffect(() => {
@@ -89,48 +94,76 @@ export function AddToPlaylistDialog({
     });
   }, []);
 
-  // Create new playlist
+  // Create new playlist with optimistic update
   const handleCreatePlaylist = async () => {
     if (!newPlaylistName.trim()) return;
 
-    try {
-      const newPlaylist = await backend.createPlaylist(newPlaylistName.trim());
-
-      setPlaylists((prev) => [newPlaylist, ...prev]);
-      setSelectedIds((prev) => new Set([...prev, newPlaylist.id]));
-      setNewPlaylistName('');
-      setShowNewPlaylistInput(false);
-    } catch (error) {
-      console.error('Failed to create playlist:', error);
-    }
+    createPlaylistMutation.mutate(
+      { name: newPlaylistName.trim() },
+      {
+        onSuccess: (newPlaylist) => {
+          setPlaylists((prev) => [newPlaylist, ...prev]);
+          setSelectedIds((prev) => new Set([...prev, newPlaylist.id]));
+          setNewPlaylistName('');
+          setShowNewPlaylistInput(false);
+        },
+        onError: (error) => {
+          console.error('Failed to create playlist:', error);
+        },
+      }
+    );
   };
 
-  // Save changes (add/remove track from playlists)
+  // Save changes (add/remove track from playlists) with optimistic updates
   const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const toAdd = Array.from(selectedIds).filter((id) => !containingPlaylistIds.has(id));
-      const toRemove = Array.from(containingPlaylistIds).filter((id) => !selectedIds.has(id));
+    const toAdd = Array.from(selectedIds).filter((id) => !containingPlaylistIds.has(id));
+    const toRemove = Array.from(containingPlaylistIds).filter((id) => !selectedIds.has(id));
 
-      // Add track to new playlists
-      await Promise.all(
-        toAdd.map((playlistId) =>
-          backend.addTrackToPlaylist(playlistId, trackId)
-        )
-      );
+    // Track pending mutations
+    let pendingCount = toAdd.length + toRemove.length;
+    let hasError = false;
 
-      // Remove track from deselected playlists
-      await Promise.all(
-        toRemove.map((playlistId) =>
-          backend.removeTrackFromPlaylist(playlistId, trackId)
-        )
-      );
+    const onMutationComplete = () => {
+      pendingCount--;
+      if (pendingCount === 0 && !hasError) {
+        onClose();
+      }
+    };
 
-      onClose();
-    } catch (error) {
+    const onError = (error: unknown) => {
+      hasError = true;
       console.error('Failed to save playlist changes:', error);
-    } finally {
-      setIsSaving(false);
+      if (pendingCount === 1) {
+        // Last mutation failed, don't close dialog
+        pendingCount--;
+      }
+    };
+
+    // Add track to new playlists with optimistic updates
+    toAdd.forEach((playlistId) => {
+      addTrackMutation.mutate(
+        { playlistId, trackId },
+        {
+          onSuccess: onMutationComplete,
+          onError,
+        }
+      );
+    });
+
+    // Remove track from deselected playlists with optimistic updates
+    toRemove.forEach((playlistId) => {
+      removeTrackMutation.mutate(
+        { playlistId, trackId },
+        {
+          onSuccess: onMutationComplete,
+          onError,
+        }
+      );
+    });
+
+    // If no changes, close immediately
+    if (pendingCount === 0) {
+      onClose();
     }
   };
 
@@ -302,10 +335,10 @@ export function AddToPlaylistDialog({
           </button>
           <button
             onClick={handleSave}
-            disabled={!hasChanges || isSaving}
+            disabled={!hasChanges || addTrackMutation.isPending || removeTrackMutation.isPending}
             className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            {isSaving ? t('common.saving', 'Saving...') : t('common.done', 'Done')}
+            {addTrackMutation.isPending || removeTrackMutation.isPending ? t('common.saving', 'Saving...') : t('common.done', 'Done')}
           </button>
         </DialogFooter>
       </DialogContent>

@@ -23,6 +23,8 @@ interface VirtualizedGridProps<T> {
   gridClass: string
   /** Number of columns (needed for row calculation) */
   columnCount: number
+  /** Estimated row height in pixels (card height + gap) */
+  rowHeight: number
   /** Loading state */
   isLoading?: boolean
   /** Callback when reaching end (for loading more) */
@@ -37,6 +39,7 @@ export function VirtualizedGrid<T>({
   renderItem,
   gridClass,
   columnCount,
+  rowHeight,
   isLoading,
   onLoadMore,
   loadMoreThreshold = 5,
@@ -57,7 +60,7 @@ export function VirtualizedGrid<T>({
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 280, // Estimated row height (card + gap)
+    estimateSize: () => rowHeight, // Row height based on scale
     overscan: 3, // Render 3 extra rows above/below viewport
   })
 

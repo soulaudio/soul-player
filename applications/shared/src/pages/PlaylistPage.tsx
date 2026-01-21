@@ -3,14 +3,17 @@
  * Shows playlist details with track list
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ArrowLeft, Play, ListMusic, Clock, Trash2, Pencil } from 'lucide-react'
-import { useBackend, type BackendPlaylist, type BackendTrack } from '../contexts/BackendContext'
+import { SkeletonDetailPage } from '../components/SkeletonDetailPage'
+import { useBackend, type BackendTrack } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
+import { usePlaylistWithTracks, usePlaylistArtwork } from '../hooks/queries/useLibraryQueries'
+import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
 import { ConfirmDialog } from '../components/ui/Dialog'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
@@ -25,63 +28,22 @@ export function PlaylistPage() {
   const commands = usePlayerCommands()
   const { features, isDesktop } = usePlatform()
 
-  const [playlist, setPlaylist] = useState<BackendPlaylist | null>(null)
-  const [tracks, setTracks] = useState<BackendTrack[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // React Query hooks - replaces manual loading state
+  const { playlist, tracks = [], isLoading, isError, error, refetch } = usePlaylistWithTracks(id)
+  const deleteTrackMutation = useDeleteTrack()
+
+  // Load playlist artwork separately (only for desktop)
+  const { data: playlistArtworkUrl } = usePlaylistArtwork(isDesktop && id ? id : undefined)
+
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'playlist' | 'track'; trackId?: number } | null>(null)
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
+  const [artworkVersion, setArtworkVersion] = useState(0)
 
   // Add to playlist dialog state
   const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
     id: number
     title: string
   } | null>(null)
-  const [playlistArtworkUrl, setPlaylistArtworkUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!id) return
-    loadPlaylist(id)
-  }, [id])
-
-  // Load playlist artwork
-  const loadPlaylistArtwork = useCallback(async (playlistId: string) => {
-    try {
-      const artwork = await backend.getPlaylistArtwork(playlistId)
-      setPlaylistArtworkUrl(artwork)
-    } catch (err) {
-      console.error('Failed to load playlist artwork:', err)
-    }
-  }, [backend])
-
-  const loadPlaylist = async (playlistId: string) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [playlistData, tracksData] = await Promise.all([
-        backend.getPlaylistById(playlistId),
-        backend.getPlaylistTracks(playlistId),
-      ])
-
-      if (!playlistData) {
-        setError(t('playlist.notFound', 'Playlist not found'))
-        return
-      }
-
-      setPlaylist(playlistData)
-      setTracks(tracksData)
-
-      // Load playlist artwork if on desktop
-      if (isDesktop) {
-        loadPlaylistArtwork(playlistId)
-      }
-    } catch (err) {
-      console.error('Failed to load playlist:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load playlist')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Convert BackendTrack to QueueTrack
   const toQueueTrack = useCallback((track: BackendTrack): QueueTrack => ({
@@ -188,22 +150,19 @@ export function PlaylistPage() {
 
   const totalDuration = tracks.reduce((acc, t) => acc + (t.duration_seconds || 0), 0)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">{t('common.loading', 'Loading...')}</p>
-        </div>
-      </div>
-    )
+  // Loading state - use skeleton
+  if (isLoading) {
+    return <SkeletonDetailPage type="playlist" />
   }
 
-  if (error || !playlist) {
+  // Error state
+  if (isError || !playlist) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-destructive">
-          <p className="font-medium mb-2">{error || t('playlist.notFound', 'Playlist not found')}</p>
+          <p className="font-medium mb-2">
+            {error instanceof Error ? error.message : t('playlist.notFound', 'Playlist not found')}
+          </p>
           <button
             onClick={() => goBack('/library?tab=playlists')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
@@ -216,9 +175,11 @@ export function PlaylistPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="mb-6">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto pr-6">
+        {/* Header */}
+        <div className="mb-6">
         <button
           onClick={() => goBack('/library?tab=playlists')}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
@@ -232,6 +193,7 @@ export function PlaylistPage() {
           <div className="group relative w-48 h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
             {playlistArtworkUrl ? (
               <img
+                key={artworkVersion}
                 src={playlistArtworkUrl}
                 alt={playlist.name}
                 className="w-full h-full object-cover"
@@ -287,10 +249,9 @@ export function PlaylistPage() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* Track List */}
-      <div className="flex-1 overflow-auto">
+        {/* Track List */}
         {tracks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <ListMusic className="w-12 h-12 mb-4 opacity-50" />
@@ -345,9 +306,8 @@ export function PlaylistPage() {
                             title: track.title,
                           })
                         }}
-                        onDelete={async () => {
-                          await backend.deleteTrack(track.id)
-                          if (id) loadPlaylist(id)
+                        onDelete={() => {
+                          deleteTrackMutation.mutate(track.id)
                         }}
                       />
                     </div>
@@ -391,7 +351,7 @@ export function PlaylistPage() {
         entityId={playlist.id}
         entityName={playlist.name}
         currentArtworkUrl={playlistArtworkUrl}
-        onArtworkChanged={() => loadPlaylistArtwork(playlist.id)}
+        onArtworkChanged={() => setArtworkVersion(v => v + 1)}
       />
 
       {/* Add to Playlist Dialog (Desktop only) */}

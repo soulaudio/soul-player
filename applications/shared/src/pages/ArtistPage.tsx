@@ -15,9 +15,12 @@ import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { ViewToggle } from '../components/ViewToggle'
 import { DiscographyListView } from '../components/DiscographyListView'
-import { useBackend, type BackendTrack, type BackendAlbum, type BackendArtist } from '../contexts/BackendContext'
+import { SkeletonDetailPage } from '../components/SkeletonDetailPage'
+import { useBackend, type BackendTrack, type BackendAlbum } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
+import { useArtistWithData, useArtistArtwork } from '../hooks/queries/useArtistQueries'
+import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 
 // Album Card for artist page
@@ -74,14 +77,16 @@ export function ArtistPage() {
   const backend = useBackend()
   const commands = usePlayerCommands()
 
-  const [artist, setArtist] = useState<BackendArtist | null>(null)
-  const [albums, setAlbums] = useState<BackendAlbum[]>([])
-  const [tracks, setTracks] = useState<BackendTrack[]>([])
-  const [topTracks, setTopTracks] = useState<BackendTrack[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // React Query hooks - replaces manual loading state
+  const artistId = id ? parseInt(id, 10) : 0
+  const { artist, tracks = [], albums = [], topTracks = [], isLoading, isError, error, refetch } = useArtistWithData(artistId)
+  const deleteTrackMutation = useDeleteTrack()
+
+  // Load artist artwork separately (only for desktop)
+  const { data: artistArtworkUrl } = useArtistArtwork(isDesktop ? artistId : undefined)
+
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
-  const [artistArtworkUrl, setArtistArtworkUrl] = useState<string | null>(null)
+  const [artworkVersion, setArtworkVersion] = useState(0)
 
   // Discography view toggle (grid or list)
   const [discographyView, setDiscographyView] = useState<'grid' | 'list'>(() => {
@@ -99,55 +104,6 @@ export function ArtistPage() {
     id: number
     title: string
   } | null>(null)
-
-  useEffect(() => {
-    if (!id) return
-    loadArtist(parseInt(id, 10))
-  }, [id])
-
-  // Load artist artwork
-  const loadArtistArtwork = useCallback(async (artistId: number) => {
-    try {
-      const artwork = await backend.getArtistArtwork(artistId)
-      setArtistArtworkUrl(artwork)
-    } catch (err) {
-      console.error('Failed to load artist artwork:', err)
-    }
-  }, [backend])
-
-  const loadArtist = async (artistId: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const foundArtist = await backend.getArtistById(artistId)
-      if (!foundArtist) {
-        setError(t('artist.notFound'))
-        return
-      }
-
-      setArtist(foundArtist)
-
-      const [artistTracks, artistAlbums, topTracksData] = await Promise.all([
-        backend.getArtistTracks(artistId),
-        backend.getArtistAlbums(artistId),
-        backend.getArtistTopTracks(artistId, 10),
-      ])
-
-      setTracks(artistTracks)
-      setAlbums(artistAlbums)
-      setTopTracks(topTracksData)
-
-      // Load artist artwork if on desktop
-      if (isDesktop) {
-        loadArtistArtwork(artistId)
-      }
-    } catch (err) {
-      console.error('Failed to load artist:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load artist')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Helper to build queue from tracks
   const buildQueueFromTracks = useCallback(
@@ -253,23 +209,19 @@ export function ArtistPage() {
   }
 
   // Loading state
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">{t('common.loading')}</p>
-        </div>
-      </div>
-    )
+  // Loading state - use skeleton
+  if (isLoading) {
+    return <SkeletonDetailPage type="artist" />
   }
 
   // Error state
-  if (error || !artist) {
+  if (isError || !artist) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-destructive">
-          <p className="font-medium mb-2">{error || t('artist.notFound')}</p>
+          <p className="font-medium mb-2">
+            {error instanceof Error ? error.message : t('artist.notFound')}
+          </p>
           <button
             onClick={() => goBack('/library?tab=artists')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
@@ -300,6 +252,7 @@ export function ArtistPage() {
             <div className="group relative w-32 h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
               {artistArtworkUrl ? (
                 <img
+                  key={artworkVersion}
                   src={artistArtworkUrl}
                   alt={artist.name}
                   className="w-full h-full object-cover"
@@ -377,9 +330,8 @@ export function ArtistPage() {
                       title: backendTrack.title,
                     })
                   }}
-                  onDelete={async () => {
-                    await backend.deleteTrack(backendTrack.id)
-                    if (id) loadArtist(parseInt(id, 10))
+                  onDelete={() => {
+                    deleteTrackMutation.mutate(backendTrack.id)
                   }}
                 />
               )
@@ -430,7 +382,7 @@ export function ArtistPage() {
         entityId={String(artist.id)}
         entityName={artist.name}
         currentArtworkUrl={artistArtworkUrl}
-        onArtworkChanged={() => loadArtistArtwork(artist.id)}
+        onArtworkChanged={() => setArtworkVersion(v => v + 1)}
       />
 
       {/* Add to Playlist Dialog (Desktop only) */}

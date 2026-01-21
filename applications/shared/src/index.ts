@@ -10,6 +10,8 @@ export { useLibraryStore } from './stores/library';
 
 // Hooks
 // export { usePlatform } from './hooks/usePlatform'; // Temporarily disabled due to missing Tauri deps
+export { useAddTrackToPlaylist, useRemoveTrackFromPlaylist, useCreatePlaylist, useDeletePlaylist } from './hooks/queries/usePlaylistMutations';
+export { useDeleteTrack } from './hooks/queries/useTrackMutations';
 
 // Contexts
 export { PlayerCommandsProvider, usePlayerCommands, usePlaybackEvents } from './contexts/PlayerCommandsContext';
@@ -133,6 +135,7 @@ export { VirtualizedGrid } from './components/VirtualizedGrid';
 // Hooks
 export { useSeekBar, setIgnorePositionUpdates, shouldIgnorePositionUpdates } from './hooks/useSeekBar';
 export { useGridScale } from './hooks/useGridScale';
+export { useResponsiveColumns } from './hooks/useResponsiveColumns';
 export { useInfiniteLibrary } from './hooks/useInfiniteLibrary';
 export { useNavigateWithHistory } from './hooks/useNavigateWithHistory';
 

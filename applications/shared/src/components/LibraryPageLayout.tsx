@@ -263,7 +263,7 @@ export function LibraryPageLayout({
       {/* Health warning */}
       <FeatureGate feature="hasHealthCheck">
         {healthWarning && (
-          <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mr-6">
+          <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-5 h-5 rounded-full bg-yellow-500/20 flex items-center justify-center mt-0.5">
                 <span className="text-yellow-600 dark:text-yellow-400 text-sm">!</span>

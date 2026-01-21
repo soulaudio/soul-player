@@ -3,7 +3,7 @@
  * Uses BackendContext for data and PlatformContext for conditional features
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
@@ -14,9 +14,12 @@ import { ArtworkImage } from '../components/ArtworkImage'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { ArtistLink } from '../components/ArtistLink'
-import { useBackend, type BackendTrack, type BackendAlbum } from '../contexts/BackendContext'
+import { SkeletonDetailPage } from '../components/SkeletonDetailPage'
+import { useBackend, type BackendTrack } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
+import { useAlbumWithTracks } from '../hooks/queries/useAlbumQueries'
+import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 
 export function AlbumPage() {
@@ -27,10 +30,11 @@ export function AlbumPage() {
   const backend = useBackend()
   const commands = usePlayerCommands()
 
-  const [album, setAlbum] = useState<BackendAlbum | null>(null)
-  const [tracks, setTracks] = useState<BackendTrack[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // React Query hook - replaces manual loading state
+  const albumId = id ? parseInt(id, 10) : 0
+  const { album, tracks = [], isLoading, isError, error, refetch } = useAlbumWithTracks(albumId)
+  const deleteTrackMutation = useDeleteTrack()
+
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
   const [artworkVersion, setArtworkVersion] = useState(0)
 
@@ -39,32 +43,6 @@ export function AlbumPage() {
     id: number
     title: string
   } | null>(null)
-
-  useEffect(() => {
-    if (!id) return
-    loadAlbum(parseInt(id, 10))
-  }, [id])
-
-  const loadAlbum = async (albumId: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const foundAlbum = await backend.getAlbumById(albumId)
-      if (!foundAlbum) {
-        setError(t('album.notFound'))
-        return
-      }
-
-      setAlbum(foundAlbum)
-      const albumTracks = await backend.getAlbumTracks(albumId)
-      setTracks(albumTracks)
-    } catch (err) {
-      console.error('Failed to load album:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load album')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Helper to build queue from tracks
   const buildQueueFromTracks = useCallback(
@@ -186,24 +164,19 @@ export function AlbumPage() {
     0
   )
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">{t('common.loading')}</p>
-        </div>
-      </div>
-    )
+  // Loading state - use skeleton
+  if (isLoading) {
+    return <SkeletonDetailPage type="album" />
   }
 
   // Error state
-  if (error || !album) {
+  if (isError || !album) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-destructive">
-          <p className="font-medium mb-2">{error || t('album.notFound')}</p>
+          <p className="font-medium mb-2">
+            {error instanceof Error ? error.message : t('album.notFound')}
+          </p>
           <button
             onClick={() => goBack('/library?tab=albums')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
@@ -220,9 +193,11 @@ export function AlbumPage() {
   const hasDesktopArtwork = isDesktop && typeof album.id === 'number'
 
   return (
-    <div className="h-full flex flex-col pr-6">
-      {/* Header */}
-      <div className="mb-6">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto pr-6">
+        {/* Header */}
+        <div className="mb-6">
         <button
           onClick={() => goBack('/library?tab=albums')}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
@@ -294,10 +269,9 @@ export function AlbumPage() {
             </button>
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* Track List */}
-      <div className="flex-1 overflow-auto">
+        {/* Track List */}
         <TrackList
           tracks={tracks.map(t => ({
             id: t.id,
@@ -329,9 +303,8 @@ export function AlbumPage() {
                     title: backendTrack.title,
                   })
                 }}
-                onDelete={async () => {
-                  await backend.deleteTrack(backendTrack.id)
-                  if (id) loadAlbum(parseInt(id, 10))
+                onDelete={() => {
+                  deleteTrackMutation.mutate(backendTrack.id)
                 }}
               />
             )

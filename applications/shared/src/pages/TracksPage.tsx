@@ -2,27 +2,27 @@
  * TracksPage - displays all tracks with search
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Music } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
+import { SkeletonGrid } from '../components/SkeletonGrid'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { removeConsecutiveDuplicates } from '../utils/queue'
+import { useTracks } from '../hooks/queries/useLibraryQueries'
+import { useDatabaseHealth } from '../hooks/queries/useLibraryQueries'
+import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
 
 export function TracksPage() {
   const { t } = useTranslation()
   const backend = useBackend()
   const commands = usePlayerCommands()
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [tracks, setTracks] = useState<BackendTrack[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [healthWarning, setHealthWarning] = useState<string | null>(null)
 
   // Add to playlist dialog state
   const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
@@ -30,31 +30,13 @@ export function TracksPage() {
     title: string
   } | null>(null)
 
-  // Load tracks
-  const loadTracks = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    setHealthWarning(null)
-    try {
-      const [tracksData, health] = await Promise.all([
-        backend.getAllTracks(),
-        backend.checkDatabaseHealth(),
-      ])
-      setTracks(tracksData)
-      if (health.issues.length > 0) {
-        setHealthWarning(health.issues.join(' '))
-      }
-    } catch (err) {
-      console.error('Failed to load tracks:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load tracks')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [backend])
+  // Fetch data using React Query hooks
+  const { data: tracks = [], isLoading, isError, error, refetch } = useTracks()
+  const { data: health } = useDatabaseHealth()
+  const deleteTrackMutation = useDeleteTrack()
 
-  useEffect(() => {
-    loadTracks()
-  }, [loadTracks])
+  // Health warning from database health check
+  const healthWarning = health?.issues.length ? health.issues.join(' ') : null
 
   // Filter tracks by search
   const filteredTracks = useMemo(() => {
@@ -166,17 +148,11 @@ export function TracksPage() {
   // }, [searchQuery, filteredTracks.length])
 
   // Show error in LibraryPageLayout if present
-  const errorContent = error ? (
+  const errorContent = isError ? (
     <div className="flex items-center justify-center py-12">
       <div className="text-center text-destructive">
         <p className="font-medium mb-2">{t('library.loadFailed')}</p>
-        <p className="text-sm">{error}</p>
-        <button
-          onClick={loadTracks}
-          className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-        >
-          {t('common.retry')}
-        </button>
+        <p className="text-sm">{error instanceof Error ? error.message : 'Failed to load tracks'}</p>
       </div>
     </div>
   ) : null
@@ -193,7 +169,9 @@ export function TracksPage() {
       gridClass="grid-cols-1"
       cacheKey="library-tracks-count"
     >
-      {errorContent || (filteredTracks.length > 0 ? (
+      {isLoading ? (
+        <SkeletonGrid count={20} type="track" gridClass="grid-cols-1" />
+      ) : errorContent || (filteredTracks.length > 0 ? (
         <TrackList
           tracks={filteredTracks.map(t => ({
             id: t.id,
@@ -227,9 +205,8 @@ export function TracksPage() {
                     title: backendTrack.title,
                   })
                 }}
-                onDelete={async () => {
-                  await backend.deleteTrack(backendTrack.id)
-                  loadTracks()
+                onDelete={() => {
+                  deleteTrackMutation.mutate(backendTrack.id)
                 }}
               />
             )

@@ -27,6 +27,44 @@ export function useGridScale() {
     localStorage.setItem(STORAGE_KEY, String(scale))
   }, [scale])
 
+  // Keyboard shortcuts: Ctrl+ and Ctrl-
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl/Cmd key
+      const isModifier = e.ctrlKey || e.metaKey
+      if (!isModifier) return
+
+      // Ctrl/Cmd + = or Ctrl/Cmd + + (scale up)
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault()
+        setScale(current => {
+          const currentIndex = SCALE_STEPS.indexOf(current)
+          if (currentIndex === -1) return DEFAULT_SCALE
+          const nextIndex = Math.min(currentIndex + 1, SCALE_STEPS.length - 1)
+          return SCALE_STEPS[nextIndex]
+        })
+      }
+      // Ctrl/Cmd + - (scale down)
+      else if (e.key === '-') {
+        e.preventDefault()
+        setScale(current => {
+          const currentIndex = SCALE_STEPS.indexOf(current)
+          if (currentIndex === -1) return DEFAULT_SCALE
+          const prevIndex = Math.max(currentIndex - 1, 0)
+          return SCALE_STEPS[prevIndex]
+        })
+      }
+      // Ctrl/Cmd + 0 (reset to default)
+      else if (e.key === '0') {
+        e.preventDefault()
+        setScale(DEFAULT_SCALE)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   const scaleUp = useCallback(() => {
     setScale(current => {
       const currentIndex = SCALE_STEPS.indexOf(current)

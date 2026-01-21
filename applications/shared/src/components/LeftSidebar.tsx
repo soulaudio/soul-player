@@ -534,8 +534,8 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         />
       </div>
 
-      {/* Navigation */}
-      <nav className="p-4 pt-6">
+      {/* Navigation - fixed at top */}
+      <nav className="p-4 pt-6 flex-shrink-0">
         <ul className="space-y-0">
           {visibleNavigationItems.map((item) => (
             <li key={item.id}>
@@ -561,20 +561,17 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         </ul>
       </nav>
 
-      {/* Spacer - minimum 100px between navigation and queue */}
-      <div className="min-h-[100px] flex-1" />
-
-      {/* Queue Section - constrained height, always above playback */}
-      <div className="flex flex-col flex-shrink-0">
-        {displayQueue.length > 0 && (
-          <div className="flex flex-col max-h-[280px] group/queue">
-            <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      {/* Queue Section - flexible, fills available space */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {displayQueue.length > 0 ? (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0">
               {t('sidebar.queue')}
             </div>
             {/* Scrollable queue */}
             <div
               ref={queueScrollRef}
-              className="flex-1 overflow-y-auto px-4 pb-2 queue-scrollbar"
+              className="flex-1 overflow-y-auto px-4 pb-2 queue-scrollbar min-h-0"
             >
               <div className="flex flex-col justify-end min-h-full gap-1">
                 {displayQueue.map(({ track, originalIndex }) => (
@@ -591,9 +588,14 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
               </div>
             </div>
           </div>
+        ) : (
+          // Spacer when no queue - only takes available space
+          <div className="flex-1 min-h-0" />
         )}
+      </div>
 
-        {/* Now Playing Section - completely static, fixed at bottom */}
+      {/* Now Playing Section - fixed at bottom, never scrolls */}
+      <div className="flex-shrink-0">
         <div className="p-4">
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
             {t('sidebar.nowPlaying')}

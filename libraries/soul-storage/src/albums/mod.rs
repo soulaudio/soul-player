@@ -75,7 +75,7 @@ pub async fn get_recently_added(pool: &SqlitePool, limit: i64) -> Result<Vec<Alb
     Ok(rows
         .into_iter()
         .map(|row| Album {
-            id: row.id,
+            id: row.id.expect("album id should not be null"),
             title: row.title,
             artist_id: row.artist_id,
             artist_name: row.artist_name,
@@ -111,7 +111,7 @@ pub async fn get_recently_added_within_days(
     Ok(rows
         .into_iter()
         .map(|row| Album {
-            id: row.id,
+            id: row.id.expect("album id should not be null"),
             title: row.title,
             artist_id: row.artist_id,
             artist_name: row.artist_name,

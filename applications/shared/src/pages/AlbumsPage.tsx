@@ -2,71 +2,31 @@
  * AlbumsPage - displays all albums with search and grid scaling
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Disc3 } from 'lucide-react'
 import { AlbumCard } from '../components/AlbumCard'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
-import { useBackend, type BackendAlbum } from '../contexts/BackendContext'
+import { SkeletonGrid } from '../components/SkeletonGrid'
+import { VirtualizedGrid } from '../components/VirtualizedGrid'
 import { useGridScale } from '../hooks/useGridScale'
+import { useResponsiveColumns } from '../hooks/useResponsiveColumns'
+import { useAlbums } from '../hooks/queries/useAlbumQueries'
+import { useDatabaseHealth } from '../hooks/queries/useLibraryQueries'
 
 export function AlbumsPage() {
   const { t } = useTranslation()
-  const backend = useBackend()
-  const { scale, scaleUp, scaleDown } = useGridScale()
+  const { scale } = useGridScale()
+  const columnCount = useResponsiveColumns(scale)
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [albums, setAlbums] = useState<BackendAlbum[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [healthWarning, setHealthWarning] = useState<string | null>(null)
 
-  // Keyboard shortcut for grid scaling
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if in input field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return
-      }
+  // Fetch data using React Query hooks
+  const { data: albums = [], isLoading, isError, error } = useAlbums()
+  const { data: health } = useDatabaseHealth()
 
-      if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
-        e.preventDefault()
-        scaleUp()
-      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
-        e.preventDefault()
-        scaleDown()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [scaleUp, scaleDown])
-
-  // Load albums
-  const loadAlbums = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    setHealthWarning(null)
-    try {
-      const [albumsData, health] = await Promise.all([
-        backend.getAllAlbums(),
-        backend.checkDatabaseHealth(),
-      ])
-      setAlbums(albumsData)
-      if (health.issues.length > 0) {
-        setHealthWarning(health.issues.join(' '))
-      }
-    } catch (err) {
-      console.error('Failed to load albums:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load albums')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [backend])
-
-  useEffect(() => {
-    loadAlbums()
-  }, [loadAlbums])
+  // Health warning from database health check
+  const healthWarning = health?.issues.length ? health.issues.join(' ') : null
 
   // Filter albums by search
   const filteredAlbums = useMemo(() => {
@@ -95,18 +55,31 @@ export function AlbumsPage() {
     }
   }, [scale])
 
+  // Row height for virtualized grid (card height + gap, based on scale)
+  const rowHeight = useMemo(() => {
+    switch (scale) {
+      case 0.75:
+        return 220 // Smaller cards: ~200px card + 16px gap
+      case 1:
+        return 280 // Default: ~260px card + 16px gap
+      case 1.25:
+        return 340 // Medium: ~320px card + 16px gap
+      case 1.5:
+        return 400 // Larger: ~380px card + 16px gap
+      default:
+        return 280
+    }
+  }, [scale])
+
+  // Use virtualization for large collections (>100 items)
+  const shouldVirtualize = filteredAlbums.length > 100
+
   // Show error in LibraryPageLayout if present
-  const errorContent = error ? (
+  const errorContent = isError ? (
     <div className="flex items-center justify-center py-12">
       <div className="text-center text-destructive">
         <p className="font-medium mb-2">{t('library.loadFailed')}</p>
-        <p className="text-sm">{error}</p>
-        <button
-          onClick={loadAlbums}
-          className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-        >
-          {t('common.retry')}
-        </button>
+        <p className="text-sm">{error instanceof Error ? error.message : 'Failed to load albums'}</p>
       </div>
     </div>
   ) : null
@@ -123,25 +96,52 @@ export function AlbumsPage() {
       gridClass={gridClass}
       cacheKey="library-albums-count"
     >
-      {errorContent || (filteredAlbums.length > 0 ? (
-        <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
-          {filteredAlbums.map((album, index) => (
-            <AlbumCard
-              key={album.id}
-              album={{
-                id: album.id,
-                title: album.title,
-                artist_name: album.artist_name,
-                artist_id: album.artist_id,
-                year: album.year,
-                cover_art_path: album.cover_art_path,
-              }}
-              showArtist={true}
-              className="w-full"
-              priority={index < 24}
-            />
-          ))}
-        </div>
+      {isLoading ? (
+        <SkeletonGrid count={24} type="album" gridClass={gridClass} />
+      ) : errorContent || (filteredAlbums.length > 0 ? (
+        shouldVirtualize ? (
+          <VirtualizedGrid
+            items={filteredAlbums}
+            totalCount={filteredAlbums.length}
+            columnCount={columnCount}
+            rowHeight={rowHeight}
+            gridClass={gridClass}
+            renderItem={(album, index) => (
+              <AlbumCard
+                album={{
+                  id: album.id,
+                  title: album.title,
+                  artist_name: album.artist_name,
+                  artist_id: album.artist_id,
+                  year: album.year,
+                  cover_art_path: album.cover_art_path,
+                }}
+                showArtist={true}
+                className="w-full"
+                priority={index < 24}
+              />
+            )}
+          />
+        ) : (
+          <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
+            {filteredAlbums.map((album, index) => (
+              <AlbumCard
+                key={album.id}
+                album={{
+                  id: album.id,
+                  title: album.title,
+                  artist_name: album.artist_name,
+                  artist_id: album.artist_id,
+                  year: album.year,
+                  cover_art_path: album.cover_art_path,
+                }}
+                showArtist={true}
+                className="w-full"
+                priority={index < 24}
+              />
+            ))}
+          </div>
+        )
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Disc3 className="w-12 h-12 mb-4 opacity-50" />

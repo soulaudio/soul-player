@@ -7,7 +7,10 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { useBackend, type BackendAlbum } from '../contexts/BackendContext'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
 import { AlbumCard } from '../components/AlbumCard'
+import { SkeletonGrid } from '../components/SkeletonGrid'
 import { categorizeAlbumsByPlayback, selectAlbumsFromOrderedIds } from '../lib/homePageUtils'
+import { useAlbums } from '../hooks/queries/useAlbumQueries'
+import { useRecentContexts } from '../hooks/queries/useLibraryQueries'
 
 // Section type definition
 interface BentoSection {
@@ -25,54 +28,51 @@ export function HomePage() {
   // Toggle to show/hide debug grid lines
   const SHOW_DEBUG_GRID = false
 
-  const backend = useBackend()
   const { setShowHeader } = useScrollVisibility()
   const containerRef = useRef<HTMLDivElement>(null)
   const [gridDimensions, setGridDimensions] = useState({ rows: 0, cols: 0 })
-  const [allAlbums, setAllAlbums] = useState<BackendAlbum[]>([])
-  const [recentAlbums, setRecentAlbums] = useState<BackendAlbum[]>([])
-  const [recentAlbumIds, setRecentAlbumIds] = useState<Set<number>>(new Set())
-  const [timeCapsuleAlbumIds, setTimeCapsuleAlbumIds] = useState<Set<number>>(new Set())
-  const [onRepeatAlbumIds, setOnRepeatAlbumIds] = useState<number[]>([])
+
+  // Fetch data using React Query hooks
+  const { data: allAlbums = [], isLoading: albumsLoading } = useAlbums()
+  const { data: contexts = [], isLoading: contextsLoading } = useRecentContexts(100)
+
+  const isLoading = albumsLoading || contextsLoading
 
   // Reset scroll visibility when HomePage mounts (fixes header hidden state from library pages)
   useEffect(() => {
     setShowHeader(true)
   }, [setShowHeader])
 
-  // Load all albums and recent contexts
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [albums, contexts] = await Promise.all([
-          backend.getAllAlbums(),
-          backend.getRecentContexts(100) // Get more contexts to find old ones
-        ])
-
-        setAllAlbums(albums)
-
-        // Use utility function to categorize albums
-        const categories = categorizeAlbumsByPlayback(contexts)
-
-        // Build recent albums array
-        const recentAlbumData: BackendAlbum[] = []
-        for (const albumId of categories.recentAlbumIds) {
-          const album = albums.find(a => a.id === albumId)
-          if (album && !recentAlbumData.find(a => a.id === album.id)) {
-            recentAlbumData.push(album)
-          }
-        }
-
-        setRecentAlbums(recentAlbumData)
-        setRecentAlbumIds(categories.recentAlbumIds)
-        setTimeCapsuleAlbumIds(categories.timeCapsuleAlbumIds)
-        setOnRepeatAlbumIds(categories.onRepeatAlbumIds)
-      } catch (err) {
-        console.error('Failed to load data:', err)
+  // Categorize albums based on playback contexts
+  const { recentAlbums, recentAlbumIds, timeCapsuleAlbumIds, onRepeatAlbumIds } = useMemo(() => {
+    if (!allAlbums.length || !contexts.length) {
+      return {
+        recentAlbums: [],
+        recentAlbumIds: new Set<number>(),
+        timeCapsuleAlbumIds: new Set<number>(),
+        onRepeatAlbumIds: [],
       }
     }
-    loadData()
-  }, [backend])
+
+    // Use utility function to categorize albums
+    const categories = categorizeAlbumsByPlayback(contexts)
+
+    // Build recent albums array
+    const recentAlbumData: BackendAlbum[] = []
+    for (const albumId of categories.recentAlbumIds) {
+      const album = allAlbums.find(a => a.id === albumId)
+      if (album && !recentAlbumData.find(a => a.id === album.id)) {
+        recentAlbumData.push(album)
+      }
+    }
+
+    return {
+      recentAlbums: recentAlbumData,
+      recentAlbumIds: categories.recentAlbumIds,
+      timeCapsuleAlbumIds: categories.timeCapsuleAlbumIds,
+      onRepeatAlbumIds: categories.onRepeatAlbumIds,
+    }
+  }, [allAlbums, contexts])
 
   useEffect(() => {
     const calculateGrid = () => {
@@ -674,6 +674,15 @@ export function HomePage() {
 
     return sections
   }, [rows, cols])
+
+  // Show loading skeleton while data is loading
+  if (isLoading) {
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <SkeletonGrid count={12} type="album" />
+      </div>
+    )
+  }
 
   return (
     <div className="h-full w-full overflow-hidden">

@@ -2,73 +2,36 @@
  * PlaylistsPage - displays all playlists with search and grid scaling
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ListMusic, Plus } from 'lucide-react'
 import { PlaylistCard } from '../components/PlaylistCard'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
+import { SkeletonGrid } from '../components/SkeletonGrid'
+import { VirtualizedGrid } from '../components/VirtualizedGrid'
 import { FeatureGate } from '../contexts/PlatformContext'
-import { useBackend, type BackendPlaylist } from '../contexts/BackendContext'
 import { useGridScale } from '../hooks/useGridScale'
+import { useResponsiveColumns } from '../hooks/useResponsiveColumns'
+import { usePlaylists } from '../hooks/queries/useLibraryQueries'
+import { useDatabaseHealth } from '../hooks/queries/useLibraryQueries'
+import { useCreatePlaylist } from '../hooks/queries/usePlaylistMutations'
 
 export function PlaylistsPage() {
   const { t } = useTranslation()
   const { navigate } = useNavigateWithHistory()
-  const backend = useBackend()
-  const { scale, scaleUp, scaleDown } = useGridScale()
+  const { scale } = useGridScale()
+  const columnCount = useResponsiveColumns(scale)
+  const createPlaylistMutation = useCreatePlaylist()
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [playlists, setPlaylists] = useState<BackendPlaylist[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [healthWarning, setHealthWarning] = useState<string | null>(null)
 
-  // Keyboard shortcut for grid scaling
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return
-      }
+  // Fetch data using React Query hooks
+  const { data: playlists = [], isLoading, isError, error } = usePlaylists()
+  const { data: health } = useDatabaseHealth()
 
-      if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
-        e.preventDefault()
-        scaleUp()
-      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
-        e.preventDefault()
-        scaleDown()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [scaleUp, scaleDown])
-
-  // Load playlists
-  const loadPlaylists = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    setHealthWarning(null)
-    try {
-      const [playlistsData, health] = await Promise.all([
-        backend.getAllPlaylists(),
-        backend.checkDatabaseHealth(),
-      ])
-      setPlaylists(playlistsData)
-      if (health.issues.length > 0) {
-        setHealthWarning(health.issues.join(' '))
-      }
-    } catch (err) {
-      console.error('Failed to load playlists:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load playlists')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [backend])
-
-  useEffect(() => {
-    loadPlaylists()
-  }, [loadPlaylists])
+  // Health warning from database health check
+  const healthWarning = health?.issues.length ? health.issues.join(' ') : null
 
   // Filter playlists by search
   const filteredPlaylists = useMemo(() => {
@@ -93,27 +56,45 @@ export function PlaylistsPage() {
     }
   }, [scale])
 
-  const handleCreatePlaylist = async () => {
-    try {
-      const playlist = await backend.createPlaylist(t('playlist.newPlaylistName', 'New Playlist'))
-      navigate(`/playlists/${playlist.id}`)
-    } catch (err) {
-      console.error('Failed to create playlist:', err)
+  // Row height for virtualized grid (card height + gap, based on scale)
+  const rowHeight = useMemo(() => {
+    switch (scale) {
+      case 0.75:
+        return 220 // Smaller cards: ~200px card + 16px gap
+      case 1:
+        return 280 // Default: ~260px card + 16px gap
+      case 1.25:
+        return 340 // Medium: ~320px card + 16px gap
+      case 1.5:
+        return 400 // Larger: ~380px card + 16px gap
+      default:
+        return 280
     }
+  }, [scale])
+
+  // Use virtualization for large collections (>100 items)
+  const shouldVirtualize = filteredPlaylists.length > 100
+
+  const handleCreatePlaylist = () => {
+    createPlaylistMutation.mutate(
+      { name: t('playlist.newPlaylistName', 'New Playlist') },
+      {
+        onSuccess: (playlist) => {
+          navigate(`/playlists/${playlist.id}`)
+        },
+        onError: (err) => {
+          console.error('Failed to create playlist:', err)
+        },
+      }
+    )
   }
 
   // Show error in LibraryPageLayout if present
-  const errorContent = error ? (
+  const errorContent = isError ? (
     <div className="flex items-center justify-center py-12">
       <div className="text-center text-destructive">
         <p className="font-medium mb-2">{t('library.loadFailed')}</p>
-        <p className="text-sm">{error}</p>
-        <button
-          onClick={loadPlaylists}
-          className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-        >
-          {t('common.retry')}
-        </button>
+        <p className="text-sm">{error instanceof Error ? error.message : 'Failed to load playlists'}</p>
       </div>
     </div>
   ) : null
@@ -141,17 +122,36 @@ export function PlaylistsPage() {
         </FeatureGate>
       }
     >
-      {errorContent || (filteredPlaylists.length > 0 ? (
-        <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
-          {filteredPlaylists.map((playlist, index) => (
-            <PlaylistCard
-              key={playlist.id}
-              playlist={playlist}
-              className="w-full"
-              priority={index < 24}
-            />
-          ))}
-        </div>
+      {isLoading ? (
+        <SkeletonGrid count={24} type="playlist" gridClass={gridClass} />
+      ) : errorContent || (filteredPlaylists.length > 0 ? (
+        shouldVirtualize ? (
+          <VirtualizedGrid
+            items={filteredPlaylists}
+            totalCount={filteredPlaylists.length}
+            columnCount={columnCount}
+            rowHeight={rowHeight}
+            gridClass={gridClass}
+            renderItem={(playlist, index) => (
+              <PlaylistCard
+                playlist={playlist}
+                className="w-full"
+                priority={index < 24}
+              />
+            )}
+          />
+        ) : (
+          <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
+            {filteredPlaylists.map((playlist, index) => (
+              <PlaylistCard
+                key={playlist.id}
+                playlist={playlist}
+                className="w-full"
+                priority={index < 24}
+              />
+            ))}
+          </div>
+        )
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <ListMusic className="w-12 h-12 mb-4 opacity-50" />

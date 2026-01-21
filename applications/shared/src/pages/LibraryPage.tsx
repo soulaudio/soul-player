@@ -18,6 +18,8 @@ import { FeatureGate, usePlatform } from '../contexts/PlatformContext'
 import { useBackend, type BackendAlbum, type BackendArtist, type BackendTrack, type BackendPlaylist } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { removeConsecutiveDuplicates } from '../utils/queue'
+import { useCreatePlaylist } from '../hooks/queries/usePlaylistMutations'
+import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
 
 type TabId = 'albums' | 'playlists' | 'artists' | 'tracks'
 
@@ -43,6 +45,8 @@ export function LibraryPage() {
   const backend = useBackend()
   const commands = usePlayerCommands()
   const { features } = usePlatform()
+  const createPlaylistMutation = useCreatePlaylist()
+  const deleteTrackMutation = useDeleteTrack()
 
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -216,13 +220,18 @@ export function LibraryPage() {
     }
   }, [commands, toQueueTrack])
 
-  const handleCreatePlaylist = async () => {
-    try {
-      const playlist = await backend.createPlaylist(t('playlist.newPlaylistName', 'New Playlist'))
-      navigate(`/playlists/${playlist.id}`)
-    } catch (err) {
-      console.error('Failed to create playlist:', err)
-    }
+  const handleCreatePlaylist = () => {
+    createPlaylistMutation.mutate(
+      { name: t('playlist.newPlaylistName', 'New Playlist') },
+      {
+        onSuccess: (playlist) => {
+          navigate(`/playlists/${playlist.id}`)
+        },
+        onError: (err) => {
+          console.error('Failed to create playlist:', err)
+        },
+      }
+    )
   }
 
   // Loading state
@@ -464,9 +473,10 @@ export function LibraryPage() {
                         title: backendTrack.title,
                       })
                     }}
-                    onDelete={async () => {
-                      await backend.deleteTrack(backendTrack.id)
-                      loadLibrary()
+                    onDelete={() => {
+                      deleteTrackMutation.mutate(backendTrack.id, {
+                        onSuccess: () => loadLibrary()
+                      })
                     }}
                   />
                 )
