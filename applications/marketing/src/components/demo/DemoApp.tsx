@@ -22,6 +22,8 @@ import {
   ScrollVisibilityProvider,
   AddToPlaylistDialog,
   usePlayerStore,
+  QueryClient,
+  QueryClientProvider,
 } from '@soul-player/shared'
 import { DemoPlayerCommandsProvider } from '@/providers/DemoPlayerCommandsProvider'
 import { MockSettingsProvider } from './MockContexts'
@@ -29,6 +31,17 @@ import { DemoInitializer } from './DemoInitializer'
 
 // Initialize i18n for the demo
 initI18n()
+
+// Create QueryClient instance for React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes
+    },
+  },
+})
 
 /**
  * Demo version of the Soul Player app for marketing showcase
@@ -98,40 +111,41 @@ export function DemoApp() {
   }
 
   return (
-    <div
-      data-demo-container
-      data-theme="dark"
-      className="bg-background text-foreground flex flex-col overflow-hidden"
-      style={{ width: 1200, height: 750 }}
-    >
-      <MemoryRouter initialEntries={['/']}>
-        <PlatformProvider
-          platform="web"
-          features={{
-            // Library features - demo supports playlists now!
-            canDeleteTracks: false,
-            canCreatePlaylists: true,
-            hasFilters: false,
-            hasHealthCheck: false,
-            hasVirtualization: false,
-            hasTrackMenu: true,
-            hasPlaybackContext: true,
-            // Settings features - disabled for web demo
-            hasLibrarySettings: false,
-            hasAudioSettings: false,
-            hasShortcutSettings: false,
-            hasUpdateSettings: false,
-            hasLanguageSettings: false,
-            hasThemeImportExport: false,
-            // Audio features - disabled for web demo
-            hasRealAudioDevices: false,
-            hasRealDeviceSelection: false,
-          }}
-        >
-          <DemoPlayerCommandsProvider storage={demoStorage}>
-            <MockBackendProvider storage={demoStorage}>
-              <MockSettingsProvider>
-                <DemoInitializer storage={demoStorage}>
+    <QueryClientProvider client={queryClient}>
+      <div
+        data-demo-container
+        data-theme="dark"
+        className="bg-background text-foreground flex flex-col overflow-hidden"
+        style={{ width: 1200, height: 750 }}
+      >
+        <MemoryRouter initialEntries={['/']}>
+          <PlatformProvider
+            platform="web"
+            features={{
+              // Library features - demo supports playlists now!
+              canDeleteTracks: false,
+              canCreatePlaylists: true,
+              hasFilters: false,
+              hasHealthCheck: false,
+              hasVirtualization: false,
+              hasTrackMenu: true,
+              hasPlaybackContext: true,
+              // Settings features - disabled for web demo
+              hasLibrarySettings: false,
+              hasAudioSettings: false,
+              hasShortcutSettings: false,
+              hasUpdateSettings: false,
+              hasLanguageSettings: false,
+              hasThemeImportExport: false,
+              // Audio features - disabled for web demo
+              hasRealAudioDevices: false,
+              hasRealDeviceSelection: false,
+            }}
+          >
+            <DemoPlayerCommandsProvider storage={demoStorage}>
+              <MockBackendProvider storage={demoStorage}>
+                <MockSettingsProvider>
+                  <DemoInitializer storage={demoStorage}>
                   {/* Wrapper to ensure MainLayout fills available space */}
                   <div className="flex-1 min-h-0 h-full">
                     <ScrollVisibilityProvider>
@@ -164,11 +178,12 @@ export function DemoApp() {
                     trackTitle={currentTrack.title}
                   />
                 )}
-              </MockSettingsProvider>
-            </MockBackendProvider>
-          </DemoPlayerCommandsProvider>
-        </PlatformProvider>
-      </MemoryRouter>
-    </div>
+                </MockSettingsProvider>
+              </MockBackendProvider>
+            </DemoPlayerCommandsProvider>
+          </PlatformProvider>
+        </MemoryRouter>
+      </div>
+    </QueryClientProvider>
   )
 }
