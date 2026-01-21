@@ -4,6 +4,19 @@
 
 import { BackendAlbum } from '../contexts/BackendContext'
 
+/**
+ * Fisher-Yates shuffle algorithm for uniform distribution
+ * O(n) time complexity, better than Array.sort() based shuffles
+ */
+function shuffle<T>(array: T[]): T[] {
+  const result = [...array]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
 export interface PlaybackContext {
   contextType: string
   contextId: string | null
@@ -108,7 +121,7 @@ export function selectAlbumsFromIds(
   }
 
   // Shuffle and take up to maxCount
-  const shuffled = [...filteredAlbums].sort(() => Math.random() - 0.5)
+  const shuffled = shuffle(filteredAlbums)
   const selected = shuffled.slice(0, Math.min(maxCount, filteredAlbums.length))
 
   // Mark as used
@@ -136,6 +149,8 @@ export function selectAlbumsFromOrderedIds(
 ): BackendAlbum[] {
   if (allAlbums.length === 0 || albumIds.length === 0) return []
 
+  // Create a Map for O(1) album lookups instead of O(n) find()
+  const albumMap = new Map(allAlbums.map(a => [a.id, a]))
   const selected: BackendAlbum[] = []
 
   for (const albumId of albumIds) {
@@ -144,7 +159,7 @@ export function selectAlbumsFromOrderedIds(
     // Skip if already used
     if (usedIds && usedIds.has(albumId)) continue
 
-    const album = allAlbums.find(a => a.id === albumId)
+    const album = albumMap.get(albumId)
     if (album) {
       selected.push(album)
       if (usedIds) {

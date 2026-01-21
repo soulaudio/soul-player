@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -471,10 +471,12 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
 
   // Filter out current track from queue, reverse so items closest to now playing are at bottom
   // Preserve original indices to handle duplicate tracks correctly
-  const displayQueue = queue
-    .map((track, index) => ({ track, originalIndex: index }))
-    .filter(({ track }) => String(track.trackId) !== String(currentTrackId))
-    .reverse();
+  const displayQueue = useMemo(() => {
+    return queue
+      .map((track, index) => ({ track, originalIndex: index }))
+      .filter(({ track }) => String(track.trackId) !== String(currentTrackId))
+      .reverse();
+  }, [queue, currentTrackId]);
 
   // progress is already a percentage (0-100) from the store
   const progressPercentage = progress;

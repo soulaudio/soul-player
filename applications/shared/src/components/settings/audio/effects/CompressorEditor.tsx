@@ -68,6 +68,9 @@ const EXTENDED_PRESETS: Record<string, CompressorSettings> = {
 // Common ratio values for stepped control
 const RATIO_STEPS = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10, 12, 16, 20];
 
+// Pre-compute preset entries to avoid creating new array on every render
+const PRESET_ENTRIES = Object.entries(EXTENDED_PRESETS);
+
 export function CompressorEditor({
   settings,
   onSettingsChange,
@@ -95,7 +98,7 @@ export function CompressorEditor({
     const presets: CompressorPreset[] = [...backendPresets];
 
     // Add extended presets if not already present
-    Object.entries(EXTENDED_PRESETS).forEach(([name, settings]) => {
+    PRESET_ENTRIES.forEach(([name, settings]) => {
       const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
       if (!presets.some(p => p.name.toLowerCase() === name)) {
         presets.push({ name: capitalizedName, settings });

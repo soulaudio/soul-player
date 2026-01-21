@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { usePlayerStore } from '../stores/player';
@@ -24,8 +24,13 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Windowed queue - only display limited number of tracks
-  const displayedQueue = fullQueue.slice(0, displayLimit);
-  const hasMore = fullQueue.length > displayLimit;
+  const displayedQueue = useMemo(() => {
+    return fullQueue.slice(0, displayLimit);
+  }, [fullQueue, displayLimit]);
+
+  const hasMore = useMemo(() => {
+    return fullQueue.length > displayLimit;
+  }, [fullQueue.length, displayLimit]);
 
   // Virtual list setup - reduced overscan for better performance
   const virtualizer = useVirtualizer({

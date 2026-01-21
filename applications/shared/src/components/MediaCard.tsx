@@ -39,6 +39,9 @@ export interface MediaCardProps {
   additionalInfo?: string
   /** Priority: if true, loads artwork immediately without lazy loading. Use for above-the-fold items (first ~20-30 items) */
   priority?: boolean
+  /** OPTIMIZATION: If provided, skips the redundant context check and uses this value instead.
+   * Parent components should fetch context once and pass it down to avoid N queries for N cards. */
+  isActiveContext?: boolean
 }
 
 /** Get fallback icon for media type */
@@ -75,6 +78,7 @@ const MediaCardComponent = ({
   className = 'w-40',
   additionalInfo,
   priority = false,
+  isActiveContext: isActiveContextProp,
 }: MediaCardProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -82,7 +86,7 @@ const MediaCardComponent = ({
   const commands = usePlayerCommands()
   const backend = useBackend()
   const { isDesktop } = usePlatform()
-  const [isActiveContext, setIsActiveContext] = useState(false)
+  const [isActiveContextState, setIsActiveContextState] = useState(false)
 
   // Debug logging for album cards
   if (type === 'album') {
@@ -92,8 +96,18 @@ const MediaCardComponent = ({
   const isCircle = type === 'artist'
   const FallbackIcon = getFallbackIcon(type)
 
+  // OPTIMIZATION: If parent provides isActiveContext prop, use it. Otherwise fetch.
+  // This allows parent components to fetch context once and pass down to avoid N queries for N cards.
+  const isActiveContext = isActiveContextProp ?? isActiveContextState
+
   // Check if this entity is the current playback context (regardless of play/pause state)
+  // Only runs if parent didn't provide isActiveContext prop
   useEffect(() => {
+    // Skip fetching if prop is provided
+    if (isActiveContextProp !== undefined) {
+      return
+    }
+
     const checkContext = async () => {
       try {
         const contexts = await backend.getRecentContexts(1)
@@ -101,14 +115,14 @@ const MediaCardComponent = ({
         const isActive =
           context?.contextType === type &&
           context?.contextId === String(id)
-        setIsActiveContext(isActive)
+        setIsActiveContextState(isActive)
       } catch {
-        setIsActiveContext(false)
+        setIsActiveContextState(false)
       }
     }
 
     checkContext()
-  }, [id, type, backend, currentTrack]) // Re-check when track changes
+  }, [id, type, backend, currentTrack, isActiveContextProp]) // Re-check when track changes
 
   const handleClick = () => {
     navigate(getRoute(type, id))
