@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            (SELECT COUNT(*) FROM library_sources WHERE user_id = ? AND device_id = ?) as source_count,\n            (SELECT COUNT(*) FROM managed_library_settings WHERE user_id = ? AND device_id = ?) as managed_count\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "source_count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "managed_count",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "612c75ef6b9493f919162e676065b4ae89b5cce222e80723e020d2524d7eee81"
+}
