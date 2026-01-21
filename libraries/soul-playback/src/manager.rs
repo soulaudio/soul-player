@@ -551,9 +551,10 @@ pub struct PlaybackManager {
     // Crossfade engine
     crossfade: CrossfadeEngine,
 
-    // Pre-allocated buffers for crossfade (to avoid allocation in audio callback)
-    outgoing_buffer: Vec<f32>,
-    incoming_buffer: Vec<f32>,
+    // Lazily-allocated buffers for crossfade (allocated on first use, freed when disabled)
+    // This saves ~14.6MB of memory when crossfade is disabled
+    outgoing_buffer: Option<Vec<f32>>,
+    incoming_buffer: Option<Vec<f32>>,
 
     // Pre-allocated buffer for stereo conversion (mono/multichannel output)
     // Avoids heap allocation in audio callback - see CLAUDE.md rule #4
@@ -639,8 +640,8 @@ impl PlaybackManager {
             next_source: None,
             next_track: None,
             crossfade: CrossfadeEngine::with_settings(config.crossfade),
-            outgoing_buffer: vec![0.0; CROSSFADE_BUFFER_SIZE],
-            incoming_buffer: vec![0.0; CROSSFADE_BUFFER_SIZE],
+            outgoing_buffer: None,
+            incoming_buffer: None,
             stereo_conversion_buffer: vec![0.0; MAX_STEREO_BUFFER_SIZE],
             sample_rate: 44100, // Default, will be updated by platform
             output_channels: 2, // Default stereo, will be updated by platform
@@ -1933,29 +1934,43 @@ impl PlaybackManager {
 
     /// Process audio during active crossfade
     fn process_active_crossfade(&mut self, output: &mut [f32]) -> Result<usize> {
+        // Ensure buffers are allocated before processing crossfade
+        // This is safe because we're in the settings/state transition path, not the audio callback
+        self.ensure_crossfade_buffers_allocated();
+
         let buffer_len = output.len();
+
+        // Get mutable references to the buffers (guaranteed to exist after allocation)
+        let outgoing_buffer = self
+            .outgoing_buffer
+            .as_mut()
+            .expect("Buffer should be allocated");
+        let incoming_buffer = self
+            .incoming_buffer
+            .as_mut()
+            .expect("Buffer should be allocated");
 
         // Read from outgoing (current) track
         let outgoing_samples = if let Some(ref mut source) = self.audio_source {
-            let len = buffer_len.min(self.outgoing_buffer.len());
+            let len = buffer_len.min(outgoing_buffer.len());
             source
-                .read_samples(&mut self.outgoing_buffer[..len])
+                .read_samples(&mut outgoing_buffer[..len])
                 .unwrap_or(0)
         } else {
             // Fill with silence if no outgoing source
-            self.outgoing_buffer[..buffer_len].fill(0.0);
+            outgoing_buffer[..buffer_len].fill(0.0);
             buffer_len
         };
 
         // Read from incoming (next) track
         let incoming_samples = if let Some(ref mut source) = self.next_source {
-            let len = buffer_len.min(self.incoming_buffer.len());
+            let len = buffer_len.min(incoming_buffer.len());
             source
-                .read_samples(&mut self.incoming_buffer[..len])
+                .read_samples(&mut incoming_buffer[..len])
                 .unwrap_or(0)
         } else {
             // Fill with silence if no incoming source
-            self.incoming_buffer[..buffer_len].fill(0.0);
+            incoming_buffer[..buffer_len].fill(0.0);
             buffer_len
         };
 
@@ -1971,8 +1986,8 @@ impl PlaybackManager {
 
         // Process crossfade mixing
         let (processed, completed) = self.crossfade.process(
-            &self.outgoing_buffer[..samples_to_process],
-            &self.incoming_buffer[..samples_to_process],
+            &outgoing_buffer[..samples_to_process],
+            &incoming_buffer[..samples_to_process],
             &mut output[..samples_to_process],
         );
 
@@ -2342,9 +2357,35 @@ impl PlaybackManager {
 
     // ===== Crossfade Settings =====
 
+    /// Ensure crossfade buffers are allocated (called before first use)
+    /// This is safe to call outside audio callback as allocation happens on settings change
+    fn ensure_crossfade_buffers_allocated(&mut self) {
+        if self.outgoing_buffer.is_none() {
+            tracing::debug!("[crossfade] Allocating buffers (~14.6MB) for crossfade processing");
+            self.outgoing_buffer = Some(vec![0.0; CROSSFADE_BUFFER_SIZE]);
+            self.incoming_buffer = Some(vec![0.0; CROSSFADE_BUFFER_SIZE]);
+        }
+    }
+
+    /// Free crossfade buffers to save memory when crossfade is disabled
+    fn free_crossfade_buffers(&mut self) {
+        if self.outgoing_buffer.is_some() {
+            tracing::debug!("[crossfade] Freeing buffers (~14.6MB) as crossfade is disabled");
+            self.outgoing_buffer = None;
+            self.incoming_buffer = None;
+        }
+    }
+
     /// Set crossfade settings
     pub fn set_crossfade_settings(&mut self, settings: CrossfadeSettings) {
+        let was_enabled = self.crossfade.settings().enabled;
+        let new_enabled = settings.enabled; // Get value before move
         self.crossfade.set_settings(settings);
+
+        // Free buffers if crossfade is being disabled
+        if was_enabled && !new_enabled {
+            self.free_crossfade_buffers();
+        }
     }
 
     /// Get current crossfade settings
@@ -2354,9 +2395,15 @@ impl PlaybackManager {
 
     /// Enable or disable crossfade
     pub fn set_crossfade_enabled(&mut self, enabled: bool) {
+        let was_enabled = self.crossfade.settings().enabled;
         let mut settings = self.crossfade.settings().clone();
         settings.enabled = enabled;
         self.crossfade.set_settings(settings);
+
+        // Free buffers if crossfade is being disabled
+        if was_enabled && !enabled {
+            self.free_crossfade_buffers();
+        }
     }
 
     /// Check if crossfade is enabled

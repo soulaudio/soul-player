@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size\n        FROM track_sources\n        ",
+  "query": "\n        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size\n        FROM track_sources\n        WHERE track_id IN (\n            SELECT t.id\n            FROM tracks t\n            WHERE (? IS NULL OR t.id > ?)\n            ORDER BY t.id\n            LIMIT ?\n        )\n        ",
   "describe": {
     "columns": [
       {
@@ -35,7 +35,7 @@
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 3
     },
     "nullable": [
       false,
@@ -46,5 +46,5 @@
       true
     ]
   },
-  "hash": "9a3d82e6e4ded038a4ad5e883ed8bfebcfa54628b1c77c78f66d2af79b17043b"
+  "hash": "3830998a44e164f844a2d0ff09d24690cfe8a1045e6197b2c05fe62419edd321"
 }

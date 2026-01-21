@@ -140,9 +140,11 @@ async fn test_large_library_get_all_tracks() {
     let albums = batch_insert_albums(pool, LARGE_ALBUM_COUNT, &artists).await;
     let _tracks = batch_insert_tracks(pool, LARGE_LIBRARY_SIZE, &artists, &albums, 1).await;
 
-    // Test retrieving all tracks
+    // Test retrieving all tracks (with explicit limit since default is 1000)
     let start = std::time::Instant::now();
-    let all_tracks = soul_storage::tracks::get_all(pool).await.unwrap();
+    let all_tracks = soul_storage::tracks::get_all(pool, Some(LARGE_LIBRARY_SIZE as i64), None)
+        .await
+        .unwrap();
     let elapsed = start.elapsed();
 
     assert_eq!(
