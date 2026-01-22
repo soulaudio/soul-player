@@ -19,7 +19,7 @@ import {
   Music,
   Heart,
 } from 'lucide-react';
-import { usePlayerStore } from '../stores/player';
+import { useCurrentTrack, useIsPlaying, usePlayerProgress, useVolume, usePlayerModes } from '../stores/player';
 import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext';
 import { ArtworkImage } from './ArtworkImage';
 import {
@@ -154,17 +154,11 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const [queue, setQueue] = useState<QueueTrack[]>([]);
   const [homeEnabled, setHomeEnabled] = useState(true);
   const [version, setVersion] = useState<string>('');
-  const {
-    currentTrack,
-    isPlaying,
-    progress,
-    duration,
-    volume,
-    shuffleMode,
-    repeatMode,
-    setShuffleMode,
-    setRepeatMode,
-  } = usePlayerStore();
+  const currentTrack = useCurrentTrack();
+  const isPlaying = useIsPlaying();
+  const { progress, duration } = usePlayerProgress();
+  const volume = useVolume();
+  const { shuffleMode, repeatMode, setShuffleMode, setRepeatMode } = usePlayerModes();
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
 
