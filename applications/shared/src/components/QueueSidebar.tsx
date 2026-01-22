@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { usePlayerStore } from '../stores/player';
+import { usePlayerPlayback } from '../stores/player';
 import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext';
 import { ArtworkImage } from './ArtworkImage';
 import { X, Music } from 'lucide-react';
@@ -18,7 +18,7 @@ const LOAD_MORE_COUNT = 50; // Load 50 more when clicking "Load More"
 export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   const [fullQueue, setFullQueue] = useState<QueueTrack[]>([]);
   const [displayLimit, setDisplayLimit] = useState(INITIAL_LOAD_COUNT);
-  const { currentTrack, isPlaying } = usePlayerStore();
+  const { currentTrack, isPlaying } = usePlayerPlayback();
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
   const parentRef = useRef<HTMLDivElement>(null);

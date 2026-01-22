@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import { Play, Pause, Music, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { usePlayerStore } from '../stores/player';
+import { usePlayerPlayback } from '../stores/player';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import type { QueueTrack } from '../contexts/PlayerCommandsContext';
 import { Tooltip } from './ui/Tooltip';
@@ -436,7 +436,7 @@ export function TrackList({
 }: TrackListProps) {
   const [hoveredGroupKey, setHoveredGroupKey] = useState<string | null>(null);
   const [selectedVersions, setSelectedVersions] = useState<Map<string, Track>>(new Map());
-  const { currentTrack, isPlaying } = usePlayerStore();
+  const { currentTrack, isPlaying } = usePlayerPlayback();
   const commands = usePlayerCommands();
   const parentRef = useRef<HTMLDivElement>(null);
 
