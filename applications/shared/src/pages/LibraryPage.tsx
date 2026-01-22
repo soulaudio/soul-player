@@ -244,22 +244,6 @@ export function LibraryPage() {
     )
   }
 
-  // Helper to determine if current tab is loading
-  const _isCurrentTabLoading = () => {
-    switch (activeTab) {
-      case 'albums':
-        return isAlbumsLoading
-      case 'playlists':
-        return isPlaylistsLoading
-      case 'artists':
-        return isArtistsLoading
-      case 'tracks':
-        return isTracksLoading
-      default:
-        return false
-    }
-  }
-
   return (
     <div className="h-full flex flex-col">
       {/* Health warning banner (Desktop only) */}

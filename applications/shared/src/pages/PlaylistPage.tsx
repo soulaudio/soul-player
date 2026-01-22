@@ -142,13 +142,6 @@ export function PlaylistPage() {
     return `${minutes} min`
   }
 
-  const _formatTrackDuration = (seconds?: number): string => {
-    if (!seconds) return '--:--'
-    const mins = Math.floor(seconds / 60)
-    const secs = Math.floor(seconds % 60)
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
-
   const totalDuration = tracks.reduce((acc, t) => acc + (t.duration_seconds || 0), 0)
 
   // Loading state - use skeleton
