@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { usePlayerStore } from '../../stores/player';
+import { useCurrentTrack } from '../../stores/player';
 import { ArtworkImage } from '../ArtworkImage';
 import { Music, ChevronUp } from 'lucide-react';
 
 export function TrackInfo() {
   const navigate = useNavigate();
-  const { currentTrack } = usePlayerStore();
+  const currentTrack = useCurrentTrack();
 
   const handleClick = () => {
     if (currentTrack) {

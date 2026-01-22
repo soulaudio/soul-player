@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { usePlayerStore } from '../../stores/player';
+import { usePlayerPlayback } from '../../stores/player';
 import { usePlayerCommands, usePlaybackEvents } from '../../contexts/PlayerCommandsContext';
 import { SkipBack, Play, Pause, SkipForward } from 'lucide-react';
 import { debug } from '../../utils/debug';
 
 export function PlayerControls() {
-  const { isPlaying, currentTrack } = usePlayerStore();
+  const { isPlaying, currentTrack } = usePlayerPlayback();
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
   const [hasNext, setHasNext] = useState(false);

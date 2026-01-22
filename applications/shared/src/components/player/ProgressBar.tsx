@@ -3,12 +3,12 @@
  */
 
 import React from 'react';
-import { usePlayerStore } from '../../stores/player';
+import { usePlayerProgress } from '../../stores/player';
 import { formatDuration } from '../../lib/utils';
 import { useSeekBar } from '../../hooks/useSeekBar';
 
 export function ProgressBar() {
-  const { progress, duration } = usePlayerStore();
+  const { progress, duration } = usePlayerProgress();
   const { isDragging, seekPosition, handleSeekStart, handleSeekChange, handleSeekEnd } = useSeekBar();
   const cleanupRef = React.useRef<(() => void) | null>(null);
 

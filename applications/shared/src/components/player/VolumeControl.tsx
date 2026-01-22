@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { usePlayerStore } from '../../stores/player';
+import { useVolume } from '../../stores/player';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
 import { Volume2, VolumeX } from 'lucide-react';
 import { debug } from '../../utils/debug';
@@ -11,7 +11,7 @@ import { debug } from '../../utils/debug';
 const SCROLL_VOLUME_STEP = 0.05;
 
 export function VolumeControl() {
-  const { volume } = usePlayerStore();
+  const volume = useVolume();
   const commands = usePlayerCommands();
   const [isMuted, setIsMuted] = useState(false);
   const [volumeBeforeMute, setVolumeBeforeMute] = useState(volume);
