@@ -6,7 +6,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
-import { usePlayerStore } from '../stores/player'
+import { usePlayerPlayback } from '../stores/player'
 import { usePlayerCommands, usePlaybackEvents } from '../contexts/PlayerCommandsContext'
 import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
@@ -134,7 +134,7 @@ export function NowPlayingPage() {
   const { t } = useTranslation()
   const { navigate } = useNavigateWithHistory()
   const { features } = usePlatform()
-  const { currentTrack, isPlaying } = usePlayerStore()
+  const { currentTrack, isPlaying } = usePlayerPlayback()
   const commands = usePlayerCommands()
   const events = usePlaybackEvents()
   const backend = useBackend()
