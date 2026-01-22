@@ -1,4 +1,4 @@
-import { usePlayerStore } from '../../stores/player';
+import { usePlayerModes } from '../../stores/player';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
 import { Shuffle, Repeat, Repeat1, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +11,7 @@ interface ShuffleRepeatControlsProps {
 
 export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControlsProps) {
   const { t } = useTranslation();
-  const { shuffleMode, repeatMode, setShuffleMode, setRepeatMode } = usePlayerStore();
+  const { shuffleMode, repeatMode, setShuffleMode, setRepeatMode } = usePlayerModes();
   const commands = usePlayerCommands();
 
   const handleShuffleToggle = async () => {
