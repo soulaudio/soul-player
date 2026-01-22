@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM playlist_tracks\n         WHERE track_id NOT IN (SELECT id FROM tracks)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "a0a3351f336c7ab0abebf1284c69cffd8e931302a22479c4f4d3bf6e9cb39b87"
+}

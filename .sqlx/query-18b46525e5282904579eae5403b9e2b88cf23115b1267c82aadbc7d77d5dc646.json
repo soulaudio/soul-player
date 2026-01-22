@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT status, phase, total_items, processed_items, successful_items, failed_items, current_item\n             FROM sync_state WHERE id = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "status",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "phase",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_items",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "processed_items",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "successful_items",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "failed_items",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "current_item",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "18b46525e5282904579eae5403b9e2b88cf23115b1267c82aadbc7d77d5dc646"
+}

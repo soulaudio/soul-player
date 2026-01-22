@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT last_migration_version FROM sync_state WHERE id = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "last_migration_version",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "14bf271cfc7d9e02f57b0d8ddfd5b28c5e5c81efe49bdfcbad8435e65fd10a87"
+}
