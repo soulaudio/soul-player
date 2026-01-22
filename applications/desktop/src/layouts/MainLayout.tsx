@@ -21,7 +21,7 @@
  */
 import { ReactNode, useState, useCallback, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { MainLayout as SharedMainLayout, usePlayerStore, AddToPlaylistDialog, ScrollVisibilityProvider, useScrollVisibility } from '@soul-player/shared';
+import { MainLayout as SharedMainLayout, useCurrentTrack, AddToPlaylistDialog, ScrollVisibilityProvider, useScrollVisibility } from '@soul-player/shared';
 import { ScanProgressIndicator } from '../components/ScanProgressIndicator';
 import { WindowControls } from '../components/WindowControls';
 import { useSettings } from '../contexts/SettingsContext';
@@ -32,7 +32,7 @@ interface MainLayoutProps {
 }
 
 function MainLayoutContent({ children }: MainLayoutProps) {
-  const { currentTrack } = usePlayerStore();
+  const currentTrack = useCurrentTrack();
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const { showHeader, setShowHeader } = useScrollVisibility();
   const { hideWindowControls } = useSettings();

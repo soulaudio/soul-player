@@ -3,7 +3,7 @@ import { Play, Pause } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ArtworkImage, getDeduplicatedTracks, usePlayerStore, usePlayerCommands } from '@soul-player/shared';
+import { ArtworkImage, getDeduplicatedTracks, useIsPlaying, usePlayerCommands } from '@soul-player/shared';
 import { usePlaybackContext } from '../hooks/usePlaybackContext';
 
 export interface Album {
@@ -35,7 +35,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { recordContext, getCurrentContext } = usePlaybackContext();
-  const { isPlaying } = usePlayerStore();
+  const isPlaying = useIsPlaying();
   const commands = usePlayerCommands();
   const [isThisAlbumPlaying, setIsThisAlbumPlaying] = useState(false);
 
