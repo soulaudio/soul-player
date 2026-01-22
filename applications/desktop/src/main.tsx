@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@soul-player/shared/theme';
-import { initI18n, PlatformProvider, QueryClient, QueryClientProvider } from '@soul-player/shared';
+import { initI18n, PlatformProvider, QueryClient, QueryClientProvider, PlaybackContextProvider } from '@soul-player/shared';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { TauriPlayerCommandsProvider } from './providers/TauriPlayerCommandsProvider';
 import { TauriBackendProvider } from './providers/TauriBackendProvider';
@@ -59,9 +59,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         >
           <TauriPlayerCommandsProvider>
             <TauriBackendProvider>
-              <SettingsProvider>
-                <App />
-              </SettingsProvider>
+              <PlaybackContextProvider>
+                <SettingsProvider>
+                  <App />
+                </SettingsProvider>
+              </PlaybackContextProvider>
             </TauriBackendProvider>
           </TauriPlayerCommandsProvider>
         </PlatformProvider>

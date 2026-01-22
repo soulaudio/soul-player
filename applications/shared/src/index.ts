@@ -54,6 +54,9 @@ export type {
 
 export { ScrollVisibilityProvider, useScrollVisibility } from './contexts/ScrollVisibilityContext';
 
+export { PlaybackContextProvider, usePlaybackContext } from './contexts/PlaybackContextProvider';
+export type { PlaybackContextData } from './contexts/PlaybackContextProvider';
+
 // Backend Providers
 export { AbstractBackendProvider, createBackendProvider } from './providers/AbstractBackendProvider';
 export { MockBackendProvider } from './providers/MockBackendProvider';
