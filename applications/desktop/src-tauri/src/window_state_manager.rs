@@ -43,8 +43,20 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
             }
 
             // Window is visible, now set the size with retries
-            tracing::debug!("[window_state] macOS: Window is visible, setting size");
-            for attempt in 1..=3 {
+            // Initial delay to let WKWebView fully initialize
+            tracing::debug!(
+                "[window_state] macOS: Window is visible, waiting for WKWebView to settle..."
+            );
+            std::thread::sleep(std::time::Duration::from_millis(100));
+
+            tracing::debug!(
+                "[window_state] macOS: Setting size {}x{}",
+                ws.width,
+                ws.height
+            );
+            let mut size_applied = false;
+
+            for attempt in 1..=5 {
                 match window.set_size(Size::Physical(PhysicalSize {
                     width: ws.width as u32,
                     height: ws.height as u32,
@@ -54,6 +66,7 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
                             "[window_state] macOS: set_size succeeded on attempt {}",
                             attempt
                         );
+                        size_applied = true;
                         break;
                     }
                     Err(e) => {
@@ -62,13 +75,18 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
                             attempt,
                             e
                         );
-                        if attempt < 3 {
-                            // Reduced from 50ms to 25ms - still allows WKWebView to settle
-                            // while reducing max blocking time from 150ms to 75ms
-                            std::thread::sleep(std::time::Duration::from_millis(25));
+                        if attempt < 5 {
+                            // 50ms delay between retries for WKWebView to stabilize
+                            std::thread::sleep(std::time::Duration::from_millis(50));
                         }
                     }
                 }
+            }
+
+            if !size_applied {
+                tracing::error!(
+                    "[window_state] macOS: Failed to apply size after 5 attempts, WKWebView may not be ready"
+                );
             }
         }
 

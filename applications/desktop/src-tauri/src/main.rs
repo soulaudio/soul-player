@@ -2273,9 +2273,13 @@ fn main() {
                     let _ = main.show();
 
                     // On macOS, we need to set the window size AFTER showing it due to a Tauri bug
-                    // with frameless windows. Call load_window_state again to apply the size.
+                    // with frameless windows. Wait a brief moment for the window to actually appear,
+                    // then call load_window_state again to apply the size.
                     #[cfg(target_os = "macos")]
                     {
+                        tracing::debug!("[startup] macOS: Waiting for window to appear...");
+                        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
                         tracing::debug!("[startup] macOS: Re-applying window state after show()");
                         if let Err(e) = window_state_manager::load_window_state(&app_handle).await {
                             tracing::warn!("Failed to re-apply window state on macOS: {}", e);
