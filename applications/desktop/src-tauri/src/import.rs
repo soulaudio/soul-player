@@ -428,7 +428,7 @@ impl ImportManager {
 pub async fn import_files(
     app: AppHandle,
     files: Vec<String>,
-    manager: tauri::State<'_, ImportManager>,
+    manager: tauri::State<'_, crate::lazy_workers::LazyImportManager>,
 ) -> Result<(), String> {
     tracing::debug!("Received {} files", files.len());
     for (i, file) in files.iter().enumerate() {
@@ -436,7 +436,8 @@ pub async fn import_files(
     }
 
     let paths: Vec<PathBuf> = files.into_iter().map(PathBuf::from).collect();
-    let result = manager.import_files(app, paths).await;
+    let manager_ref = manager.get().await?;
+    let result = manager_ref.import_files(app, paths).await;
 
     match &result {
         Ok(_) => tracing::debug!("Import started successfully"),
@@ -450,11 +451,12 @@ pub async fn import_files(
 pub async fn import_directory(
     app: AppHandle,
     directory: String,
-    manager: tauri::State<'_, ImportManager>,
+    manager: tauri::State<'_, crate::lazy_workers::LazyImportManager>,
 ) -> Result<(), String> {
     tracing::debug!("Received directory: {}", directory);
 
-    let result = manager
+    let manager_ref = manager.get().await?;
+    let result = manager_ref
         .import_directory(app, PathBuf::from(directory))
         .await;
 
@@ -467,28 +469,36 @@ pub async fn import_directory(
 }
 
 #[tauri::command]
-pub async fn cancel_import(manager: tauri::State<'_, ImportManager>) -> Result<(), String> {
-    manager.cancel_import().await
+pub async fn cancel_import(
+    manager: tauri::State<'_, crate::lazy_workers::LazyImportManager>,
+) -> Result<(), String> {
+    let manager_ref = manager.get().await?;
+    manager_ref.cancel_import().await
 }
 
 #[tauri::command]
-pub async fn is_importing(manager: tauri::State<'_, ImportManager>) -> Result<bool, String> {
-    Ok(manager.is_importing().await)
+pub async fn is_importing(
+    manager: tauri::State<'_, crate::lazy_workers::LazyImportManager>,
+) -> Result<bool, String> {
+    let manager_ref = manager.get().await?;
+    Ok(manager_ref.is_importing().await)
 }
 
 #[tauri::command]
 pub async fn get_import_config(
-    manager: tauri::State<'_, ImportManager>,
+    manager: tauri::State<'_, crate::lazy_workers::LazyImportManager>,
 ) -> Result<ImportConfig, String> {
-    Ok(manager.get_config().await)
+    let manager_ref = manager.get().await?;
+    Ok(manager_ref.get_config().await)
 }
 
 #[tauri::command]
 pub async fn update_import_config(
     config: ImportConfig,
-    manager: tauri::State<'_, ImportManager>,
+    manager: tauri::State<'_, crate::lazy_workers::LazyImportManager>,
 ) -> Result<(), String> {
-    manager.update_config(config).await;
+    let manager_ref = manager.get().await?;
+    manager_ref.update_config(config).await;
     Ok(())
 }
 

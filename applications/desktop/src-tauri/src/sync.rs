@@ -2,7 +2,6 @@ use soul_sync::{SyncManager, SyncProgress};
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-use tokio::sync::Mutex;
 
 /// Sync state managed by Tauri
 pub struct SyncState {
@@ -21,7 +20,7 @@ impl SyncState {
 pub async fn start_sync(
     app: AppHandle,
     trigger: String,
-    state: State<'_, Arc<Mutex<SyncState>>>,
+    state: State<'_, crate::lazy_workers::LazySyncState>,
 ) -> Result<(), String> {
     let trigger_enum = match trigger.as_str() {
         "manual" => soul_sync::SyncTrigger::Manual,
@@ -30,7 +29,8 @@ pub async fn start_sync(
         _ => return Err(format!("Invalid trigger: {}", trigger)),
     };
 
-    let state_guard = state.lock().await;
+    let sync_state = state.get();
+    let state_guard = sync_state.lock().await;
     let (mut progress_rx, handle) = state_guard
         .manager
         .start_sync(trigger_enum)
@@ -65,9 +65,10 @@ pub async fn start_sync(
 
 #[tauri::command]
 pub async fn get_sync_status(
-    state: State<'_, Arc<Mutex<SyncState>>>,
+    state: State<'_, crate::lazy_workers::LazySyncState>,
 ) -> Result<SyncProgress, String> {
-    let state_guard = state.lock().await;
+    let sync_state = state.get();
+    let state_guard = sync_state.lock().await;
     state_guard
         .manager
         .get_status()
@@ -76,8 +77,11 @@ pub async fn get_sync_status(
 }
 
 #[tauri::command]
-pub async fn cancel_sync(state: State<'_, Arc<Mutex<SyncState>>>) -> Result<(), String> {
-    let state_guard = state.lock().await;
+pub async fn cancel_sync(
+    state: State<'_, crate::lazy_workers::LazySyncState>,
+) -> Result<(), String> {
+    let sync_state = state.get();
+    let state_guard = sync_state.lock().await;
     state_guard
         .manager
         .cancel_sync()
@@ -96,7 +100,7 @@ pub struct SyncErrorRecord {
 #[tauri::command]
 pub async fn get_sync_errors(
     _session_id: Option<String>,
-    _state: State<'_, Arc<Mutex<SyncState>>>,
+    _state: State<'_, crate::lazy_workers::LazySyncState>,
 ) -> Result<Vec<SyncErrorRecord>, String> {
     // TODO: Implement sync error retrieval
     // For now, return empty vector as this is not critical for MVP

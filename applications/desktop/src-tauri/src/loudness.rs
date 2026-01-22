@@ -6,6 +6,7 @@
 
 use crate::app_state::AppState;
 use crate::playback::PlaybackManager;
+use crate::playback_lazy::LazyPlaybackManager;
 use serde::{Deserialize, Serialize};
 use soul_loudness::{LoudnessAnalyzer, LoudnessInfo, NormalizationMode, ReplayGainCalculator};
 use std::path::Path;
@@ -232,10 +233,11 @@ pub async fn get_analysis_queue_stats(state: State<'_, AppState>) -> Result<Queu
 #[tauri::command]
 pub async fn start_analysis_worker(
     state: State<'_, AppState>,
-    worker_state: State<'_, Arc<Mutex<AnalysisWorker>>>,
+    worker_state: State<'_, crate::lazy_workers::LazyAnalysisWorker>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let worker = worker_state.lock().await;
+    let worker_arc = worker_state.get();
+    let worker = worker_arc.lock().await;
 
     // Check if already running
     if worker.is_running.load(Ordering::SeqCst) {
@@ -250,11 +252,11 @@ pub async fn start_analysis_worker(
 
     // Clone what we need for the background task
     let pool = (*state.pool).clone();
-    let worker_arc = (*worker_state).clone();
+    let worker_arc_clone = worker_arc.clone();
 
     // Spawn background analysis task
     tokio::spawn(async move {
-        run_analysis_worker(pool, worker_arc, app).await;
+        run_analysis_worker(pool, worker_arc_clone, app).await;
     });
 
     Ok(())
@@ -263,9 +265,9 @@ pub async fn start_analysis_worker(
 /// Stop background analysis worker
 #[tauri::command]
 pub async fn stop_analysis_worker(
-    worker_state: State<'_, Arc<Mutex<AnalysisWorker>>>,
+    worker_state: State<'_, crate::lazy_workers::LazyAnalysisWorker>,
 ) -> Result<(), String> {
-    let worker = worker_state.lock().await;
+    let worker = worker_state.get().lock().await;
     worker.cancel_requested.store(true, Ordering::SeqCst);
     Ok(())
 }
@@ -273,9 +275,9 @@ pub async fn stop_analysis_worker(
 /// Get analysis worker status
 #[tauri::command]
 pub async fn get_analysis_worker_status(
-    worker_state: State<'_, Arc<Mutex<AnalysisWorker>>>,
+    worker_state: State<'_, crate::lazy_workers::LazyAnalysisWorker>,
 ) -> Result<serde_json::Value, String> {
-    let worker = worker_state.lock().await;
+    let worker = worker_state.get().lock().await;
     Ok(serde_json::json!({
         "isRunning": worker.is_running.load(Ordering::SeqCst),
         "tracksAnalyzed": worker.tracks_analyzed.load(Ordering::SeqCst),
@@ -286,7 +288,7 @@ pub async fn get_analysis_worker_status(
 #[tauri::command]
 pub async fn set_volume_leveling_mode(
     mode: String,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let normalization_mode = match mode.as_str() {
@@ -299,7 +301,8 @@ pub async fn set_volume_leveling_mode(
     };
 
     // Set the mode on the playback manager (runtime)
-    playback.set_volume_leveling_mode(normalization_mode);
+    let pm = playback.get().await?;
+    pm.set_volume_leveling_mode(normalization_mode);
     tracing::info!(
         mode = ?normalization_mode,
         "[set_volume_leveling_mode] Mode set"
@@ -327,14 +330,15 @@ pub async fn set_volume_leveling_mode(
 #[tauri::command]
 pub async fn set_volume_leveling_preamp(
     preamp_db: f64,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     // Clamp preamp to valid range
     let clamped = preamp_db.clamp(-12.0, 12.0);
 
     // Set on playback manager (runtime)
-    playback.set_loudness_preamp(clamped);
+    let pm = playback.get().await?;
+    pm.set_loudness_preamp(clamped);
     tracing::info!(
         preamp_db = clamped,
         "[set_volume_leveling_preamp] Pre-amp set"
@@ -362,11 +366,12 @@ pub async fn set_volume_leveling_preamp(
 #[tauri::command]
 pub async fn set_volume_leveling_prevent_clipping(
     prevent: bool,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     // Set on playback manager (runtime)
-    playback.set_prevent_clipping(prevent);
+    let pm = playback.get().await?;
+    pm.set_prevent_clipping(prevent);
     tracing::info!(
         prevent_clipping = prevent,
         "[set_volume_leveling_prevent_clipping] Prevent clipping set"

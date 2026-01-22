@@ -6,7 +6,16 @@ use sqlx::{Row, SqlitePool};
 async fn fetch_track_availability(
     pool: &SqlitePool,
     track_ids: &[String],
-) -> Result<Vec<(i64, i64, String, Option<String>, Option<String>, Option<i64>)>> {
+) -> Result<
+    Vec<(
+        i64,
+        i64,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+    )>,
+> {
     if track_ids.is_empty() {
         return Ok(Vec::new());
     }

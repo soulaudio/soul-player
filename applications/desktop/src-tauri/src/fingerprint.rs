@@ -82,19 +82,20 @@ pub struct FingerprintStatus {
 #[tauri::command]
 pub async fn get_fingerprint_status(
     state: State<'_, AppState>,
-    worker: State<'_, Arc<FingerprintWorker>>,
+    worker: State<'_, crate::lazy_workers::LazyFingerprintWorker>,
 ) -> Result<FingerprintStatus, String> {
     let stats = soul_storage::fingerprint_queue::get_stats(&state.pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    let last_error = worker.last_error.lock().await.clone();
+    let worker_ref = worker.get();
+    let last_error = worker_ref.last_error.lock().await.clone();
 
     Ok(FingerprintStatus {
-        is_running: worker.is_running(),
+        is_running: worker_ref.is_running(),
         pending_count: stats.pending,
         failed_count: stats.failed,
-        processed_this_session: worker.processed_count(),
+        processed_this_session: worker_ref.processed_count(),
         last_error,
     })
 }
@@ -104,17 +105,18 @@ pub async fn get_fingerprint_status(
 pub async fn start_fingerprinting(
     app: AppHandle,
     state: State<'_, AppState>,
-    worker: State<'_, Arc<FingerprintWorker>>,
+    worker: State<'_, crate::lazy_workers::LazyFingerprintWorker>,
 ) -> Result<(), String> {
-    if worker.is_running() {
+    let worker_ref = worker.get();
+    if worker_ref.is_running() {
         return Err("Fingerprinting already in progress".to_string());
     }
 
-    worker.reset();
-    worker.running.store(true, Ordering::SeqCst);
+    worker_ref.reset();
+    worker_ref.running.store(true, Ordering::SeqCst);
 
     let pool = (*state.pool).clone();
-    let worker_clone = Arc::clone(&worker);
+    let worker_clone = worker_ref.clone();
 
     // Spawn background task
     tokio::spawn(async move {
@@ -126,12 +128,15 @@ pub async fn start_fingerprinting(
 
 /// Stop the fingerprinting worker
 #[tauri::command]
-pub async fn stop_fingerprinting(worker: State<'_, Arc<FingerprintWorker>>) -> Result<(), String> {
-    if !worker.is_running() {
+pub async fn stop_fingerprinting(
+    worker: State<'_, crate::lazy_workers::LazyFingerprintWorker>,
+) -> Result<(), String> {
+    let worker_ref = worker.get();
+    if !worker_ref.is_running() {
         return Ok(());
     }
 
-    worker.request_cancel();
+    worker_ref.request_cancel();
     Ok(())
 }
 

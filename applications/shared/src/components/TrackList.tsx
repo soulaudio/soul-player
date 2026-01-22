@@ -287,6 +287,21 @@ function FormatDropdown({
   );
 }
 
+/** Props for TrackRowComponent */
+interface TrackRowProps {
+  group: GroupedTrack;
+  getActiveVersion: (group: GroupedTrack) => Track;
+  onVersionSelect: (groupKey: string, track: Track) => void;
+  onPlay: (group: GroupedTrack) => void;
+  onPause: () => void;
+  isCurrentTrack: boolean;
+  isPlaying: boolean;
+  isHovered: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  renderMenu?: (track: Track) => React.ReactNode;
+}
+
 /** Single track row component - memoized for performance */
 const TrackRowComponent = ({
   group,
@@ -300,19 +315,7 @@ const TrackRowComponent = ({
   onMouseEnter,
   onMouseLeave,
   renderMenu,
-}: {
-  group: GroupedTrack;
-  getActiveVersion: (group: GroupedTrack) => Track;
-  onVersionSelect: (groupKey: string, track: Track) => void;
-  onPlay: (group: GroupedTrack) => void;
-  onPause: () => void;
-  isCurrentTrack: boolean;
-  isPlaying: boolean;
-  isHovered: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  renderMenu?: (track: Track) => React.ReactNode;
-}) {
+}: TrackRowProps) => {
   const activeVersion = getActiveVersion(group);
   const showPauseButton = isCurrentTrack && isPlaying;
   const isUnavailable = activeVersion.isAvailable === false;

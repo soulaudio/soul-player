@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { Plus, X, Check, AlertCircle, Headphones, SlidersHorizontal, Volume2, Activity, Gauge, Waves, Settings2, ChevronUp, AudioWaveform } from 'lucide-react';
 import { ConfirmDialog } from '../../ui/Dialog';
 import {
-import { debug } from '../../../utils/debug';
   ParametricEqEditor,
   GraphicEqEditor,
   CompressorEditor,

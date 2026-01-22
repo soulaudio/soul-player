@@ -6,7 +6,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
-import { debug } from '../../../../utils/debug';
   FolderOpen,
   X,
   Volume2,

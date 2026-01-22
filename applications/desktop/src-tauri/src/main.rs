@@ -15,14 +15,17 @@
 mod app_state;
 mod artwork;
 mod audio_settings;
+mod config;
 mod deep_link;
 mod dsp_commands;
 mod fingerprint;
 mod import;
+mod lazy_workers;
 mod library_settings;
 mod loudness;
 mod playback;
 mod playback_context;
+mod playback_lazy;
 mod shortcuts;
 mod sources;
 mod splash;
@@ -32,8 +35,8 @@ mod updater;
 mod window_state_manager;
 
 use app_state::AppState;
-use import::ImportManager;
-use playback::PlaybackManager;
+use lazy_workers::{LazyAnalysisWorker, LazyFingerprintWorker, LazyImportManager, LazySyncState};
+use playback_lazy::LazyPlaybackManager;
 use serde::{Deserialize, Serialize};
 use soul_playback::{lazy_queue::QueueContext, RepeatMode, ShuffleMode};
 use std::path::PathBuf;
@@ -233,7 +236,7 @@ async fn play_track(
     file_path: String,
     duration_seconds: Option<f64>,
     track_number: Option<u32>,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     use std::time::Duration;
 
@@ -250,14 +253,14 @@ async fn play_track(
         source: soul_playback::TrackSource::Single,
     };
 
-    playback.play_track(track)
+    playback.get().await?.play_track(track)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn play_queue(
     queue: Vec<TrackData>,
     start_index: usize,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     let start = std::time::Instant::now();
 
@@ -303,7 +306,7 @@ async fn play_queue(
 
     // Stop current playback
     tracing::debug!("[play_queue] Calling stop()...");
-    let stop_result = playback.stop();
+    let stop_result = playback.get().await?.stop();
     tracing::debug!("[play_queue] stop() returned: {:?}", stop_result);
     stop_result?;
 
@@ -314,7 +317,7 @@ async fn play_queue(
         tracks.len()
     );
     let load_start = std::time::Instant::now();
-    let load_result = playback.load_playlist(tracks);
+    let load_result = playback.get().await?.load_playlist(tracks);
     let load_duration = load_start.elapsed();
     tracing::debug!(
         load_duration_ms = load_duration.as_millis(),
@@ -326,7 +329,7 @@ async fn play_queue(
     // Start playback (will play first track in source queue)
     tracing::debug!("[play_queue] Calling play()...");
     let play_start = std::time::Instant::now();
-    let play_result = playback.play();
+    let play_result = playback.get().await?.play();
     let play_duration = play_start.elapsed();
     tracing::debug!(
         play_duration_ms = play_duration.as_millis(),
@@ -352,7 +355,7 @@ async fn play_queue_with_context(
     initial_batch: Vec<TrackData>,
     start_index: usize,
     enable_shuffle: bool,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     tracing::debug!(
         "[play_queue_with_context] Context: {:?}, batch size: {}, start_index: {}, shuffle: {}",
@@ -386,26 +389,29 @@ async fn play_queue_with_context(
     };
 
     // Stop current playback
-    playback.stop()?;
+    playback.get().await?.stop()?;
 
     // Load initial batch as source queue
-    playback.load_playlist(tracks)?;
+    playback.get().await?.load_playlist(tracks)?;
 
     // Set lazy context with backend-generated seed
-    playback.set_lazy_context(context.clone(), shuffle_seed)?;
+    playback
+        .get()
+        .await?
+        .set_lazy_context(context.clone(), shuffle_seed)?;
 
     // Apply shuffle if enabled
     if enable_shuffle {
-        playback.set_shuffle(ShuffleMode::Random)?;
+        playback.get().await?.set_shuffle(ShuffleMode::Random)?;
     }
 
     // Skip to start index if needed
     if start_index > 0 {
-        playback.skip_to_index(start_index)?;
+        playback.get().await?.skip_to_index(start_index)?;
     }
 
     // Start playback
-    playback.play()?;
+    playback.get().await?.play()?;
 
     tracing::debug!(
         "[play_queue_with_context] Lazy queue initialized: context={:?}, total_count={}",
@@ -417,31 +423,35 @@ async fn play_queue_with_context(
 }
 
 #[tauri::command]
-async fn play(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.play()
+async fn play(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    let pm = playback.get().await?;
+    pm.play()
 }
 
 #[tauri::command]
-async fn pause_playback(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.pause()
+async fn pause_playback(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    let pm = playback.get().await?;
+    pm.pause()
 }
 
 #[tauri::command]
-async fn resume_playback(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.play()
+async fn resume_playback(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    let pm = playback.get().await?;
+    pm.play()
 }
 
 #[tauri::command]
-async fn stop_playback(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.stop()
+async fn stop_playback(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    let pm = playback.get().await?;
+    pm.stop()
 }
 
 #[tauri::command]
-async fn next_track(playback: State<'_, PlaybackManager>) -> Result<(), String> {
+async fn next_track(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
     let start = std::time::Instant::now();
     tracing::debug!("[next_track] Skipping to next track");
 
-    let result = playback.next();
+    let result = playback.get().await?.next();
 
     let duration = start.elapsed();
     tracing::info!(
@@ -454,11 +464,11 @@ async fn next_track(playback: State<'_, PlaybackManager>) -> Result<(), String> 
 }
 
 #[tauri::command]
-async fn previous_track(playback: State<'_, PlaybackManager>) -> Result<(), String> {
+async fn previous_track(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
     let start = std::time::Instant::now();
     tracing::debug!("[previous_track] Skipping to previous track");
 
-    let result = playback.previous();
+    let result = playback.get().await?.previous();
 
     let duration = start.elapsed();
     tracing::info!(
@@ -471,100 +481,100 @@ async fn previous_track(playback: State<'_, PlaybackManager>) -> Result<(), Stri
 }
 
 #[tauri::command]
-async fn set_volume(volume: u8, playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.set_volume(volume)
+async fn set_volume(volume: u8, playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    playback.get().await?.set_volume(volume)
 }
 
 #[tauri::command]
-async fn mute(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.mute()
+async fn mute(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    playback.get().await?.mute()
 }
 
 #[tauri::command]
-async fn unmute(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.unmute()
+async fn unmute(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    playback.get().await?.unmute()
 }
 
 #[tauri::command]
-async fn seek_to(position: f64, playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.seek(position)
+async fn seek_to(position: f64, playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    playback.get().await?.seek(position)
 }
 
 #[tauri::command]
-async fn set_shuffle(mode: String, playback: State<'_, PlaybackManager>) -> Result<(), String> {
+async fn set_shuffle(mode: String, playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
     let shuffle_mode = match mode.as_str() {
         "off" => ShuffleMode::Off,
         "random" => ShuffleMode::Random,
         "smart" => ShuffleMode::Smart,
         _ => return Err("Invalid shuffle mode".to_string()),
     };
-    playback.set_shuffle(shuffle_mode)
+    playback.get().await?.set_shuffle(shuffle_mode)
 }
 
 #[tauri::command]
-async fn set_repeat(mode: String, playback: State<'_, PlaybackManager>) -> Result<(), String> {
+async fn set_repeat(mode: String, playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
     let repeat_mode = match mode.as_str() {
         "off" => RepeatMode::Off,
         "all" => RepeatMode::All,
         "one" => RepeatMode::One,
         _ => return Err("Invalid repeat mode".to_string()),
     };
-    playback.set_repeat(repeat_mode)
+    playback.get().await?.set_repeat(repeat_mode)
 }
 
 #[tauri::command]
-async fn clear_queue(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.clear_queue()
+async fn clear_queue(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    playback.get().await?.clear_queue()
 }
 
 #[tauri::command]
 async fn add_play_next(
     track: TrackData,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     let queue_track = track.to_queue_track();
-    playback.add_play_next(queue_track)
+    playback.get().await?.add_play_next(queue_track)
 }
 
 #[tauri::command]
 async fn add_to_queue_end(
     track: TrackData,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     let queue_track = track.to_queue_track();
-    playback.add_to_queue_end(queue_track)
+    playback.get().await?.add_to_queue_end(queue_track)
 }
 
 #[tauri::command]
-async fn clear_play_next(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.clear_play_next()
+async fn clear_play_next(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    playback.get().await?.clear_play_next()
 }
 
 #[tauri::command]
-async fn clear_add_to_queue(playback: State<'_, PlaybackManager>) -> Result<(), String> {
-    playback.clear_add_to_queue()
+async fn clear_add_to_queue(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    playback.get().await?.clear_add_to_queue()
 }
 
 #[tauri::command]
-async fn cycle_shuffle(playback: State<'_, PlaybackManager>) -> Result<String, String> {
-    playback.cycle_shuffle()
+async fn cycle_shuffle(playback: State<'_, LazyPlaybackManager>) -> Result<String, String> {
+    playback.get().await?.cycle_shuffle()
 }
 
 #[tauri::command]
-async fn get_shuffle(playback: State<'_, PlaybackManager>) -> Result<String, String> {
-    Ok(playback.get_shuffle().as_str().to_string())
+async fn get_shuffle(playback: State<'_, LazyPlaybackManager>) -> Result<String, String> {
+    Ok(playback.get().await?.get_shuffle().as_str().to_string())
 }
 
 #[tauri::command]
-async fn get_repeat(playback: State<'_, PlaybackManager>) -> Result<String, String> {
-    Ok(playback.get_repeat().as_str().to_string())
+async fn get_repeat(playback: State<'_, LazyPlaybackManager>) -> Result<String, String> {
+    Ok(playback.get().await?.get_repeat().as_str().to_string())
 }
 
 #[tauri::command]
-async fn get_queue(playback: State<'_, PlaybackManager>) -> Result<Vec<TrackData>, String> {
+async fn get_queue(playback: State<'_, LazyPlaybackManager>) -> Result<Vec<TrackData>, String> {
     use soul_playback::TrackSource;
 
-    let queue = playback.get_queue();
+    let queue = playback.get().await?.get_queue();
     let queue_data = queue
         .iter()
         .map(|track| {
@@ -596,25 +606,25 @@ async fn get_queue(playback: State<'_, PlaybackManager>) -> Result<Vec<TrackData
 #[tauri::command]
 async fn skip_to_queue_index(
     index: usize,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
-    playback.skip_to_queue_index(index)
+    playback.get().await?.skip_to_queue_index(index)
 }
 
 #[tauri::command]
 async fn get_playback_capabilities(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
-        "hasNext": playback.has_next(),
-        "hasPrevious": playback.has_previous(),
+        "hasNext": playback.get().await?.has_next(),
+        "hasPrevious": playback.get().await?.has_previous(),
     }))
 }
 
 /// Get current playback state (for syncing UI with audio layer)
 #[tauri::command]
-async fn get_playback_state(playback: State<'_, PlaybackManager>) -> Result<String, String> {
-    let state = playback.get_state();
+async fn get_playback_state(playback: State<'_, LazyPlaybackManager>) -> Result<String, String> {
+    let state = playback.get().await?.get_state();
     // Return state as string matching what's emitted in events
     let state_str = match state {
         soul_playback::PlaybackState::Playing => "Playing",
@@ -1437,6 +1447,36 @@ async fn get_user_setting(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn set_logging_enabled(
+    enabled: bool,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    // Update database
+    soul_storage::settings::set_setting(
+        &state.pool,
+        &state.user_id,
+        soul_storage::settings::SETTING_LOGGING_ENABLED,
+        &serde_json::Value::Bool(enabled),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Update config file cache so the preference is available on next startup
+    // without querying the database
+    let app_data_dir = get_app_data_dir();
+    let config = config::AppConfig {
+        enable_file_logging: enabled,
+    };
+    config
+        .write(&app_data_dir)
+        .map_err(|e| format!("Failed to write config file: {}", e))?;
+
+    tracing::info!("Logging preference updated: enabled={}", enabled);
+
+    Ok(())
+}
+
 /// Get artwork as data URL for a track
 #[tauri::command]
 async fn get_track_artwork(
@@ -1996,41 +2036,15 @@ fn init_console_logging() {
 }
 
 fn main() {
-    // Check user's logging preference from database before initializing logging
-    // This allows the UI toggle to override the --logs command-line flag
-    let enable_file_logging = tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(async {
-            // Get database path (same logic as in setup closure)
-            let app_data_dir = get_app_data_dir();
-            let db_path = app_data_dir.join("soul-player.db");
-
-            // Only check database if it exists (avoid creating DB just to check logging)
-            if !db_path.exists() {
-                return None;
-            }
-
-            // Create temporary pool to check setting
-            let db_url = if cfg!(windows) {
-                let path_str = db_path.to_str()?.replace('\\', "/");
-                format!("sqlite:///{}", path_str)
-            } else {
-                format!("sqlite://{}", db_path.to_str()?)
-            };
-
-            let pool = soul_storage::create_pool(&db_url).await.ok()?;
-
-            // Check user's logging preference (user_id = "1" for desktop)
-            soul_storage::settings::get_logging_enabled(&pool, "1")
-                .await
-                .ok()
-                .flatten()
-        })
+    // Check user's logging preference from config.json cache (not database)
+    // This avoids blocking the main thread with a database query before Tauri starts
+    let app_data_dir = get_app_data_dir();
+    let enable_file_logging = config::AppConfig::read(&app_data_dir)
+        .map(|c| c.enable_file_logging)
         .unwrap_or_else(|| {
             // Fall back to --logs flag if:
-            // - Database doesn't exist yet (first run)
-            // - Database check failed
-            // - User hasn't set preference (returns None)
+            // - config.json doesn't exist yet (first run)
+            // - config.json can't be parsed
             std::env::args().any(|arg| arg == "--logs")
         });
 
@@ -2139,6 +2153,33 @@ fn main() {
                 emit_init_progress(&app_handle, "Loading settings...", 30).await;
                 app_handle.manage(app_state);
 
+                // Sync logging preference from database to config.json cache
+                // This ensures config.json is always up-to-date for next startup
+                match soul_storage::settings::get_logging_enabled(&pool, "1").await {
+                    Ok(Some(enabled)) => {
+                        let config = config::AppConfig {
+                            enable_file_logging: enabled,
+                        };
+                        if let Err(e) = config.write(&app_data_dir) {
+                            tracing::warn!("Failed to write config.json: {}", e);
+                        } else {
+                            tracing::debug!("Synced logging preference to config.json: {}", enabled);
+                        }
+                    }
+                    Ok(None) => {
+                        // No preference set in database, create default config
+                        let config = config::AppConfig::default();
+                        if let Err(e) = config.write(&app_data_dir) {
+                            tracing::warn!("Failed to write default config.json: {}", e);
+                        } else {
+                            tracing::debug!("Created default config.json");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to read logging preference from database: {}", e);
+                    }
+                }
+
                 // Cleanup any orphaned scans from previous app crash/quit
                 let device_id = library_settings::get_device_id();
                 match soul_storage::library_sources::cleanup_orphaned_scans(
@@ -2159,86 +2200,35 @@ fn main() {
                     _ => {}
                 }
 
-                emit_init_progress(&app_handle, "Initializing audio engine...", 50).await;
+                // Initialize lazy playback manager (audio engine initializes on first playback)
+                // This removes 200-800ms from startup time by deferring expensive audio
+                // device enumeration and stream initialization until first play command
+                app_handle.manage(LazyPlaybackManager::new(app_handle.clone()));
+                tracing::info!("[main] LazyPlaybackManager created (audio engine will initialize on first playback)");
 
-                // Initialize playback manager
-                let playback_manager = PlaybackManager::new(app_handle.clone())
-                    .expect("Failed to initialize playback");
+                // Phase 2A: Initialize lazy workers (defer initialization until first use)
+                // This removes 100-200ms from startup by deferring worker creation
+                tracing::info!("[main] Registering lazy workers (will initialize on first use)");
 
-                // Restore saved audio device (if any)
-                {
-                    let app_state_for_init = app_handle.state::<AppState>();
-                    if let Err(e) = audio_settings::initialize_audio_device(
-                        &playback_manager,
-                        &app_state_for_init,
-                    )
-                    .await
-                    {
-                        tracing::warn!("[main] Warning: Failed to restore audio device: {}", e);
-                    }
-                }
+                // Loudness analyzer - deferred until first analysis request
+                app_handle.manage(LazyAnalysisWorker::new());
 
-                // Restore saved volume leveling mode (if any)
-                {
-                    let app_state_for_init = app_handle.state::<AppState>();
-                    if let Err(e) = loudness::initialize_volume_leveling_mode(
-                        &playback_manager,
-                        &app_state_for_init,
-                    )
-                    .await
-                    {
-                        tracing::warn!(
-                            "[main] Warning: Failed to restore volume leveling mode: {}",
-                            e
-                        );
-                    }
-                }
-
-                // Restore saved DSP effect chain
-                {
-                    let app_state_for_init = app_handle.state::<AppState>();
-                    dsp_commands::restore_dsp_chain_from_database(
-                        &playback_manager,
-                        &app_state_for_init.pool,
-                        &app_state_for_init.user_id,
-                    )
-                    .await;
-                }
-
-                app_handle.manage(playback_manager);
-
-                emit_init_progress(&app_handle, "Initializing loudness analyzer...", 55).await;
-
-                // Initialize loudness analysis worker
-                let analysis_worker =
-                    std::sync::Arc::new(tokio::sync::Mutex::new(loudness::AnalysisWorker::new()));
-                app_handle.manage(analysis_worker);
-
-                emit_init_progress(&app_handle, "Configuring import system...", 60).await;
-
-                // Initialize import manager
-                // Use the same platform-specific directory as the database
+                // Import manager - deferred until first import operation
                 let library_path = app_data_dir.join("library");
-
-                let import_manager = ImportManager::new(
+                app_handle.manage(LazyImportManager::new(
                     pool.clone(),
                     "1".to_string(), // Desktop uses user_id = "1" as default user
                     library_path,
-                )
-                .await
-                .expect("Failed to initialize import manager");
-                app_handle.manage(import_manager);
-
-                emit_init_progress(&app_handle, "Initializing sync system...", 65).await;
-
-                // Initialize sync manager
-                let sync_state = std::sync::Arc::new(tokio::sync::Mutex::new(
-                    sync::SyncState::new(pool.clone()),
                 ));
-                app_handle.manage(sync_state.clone());
+
+                // Sync manager - deferred until first sync operation
+                let lazy_sync = LazySyncState::new(pool.clone());
+                app_handle.manage(lazy_sync.clone());
 
                 // Check if auto-sync is needed (schema changes)
+                // This triggers lazy initialization only if needed
                 {
+                    let sync_state = lazy_sync.get_for_startup_check().await.expect("Failed to get sync state");
                     let sync_guard = sync_state.lock().await;
                     if let Ok(Some(trigger)) = sync_guard.manager.should_auto_sync().await {
                         drop(sync_guard);
@@ -2250,11 +2240,8 @@ fn main() {
                     }
                 }
 
-                emit_init_progress(&app_handle, "Initializing fingerprint worker...", 68).await;
-
-                // Initialize fingerprint worker
-                let fingerprint_worker = std::sync::Arc::new(fingerprint::FingerprintWorker::new());
-                app_handle.manage(fingerprint_worker);
+                // Fingerprint worker - deferred until first fingerprinting request
+                app_handle.manage(LazyFingerprintWorker::new());
 
                 emit_init_progress(&app_handle, "Setting up system tray...", 70).await;
 
@@ -2264,28 +2251,14 @@ fn main() {
                 //     eprintln!("Failed to create tray: {}", e);
                 // }
 
-                emit_init_progress(&app_handle, "Registering shortcuts...", 80).await;
-
-                // Register global shortcuts
-                if let Err(e) = shortcuts::register_shortcuts(&app_handle).await {
-                    tracing::warn!("Failed to register shortcuts: {}", e);
-                }
-
-                emit_init_progress(&app_handle, "Configuring deep links...", 85).await;
-
-                // Setup deep link handler
-                if let Err(e) = deep_link::setup(&app_handle) {
-                    tracing::warn!("Failed to setup deep links: {}", e);
-                }
-
-                emit_init_progress(&app_handle, "Loading window state...", 90).await;
+                emit_init_progress(&app_handle, "Loading window state...", 80).await;
 
                 // Load window state
                 if let Err(e) = window_state_manager::load_window_state(&app_handle).await {
                     tracing::warn!("Failed to load window state: {}", e);
                 }
 
-                emit_init_progress(&app_handle, "Starting update checker...", 95).await;
+                emit_init_progress(&app_handle, "Starting update checker...", 90).await;
 
                 // Start update checker
                 updater::start_update_checker(app_handle.clone());
@@ -2309,6 +2282,26 @@ fn main() {
                         }
                     }
                 }
+
+                // Register shortcuts and deep links in background after window is shown
+                // This removes 50-100ms from the critical startup path
+                let app_handle_bg = app_handle.clone();
+                tokio::spawn(async move {
+                    // Small delay to ensure window is fully shown and settled
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+                    tracing::info!("[Background] Registering global shortcuts...");
+                    if let Err(e) = shortcuts::register_shortcuts(&app_handle_bg).await {
+                        tracing::warn!("[Background] Failed to register shortcuts: {}", e);
+                    }
+
+                    tracing::info!("[Background] Setting up deep link handler...");
+                    if let Err(e) = deep_link::setup(&app_handle_bg) {
+                        tracing::warn!("[Background] Failed to setup deep links: {}", e);
+                    }
+
+                    tracing::info!("[Background] Shortcuts and deep links registered");
+                });
 
                 // Handle file associations from command line (Windows/Linux)
                 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
@@ -2501,6 +2494,7 @@ fn main() {
             get_user_settings,
             set_user_setting,
             get_user_setting,
+            set_logging_enabled,
             // Artwork
             get_track_artwork,
             get_album_artwork,

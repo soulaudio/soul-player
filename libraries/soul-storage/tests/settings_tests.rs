@@ -290,14 +290,17 @@ async fn test_import_strategy_persistence() {
         .unwrap();
 
     // Set strategy to "reference"
-    settings::set_setting(&pool, "1", settings::SETTING_IMPORT_STRATEGY, &serde_json::json!("reference"))
-        .await
-        .unwrap();
+    settings::set_setting(
+        &pool,
+        "1",
+        settings::SETTING_IMPORT_STRATEGY,
+        &serde_json::json!("reference"),
+    )
+    .await
+    .unwrap();
 
     // Load strategy
-    let loaded = settings::get_import_strategy(&pool, "1")
-        .await
-        .unwrap();
+    let loaded = settings::get_import_strategy(&pool, "1").await.unwrap();
 
     // Verify it matches
     assert_eq!(loaded, "reference");
@@ -314,9 +317,7 @@ async fn test_import_strategy_defaults_to_copy() {
         .unwrap();
 
     // Load strategy without setting it (should get default)
-    let loaded = settings::get_import_strategy(&pool, "1")
-        .await
-        .unwrap();
+    let loaded = settings::get_import_strategy(&pool, "1").await.unwrap();
 
     // Verify default is "copy"
     assert_eq!(loaded, "copy");
@@ -333,19 +334,27 @@ async fn test_import_strategy_update() {
         .unwrap();
 
     // Set initial strategy to "copy"
-    settings::set_setting(&pool, "1", settings::SETTING_IMPORT_STRATEGY, &serde_json::json!("copy"))
-        .await
-        .unwrap();
+    settings::set_setting(
+        &pool,
+        "1",
+        settings::SETTING_IMPORT_STRATEGY,
+        &serde_json::json!("copy"),
+    )
+    .await
+    .unwrap();
 
     // Update to "reference"
-    settings::set_setting(&pool, "1", settings::SETTING_IMPORT_STRATEGY, &serde_json::json!("reference"))
-        .await
-        .unwrap();
+    settings::set_setting(
+        &pool,
+        "1",
+        settings::SETTING_IMPORT_STRATEGY,
+        &serde_json::json!("reference"),
+    )
+    .await
+    .unwrap();
 
     // Verify updated strategy
-    let loaded = settings::get_import_strategy(&pool, "1")
-        .await
-        .unwrap();
+    let loaded = settings::get_import_strategy(&pool, "1").await.unwrap();
 
     assert_eq!(loaded, "reference");
 }

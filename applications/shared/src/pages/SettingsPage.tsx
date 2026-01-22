@@ -13,7 +13,6 @@ import { AudioSettingsPage } from '../components/settings/AudioSettingsPage'
 import { LibrarySettingsPage } from '../components/settings/LibrarySettingsPage'
 import { ReportBugSettingsPage } from '../components/settings/ReportBugSettingsPage'
 import {
-import { debug } from '../utils/debug';
   Settings,
   Volume2,
   Keyboard,
