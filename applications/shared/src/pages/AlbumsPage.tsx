@@ -2,7 +2,7 @@
  * AlbumsPage - displays all albums with search and grid scaling
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useDeferredValue } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Disc3 } from 'lucide-react'
 import { AlbumCard } from '../components/AlbumCard'
@@ -20,6 +20,7 @@ export function AlbumsPage() {
   const columnCount = useResponsiveColumns(scale)
 
   const [searchQuery, setSearchQuery] = useState('')
+  const deferredSearchQuery = useDeferredValue(searchQuery)
 
   // Fetch data using React Query hooks
   const { data: albums = [], isLoading, isError, error } = useAlbums()
@@ -30,14 +31,14 @@ export function AlbumsPage() {
 
   // Filter albums by search
   const filteredAlbums = useMemo(() => {
-    if (!searchQuery.trim()) return albums
-    const query = searchQuery.toLowerCase()
+    if (!deferredSearchQuery.trim()) return albums
+    const query = deferredSearchQuery.toLowerCase()
     return albums.filter(
       a =>
         a.title.toLowerCase().includes(query) ||
         (a.artist_name || '').toLowerCase().includes(query)
     )
-  }, [albums, searchQuery])
+  }, [albums, deferredSearchQuery])
 
   // Grid columns based on scale - responsive breakpoints to prevent overlap
   const gridClass = useMemo(() => {

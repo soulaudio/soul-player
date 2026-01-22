@@ -2,7 +2,7 @@
  * ArtistsPage - displays all artists with search and grid scaling
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useDeferredValue } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Users } from 'lucide-react'
 import { ArtistCard } from '../components/ArtistCard'
@@ -20,6 +20,7 @@ export function ArtistsPage() {
   const columnCount = useResponsiveColumns(scale)
 
   const [searchQuery, setSearchQuery] = useState('')
+  const deferredSearchQuery = useDeferredValue(searchQuery)
 
   // Fetch data using React Query hooks
   const { data: artists = [], isLoading, isError, error } = useArtists()
@@ -30,10 +31,10 @@ export function ArtistsPage() {
 
   // Filter artists by search
   const filteredArtists = useMemo(() => {
-    if (!searchQuery.trim()) return artists
-    const query = searchQuery.toLowerCase()
+    if (!deferredSearchQuery.trim()) return artists
+    const query = deferredSearchQuery.toLowerCase()
     return artists.filter(a => a.name.toLowerCase().includes(query))
-  }, [artists, searchQuery])
+  }, [artists, deferredSearchQuery])
 
   // Grid columns based on scale - responsive breakpoints to prevent overlap
   const gridClass = useMemo(() => {

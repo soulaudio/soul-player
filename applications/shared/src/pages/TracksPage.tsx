@@ -2,7 +2,7 @@
  * TracksPage - displays all tracks with search
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useDeferredValue } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Music } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
@@ -23,6 +23,7 @@ export function TracksPage() {
   const commands = usePlayerCommands()
 
   const [searchQuery, setSearchQuery] = useState('')
+  const deferredSearchQuery = useDeferredValue(searchQuery)
 
   // Add to playlist dialog state
   const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
@@ -40,15 +41,15 @@ export function TracksPage() {
 
   // Filter tracks by search
   const filteredTracks = useMemo(() => {
-    if (!searchQuery.trim()) return tracks
-    const query = searchQuery.toLowerCase()
+    if (!deferredSearchQuery.trim()) return tracks
+    const query = deferredSearchQuery.toLowerCase()
     return tracks.filter(
       t =>
         t.title?.toLowerCase().includes(query) ||
         (t.artist_name || '').toLowerCase().includes(query) ||
         (t.album_title || '').toLowerCase().includes(query)
     )
-  }, [tracks, searchQuery])
+  }, [tracks, deferredSearchQuery])
 
   // Build queue from tracks (optimized: only first 50 tracks for immediate playback)
   const buildQueueFromTracks = useCallback((

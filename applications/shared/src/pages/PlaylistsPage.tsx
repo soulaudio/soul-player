@@ -2,7 +2,7 @@
  * PlaylistsPage - displays all playlists with search and grid scaling
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useDeferredValue } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ListMusic, Plus } from 'lucide-react'
@@ -26,6 +26,7 @@ export function PlaylistsPage() {
   const createPlaylistMutation = useCreatePlaylist()
 
   const [searchQuery, setSearchQuery] = useState('')
+  const deferredSearchQuery = useDeferredValue(searchQuery)
 
   // Fetch data using React Query hooks
   const { data: playlists = [], isLoading, isError, error } = usePlaylists()
@@ -36,10 +37,10 @@ export function PlaylistsPage() {
 
   // Filter playlists by search
   const filteredPlaylists = useMemo(() => {
-    if (!searchQuery.trim()) return playlists
-    const query = searchQuery.toLowerCase()
+    if (!deferredSearchQuery.trim()) return playlists
+    const query = deferredSearchQuery.toLowerCase()
     return playlists.filter(p => p.name.toLowerCase().includes(query))
-  }, [playlists, searchQuery])
+  }, [playlists, deferredSearchQuery])
 
   // Grid columns based on scale - responsive breakpoints to prevent overlap
   const gridClass = useMemo(() => {
