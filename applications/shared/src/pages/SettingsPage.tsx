@@ -21,6 +21,7 @@ import {
   FolderOpen,
   Bug,
 } from 'lucide-react'
+import { debug } from '../utils/debug'
 
 type SettingsTab = 'general' | 'library' | 'audio' | 'shortcuts' | 'reportBug' | 'about'
 

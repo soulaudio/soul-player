@@ -23,6 +23,7 @@ import {
   Guitar,
   ChevronDown,
 } from 'lucide-react'
+import { debug } from '../utils/debug'
 
 type ContextType = 'album' | 'playlist' | 'artist' | 'genre' | 'library'
 

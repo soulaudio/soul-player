@@ -3,6 +3,8 @@
  * Reusable across marketing demo and web demo mode
  */
 
+import { debug } from '../utils/debug';
+
 export interface DemoTrack {
   id: string
   title: string

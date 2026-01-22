@@ -16,6 +16,7 @@ import {
   Loader2,
   Music
 } from 'lucide-react';
+import { debug } from '../../../../utils/debug';
 
 /**
  * Settings for the convolution effect

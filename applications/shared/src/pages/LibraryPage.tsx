@@ -245,7 +245,7 @@ export function LibraryPage() {
   }
 
   // Helper to determine if current tab is loading
-  const isCurrentTabLoading = () => {
+  const _isCurrentTabLoading = () => {
     switch (activeTab) {
       case 'albums':
         return isAlbumsLoading

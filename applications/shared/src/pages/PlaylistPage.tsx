@@ -142,7 +142,7 @@ export function PlaylistPage() {
     return `${minutes} min`
   }
 
-  const formatTrackDuration = (seconds?: number): string => {
+  const _formatTrackDuration = (seconds?: number): string => {
     if (!seconds) return '--:--'
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
@@ -276,7 +276,7 @@ export function PlaylistPage() {
               sampleRate: t.sample_rate,
               channels: t.channels,
             }))}
-            buildQueue={(allTracks, clickedTrack, clickedIndex) => {
+            buildQueue={(_allTracks, clickedTrack, _clickedIndex) => {
               // Build queue from all tracks, starting at clicked position
               const queue = tracks
                 .filter((t) => t.file_path)

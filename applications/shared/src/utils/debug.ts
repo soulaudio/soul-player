@@ -5,9 +5,9 @@
 
 /**
  * Check if we're in development mode.
- * Uses import.meta.env.DEV for Vite-based builds.
+ * Uses process.env.NODE_ENV for compatibility across build tools.
  */
-const isDevelopment = import.meta.env.DEV;
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 /**
  * Debug logging utility.

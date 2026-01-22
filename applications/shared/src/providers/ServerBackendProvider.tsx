@@ -16,6 +16,7 @@ import type {
   PlaybackContext,
   SetArtworkParams,
 } from '../contexts/BackendContext'
+import { debug } from '../utils/debug'
 
 interface ServerBackendProviderProps {
   apiBase: string
