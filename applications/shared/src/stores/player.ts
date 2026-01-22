@@ -61,3 +61,45 @@ export const usePlayerStore = create<PlayerState>((set) => ({
 
   setShuffleMode: (mode) => set({ shuffleMode: mode }),
 }));
+
+// =============================================================================
+// Optimized Selector Hooks (Performance Enhancement)
+// =============================================================================
+// These selector hooks prevent unnecessary re-renders by subscribing to only
+// the specific state values that a component needs, instead of the entire store.
+//
+// Example: A component using useCurrentTrack() will ONLY re-render when
+// currentTrack changes, not when volume, progress, or any other state changes.
+//
+// Before: const { currentTrack } = usePlayerStore() → re-renders on ANY state change
+// After: const currentTrack = useCurrentTrack() → re-renders ONLY on currentTrack change
+// =============================================================================
+
+export const useCurrentTrack = () => usePlayerStore(state => state.currentTrack);
+export const useIsPlaying = () => usePlayerStore(state => state.isPlaying);
+export const useProgress = () => usePlayerStore(state => state.progress);
+export const useDuration = () => usePlayerStore(state => state.duration);
+export const useVolume = () => usePlayerStore(state => state.volume);
+export const useShuffleMode = () => usePlayerStore(state => state.shuffleMode);
+export const useRepeatMode = () => usePlayerStore(state => state.repeatMode);
+export const useQueue = () => usePlayerStore(state => state.queue);
+export const useQueueIndex = () => usePlayerStore(state => state.queueIndex);
+
+// Composite selectors for components that need multiple values
+// Still better than full store subscription
+export const usePlayerPlayback = () => usePlayerStore(state => ({
+  currentTrack: state.currentTrack,
+  isPlaying: state.isPlaying,
+}));
+
+export const usePlayerProgress = () => usePlayerStore(state => ({
+  progress: state.progress,
+  duration: state.duration,
+}));
+
+export const usePlayerModes = () => usePlayerStore(state => ({
+  shuffleMode: state.shuffleMode,
+  repeatMode: state.repeatMode,
+  setShuffleMode: state.setShuffleMode,
+  setRepeatMode: state.setRepeatMode,
+}));

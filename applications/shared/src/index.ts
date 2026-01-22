@@ -5,7 +5,23 @@ export * from './types';
 export { initI18n, useTranslation, Trans, I18nextProvider } from './i18n';
 
 // Stores
-export { usePlayerStore } from './stores/player';
+export {
+  usePlayerStore,
+  // Optimized selector hooks (CRITICAL for performance)
+  useCurrentTrack,
+  useIsPlaying,
+  useProgress,
+  useDuration,
+  useVolume,
+  useShuffleMode,
+  useRepeatMode,
+  useQueue,
+  useQueueIndex,
+  // Composite selectors
+  usePlayerPlayback,
+  usePlayerProgress,
+  usePlayerModes,
+} from './stores/player';
 export { useLibraryStore } from './stores/library';
 
 // Hooks
