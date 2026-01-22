@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO playlist_tracks (playlist_id, track_id, position)\n        VALUES (?, ?, ?)\n        ON CONFLICT(playlist_id, track_id) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "e1b259bc597d3eab270c940b9fe9b48a585e6fe46501862f1e0ed812fc21dc16"
+}

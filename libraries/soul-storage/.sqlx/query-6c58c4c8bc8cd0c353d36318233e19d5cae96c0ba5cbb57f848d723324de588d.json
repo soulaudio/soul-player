@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "value",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6c58c4c8bc8cd0c353d36318233e19d5cae96c0ba5cbb57f848d723324de588d"
+}

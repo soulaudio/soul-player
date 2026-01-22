@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT action, accelerator, enabled, is_default FROM global_shortcuts WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "action",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "accelerator",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "enabled",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_default",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a7d547e69ce8ba9e0bde6ec64fdd3419da07e52fd81abf51d2be0e04682b5731"
+}

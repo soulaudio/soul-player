@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE playlist_tracks SET position = ? WHERE playlist_id = ? AND track_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "920a9753a187d61d362d32262443e7384d6cd1d9039259a6ffce3d53649a3dbd"
+}

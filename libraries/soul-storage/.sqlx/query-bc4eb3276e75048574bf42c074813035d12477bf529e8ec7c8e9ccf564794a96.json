@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, canonical_name, created_at\n         FROM genres\n         WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "canonical_name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bc4eb3276e75048574bf42c074813035d12477bf529e8ec7c8e9ccf564794a96"
+}

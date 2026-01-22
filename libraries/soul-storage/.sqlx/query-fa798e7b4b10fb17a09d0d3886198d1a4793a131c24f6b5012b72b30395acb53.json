@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE sources SET is_online = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "fa798e7b4b10fb17a09d0d3886198d1a4793a131c24f6b5012b72b30395acb53"
+}

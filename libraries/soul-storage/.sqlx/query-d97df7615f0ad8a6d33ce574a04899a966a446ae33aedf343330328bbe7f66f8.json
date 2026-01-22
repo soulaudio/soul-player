@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT g.id, g.name, g.canonical_name, g.created_at\n         FROM genres g\n         INNER JOIN track_genres tg ON g.id = tg.genre_id\n         WHERE tg.track_id = ?\n         ORDER BY g.name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "canonical_name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d97df7615f0ad8a6d33ce574a04899a966a446ae33aedf343330328bbe7f66f8"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            COALESCE(\n                CASE\n                    WHEN p.owner_id = ? THEN 1\n                    WHEN ps.permission = 'write' THEN 1\n                    ELSE 0\n                END,\n                0\n            ) as \"has_permission: i64\"\n        FROM playlists p\n        LEFT JOIN playlist_shares ps ON p.id = ps.playlist_id AND ps.shared_with_user_id = ?\n        WHERE p.id = ?\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "has_permission: i64",
+        "ordinal": 0,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c71091d56ee37de5ebef4a106a61823cee3bef54c4109c41e5c79ce7d8a769ec"
+}

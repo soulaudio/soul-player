@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM global_shortcuts WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a25e2ed147a8e9c1e3c2cd889229db37c8b0dd2b8e1d8572cb9b8fe7946f6594"
+}

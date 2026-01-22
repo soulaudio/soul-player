@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT x, y, width, height, maximized, last_route FROM window_state WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "x",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "y",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "width",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "height",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "maximized",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_route",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "6b76c352064e5383f3115383ad3f81051007de25b94dd3a04708f08542434c09"
+}

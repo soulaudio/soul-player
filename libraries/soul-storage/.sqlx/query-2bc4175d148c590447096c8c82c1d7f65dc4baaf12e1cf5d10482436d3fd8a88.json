@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) as count FROM user_credentials WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2bc4175d148c590447096c8c82c1d7f65dc4baaf12e1cf5d10482436d3fd8a88"
+}
