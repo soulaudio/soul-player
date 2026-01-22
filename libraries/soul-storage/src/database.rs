@@ -19,10 +19,20 @@ impl Database {
     /// # Errors
     /// Returns an error if the connection fails or migrations fail
     pub async fn new(database_url: &str) -> Result<Self> {
-        let options = SqliteConnectOptions::from_str(database_url)?.create_if_missing(true);
+        let options = SqliteConnectOptions::from_str(database_url)?
+            .create_if_missing(true)
+            // Enable WAL mode for better concurrent read performance
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            // Optimize for macOS and other platforms with many concurrent queries
+            .busy_timeout(std::time::Duration::from_secs(5));
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(5)
+            // Increased from 5 to 20 to handle concurrent operations
+            .max_connections(20)
+            // Keep minimum connections ready to reduce latency
+            .min_connections(2)
+            // Reduce slow acquisition threshold for earlier warnings
+            .acquire_timeout(std::time::Duration::from_secs(10))
             .connect_with(options)
             .await?;
 
