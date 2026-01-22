@@ -21,7 +21,7 @@ import {
   DemoStorage,
   ScrollVisibilityProvider,
   AddToPlaylistDialog,
-  usePlayerStore,
+  useCurrentTrack,
   QueryClient,
   QueryClientProvider,
 } from '@soul-player/shared'
@@ -55,7 +55,7 @@ export function DemoApp() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false)
-  const { currentTrack } = usePlayerStore()
+  const currentTrack = useCurrentTrack()
 
   // Initialize demo storage on mount
   useEffect(() => {

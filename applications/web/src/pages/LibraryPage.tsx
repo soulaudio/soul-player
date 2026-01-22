@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { usePlayerCommands, usePlayerStore, TrackList, type Track } from '@soul-player/shared';
+import { usePlayerCommands, usePlayerPlayback, TrackList, type Track } from '@soul-player/shared';
 import { apiClient } from '../api/client';
 
 interface TracksResponse {
@@ -13,7 +13,7 @@ export function LibraryPage() {
   const [error, setError] = useState<string | null>(null);
 
   const commands = usePlayerCommands();
-  const { currentTrack, isPlaying } = usePlayerStore();
+  const { currentTrack, isPlaying } = usePlayerPlayback();
 
   useEffect(() => {
     const loadTracks = async () => {

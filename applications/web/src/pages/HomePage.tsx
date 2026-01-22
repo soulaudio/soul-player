@@ -1,8 +1,8 @@
-import { usePlayerStore } from '@soul-player/shared';
+import { usePlayerPlayback } from '@soul-player/shared';
 import { Music } from 'lucide-react';
 
 export function HomePage() {
-  const { currentTrack, isPlaying } = usePlayerStore();
+  const { currentTrack, isPlaying } = usePlayerPlayback();
 
   return (
     <div className="p-6 space-y-8">
