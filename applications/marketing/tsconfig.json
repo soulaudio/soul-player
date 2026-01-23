@@ -51,6 +51,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "vitest.d.ts",
     "**/*.ts",
     "**/*.tsx",
     "**/*.mdx",

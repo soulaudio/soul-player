@@ -16,7 +16,7 @@ import {
   PlaylistPage,
 } from '@soul-player/shared';
 // Desktop-specific pages
-import { SettingsPage } from './pages/SettingsPage';
+import { SettingsRouter } from './pages/SettingsRouter';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { GenrePage } from './pages/GenrePage';
 import { FileDropHandler } from './components/FileDropHandler';
@@ -99,46 +99,56 @@ function App() {
   // Listen for artwork change events from backend
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let isMounted = true;
 
     async function setupArtworkListener() {
-      // Check if we're in Tauri environment
-      if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-        const { listen } = await import('@tauri-apps/api/event');
-        const { invoke } = await import('@tauri-apps/api/core');
+      try {
+        // Check if we're in Tauri environment
+        if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+          const { listen } = await import('@tauri-apps/api/event');
+          const { invoke } = await import('@tauri-apps/api/core');
 
-        unlisten = await listen<{ entityType: string; entityId: string }>('artwork-changed', async (event) => {
-          console.log('[App] Artwork changed:', event.payload);
-          const { entityType, entityId } = event.payload;
+          // Only set up listener if component is still mounted
+          if (!isMounted) return;
 
-          // Clear the cache for this entity to force reload
-          if (entityType === 'album') {
-            // Clear album cache
-            clearArtworkCache('album', entityId);
+          unlisten = await listen<{ entityType: string; entityId: string }>('artwork-changed', async (event) => {
+            console.log('[App] Artwork changed:', event.payload);
+            const { entityType, entityId } = event.payload;
 
-            // Also clear cache for all tracks in this album
-            try {
-              const tracks = await invoke<Array<{ id: string }>>('get_album_tracks', {
-                albumId: parseInt(entityId, 10)
-              });
-              tracks.forEach(track => {
-                clearArtworkCache('track', track.id);
-              });
-              console.log(`[App] Cleared cache for album ${entityId} and ${tracks.length} tracks`);
-            } catch (error) {
-              console.error('[App] Failed to get album tracks for cache clearing:', error);
+            // Clear the cache for this entity to force reload
+            if (entityType === 'album') {
+              // Clear album cache
+              clearArtworkCache('album', entityId);
+
+              // Also clear cache for all tracks in this album
+              try {
+                const tracks = await invoke<Array<{ id: string }>>('get_album_tracks', {
+                  albumId: parseInt(entityId, 10)
+                });
+                tracks.forEach(track => {
+                  clearArtworkCache('track', track.id);
+                });
+                console.log(`[App] Cleared cache for album ${entityId} and ${tracks.length} tracks`);
+              } catch (error) {
+                console.error('[App] Failed to get album tracks for cache clearing:', error);
+              }
+            } else if (entityType === 'artist' || entityType === 'playlist') {
+              clearArtworkCache(entityType, entityId);
             }
-          } else if (entityType === 'artist' || entityType === 'playlist') {
-            clearArtworkCache(entityType, entityId);
-          }
-        });
+          });
 
-        console.log('[App] Listening for artwork-changed events');
+          console.log('[App] Listening for artwork-changed events');
+        }
+      } catch (error) {
+        console.error('[App] Failed to set up artwork listener:', error);
       }
     }
 
-    setupArtworkListener();
+    // Await the setup to prevent race conditions and loading cursor issues
+    void setupArtworkListener();
 
     return () => {
+      isMounted = false;
       if (unlisten) {
         unlisten();
       }
@@ -178,7 +188,7 @@ function App() {
           <Route path="/tracks" element={<TracksPage />} />
           <Route path="/genres/:id" element={<GenrePage />} />
           <Route path="/now-playing" element={<NowPlayingPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/*" element={<SettingsRouter />} />
         </Routes>
       </MainLayout>
     </FileDropHandler>

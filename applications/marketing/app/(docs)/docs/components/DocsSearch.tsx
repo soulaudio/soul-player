@@ -154,7 +154,7 @@ export function DocsSearch() {
       {/* Search trigger button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground bg-muted/50 rounded-md border border-border hover:bg-muted transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground bg-muted/50 rounded-md border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
       >
         <Search className="w-4 h-4" />
         <span className="hidden sm:inline">Search...</span>
@@ -188,12 +188,12 @@ export function DocsSearch() {
                 onKeyDown={handleKeyDown}
                 placeholder={pagefind ? 'Search documentation...' : 'Search coming soon...'}
                 disabled={!pagefind}
-                className="flex-1 py-4 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                className="flex-1 py-4 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-[var(--disabled-opacity)]"
               />
               {isLoading && <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />}
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                className="p-1 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -206,10 +206,10 @@ export function DocsSearch() {
                   <li key={result.url}>
                     <button
                       onClick={() => handleSelect(result.url)}
-                      className={`w-full flex items-start gap-3 p-3 rounded-md text-left transition-colors ${
+                      className={`w-full flex items-start gap-3 p-3 rounded-md text-left transition-colors duration-[var(--transition-duration)] ${
                         index === selectedIndex
-                          ? 'bg-accent text-foreground'
-                          : 'hover:bg-muted'
+                          ? 'bg-foreground/[var(--hover-bg-opacity)] text-foreground'
+                          : 'hover:bg-foreground/[var(--hover-bg-opacity)]'
                       }`}
                     >
                       <FileText className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />

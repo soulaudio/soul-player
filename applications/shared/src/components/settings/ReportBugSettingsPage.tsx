@@ -117,7 +117,7 @@ export function ReportBugSettingsPage() {
         <div className="mt-6 pt-6 border-t border-border">
           <button
             onClick={handleOpenGitHub}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
           >
             <ExternalLink className="w-4 h-4" />
             {t('settings.reportBugGithubLink')}
@@ -142,7 +142,7 @@ export function ReportBugSettingsPage() {
 
           {/* Logging Toggle */}
           <div className="mb-4">
-            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
               <input
                 type="checkbox"
                 checked={loggingEnabled}
@@ -213,7 +213,7 @@ export function ReportBugSettingsPage() {
             href="https://github.com/soulaudio/soul-player"
             target="_blank"
             rel="noopener noreferrer"
-            className="block p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+            className="block p-4 bg-muted/30 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
           >
             <div className="flex items-center gap-3">
               <ExternalLink className="w-5 h-5 text-primary" />
@@ -228,7 +228,7 @@ export function ReportBugSettingsPage() {
             href="https://github.com/soulaudio/soul-player/wiki"
             target="_blank"
             rel="noopener noreferrer"
-            className="block p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+            className="block p-4 bg-muted/30 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
           >
             <div className="flex items-center gap-3">
               <FileText className="w-5 h-5 text-primary" />

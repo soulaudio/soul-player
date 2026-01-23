@@ -35,6 +35,10 @@ pub enum StorageError {
     /// I/O error
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    /// Missing required field in database result
+    #[error("Missing required field: {0}")]
+    MissingField(String),
 }
 
 impl StorageError {

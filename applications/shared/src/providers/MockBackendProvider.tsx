@@ -14,6 +14,12 @@ import type {
   BackendGenre,
   DatabaseHealth,
   PlaybackContext,
+  EffectType,
+  HeadroomSettings,
+  LatencyInfo,
+  ExclusiveConfig,
+  AnalysisQueueStats,
+  AnalysisWorkerStatus,
 } from '../contexts/BackendContext'
 import { DemoStorage, DemoTrack, DemoAlbum } from '../lib/demo-storage'
 import { debug } from '../utils/debug';
@@ -132,9 +138,10 @@ function toBackendAlbum(da: DemoAlbum, index?: number, artistIdMap?: Map<string,
 interface MockBackendProviderProps {
   storage: DemoStorage
   children: ReactNode
+  version?: string | null // Optional version override (e.g., from GitHub API)
 }
 
-export function MockBackendProvider({ storage, children }: MockBackendProviderProps) {
+export function MockBackendProvider({ storage, children, version: versionProp }: MockBackendProviderProps) {
   // Initialize default playlists if storage doesn't have any
   const playlistsInitialized = useRef(false)
   const [storageLoaded, setStorageLoaded] = useState(storage.isLoaded())
@@ -547,7 +554,187 @@ export function MockBackendProvider({ storage, children }: MockBackendProviderPr
 
     // App metadata
     async getVersion() {
-      return '0.1.1 (Demo)'
+      // If version provided (from GitHub API), format as "v{version} (Demo)"
+      // Strip any leading "v" just in case (defensive), then add it back
+      console.log('[MockBackendProvider] getVersion called, versionProp:', versionProp)
+
+      if (versionProp && versionProp.trim() !== '') {
+        console.log('[MockBackendProvider] getVersion input:', versionProp)
+        const cleanVersion = versionProp.replace(/^v/, '').trim()
+        const result = `v${cleanVersion} (Demo)`
+        console.log('[MockBackendProvider] getVersion output:', result)
+        return result
+      }
+
+      console.log('[MockBackendProvider] No version prop, returning "Demo"')
+      return 'Demo'
+    },
+
+    // Audio Settings - DSP Chain (mock/stub implementations)
+    async getDspChain() {
+      // Return empty chain for demo
+      return [
+        { index: 0, effect: null, enabled: false },
+        { index: 1, effect: null, enabled: false },
+        { index: 2, effect: null, enabled: false },
+        { index: 3, effect: null, enabled: false },
+      ]
+    },
+
+    async addEffectToChain(_slotIndex: number, _effect: EffectType) {
+      debug.log('[MockBackend] DSP effects not supported in demo mode')
+    },
+
+    async removeEffectFromChain(_slotIndex: number) {
+      debug.log('[MockBackend] DSP effects not supported in demo mode')
+    },
+
+    async toggleEffect(_slotIndex: number, _enabled: boolean) {
+      debug.log('[MockBackend] DSP effects not supported in demo mode')
+    },
+
+    async clearDspChain() {
+      debug.log('[MockBackend] DSP effects not supported in demo mode')
+    },
+
+    async updateEffectParameters(_slotIndex: number, _effect: EffectType) {
+      debug.log('[MockBackend] DSP effects not supported in demo mode')
+    },
+
+    // Audio Settings - Headroom Management (mock/stub implementations)
+    async getHeadroomSettings(): Promise<HeadroomSettings> {
+      return {
+        enabled: true,
+        mode: { mode: 'auto', manualDb: null },
+        totalGainDb: 0,
+        attenuationDb: 0,
+      }
+    },
+
+    async setHeadroomMode(_mode: string, _manualDb?: number) {
+      debug.log('[MockBackend] Headroom settings not supported in demo mode')
+    },
+
+    async setHeadroomEnabled(_enabled: boolean) {
+      debug.log('[MockBackend] Headroom settings not supported in demo mode')
+    },
+
+    // Audio Settings - Latency & Exclusive Mode (mock/stub implementations)
+    async getLatencyInfo(): Promise<LatencyInfo> {
+      return {
+        bufferSamples: 1024,
+        bufferMs: 23.2,
+        totalMs: 28.5,
+        exclusive: false,
+      }
+    },
+
+    async isExclusiveMode() {
+      return false
+    },
+
+    async disableExclusiveMode() {
+      debug.log('[MockBackend] Exclusive mode not supported in demo mode')
+    },
+
+    async setExclusiveMode(_config: ExclusiveConfig) {
+      debug.log('[MockBackend] Exclusive mode not supported in demo mode')
+      // Return mock latency info
+      return {
+        bufferSamples: 1024,
+        bufferMs: 23.2,
+        totalMs: 28.5,
+        exclusive: false,
+      }
+    },
+
+    // Audio Settings - Volume Leveling Analysis (mock/stub implementations)
+    async getAnalysisQueueStats(): Promise<AnalysisQueueStats> {
+      return {
+        total: 0,
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        failed: 0,
+      }
+    },
+
+    async getAnalysisWorkerStatus(): Promise<AnalysisWorkerStatus> {
+      return {
+        isRunning: false,
+        tracksAnalyzed: 0,
+      }
+    },
+
+    async startAnalysisWorker() {
+      debug.log('[MockBackend] Audio analysis not supported in demo mode')
+    },
+
+    async stopAnalysisWorker() {
+      debug.log('[MockBackend] Audio analysis not supported in demo mode')
+    },
+
+    async queueAllUnanalyzed() {
+      debug.log('[MockBackend] Audio analysis not supported in demo mode')
+      return 0
+    },
+
+    async clearCompletedAnalysis() {
+      debug.log('[MockBackend] Audio analysis not supported in demo mode')
+    },
+
+    // Audio Settings - Volume Leveling Runtime (mock/stub implementations)
+    async setVolumeLevelingMode(_mode: string) {
+      debug.log('[MockBackend] Volume leveling not supported in demo mode')
+    },
+
+    async setVolumeLevelingPreamp(_preampDb: number) {
+      debug.log('[MockBackend] Volume leveling not supported in demo mode')
+    },
+
+    async setVolumeLevelingPreventClipping(_prevent: boolean) {
+      debug.log('[MockBackend] Volume leveling not supported in demo mode')
+    },
+
+    // Audio Settings - Resampling (mock/stub implementations)
+    async setResamplingQuality(_quality: string) {
+      debug.log('[MockBackend] Resampling not supported in demo mode')
+    },
+
+    async setResamplingTargetRate(_rate: number) {
+      debug.log('[MockBackend] Resampling not supported in demo mode')
+    },
+
+    async setResamplingBackend(_backend: string) {
+      debug.log('[MockBackend] Resampling not supported in demo mode')
+    },
+
+    async isR8brainAvailable() {
+      return false
+    },
+
+    // Audio Settings - Crossfade (mock/stub implementations)
+    async setCrossfadeSettings(_enabled: boolean, _durationMs: number, _curve: string) {
+      debug.log('[MockBackend] Crossfade not supported in demo mode')
+    },
+
+    // Audio Settings - Device Selection (mock/stub implementations)
+    async getAudioBackends() {
+      return []
+    },
+
+    async getAudioDevices(_backendStr: string) {
+      return []
+    },
+
+    async setAudioDevice(_backendStr: string, _deviceName: string) {
+      debug.log('[MockBackend] Audio device selection not supported in demo mode')
+    },
+
+    // Audio Settings - File Dialog (mock/stub implementations)
+    async openFileDialog(_multiple: boolean, _filters: Array<{ name: string; extensions: string[] }>) {
+      debug.log('[MockBackend] File dialog not supported in demo mode')
+      return null
     },
   }), [storage, getArtistsFromTracks, getArtistIdMap, getMockPlaylists])
 

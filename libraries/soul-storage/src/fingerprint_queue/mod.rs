@@ -97,14 +97,22 @@ pub async fn get_next(pool: &SqlitePool) -> Result<Option<FingerprintQueueItem>>
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| FingerprintQueueItem {
-        id: r.id.expect("id should not be null"),
-        track_id: r.track_id,
-        priority: r.priority as i32,
-        attempts: r.attempts as i32,
-        last_error: r.last_error,
-        created_at: r.created_at,
-    }))
+    match row {
+        Some(r) => match r.id {
+            Some(id) => Ok(Some(FingerprintQueueItem {
+                id,
+                track_id: r.track_id,
+                priority: r.priority as i32,
+                attempts: r.attempts as i32,
+                last_error: r.last_error,
+                created_at: r.created_at,
+            })),
+            None => Err(StorageError::MissingField(
+                "fingerprint_queue.id".to_string(),
+            )),
+        },
+        None => Ok(None),
+    }
 }
 
 /// Get a batch of items to process
@@ -122,17 +130,19 @@ pub async fn get_batch(pool: &SqlitePool, limit: i32) -> Result<Vec<FingerprintQ
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|r| FingerprintQueueItem {
-            id: r.id.expect("id should not be null"),
-            track_id: r.track_id,
-            priority: r.priority as i32,
-            attempts: r.attempts as i32,
-            last_error: r.last_error,
-            created_at: r.created_at,
+    rows.into_iter()
+        .map(|r| {
+            r.id.ok_or_else(|| StorageError::MissingField("fingerprint_queue.id".to_string()))
+                .map(|id| FingerprintQueueItem {
+                    id,
+                    track_id: r.track_id,
+                    priority: r.priority as i32,
+                    attempts: r.attempts as i32,
+                    last_error: r.last_error,
+                    created_at: r.created_at,
+                })
         })
-        .collect())
+        .collect()
 }
 
 /// Mark an item as completed (remove from queue)

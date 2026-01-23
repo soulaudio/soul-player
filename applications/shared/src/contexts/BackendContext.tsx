@@ -107,6 +107,128 @@ export interface SetArtworkParams {
 }
 
 // =============================================================================
+// Audio Settings Types
+// =============================================================================
+
+export interface EffectSlot {
+  index: number
+  effect: EffectType | null
+  enabled: boolean
+}
+
+export type EffectType =
+  | { type: 'eq'; bands: EqBand[] }
+  | { type: 'compressor'; settings: CompressorSettings }
+  | { type: 'limiter'; settings: LimiterSettings }
+  | { type: 'crossfeed'; settings: CrossfeedSettings }
+  | { type: 'stereo'; settings: StereoSettings }
+  | { type: 'graphic_eq'; settings: GraphicEqSettings }
+  | { type: 'convolution'; settings: ConvolutionSettings }
+
+export interface EqBand {
+  frequency: number
+  gain: number
+  q: number
+}
+
+export interface CompressorSettings {
+  thresholdDb: number
+  ratio: number
+  attackMs: number
+  releaseMs: number
+  kneeDb: number
+  makeupGainDb: number
+}
+
+export interface LimiterSettings {
+  thresholdDb: number
+  releaseMs: number
+}
+
+export interface CrossfeedSettings {
+  preset: string
+  levelDb: number
+  cutoffHz: number
+}
+
+export interface StereoSettings {
+  width: number
+  midGainDb: number
+  sideGainDb: number
+  balance: number
+}
+
+export interface GraphicEqSettings {
+  preset: string
+  bandCount: number
+  gains: number[]
+}
+
+export interface ConvolutionSettings {
+  irFilePath: string
+  wetDryMix: number
+  preDelayMs: number
+  decay: number
+}
+
+export interface HeadroomSettings {
+  enabled: boolean
+  mode: {
+    mode: string // 'auto' | 'manual' | 'disabled'
+    manualDb: number | null
+  }
+  totalGainDb: number
+  attenuationDb: number
+}
+
+export interface LatencyInfo {
+  bufferSamples: number
+  bufferMs: number
+  totalMs: number
+  exclusive: boolean
+}
+
+export interface ExclusiveConfig {
+  sampleRate: number
+  bitDepth: string
+  bufferFrames: number | null
+  exclusiveMode: boolean
+  deviceName: string | null
+  backend: string
+}
+
+export interface AnalysisQueueStats {
+  total: number
+  pending: number
+  processing: number
+  completed: number
+  failed: number
+}
+
+export interface AnalysisWorkerStatus {
+  isRunning: boolean
+  tracksAnalyzed: number
+}
+
+export interface AudioBackend {
+  backend: 'default' | 'asio' | 'jack'
+  name: string
+  description: string
+  available: boolean
+  is_default: boolean
+  device_count: number
+}
+
+export interface AudioDevice {
+  name: string
+  backend: string
+  isDefault: boolean
+  sampleRate: number
+  channels: number
+  sampleRateRange?: [number, number]
+}
+
+// =============================================================================
 // Backend Interface
 // =============================================================================
 
@@ -173,6 +295,55 @@ export interface BackendInterface {
 
   // App metadata
   getVersion: () => Promise<string>
+
+  // Audio Settings - DSP Chain
+  getDspChain: () => Promise<EffectSlot[]>
+  addEffectToChain: (slotIndex: number, effect: EffectType) => Promise<void>
+  removeEffectFromChain: (slotIndex: number) => Promise<void>
+  toggleEffect: (slotIndex: number, enabled: boolean) => Promise<void>
+  clearDspChain: () => Promise<void>
+  updateEffectParameters: (slotIndex: number, effect: EffectType) => Promise<void>
+
+  // Audio Settings - Headroom Management
+  getHeadroomSettings: () => Promise<HeadroomSettings>
+  setHeadroomMode: (mode: string, manualDb?: number) => Promise<void>
+  setHeadroomEnabled: (enabled: boolean) => Promise<void>
+
+  // Audio Settings - Latency & Exclusive Mode
+  getLatencyInfo: () => Promise<LatencyInfo>
+  isExclusiveMode: () => Promise<boolean>
+  disableExclusiveMode: () => Promise<void>
+  setExclusiveMode: (config: ExclusiveConfig) => Promise<LatencyInfo>
+
+  // Audio Settings - Volume Leveling Analysis
+  getAnalysisQueueStats: () => Promise<AnalysisQueueStats>
+  getAnalysisWorkerStatus: () => Promise<AnalysisWorkerStatus>
+  startAnalysisWorker: () => Promise<void>
+  stopAnalysisWorker: () => Promise<void>
+  queueAllUnanalyzed: () => Promise<number>
+  clearCompletedAnalysis: () => Promise<void>
+
+  // Audio Settings - Volume Leveling Runtime
+  setVolumeLevelingMode: (mode: string) => Promise<void>
+  setVolumeLevelingPreamp: (preampDb: number) => Promise<void>
+  setVolumeLevelingPreventClipping: (prevent: boolean) => Promise<void>
+
+  // Audio Settings - Resampling
+  setResamplingQuality: (quality: string) => Promise<void>
+  setResamplingTargetRate: (rate: number) => Promise<void>
+  setResamplingBackend: (backend: string) => Promise<void>
+  isR8brainAvailable: () => Promise<boolean>
+
+  // Audio Settings - Crossfade
+  setCrossfadeSettings: (enabled: boolean, durationMs: number, curve: string) => Promise<void>
+
+  // Audio Settings - Device Selection
+  getAudioBackends: () => Promise<AudioBackend[]>
+  getAudioDevices: (backendStr: string) => Promise<AudioDevice[]>
+  setAudioDevice: (backendStr: string, deviceName: string) => Promise<void>
+
+  // Audio Settings - File Dialog (for convolution IR selection)
+  openFileDialog: (multiple: boolean, filters: Array<{ name: string; extensions: string[] }>) => Promise<string[] | null>
 }
 
 // =============================================================================

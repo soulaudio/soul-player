@@ -1,4 +1,4 @@
-import { ThemePicker } from '@soul-player/shared';
+import { ThemePicker } from '@soul-player/shared/theme';
 import { useAuth } from '../providers/AuthProvider';
 
 export function SettingsPage() {

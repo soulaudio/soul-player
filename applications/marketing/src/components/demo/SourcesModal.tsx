@@ -25,7 +25,7 @@ export function SourcesModalContent() {
               </div>
             </div>
             <button
-              className="px-3 py-1 text-xs rounded-md border hover:bg-accent transition-colors"
+              className="px-3 py-1 text-xs rounded-md border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
               disabled
             >
               Remove
@@ -33,7 +33,7 @@ export function SourcesModalContent() {
           </div>
 
           <button
-            className="w-full py-2 px-4 rounded-md border border-dashed border-muted-foreground/30 text-sm text-muted-foreground hover:bg-muted/20 transition-colors"
+            className="w-full py-2 px-4 rounded-md border border-dashed border-muted-foreground/30 text-sm text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             disabled
           >
             + Add Music Folder
@@ -57,7 +57,7 @@ export function SourcesModalContent() {
           </div>
 
           <button
-            className="w-full py-2 px-4 rounded-md border border-dashed border-muted-foreground/30 text-sm text-muted-foreground hover:bg-muted/20 transition-colors"
+            className="w-full py-2 px-4 rounded-md border border-dashed border-muted-foreground/30 text-sm text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             disabled
           >
             + Connect to Server

@@ -15,8 +15,15 @@ import {
   type BackendPlaylist,
   type BackendGenre,
   type DatabaseHealth,
-  type BackendPlaybackContext,
+  type PlaybackContext,
   type SetArtworkParams,
+  type EffectSlot,
+  type EffectType,
+  type HeadroomSettings,
+  type LatencyInfo,
+  type ExclusiveConfig,
+  type AnalysisQueueStats,
+  type AnalysisWorkerStatus,
 } from '@soul-player/shared'
 
 interface TauriBackendProviderProps {
@@ -119,7 +126,7 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
 
     // Playback context
     async getRecentContexts(limit: number) {
-      return invoke<BackendPlaybackContext[]>('get_recent_playback_contexts', { limit })
+      return invoke<PlaybackContext[]>('get_recent_playback_contexts', { limit })
     },
 
     async recordContext(context) {
@@ -192,6 +199,139 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
     // App metadata
     async getVersion() {
       return getVersion()
+    },
+
+    // Audio Settings - DSP Chain
+    async getDspChain() {
+      return invoke<EffectSlot[]>('get_dsp_chain')
+    },
+
+    async addEffectToChain(slotIndex: number, effect: EffectType) {
+      await invoke('add_effect_to_chain', { slotIndex, effect })
+    },
+
+    async removeEffectFromChain(slotIndex: number) {
+      await invoke('remove_effect_from_chain', { slotIndex })
+    },
+
+    async toggleEffect(slotIndex: number, enabled: boolean) {
+      await invoke('toggle_effect', { slotIndex, enabled })
+    },
+
+    async clearDspChain() {
+      await invoke('clear_dsp_chain')
+    },
+
+    async updateEffectParameters(slotIndex: number, effect: EffectType) {
+      await invoke('update_effect_parameters', { slotIndex, effect })
+    },
+
+    // Audio Settings - Headroom Management
+    async getHeadroomSettings() {
+      return invoke<HeadroomSettings>('get_headroom_settings')
+    },
+
+    async setHeadroomMode(mode: string, manualDb?: number) {
+      await invoke('set_headroom_mode', { mode, manualDb })
+    },
+
+    async setHeadroomEnabled(enabled: boolean) {
+      await invoke('set_headroom_enabled', { enabled })
+    },
+
+    // Audio Settings - Latency & Exclusive Mode
+    async getLatencyInfo() {
+      return invoke<LatencyInfo>('get_latency_info')
+    },
+
+    async isExclusiveMode() {
+      return invoke<boolean>('is_exclusive_mode')
+    },
+
+    async disableExclusiveMode() {
+      await invoke('disable_exclusive_mode')
+    },
+
+    async setExclusiveMode(config: ExclusiveConfig) {
+      return invoke<LatencyInfo>('set_exclusive_mode', { config })
+    },
+
+    // Audio Settings - Volume Leveling Analysis
+    async getAnalysisQueueStats() {
+      return invoke<AnalysisQueueStats>('get_analysis_queue_stats')
+    },
+
+    async getAnalysisWorkerStatus() {
+      return invoke<AnalysisWorkerStatus>('get_analysis_worker_status')
+    },
+
+    async startAnalysisWorker() {
+      await invoke('start_analysis_worker')
+    },
+
+    async stopAnalysisWorker() {
+      await invoke('stop_analysis_worker')
+    },
+
+    async queueAllUnanalyzed() {
+      return invoke<number>('queue_all_unanalyzed')
+    },
+
+    async clearCompletedAnalysis() {
+      await invoke('clear_completed_analysis')
+    },
+
+    // Audio Settings - Volume Leveling Runtime
+    async setVolumeLevelingMode(mode: string) {
+      await invoke('set_volume_leveling_mode', { mode })
+    },
+
+    async setVolumeLevelingPreamp(preampDb: number) {
+      await invoke('set_volume_leveling_preamp', { preampDb })
+    },
+
+    async setVolumeLevelingPreventClipping(prevent: boolean) {
+      await invoke('set_volume_leveling_prevent_clipping', { prevent })
+    },
+
+    // Audio Settings - Resampling
+    async setResamplingQuality(quality: string) {
+      await invoke('set_resampling_quality', { quality })
+    },
+
+    async setResamplingTargetRate(rate: number) {
+      await invoke('set_resampling_target_rate', { rate })
+    },
+
+    async setResamplingBackend(backend: string) {
+      await invoke('set_resampling_backend', { backend })
+    },
+
+    async isR8brainAvailable() {
+      return invoke<boolean>('is_r8brain_available')
+    },
+
+    // Audio Settings - Crossfade
+    async setCrossfadeSettings(enabled: boolean, durationMs: number, curve: string) {
+      await invoke('set_crossfade_settings', { enabled, durationMs, curve })
+    },
+
+    // Audio Settings - Device Selection
+    async getAudioBackends() {
+      return invoke('get_audio_backends')
+    },
+
+    async getAudioDevices(backendStr: string) {
+      return invoke('get_audio_devices', { backendStr })
+    },
+
+    async setAudioDevice(backendStr: string, deviceName: string) {
+      await invoke('set_audio_device', { backendStr, deviceName })
+    },
+
+    // Audio Settings - File Dialog (for convolution IR selection)
+    async openFileDialog(multiple: boolean, filters: Array<{ name: string; extensions: string[] }>) {
+      return invoke<string[] | null>('open_file_dialog', { multiple, filters })
     },
   }), [])
 

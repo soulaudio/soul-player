@@ -61,7 +61,7 @@ export function WindowControls() {
       {/* Minimize */}
       <button
         onClick={handleMinimize}
-        className="flex items-center justify-center w-11 h-8 hover:bg-muted/80 transition-colors"
+        className="flex items-center justify-center w-11 h-8 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         title={t('titleBar.minimize')}
         aria-label={t('titleBar.minimize')}
       >
@@ -71,7 +71,7 @@ export function WindowControls() {
       {/* Maximize/Restore */}
       <button
         onClick={handleMaximize}
-        className="flex items-center justify-center w-11 h-8 hover:bg-muted/80 transition-colors"
+        className="flex items-center justify-center w-11 h-8 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         title={isMaximized ? t('titleBar.restore') : t('titleBar.maximize')}
         aria-label={isMaximized ? t('titleBar.restore') : t('titleBar.maximize')}
       >

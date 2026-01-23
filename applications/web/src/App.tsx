@@ -116,7 +116,7 @@ function DemoModeApp() {
   return (
     <MockBackendProvider storage={demoStorage}>
       <WebPlayerCommandsProvider>
-        <MainLayout showKeyboardShortcuts={false}>
+        <MainLayout>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
             <Route path="/library" element={<LibraryPage />} />
@@ -153,7 +153,7 @@ function ServerModeApp() {
   return (
     <ServerBackendProvider apiBase={apiBase} authToken={token}>
       <WebPlayerCommandsProvider>
-        <MainLayout showKeyboardShortcuts={false}>
+        <MainLayout>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
             <Route path="/library" element={<LibraryPage />} />
@@ -221,7 +221,7 @@ function App() {
   };
 
   return (
-    <ThemeProvider defaultTheme="dark">
+    <ThemeProvider>
       <PlatformProvider
         platform="web"
         features={{

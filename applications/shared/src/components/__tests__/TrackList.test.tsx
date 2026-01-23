@@ -23,6 +23,8 @@ const createMockCommands = () => ({
   cycleShuffle: vi.fn().mockResolvedValue('off' as 'off' | 'random' | 'smart'),
   getShuffle: vi.fn().mockResolvedValue('off' as 'off' | 'random' | 'smart'),
   setRepeatMode: vi.fn().mockResolvedValue(undefined),
+  cycleRepeat: vi.fn().mockResolvedValue('off' as 'off' | 'all' | 'one'),
+  getRepeat: vi.fn().mockResolvedValue('off' as 'off' | 'all' | 'one'),
   getPlaybackCapabilities: vi.fn().mockResolvedValue({ hasNext: true, hasPrevious: true }),
   getQueue: vi.fn().mockResolvedValue([]),
   playQueue: vi.fn().mockResolvedValue(undefined),

@@ -68,7 +68,9 @@ pub struct TrackLoader {
 
 impl TrackLoader {
     /// Create a new track loader with a background thread
-    pub fn new() -> Self {
+    ///
+    /// Returns an error if the background thread cannot be spawned.
+    pub fn new() -> Result<Self, String> {
         let (request_tx, request_rx) = bounded::<LoadRequest>(4);
         let (result_tx, result_rx) = bounded::<LoadResult>(4);
         let shutdown = Arc::new(Mutex::new(false));
@@ -79,14 +81,14 @@ impl TrackLoader {
             .spawn(move || {
                 Self::loader_thread(request_rx, result_tx, shutdown_clone);
             })
-            .expect("Failed to spawn track loader thread");
+            .map_err(|e| format!("Failed to spawn track loader thread: {}", e))?;
 
-        Self {
+        Ok(Self {
             request_tx,
             result_rx,
             _thread_handle: thread_handle,
             shutdown,
-        }
+        })
     }
 
     /// Request loading a track (non-blocking)
@@ -128,8 +130,17 @@ impl TrackLoader {
     }
 
     /// Shutdown the loader thread
+    ///
+    /// If the shutdown mutex is poisoned, logs an error but does not panic.
     pub fn shutdown(&self) {
-        *self.shutdown.lock().unwrap() = true;
+        match self.shutdown.lock() {
+            Ok(mut guard) => *guard = true,
+            Err(e) => {
+                tracing::error!(error = %e, "[TrackLoader] Failed to lock shutdown mutex - poisoned?");
+                // Still try to set the flag via the poisoned mutex
+                *e.into_inner() = true;
+            }
+        }
         // Send a dummy request to wake up the thread if it's waiting
         // (The thread will check the shutdown flag and exit)
     }
@@ -144,7 +155,16 @@ impl TrackLoader {
 
         loop {
             // Check for shutdown
-            if *shutdown.lock().unwrap() {
+            let should_shutdown = match shutdown.lock() {
+                Ok(guard) => *guard,
+                Err(e) => {
+                    tracing::error!(error = %e, "[TrackLoader] Shutdown mutex poisoned in loader thread");
+                    // Assume shutdown if mutex is poisoned - safer to exit than continue
+                    true
+                }
+            };
+
+            if should_shutdown {
                 tracing::debug!("[TrackLoader] Shutdown requested, exiting");
                 break;
             }
@@ -244,7 +264,7 @@ impl TrackLoader {
 
 impl Default for TrackLoader {
     fn default() -> Self {
-        Self::new()
+        Self::new().expect("Failed to create default TrackLoader - thread spawn failed")
     }
 }
 
@@ -302,7 +322,7 @@ mod tests {
         let wav_path = temp_dir.path().join("test.wav");
         generate_test_wav(&wav_path).unwrap();
 
-        let loader = TrackLoader::new();
+        let loader = TrackLoader::new().expect("Failed to create TrackLoader");
 
         let request = LoadRequest {
             path: wav_path.clone(),
@@ -341,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_track_loader_handles_missing_file() {
-        let loader = TrackLoader::new();
+        let loader = TrackLoader::new().expect("Failed to create TrackLoader");
 
         let missing_path = PathBuf::from("/nonexistent/file.wav");
         let request = LoadRequest {
@@ -379,7 +399,7 @@ mod tests {
 
     #[test]
     fn test_track_loader_non_blocking() {
-        let loader = TrackLoader::new();
+        let loader = TrackLoader::new().expect("Failed to create TrackLoader");
 
         // poll_ready should return immediately when nothing is loaded
         let start = std::time::Instant::now();

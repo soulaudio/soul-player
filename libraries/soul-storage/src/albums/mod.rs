@@ -1,3 +1,4 @@
+use crate::error::StorageError;
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
@@ -12,21 +13,24 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Album>> {
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Album {
-            id: row.id.expect("album id should not be null"),
-            title: row.title,
-            artist_id: row.artist_id,
-            artist_name: row.artist_name,
-            year: row.year.map(|y| y as i32),
-            cover_art_path: row.cover_art_path,
-            artwork_source: row.artwork_source,
-            musicbrainz_id: row.musicbrainz_id,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+    rows.into_iter()
+        .map(|row| {
+            Ok(Album {
+                id: row
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("album.id".to_string()))?,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: row.artist_name,
+                year: row.year.map(|y| y as i32),
+                cover_art_path: row.cover_art_path,
+                artwork_source: row.artwork_source,
+                musicbrainz_id: row.musicbrainz_id,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub async fn get_random(pool: &SqlitePool, limit: i64) -> Result<Vec<Album>> {
@@ -72,21 +76,24 @@ pub async fn get_recently_added(pool: &SqlitePool, limit: i64) -> Result<Vec<Alb
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Album {
-            id: row.id.expect("album id should not be null"),
-            title: row.title,
-            artist_id: row.artist_id,
-            artist_name: row.artist_name,
-            year: row.year.map(|y| y as i32),
-            cover_art_path: row.cover_art_path,
-            artwork_source: row.artwork_source,
-            musicbrainz_id: row.musicbrainz_id,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+    rows.into_iter()
+        .map(|row| {
+            Ok(Album {
+                id: row
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("album.id".to_string()))?,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: row.artist_name,
+                year: row.year.map(|y| y as i32),
+                cover_art_path: row.cover_art_path,
+                artwork_source: row.artwork_source,
+                musicbrainz_id: row.musicbrainz_id,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub async fn get_recently_added_within_days(
@@ -108,21 +115,24 @@ pub async fn get_recently_added_within_days(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Album {
-            id: row.id.expect("album id should not be null"),
-            title: row.title,
-            artist_id: row.artist_id,
-            artist_name: row.artist_name,
-            year: row.year.map(|y| y as i32),
-            cover_art_path: row.cover_art_path,
-            artwork_source: row.artwork_source,
-            musicbrainz_id: row.musicbrainz_id,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+    rows.into_iter()
+        .map(|row| {
+            Ok(Album {
+                id: row
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("album.id".to_string()))?,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: row.artist_name,
+                year: row.year.map(|y| y as i32),
+                cover_art_path: row.cover_art_path,
+                artwork_source: row.artwork_source,
+                musicbrainz_id: row.musicbrainz_id,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub async fn get_least_played(pool: &SqlitePool, limit: i64, user_id: i64) -> Result<Vec<Album>> {
@@ -281,21 +291,24 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Album {
-            id: row.id.expect("album id should not be null"),
-            title: row.title,
-            artist_id: row.artist_id,
-            artist_name: Some(row.artist_name),
-            year: row.year.map(|y| y as i32),
-            cover_art_path: row.cover_art_path,
-            artwork_source: row.artwork_source,
-            musicbrainz_id: row.musicbrainz_id,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+    rows.into_iter()
+        .map(|row| {
+            Ok(Album {
+                id: row
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("album.id".to_string()))?,
+                title: row.title,
+                artist_id: row.artist_id,
+                artist_name: Some(row.artist_name),
+                year: row.year.map(|y| y as i32),
+                cover_art_path: row.cover_art_path,
+                artwork_source: row.artwork_source,
+                musicbrainz_id: row.musicbrainz_id,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub async fn create(pool: &SqlitePool, album: CreateAlbum) -> Result<Album> {

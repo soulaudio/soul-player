@@ -164,7 +164,7 @@ export function GenrePage() {
           <p className="font-medium mb-2">{error || t('genre.notFound', 'Genre not found')}</p>
           <button
             onClick={() => navigate('/library?tab=genres')}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
           >
             {t('common.back', 'Back')}
           </button>
@@ -179,7 +179,7 @@ export function GenrePage() {
       <div className="mb-6">
         <button
           onClick={() => navigate('/library?tab=genres')}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
+          className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{t('genre.backToGenres', 'Back to Genres')}</span>
@@ -205,7 +205,7 @@ export function GenrePage() {
             <button
               onClick={handlePlayAll}
               disabled={tracks.filter(t => t.file_path).length === 0}
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)] transition-opacity duration-[var(--transition-duration)]"
             >
               <Play className="w-5 h-5" fill="currentColor" />
               <span>{t('common.playAll', 'Play All')}</span>

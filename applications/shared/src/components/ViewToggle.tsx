@@ -17,7 +17,7 @@ export function ViewToggle({ view, onViewChange, className = '' }: ViewTogglePro
         className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
           view === 'grid'
             ? 'bg-neutral-700 text-white'
-            : 'text-neutral-400 hover:text-white hover:bg-neutral-750'
+            : 'text-neutral-400 hover:text-white hover:bg-foreground/[var(--hover-bg-opacity)]'
         }`}
         aria-label={t('artist.viewGrid')}
         aria-pressed={view === 'grid'}
@@ -30,7 +30,7 @@ export function ViewToggle({ view, onViewChange, className = '' }: ViewTogglePro
         className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
           view === 'list'
             ? 'bg-neutral-700 text-white'
-            : 'text-neutral-400 hover:text-white hover:bg-neutral-750'
+            : 'text-neutral-400 hover:text-white hover:bg-foreground/[var(--hover-bg-opacity)]'
         }`}
         aria-label={t('artist.viewList')}
         aria-pressed={view === 'list'}

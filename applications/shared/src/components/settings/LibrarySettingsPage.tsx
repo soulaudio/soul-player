@@ -462,7 +462,7 @@ export function LibrarySettingsPage() {
       <section className="border border-border rounded-lg overflow-hidden">
         <button
           onClick={() => toggleSection('sources')}
-          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
+          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <div className="flex items-center gap-3">
             <FolderOpen className="w-5 h-5 text-primary" />
@@ -511,7 +511,7 @@ export function LibrarySettingsPage() {
                       ) : (
                         <button
                           onClick={() => handleRescanSource(source.id)}
-                          className="p-2 hover:bg-muted rounded-lg transition-colors"
+                          className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-lg transition-colors duration-[var(--transition-duration)]"
                           title={t('librarySettings.rescan')}
                         >
                           <RefreshCw className="w-4 h-4" />
@@ -559,7 +559,7 @@ export function LibrarySettingsPage() {
                         }
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 whitespace-nowrap"
+                    className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] whitespace-nowrap"
                   >
                     <FolderOpen className="w-4 h-4" />
                     {t('common.browse')}
@@ -578,14 +578,14 @@ export function LibrarySettingsPage() {
                   <button
                     onClick={handleAddSource}
                     disabled={!newSourceName.trim() || !newSourcePath.trim()}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                   >
                     <Check className="w-4 h-4" />
                     {t('common.save')}
                   </button>
                   <button
                     onClick={() => setAddingSource(false)}
-                    className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80"
+                    className="px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
                   >
                     {t('common.cancel')}
                   </button>
@@ -595,7 +595,7 @@ export function LibrarySettingsPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setAddingSource(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
                 >
                   <Plus className="w-4 h-4" />
                   {t('librarySettings.addFolder')}
@@ -605,7 +605,7 @@ export function LibrarySettingsPage() {
                     <button
                       onClick={() => handleRescanAll(false)}
                       disabled={scanningSourceId !== null}
-                      className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                     >
                       {scanningSourceId === -1 ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -617,7 +617,7 @@ export function LibrarySettingsPage() {
                     <button
                       onClick={() => handleRescanAll(true)}
                       disabled={scanningSourceId !== null}
-                      className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-500/30 disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-500/30 disabled:opacity-[var(--disabled-opacity)]"
                       title={t('librarySettings.forceRefreshDescription')}
                     >
                       {scanningSourceId === -1 ? (
@@ -639,7 +639,7 @@ export function LibrarySettingsPage() {
       <section className="border border-border rounded-lg overflow-hidden">
         <button
           onClick={() => toggleSection('managed')}
-          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
+          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <div className="flex items-center gap-3">
             <FolderInput className="w-5 h-5 text-primary" />
@@ -674,7 +674,7 @@ export function LibrarySettingsPage() {
                       handleManagedSettingsChange('libraryPath', folder);
                     }
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 whitespace-nowrap"
+                  className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] whitespace-nowrap"
                 >
                   <FolderOpen className="w-4 h-4" />
                   {t('common.browse')}
@@ -738,7 +738,7 @@ export function LibrarySettingsPage() {
       <section className="border border-border rounded-lg overflow-hidden">
         <button
           onClick={() => toggleSection('external')}
-          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
+          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <div className="flex items-center gap-3">
             <FileAudio className="w-5 h-5 text-primary" />
@@ -831,7 +831,7 @@ export function LibrarySettingsPage() {
       <section className="border border-border rounded-lg overflow-hidden">
         <button
           onClick={() => toggleSection('servers')}
-          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
+          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <div className="flex items-center gap-3">
             <Cloud className="w-5 h-5 text-primary" />
@@ -923,7 +923,7 @@ export function LibrarySettingsPage() {
                           <button
                             onClick={() => handleAuthenticate(source.id)}
                             disabled={authenticating || !authUsername.trim() || !authPassword.trim()}
-                            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                           >
                             {authenticating ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -938,7 +938,7 @@ export function LibrarySettingsPage() {
                               setAuthUsername('');
                               setAuthPassword('');
                             }}
-                            className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80"
+                            className="px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
                           >
                             {t('common.cancel')}
                           </button>
@@ -978,7 +978,7 @@ export function LibrarySettingsPage() {
                       {!source.isAuthenticated ? (
                         <button
                           onClick={() => setAuthSourceId(source.id)}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] text-sm"
                         >
                           <LogIn className="w-4 h-4" />
                           {t('sources.signIn')}
@@ -988,7 +988,7 @@ export function LibrarySettingsPage() {
                           {!source.isActive && (
                             <button
                               onClick={() => handleSetActive(source.id)}
-                              className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-muted/80 text-sm"
+                              className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm"
                             >
                               <Check className="w-4 h-4" />
                               {t('sources.setActive')}
@@ -997,14 +997,14 @@ export function LibrarySettingsPage() {
                           <button
                             onClick={() => handleSyncFromServer(source.id)}
                             disabled={syncingSourceId !== null}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-muted/80 text-sm disabled:opacity-50"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm disabled:opacity-[var(--disabled-opacity)]"
                           >
                             <Download className="w-4 h-4" />
                             {t('sources.syncFromServer')}
                           </button>
                           <button
                             onClick={() => handleLogout(source.id)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-muted/80 text-sm"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm"
                           >
                             <LogOut className="w-4 h-4" />
                             {t('sources.signOut')}
@@ -1047,7 +1047,7 @@ export function LibrarySettingsPage() {
                   <button
                     onClick={handleTestConnection}
                     disabled={testingConnection || !newServerUrl.trim()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-muted/80 text-sm disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm disabled:opacity-[var(--disabled-opacity)]"
                   >
                     {testingConnection ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1077,7 +1077,7 @@ export function LibrarySettingsPage() {
                   <button
                     onClick={handleAddServer}
                     disabled={!newServerName.trim() || !newServerUrl.trim()}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                   >
                     <Check className="w-4 h-4" />
                     {t('common.save')}
@@ -1089,7 +1089,7 @@ export function LibrarySettingsPage() {
                       setNewServerUrl('');
                       setConnectionTestResult(null);
                     }}
-                    className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80"
+                    className="px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
                   >
                     {t('common.cancel')}
                   </button>
@@ -1098,7 +1098,7 @@ export function LibrarySettingsPage() {
             ) : (
               <button
                 onClick={() => setAddingServer(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)]"
               >
                 <Plus className="w-4 h-4" />
                 {t('sources.addServer')}

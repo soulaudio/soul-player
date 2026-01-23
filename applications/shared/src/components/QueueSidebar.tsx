@@ -89,7 +89,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
         <h2 className="text-lg font-semibold">Queue</h2>
         <button
           onClick={onClose}
-          className="p-1 rounded-md hover:bg-accent transition-colors"
+          className="p-1 rounded-md hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
           aria-label="Close queue"
         >
           <X className="w-5 h-5" />
@@ -189,7 +189,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                           width: '100%',
                           transform: `translateY(${virtualItem.start}px)`,
                         }}
-                        className="px-4 py-2 mx-2 hover:bg-accent/50 transition-colors cursor-pointer rounded-md"
+                        className="px-4 py-2 mx-2 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors cursor-pointer rounded-md"
                         onClick={() => handleQueueItemClick(virtualItem.index)}
                       >
                         <div className="flex items-center gap-3">
@@ -223,7 +223,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                   <div className="px-4 py-3 flex justify-center">
                     <button
                       onClick={loadMore}
-                      className="px-4 py-2 text-sm bg-accent hover:bg-accent/80 rounded-md transition-colors"
+                      className="px-4 py-2 text-sm bg-accent hover:opacity-[var(--hover-button-opacity)] rounded-md transition-opacity"
                     >
                       Load {Math.min(LOAD_MORE_COUNT, fullQueue.length - displayLimit)} more tracks
                     </button>

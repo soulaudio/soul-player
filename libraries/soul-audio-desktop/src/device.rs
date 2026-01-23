@@ -179,8 +179,10 @@ pub fn detect_device_capabilities(
     let mut max_channels: u16 = 2;
 
     // Query all supported output configurations
+    // Limit to 50 configs to prevent performance issues on macOS with professional audio interfaces
+    // that can expose 50-200+ configurations (each sample rate × bit depth × channel count combination)
     if let Ok(configs) = device.supported_output_configs() {
-        for config in configs {
+        for config in configs.take(50) {
             // Extract sample format / bit depth
             if let Some(depth) = SupportedBitDepth::from_cpal(config.sample_format()) {
                 bit_depths.insert(depth);

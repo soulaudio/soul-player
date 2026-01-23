@@ -1,11 +1,22 @@
 // Enhanced DSP effects chain configurator with backend integration
 
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { Plus, X, Check, AlertCircle, Headphones, SlidersHorizontal, Volume2, Activity, Gauge, Waves, Settings2, ChevronUp, AudioWaveform } from 'lucide-react';
 import { ConfirmDialog } from '../../ui/Dialog';
 import { debug } from '../../../utils/debug';
+import { useBackend } from '../../../contexts/BackendContext';
+import type {
+  EffectSlot,
+  EffectType,
+  EqBand,
+  CompressorSettings,
+  LimiterSettings,
+  CrossfeedSettings,
+  StereoSettings,
+  GraphicEqSettings,
+  ConvolutionSettings,
+} from '../../../contexts/BackendContext';
 import {
   ParametricEqEditor,
   GraphicEqEditor,
@@ -17,66 +28,17 @@ import {
   defaultConvolutionSettings,
 } from './effects';
 
-// Types matching backend
-export interface EffectSlot {
-  index: number;
-  effect: EffectType | null;
-  enabled: boolean;
-}
-
-export type EffectType =
-  | { type: 'eq'; bands: EqBand[] }
-  | { type: 'compressor'; settings: CompressorSettings }
-  | { type: 'limiter'; settings: LimiterSettings }
-  | { type: 'crossfeed'; settings: CrossfeedSettings }
-  | { type: 'stereo'; settings: StereoSettings }
-  | { type: 'graphic_eq'; settings: GraphicEqSettings }
-  | { type: 'convolution'; settings: ConvolutionSettings };
-
-export interface EqBand {
-  frequency: number;
-  gain: number;
-  q: number;
-}
-
-export interface CompressorSettings {
-  thresholdDb: number;
-  ratio: number;
-  attackMs: number;
-  releaseMs: number;
-  kneeDb: number;
-  makeupGainDb: number;
-}
-
-export interface LimiterSettings {
-  thresholdDb: number;
-  releaseMs: number;
-}
-
-export interface CrossfeedSettings {
-  preset: string;
-  levelDb: number;
-  cutoffHz: number;
-}
-
-export interface StereoSettings {
-  width: number;
-  midGainDb: number;
-  sideGainDb: number;
-  balance: number;
-}
-
-export interface GraphicEqSettings {
-  preset: string;
-  bandCount: number;
-  gains: number[];
-}
-
-export interface ConvolutionSettings {
-  irFilePath: string;
-  wetDryMix: number;
-  preDelayMs: number;
-  decay: number;
+// Re-export types for backwards compatibility with effect editors
+export type {
+  EffectSlot,
+  EffectType,
+  EqBand,
+  CompressorSettings,
+  LimiterSettings,
+  CrossfeedSettings,
+  StereoSettings,
+  GraphicEqSettings,
+  ConvolutionSettings,
 }
 
 interface DspConfigProps {
@@ -147,6 +109,7 @@ const EFFECT_INFO: EffectInfo[] = [
 
 export function DspConfig({ onChainChange }: DspConfigProps) {
   const { t } = useTranslation();
+  const backend = useBackend();
   const [chain, setChain] = useState<EffectSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedSlot, setExpandedSlot] = useState<number | null>(null);
@@ -169,7 +132,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
   const loadChain = async () => {
     try {
       setLoading(true);
-      const chainData = await invoke<EffectSlot[]>('get_dsp_chain');
+      const chainData = await backend.getDspChain();
       setChain(chainData);
     } catch (error) {
       debug.error('Failed to load DSP chain:', error);
@@ -265,7 +228,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
           break;
       }
 
-      await invoke('add_effect_to_chain', { slotIndex, effect });
+      await backend.addEffectToChain(slotIndex, effect);
       await loadChain();
       const effectInfo = EFFECT_INFO.find(e => e.key === effectType);
       showNotificationMsg('success', `Added ${effectInfo?.name || effectType} to slot ${slotIndex + 1}`);
@@ -279,7 +242,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
 
   const removeEffect = async (slotIndex: number) => {
     try {
-      await invoke('remove_effect_from_chain', { slotIndex });
+      await backend.removeEffectFromChain(slotIndex);
       await loadChain();
       showNotificationMsg('success', `Removed effect from slot ${slotIndex + 1}`);
       onChainChange?.();
@@ -292,7 +255,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
 
   const toggleEffect = async (slotIndex: number, enabled: boolean) => {
     try {
-      await invoke('toggle_effect', { slotIndex, enabled });
+      await backend.toggleEffect(slotIndex, enabled);
       await loadChain();
       showNotificationMsg('success', `${enabled ? 'Enabled' : 'Disabled'} effect in slot ${slotIndex + 1}`);
       onChainChange?.();
@@ -304,7 +267,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
 
   const clearChain = async () => {
     try {
-      await invoke('clear_dsp_chain');
+      await backend.clearDspChain();
       await loadChain();
       showNotificationMsg('success', 'Cleared DSP chain');
       onChainChange?.();
@@ -328,16 +291,13 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
 
     // Send to backend (fire and forget for smooth UX, errors logged)
     try {
-      await invoke('update_effect_parameters', {
-        slotIndex,
-        effect: params,
-      });
+      await backend.updateEffectParameters(slotIndex, params);
       onChainChange?.();
     } catch (error) {
       debug.error('Failed to update effect parameters:', error);
       // Don't show notification for parameter updates to avoid interrupting UX
     }
-  }, [onChainChange]);
+  }, [backend, onChainChange]);
 
   // Render the appropriate effect editor based on effect type
   const renderEffectEditor = (slot: EffectSlot) => {
@@ -499,7 +459,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
               <button
                 data-testid={`add-effect-btn-${slot.index}`}
                 onClick={() => setExpandedSlot(expandedSlot === slot.index ? null : slot.index)}
-                className="w-full p-3 border border-dashed rounded-lg text-sm text-muted-foreground hover:bg-muted/30 hover:border-primary/50 transition-all flex items-center justify-center gap-2"
+                className="w-full p-3 border border-dashed rounded-lg text-sm text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:border-primary/50 transition-all flex items-center justify-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 {t('dsp.addEffect', 'Add Effect')}
@@ -522,7 +482,7 @@ export function DspConfig({ onChainChange }: DspConfigProps) {
                         flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border transition-colors
                         ${editingSlot === slot.index
                           ? 'bg-primary text-primary-foreground border-primary'
-                          : 'border-border hover:bg-muted hover:border-primary/50'
+                          : 'border-border hover:bg-foreground/[var(--hover-bg-opacity)] hover:border-primary/50'
                         }
                       `}
                       title={editingSlot === slot.index ? t('common.done', 'Done') : t('common.edit', 'Edit')}

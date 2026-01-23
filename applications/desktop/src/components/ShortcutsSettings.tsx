@@ -168,7 +168,7 @@ function ShortcutRow({
           ${
             isEditing
               ? 'bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2'
-              : 'bg-muted hover:bg-muted/80'
+              : 'bg-muted hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]'
           }
         `}
       >
@@ -280,7 +280,7 @@ export function ShortcutsSettings() {
 
       <button
         onClick={handleResetDefaults}
-        className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors text-sm"
+        className="px-4 py-2 border border-border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm"
       >
         {t('settings.resetShortcuts')}
       </button>

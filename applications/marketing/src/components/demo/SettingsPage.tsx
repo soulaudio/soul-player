@@ -59,7 +59,7 @@ export function SettingsPage() {
                       ${
                         isActive
                           ? 'bg-primary text-primary-foreground font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]'
                       }
                     `}
                   >
@@ -111,7 +111,7 @@ export function SettingsPage() {
                       ${
                         isActive
                           ? 'bg-primary/10 text-primary font-medium'
-                          : 'text-foreground hover:bg-muted'
+                          : 'text-foreground hover:bg-foreground/[var(--hover-bg-opacity)]'
                       }
                     `}
                   >

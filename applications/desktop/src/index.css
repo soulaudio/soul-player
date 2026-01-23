@@ -37,6 +37,14 @@
     --font-sans: Inter, system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', Consolas, monospace;
     --font-size-base: 16px;
+
+    /* Interactions (Tailwind v4 best practices - CSS-first) */
+    --hover-text-opacity: 0.8;
+    --hover-button-opacity: 0.9;
+    --hover-bg-opacity: 0.1;
+    --selected-bg-opacity: 0.2;
+    --disabled-opacity: 0.5;
+    --transition-duration: 200ms;
   }
 
   /* Dark theme - Also available as .dark class for backward compatibility */

@@ -7,6 +7,10 @@ arch=('x86_64')
 url="https://github.com/soulaudio/soul-player"
 license=('AGPL3')
 depends=('webkit2gtk' 'gtk3' 'libayatana-appindicator')
+optdepends=(
+    'libappindicator-gtk3: system tray support'
+)
+install=soul-player.install
 source=("soul-player-${pkgver}::https://github.com/soulaudio/soul-player/releases/download/v${pkgver}/soul-player")
 sha256sums=('SKIP')  # Updated by makepkg or maintainer
 

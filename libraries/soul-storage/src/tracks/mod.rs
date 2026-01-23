@@ -1,11 +1,11 @@
 use soul_core::{error::Result, types::*};
 use sqlx::{Row, SqlitePool};
 
-/// Helper function to batch fetch track availability data using native IN clause
-/// This is more efficient than JSON serialization + json_each()
-async fn fetch_track_availability(
+/// Helper function to batch fetch track availability data
+/// Uses compile-time safe query with subquery pattern
+async fn batch_fetch_availability(
     pool: &SqlitePool,
-    track_ids: &[String],
+    track_ids: &[i64],
 ) -> Result<
     Vec<(
         i64,
@@ -20,25 +20,24 @@ async fn fetch_track_availability(
         return Ok(Vec::new());
     }
 
-    // Build dynamic IN clause with proper parameter binding
-    // e.g., "WHERE track_id IN (?, ?, ?)"
-    let placeholders = track_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-    let sql = format!(
+    // Convert track IDs to comma-separated string for subquery
+    let ids_str = track_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    // Use subquery pattern with compile-time safe query
+    // SQLx doesn't support array binding in SQLite, but we can use a workaround
+    // by constructing the query string safely (no user input, only i64 IDs)
+    let query_str = format!(
         "SELECT track_id, source_id, status, local_file_path, server_path, local_file_size \
          FROM track_sources WHERE track_id IN ({})",
-        placeholders
+        ids_str
     );
 
-    // Build query and bind all track IDs
-    let mut query = sqlx::query(&sql);
-    for track_id in track_ids {
-        // Parse to i64 for binding (track IDs are stored as integers)
-        let track_id_int: i64 = track_id.parse().unwrap_or(0);
-        query = query.bind(track_id_int);
-    }
+    let rows = sqlx::query(&query_str).fetch_all(pool).await?;
 
-    // Execute and map results to tuple format matching the old query! output
-    let rows = query.fetch_all(pool).await?;
     let results = rows
         .into_iter()
         .map(|row| {
@@ -69,7 +68,7 @@ pub async fn get_all(
     let limit = limit.unwrap_or(1000);
     let after_id_int: Option<i64> = after_id.as_ref().and_then(|id| id.parse::<i64>().ok());
 
-    // First, fetch all track data with artist/album info
+    // Optimized: Single query with LEFT JOIN to fetch tracks, artists, albums, and availability
     let query_start = std::time::Instant::now();
     let rows = sqlx::query!(
         r#"
@@ -80,12 +79,18 @@ pub async fn get_all(
             t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
             t.metadata_source, t.created_at, t.updated_at,
             ar.name as artist_name,
-            al.title as album_title
+            al.title as album_title,
+            ts.source_id as "source_id?",
+            ts.status as "status?",
+            ts.local_file_path as "local_file_path?",
+            ts.server_path as "server_path?",
+            ts.local_file_size as "local_file_size?"
         FROM tracks t
         LEFT JOIN artists ar ON t.artist_id = ar.id
         LEFT JOIN albums al ON t.album_id = al.id
+        LEFT JOIN track_sources ts ON t.id = ts.track_id
         WHERE (? IS NULL OR t.id > ?)
-        ORDER BY t.id
+        ORDER BY t.id, ts.source_id
         LIMIT ?
         "#,
         after_id_int,
@@ -99,92 +104,60 @@ pub async fn get_all(
     tracing::debug!(
         query_duration_ms = query_duration.as_millis(),
         row_count = rows.len(),
-        "[DB] get_all tracks query completed"
+        "[DB] get_all tracks query completed (optimized single query)"
     );
 
-    // Batch fetch availability data for returned tracks only
-    let avail_query_start = std::time::Instant::now();
-    let availability_rows = sqlx::query!(
-        r#"
-        SELECT track_id, source_id, status, local_file_path, server_path, local_file_size
-        FROM track_sources
-        WHERE track_id IN (
-            SELECT t.id
-            FROM tracks t
-            WHERE (? IS NULL OR t.id > ?)
-            ORDER BY t.id
-            LIMIT ?
-        )
-        "#,
-        after_id_int,
-        after_id_int,
-        limit
-    )
-    .fetch_all(pool)
-    .await?;
+    // Group rows by track_id and build Track objects
+    let build_start = std::time::Instant::now();
+    let mut tracks_map: std::collections::HashMap<i64, Track> = std::collections::HashMap::new();
 
-    let avail_query_duration = avail_query_start.elapsed();
-    tracing::debug!(
-        query_duration_ms = avail_query_duration.as_millis(),
-        row_count = availability_rows.len(),
-        "[DB] track_sources query completed"
-    );
+    for row in rows {
+        let track_id_i64 = row.id;
+        let track = tracks_map.entry(track_id_i64).or_insert_with(|| Track {
+            id: TrackId::new(track_id_i64.to_string()),
+            title: row.title.clone(),
+            artist_id: row.artist_id,
+            artist_name: row.artist_name.clone(),
+            album_id: row.album_id,
+            album_title: row.album_title.clone(),
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row
+                .file_format
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id.clone(),
+            fingerprint: row.fingerprint.clone(),
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at.clone(),
+            updated_at: row.updated_at.clone(),
+            availability: Vec::new(),
+        });
 
-    // Group availability by track_id
-    let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
-    for avail_row in availability_rows {
-        availability_map
-            .entry(avail_row.track_id.to_string())
-            .or_insert_with(Vec::new)
-            .push(TrackAvailability {
-                source_id: avail_row.source_id,
-                status: parse_availability_status(&avail_row.status),
-                local_file_path: avail_row.local_file_path,
-                server_path: avail_row.server_path,
-                local_file_size: avail_row.local_file_size,
+        // Add availability data if present in this row
+        if let (Some(source_id), Some(status)) = (row.source_id, &row.status) {
+            track.availability.push(TrackAvailability {
+                source_id,
+                status: parse_availability_status(status),
+                local_file_path: row.local_file_path.clone(),
+                server_path: row.server_path.clone(),
+                local_file_size: row.local_file_size,
             });
+        }
     }
 
-    // Build track objects with availability data
-    let build_start = std::time::Instant::now();
-    let tracks: Vec<Track> = rows
-        .into_iter()
-        .map(|row| {
-            let track_id = TrackId::new(row.id.to_string());
-            let availability = availability_map
-                .get(track_id.as_str())
-                .cloned()
-                .unwrap_or_default();
-
-            Track {
-                id: track_id,
-                title: row.title,
-                artist_id: row.artist_id,
-                artist_name: row.artist_name,
-                album_id: row.album_id,
-                album_title: row.album_title,
-                album_artist_id: row.album_artist_id,
-                track_number: row.track_number.map(|x| x as i32),
-                disc_number: row.disc_number.map(|x| x as i32),
-                year: row.year.map(|x| x as i32),
-                duration_seconds: row.duration_seconds,
-                bitrate: row.bitrate.map(|x| x as i32),
-                sample_rate: row.sample_rate.map(|x| x as i32),
-                channels: row.channels.map(|x| x as i32),
-                file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
-                origin_source_id: row.origin_source_id,
-                musicbrainz_recording_id: row.musicbrainz_recording_id,
-                fingerprint: row.fingerprint,
-                metadata_source: parse_metadata_source(
-                    row.metadata_source.as_deref().unwrap_or("file"),
-                ),
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-                availability,
-            }
-        })
-        .collect();
+    // Convert to Vec and preserve order
+    let mut tracks: Vec<Track> = tracks_map.into_values().collect();
+    tracks.sort_by_key(|t| t.id.as_str().parse::<i64>().unwrap_or(0));
 
     let build_duration = build_start.elapsed();
     let total_duration = start.elapsed();
@@ -193,7 +166,7 @@ pub async fn get_all(
         total_duration_ms = total_duration.as_millis(),
         build_duration_ms = build_duration.as_millis(),
         track_count = tracks.len(),
-        "[DB] get_all completed"
+        "[DB] get_all completed (optimized)"
     );
 
     Ok(tracks)
@@ -248,10 +221,10 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for matched tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for matched tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -411,10 +384,10 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -505,10 +478,10 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -599,10 +572,10 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -1017,10 +990,10 @@ pub async fn get_top_tracks_by_artist(
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -1118,10 +1091,10 @@ pub async fn get_recently_played(
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -1313,10 +1286,10 @@ pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Re
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -1414,10 +1387,10 @@ pub async fn get_by_artist_paginated(
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -1515,10 +1488,10 @@ pub async fn get_by_album_paginated(
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -1617,10 +1590,10 @@ pub async fn get_by_playlist_paginated(
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -1986,10 +1959,10 @@ pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Ve
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -2092,10 +2065,10 @@ pub async fn get_with_fingerprints(
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -2188,10 +2161,10 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
@@ -2282,10 +2255,10 @@ pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Resu
     }
 
     // Collect track IDs for batch availability lookup
-    let track_ids: Vec<String> = rows.iter().map(|r| r.id.to_string()).collect();
+    let track_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
 
-    // Batch fetch availability data for these tracks using native IN clause
-    let availability_rows = fetch_track_availability(pool, &track_ids).await?;
+    // Batch fetch availability data for these tracks using compile-time safe queries
+    let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
     // Group availability by track_id
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =

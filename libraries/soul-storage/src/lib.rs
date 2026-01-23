@@ -111,7 +111,7 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
     let options = SqliteConnectOptions::from_str(database_url)?
         .create_if_missing(true) // Create database file if it doesn't exist
         .journal_mode(SqliteJournalMode::Wal) // Use WAL mode for better concurrency
-        .busy_timeout(std::time::Duration::from_secs(30)) // Wait up to 30s for locks
+        .busy_timeout(std::time::Duration::from_secs(5)) // Wait up to 5s for locks (reduced from 30s)
         // Performance optimizations for desktop use:
         .pragma("synchronous", "NORMAL") // Reduce fsync calls (safe with WAL, ~2x faster writes)
         .pragma("cache_size", "-64000") // 64MB page cache (negative = KB, default ~2MB)
@@ -122,8 +122,11 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
     tracing::debug!("[soul-storage] Options configured");
 
     // Create pool with the configured options
+    // Optimized for concurrent operations (library scanning, playback init, import, etc.)
     let pool = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(20) // Increased from 5 to handle concurrent background tasks
+        .min_connections(2) // Keep minimum connections ready to reduce latency
+        .acquire_timeout(std::time::Duration::from_secs(10)) // Timeout for pool acquisition
         .connect_with(options)
         .await?;
 

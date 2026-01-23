@@ -166,7 +166,7 @@ export function CrossfeedEditor({
                   ${
                     isSelected || isCustomSelected
                       ? 'border-primary bg-primary/5 shadow-sm'
-                      : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                      : 'border-border hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
                   }
                 `}
               >
@@ -238,7 +238,7 @@ export function CrossfeedEditor({
       {/* Advanced Controls Toggle */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
       >
         {showAdvanced ? (
           <ChevronUp className="w-4 h-4" />

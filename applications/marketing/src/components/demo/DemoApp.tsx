@@ -24,10 +24,12 @@ import {
   useCurrentTrack,
   QueryClient,
   QueryClientProvider,
+  PlaybackContextProvider,
 } from '@soul-player/shared'
 import { DemoPlayerCommandsProvider } from '@/providers/DemoPlayerCommandsProvider'
 import { MockSettingsProvider } from './MockContexts'
 import { DemoInitializer } from './DemoInitializer'
+import { useGitHubRelease } from '@/hooks/useGitHubRelease'
 
 // Initialize i18n for the demo
 initI18n()
@@ -56,6 +58,7 @@ export function DemoApp() {
   const [error, setError] = useState<string | null>(null)
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false)
   const currentTrack = useCurrentTrack()
+  const { version } = useGitHubRelease()
 
   // Initialize demo storage on mount
   useEffect(() => {
@@ -143,13 +146,14 @@ export function DemoApp() {
             }}
           >
             <DemoPlayerCommandsProvider storage={demoStorage}>
-              <MockBackendProvider storage={demoStorage}>
-                <MockSettingsProvider>
-                  <DemoInitializer storage={demoStorage}>
-                  {/* Wrapper to ensure MainLayout fills available space */}
-                  <div className="flex-1 min-h-0 h-full">
-                    <ScrollVisibilityProvider>
-                      <MainLayout onAddToPlaylist={handleAddToPlaylist}>
+              <MockBackendProvider storage={demoStorage} version={version}>
+                <PlaybackContextProvider>
+                  <MockSettingsProvider>
+                    <DemoInitializer storage={demoStorage}>
+                    {/* Wrapper to ensure MainLayout fills available space */}
+                    <div className="flex-1 min-h-0 h-full">
+                      <ScrollVisibilityProvider>
+                        <MainLayout onAddToPlaylist={handleAddToPlaylist}>
                         <Routes>
                           <Route path="/" element={<HomePage />} />
                           <Route path="/library" element={<LibraryPage />} />
@@ -166,19 +170,20 @@ export function DemoApp() {
                         </Routes>
                       </MainLayout>
                     </ScrollVisibilityProvider>
-                  </div>
-                </DemoInitializer>
+                    </div>
+                  </DemoInitializer>
 
-                {/* Add to Playlist Dialog */}
-                {currentTrack && showAddToPlaylist && (
-                  <AddToPlaylistDialog
-                    open={showAddToPlaylist}
-                    onClose={() => setShowAddToPlaylist(false)}
-                    trackId={currentTrack.id}
-                    trackTitle={currentTrack.title}
-                  />
-                )}
-                </MockSettingsProvider>
+                  {/* Add to Playlist Dialog */}
+                  {currentTrack && showAddToPlaylist && (
+                    <AddToPlaylistDialog
+                      open={showAddToPlaylist}
+                      onClose={() => setShowAddToPlaylist(false)}
+                      trackId={currentTrack.id}
+                      trackTitle={currentTrack.title}
+                    />
+                  )}
+                  </MockSettingsProvider>
+                </PlaybackContextProvider>
               </MockBackendProvider>
             </DemoPlayerCommandsProvider>
           </PlatformProvider>

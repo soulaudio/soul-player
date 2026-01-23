@@ -1,3 +1,4 @@
+use crate::error::StorageError;
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
@@ -10,18 +11,21 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Artist>> {
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Artist {
-            id: row.id.expect("artist id should not be null"),
-            name: row.name,
-            sort_name: row.sort_name,
-            musicbrainz_id: row.musicbrainz_id,
-            cover_art_path: row.cover_art_path,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+    rows.into_iter()
+        .map(|row| {
+            Ok(Artist {
+                id: row
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("artist.id".to_string()))?,
+                name: row.name,
+                sort_name: row.sort_name,
+                musicbrainz_id: row.musicbrainz_id,
+                cover_art_path: row.cover_art_path,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub async fn get_by_id(pool: &SqlitePool, id: ArtistId) -> Result<Option<Artist>> {
@@ -55,14 +59,17 @@ pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Artist
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| Artist {
-        id: row.id.expect("artist id should not be null"),
-        name: row.name,
-        sort_name: row.sort_name,
-        musicbrainz_id: row.musicbrainz_id,
-        cover_art_path: row.cover_art_path,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
+    Ok(row.and_then(|row| {
+        // Use filter_map pattern to handle missing id gracefully
+        row.id.map(|id| Artist {
+            id,
+            name: row.name,
+            sort_name: row.sort_name,
+            musicbrainz_id: row.musicbrainz_id,
+            cover_art_path: row.cover_art_path,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
     }))
 }
 
@@ -115,13 +122,11 @@ pub async fn get_track_counts(
 
     Ok(rows
         .into_iter()
-        .map(|row| {
-            (
-                row.artist_id.expect("artist_id should not be null"),
-                row.count as i32,
-            )
+        .filter_map(|row| {
+            // Filter out rows with missing artist_id
+            row.artist_id.map(|artist_id| (artist_id, row.count as i32))
         })
-        .collect())
+        .collect::<std::collections::HashMap<_, _>>())
 }
 
 /// Get album counts for all artists in a single query
@@ -139,11 +144,9 @@ pub async fn get_album_counts(
 
     Ok(rows
         .into_iter()
-        .map(|row| {
-            (
-                row.artist_id.expect("artist_id should not be null"),
-                row.count as i32,
-            )
+        .filter_map(|row| {
+            // Filter out rows with missing artist_id
+            row.artist_id.map(|artist_id| (artist_id, row.count as i32))
         })
-        .collect())
+        .collect::<std::collections::HashMap<_, _>>())
 }

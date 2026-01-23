@@ -15,7 +15,7 @@ export function DocsSidebar() {
         <Link
           key={item.href}
           href={item.href}
-          className="sidebar-link block px-3 py-2 rounded-md text-sm transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="sidebar-link block px-3 py-2 rounded-md text-sm transition-colors duration-[var(--transition-duration)] text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity"
         >
           {item.title}
         </Link>

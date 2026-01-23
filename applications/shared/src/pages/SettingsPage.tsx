@@ -123,7 +123,7 @@ export function SettingsPage({ handlers, ShortcutsSettingsComponent }: SettingsP
                       ${
                         isActive
                           ? 'bg-primary text-primary-foreground font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]'
                       }
                     `}
                   >
@@ -175,7 +175,7 @@ export function SettingsPage({ handlers, ShortcutsSettingsComponent }: SettingsP
                       ${
                         isActive
                           ? 'bg-primary/10 text-primary font-medium'
-                          : 'text-foreground hover:bg-muted'
+                          : 'text-foreground hover:bg-foreground/[var(--hover-bg-opacity)]'
                       }
                     `}
                   >
@@ -406,7 +406,7 @@ function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
               checked={handlers?.silentUpdate ?? false}
               onChange={(e) => handlers?.handleSilentUpdateChange?.(e.target.checked)}
               disabled={!canChangeUpdates || !handlers?.autoUpdate}
-              className="w-4 h-4 disabled:opacity-50"
+              className="w-4 h-4 disabled:opacity-[var(--disabled-opacity)]"
             />
             <span className={`text-sm ${!handlers?.autoUpdate ? 'text-muted-foreground' : ''}`}>
               {t('settings.silentUpdate')}
@@ -417,8 +417,8 @@ function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
             onClick={() => handlers?.checkForUpdates?.()}
             disabled={!canChangeUpdates || handlers?.checking}
             className={`px-4 py-2 bg-primary text-primary-foreground rounded-lg ${
-              canChangeUpdates ? 'hover:bg-primary/90' : 'opacity-50 cursor-not-allowed'
-            } disabled:opacity-50`}
+              canChangeUpdates ? 'hover:opacity-[var(--hover-button-opacity)] transition-opacity' : 'opacity-50 cursor-not-allowed'
+            } disabled:opacity-[var(--disabled-opacity)]`}
           >
             {handlers?.checking ? t('settings.checking') : t('settings.checkNow')}
           </button>

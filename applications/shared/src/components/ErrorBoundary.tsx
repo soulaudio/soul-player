@@ -113,13 +113,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <div className="flex gap-3 justify-center">
               <button
                 onClick={this.reset}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-all duration-[var(--transition-duration)]"
               >
                 Try Again
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors"
+                className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-all duration-[var(--transition-duration)]"
               >
                 Reload Page
               </button>
@@ -138,9 +138,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
  * Useful for async errors that occur outside of render
  */
 export function useErrorBoundary() {
+  const timerRef = { current: null as NodeJS.Timeout | null }
+
   const throwError = (error: Error): void => {
+    // Clear any pending timer
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+    }
+
     // Throw error in next tick to trigger error boundary
-    setTimeout(() => {
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
       throw error
     }, 0)
   }

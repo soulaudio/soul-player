@@ -85,6 +85,26 @@
         "platform": "macOS",
         "arch": "x64",
         "recommended": false
+      },
+      "app-arm": {
+        "name": "Soul Player_{version}_aarch64.app.tar.gz",
+        "artifactName": "macos-aarch64-apple-darwin",
+        "path": "macos",
+        "displayName": "macOS App Bundle (Apple Silicon)",
+        "platform": "macOS",
+        "arch": "arm64",
+        "recommended": false,
+        "description": "For Tauri auto-updates. Users should download DMG instead."
+      },
+      "app-intel": {
+        "name": "Soul Player_{version}_x64.app.tar.gz",
+        "artifactName": "macos-x86_64-apple-darwin",
+        "path": "macos",
+        "displayName": "macOS App Bundle (Intel)",
+        "platform": "macOS",
+        "arch": "x64",
+        "recommended": false,
+        "description": "For Tauri auto-updates. Users should download DMG instead."
       }
     }
   },

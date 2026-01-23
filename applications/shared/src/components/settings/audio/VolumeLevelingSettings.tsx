@@ -1,23 +1,11 @@
 // Volume leveling (ReplayGain / EBU R128) settings component
 
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Info, Play, Square, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
 import { debug } from '../../../utils/debug';
-
-interface QueueStats {
-  total: number;
-  pending: number;
-  processing: number;
-  completed: number;
-  failed: number;
-}
-
-interface WorkerStatus {
-  isRunning: boolean;
-  tracksAnalyzed: number;
-}
+import { useBackend } from '../../../contexts/BackendContext';
+import type { AnalysisQueueStats, AnalysisWorkerStatus } from '../../../contexts/BackendContext';
 
 interface VolumeLevelingSettingsProps {
   mode: 'disabled' | 'replaygain_track' | 'replaygain_album' | 'ebu_r128';
@@ -63,8 +51,9 @@ export function VolumeLevelingSettings({
   onPreampChange,
   onPreventClippingChange,
 }: VolumeLevelingSettingsProps) {
-  const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
-  const [workerStatus, setWorkerStatus] = useState<WorkerStatus>({ isRunning: false, tracksAnalyzed: 0 });
+  const backend = useBackend();
+  const [queueStats, setQueueStats] = useState<AnalysisQueueStats | null>(null);
+  const [workerStatus, setWorkerStatus] = useState<AnalysisWorkerStatus>({ isRunning: false, tracksAnalyzed: 0 });
   const [isLoading, setIsLoading] = useState(false);
   const [lastAnalyzedTrack, setLastAnalyzedTrack] = useState<string | null>(null);
 
@@ -81,28 +70,16 @@ export function VolumeLevelingSettings({
     setLocalPreampDb(value);
     if (onPreampChange) {
       onPreampChange(value);
-    } else {
-      // Fallback: directly invoke Tauri command if no callback provided
-      try {
-        await invoke('set_volume_leveling_preamp', { preampDb: value });
-      } catch (error) {
-        debug.error('Failed to set preamp:', error);
-      }
     }
+    // Note: Parent component (AudioSettingsPage) handles the backend call via onPreampChange
   };
 
   // Prevent clipping change handler
   const handlePreventClippingChange = async (checked: boolean) => {
     if (onPreventClippingChange) {
       onPreventClippingChange(checked);
-    } else {
-      // Fallback: directly invoke Tauri command if no callback provided
-      try {
-        await invoke('set_volume_leveling_prevent_clipping', { prevent: checked });
-      } catch (error) {
-        debug.error('Failed to set prevent clipping:', error);
-      }
     }
+    // Note: Parent component (AudioSettingsPage) handles the backend call via onPreventClippingChange
   };
 
   // Load initial stats
@@ -113,31 +90,49 @@ export function VolumeLevelingSettings({
 
   // Listen for analysis events
   useEffect(() => {
-    const unlistenProgress = listen<{ trackId: number; trackTitle: string }>('loudness-analysis-progress', (event) => {
-      setLastAnalyzedTrack(event.payload.trackTitle);
-      loadQueueStats();
-      loadWorkerStatus();
-    });
+    const unlistenFunctions: (() => void)[] = [];
+    let isMounted = true;
 
-    const unlistenComplete = listen('analysis-worker-complete', () => {
-      setWorkerStatus({ isRunning: false, tracksAnalyzed: workerStatus.tracksAnalyzed });
-      loadQueueStats();
-    });
+    const setupListeners = async () => {
+      try {
+        if (!isMounted) return;
 
-    const unlistenStopped = listen('analysis-worker-stopped', () => {
-      setWorkerStatus({ isRunning: false, tracksAnalyzed: workerStatus.tracksAnalyzed });
-    });
+        const unlistenProgress = await listen<{ trackId: number; trackTitle: string }>('loudness-analysis-progress', (event) => {
+          if (!isMounted) return;
+          setLastAnalyzedTrack(event.payload.trackTitle);
+          loadQueueStats();
+          loadWorkerStatus();
+        });
+        unlistenFunctions.push(unlistenProgress);
+
+        const unlistenComplete = await listen('analysis-worker-complete', () => {
+          if (!isMounted) return;
+          setWorkerStatus((prev) => ({ isRunning: false, tracksAnalyzed: prev.tracksAnalyzed }));
+          loadQueueStats();
+        });
+        unlistenFunctions.push(unlistenComplete);
+
+        const unlistenStopped = await listen('analysis-worker-stopped', () => {
+          if (!isMounted) return;
+          setWorkerStatus((prev) => ({ isRunning: false, tracksAnalyzed: prev.tracksAnalyzed }));
+        });
+        unlistenFunctions.push(unlistenStopped);
+      } catch (error) {
+        console.error('[VolumeLevelingSettings] Failed to set up listeners:', error);
+      }
+    };
+
+    void setupListeners();
 
     return () => {
-      unlistenProgress.then(f => f());
-      unlistenComplete.then(f => f());
-      unlistenStopped.then(f => f());
+      isMounted = false;
+      unlistenFunctions.forEach(fn => fn());
     };
-  }, [workerStatus.tracksAnalyzed]);
+  }, []); // Remove workerStatus.tracksAnalyzed dependency - CRITICAL FIX for listener leak multiplier
 
   const loadQueueStats = async () => {
     try {
-      const stats = await invoke<QueueStats>('get_analysis_queue_stats');
+      const stats = await backend.getAnalysisQueueStats();
       setQueueStats(stats);
     } catch (error) {
       debug.error('Failed to load queue stats:', error);
@@ -146,7 +141,7 @@ export function VolumeLevelingSettings({
 
   const loadWorkerStatus = async () => {
     try {
-      const status = await invoke<WorkerStatus>('get_analysis_worker_status');
+      const status = await backend.getAnalysisWorkerStatus();
       setWorkerStatus(status);
     } catch (error) {
       debug.error('Failed to load worker status:', error);
@@ -156,7 +151,7 @@ export function VolumeLevelingSettings({
   const handleStartAnalysis = async () => {
     setIsLoading(true);
     try {
-      await invoke('start_analysis_worker');
+      await backend.startAnalysisWorker();
       setWorkerStatus({ ...workerStatus, isRunning: true });
     } catch (error) {
       debug.error('Failed to start analysis:', error);
@@ -168,7 +163,7 @@ export function VolumeLevelingSettings({
   const handleStopAnalysis = async () => {
     setIsLoading(true);
     try {
-      await invoke('stop_analysis_worker');
+      await backend.stopAnalysisWorker();
     } catch (error) {
       debug.error('Failed to stop analysis:', error);
     } finally {
@@ -179,7 +174,7 @@ export function VolumeLevelingSettings({
   const handleQueueAllUnanalyzed = async () => {
     setIsLoading(true);
     try {
-      const count = await invoke<number>('queue_all_unanalyzed');
+      const count = await backend.queueAllUnanalyzed();
       await loadQueueStats();
       if (count > 0) {
         // Auto-start worker if items were queued
@@ -194,7 +189,7 @@ export function VolumeLevelingSettings({
 
   const handleClearCompleted = async () => {
     try {
-      await invoke('clear_completed_analysis');
+      await backend.clearCompletedAnalysis();
       await loadQueueStats();
     } catch (error) {
       debug.error('Failed to clear completed:', error);
@@ -220,7 +215,7 @@ export function VolumeLevelingSettings({
                   ${
                     isSelected
                       ? 'border-primary bg-primary/5 shadow-sm'
-                      : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                      : 'border-border hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
                   }
                 `}
               >
@@ -293,7 +288,7 @@ export function VolumeLevelingSettings({
       {/* Prevent Clipping */}
       {mode !== 'disabled' && (
         <div className="space-y-3">
-          <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
+          <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors">
             <input
               type="checkbox"
               checked={preventClipping}
@@ -369,7 +364,7 @@ export function VolumeLevelingSettings({
             <h3 className="text-sm font-medium">Library Analysis</h3>
             <button
               onClick={loadQueueStats}
-              className="p-1 hover:bg-muted rounded transition-colors"
+              className="p-1 hover:bg-foreground/[var(--hover-bg-opacity)] rounded transition-colors"
               title="Refresh stats"
             >
               <RefreshCw className="w-4 h-4 text-muted-foreground" />
@@ -422,7 +417,7 @@ export function VolumeLevelingSettings({
               <button
                 onClick={handleStopAnalysis}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
               >
                 <Square className="w-4 h-4" />
                 Stop Analysis
@@ -432,7 +427,7 @@ export function VolumeLevelingSettings({
                 <button
                   onClick={handleQueueAllUnanalyzed}
                   disabled={isLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                 >
                   {isLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -445,7 +440,7 @@ export function VolumeLevelingSettings({
                   <button
                     onClick={handleStartAnalysis}
                     disabled={isLoading}
-                    className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
                   >
                     Resume ({queueStats.pending} pending)
                   </button>
@@ -455,7 +450,7 @@ export function VolumeLevelingSettings({
             {queueStats && queueStats.completed > 0 && (
               <button
                 onClick={handleClearCompleted}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
               >
                 <CheckCircle className="w-4 h-4" />
                 Clear Completed

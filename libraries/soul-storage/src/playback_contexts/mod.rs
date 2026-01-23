@@ -123,8 +123,9 @@ pub async fn get_recent(
         .into_iter()
         .filter_map(|row| {
             let context_type = ContextType::from_str(&row.context_type)?;
+            let id = row.id?;
             Some(PlaybackContext {
-                id: row.id.expect("playback_contexts.id should not be null"),
+                id,
                 user_id: row.user_id,
                 context_type,
                 context_id: if row.context_id.as_deref() == Some("") {
@@ -171,8 +172,9 @@ pub async fn get_by_type_and_id(
 
     Ok(row.and_then(|row| {
         let context_type = ContextType::from_str(&row.context_type)?;
+        let id = row.id?;
         Some(PlaybackContext {
-            id: row.id.expect("playback_contexts.id should not be null"),
+            id,
             user_id: row.user_id,
             context_type,
             context_id: if row.context_id.as_deref() == Some("") {

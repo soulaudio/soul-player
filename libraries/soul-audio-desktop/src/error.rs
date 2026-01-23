@@ -85,6 +85,12 @@ impl From<soul_playback::PlaybackError> for AudioError {
     }
 }
 
+impl From<String> for AudioError {
+    fn from(err: String) -> Self {
+        AudioError::DeviceError(err)
+    }
+}
+
 impl From<AudioOutputError> for soul_core::SoulError {
     fn from(err: AudioOutputError) -> Self {
         soul_core::SoulError::audio(err.to_string())

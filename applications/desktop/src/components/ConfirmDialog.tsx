@@ -49,7 +49,7 @@ export function ConfirmDialog({
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
             disabled={isLoading}
           >
             <X className="w-5 h-5" />
@@ -65,7 +65,7 @@ export function ConfirmDialog({
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded hover:bg-accent transition-colors"
+            className="px-4 py-2 rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             disabled={isLoading}
           >
             Cancel
@@ -73,10 +73,10 @@ export function ConfirmDialog({
           <button
             onClick={onConfirm}
             disabled={isLoading}
-            className={`px-4 py-2 rounded transition-colors ${
+            className={`px-4 py-2 rounded transition-opacity duration-[var(--transition-duration)] ${
               confirmVariant === 'danger'
-                ? 'bg-red-600 hover:bg-red-700 text-white'
-                : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                ? 'bg-red-600 hover:opacity-[var(--hover-button-opacity)] text-white'
+                : 'bg-primary hover:opacity-[var(--hover-button-opacity)] text-primary-foreground'
             } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {isLoading ? 'Processing...' : confirmText}

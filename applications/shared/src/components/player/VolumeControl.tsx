@@ -91,10 +91,10 @@ export function VolumeControl() {
   const displayVolume = isMuted ? 0 : volume;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 shrink-0">
       <button
         onClick={handleMuteToggle}
-        className="p-2 rounded-full hover:bg-accent transition-colors"
+        className="p-2 rounded-full hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors shrink-0"
         aria-label={isMuted ? 'Unmute' : 'Mute'}
       >
         {isMuted || volume === 0 ? (
@@ -104,7 +104,11 @@ export function VolumeControl() {
         )}
       </button>
 
-      <div ref={sliderContainerRef} className="relative w-24 h-2 group">
+      <div
+        ref={sliderContainerRef}
+        className="relative shrink-0"
+        style={{ width: '96px', minWidth: '96px' }}
+      >
         <input
           type="range"
           min="0"
@@ -112,24 +116,44 @@ export function VolumeControl() {
           step="0.01"
           value={displayVolume}
           onChange={handleVolumeChange}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
           aria-label="Volume"
+          style={{ width: '96px' }}
         />
 
-        <div className="absolute inset-0 bg-muted rounded-full" />
-
+        {/* Track container with solid background */}
         <div
-          className="absolute inset-y-0 left-0 bg-primary rounded-full"
-          style={{ width: `${displayVolume * 100}%` }}
-        />
+          className="rounded-full overflow-hidden relative"
+          style={{
+            height: '8px',
+            width: '96px',
+            backgroundColor: '#374151'
+          }}
+        >
+          {/* Filled portion */}
+          <div
+            className="h-full bg-primary transition-all duration-100"
+            style={{
+              width: `${displayVolume * 100}%`,
+              height: '8px'
+            }}
+          />
+        </div>
 
+        {/* Hover handle positioned on top */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ left: `${displayVolume * 100}%`, transform: 'translate(-50%, -50%)' }}
+          className="absolute bg-primary rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+          style={{
+            left: `${displayVolume * 100}%`,
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '12px',
+            height: '12px'
+          }}
         />
       </div>
 
-      <span className="text-xs text-muted-foreground font-mono w-8 text-right">
+      <span className="text-xs text-muted-foreground font-mono shrink-0" style={{ width: '32px', textAlign: 'right' }}>
         {Math.round(displayVolume * 100)}
       </span>
     </div>

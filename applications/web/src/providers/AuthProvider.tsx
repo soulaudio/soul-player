@@ -7,6 +7,7 @@ interface AuthContextValue {
   user: { id: string; username: string } | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  token: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -79,8 +80,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     navigate('/login');
   };
 
+  const token = apiClient.getAccessToken();
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, token, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -104,7 +104,7 @@ export function BufferSettings({
             </span>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border hover:bg-muted/30 transition-colors">
+          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
             <input
               type="checkbox"
               checked={preloadEnabled}
@@ -159,7 +159,7 @@ export function BufferSettings({
             </label>
 
             {/* Crossfade Enable */}
-            <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border hover:bg-muted/30 transition-colors">
+            <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
               <input
                 type="checkbox"
                 checked={crossfade.enabled}

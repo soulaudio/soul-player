@@ -59,6 +59,8 @@ export interface PlayerCommandsInterface {
   cycleShuffle: () => Promise<'off' | 'random' | 'smart'>;
   getShuffle: () => Promise<'off' | 'random' | 'smart'>;
   setRepeatMode: (mode: 'off' | 'all' | 'one') => Promise<void>;
+  cycleRepeat: () => Promise<'off' | 'all' | 'one'>;
+  getRepeat: () => Promise<'off' | 'all' | 'one'>;
 
   // Capabilities
   getPlaybackCapabilities: () => Promise<PlaybackCapabilities>;

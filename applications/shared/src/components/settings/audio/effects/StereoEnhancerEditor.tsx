@@ -140,7 +140,7 @@ export function StereoEnhancerEditor({
         </div>
         <button
           onClick={handleReset}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] hover:bg-foreground/[var(--hover-bg-opacity)] rounded-lg transition-all duration-[var(--transition-duration)]"
           title={t('dsp.stereo.reset')}
         >
           <RotateCcw className="w-4 h-4" />

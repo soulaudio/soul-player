@@ -310,7 +310,7 @@ export function EditArtworkDialog({
                   <button
                     onClick={() => handleAlbumChoice('folder')}
                     disabled={saving}
-                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-[var(--disabled-opacity)]"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -329,7 +329,7 @@ export function EditArtworkDialog({
                   <button
                     onClick={() => handleAlbumChoice('both')}
                     disabled={saving}
-                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-[var(--disabled-opacity)]"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -348,7 +348,7 @@ export function EditArtworkDialog({
                   <button
                     onClick={() => handleAlbumChoice('soul_storage')}
                     disabled={saving}
-                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                    className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-[var(--disabled-opacity)]"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

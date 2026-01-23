@@ -46,7 +46,7 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline underline-offset-2 transition-opacity hover:opacity-80"
+            className="underline underline-offset-2 transition-opacity hover:opacity-[var(--hover-text-opacity)]"
             style={{ color: 'hsl(var(--primary))' }}
           >
             {children}
@@ -56,7 +56,7 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
       return (
         <Link
           href={href || '#'}
-          className="underline underline-offset-2 transition-opacity hover:opacity-80"
+          className="underline underline-offset-2 transition-opacity hover:opacity-[var(--hover-text-opacity)]"
           style={{ color: 'hsl(var(--primary))' }}
         >
           {children}

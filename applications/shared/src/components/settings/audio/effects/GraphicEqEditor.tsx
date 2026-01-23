@@ -364,7 +364,7 @@ export function GraphicEqEditor({
             className={`
               w-full flex items-center justify-between gap-2 px-3 py-2
               border border-border rounded-lg bg-background
-              hover:bg-muted/30 transition-colors text-sm
+              hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors text-sm
             `}
           >
             <span className="truncate">
@@ -388,7 +388,7 @@ export function GraphicEqEditor({
                       onClick={() => applyPreset(preset)}
                       className={`
                         w-full flex items-center justify-between px-3 py-2 text-sm text-left
-                        transition-colors hover:bg-muted/50
+                        transition-colors hover:bg-foreground/[var(--hover-bg-opacity)]
                         ${isSelected ? 'bg-primary/10 text-primary' : ''}
                       `}
                     >
@@ -413,7 +413,7 @@ export function GraphicEqEditor({
             border border-border transition-colors
             ${isFlat
               ? 'opacity-50 cursor-not-allowed'
-              : 'hover:bg-muted/50 hover:text-primary'
+              : 'hover:bg-foreground/[var(--hover-bg-opacity)] hover:text-primary'
             }
           `}
           title={t('settings.audio.graphicEq.reset')}

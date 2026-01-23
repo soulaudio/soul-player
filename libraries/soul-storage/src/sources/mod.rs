@@ -1,3 +1,4 @@
+use crate::error::StorageError;
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
@@ -90,19 +91,25 @@ pub async fn get_active_server(pool: &SqlitePool) -> Result<Option<Source>> {
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| Source {
-        id: row.id.expect("source id should not be null"),
-        name: row.name,
-        source_type: SourceType::Server,
-        config: SourceConfig::Server {
-            url: row.server_url.unwrap_or_default(),
-            username: row.server_username.unwrap_or_default(),
-            token: row.server_token,
-        },
-        is_active: row.is_active,
-        is_online: row.is_online,
-        last_sync_at: row.last_sync_at,
-    }))
+    row.map(|row| {
+        row.id
+            .ok_or_else(|| StorageError::MissingField("source.id".to_string()))
+            .map(|id| Source {
+                id,
+                name: row.name,
+                source_type: SourceType::Server,
+                config: SourceConfig::Server {
+                    url: row.server_url.unwrap_or_default(),
+                    username: row.server_username.unwrap_or_default(),
+                    token: row.server_token,
+                },
+                is_active: row.is_active,
+                is_online: row.is_online,
+                last_sync_at: row.last_sync_at,
+            })
+    })
+    .transpose()
+    .map_err(Into::into)
 }
 
 pub async fn create(pool: &SqlitePool, source: CreateSource) -> Result<Source> {
@@ -235,22 +242,25 @@ pub async fn get_server_sources_for_user(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Source {
-            id: row.id.expect("source id should not be null"),
-            name: row.name,
-            source_type: SourceType::Server,
-            config: SourceConfig::Server {
-                url: row.server_url.unwrap_or_default(),
-                username: row.server_username.unwrap_or_default(),
-                token: row.server_token,
-            },
-            is_active: row.is_active,
-            is_online: row.is_online,
-            last_sync_at: row.last_sync_at,
+    rows.into_iter()
+        .map(|row| {
+            Ok(Source {
+                id: row
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("source.id".to_string()))?,
+                name: row.name,
+                source_type: SourceType::Server,
+                config: SourceConfig::Server {
+                    url: row.server_url.unwrap_or_default(),
+                    username: row.server_username.unwrap_or_default(),
+                    token: row.server_token,
+                },
+                is_active: row.is_active,
+                is_online: row.is_online,
+                last_sync_at: row.last_sync_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// Add a new server source for a user

@@ -47,16 +47,25 @@ pub async fn get(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| ManagedLibrarySettings {
-        id: r.id.expect("managed_library_settings id cannot be null"),
-        user_id: r.user_id,
-        device_id: r.device_id,
-        library_path: r.library_path,
-        path_template: r.path_template,
-        import_action: ImportAction::from_str(&r.import_action).unwrap_or(ImportAction::Copy),
-        created_at: r.created_at,
-        updated_at: r.updated_at,
-    }))
+    match row {
+        Some(r) => match r.id {
+            Some(id) => Ok(Some(ManagedLibrarySettings {
+                id,
+                user_id: r.user_id,
+                device_id: r.device_id,
+                library_path: r.library_path,
+                path_template: r.path_template,
+                import_action: ImportAction::from_str(&r.import_action)
+                    .unwrap_or(ImportAction::Copy),
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })),
+            None => Err(StorageError::MissingField(
+                "managed_library_settings.id".to_string(),
+            )),
+        },
+        None => Ok(None),
+    }
 }
 
 /// Get managed library settings, creating with defaults if not exists

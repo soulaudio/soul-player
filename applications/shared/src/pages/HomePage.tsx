@@ -8,7 +8,7 @@ import type { BackendAlbum } from '../contexts/BackendContext'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
 import { AlbumCard } from '../components/AlbumCard'
 import { SkeletonGrid } from '../components/SkeletonGrid'
-import { categorizeAlbumsByPlayback, selectAlbumsFromOrderedIds } from '../lib/homePageUtils'
+import { categorizeAlbumsByPlayback, selectAlbumsFromOrderedIds, shuffle } from '../lib/homePageUtils'
 import { useAlbums } from '../hooks/queries/useAlbumQueries'
 import { useRecentContexts } from '../hooks/queries/useLibraryQueries'
 import { debounce } from '../utils/debounce'
@@ -165,7 +165,8 @@ export function HomePage() {
     let albums: BackendAlbum[] = []
     if (recentAlbums.length === 0 && allAlbums.length > 0) {
       // Fallback to random albums if no recent history
-      const shuffled = [...allAlbums].sort(() => Math.random() - 0.5)
+      // Use Fisher-Yates shuffle (O(n)) instead of sort-based shuffle (O(n log n))
+      const shuffled = shuffle(allAlbums)
       albums = shuffled.slice(0, Math.min(30, allAlbums.length))
     } else {
       // Return up to 30 recent albums - layout will show what fits
@@ -196,7 +197,8 @@ export function HomePage() {
     const capsuleAlbums = allAlbums.filter(album => timeCapsuleAlbumIds.has(album.id))
 
     // Shuffle and take up to 30 - layout will show what fits
-    const shuffled = [...capsuleAlbums].sort(() => Math.random() - 0.5)
+    // Use Fisher-Yates shuffle (O(n)) instead of sort-based shuffle (O(n log n))
+    const shuffled = shuffle(capsuleAlbums)
     const selected = shuffled.slice(0, Math.min(30, capsuleAlbums.length))
 
     // Mark as used
@@ -215,7 +217,8 @@ export function HomePage() {
     )
 
     // Shuffle and take up to 30 - layout will show what fits
-    const shuffled = [...nonRecentAlbums].sort(() => Math.random() - 0.5)
+    // Use Fisher-Yates shuffle (O(n)) instead of sort-based shuffle (O(n log n))
+    const shuffled = shuffle(nonRecentAlbums)
     const selected = shuffled.slice(0, Math.min(30, nonRecentAlbums.length))
 
     // Mark as used
@@ -234,7 +237,8 @@ export function HomePage() {
 
     // Filter out already used albums
     const availableAlbums = allAlbums.filter(album => !usedAlbumIds.current.has(album.id))
-    const shuffled = [...availableAlbums].sort(() => Math.random() - 0.5)
+    // Use Fisher-Yates shuffle (O(n)) instead of sort-based shuffle (O(n log n))
+    const shuffled = shuffle(availableAlbums)
     const selected = shuffled.slice(0, Math.min(maxAlbumsToGenerate, availableAlbums.length))
 
     // Mark as used

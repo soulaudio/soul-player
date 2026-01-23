@@ -116,7 +116,7 @@ export function PlaylistsPage() {
         <FeatureGate feature="canCreatePlaylists">
           <button
             onClick={handleCreatePlaylist}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">{t('playlist.create')}</span>
@@ -166,7 +166,7 @@ export function PlaylistsPage() {
           <FeatureGate feature="canCreatePlaylists">
             <button
               onClick={handleCreatePlaylist}
-              className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+              className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
             >
               {t('playlist.create')}
             </button>

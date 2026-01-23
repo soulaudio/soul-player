@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import {
   FolderOpen,
   X,
@@ -17,6 +16,7 @@ import {
   Music
 } from 'lucide-react';
 import { debug } from '../../../../utils/debug';
+import { useBackend } from '../../../../contexts/BackendContext';
 
 /**
  * Settings for the convolution effect
@@ -85,6 +85,7 @@ export function ConvolutionEditor({
   slotIndex: _slotIndex // Reserved for backend integration
 }: ConvolutionEditorProps) {
   const { t } = useTranslation();
+  const backend = useBackend();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const [loading, setLoading] = useState(false);
@@ -177,17 +178,13 @@ export function ConvolutionEditor({
     setError(null);
 
     try {
-      // Use Tauri command to open file dialog with audio file filters
-      // Note: open_file_dialog expects filters as array of {name, extensions} objects
-      const selected = await invoke<string[] | null>('open_file_dialog', {
-        multiple: false,
-        filters: [
-          {
-            name: t('convolution.audioFiles'),
-            extensions: ['wav', 'flac', 'aiff', 'aif']
-          }
-        ]
-      });
+      // Use backend method to open file dialog with audio filters
+      const selected = await backend.openFileDialog(false, [
+        {
+          name: t('convolution.audioFiles'),
+          extensions: ['wav', 'flac', 'aiff', 'aif']
+        }
+      ]);
 
       if (selected && selected.length > 0) {
         const filePath = selected[0];
@@ -339,7 +336,7 @@ export function ConvolutionEditor({
           <button
             onClick={handleLoadIr}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)] transition-colors"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -504,7 +501,7 @@ export function ConvolutionEditor({
                   text-left p-3 rounded-lg border-2 transition-all
                   ${isActive
                     ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                    : 'border-border hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
                   }
                 `}
               >

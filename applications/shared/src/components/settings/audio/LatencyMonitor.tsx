@@ -3,25 +3,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Activity, Zap, Lock, Unlock, RefreshCw, Settings2 } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { debug } from '../../../utils/debug';
-
-export interface LatencyInfo {
-  bufferSamples: number;
-  bufferMs: number;
-  totalMs: number;
-  exclusive: boolean;
-}
-
-export interface ExclusiveConfig {
-  sampleRate: number;
-  bitDepth: string;
-  bufferFrames: number | null;
-  exclusiveMode: boolean;
-  deviceName: string | null;
-  backend: string;
-}
+import { useBackend } from '../../../contexts/BackendContext';
+import type { LatencyInfo, ExclusiveConfig } from '../../../contexts/BackendContext';
 
 export interface BufferSizeOption {
   frames: number;
@@ -42,6 +27,7 @@ export function LatencyMonitor({
   onExclusiveModeChange,
 }: LatencyMonitorProps) {
   const { t } = useTranslation();
+  const backend = useBackend();
   const [latencyInfo, setLatencyInfo] = useState<LatencyInfo | null>(null);
   const [isExclusive, setIsExclusive] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,7 +36,7 @@ export function LatencyMonitor({
   // Fetch latency info
   const fetchLatencyInfo = useCallback(async () => {
     try {
-      const info = await invoke<LatencyInfo>('get_latency_info');
+      const info = await backend.getLatencyInfo();
       setLatencyInfo(info);
       setIsExclusive(info.exclusive);
       setError(null);
@@ -58,42 +44,51 @@ export function LatencyMonitor({
       debug.error('Failed to fetch latency info:', e);
       setError(String(e));
     }
-  }, []);
+  }, [backend]);
 
   // Fetch exclusive mode status
   const fetchExclusiveStatus = useCallback(async () => {
     try {
-      const exclusive = await invoke<boolean>('is_exclusive_mode');
+      const exclusive = await backend.isExclusiveMode();
       setIsExclusive(exclusive);
     } catch (e) {
       debug.error('Failed to fetch exclusive mode status:', e);
     }
-  }, []);
+  }, [backend]);
 
   // Initial fetch and periodic refresh
   useEffect(() => {
+    console.log('[LatencyMonitor] Setting up latency monitoring');
+
     const init = async () => {
+      console.log('[LatencyMonitor] Initial fetch starting');
       setIsLoading(true);
       await fetchLatencyInfo();
       await fetchExclusiveStatus();
       setIsLoading(false);
+      console.log('[LatencyMonitor] Initial fetch complete');
     };
 
-    init();
+    void init();
 
     // Refresh every 5 seconds
+    console.log('[LatencyMonitor] Starting 5-second refresh interval');
     const interval = setInterval(() => {
-      fetchLatencyInfo();
+      console.log('[LatencyMonitor] Periodic refresh triggered');
+      void fetchLatencyInfo();
     }, 5000);
 
-    return () => clearInterval(interval);
-  }, [fetchLatencyInfo, fetchExclusiveStatus]);
+    return () => {
+      console.log('[LatencyMonitor] Cleaning up interval');
+      clearInterval(interval);
+    };
+  }, []); // Empty dependency array to prevent interval leak - callbacks are stable
 
   // Toggle exclusive mode
   const handleToggleExclusive = async () => {
     try {
       if (isExclusive) {
-        await invoke('disable_exclusive_mode');
+        await backend.disableExclusiveMode();
         setIsExclusive(false);
         onExclusiveModeChange?.(false);
       } else {
@@ -105,7 +100,7 @@ export function LatencyMonitor({
           deviceName: null,
           backend: 'default',
         };
-        const newLatency = await invoke<LatencyInfo>('set_exclusive_mode', { config });
+        const newLatency = await backend.setExclusiveMode(config);
         setLatencyInfo(newLatency);
         setIsExclusive(true);
         onExclusiveModeChange?.(true);
@@ -145,7 +140,7 @@ export function LatencyMonitor({
         </div>
         <button
           onClick={fetchLatencyInfo}
-          className="p-1.5 rounded hover:bg-muted/50 transition-colors"
+          className="p-1.5 rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
           title={t('settings.audio.latency.refresh')}
         >
           <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
@@ -217,8 +212,8 @@ export function LatencyMonitor({
               onClick={handleToggleExclusive}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 isExclusive
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'bg-muted hover:bg-muted/80'
+                  ? 'bg-primary text-primary-foreground hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]'
+                  : 'bg-muted hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]'
               }`}
             >
               {isExclusive ? t('settings.audio.exclusive.disable') : t('settings.audio.exclusive.enable')}

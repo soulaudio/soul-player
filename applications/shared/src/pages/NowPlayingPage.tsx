@@ -81,7 +81,7 @@ function FormatDropdown({
           e.stopPropagation()
           setIsOpen(!isOpen)
         }}
-        className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${style.bg} ${style.text} hover:opacity-80`}
+        className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${style.bg} ${style.text} hover:opacity-[var(--hover-text-opacity)]`}
       >
         {activeVersion.file_format?.toUpperCase()}
         <ChevronDown className="w-3 h-3" />
@@ -110,7 +110,7 @@ function FormatDropdown({
                     onSelect(version)
                     setIsOpen(false)
                   }}
-                  className={`w-full px-3 py-1.5 text-left text-xs flex items-center justify-between gap-2 hover:bg-muted/50 ${
+                  className={`w-full px-3 py-1.5 text-left text-xs flex items-center justify-between gap-2 hover:bg-foreground/[var(--hover-bg-opacity)] ${
                     isActive ? 'bg-muted/30' : ''
                   }`}
                 >
@@ -364,7 +364,7 @@ export function NowPlayingPage() {
         </p>
         <button
           onClick={() => navigate('/library')}
-          className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity transition-colors"
         >
           {t('common.browse', 'Browse Library')}
         </button>
@@ -481,7 +481,7 @@ export function NowPlayingPage() {
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
                         isCurrentTrack
                           ? 'bg-primary/10 border border-primary/20'
-                          : 'hover:bg-accent/30'
+                          : 'hover:bg-foreground/[var(--hover-bg-opacity)]'
                       }`}
                     >
                       {/* Track Number or Playing Indicator */}

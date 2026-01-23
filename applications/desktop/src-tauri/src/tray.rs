@@ -49,14 +49,32 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
+                tracing::debug!("[Tray] Left click detected, toggling window visibility");
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
-                    if window.is_visible().unwrap_or(false) {
-                        let _ = window.hide();
-                    } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+                    match window.is_visible() {
+                        Ok(is_visible) => {
+                            if is_visible {
+                                tracing::debug!("[Tray] Hiding window");
+                                if let Err(e) = window.hide() {
+                                    tracing::error!("[Tray] Failed to hide window: {}", e);
+                                }
+                            } else {
+                                tracing::debug!("[Tray] Showing and focusing window");
+                                if let Err(e) = window.show() {
+                                    tracing::error!("[Tray] Failed to show window: {}", e);
+                                }
+                                if let Err(e) = window.set_focus() {
+                                    tracing::error!("[Tray] Failed to focus window: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("[Tray] Failed to check window visibility: {}", e);
+                        }
                     }
+                } else {
+                    tracing::warn!("[Tray] Main window not found");
                 }
             }
         })

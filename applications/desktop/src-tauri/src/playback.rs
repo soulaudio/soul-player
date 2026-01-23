@@ -167,6 +167,9 @@ impl PlaybackManager {
     /// Uses channel-based blocking with timeout instead of busy-waiting.
     /// Wakes up immediately when events arrive, or when periodic tasks are due (500ms position, 2s sample rate).
     /// This significantly reduces CPU usage and power consumption compared to fixed 50ms polling.
+    ///
+    /// NOTE: Mutex locks use expect() with clear messages instead of unwrap()
+    /// to aid debugging if the mutex is poisoned (indicates a panic in another thread).
     fn event_emission_loop(playback: Arc<Mutex<DesktopPlayback>>, app_handle: AppHandle) {
         let mut last_position_emit = std::time::Instant::now();
         let mut last_sample_rate_check = std::time::Instant::now();
@@ -187,8 +190,17 @@ impl PlaybackManager {
 
             // Block until event arrives or timeout expires (efficient channel-based waiting)
             let event = {
-                let pb = playback.lock().unwrap();
-                pb.recv_event_timeout(timeout)
+                match playback.lock() {
+                    Ok(pb) => pb.recv_event_timeout(timeout),
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            "[playback] Failed to lock playback mutex in event loop - thread poisoned?"
+                        );
+                        // Skip this iteration and try again
+                        continue;
+                    }
+                }
             };
 
             if let Some(event) = event {
@@ -387,37 +399,58 @@ impl PlaybackManager {
 
             // Emit position updates every 500ms during playback
             if last_position_emit.elapsed() >= Duration::from_millis(500) {
-                let pb = playback.lock().unwrap();
-                let position = pb.get_position();
-                let state = pb.get_state();
-                drop(pb);
+                match playback.lock() {
+                    Ok(pb) => {
+                        let position = pb.get_position();
+                        let state = pb.get_state();
+                        drop(pb);
 
-                if state == soul_playback::PlaybackState::Playing {
-                    let _ = app_handle.emit("playback:position-updated", position.as_secs_f64());
+                        if state == soul_playback::PlaybackState::Playing {
+                            let _ = app_handle
+                                .emit("playback:position-updated", position.as_secs_f64());
+                        }
+
+                        last_position_emit = std::time::Instant::now();
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            "[playback] Failed to lock mutex for position update - skipping"
+                        );
+                        // Continue without updating position this iteration
+                    }
                 }
-
-                last_position_emit = std::time::Instant::now();
             }
 
             // Check for device sample rate changes every 2 seconds
             // This detects when the user changes the device's sample rate externally
             // (e.g., via ASIO control panel or Windows sound settings)
             if last_sample_rate_check.elapsed() >= Duration::from_secs(2) {
-                let mut pb = playback.lock().unwrap();
-                match pb.check_and_update_sample_rate() {
-                    Ok(true) => {
-                        tracing::debug!("Device sample rate changed, stream recreated");
-                    }
-                    Ok(false) => {
-                        // No change, nothing to do
+                match playback.lock() {
+                    Ok(mut pb) => {
+                        match pb.check_and_update_sample_rate() {
+                            Ok(true) => {
+                                tracing::debug!("Device sample rate changed, stream recreated");
+                            }
+                            Ok(false) => {
+                                // No change, nothing to do
+                            }
+                            Err(e) => {
+                                // Don't spam errors, just log once per failure
+                                tracing::warn!(error = %e, "Failed to check sample rate");
+                            }
+                        }
+                        drop(pb);
+                        last_sample_rate_check = std::time::Instant::now();
                     }
                     Err(e) => {
-                        // Don't spam errors, just log once per failure
-                        tracing::warn!(error = %e, "Failed to check sample rate");
+                        tracing::warn!(
+                            error = %e,
+                            "[playback] Failed to lock mutex for sample rate check - skipping"
+                        );
+                        // Continue without checking sample rate this iteration
                     }
                 }
-                drop(pb);
-                last_sample_rate_check = std::time::Instant::now();
             }
 
             // No explicit sleep needed - recv_event_timeout() blocks efficiently
@@ -750,6 +783,24 @@ impl PlaybackManager {
         playback
             .send_command(PlaybackCommand::SetRepeat(mode))
             .map_err(|e| e.to_string())
+    }
+
+    /// Cycle through repeat modes: Off → All → One → Off
+    pub fn cycle_repeat(&self) -> Result<String, String> {
+        let current = self.get_repeat();
+        let next = match current {
+            RepeatMode::Off => RepeatMode::All,
+            RepeatMode::All => RepeatMode::One,
+            RepeatMode::One => RepeatMode::Off,
+        };
+
+        self.set_repeat(next)?;
+
+        Ok(match next {
+            RepeatMode::Off => "off".to_string(),
+            RepeatMode::All => "all".to_string(),
+            RepeatMode::One => "one".to_string(),
+        })
     }
 
     /// Get queue

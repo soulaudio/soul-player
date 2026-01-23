@@ -1,0 +1,24 @@
+{
+  "name": "soul-playback",
+  "type": "module",
+  "collaborators": [
+    "Soul Player Contributors"
+  ],
+  "description": "Platform-agnostic playback management for Soul Player",
+  "version": "0.0.1",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/soul-player"
+  },
+  "files": [
+    "soul_playback_bg.wasm",
+    "soul_playback.js",
+    "soul_playback.d.ts"
+  ],
+  "main": "soul_playback.js",
+  "types": "soul_playback.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

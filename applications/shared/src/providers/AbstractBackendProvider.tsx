@@ -243,6 +243,187 @@ export abstract class AbstractBackendProvider implements BackendInterface {
   }
 
   // ============================================================================
+  // Audio Settings - DSP Chain
+  // ============================================================================
+
+  async getDspChain(): Promise<any[]> {
+    return [];
+  }
+
+  async addEffectToChain(_slotIndex: number, _effect: any): Promise<void> {
+    debug.log('[AbstractBackend] DSP chain not supported on this platform');
+  }
+
+  async removeEffectFromChain(_slotIndex: number): Promise<void> {
+    debug.log('[AbstractBackend] DSP chain not supported on this platform');
+  }
+
+  async toggleEffect(_slotIndex: number, _enabled: boolean): Promise<void> {
+    debug.log('[AbstractBackend] DSP chain not supported on this platform');
+  }
+
+  async clearDspChain(): Promise<void> {
+    debug.log('[AbstractBackend] DSP chain not supported on this platform');
+  }
+
+  async updateEffectParameters(_slotIndex: number, _effect: any): Promise<void> {
+    debug.log('[AbstractBackend] DSP chain not supported on this platform');
+  }
+
+  // ============================================================================
+  // Audio Settings - Headroom Management
+  // ============================================================================
+
+  async getHeadroomSettings(): Promise<any> {
+    return {
+      enabled: false,
+      mode: { mode: 'auto', manualDb: null },
+      totalGainDb: 0,
+      attenuationDb: 0,
+    };
+  }
+
+  async setHeadroomMode(_mode: string, _manualDb?: number): Promise<void> {
+    debug.log('[AbstractBackend] Headroom settings not supported on this platform');
+  }
+
+  async setHeadroomEnabled(_enabled: boolean): Promise<void> {
+    debug.log('[AbstractBackend] Headroom settings not supported on this platform');
+  }
+
+  // ============================================================================
+  // Audio Settings - Latency & Exclusive Mode
+  // ============================================================================
+
+  async getLatencyInfo(): Promise<any> {
+    return {
+      bufferSamples: 0,
+      bufferMs: 0,
+      totalMs: 0,
+      exclusive: false,
+    };
+  }
+
+  async isExclusiveMode(): Promise<boolean> {
+    return false;
+  }
+
+  async disableExclusiveMode(): Promise<void> {
+    debug.log('[AbstractBackend] Exclusive mode not supported on this platform');
+  }
+
+  async setExclusiveMode(_config: any): Promise<any> {
+    debug.log('[AbstractBackend] Exclusive mode not supported on this platform');
+    return this.getLatencyInfo();
+  }
+
+  // ============================================================================
+  // Audio Settings - Volume Leveling Analysis
+  // ============================================================================
+
+  async getAnalysisQueueStats(): Promise<any> {
+    return {
+      total: 0,
+      pending: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+    };
+  }
+
+  async getAnalysisWorkerStatus(): Promise<any> {
+    return {
+      isRunning: false,
+      tracksAnalyzed: 0,
+    };
+  }
+
+  async startAnalysisWorker(): Promise<void> {
+    debug.log('[AbstractBackend] Volume leveling analysis not supported on this platform');
+  }
+
+  async stopAnalysisWorker(): Promise<void> {
+    debug.log('[AbstractBackend] Volume leveling analysis not supported on this platform');
+  }
+
+  async queueAllUnanalyzed(): Promise<number> {
+    return 0;
+  }
+
+  async clearCompletedAnalysis(): Promise<void> {
+    debug.log('[AbstractBackend] Volume leveling analysis not supported on this platform');
+  }
+
+  // ============================================================================
+  // Audio Settings - Volume Leveling Runtime
+  // ============================================================================
+
+  async setVolumeLevelingMode(_mode: string): Promise<void> {
+    debug.log('[AbstractBackend] Volume leveling not supported on this platform');
+  }
+
+  async setVolumeLevelingPreamp(_preampDb: number): Promise<void> {
+    debug.log('[AbstractBackend] Volume leveling not supported on this platform');
+  }
+
+  async setVolumeLevelingPreventClipping(_prevent: boolean): Promise<void> {
+    debug.log('[AbstractBackend] Volume leveling not supported on this platform');
+  }
+
+  // ============================================================================
+  // Audio Settings - Resampling
+  // ============================================================================
+
+  async setResamplingQuality(_quality: string): Promise<void> {
+    debug.log('[AbstractBackend] Resampling not supported on this platform');
+  }
+
+  async setResamplingTargetRate(_rate: number): Promise<void> {
+    debug.log('[AbstractBackend] Resampling not supported on this platform');
+  }
+
+  async setResamplingBackend(_backend: string): Promise<void> {
+    debug.log('[AbstractBackend] Resampling not supported on this platform');
+  }
+
+  async isR8brainAvailable(): Promise<boolean> {
+    return false;
+  }
+
+  // ============================================================================
+  // Audio Settings - Crossfade
+  // ============================================================================
+
+  async setCrossfadeSettings(_enabled: boolean, _durationMs: number, _curve: string): Promise<void> {
+    debug.log('[AbstractBackend] Crossfade not supported on this platform');
+  }
+
+  // ============================================================================
+  // Audio Settings - Device Selection
+  // ============================================================================
+
+  async getAudioBackends(): Promise<any[]> {
+    return [];
+  }
+
+  async getAudioDevices(_backendStr: string): Promise<any[]> {
+    return [];
+  }
+
+  async setAudioDevice(_backendStr: string, _deviceName: string): Promise<void> {
+    debug.log('[AbstractBackend] Audio device selection not supported on this platform');
+  }
+
+  // ============================================================================
+  // Audio Settings - File Dialog
+  // ============================================================================
+
+  async openFileDialog(_multiple: boolean, _filters: Array<{ name: string; extensions: string[] }>): Promise<string[] | null> {
+    debug.log('[AbstractBackend] File dialog not supported on this platform');
+    return null;
+  }
+
+  // ============================================================================
   // App Metadata
   // ============================================================================
 

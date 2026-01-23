@@ -119,6 +119,7 @@
 mod crossfade;
 mod error;
 pub mod events;
+mod fade_envelopes;
 mod history;
 pub mod lazy_queue;
 mod manager;

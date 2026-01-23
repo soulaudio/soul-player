@@ -5,6 +5,7 @@
 import type { Theme, ThemeExport, ThemeValidationResult } from './types';
 import { builtInThemes, defaultTheme } from './themes';
 import { validateTheme } from './validators';
+import { defaultInteractions } from './defaultInteractions';
 import { debug } from '../utils/debug';
 
 const STORAGE_KEY_CURRENT_THEME = 'soul-player-current-theme';
@@ -98,6 +99,15 @@ export class ThemeManager {
         root.setProperty('--font-size-base', theme.typography.fontSize.base);
       }
     }
+
+    // Apply interaction settings (with fallback to defaults)
+    const interactions = theme.interactions || defaultInteractions;
+    root.setProperty('--hover-text-opacity', interactions.hover.textOpacity.toString());
+    root.setProperty('--hover-button-opacity', interactions.hover.buttonOpacity.toString());
+    root.setProperty('--hover-bg-opacity', interactions.hover.bgOpacity.toString());
+    root.setProperty('--selected-bg-opacity', interactions.selected.bgOpacity.toString());
+    root.setProperty('--disabled-opacity', interactions.disabled.opacity.toString());
+    root.setProperty('--transition-duration', interactions.transition.duration);
   }
 
   /**

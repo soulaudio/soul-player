@@ -40,7 +40,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
           <h2 className="text-xl font-semibold">Manage Sources</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-accent rounded-full transition-colors"
+            className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-full transition-colors"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -66,7 +66,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
                 {sources.map((source) => (
                   <div
                     key={source.id}
-                    className="p-4 border rounded-lg flex items-center justify-between hover:bg-accent/50 transition-colors"
+                    className="p-4 border rounded-lg flex items-center justify-between hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-2 h-2 rounded-full ${source.isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
@@ -108,7 +108,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
 
               <div className="flex gap-3 mt-6">
                 <button
-                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                   disabled
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -128,7 +128,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
         <div className="p-4 border-t flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-all duration-[var(--transition-duration)]"
           >
             Close
           </button>

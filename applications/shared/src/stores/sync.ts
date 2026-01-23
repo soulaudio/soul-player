@@ -86,20 +86,41 @@ export const useSyncStore = create<SyncState>((set) => ({
 }));
 
 // Setup event listeners
-export function setupSyncListeners() {
-  listen<SyncProgress>('sync-progress', (event) => {
-    useSyncStore.getState().setProgress(event.payload);
-  });
+// Returns cleanup function to unlisten all events
+export function setupSyncListeners(): () => void {
+  const unlistenFunctions: (() => void)[] = [];
 
-  listen<SyncSummary>('sync-complete', (event) => {
-    useSyncStore.getState().setSummary(event.payload);
-  });
+  const setup = async () => {
+    try {
+      const unlistenProgress = await listen<SyncProgress>('sync-progress', (event) => {
+        useSyncStore.getState().setProgress(event.payload);
+      });
+      unlistenFunctions.push(unlistenProgress);
 
-  listen<string>('sync-error', (event) => {
-    useSyncStore.getState().setError(event.payload);
-  });
+      const unlistenComplete = await listen<SyncSummary>('sync-complete', (event) => {
+        useSyncStore.getState().setSummary(event.payload);
+      });
+      unlistenFunctions.push(unlistenComplete);
 
-  listen('sync-required', () => {
-    useSyncStore.getState().setSyncRequired(true);
-  });
+      const unlistenError = await listen<string>('sync-error', (event) => {
+        useSyncStore.getState().setError(event.payload);
+      });
+      unlistenFunctions.push(unlistenError);
+
+      const unlistenRequired = await listen('sync-required', () => {
+        useSyncStore.getState().setSyncRequired(true);
+      });
+      unlistenFunctions.push(unlistenRequired);
+    } catch (error) {
+      console.error('[setupSyncListeners] Failed to set up listeners:', error);
+    }
+  };
+
+  // Setup listeners asynchronously
+  void setup();
+
+  // Return cleanup function
+  return () => {
+    unlistenFunctions.forEach(fn => fn());
+  };
 }

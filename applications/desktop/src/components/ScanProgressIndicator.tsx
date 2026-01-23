@@ -38,59 +38,93 @@ export function ScanProgressIndicator({
 
   // Poll for running scans
   useEffect(() => {
+    let previousScanCount = 0;
+    let idleCount = 0; // Track consecutive idle polls
+    let interval: NodeJS.Timeout | null = null;
+
     const fetchScans = async () => {
       try {
         const runningScans = await invoke<ScanProgress[]>('get_running_scans');
         setScans(runningScans);
 
-        // Check if all scans completed
-        if (runningScans.length === 0 && scans.length > 0) {
+        // Check if all scans completed (compare with previous count, not state)
+        if (runningScans.length === 0 && previousScanCount > 0) {
           onComplete?.();
         }
+
+        // Stop polling after 3 consecutive idle polls (1.5 seconds of no scans)
+        if (runningScans.length === 0) {
+          idleCount++;
+          if (idleCount >= 3 && interval) {
+            console.log('[ScanProgressIndicator] No scans for 1.5s, stopping poll interval');
+            clearInterval(interval);
+            interval = null;
+          }
+        } else {
+          idleCount = 0; // Reset idle counter when scans are active
+        }
+
+        previousScanCount = runningScans.length;
       } catch (err) {
-        console.error('Failed to fetch running scans:', err);
+        console.error('[ScanProgressIndicator] Failed to fetch running scans:', err);
       }
     };
 
     // Initial fetch
-    fetchScans();
+    console.log('[ScanProgressIndicator] Starting scan polling');
+    void fetchScans();
 
     // Poll every 500ms while there are active scans
-    const interval = setInterval(fetchScans, 500);
+    interval = setInterval(fetchScans, 500);
 
-    return () => clearInterval(interval);
-  }, [scans.length, onComplete]);
+    return () => {
+      if (interval) {
+        console.log('[ScanProgressIndicator] Cleaning up poll interval');
+        clearInterval(interval);
+      }
+    };
+  }, [onComplete]); // Remove scans.length dependency to prevent interval leak
 
   // Listen for scan events
   useEffect(() => {
-    let unlistenStart: (() => void) | null = null;
-    let unlistenProgress: (() => void) | null = null;
-    let unlistenComplete: (() => void) | null = null;
+    const unlistenFunctions: (() => void)[] = [];
+    let isMounted = true;
 
     const setupListeners = async () => {
-      unlistenStart = await listen('scan-started', () => {
-        // Refresh scans when a new one starts
-        invoke<ScanProgress[]>('get_running_scans').then(setScans);
-      });
+      try {
+        if (!isMounted) return;
 
-      unlistenProgress = await listen<ScanProgress>('scan-progress', (event) => {
-        setScans((prev) =>
-          prev.map((s) => (s.id === event.payload.id ? event.payload : s))
-        );
-      });
+        const unlistenStart = await listen('scan-started', () => {
+          if (!isMounted) return;
+          // Refresh scans when a new one starts
+          invoke<ScanProgress[]>('get_running_scans').then(setScans).catch(console.error);
+        });
+        unlistenFunctions.push(unlistenStart);
 
-      unlistenComplete = await listen<{ sourceId: number }>('scan-complete', () => {
-        // Refresh scans when one completes
-        invoke<ScanProgress[]>('get_running_scans').then(setScans);
-      });
+        const unlistenProgress = await listen<ScanProgress>('scan-progress', (event) => {
+          if (!isMounted) return;
+          setScans((prev) =>
+            prev.map((s) => (s.id === event.payload.id ? event.payload : s))
+          );
+        });
+        unlistenFunctions.push(unlistenProgress);
+
+        const unlistenComplete = await listen<{ sourceId: number }>('scan-complete', () => {
+          if (!isMounted) return;
+          // Refresh scans when one completes
+          invoke<ScanProgress[]>('get_running_scans').then(setScans).catch(console.error);
+        });
+        unlistenFunctions.push(unlistenComplete);
+      } catch (error) {
+        console.error('[ScanProgressIndicator] Failed to set up listeners:', error);
+      }
     };
 
-    setupListeners();
+    void setupListeners();
 
     return () => {
-      if (unlistenStart) unlistenStart();
-      if (unlistenProgress) unlistenProgress();
-      if (unlistenComplete) unlistenComplete();
+      isMounted = false;
+      unlistenFunctions.forEach(fn => fn());
     };
   }, []);
 
@@ -116,7 +150,7 @@ export function ScanProgressIndicator({
         <div className="max-w-xl mx-auto pointer-events-auto">
           <div className="bg-card border rounded-lg shadow-lg overflow-hidden">
             {/* Compact view */}
-            <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+            <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
               <Loader2 className="w-4 h-4 animate-spin text-primary flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between text-sm">

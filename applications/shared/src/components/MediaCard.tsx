@@ -232,8 +232,8 @@ const MediaCardComponent = ({
 
     // Fallback with gradient and icon
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 group-hover:from-primary/30 group-hover:to-primary/10 transition-colors">
-        <FallbackIcon className="w-12 h-12 text-primary/60 group-hover:text-primary transition-colors" />
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 group-hover:opacity-90 transition-opacity">
+        <FallbackIcon className="w-12 h-12 text-primary/60" />
       </div>
     )
   }
@@ -268,7 +268,7 @@ const MediaCardComponent = ({
 
       {/* Title - always clickable */}
       <p
-        className={`font-medium truncate group-hover:text-primary transition-colors cursor-pointer ${isCircle ? 'text-center' : ''}`}
+        className={`font-medium truncate group-hover:opacity-[var(--hover-text-opacity)] transition-opacity cursor-pointer ${isCircle ? 'text-center' : ''}`}
         title={title}
         onClick={handleClick}
       >
@@ -282,7 +282,7 @@ const MediaCardComponent = ({
           <ArtistLink
             artistId={artistId}
             artistName={subtitle}
-            className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+            className="text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] hover:underline transition-opacity"
           />
           {additionalInfo && (
             <span className="cursor-default"> • {additionalInfo}</span>

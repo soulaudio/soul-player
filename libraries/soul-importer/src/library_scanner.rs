@@ -2,12 +2,21 @@
 //!
 //! Scans library sources (watched folders) and synchronizes with the database.
 //! Uses mtime + size for change detection and content hash for file relocation.
+//!
+//! This module orchestrates filesystem traversal and delegates hash computation,
+//! metadata extraction, and file processing to specialized modules.
 
-use crate::{fuzzy::FuzzyMatcher, metadata, scanner::FileScanner, ImportError, Result};
-use soul_core::types::{CreateTrack, LibrarySource, ScanStatus};
+use crate::{
+    file_processor::{FileAction, FileProcessor},
+    hash_computer,
+    metadata_extractor::MetadataExtractor,
+    scanner::FileScanner,
+    ImportError, Result,
+};
+use soul_core::types::{LibrarySource, ScanStatus};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Instant;
 
 /// Statistics from a library scan
@@ -34,8 +43,8 @@ pub struct LibraryScanner {
     compute_hashes: bool,
     /// Progress callback
     progress_callback: Option<ProgressCallback>,
-    /// Fuzzy matcher for artist/album/genre matching
-    fuzzy_matcher: FuzzyMatcher,
+    /// Metadata extractor with fuzzy matching
+    metadata_extractor: MetadataExtractor,
     /// Force re-extraction of metadata even for unchanged files
     force_metadata_refresh: bool,
 }
@@ -49,7 +58,7 @@ impl LibraryScanner {
             device_id: device_id.into(),
             compute_hashes: true,
             progress_callback: None,
-            fuzzy_matcher: FuzzyMatcher::new(),
+            metadata_extractor: MetadataExtractor::new(),
             force_metadata_refresh: false,
         }
     }
@@ -314,36 +323,17 @@ impl LibraryScanner {
             }
 
             // File changed or force refresh - update metadata
-            self.update_track_metadata(existing.id, file_path, file_size, file_mtime)
+            let processor =
+                FileProcessor::new(&self.pool, &self.metadata_extractor, self.compute_hashes);
+            processor
+                .update_track_metadata(existing.id, file_path, file_size, file_mtime)
                 .await?;
             return Ok(FileAction::Updated);
         }
 
         // File is new - check if it's a relocated file (by hash)
         let content_hash = if self.compute_hashes {
-            tracing::debug!("[SCAN] Computing hash: {}", file_path.display());
-            let file_path_owned = file_path.to_path_buf();
-            let file_path_for_log = file_path.to_path_buf();
-            let hash_task = tokio::task::spawn_blocking(move || {
-                metadata::calculate_file_hash(&file_path_owned)
-            });
-
-            let hash = tokio::time::timeout(std::time::Duration::from_secs(60), hash_task)
-                .await
-                .map_err(|_| {
-                    tracing::error!(
-                        "[SCAN] TIMEOUT computing hash: {}",
-                        file_path_for_log.display()
-                    );
-                    ImportError::Metadata(format!(
-                        "Hash calculation timeout (60s) for: {}",
-                        file_path.display()
-                    ))
-                })?
-                .map_err(|e| {
-                    ImportError::Metadata(format!("Hash calculation task failed: {}", e))
-                })??;
-            Some(hash)
+            Some(hash_computer::compute_file_hash(file_path).await?)
         } else {
             None
         };
@@ -367,309 +357,12 @@ impl LibraryScanner {
         }
 
         // Truly new file - import it
-        self.import_new_file(file_path, source_id, file_size, file_mtime, content_hash)
+        let processor =
+            FileProcessor::new(&self.pool, &self.metadata_extractor, self.compute_hashes);
+        processor
+            .import_new_file(file_path, source_id, file_size, file_mtime, content_hash)
             .await?;
         Ok(FileAction::New)
-    }
-
-    /// Import a new file into the library
-    async fn import_new_file(
-        &self,
-        file_path: &Path,
-        source_id: i64,
-        file_size: i64,
-        file_mtime: i64,
-        content_hash: Option<String>,
-    ) -> Result<()> {
-        // Extract metadata with timeout to prevent hanging on problematic files
-        tracing::info!("[SCAN] Processing: {}", file_path.display());
-
-        let file_path_owned = file_path.to_path_buf();
-        let file_path_for_log = file_path.to_path_buf();
-        let meta_task =
-            tokio::task::spawn_blocking(move || metadata::extract_metadata(&file_path_owned));
-
-        let meta = tokio::time::timeout(std::time::Duration::from_secs(30), meta_task)
-            .await
-            .map_err(|_| {
-                tracing::error!("[SCAN] TIMEOUT on file: {}", file_path_for_log.display());
-                ImportError::Metadata(format!(
-                    "Metadata extraction timeout (30s) for: {}",
-                    file_path.display()
-                ))
-            })?
-            .map_err(|e| {
-                ImportError::Metadata(format!("Metadata extraction task failed: {}", e))
-            })??;
-
-        tracing::info!(
-            "import_new_file: file={}, artist={:?}, album={:?}",
-            file_path.display(),
-            meta.artist,
-            meta.album
-        );
-
-        // Fuzzy match artist
-        let artist_id = if let Some(ref artist_name) = meta.artist {
-            let artist_match = self
-                .fuzzy_matcher
-                .find_or_create_artist(&self.pool, artist_name)
-                .await?;
-            Some(artist_match.entity.id)
-        } else {
-            None
-        };
-
-        // Fuzzy match album (linked to artist if available)
-        let album_id = if let Some(ref album_title) = meta.album {
-            let album_match = self
-                .fuzzy_matcher
-                .find_or_create_album(&self.pool, album_title, artist_id)
-                .await?;
-            Some(album_match.entity.id)
-        } else {
-            None
-        };
-
-        // Fuzzy match album artist (if different from track artist)
-        let album_artist_id = if let Some(ref album_artist_name) = meta.album_artist {
-            // Only create separate album artist if different from track artist
-            if meta.artist.as_ref() != Some(album_artist_name) {
-                let artist_match = self
-                    .fuzzy_matcher
-                    .find_or_create_artist(&self.pool, album_artist_name)
-                    .await?;
-                Some(artist_match.entity.id)
-            } else {
-                artist_id
-            }
-        } else {
-            None
-        };
-
-        // Create the track
-        let create_track = CreateTrack {
-            title: meta.title.clone().unwrap_or_else(|| {
-                file_path
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "Unknown".to_string())
-            }),
-            artist_id,
-            album_id,
-            album_artist_id,
-            track_number: meta.track_number.map(|n| n as i32),
-            disc_number: meta.disc_number.map(|n| n as i32),
-            year: meta.year,
-            duration_seconds: meta.duration_seconds,
-            bitrate: meta.bitrate.map(|b| b as i32),
-            sample_rate: meta.sample_rate.map(|s| s as i32),
-            channels: meta.channels.map(|c| c as i32),
-            file_format: meta.file_format.to_uppercase(),
-            file_hash: content_hash,
-            origin_source_id: 1, // Default local source
-            local_file_path: Some(file_path.display().to_string()),
-            musicbrainz_recording_id: meta.musicbrainz_recording_id.clone(),
-            fingerprint: None,
-        };
-
-        let track = soul_storage::tracks::create(&self.pool, create_track).await?;
-
-        // Parse track ID to i64 for the storage function
-        let track_id: i64 = track
-            .id
-            .as_str()
-            .parse()
-            .map_err(|_| ImportError::Unknown(format!("Invalid track ID: {}", track.id)))?;
-
-        // Update library-specific fields
-        soul_storage::tracks::set_library_source(
-            &self.pool, track_id, source_id, file_size, file_mtime,
-        )
-        .await?;
-
-        // Add genres to track
-        let track_id_typed = soul_core::types::TrackId::new(track_id.to_string());
-        for genre_name in &meta.genres {
-            let genre_match = self
-                .fuzzy_matcher
-                .find_or_create_genre(&self.pool, genre_name)
-                .await?;
-            soul_storage::genres::add_to_track(
-                &self.pool,
-                track_id_typed.clone(),
-                genre_match.entity.id,
-            )
-            .await?;
-        }
-
-        // Discover folder artwork if album exists
-        if let Some(album_id) = album_id {
-            if let Some(folder_path) = file_path.parent() {
-                if let Some(artwork_path) = Self::discover_folder_artwork(folder_path) {
-                    // Record in database that this album has folder artwork
-                    soul_storage::albums::set_artwork_source(
-                        &self.pool,
-                        album_id,
-                        "folder",
-                        &artwork_path.to_string_lossy(),
-                    )
-                    .await
-                    .ok(); // Ignore errors - artwork is optional
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Discover folder artwork in a directory
-    ///
-    /// Looks for common artwork filenames: cover, folder, front, album, artwork
-    /// Supports extensions: jpg, jpeg, png, webp, gif, bmp
-    fn discover_folder_artwork(folder: &Path) -> Option<PathBuf> {
-        const FILENAMES: &[&str] = &["cover", "folder", "front", "album", "artwork"];
-        const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp"];
-
-        for name in FILENAMES {
-            for ext in EXTENSIONS {
-                let path = folder.join(format!("{}.{}", name, ext));
-                if path.exists() {
-                    return Some(path);
-                }
-            }
-        }
-        None
-    }
-
-    /// Update track metadata after file change
-    async fn update_track_metadata(
-        &self,
-        track_id: i64,
-        file_path: &Path,
-        file_size: i64,
-        file_mtime: i64,
-    ) -> Result<()> {
-        // Re-extract metadata with timeout
-        tracing::info!("[SCAN] Updating: {}", file_path.display());
-
-        let file_path_owned = file_path.to_path_buf();
-        let file_path_for_log = file_path.to_path_buf();
-        let meta_task =
-            tokio::task::spawn_blocking(move || metadata::extract_metadata(&file_path_owned));
-
-        let meta = tokio::time::timeout(std::time::Duration::from_secs(30), meta_task)
-            .await
-            .map_err(|_| {
-                tracing::error!("[SCAN] TIMEOUT updating: {}", file_path_for_log.display());
-                ImportError::Metadata(format!(
-                    "Metadata extraction timeout (30s) for: {}",
-                    file_path.display()
-                ))
-            })?
-            .map_err(|e| {
-                ImportError::Metadata(format!("Metadata extraction task failed: {}", e))
-            })??;
-
-        tracing::info!(
-            "update_track_metadata: file={}, artist={:?}, album={:?}",
-            file_path.display(),
-            meta.artist,
-            meta.album
-        );
-
-        let content_hash = if self.compute_hashes {
-            let file_path_owned = file_path.to_path_buf();
-            let file_path_for_log = file_path.to_path_buf();
-            let hash_task = tokio::task::spawn_blocking(move || {
-                metadata::calculate_file_hash(&file_path_owned)
-            });
-
-            let hash = tokio::time::timeout(std::time::Duration::from_secs(60), hash_task)
-                .await
-                .map_err(|_| {
-                    tracing::error!(
-                        "[SCAN] TIMEOUT computing hash for update: {}",
-                        file_path_for_log.display()
-                    );
-                    ImportError::Metadata(format!(
-                        "Hash calculation timeout (60s) for: {}",
-                        file_path.display()
-                    ))
-                })?
-                .map_err(|e| {
-                    ImportError::Metadata(format!("Hash calculation task failed: {}", e))
-                })??;
-            Some(hash)
-        } else {
-            None
-        };
-
-        // Fuzzy match artist
-        let artist_id = if let Some(ref artist_name) = meta.artist {
-            let artist_match = self
-                .fuzzy_matcher
-                .find_or_create_artist(&self.pool, artist_name)
-                .await?;
-            Some(artist_match.entity.id)
-        } else {
-            None
-        };
-
-        // Fuzzy match album (linked to artist if available)
-        let album_id = if let Some(ref album_title) = meta.album {
-            let album_match = self
-                .fuzzy_matcher
-                .find_or_create_album(&self.pool, album_title, artist_id)
-                .await?;
-            Some(album_match.entity.id)
-        } else {
-            None
-        };
-
-        // Update the track using the storage function
-        soul_storage::tracks::update_file_metadata(
-            &self.pool,
-            track_id,
-            meta.title.as_deref(),
-            meta.track_number,
-            meta.disc_number,
-            meta.year,
-            meta.duration_seconds,
-            meta.bitrate,
-            meta.sample_rate,
-            meta.channels,
-            &meta.file_format,
-            file_size,
-            file_mtime,
-            content_hash.as_deref(),
-        )
-        .await?;
-
-        // Update artist/album relationships if we have them
-        if artist_id.is_some() || album_id.is_some() {
-            soul_storage::tracks::update_artist_album(&self.pool, track_id, artist_id, album_id)
-                .await?;
-        }
-
-        // Discover folder artwork if album exists (same as on import)
-        if let Some(album_id) = album_id {
-            if let Some(folder_path) = file_path.parent() {
-                if let Some(artwork_path) = Self::discover_folder_artwork(folder_path) {
-                    // Record in database that this album has folder artwork
-                    soul_storage::albums::set_artwork_source(
-                        &self.pool,
-                        album_id,
-                        "folder",
-                        &artwork_path.to_string_lossy(),
-                    )
-                    .await
-                    .ok(); // Ignore errors - artwork is optional
-                }
-            }
-        }
-
-        Ok(())
     }
 
     /// Mark files that are no longer present as unavailable
@@ -704,19 +397,6 @@ struct ExistingTrack {
     content_hash: Option<String>,
 }
 
-/// Action taken for a file during scanning
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FileAction {
-    /// File is new, was imported
-    New,
-    /// File existed and was updated
-    Updated,
-    /// File existed and was unchanged
-    Unchanged,
-    /// File was relocated (same hash, different path)
-    Relocated,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -727,11 +407,5 @@ mod tests {
         assert_eq!(stats.total_files, 0);
         assert_eq!(stats.processed, 0);
         assert_eq!(stats.new_files, 0);
-    }
-
-    #[test]
-    fn test_file_action_equality() {
-        assert_eq!(FileAction::New, FileAction::New);
-        assert_ne!(FileAction::New, FileAction::Updated);
     }
 }

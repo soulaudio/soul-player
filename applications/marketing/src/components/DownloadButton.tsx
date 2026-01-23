@@ -123,7 +123,7 @@ export function DownloadButton() {
           <button
             onClick={() => setShowDropdown(!showDropdown)}
             data-other-platforms
-            className="text-sm transition-colors duration-700 inline-flex items-center gap-1 hover:opacity-80 text-muted-foreground"
+            className="text-sm transition-colors duration-700 inline-flex items-center gap-1 hover:opacity-[var(--hover-text-opacity)] text-muted-foreground"
           >
             Other platforms
             <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
@@ -162,7 +162,7 @@ export function DownloadButton() {
                       href={url}
                       onClick={handleClick}
                       data-dropdown-item
-                      className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-muted text-foreground"
+                      className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-[var(--transition-duration)] group hover:bg-foreground/[var(--hover-bg-opacity)] text-foreground"
                     >
                       <Icon className="w-4 h-4 transition-colors duration-200 text-muted-foreground group-hover:text-primary" />
                       <span className="font-medium">{name}</span>
@@ -181,7 +181,7 @@ export function DownloadButton() {
                         href={url}
                         onClick={() => setShowDropdown(false)}
                         data-dropdown-item
-                        className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group hover:bg-muted text-foreground"
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-[var(--transition-duration)] group hover:bg-foreground/[var(--hover-bg-opacity)] text-foreground"
                       >
                         <div className="w-4 h-4 rounded bg-muted-foreground/20" />
                         <div className="flex-1">

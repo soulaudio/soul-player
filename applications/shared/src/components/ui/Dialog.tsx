@@ -80,7 +80,7 @@ export function DialogHeader({ children, onClose }: DialogHeaderProps) {
       {onClose && (
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-muted transition-colors"
+          className="p-1 rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <X className="w-5 h-5 text-muted-foreground" />
         </button>
@@ -146,16 +146,16 @@ export function ConfirmDialog({
         <DialogFooter>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
+            className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
           >
             {cancelText}
           </button>
           <button
             onClick={handleConfirm}
-            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+            className={`px-4 py-2 text-sm rounded-lg transition-all duration-[var(--transition-duration)] ${
               variant === 'destructive'
-                ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
-                : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                ? 'bg-destructive text-destructive-foreground hover:opacity-[var(--hover-button-opacity)]'
+                : 'bg-primary text-primary-foreground hover:opacity-[var(--hover-button-opacity)]'
             }`}
           >
             {confirmText}

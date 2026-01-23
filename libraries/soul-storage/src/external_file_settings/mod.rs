@@ -54,19 +54,27 @@ pub async fn get(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| ExternalFileSettings {
-        id: r.id.expect("id should not be null for existing row"),
-        user_id: r.user_id,
-        device_id: r.device_id,
-        default_action: ExternalFileAction::from_str(&r.default_action)
-            .unwrap_or(ExternalFileAction::Ask),
-        import_destination: ImportDestination::from_str(&r.import_destination)
-            .unwrap_or(ImportDestination::Managed),
-        import_to_source_id: r.import_to_source_id,
-        show_import_notification: r.show_import_notification != 0,
-        created_at: r.created_at,
-        updated_at: r.updated_at,
-    }))
+    match row {
+        Some(r) => match r.id {
+            Some(id) => Ok(Some(ExternalFileSettings {
+                id,
+                user_id: r.user_id,
+                device_id: r.device_id,
+                default_action: ExternalFileAction::from_str(&r.default_action)
+                    .unwrap_or(ExternalFileAction::Ask),
+                import_destination: ImportDestination::from_str(&r.import_destination)
+                    .unwrap_or(ImportDestination::Managed),
+                import_to_source_id: r.import_to_source_id,
+                show_import_notification: r.show_import_notification != 0,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })),
+            None => Err(StorageError::MissingField(
+                "external_file_settings.id".to_string(),
+            )),
+        },
+        None => Ok(None),
+    }
 }
 
 /// Get external file settings for a user/device, creating defaults if not exists

@@ -142,14 +142,14 @@ export function ThemePicker({
           <div className="flex flex-wrap gap-3">
             <button
               onClick={handleImport}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-[var(--hover-button-opacity)] transition-opacity"
             >
               Import Theme
             </button>
 
             <button
               onClick={() => handleExport(currentTheme)}
-              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:opacity-90 transition-opacity"
+              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:opacity-[var(--hover-button-opacity)] transition-opacity"
             >
               Export Current Theme
             </button>

@@ -30,7 +30,7 @@ export function TrackInfo() {
   return (
     <button
       onClick={handleClick}
-      className="flex items-center gap-3 min-w-0 group hover:bg-accent/50 rounded-lg p-1 -m-1 transition-colors"
+      className="flex items-center gap-3 min-w-0 group hover:bg-foreground/[var(--hover-bg-opacity)] rounded-lg p-1 -m-1 transition-colors"
     >
       {/* Album art */}
       <div className="flex-shrink-0 w-14 h-14 bg-gradient-player rounded overflow-hidden relative">

@@ -159,7 +159,7 @@ export function PlaylistPage() {
           </p>
           <button
             onClick={() => goBack('/library?tab=playlists')}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
           >
             {t('common.back', 'Back')}
           </button>
@@ -176,7 +176,7 @@ export function PlaylistPage() {
         <div className="mb-6">
         <button
           onClick={() => goBack('/library?tab=playlists')}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
+          className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{hasHistory ? t('common.back', 'Back') : t('playlist.backToPlaylists', 'Back to Playlists')}</span>
@@ -225,7 +225,7 @@ export function PlaylistPage() {
                 onClick={handlePlayAll}
                 onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
                 disabled={tracks.length === 0}
-                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50"
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
               >
                 <Play className="w-5 h-5" fill="currentColor" />
                 <span>{t('common.playAll', 'Play All')}</span>

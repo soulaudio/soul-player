@@ -207,7 +207,7 @@ export function AddToPlaylistDialog({
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -232,7 +232,7 @@ export function AddToPlaylistDialog({
               <button
                 onClick={handleCreatePlaylist}
                 disabled={!newPlaylistName.trim()}
-                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-[var(--hover-button-opacity)] transition-all duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
               >
                 {t('common.save', 'Save')}
               </button>
@@ -241,7 +241,7 @@ export function AddToPlaylistDialog({
                   setShowNewPlaylistInput(false);
                   setNewPlaylistName('');
                 }}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-lg transition-colors duration-[var(--transition-duration)]"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -249,7 +249,7 @@ export function AddToPlaylistDialog({
           ) : (
             <button
               onClick={() => setShowNewPlaylistInput(true)}
-              className="flex items-center gap-2 w-full px-3 py-2 mb-4 rounded-lg border border-dashed border-border hover:border-primary hover:bg-muted/50 transition-colors text-sm text-muted-foreground hover:text-foreground"
+              className="flex items-center gap-2 w-full px-3 py-2 mb-4 rounded-lg border border-dashed border-border hover:border-primary hover:bg-foreground/[var(--hover-bg-opacity)] transition-all duration-[var(--transition-duration)] text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)]"
             >
               <Plus className="w-4 h-4" />
               {t('playlist.createNew', 'Create new playlist')}
@@ -283,10 +283,10 @@ export function AddToPlaylistDialog({
                     <button
                       key={playlist.id}
                       onClick={() => togglePlaylist(playlist.id)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left ${
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors duration-[var(--transition-duration)] text-left ${
                         isSelected
                           ? 'bg-primary/10 border border-primary/30'
-                          : 'hover:bg-muted border border-transparent'
+                          : 'hover:bg-foreground/[var(--hover-bg-opacity)] border border-transparent'
                       }`}
                     >
                       {/* Playlist cover placeholder */}
@@ -330,14 +330,14 @@ export function AddToPlaylistDialog({
         <DialogFooter>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
+            className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
           >
             {t('common.cancel', 'Cancel')}
           </button>
           <button
             onClick={handleSave}
             disabled={!hasChanges || addTrackMutation.isPending || removeTrackMutation.isPending}
-            className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:opacity-[var(--hover-button-opacity)] transition-all duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
           >
             {addTrackMutation.isPending || removeTrackMutation.isPending ? t('common.saving', 'Saving...') : t('common.done', 'Done')}
           </button>

@@ -28,8 +28,6 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
   // Set up event listeners to update store (similar to old usePlaybackEvents hook)
   useEffect(() => {
-    console.log('[TauriPlayerCommandsProvider] Setting up playback event listeners');
-
     // Store unlisten functions for cleanup
     const unlistenFunctions: (() => void)[] = [];
     let isMounted = true;
@@ -48,7 +46,6 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         if (!isMounted) return;
 
         const isPlaying = state === 'Playing';
-        console.log('[TauriPlayerCommandsProvider] Initial state sync:', state, '-> isPlaying:', isPlaying, 'shuffle:', shuffleMode, 'repeat:', repeatMode);
         usePlayerStore.setState({
           isPlaying,
           shuffleMode: shuffleMode as 'off' | 'random' | 'smart',
@@ -64,7 +61,6 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         // Listen for playback state changes
         const unlistenStateChanged = await listen<string>('playback:state-changed', (event) => {
           const isPlaying = event.payload === 'Playing';
-          console.log('[TauriPlayerCommandsProvider] State changed event:', event.payload, '-> isPlaying:', isPlaying);
           usePlayerStore.setState({ isPlaying });
         });
         unlistenFunctions.push(unlistenStateChanged);
@@ -83,8 +79,6 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         // Listen for track changes
         const unlistenTrackChanged = await listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string }>('playback:track-changed', (event) => {
           const trackPayload = event.payload;
-          console.log('[TauriPlayerCommandsProvider] Track changed:', trackPayload);
-          console.log('[TauriPlayerCommandsProvider] coverArtPath:', trackPayload?.coverArtPath);
           // Only update if track is valid - don't clear current track on null/undefined
           // (e.g., when skipPrevious is called at the start of queue)
           if (trackPayload && trackPayload.id) {
@@ -125,19 +119,20 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           console.error('[TauriPlayerCommandsProvider] Playback error:', event.payload);
         });
         unlistenFunctions.push(unlistenError);
-
-        console.log('[TauriPlayerCommandsProvider] All event listeners registered successfully');
       } catch (error) {
         console.error('[TauriPlayerCommandsProvider] Failed to set up event listeners:', error);
       }
     };
 
     // Initialize listeners and state in parallel
-    void Promise.all([setupListeners(), syncInitialState()]);
+    // Use proper promise handling to avoid loading cursor issues on macOS
+    Promise.all([setupListeners(), syncInitialState()])
+      .catch((error) => {
+        console.error('[TauriPlayerCommandsProvider] Initialization failed:', error);
+      });
 
     // Cleanup function
     return () => {
-      console.log('[TauriPlayerCommandsProvider] Cleaning up event listeners');
       isMounted = false;
       unlistenFunctions.forEach(fn => fn());
     };
@@ -195,6 +190,16 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
       async setRepeatMode(mode: 'off' | 'all' | 'one') {
         await invoke('set_repeat', { mode });
+      },
+
+      async cycleRepeat() {
+        const newMode = await invoke<string>('cycle_repeat');
+        return newMode as 'off' | 'all' | 'one';
+      },
+
+      async getRepeat() {
+        const mode = await invoke<string>('get_repeat');
+        return mode as 'off' | 'all' | 'one';
       },
 
       async getPlaybackCapabilities(): Promise<PlaybackCapabilities> {

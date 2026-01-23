@@ -413,8 +413,19 @@ async fn analyze_audio_file(file_path: &str) -> Result<LoudnessInfo, String> {
         return Err(format!("File not found: {}", file_path));
     }
 
+    // Security: Canonicalize path to prevent path traversal attacks
+    // Even though paths come from database, validate to prevent issues if DB is compromised
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|e| format!("Failed to canonicalize path: {}", e))?;
+
+    // Verify it's a file (not a directory or symlink to dangerous location)
+    if !canonical_path.is_file() {
+        return Err(format!("Path is not a file: {}", file_path));
+    }
+
     // Use symphonia to decode and analyze
-    let file_path = file_path.to_string();
+    let file_path = canonical_path.to_string_lossy().to_string();
 
     tokio::task::spawn_blocking(move || {
         use symphonia::core::audio::SampleBuffer;

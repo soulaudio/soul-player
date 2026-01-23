@@ -1,12 +1,30 @@
 /**
- * Web Audio API player
- * Replaces CPAL + LocalAudioSource from desktop implementation
+ * Web Audio API Player
+ *
+ * Provides audio playback using HTMLAudioElement + Web Audio API.
+ * Replaces CPAL + LocalAudioSource from desktop implementation.
+ *
+ * Features:
+ * - Loading audio files from URLs
+ * - Play, pause, stop, seek operations
+ * - Volume control via GainNode (logarithmic scaling)
+ * - Event callbacks for time updates, track end, errors
+ *
+ * @module @soul-player/playback-web
  */
 
 export type AudioEventCallback = () => void
 export type AudioPositionCallback = (position: number) => void
 export type AudioErrorCallback = (error: Error) => void
 
+/**
+ * Web Audio Player
+ *
+ * Low-level audio playback using Web Audio API. Used by WasmPlaybackAdapter
+ * to handle actual audio output while WASM handles queue logic.
+ *
+ * @class WebAudioPlayer
+ */
 export class WebAudioPlayer {
   private audioContext: AudioContext
   private audioElement: HTMLAudioElement
@@ -23,6 +41,22 @@ export class WebAudioPlayer {
     this.gainNode.connect(this.audioContext.destination)
   }
 
+  /**
+   * Load an audio track from URL
+   *
+   * Stops current playback and loads new audio file. Audio is ready to play
+   * when promise resolves.
+   *
+   * @param url - URL to audio file (MP3, OGG, WAV, etc.)
+   * @returns Promise that resolves when audio is loaded and ready
+   * @throws Error if audio fails to load
+   *
+   * @example
+   * ```typescript
+   * await player.loadTrack('/audio/track.mp3');
+   * await player.play();
+   * ```
+   */
   async loadTrack(url: string): Promise<void> {
     console.log('[WebAudioPlayer] Loading track:', url)
 
@@ -98,6 +132,20 @@ export class WebAudioPlayer {
     this.audioElement.currentTime = position
   }
 
+  /**
+   * Set playback volume
+   *
+   * Uses quadratic (x²) scaling for more natural volume feel.
+   * GainNode.gain is set to (level/100)² to approximate logarithmic perception.
+   *
+   * @param level - Volume level (0-100)
+   *
+   * @example
+   * ```typescript
+   * player.setVolume(80); // 80% volume
+   * player.setVolume(0);  // Mute
+   * ```
+   */
   setVolume(level: number): void {
     // Logarithmic volume scaling (0-100 -> 0.0-1.0)
     // Using quadratic curve for more natural volume feel
@@ -122,6 +170,23 @@ export class WebAudioPlayer {
   }
 
   // Event listeners
+
+  /**
+   * Listen for time position updates
+   *
+   * Callback is called repeatedly during playback (~100ms intervals).
+   * Use for progress bars and position displays.
+   *
+   * @param callback - Function receiving current position in seconds
+   * @returns Cleanup function to remove listener
+   *
+   * @example
+   * ```typescript
+   * const cleanup = player.onTimeUpdate((pos) => {
+   *   console.log('Position:', pos);
+   * });
+   * ```
+   */
   onTimeUpdate(callback: AudioPositionCallback): () => void {
     const handler = () => callback(this.position)
     this.audioElement.addEventListener('timeupdate', handler)

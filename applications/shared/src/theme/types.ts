@@ -71,6 +71,40 @@ export interface ThemeTypography {
 }
 
 /**
+ * Interaction configuration for hover, focus, and active states
+ * Following Tailwind v4 best practices with CSS-first approach
+ */
+export interface ThemeInteractions {
+  /** Hover effects (transient state) */
+  hover: {
+    /** Text/icon opacity on hover (0-1, default: 0.8) */
+    textOpacity: number;
+    /** Button opacity on hover (0-1, default: 0.9) */
+    buttonOpacity: number;
+    /** Background overlay opacity on hover (0-1, default: 0.1) */
+    bgOpacity: number;
+  };
+
+  /** Selected/active states (persistent state) */
+  selected: {
+    /** Background opacity for selected items (0-1, default: 0.2) */
+    bgOpacity: number;
+  };
+
+  /** Disabled state */
+  disabled: {
+    /** Opacity for disabled elements (0-1, default: 0.5) */
+    opacity: number;
+  };
+
+  /** Transition settings */
+  transition: {
+    /** Duration for all transitions (default: '200ms') */
+    duration: string;
+  };
+}
+
+/**
  * Complete theme definition
  */
 export interface Theme {
@@ -97,6 +131,9 @@ export interface Theme {
 
   /** Typography settings */
   typography?: ThemeTypography;
+
+  /** Interaction configuration (hover, focus, active states) */
+  interactions?: ThemeInteractions;
 
   /** Whether this is a built-in theme (cannot be deleted) */
   isBuiltIn?: boolean;

@@ -17,7 +17,6 @@ interface MacosOption {
   filePattern: string
   displayName: string
   description: string
-  recommended: boolean
   icon: LucideIcon
 }
 
@@ -72,7 +71,6 @@ export function MacosDownloadModal({ isOpen, onClose, version }: MacosDownloadMo
       filePattern: DOWNLOAD_CONFIGS.macos.filePattern,
       displayName: 'Apple Silicon (M1/M2/M3/M4)',
       description: 'For Macs with Apple Silicon processors',
-      recommended: true,
       icon: Apple,
     },
     {
@@ -80,7 +78,6 @@ export function MacosDownloadModal({ isOpen, onClose, version }: MacosDownloadMo
       filePattern: ALTERNATE_DOWNLOADS.find((d) => d.platform === 'macos')?.filePattern || '',
       displayName: 'Intel (x64)',
       description: 'For Intel-based Macs',
-      recommended: false,
       icon: Cpu,
     },
   ]
@@ -101,7 +98,7 @@ export function MacosDownloadModal({ isOpen, onClose, version }: MacosDownloadMo
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            className="p-2 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" />
@@ -119,25 +116,11 @@ export function MacosDownloadModal({ isOpen, onClose, version }: MacosDownloadMo
               return (
                 <div
                   key={option.id}
-                  className={`group relative p-4 rounded-xl border transition-all duration-200 ${
-                    option.recommended
-                      ? 'border-primary/50 bg-primary/5 hover:border-primary hover:bg-primary/10'
-                      : 'border-border bg-card hover:border-primary/30 hover:bg-muted/50'
-                  }`}
+                  className="group relative p-4 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-foreground/[var(--hover-bg-opacity)] transition-all duration-[var(--transition-duration)]"
                 >
-                  {option.recommended && (
-                    <div className="absolute -top-2.5 left-4 px-2.5 py-0.5 bg-primary text-primary-foreground text-xs font-semibold rounded-full">
-                      Recommended
-                    </div>
-                  )}
-
                   <div className="flex items-start gap-4">
-                    <div className={`p-3 rounded-lg ${
-                      option.recommended ? 'bg-primary/10' : 'bg-muted'
-                    } group-hover:scale-110 transition-transform`}>
-                      <Icon className={`w-6 h-6 ${
-                        option.recommended ? 'text-primary' : 'text-muted-foreground'
-                      }`} />
+                    <div className="p-3 rounded-lg bg-muted group-hover:scale-110 transition-transform">
+                      <Icon className="w-6 h-6 text-muted-foreground" />
                     </div>
 
                     <div className="flex-1 min-w-0">

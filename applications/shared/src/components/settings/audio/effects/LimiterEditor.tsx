@@ -120,7 +120,7 @@ export function LimiterEditor({ settings, onSettingsChange, slotIndex: _slotInde
           <button
             data-testid="limiter-preset-select"
             onClick={() => setIsPresetOpen(!isPresetOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-muted/50 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
           >
             <span>{selectedPreset ? t(`limiter.preset.${selectedPreset}`) : t('limiter.selectPreset')}</span>
             <ChevronDown className={`w-4 h-4 transition-transform ${isPresetOpen ? 'rotate-180' : ''}`} />
@@ -134,7 +134,7 @@ export function LimiterEditor({ settings, onSettingsChange, slotIndex: _slotInde
                 <button
                   key={preset.key}
                   onClick={() => applyUiPreset(preset.key, preset.releaseMs)}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors ${
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors ${
                     selectedPreset === preset.key ? 'bg-primary/10 text-primary' : ''
                   }`}
                 >
@@ -152,7 +152,7 @@ export function LimiterEditor({ settings, onSettingsChange, slotIndex: _slotInde
                     <button
                       key={preset.name}
                       onClick={() => applyPreset(preset)}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors ${
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors ${
                         selectedPreset === preset.name ? 'bg-primary/10 text-primary' : ''
                       }`}
                     >
@@ -303,7 +303,7 @@ export function LimiterEditor({ settings, onSettingsChange, slotIndex: _slotInde
                   className={`flex-1 px-2 py-1 text-xs rounded border transition-colors ${
                     Math.abs(settings.releaseMs - ms) < 5
                       ? 'bg-primary text-primary-foreground border-primary'
-                      : 'border-border hover:bg-muted/50'
+                      : 'border-border hover:bg-foreground/[var(--hover-bg-opacity)]'
                   }`}
                 >
                   {ms}

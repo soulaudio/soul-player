@@ -80,6 +80,8 @@ const createMockPlayerCommands = (): PlayerContextValue => ({
     cycleShuffle: vi.fn().mockResolvedValue('off' as const),
     getShuffle: vi.fn().mockResolvedValue('off' as const),
     setRepeatMode: vi.fn().mockResolvedValue(undefined),
+    cycleRepeat: vi.fn().mockResolvedValue('off' as const),
+    getRepeat: vi.fn().mockResolvedValue('off' as const),
     getPlaybackCapabilities: vi.fn().mockResolvedValue({ hasNext: true, hasPrevious: true }),
     getQueue: vi.fn().mockResolvedValue([]),
     playQueue: vi.fn().mockResolvedValue(undefined),

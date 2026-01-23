@@ -1,3 +1,4 @@
+use crate::error::StorageError;
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
@@ -10,15 +11,18 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Genre>> {
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Genre {
-            id: row.id.expect("genre id should not be null"),
-            name: row.name,
-            canonical_name: row.canonical_name,
-            created_at: row.created_at,
+    rows.into_iter()
+        .map(|row| {
+            Ok(Genre {
+                id: row
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("genre.id".to_string()))?,
+                name: row.name,
+                canonical_name: row.canonical_name,
+                created_at: row.created_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub async fn get_by_id(pool: &SqlitePool, id: GenreId) -> Result<Option<Genre>> {
@@ -49,12 +53,18 @@ pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Genre>
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| Genre {
-        id: row.id.expect("genre id should not be null"),
-        name: row.name,
-        canonical_name: row.canonical_name,
-        created_at: row.created_at,
-    }))
+    match row {
+        Some(row) => match row.id {
+            Some(id) => Ok(Some(Genre {
+                id,
+                name: row.name,
+                canonical_name: row.canonical_name,
+                created_at: row.created_at,
+            })),
+            None => Err(StorageError::MissingField("genre.id".to_string()).into()),
+        },
+        None => Ok(None),
+    }
 }
 
 pub async fn find_by_canonical_name(
@@ -70,12 +80,18 @@ pub async fn find_by_canonical_name(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| Genre {
-        id: row.id.expect("genre id should not be null"),
-        name: row.name,
-        canonical_name: row.canonical_name,
-        created_at: row.created_at,
-    }))
+    match row {
+        Some(row) => match row.id {
+            Some(id) => Ok(Some(Genre {
+                id,
+                name: row.name,
+                canonical_name: row.canonical_name,
+                created_at: row.created_at,
+            })),
+            None => Err(StorageError::MissingField("genre.id".to_string()).into()),
+        },
+        None => Ok(None),
+    }
 }
 
 pub async fn create(pool: &SqlitePool, genre: CreateGenre) -> Result<Genre> {
@@ -108,15 +124,18 @@ pub async fn get_by_track(pool: &SqlitePool, track_id: TrackId) -> Result<Vec<Ge
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Genre {
-            id: row.id.expect("genre id should not be null"),
-            name: row.name,
-            canonical_name: row.canonical_name,
-            created_at: row.created_at,
+    rows.into_iter()
+        .map(|row| {
+            Ok(Genre {
+                id: row
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("genre.id".to_string()))?,
+                name: row.name,
+                canonical_name: row.canonical_name,
+                created_at: row.created_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// Add a genre to a track

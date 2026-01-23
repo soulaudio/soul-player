@@ -82,27 +82,30 @@ pub async fn get_by_user_device(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|r| LibrarySource {
-            id: r.id.expect("library_source id cannot be null"),
-            user_id: r.user_id,
-            device_id: r.device_id,
-            name: r.name,
-            path: r.path,
-            enabled: r.enabled != 0,
-            sync_deletes: r.sync_deletes != 0,
-            last_scan_at: r.last_scan_at,
-            scan_status: r
-                .scan_status
-                .as_deref()
-                .and_then(ScanStatus::from_str)
-                .unwrap_or(ScanStatus::Idle),
-            error_message: r.error_message,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+    rows.into_iter()
+        .map(|r| {
+            Ok(LibrarySource {
+                id: r
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("library_source.id".to_string()))?,
+                user_id: r.user_id,
+                device_id: r.device_id,
+                name: r.name,
+                path: r.path,
+                enabled: r.enabled != 0,
+                sync_deletes: r.sync_deletes != 0,
+                last_scan_at: r.last_scan_at,
+                scan_status: r
+                    .scan_status
+                    .as_deref()
+                    .and_then(ScanStatus::from_str)
+                    .unwrap_or(ScanStatus::Idle),
+                error_message: r.error_message,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// Get only enabled library sources for a user/device
@@ -125,27 +128,30 @@ pub async fn get_enabled(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|r| LibrarySource {
-            id: r.id.expect("library_source id cannot be null"),
-            user_id: r.user_id,
-            device_id: r.device_id,
-            name: r.name,
-            path: r.path,
-            enabled: r.enabled != 0,
-            sync_deletes: r.sync_deletes != 0,
-            last_scan_at: r.last_scan_at,
-            scan_status: r
-                .scan_status
-                .as_deref()
-                .and_then(ScanStatus::from_str)
-                .unwrap_or(ScanStatus::Idle),
-            error_message: r.error_message,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+    rows.into_iter()
+        .map(|r| {
+            Ok(LibrarySource {
+                id: r
+                    .id
+                    .ok_or_else(|| StorageError::MissingField("library_source.id".to_string()))?,
+                user_id: r.user_id,
+                device_id: r.device_id,
+                name: r.name,
+                path: r.path,
+                enabled: r.enabled != 0,
+                sync_deletes: r.sync_deletes != 0,
+                last_scan_at: r.last_scan_at,
+                scan_status: r
+                    .scan_status
+                    .as_deref()
+                    .and_then(ScanStatus::from_str)
+                    .unwrap_or(ScanStatus::Idle),
+                error_message: r.error_message,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// Create a new library source (watched folder)

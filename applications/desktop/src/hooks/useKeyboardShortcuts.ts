@@ -189,15 +189,15 @@ export function useKeyboardShortcuts() {
           break;
         }
 
-        case 'toggle_shuffle':
-          // TODO: Implement toggle shuffle
-          console.log('[useKeyboardShortcuts] Toggle shuffle not implemented');
+        case 'toggle_shuffle': {
+          await commands.cycleShuffle();
           break;
+        }
 
-        case 'toggle_repeat':
-          // TODO: Implement toggle repeat
-          console.log('[useKeyboardShortcuts] Toggle repeat not implemented');
+        case 'toggle_repeat': {
+          await commands.cycleRepeat();
           break;
+        }
       }
     } catch (error) {
       console.error('[useKeyboardShortcuts] Failed to execute action:', action, error);
@@ -237,7 +237,6 @@ export function useKeyboardShortcuts() {
       try {
         const result = await invoke<GlobalShortcut[]>('get_global_shortcuts');
         setShortcuts(result);
-        console.log('[useKeyboardShortcuts] Shortcuts reloaded');
       } catch (error) {
         console.error('[useKeyboardShortcuts] Failed to reload shortcuts:', error);
       }

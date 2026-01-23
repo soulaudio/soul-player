@@ -60,8 +60,8 @@ export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControls
         onClick={handleShuffleToggle}
         className={`p-2 rounded-full transition-colors relative ${
           shuffleMode !== 'off'
-            ? 'text-primary hover:bg-accent'
-            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            ? 'text-primary hover:bg-foreground/[var(--hover-bg-opacity)]'
+            : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]'
         }`}
         aria-label={getShuffleTitle()}
         title={getShuffleTitle()}
@@ -80,8 +80,8 @@ export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControls
         onClick={handleRepeatToggle}
         className={`p-2 rounded-full transition-colors ${
           repeatMode !== 'off'
-            ? 'text-primary hover:bg-accent'
-            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            ? 'text-primary hover:bg-foreground/[var(--hover-bg-opacity)]'
+            : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]'
         }`}
         aria-label={`Repeat: ${repeatMode}`}
         title={`Repeat: ${repeatMode}`}
@@ -97,7 +97,7 @@ export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControls
       {onAddToPlaylist && (
         <button
           onClick={onAddToPlaylist}
-          className="p-2 rounded-full transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="p-2 rounded-full transition-colors text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
           aria-label={t('playlist.addToPlaylist', 'Add to Playlist')}
           title={t('playlist.addToPlaylist', 'Add to Playlist')}
         >

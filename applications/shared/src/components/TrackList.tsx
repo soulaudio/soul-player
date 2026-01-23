@@ -235,7 +235,7 @@ function FormatDropdown({
           setIsOpen(!isOpen);
         }}
         onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
-        className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${activeStyle.bg} ${activeStyle.text} hover:opacity-80`}
+        className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${activeStyle.bg} ${activeStyle.text} hover:opacity-[var(--hover-text-opacity)]`}
       >
         {activeVersion.format?.toUpperCase()}
         <ChevronDown className="w-3 h-3" />
@@ -267,7 +267,7 @@ function FormatDropdown({
                     onSelect(version);
                     setIsOpen(false);
                   }}
-                  className={`w-full px-3 py-1.5 text-left text-xs flex items-center justify-between gap-2 hover:bg-muted/50 ${
+                  className={`w-full px-3 py-1.5 text-left text-xs flex items-center justify-between gap-2 hover:bg-foreground/[var(--hover-bg-opacity)] ${
                     isActive ? 'bg-muted/30' : ''
                   }`}
                 >
@@ -322,7 +322,7 @@ const TrackRowComponent = ({
 
   return (
     <div
-      className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px] gap-4 px-4 py-3 hover:bg-muted/50 border-b last:border-b-0 transition-colors group ${
+      className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px] gap-4 px-4 py-3 hover:bg-foreground/[var(--hover-bg-opacity)] border-b last:border-b-0 transition-colors group ${
         isCurrentTrack ? 'bg-accent/20' : ''
       } ${isUnavailable ? 'opacity-60' : ''}`}
       onMouseEnter={onMouseEnter}
@@ -341,7 +341,7 @@ const TrackRowComponent = ({
           <button
             onClick={() => (showPauseButton ? onPause() : onPlay(group))}
             onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-primary/10 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
             aria-label={showPauseButton ? 'Pause' : 'Play'}
           >
             {showPauseButton ? (
@@ -380,7 +380,7 @@ const TrackRowComponent = ({
         <ArtistLink
           artistId={activeVersion.artistId}
           artistName={activeVersion.artist}
-          className="text-sm text-muted-foreground hover:text-foreground"
+          className="text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
         />
       </div>
 
@@ -398,7 +398,7 @@ const TrackRowComponent = ({
         <AlbumLink
           albumId={activeVersion.albumId}
           albumName={activeVersion.album}
-          className="text-sm text-muted-foreground hover:text-foreground"
+          className="text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
         />
       </div>
 
@@ -481,10 +481,11 @@ export function TrackList({
 
     const queue = buildQueue(activeTracks, activeVersion, clickedIndex);
 
-    debug.log('[TrackList] Playing queue with', queue.length, 'tracks');
+    debug.log('[TrackList] Playing queue with', queue.length, 'tracks, starting at index', clickedIndex);
 
     try {
-      await commands.playQueue(queue, 0);
+      // CRITICAL: Pass clickedIndex as startIndex so the clicked track plays, not always the first track
+      await commands.playQueue(queue, clickedIndex);
       onTrackAction?.(activeVersion);
     } catch (error) {
       debug.error('[TrackList] Failed to play track:', error);

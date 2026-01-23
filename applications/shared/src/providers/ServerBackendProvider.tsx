@@ -287,6 +287,165 @@ export function ServerBackendProvider({ apiBase, authToken, children }: ServerBa
       )
     },
 
+    // Audio Settings - DSP Chain (not supported on server, stub implementations)
+    async getDspChain() {
+      return []
+    },
+
+    async addEffectToChain(_slotIndex: number, _effect: any) {
+      debug.log('[ServerBackend] DSP chain not supported on server')
+    },
+
+    async removeEffectFromChain(_slotIndex: number) {
+      debug.log('[ServerBackend] DSP chain not supported on server')
+    },
+
+    async toggleEffect(_slotIndex: number, _enabled: boolean) {
+      debug.log('[ServerBackend] DSP chain not supported on server')
+    },
+
+    async clearDspChain() {
+      debug.log('[ServerBackend] DSP chain not supported on server')
+    },
+
+    async updateEffectParameters(_slotIndex: number, _effect: any) {
+      debug.log('[ServerBackend] DSP chain not supported on server')
+    },
+
+    // Audio Settings - Headroom Management (not supported on server)
+    async getHeadroomSettings() {
+      return {
+        enabled: false,
+        mode: { mode: 'auto', manualDb: null },
+        totalGainDb: 0,
+        attenuationDb: 0,
+      }
+    },
+
+    async setHeadroomMode(_mode: string, _manualDb?: number) {
+      debug.log('[ServerBackend] Headroom settings not supported on server')
+    },
+
+    async setHeadroomEnabled(_enabled: boolean) {
+      debug.log('[ServerBackend] Headroom settings not supported on server')
+    },
+
+    // Audio Settings - Latency & Exclusive Mode (not supported on server)
+    async getLatencyInfo() {
+      return {
+        bufferSamples: 0,
+        bufferMs: 0,
+        totalMs: 0,
+        exclusive: false,
+      }
+    },
+
+    async isExclusiveMode() {
+      return false
+    },
+
+    async disableExclusiveMode() {
+      debug.log('[ServerBackend] Exclusive mode not supported on server')
+    },
+
+    async setExclusiveMode(_config: any) {
+      debug.log('[ServerBackend] Exclusive mode not supported on server')
+      return {
+        bufferSamples: 0,
+        bufferMs: 0,
+        totalMs: 0,
+        exclusive: false,
+      }
+    },
+
+    // Audio Settings - Volume Leveling Analysis (not supported on server)
+    async getAnalysisQueueStats() {
+      return {
+        total: 0,
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        failed: 0,
+      }
+    },
+
+    async getAnalysisWorkerStatus() {
+      return {
+        isRunning: false,
+        tracksAnalyzed: 0,
+      }
+    },
+
+    async startAnalysisWorker() {
+      debug.log('[ServerBackend] Volume leveling analysis not supported on server')
+    },
+
+    async stopAnalysisWorker() {
+      debug.log('[ServerBackend] Volume leveling analysis not supported on server')
+    },
+
+    async queueAllUnanalyzed() {
+      return 0
+    },
+
+    async clearCompletedAnalysis() {
+      debug.log('[ServerBackend] Volume leveling analysis not supported on server')
+    },
+
+    // Audio Settings - Volume Leveling Runtime (not supported on server)
+    async setVolumeLevelingMode(_mode: string) {
+      debug.log('[ServerBackend] Volume leveling not supported on server')
+    },
+
+    async setVolumeLevelingPreamp(_preampDb: number) {
+      debug.log('[ServerBackend] Volume leveling not supported on server')
+    },
+
+    async setVolumeLevelingPreventClipping(_prevent: boolean) {
+      debug.log('[ServerBackend] Volume leveling not supported on server')
+    },
+
+    // Audio Settings - Resampling (not supported on server)
+    async setResamplingQuality(_quality: string) {
+      debug.log('[ServerBackend] Resampling not supported on server')
+    },
+
+    async setResamplingTargetRate(_rate: number) {
+      debug.log('[ServerBackend] Resampling not supported on server')
+    },
+
+    async setResamplingBackend(_backend: string) {
+      debug.log('[ServerBackend] Resampling not supported on server')
+    },
+
+    async isR8brainAvailable() {
+      return false
+    },
+
+    // Audio Settings - Crossfade (not supported on server)
+    async setCrossfadeSettings(_enabled: boolean, _durationMs: number, _curve: string) {
+      debug.log('[ServerBackend] Crossfade not supported on server')
+    },
+
+    // Audio Settings - Device Selection (not supported on server)
+    async getAudioBackends() {
+      return []
+    },
+
+    async getAudioDevices(_backendStr: string) {
+      return []
+    },
+
+    async setAudioDevice(_backendStr: string, _deviceName: string) {
+      debug.log('[ServerBackend] Audio device selection not supported on server')
+    },
+
+    // Audio Settings - File Dialog (not supported on server)
+    async openFileDialog(_multiple: boolean, _filters: Array<{ name: string; extensions: string[] }>) {
+      debug.log('[ServerBackend] File dialog not supported on server')
+      return null
+    },
+
     async getVersion() {
       return apiFetch<string>(`${apiBase}/version`, {}, authToken)
     },

@@ -75,6 +75,8 @@ const createMockPlayerCommands = (): PlayerContextValue => ({
     cycleShuffle: vi.fn().mockResolvedValue('off' as const),
     getShuffle: vi.fn().mockResolvedValue('off' as const),
     setRepeatMode: vi.fn().mockResolvedValue(undefined),
+    cycleRepeat: vi.fn().mockResolvedValue('off' as const),
+    getRepeat: vi.fn().mockResolvedValue('off' as const),
     getPlaybackCapabilities: vi.fn().mockResolvedValue({ hasNext: true, hasPrevious: true }),
     getQueue: vi.fn().mockResolvedValue([]),
     playQueue: vi.fn().mockResolvedValue(undefined),
@@ -285,7 +287,7 @@ describe('AlbumPage - Race Condition Handling', () => {
       const albums = [1, 2, 3].map(createSampleAlbum);
       const allTracks = [1, 2, 3].map(id => createSampleTracks(id));
 
-      let resolvers: Array<{
+      const resolvers: Array<{
         album: (value: BackendAlbum) => void;
         tracks: (value: BackendTrack[]) => void;
       }> = [];

@@ -53,6 +53,9 @@ export function ProgressBar() {
 
     let currentSeekPosition = newPosition;
 
+    // Use AbortController for reliable cleanup even if component unmounts during drag
+    const abortController = new AbortController();
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const moveX = moveEvent.clientX - rect.left;
       const movePercentage = Math.max(0, Math.min(100, (moveX / width) * 100));
@@ -64,18 +67,16 @@ export function ProgressBar() {
 
     const handleMouseUp = () => {
       handleSeekEnd(currentSeekPosition);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      abortController.abort();
       cleanupRef.current = null;
     };
 
     cleanupRef.current = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      abortController.abort();
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove, { signal: abortController.signal });
+    document.addEventListener('mouseup', handleMouseUp, { signal: abortController.signal });
   };
 
   return (

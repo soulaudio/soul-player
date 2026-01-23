@@ -186,7 +186,8 @@ impl ArtworkManager {
         // First try the recorded path from database
         if let Some((source, Some(path))) = artwork_info {
             if source == "folder" && std::path::Path::new(&path).exists() {
-                if let Ok(data) = std::fs::read(&path) {
+                // Use tokio::fs for async I/O to avoid blocking runtime
+                if let Ok(data) = tokio::fs::read(&path).await {
                     let mime_type = Self::guess_mime_from_path(&path);
                     return Ok(Some((data, mime_type)));
                 }
@@ -195,7 +196,8 @@ impl ArtworkManager {
 
         // Fallback: Auto-discover folder artwork if not in database
         if let Ok(Some(folder_path)) = self.discover_folder_artwork_for_album(album_id).await {
-            if let Ok(data) = std::fs::read(&folder_path) {
+            // Use tokio::fs for async I/O to avoid blocking runtime
+            if let Ok(data) = tokio::fs::read(&folder_path).await {
                 let mime_type = Self::guess_mime_from_path(&folder_path.to_string_lossy());
                 return Ok(Some((data, mime_type)));
             }
@@ -239,7 +241,8 @@ impl ArtworkManager {
         // First try the recorded path from database
         if let Some((source, Some(path))) = artwork_info {
             if source == "folder" && std::path::Path::new(&path).exists() {
-                if let Ok(data) = std::fs::read(&path) {
+                // Use tokio::fs for async I/O to avoid blocking runtime
+                if let Ok(data) = tokio::fs::read(&path).await {
                     let mime_type = Self::guess_mime_from_path(&path);
                     return Ok(Some((data, mime_type, false)));
                 }
@@ -248,7 +251,8 @@ impl ArtworkManager {
 
         // Fallback: Auto-discover folder artwork if not in database
         if let Ok(Some(folder_path)) = self.discover_folder_artwork_for_album(album_id).await {
-            if let Ok(data) = std::fs::read(&folder_path) {
+            // Use tokio::fs for async I/O to avoid blocking runtime
+            if let Ok(data) = tokio::fs::read(&folder_path).await {
                 let mime_type = Self::guess_mime_from_path(&folder_path.to_string_lossy());
                 return Ok(Some((data, mime_type, false)));
             }

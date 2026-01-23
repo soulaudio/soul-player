@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import { usePlayerStore } from '../stores/player';
 import { debug } from '../utils/debug';
@@ -23,6 +23,19 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
   const [isDragging, setIsDragging] = useState(false);
   const [seekPosition, setSeekPosition] = useState<number | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ignoreUpdatesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      if (ignoreUpdatesTimerRef.current) {
+        clearTimeout(ignoreUpdatesTimerRef.current);
+      }
+    };
+  }, []);
 
   /**
    * Called when user starts dragging the seek bar
@@ -96,9 +109,14 @@ export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
 
       // Re-enable position updates after 500ms
       // This gives the backend time to process the seek
-      setTimeout(() => {
+      // Clear any existing timer first
+      if (ignoreUpdatesTimerRef.current) {
+        clearTimeout(ignoreUpdatesTimerRef.current);
+      }
+      ignoreUpdatesTimerRef.current = setTimeout(() => {
         setIgnorePositionUpdates(false);
         debug.log('[useSeekBar] Re-enabled position updates');
+        ignoreUpdatesTimerRef.current = null;
       }, 500);
     } else {
       debug.warn('[useSeekBar] handleSeekEnd called but no position available');

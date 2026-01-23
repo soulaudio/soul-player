@@ -60,7 +60,7 @@ export function PremiumHero() {
         {/* Demo showcase */}
         <div className="relative mt-16 animate-fade-in-delay-500 max-w-7xl mx-auto">
           {/* Theme switcher and interactive badge - above demo */}
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-end mb-4">
             <div className="flex flex-col items-start gap-2">
               <span data-theme-label className="text-xs tracking-wide transition-colors duration-700 text-muted-foreground">Pick your theme</span>
               <DemoThemeSwitcher />

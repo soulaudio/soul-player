@@ -26,7 +26,7 @@ export function DemoThemeSwitcher() {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
               currentTheme.id === theme.id
                 ? 'bg-primary/20 text-primary-foreground border-primary/30'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted/80 hover:text-foreground border-border'
+                : 'bg-muted/50 text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] border-border'
             }`}
           >
             {theme.name}
@@ -38,7 +38,7 @@ export function DemoThemeSwitcher() {
       <div className="sm:hidden relative">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-3 py-2 bg-muted/80 backdrop-blur-sm border border-border rounded-lg hover:bg-muted transition-colors text-sm text-muted-foreground"
+          className="flex items-center gap-2 px-3 py-2 bg-muted/80 backdrop-blur-sm border border-border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm text-muted-foreground"
           aria-label="Switch theme"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,7 +67,7 @@ export function DemoThemeSwitcher() {
                   className={`w-full text-left px-4 py-2 text-sm transition-colors ${
                     currentTheme.id === theme.id
                       ? 'bg-primary/20 text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-muted/80'
+                      : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]'
                   }`}
                 >
                   {theme.name}

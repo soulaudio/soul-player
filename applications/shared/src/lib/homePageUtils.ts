@@ -7,8 +7,10 @@ import { BackendAlbum } from '../contexts/BackendContext'
 /**
  * Fisher-Yates shuffle algorithm for uniform distribution
  * O(n) time complexity, better than Array.sort() based shuffles
+ * @param array - Array to shuffle (not mutated)
+ * @returns Shuffled copy of the array
  */
-function shuffle<T>(array: T[]): T[] {
+export function shuffle<T>(array: T[]): T[] {
   const result = [...array]
   for (let i = result.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

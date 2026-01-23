@@ -538,7 +538,10 @@ impl DesktopPlayback {
         let (event_tx, event_rx) = bounded(32);
 
         // Create background track loader FIRST - keeps disk I/O off audio thread
-        let track_loader = Arc::new(crate::track_loader::TrackLoader::new());
+        let track_loader = Arc::new(
+            crate::track_loader::TrackLoader::new()
+                .map_err(|e| crate::error::AudioError::DeviceError(e))?,
+        );
 
         // Create CPAL stream with specified device (passes track_loader to callbacks)
         let (stream, actual_device_name, sample_rate) = Self::create_audio_stream(

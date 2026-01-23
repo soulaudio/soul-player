@@ -1,0 +1,32 @@
+post_install() {
+    echo ""
+    echo "==> Soul Player has been installed."
+    echo ""
+    echo "    User data will be stored in: ~/.config/soul-player/"
+    echo ""
+}
+
+post_upgrade() {
+    echo ""
+    echo "==> Soul Player has been upgraded."
+    echo ""
+    echo "    Your library data, playlists, and settings are preserved."
+    echo "    If you experience issues, see: https://github.com/soulaudio/soul-player/docs"
+    echo ""
+}
+
+post_remove() {
+    echo ""
+    echo "==> Soul Player has been removed."
+    echo ""
+    echo "    Your user data is preserved at: ~/.config/soul-player/"
+    echo ""
+    echo "    To completely remove all Soul Player data (library, playlists, settings):"
+    echo "      rm -rf ~/.config/soul-player"
+    echo ""
+    echo "    Or download the cleanup script:"
+    echo "      curl -O https://raw.githubusercontent.com/soulaudio/soul-player/main/scripts/cleanup-linux-userdata.sh"
+    echo "      chmod +x cleanup-linux-userdata.sh"
+    echo "      ./cleanup-linux-userdata.sh"
+    echo ""
+}

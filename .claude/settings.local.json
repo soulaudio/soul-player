@@ -227,7 +227,9 @@
       "Bash(if gh release view v0.1.2)",
       "Bash(then)",
       "Bash(else)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "WebFetch(domain:rustsec.org)",
+      "Bash(taskkill:*)"
     ]
   },
   "hooks": {

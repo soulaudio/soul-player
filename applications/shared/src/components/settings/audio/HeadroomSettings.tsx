@@ -2,22 +2,11 @@
 // Prevents clipping by attenuating signal before DSP chain
 
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Info, AlertTriangle, Volume2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { debug } from '../../../utils/debug';
-
-interface HeadroomMode {
-  mode: string; // 'auto' | 'manual' | 'disabled'
-  manualDb: number | null;
-}
-
-interface HeadroomSettings {
-  enabled: boolean;
-  mode: HeadroomMode;
-  totalGainDb: number;
-  attenuationDb: number;
-}
+import { useBackend } from '../../../contexts/BackendContext';
+import type { HeadroomSettings } from '../../../contexts/BackendContext';
 
 interface HeadroomSettingsProps {
   enabled?: boolean;
@@ -53,6 +42,7 @@ export function HeadroomSettings({
   onModeChange,
 }: HeadroomSettingsProps) {
   const { t } = useTranslation();
+  const backend = useBackend();
   const [settings, setSettings] = useState<HeadroomSettings | null>(null);
   const [localManualDb, setLocalManualDb] = useState(propManualDb ?? -6);
   const [isLoading, setIsLoading] = useState(false);
@@ -60,7 +50,7 @@ export function HeadroomSettings({
   // Load settings from backend
   const loadSettings = async () => {
     try {
-      const result = await invoke<HeadroomSettings>('get_headroom_settings');
+      const result = await backend.getHeadroomSettings();
       setSettings(result);
       if (result.mode.manualDb !== null) {
         setLocalManualDb(result.mode.manualDb);
@@ -88,7 +78,7 @@ export function HeadroomSettings({
     setIsLoading(true);
     try {
       const manualDb = newMode === 'manual' ? localManualDb : undefined;
-      await invoke('set_headroom_mode', { mode: newMode, manualDb });
+      await backend.setHeadroomMode(newMode, manualDb);
 
       if (onModeChange) {
         onModeChange(newMode, manualDb);
@@ -107,7 +97,7 @@ export function HeadroomSettings({
 
     if (currentMode === 'manual') {
       try {
-        await invoke('set_headroom_mode', { mode: 'manual', manualDb: value });
+        await backend.setHeadroomMode('manual', value);
         if (onModeChange) {
           onModeChange('manual', value);
         }
@@ -120,7 +110,7 @@ export function HeadroomSettings({
 
   const handleEnabledChange = async (enabled: boolean) => {
     try {
-      await invoke('set_headroom_enabled', { enabled });
+      await backend.setHeadroomEnabled(enabled);
       if (onEnabledChange) {
         onEnabledChange(enabled);
       }
@@ -137,7 +127,7 @@ export function HeadroomSettings({
   return (
     <div className="space-y-6">
       {/* Enable/Disable Toggle */}
-      <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
+      <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
         <input
           type="checkbox"
           checked={currentEnabled}
@@ -173,9 +163,9 @@ export function HeadroomSettings({
                       ${
                         isSelected
                           ? 'border-primary bg-primary/5 shadow-sm'
-                          : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                          : 'border-border hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
                       }
-                      disabled:opacity-50
+                      disabled:opacity-[var(--disabled-opacity)]
                     `}
                   >
                     <div className="flex items-start justify-between gap-4">

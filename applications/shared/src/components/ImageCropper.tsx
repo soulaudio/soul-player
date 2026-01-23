@@ -334,7 +334,7 @@ export function ImageCropper({
         <button
           type="button"
           onClick={handleZoomOut}
-          className="p-2 rounded-lg hover:bg-muted transition-colors"
+          className="p-2 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
           title={t('artwork.edit.zoomOut')}
         >
           <ZoomOut className="w-5 h-5" />
@@ -367,7 +367,7 @@ export function ImageCropper({
         <button
           type="button"
           onClick={handleZoomIn}
-          className="p-2 rounded-lg hover:bg-muted transition-colors"
+          className="p-2 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
           title={t('artwork.edit.zoomIn')}
         >
           <ZoomIn className="w-5 h-5" />
@@ -376,7 +376,7 @@ export function ImageCropper({
         <button
           type="button"
           onClick={handleReset}
-          className="p-2 rounded-lg hover:bg-muted transition-colors ml-2"
+          className="p-2 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors ml-2"
           title={t('artwork.edit.resetZoom')}
         >
           <RotateCcw className="w-5 h-5" />
@@ -388,7 +388,7 @@ export function ImageCropper({
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 rounded-lg border hover:bg-muted transition-colors"
+          className="px-4 py-2 rounded-lg border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
         >
           {t('common.cancel')}
         </button>
@@ -396,7 +396,7 @@ export function ImageCropper({
           type="button"
           onClick={handleCrop}
           disabled={!imageLoaded}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-all duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
         >
           {t('artwork.edit.crop')}
         </button>

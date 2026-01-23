@@ -78,20 +78,29 @@ pub async fn get_running(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| ScanProgress {
-        id: r.id.expect("scan_progress id cannot be null"),
-        library_source_id: r.library_source_id,
-        started_at: r.started_at,
-        completed_at: r.completed_at,
-        total_files: r.total_files,
-        processed_files: r.processed_files,
-        new_files: r.new_files,
-        updated_files: r.updated_files,
-        removed_files: r.removed_files,
-        errors: r.errors,
-        status: ScanProgressStatus::from_str(&r.status).unwrap_or(ScanProgressStatus::Running),
-        error_message: r.error_message,
-    }))
+    match row {
+        Some(r) => match r.id {
+            Some(id) => Ok(Some(ScanProgress {
+                id,
+                library_source_id: r.library_source_id,
+                started_at: r.started_at,
+                completed_at: r.completed_at,
+                total_files: r.total_files,
+                processed_files: r.processed_files,
+                new_files: r.new_files,
+                updated_files: r.updated_files,
+                removed_files: r.removed_files,
+                errors: r.errors,
+                status: ScanProgressStatus::from_str(&r.status)
+                    .unwrap_or(ScanProgressStatus::Running),
+                error_message: r.error_message,
+            })),
+            None => Err(crate::StorageError::MissingField(
+                "scan_progress.id".to_string(),
+            )),
+        },
+        None => Ok(None),
+    }
 }
 
 /// Get the most recent scan for a library source
@@ -111,20 +120,29 @@ pub async fn get_latest(pool: &SqlitePool, library_source_id: i64) -> Result<Opt
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| ScanProgress {
-        id: r.id.expect("scan_progress id cannot be null"),
-        library_source_id: r.library_source_id,
-        started_at: r.started_at,
-        completed_at: r.completed_at,
-        total_files: r.total_files,
-        processed_files: r.processed_files,
-        new_files: r.new_files,
-        updated_files: r.updated_files,
-        removed_files: r.removed_files,
-        errors: r.errors,
-        status: ScanProgressStatus::from_str(&r.status).unwrap_or(ScanProgressStatus::Running),
-        error_message: r.error_message,
-    }))
+    match row {
+        Some(r) => match r.id {
+            Some(id) => Ok(Some(ScanProgress {
+                id,
+                library_source_id: r.library_source_id,
+                started_at: r.started_at,
+                completed_at: r.completed_at,
+                total_files: r.total_files,
+                processed_files: r.processed_files,
+                new_files: r.new_files,
+                updated_files: r.updated_files,
+                removed_files: r.removed_files,
+                errors: r.errors,
+                status: ScanProgressStatus::from_str(&r.status)
+                    .unwrap_or(ScanProgressStatus::Running),
+                error_message: r.error_message,
+            })),
+            None => Err(crate::StorageError::MissingField(
+                "scan_progress.id".to_string(),
+            )),
+        },
+        None => Ok(None),
+    }
 }
 
 /// Start a new scan for a library source

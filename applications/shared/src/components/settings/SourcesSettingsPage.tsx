@@ -306,7 +306,7 @@ export function SourcesSettingsPage() {
       <section className="border border-border rounded-lg overflow-hidden">
         <button
           onClick={() => toggleSection('servers')}
-          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
+          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <div className="flex items-center gap-3">
             <Cloud className="w-5 h-5 text-primary" />
@@ -398,7 +398,7 @@ export function SourcesSettingsPage() {
                           <button
                             onClick={() => handleAuthenticate(source.id)}
                             disabled={authenticating || !authUsername.trim() || !authPassword.trim()}
-                            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                           >
                             {authenticating ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -413,7 +413,7 @@ export function SourcesSettingsPage() {
                               setAuthUsername('');
                               setAuthPassword('');
                             }}
-                            className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80"
+                            className="px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
                           >
                             {t('common.cancel')}
                           </button>
@@ -453,7 +453,7 @@ export function SourcesSettingsPage() {
                       {!source.isAuthenticated ? (
                         <button
                           onClick={() => setAuthSourceId(source.id)}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] text-sm"
                         >
                           <LogIn className="w-4 h-4" />
                           {t('sources.signIn')}
@@ -463,7 +463,7 @@ export function SourcesSettingsPage() {
                           {!source.isActive && (
                             <button
                               onClick={() => handleSetActive(source.id)}
-                              className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-muted/80 text-sm"
+                              className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm"
                             >
                               <Check className="w-4 h-4" />
                               {t('sources.setActive')}
@@ -472,14 +472,14 @@ export function SourcesSettingsPage() {
                           <button
                             onClick={() => handleSyncFromServer(source.id)}
                             disabled={syncingSourceId !== null}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-muted/80 text-sm disabled:opacity-50"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm disabled:opacity-[var(--disabled-opacity)]"
                           >
                             <Download className="w-4 h-4" />
                             {t('sources.syncFromServer')}
                           </button>
                           <button
                             onClick={() => handleLogout(source.id)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-muted/80 text-sm"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm"
                           >
                             <LogOut className="w-4 h-4" />
                             {t('sources.signOut')}
@@ -522,7 +522,7 @@ export function SourcesSettingsPage() {
                   <button
                     onClick={handleTestConnection}
                     disabled={testingConnection || !newServerUrl.trim()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-muted/80 text-sm disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] text-sm disabled:opacity-[var(--disabled-opacity)]"
                   >
                     {testingConnection ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -552,7 +552,7 @@ export function SourcesSettingsPage() {
                   <button
                     onClick={handleAddServer}
                     disabled={!newServerName.trim() || !newServerUrl.trim()}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)]"
                   >
                     <Check className="w-4 h-4" />
                     {t('common.save')}
@@ -564,7 +564,7 @@ export function SourcesSettingsPage() {
                       setNewServerUrl('');
                       setConnectionTestResult(null);
                     }}
-                    className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80"
+                    className="px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
                   >
                     {t('common.cancel')}
                   </button>
@@ -573,7 +573,7 @@ export function SourcesSettingsPage() {
             ) : (
               <button
                 onClick={() => setAddingServer(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
               >
                 <Plus className="w-4 h-4" />
                 {t('sources.addServer')}

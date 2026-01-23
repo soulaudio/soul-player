@@ -89,74 +89,115 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
 
   // Tauri file drop events (dragDropEnabled: true)
   useEffect(() => {
-    let unlistenDrop: (() => void) | null = null;
-    let unlistenHover: (() => void) | null = null;
-    let unlistenCancel: (() => void) | null = null;
+    console.log('[FileDropHandler] Setting up file drop listeners');
+    const unlistenFunctions: (() => void)[] = [];
+    let isMounted = true;
 
     const setupListeners = async () => {
-      // Listen for file drop
-      unlistenDrop = await listen(TauriEvent.DRAG_DROP, async (event) => {
-        setIsDragging(false);
-
-        // Normalize payload to always be an array of strings
-        let paths: string[];
-        const payload = event.payload;
-
-        if (typeof payload === 'string') {
-          paths = [payload];
-        } else if (Array.isArray(payload)) {
-          paths = payload;
-        } else if (payload && typeof payload === 'object' && 'paths' in payload) {
-          paths = Array.isArray((payload as { paths: string[] }).paths)
-            ? (payload as { paths: string[] }).paths
-            : [(payload as { paths: string }).paths];
-        } else {
-          console.error('Unexpected payload format:', payload);
+      try {
+        if (!isMounted) {
+          console.log('[FileDropHandler] Component unmounted before setup, aborting');
           return;
         }
 
-        await processFilePaths(paths);
-      });
+        // Listen for file drop
+        const unlistenDrop = await listen(TauriEvent.DRAG_DROP, async (event) => {
+          if (!isMounted) return;
+          console.log('[FileDropHandler] File drop event received');
+          setIsDragging(false);
 
-      // Listen for drag hover
-      unlistenHover = await listen(TauriEvent.DRAG_ENTER, () => {
-        setIsDragging(true);
-      });
+          // Normalize payload to always be an array of strings
+          let paths: string[];
+          const payload = event.payload;
 
-      // Listen for drag leave
-      unlistenCancel = await listen(TauriEvent.DRAG_LEAVE, () => {
-        setIsDragging(false);
-      });
+          if (typeof payload === 'string') {
+            paths = [payload];
+          } else if (Array.isArray(payload)) {
+            paths = payload;
+          } else if (payload && typeof payload === 'object' && 'paths' in payload) {
+            paths = Array.isArray((payload as { paths: string[] }).paths)
+              ? (payload as { paths: string[] }).paths
+              : [(payload as { paths: string }).paths];
+          } else {
+            console.error('[FileDropHandler] Unexpected payload format:', payload);
+            return;
+          }
+
+          console.log('[FileDropHandler] Processing', paths.length, 'file(s)');
+          await processFilePaths(paths);
+        });
+        unlistenFunctions.push(unlistenDrop);
+        console.log('[FileDropHandler] DRAG_DROP listener registered');
+
+        // Listen for drag hover
+        const unlistenHover = await listen(TauriEvent.DRAG_ENTER, () => {
+          if (!isMounted) return;
+          console.log('[FileDropHandler] Drag enter detected');
+          setIsDragging(true);
+        });
+        unlistenFunctions.push(unlistenHover);
+        console.log('[FileDropHandler] DRAG_ENTER listener registered');
+
+        // Listen for drag leave
+        const unlistenCancel = await listen(TauriEvent.DRAG_LEAVE, () => {
+          if (!isMounted) return;
+          console.log('[FileDropHandler] Drag leave detected');
+          setIsDragging(false);
+        });
+        unlistenFunctions.push(unlistenCancel);
+        console.log('[FileDropHandler] DRAG_LEAVE listener registered');
+
+        console.log('[FileDropHandler] All file drop listeners registered successfully');
+      } catch (error) {
+        console.error('[FileDropHandler] Failed to set up listeners:', error);
+      }
     };
 
-    setupListeners();
+    void setupListeners();
 
     return () => {
-      if (unlistenDrop) unlistenDrop();
-      if (unlistenHover) unlistenHover();
-      if (unlistenCancel) unlistenCancel();
+      console.log('[FileDropHandler] Cleaning up file drop listeners, count:', unlistenFunctions.length);
+      isMounted = false;
+      unlistenFunctions.forEach(fn => fn());
     };
-  }, [processFilePaths]);
+  }, []); // Remove processFilePaths dependency to prevent listener leak
 
   // Listen for files opened via file association (double-click on audio files)
   useEffect(() => {
-    let unlistenFilesOpened: (() => void) | null = null;
+    console.log('[FileDropHandler] Setting up files-opened listener');
+    const unlistenFunctions: (() => void)[] = [];
+    let isMounted = true;
 
     const setupListener = async () => {
-      unlistenFilesOpened = await listen<string[]>('files-opened', async (event) => {
-        const paths = event.payload;
-        if (paths && paths.length > 0) {
-          await processFilePaths(paths);
+      try {
+        if (!isMounted) {
+          console.log('[FileDropHandler] Component unmounted before files-opened setup, aborting');
+          return;
         }
-      });
+
+        const unlistenFilesOpened = await listen<string[]>('files-opened', async (event) => {
+          if (!isMounted) return;
+          const paths = event.payload;
+          console.log('[FileDropHandler] files-opened event received, count:', paths?.length || 0);
+          if (paths && paths.length > 0) {
+            await processFilePaths(paths);
+          }
+        });
+        unlistenFunctions.push(unlistenFilesOpened);
+        console.log('[FileDropHandler] files-opened listener registered');
+      } catch (error) {
+        console.error('[FileDropHandler] Failed to set up files-opened listener:', error);
+      }
     };
 
-    setupListener();
+    void setupListener();
 
     return () => {
-      if (unlistenFilesOpened) unlistenFilesOpened();
+      console.log('[FileDropHandler] Cleaning up files-opened listener');
+      isMounted = false;
+      unlistenFunctions.forEach(fn => fn());
     };
-  }, [processFilePaths]);
+  }, []); // Empty dependency array to prevent listener leak
 
   // Internal play handler that takes files directly
   const handlePlayInternal = async (files: DroppedFile[]) => {
@@ -297,7 +338,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
               <h2 className="text-lg font-semibold">{t('import.fileDropped')}</h2>
               <button
                 onClick={handleClose}
-                className="p-2 hover:bg-accent rounded-full transition-colors"
+                className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-full transition-colors duration-[var(--transition-duration)]"
                 disabled={loading}
               >
                 <X className="w-4 h-4" />
@@ -347,7 +388,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
                 <button
                   onClick={handlePlay}
                   disabled={loading}
-                  className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-primary bg-primary/5 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                 >
                   {loading ? (
                     <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -363,7 +404,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
                 <button
                   onClick={handleImport}
                   disabled={loading}
-                  className="w-full flex items-center gap-3 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center gap-3 p-4 rounded-lg border hover:border-primary hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                 >
                   {loading ? (
                     <Loader2 className="w-6 h-6 animate-spin" />

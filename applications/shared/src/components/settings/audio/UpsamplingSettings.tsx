@@ -116,7 +116,7 @@ export function UpsamplingSettings({
                   relative text-left p-4 rounded-lg border-2 transition-all
                   ${isSelected
                     ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                    : 'border-border hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
                   }
                 `}
               >
@@ -186,7 +186,7 @@ export function UpsamplingSettings({
         <div>
           <label className="text-sm font-medium mb-2 block">Resampling Engine</label>
           <div className="space-y-2">
-            <label className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 cursor-pointer">
+            <label className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-foreground/[var(--hover-bg-opacity)] cursor-pointer">
               <input
                 type="radio"
                 name="backend"
@@ -202,7 +202,7 @@ export function UpsamplingSettings({
                 </div>
               </div>
             </label>
-            <label className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 cursor-pointer">
+            <label className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-foreground/[var(--hover-bg-opacity)] cursor-pointer">
               <input
                 type="radio"
                 name="backend"
@@ -220,7 +220,7 @@ export function UpsamplingSettings({
             </label>
             <label
               className={`flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer ${
-                r8brainAvailable ? 'hover:bg-muted/30' : 'opacity-50 cursor-not-allowed'
+                r8brainAvailable ? 'hover:bg-foreground/[var(--hover-bg-opacity)]' : 'opacity-50 cursor-not-allowed'
               }`}
             >
               <input

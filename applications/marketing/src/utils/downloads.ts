@@ -37,7 +37,6 @@ export interface LinuxDownload {
   filePattern: string
   displayName: string
   description: string
-  recommended: boolean
   installCommand?: string
   isAur?: boolean
 }
@@ -52,35 +51,30 @@ export const LINUX_DOWNLOADS: LinuxDownload[] = [
     filePattern: 'soul-player_{version}_x86_64.AppImage',
     displayName: 'AppImage (Universal)',
     description: 'Works on all Linux distributions. No installation required.',
-    recommended: true,
   },
   {
     id: 'flatpak',
     filePattern: 'io.github.soulaudio.SoulPlayer_{version}_x86_64.flatpak',
     displayName: 'Flatpak',
     description: 'Sandboxed universal package. Install: flatpak install <file>',
-    recommended: false,
   },
   {
     id: 'deb',
     filePattern: 'Soul.Player_{version}_amd64.deb',
     displayName: 'Debian/Ubuntu (.deb)',
     description: 'For Debian, Ubuntu, Linux Mint, Pop!_OS',
-    recommended: false,
   },
   {
     id: 'rpm',
     filePattern: 'Soul.Player-{version}-1.x86_64.rpm',
     displayName: 'Fedora/RHEL (.rpm)',
     description: 'For Fedora, RHEL, CentOS, openSUSE',
-    recommended: false,
   },
   {
     id: 'aur',
     filePattern: '',
     displayName: 'Arch Linux (AUR)',
     description: 'Install via your favorite AUR helper (yay, paru, etc.)',
-    recommended: false,
     installCommand: 'yay -S soul-player',
     isAur: true,
   },

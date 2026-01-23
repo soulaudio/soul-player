@@ -1,10 +1,20 @@
-import { X, Download } from 'lucide-react';
+import { X, Download, Terminal, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 interface UpdateInfo {
   version: string;
   date?: string;
   body?: string;
+}
+
+interface InstallationInfo {
+  method: {
+    type: 'appimage' | 'deb' | 'rpm' | 'flatpak' | 'snap' | 'aur' | 'unknown';
+  };
+  update_command: string | null;
+  supports_auto_update: boolean;
 }
 
 interface UpdateDialogProps {
@@ -25,8 +35,30 @@ export function UpdateDialog({
   progress = 0,
 }: UpdateDialogProps) {
   const { t } = useTranslation();
+  const [installationInfo, setInstallationInfo] = useState<InstallationInfo | null>(null);
+  const [commandCopied, setCommandCopied] = useState(false);
+
+  // Fetch installation info when dialog opens
+  useEffect(() => {
+    if (open) {
+      invoke<InstallationInfo>('get_installation_info')
+        .then(setInstallationInfo)
+        .catch((err) => console.error('Failed to get installation info:', err));
+    }
+  }, [open]);
+
+  const handleCopyCommand = () => {
+    if (installationInfo?.update_command) {
+      navigator.clipboard.writeText(installationInfo.update_command);
+      setCommandCopied(true);
+      setTimeout(() => setCommandCopied(false), 2000);
+    }
+  };
 
   if (!open || !updateInfo) return null;
+
+  const supportsAutoUpdate = installationInfo?.supports_auto_update ?? true;
+  const updateCommand = installationInfo?.update_command;
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget && !isInstalling) {
@@ -55,7 +87,7 @@ export function UpdateDialog({
           </div>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
             disabled={isInstalling}
           >
             <X className="w-5 h-5" />
@@ -76,6 +108,46 @@ export function UpdateDialog({
               <p className="text-sm font-medium mb-2">{t('updateDialog.releaseNotes')}</p>
               <div className="text-sm text-muted-foreground max-h-48 overflow-y-auto bg-accent/20 rounded p-3 whitespace-pre-wrap">
                 {updateInfo.body}
+              </div>
+              {/* Extract GitHub release URL from notes if present */}
+              {updateInfo.body.match(/https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/tag\/[^\s)]+/) && (
+                <a
+                  href={updateInfo.body.match(/https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/tag\/[^\s)]+/)?.[0]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary hover:underline mt-2 inline-block"
+                >
+                  {t('updateDialog.viewFullReleaseNotes')}
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Package manager update instructions */}
+          {!supportsAutoUpdate && updateCommand && (
+            <div className="p-4 bg-accent/30 rounded-lg border border-border space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {t('updateDialog.packageManagerUpdateRequired')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('updateDialog.packageManagerUpdateDescription')}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <code className="flex-1 px-3 py-2 bg-background border rounded text-xs font-mono">
+                      {updateCommand}
+                    </code>
+                    <button
+                      onClick={handleCopyCommand}
+                      className="px-3 py-2 bg-primary/10 hover:bg-foreground/[var(--hover-bg-opacity)] text-primary rounded text-sm font-medium transition-colors duration-[var(--transition-duration)] flex items-center gap-1.5"
+                    >
+                      <Terminal className="w-3.5 h-3.5" />
+                      {commandCopied ? t('updateDialog.copied') : t('updateDialog.copy')}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -100,21 +172,33 @@ export function UpdateDialog({
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded hover:bg-accent transition-colors"
+            className="px-4 py-2 rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             disabled={isInstalling}
           >
             {t('updateDialog.later')}
           </button>
-          <button
-            onClick={onInstall}
-            disabled={isInstalling}
-            className={`px-4 py-2 rounded transition-colors bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 ${
-              isInstalling ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-          >
-            <Download className="w-4 h-4" />
-            {isInstalling ? t('updateDialog.installing') : t('updateDialog.installNow')}
-          </button>
+          {supportsAutoUpdate ? (
+            <button
+              onClick={onInstall}
+              disabled={isInstalling}
+              className={`px-4 py-2 rounded transition-opacity duration-[var(--transition-duration)] bg-primary hover:opacity-[var(--hover-button-opacity)] text-primary-foreground flex items-center gap-2 ${
+                isInstalling ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              <Download className="w-4 h-4" />
+              {isInstalling ? t('updateDialog.installing') : t('updateDialog.installNow')}
+            </button>
+          ) : (
+            <a
+              href={`https://github.com/soulaudio/soul-player/releases/tag/v${updateInfo.version}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded bg-primary hover:opacity-[var(--hover-button-opacity)] text-primary-foreground flex items-center gap-2 transition-opacity duration-[var(--transition-duration)]"
+            >
+              <Download className="w-4 h-4" />
+              {t('updateDialog.viewRelease')}
+            </a>
+          )}
         </div>
       </div>
     </div>

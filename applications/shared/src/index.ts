@@ -48,8 +48,25 @@ export type {
   BackendPlaylist,
   BackendGenre,
   DatabaseHealth,
+  PlaybackContext,
   PlaybackContext as BackendPlaybackContext,
   SetArtworkParams,
+  EffectSlot,
+  EffectType,
+  EqBand,
+  CompressorSettings,
+  LimiterSettings,
+  CrossfeedSettings,
+  StereoSettings,
+  GraphicEqSettings,
+  ConvolutionSettings,
+  HeadroomSettings,
+  LatencyInfo,
+  ExclusiveConfig,
+  AnalysisQueueStats,
+  AnalysisWorkerStatus,
+  AudioBackend,
+  AudioDevice,
 } from './contexts/BackendContext';
 
 export { ScrollVisibilityProvider, useScrollVisibility } from './contexts/ScrollVisibilityContext';
@@ -62,9 +79,15 @@ export { AbstractBackendProvider, createBackendProvider } from './providers/Abst
 export { MockBackendProvider } from './providers/MockBackendProvider';
 export { ServerBackendProvider } from './providers/ServerBackendProvider';
 
+// Web Playback Provider (for marketing demo and future web player)
+export { WebPlaybackProvider } from './providers/WebPlaybackProvider';
+
 // Demo Storage
 export { DemoStorage } from './lib/demo-storage';
 export type { DemoTrack, DemoAlbum, DemoPlaylist, DemoData } from './lib/demo-storage';
+
+// Storage interfaces
+export type { PlaybackDataStorage } from './types/storage';
 
 // Utils
 export { cn, formatDuration, formatBytes, formatRelativeTime, debounce, throttle } from './lib/utils';
@@ -80,6 +103,7 @@ export { debug } from './utils/debug';
 export { themeManager, ThemeManager } from './theme/ThemeManager';
 export { builtInThemes, defaultTheme, lightTheme, darkTheme, oceanTheme } from './theme/themes';
 export { ThemeProvider } from './theme/ThemeProvider';
+export { ThemePicker } from './theme/components/ThemePicker';
 export { useTheme } from './theme/useTheme';
 export * from './theme/types';
 
@@ -143,6 +167,11 @@ export { PlaylistPage } from './pages/PlaylistPage';
 export { NowPlayingPage } from './pages/NowPlayingPage';
 export { SettingsPage } from './pages/SettingsPage';
 export type { SettingsHandlers, ShortcutsSettingsProps } from './pages/SettingsPage';
+export { SettingsLayout } from './components/settings/SettingsLayout';
+export { AudioSettingsPage } from './components/settings/AudioSettingsPage';
+export { LibrarySettingsPage } from './components/settings/LibrarySettingsPage';
+export { ReportBugSettingsPage } from './components/settings/ReportBugSettingsPage';
+export { DataManagementSettingsPage } from './components/settings/DataManagementSettingsPage';
 
 // Shared components
 export { AlbumCard, type AlbumCardAlbum } from './components/AlbumCard';

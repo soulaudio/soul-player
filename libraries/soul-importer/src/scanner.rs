@@ -71,9 +71,15 @@ impl FileScanner {
                 continue;
             }
 
-            // Skip macOS metadata files (._*)
+            // Skip macOS metadata files
             if let Some(filename) = path.file_name() {
-                if filename.to_string_lossy().starts_with("._") {
+                let filename_str = filename.to_string_lossy();
+                if filename_str.starts_with("._")      // AppleDouble resource forks
+                    || filename_str == ".DS_Store"     // Finder metadata
+                    || filename_str == ".localized"    // Localization markers
+                    || filename_str == "Icon\r"
+                // Custom folder icons
+                {
                     continue;
                 }
             }

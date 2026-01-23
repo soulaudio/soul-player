@@ -127,7 +127,7 @@ export function ImportToServerDialog({
           <button
             onClick={handleClose}
             disabled={isUploading}
-            className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -230,10 +230,10 @@ export function ImportToServerDialog({
                       <button
                         key={server.id}
                         onClick={() => setSelectedSourceId(server.id)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all duration-[var(--transition-duration)] ${
                           selectedSourceId === server.id
                             ? 'border-primary bg-primary/5'
-                            : 'border-muted hover:border-primary/50'
+                            : 'border-muted hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
                         }`}
                       >
                         <Server className={`w-5 h-5 ${selectedSourceId === server.id ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -261,11 +261,11 @@ export function ImportToServerDialog({
                     <button
                       onClick={() => setUploadMode('selected')}
                       disabled={selectedTrackIds.length === 0}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors duration-[var(--transition-duration)] ${
                         uploadMode === 'selected'
                           ? 'border-primary bg-primary/5'
-                          : 'border-muted hover:border-primary/50'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          : 'border-muted hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
+                      } disabled:opacity-[var(--disabled-opacity)] disabled:cursor-not-allowed`}
                     >
                       <Music className={`w-5 h-5 ${uploadMode === 'selected' ? 'text-primary' : 'text-muted-foreground'}`} />
                       <div className="text-left flex-1">
@@ -282,10 +282,10 @@ export function ImportToServerDialog({
                     {onSyncLibrary && (
                       <button
                         onClick={() => setUploadMode('library')}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors duration-[var(--transition-duration)] ${
                           uploadMode === 'library'
                             ? 'border-primary bg-primary/5'
-                            : 'border-muted hover:border-primary/50'
+                            : 'border-muted hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
                         }`}
                       >
                         <Music className={`w-5 h-5 ${uploadMode === 'library' ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -329,7 +329,7 @@ export function ImportToServerDialog({
                               />
                               <button
                                 onClick={handleSelectFolder}
-                                className="px-3 py-2 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
+                                className="px-3 py-2 bg-muted rounded-md text-sm hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
                               >
                                 {t('common.browse', 'Browse')}
                               </button>
@@ -350,7 +350,7 @@ export function ImportToServerDialog({
           {uploadComplete ? (
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-colors"
             >
               {t('common.done', 'Done')}
             </button>
@@ -359,14 +359,14 @@ export function ImportToServerDialog({
               <button
                 onClick={handleClose}
                 disabled={isUploading}
-                className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
               >
                 {t('common.cancel', 'Cancel')}
               </button>
               <button
                 onClick={handleUpload}
                 disabled={!canUpload() || isUploading || availableServers.length === 0}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)] transition-colors flex items-center gap-2"
               >
                 {isUploading ? (
                   <>

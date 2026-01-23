@@ -435,7 +435,7 @@ export function ParametricEqEditor({
             <button
               data-testid="eq-preset-select"
               onClick={() => setShowPresets(!showPresets)}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
             >
               {t('parametricEq.presets', 'Presets')}
               <ChevronDown className={`w-4 h-4 transition-transform ${showPresets ? 'rotate-180' : ''}`} />
@@ -446,7 +446,7 @@ export function ParametricEqEditor({
                   <button
                     key={preset.name}
                     onClick={() => applyPreset(preset)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
                   >
                     {t(preset.name, preset.name.split('.')[1])}
                   </button>
@@ -458,7 +458,7 @@ export function ParametricEqEditor({
           {/* Reset button */}
           <button
             onClick={resetToFlat}
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+            className="p-1.5 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] hover:bg-foreground/[var(--hover-bg-opacity)] rounded transition-all duration-[var(--transition-duration)]"
             title={t('parametricEq.resetToFlat', 'Reset to flat')}
           >
             <RotateCcw className="w-4 h-4" />
@@ -646,7 +646,7 @@ export function ParametricEqEditor({
             data-testid="eq-add-band-btn"
             onClick={addBand}
             disabled={normalizedBands.length >= MAX_BANDS}
-            className="flex items-center gap-1 px-2 py-1 text-sm border border-border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-2 py-1 text-sm border border-border rounded hover:bg-foreground/[var(--hover-bg-opacity)] disabled:opacity-[var(--disabled-opacity)] disabled:cursor-not-allowed transition-colors"
           >
             <Plus className="w-4 h-4" />
             {t('parametricEq.addBand', 'Add Band')}
@@ -681,7 +681,7 @@ export function ParametricEqEditor({
                     toggleBand(index);
                   }}
                   className={`p-1.5 rounded transition-colors ${
-                    band.enabled ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'
+                    band.enabled ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)]'
                   }`}
                   title={band.enabled ? t('parametricEq.disable', 'Disable') : t('parametricEq.enable', 'Enable')}
                 >

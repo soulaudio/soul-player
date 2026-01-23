@@ -198,7 +198,12 @@ fn parse_backend(backend_str: &str) -> Result<AudioBackend, String> {
 pub async fn get_audio_backends() -> Result<Vec<FrontendBackendInfo>, String> {
     tracing::debug!("[audio_settings] Getting available backends");
 
-    let backends = backend::get_backend_info();
+    // Wrap blocking device enumeration in spawn_blocking to avoid blocking Tokio runtime
+    // This is critical on macOS where CoreAudio enumeration can take 100-500ms
+    let backends = tokio::task::spawn_blocking(|| backend::get_backend_info())
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?;
+
     let frontend_backends: Vec<FrontendBackendInfo> = backends
         .into_iter()
         .map(FrontendBackendInfo::from)
@@ -230,7 +235,13 @@ pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDevice
     );
 
     let backend = parse_backend(&backend_str)?;
-    let devices = device::list_devices(backend).map_err(|e| e.to_string())?;
+
+    // Wrap blocking device enumeration in spawn_blocking to avoid blocking Tokio runtime
+    // This is critical on macOS where CoreAudio enumeration can take 100-500ms
+    let devices = tokio::task::spawn_blocking(move || device::list_devices(backend))
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+        .map_err(|e| e.to_string())?;
 
     let frontend_devices: Vec<FrontendDeviceInfo> =
         devices.into_iter().map(FrontendDeviceInfo::from).collect();
@@ -273,8 +284,14 @@ pub async fn set_audio_device(
 
     let backend = parse_backend(&backend_str)?;
 
-    // Verify device exists
-    let _device = device::find_device_by_name(backend, &device_name).map_err(|e| e.to_string())?;
+    // Verify device exists (wrap in spawn_blocking to avoid blocking Tokio runtime)
+    let device_name_clone = device_name.clone();
+    let _device = tokio::task::spawn_blocking(move || {
+        device::find_device_by_name(backend, &device_name_clone)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| e.to_string())?;
     tracing::debug!(device_name = %device_name, "[audio_settings] Device found");
 
     // Switch the playback device
@@ -320,7 +337,20 @@ pub async fn set_audio_device(
 
 /// Initialize audio device from saved settings
 ///
-/// Called on app startup to restore the previously selected device
+/// Called on app startup to restore the previously selected device.
+///
+/// This function implements comprehensive error recovery to handle:
+/// - Cross-platform device name mismatches (Windows device on Linux)
+/// - Removed/unplugged devices
+/// - Invalid backend strings (ASIO on Linux, etc.)
+/// - Corrupted JSON in database
+/// - Missing required fields
+///
+/// ## Recovery Strategy
+/// 1. If device not found → Keep current default, update saved setting
+/// 2. If backend invalid → Fallback to default backend
+/// 3. If JSON corrupted → Log error, use default device
+/// 4. If device switch fails → Keep current device, log warning
 pub async fn initialize_audio_device(
     playback: &PlaybackManager,
     app_state: &AppState,
@@ -338,35 +368,173 @@ pub async fn initialize_audio_device(
     .map_err(|e| format!("Failed to load device setting: {}", e))?;
 
     if let Some((value,)) = saved_setting {
-        // Parse saved settings
-        let settings: serde_json::Value = serde_json::from_str(&value)
-            .map_err(|e| format!("Failed to parse device settings: {}", e))?;
+        // Parse saved settings with error recovery
+        let settings: serde_json::Value = match serde_json::from_str(&value) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    raw_value = %value,
+                    "[audio_settings] Failed to parse device settings JSON - using default device"
+                );
+                // Clear corrupted setting
+                if let Err(e) =
+                    sqlx::query("DELETE FROM user_settings WHERE user_id = ? AND key = ?")
+                        .bind(&app_state.user_id)
+                        .bind("audio.output_device")
+                        .execute(&*app_state.pool)
+                        .await
+                {
+                    tracing::warn!(
+                        error = %e,
+                        "[audio_settings] Failed to delete corrupted device setting"
+                    );
+                }
+                return Ok(());
+            }
+        };
 
-        if let (Some(backend_str), Some(device_name)) = (
-            settings.get("backend").and_then(|v| v.as_str()),
-            settings.get("device_name").and_then(|v| v.as_str()),
-        ) {
-            let backend = parse_backend(backend_str)?;
-            let device_name = if device_name.is_empty() {
+        // Extract backend and device name with validation
+        let backend_str = match settings.get("backend").and_then(|v| v.as_str()) {
+            Some(s) if !s.is_empty() => s,
+            _ => {
+                tracing::warn!(
+                    "[audio_settings] Missing or empty backend in settings - using default"
+                );
+                return Ok(());
+            }
+        };
+
+        let device_name = settings.get("device_name").and_then(|v| v.as_str());
+
+        // Parse and validate backend
+        let backend = match parse_backend(backend_str) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!(
+                    backend_str = %backend_str,
+                    error = %e,
+                    "[audio_settings] Invalid backend in settings - possible causes: \
+                     (1) app compiled without this backend feature (e.g., ASIO on Linux), \
+                     (2) settings from different platform (e.g., ASIO from Windows), \
+                     (3) unknown backend string - falling back to default"
+                );
+                // Clear invalid backend setting
+                if let Err(e) =
+                    sqlx::query("DELETE FROM user_settings WHERE user_id = ? AND key = ?")
+                        .bind(&app_state.user_id)
+                        .bind("audio.output_device")
+                        .execute(&*app_state.pool)
+                        .await
+                {
+                    tracing::warn!(
+                        error = %e,
+                        "[audio_settings] Failed to delete invalid backend setting"
+                    );
+                }
+                return Ok(());
+            }
+        };
+
+        // Convert device name: trim whitespace, treat empty as None
+        // Trimming handles user copy-paste errors and UI bugs that add leading/trailing spaces
+        let device_name_opt = if let Some(name) = device_name {
+            let trimmed = name.trim();
+            if trimmed.is_empty() {
                 None
             } else {
-                Some(device_name.to_string())
-            };
+                Some(trimmed.to_string())
+            }
+        } else {
+            None
+        };
 
-            tracing::info!(
-                backend = ?backend,
-                device_name = ?device_name,
-                "[audio_settings] Restoring saved device"
-            );
+        tracing::info!(
+            backend = ?backend,
+            device_name = ?device_name_opt,
+            "[audio_settings] Restoring saved device"
+        );
 
-            // Switch to saved device
-            playback
-                .switch_device(backend, device_name)
-                .map_err(|e| format!("Failed to restore device: {}", e))?;
+        // Verify device exists before switching (with spawn_blocking for I/O-heavy enumeration)
+        if let Some(ref name) = device_name_opt {
+            let name_clone = name.clone();
+            let device_check = tokio::task::spawn_blocking(move || {
+                device::find_device_by_name(backend, &name_clone)
+            })
+            .await
+            .map_err(|e| format!("Task join error: {}", e))?;
 
-            tracing::info!("[audio_settings] Device restored successfully");
-            return Ok(());
+            if let Err(e) = device_check {
+                tracing::warn!(
+                    device_name = %name,
+                    backend = ?backend,
+                    error = %e,
+                    "[audio_settings] Saved device not found - possible causes: \
+                     (1) cross-platform mismatch (device name from different OS), \
+                     (2) device unplugged/removed, \
+                     (3) backend/device format mismatch (ASIO name with WASAPI backend)"
+                );
+
+                // Fallback: Keep current device and update saved setting
+                let current_backend = playback.get_current_backend();
+                let current_device = playback.get_current_device();
+
+                tracing::info!(
+                    backend = ?current_backend,
+                    device_name = %current_device,
+                    "[audio_settings] Updating saved setting to current device"
+                );
+
+                // Update the saved setting with the actual current device
+                let new_settings = serde_json::json!({
+                    "backend": match current_backend {
+                        AudioBackend::Default => "default",
+                        #[cfg(all(target_os = "windows", feature = "asio"))]
+                        AudioBackend::Asio => "asio",
+                        #[cfg(feature = "jack")]
+                        AudioBackend::Jack => "jack",
+                        #[allow(unreachable_patterns)]
+                        _ => "default",
+                    },
+                    "device_name": current_device,
+                });
+
+                let now = chrono::Utc::now().timestamp();
+                if let Err(e) = sqlx::query(
+                    "UPDATE user_settings SET value = ?, updated_at = ? WHERE user_id = ? AND key = ?"
+                )
+                .bind(new_settings.to_string())
+                .bind(now)
+                .bind(&app_state.user_id)
+                .bind("audio.output_device")
+                .execute(&*app_state.pool)
+                .await
+                {
+                    tracing::error!(
+                        error = %e,
+                        "[audio_settings] Failed to update device setting - continuing anyway"
+                    );
+                }
+
+                return Ok(());
+            }
         }
+
+        // Device exists, attempt to switch to it
+        match playback.switch_device(backend, device_name_opt) {
+            Ok(()) => {
+                tracing::info!("[audio_settings] Device restored successfully");
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "[audio_settings] Failed to switch to saved device - keeping default"
+                );
+                // Don't return error - app should continue with default device
+            }
+        }
+
+        return Ok(());
     }
 
     tracing::info!("[audio_settings] No saved device found, using default");
@@ -397,14 +565,19 @@ pub async fn get_current_audio_device(
     };
 
     // Try to get device info by listing all devices and finding the matching one
-    let (channels, is_default) = match device::list_devices(backend) {
-        Ok(devices) => devices
-            .into_iter()
-            .find(|d| d.name == device_name)
-            .map(|d| (Some(d.channels), d.is_default))
-            .unwrap_or((None, false)),
-        Err(_) => (None, false),
-    };
+    // Wrap in spawn_blocking to avoid blocking Tokio runtime (CoreAudio enumeration can take 100-500ms on macOS)
+    let (channels, is_default) =
+        match tokio::task::spawn_blocking(move || device::list_devices(backend))
+            .await
+            .map_err(|e| format!("Task join error: {}", e))
+        {
+            Ok(Ok(devices)) => devices
+                .into_iter()
+                .find(|d| d.name == device_name)
+                .map(|d| (Some(d.channels), d.is_default))
+                .unwrap_or((None, false)),
+            _ => (None, false),
+        };
 
     tracing::debug!(
         device_name = %device_name,
@@ -482,7 +655,16 @@ pub async fn get_device_capabilities(
     );
 
     let backend = parse_backend(&backend_str)?;
-    let caps = device::get_device_capabilities(backend, &device_name).map_err(|e| e.to_string())?;
+
+    // Wrap in spawn_blocking to avoid blocking Tokio runtime
+    // Device capability detection can query 50+ configs on macOS (100-500ms)
+    let device_name_clone = device_name.clone();
+    let caps = tokio::task::spawn_blocking(move || {
+        device::get_device_capabilities(backend, &device_name_clone)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| e.to_string())?;
 
     let frontend_caps = FrontendDeviceCapabilities::from(caps);
 
@@ -511,8 +693,14 @@ pub async fn get_audio_devices_with_capabilities(
     );
 
     let backend = parse_backend(&backend_str)?;
+
+    // Wrap in spawn_blocking to avoid blocking Tokio runtime
+    // Capability detection iterates 50+ configs per device on macOS (can take 1-5 seconds for multiple devices)
     let devices =
-        device::list_devices_with_capabilities(backend, true).map_err(|e| e.to_string())?;
+        tokio::task::spawn_blocking(move || device::list_devices_with_capabilities(backend, true))
+            .await
+            .map_err(|e| format!("Task join error: {}", e))?
+            .map_err(|e| e.to_string())?;
 
     let frontend_devices: Vec<FrontendDeviceInfo> =
         devices.into_iter().map(FrontendDeviceInfo::from).collect();
@@ -819,7 +1007,15 @@ pub async fn get_available_buffer_sizes(
     );
 
     let backend = parse_backend(&backend_str)?;
-    let caps = device::get_device_capabilities(backend, &device_name).map_err(|e| e.to_string())?;
+
+    // Wrap in spawn_blocking to avoid blocking Tokio runtime
+    let device_name_clone = device_name.clone();
+    let caps = tokio::task::spawn_blocking(move || {
+        device::get_device_capabilities(backend, &device_name_clone)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| e.to_string())?;
 
     // Standard buffer sizes in frames
     let standard_sizes = [32, 64, 128, 256, 512, 1024, 2048, 4096];

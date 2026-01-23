@@ -95,9 +95,49 @@ if [ -n "$APPIMAGE_FILE" ] && [ -f "$APPIMAGE_FILE" ]; then
     mv "$APPIMAGE_FILE" "$TARGET_NAME"
     echo "✅ AppImage created: $TARGET_NAME (from $APPIMAGE_FILE)"
 
-    # Calculate SHA256
+    # Calculate SHA256 checksum
     sha256sum "$TARGET_NAME" > "${TARGET_NAME}.sha256"
     echo "✅ Checksum created: ${TARGET_NAME}.sha256"
+
+    # Generate Tauri signature (.sig) if signing keys are available
+    # This matches the signature format used by DEB/RPM/DMG bundles
+    if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] && [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+        echo "Generating Tauri signature for auto-updates..."
+
+        # Install tauri-cli if not already installed
+        if ! command -v tauri &> /dev/null; then
+            echo "Installing tauri-cli for signature generation..."
+            cargo install tauri-cli --version "^2.0.0" --locked || {
+                echo "⚠️  Warning: Failed to install tauri-cli, skipping signature generation"
+                echo "   AppImage will still work, but auto-updates may not verify signature"
+            }
+        fi
+
+        # Generate signature using tauri signer
+        if command -v tauri &> /dev/null; then
+            # Save private key to temp file
+            TEMP_KEY_FILE=$(mktemp)
+            echo "$TAURI_SIGNING_PRIVATE_KEY" > "$TEMP_KEY_FILE"
+
+            # Sign the AppImage
+            tauri signer sign "$TARGET_NAME" \
+                --private-key "$TEMP_KEY_FILE" \
+                --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" || {
+                echo "⚠️  Warning: Signature generation failed"
+                echo "   AppImage will still work, but auto-updates may not verify signature"
+            }
+
+            # Clean up temp key file
+            rm -f "$TEMP_KEY_FILE"
+
+            if [ -f "${TARGET_NAME}.sig" ]; then
+                echo "✅ Tauri signature created: ${TARGET_NAME}.sig"
+            fi
+        fi
+    else
+        echo "ℹ️  Tauri signing keys not found (TAURI_SIGNING_PRIVATE_KEY not set)"
+        echo "   AppImage will work but won't have Tauri signature for auto-updates"
+    fi
 else
     echo "❌ Error: AppImage was not created"
     echo "Current directory contents:"

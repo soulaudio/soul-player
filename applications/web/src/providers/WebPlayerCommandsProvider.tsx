@@ -65,7 +65,6 @@ class WebAudioPlayer {
   }
 
   async loadTrack(trackId: string) {
-    const token = apiClient.getAccessToken();
     const apiBase = import.meta.env.VITE_API_URL || '/api';
     this.audio.src = `${apiBase}/stream/${trackId}`;
     // Add auth header via fetch is not possible for audio element
@@ -231,7 +230,7 @@ export function WebPlayerCommandsProvider({ children }: Props) {
       try {
         const state = await apiClient.get<PlaybackStateResponse>('/playback');
         store.setVolume(state.volume / 100);
-        store.setShuffleEnabled(state.shuffle_enabled);
+        store.setShuffleMode(state.shuffle_enabled ? 'random' : 'off');
         store.setRepeatMode(state.repeat_mode);
         if (audioPlayerRef.current) {
           audioPlayerRef.current.setVolume(state.volume / 100);
@@ -249,17 +248,21 @@ export function WebPlayerCommandsProvider({ children }: Props) {
       id: parseInt(track.trackId) || 0,
       title: track.title,
       artist: track.artist,
-      album: track.album || undefined,
+      album: track.album || '',
       duration: track.durationSeconds || 0,
       trackNumber: track.trackNumber || undefined,
       coverArtPath: track.coverArtPath,
+      filePath: track.filePath,
+      addedAt: new Date().toISOString(),
     });
     store.setQueue(queueRef.current.map((t) => ({
       id: parseInt(t.trackId) || 0,
       title: t.title,
       artist: t.artist,
-      album: t.album || undefined,
+      album: t.album || '',
       duration: t.durationSeconds || 0,
+      filePath: t.filePath,
+      addedAt: new Date().toISOString(),
     })));
     eventCallbacks.current.trackChange.forEach((cb) => cb(track));
     eventCallbacks.current.queueUpdate.forEach((cb) => cb());
@@ -333,9 +336,20 @@ export function WebPlayerCommandsProvider({ children }: Props) {
         await apiClient.post('/playback/volume', { volume: Math.floor(volume * 100) });
       },
 
-      async setShuffle(enabled) {
-        store.setShuffleEnabled(enabled);
-        await apiClient.put('/playback', { shuffle_enabled: enabled });
+      async setShuffle(mode) {
+        store.setShuffleMode(mode);
+        await apiClient.put('/playback', { shuffle_mode: mode });
+      },
+
+      async cycleShuffle() {
+        const currentMode = store.shuffleMode || 'off';
+        const nextMode = currentMode === 'off' ? 'random' : currentMode === 'random' ? 'smart' : 'off';
+        await commands.setShuffle(nextMode);
+        return nextMode;
+      },
+
+      async getShuffle() {
+        return store.shuffleMode || 'off';
       },
 
       async setRepeatMode(mode) {
@@ -372,6 +386,14 @@ export function WebPlayerCommandsProvider({ children }: Props) {
         }
       },
 
+      async playQueueWithContext(_context, initialBatch, startIndex, enableShuffle) {
+        // For now, just play the queue - context handling can be added later
+        await commands.playQueue(initialBatch, startIndex);
+        if (enableShuffle) {
+          await commands.setShuffle('random');
+        }
+      },
+
       async skipToQueueIndex(index) {
         if (index >= 0 && index < queueRef.current.length && audioPlayerRef.current) {
           const track = queueRef.current[index];
@@ -380,6 +402,29 @@ export function WebPlayerCommandsProvider({ children }: Props) {
           await audioPlayerRef.current.play();
           updateStoreWithTrack(track);
         }
+      },
+
+      async addPlayNext(track) {
+        // Add track after current position
+        const insertIndex = currentIndexRef.current + 1;
+        queueRef.current.splice(insertIndex, 0, track);
+        eventCallbacks.current.queueUpdate.forEach((cb) => cb());
+      },
+
+      async addToQueueEnd(track) {
+        // Add track to end of queue
+        queueRef.current.push(track);
+        eventCallbacks.current.queueUpdate.forEach((cb) => cb());
+      },
+
+      async clearPlayNext() {
+        // Remove all "play next" tracks (for now, no-op as we don't track this separately)
+        // This would require more complex queue management
+      },
+
+      async clearAddToQueue() {
+        // Remove all "add to queue" tracks (for now, no-op as we don't track this separately)
+        // This would require more complex queue management
       },
 
       async getAllSources() {

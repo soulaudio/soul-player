@@ -67,7 +67,7 @@ export function DeviceSelector({
                   ${
                     isSelected
                       ? 'border-primary bg-primary/5 shadow-sm'
-                      : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                      : 'border-border hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
                   }
                 `}
               >

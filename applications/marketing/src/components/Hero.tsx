@@ -58,7 +58,7 @@ export function Hero() {
 
           <Link
             href="#demo"
-            className="transition-colors text-xs sm:text-sm text-muted-foreground hover:text-foreground"
+            className="transition-colors text-xs sm:text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
           >
             {t('marketing.hero.seeItInAction')} ↓
           </Link>

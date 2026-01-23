@@ -16,7 +16,7 @@ import {
   Repeat,
   Repeat1
 } from 'lucide-react'
-import { PlaybackState, RepeatMode, ShuffleMode } from '@/lib/demo/types'
+import { PlaybackState, RepeatMode, ShuffleMode } from '@soul-player/playback-web'
 
 interface PlaybackControlsProps {
   // State
@@ -131,10 +131,10 @@ export function PlaybackControls({
         <div className="flex items-center gap-1">
           <button
             onClick={onShuffleToggle}
-            className={`p-2 rounded-md transition-colors ${
+            className={`p-2 rounded-md transition-colors duration-[var(--transition-duration)] ${
               shuffle !== ShuffleMode.Off
-                ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                : 'hover:bg-muted'
+                ? 'bg-primary/10 text-primary hover:opacity-[var(--hover-button-opacity)] transition-opacity'
+                : 'hover:bg-foreground/[var(--hover-bg-opacity)]'
             }`}
             title={shuffle === ShuffleMode.Off ? 'Enable shuffle' : 'Disable shuffle'}
             aria-label="Toggle shuffle"
@@ -144,10 +144,10 @@ export function PlaybackControls({
 
           <button
             onClick={onRepeatCycle}
-            className={`p-2 rounded-md transition-colors ${
+            className={`p-2 rounded-md transition-colors duration-[var(--transition-duration)] ${
               repeat !== RepeatMode.Off
-                ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                : 'hover:bg-muted'
+                ? 'bg-primary/10 text-primary hover:opacity-[var(--hover-button-opacity)] transition-opacity'
+                : 'hover:bg-foreground/[var(--hover-bg-opacity)]'
             }`}
             title={
               repeat === RepeatMode.Off
@@ -170,7 +170,7 @@ export function PlaybackControls({
         <div className="flex items-center gap-2">
           <button
             onClick={onPrevious}
-            className="p-2 rounded-md hover:bg-muted transition-colors"
+            className="p-2 rounded-md hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             title="Previous track"
             aria-label="Previous track"
           >
@@ -179,7 +179,7 @@ export function PlaybackControls({
 
           <button
             onClick={isPlaying ? onPause : onPlay}
-            className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="p-3 rounded-full bg-primary text-primary-foreground hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
             title={isPlaying ? 'Pause' : 'Play'}
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
@@ -188,7 +188,7 @@ export function PlaybackControls({
 
           <button
             onClick={onNext}
-            className="p-2 rounded-md hover:bg-muted transition-colors"
+            className="p-2 rounded-md hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             title="Next track"
             aria-label="Next track"
           >
@@ -200,7 +200,7 @@ export function PlaybackControls({
         <div className="flex items-center gap-2 min-w-[120px]">
           <button
             onClick={onToggleMute}
-            className="p-2 rounded-md hover:bg-muted transition-colors"
+            className="p-2 rounded-md hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             title={isMuted ? 'Unmute' : 'Mute'}
             aria-label={isMuted ? 'Unmute' : 'Mute'}
           >

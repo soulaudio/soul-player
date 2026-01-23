@@ -85,7 +85,7 @@ export function PlayerControls() {
       <button
         onClick={handlePrevious}
         disabled={isPreviousDisabled}
-        className="p-2 rounded-full hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="p-2 rounded-full hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         aria-label="Previous track"
       >
         <SkipBack className="w-5 h-5" />
@@ -95,7 +95,7 @@ export function PlayerControls() {
       <button
         onClick={handlePlayPause}
         disabled={isPlayDisabled}
-        className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="p-3 rounded-full bg-primary text-primary-foreground hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? (
@@ -109,7 +109,7 @@ export function PlayerControls() {
       <button
         onClick={handleNext}
         disabled={isNextDisabled}
-        className="p-2 rounded-full hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="p-2 rounded-full hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         aria-label="Next track"
       >
         <SkipForward className="w-5 h-5" />

@@ -52,7 +52,11 @@
     "pause": "Pause",
     "next": "Next Track",
     "previous": "Previous Track",
-    "shuffle": "Shuffle",
+    "shuffle": {
+      "off": "Shuffle: Off",
+      "random": "Shuffle: Random",
+      "smart": "Shuffle: Smart"
+    },
     "shuffleOff": "Shuffle: Off",
     "shuffleRandom": "Shuffle: Random",
     "shuffleSmart": "Shuffle: Smart",
@@ -109,8 +113,8 @@
     "library": "Library",
     "appearance": "Appearance",
     "theme": "Theme",
-    "themeLight": "Light",
-    "themeDark": "Dark",
+    "themeLight": "Day",
+    "themeDark": "Night",
     "themeOcean": "Ocean",
     "themeAuto": "Auto (Match Device)",
     "language": "Language",
@@ -128,6 +132,9 @@
     "audio": {
       "title": "Audio",
       "outputDevice": "Output Device",
+      "selectDevice": "Select audio device",
+      "output": "Audio Output",
+      "noDevicesFound": "No audio devices found",
       "warning": {
         "title": "Experimental Audio Pipeline",
         "description": "The audio pipeline and features are under active development and may contain bugs or instability. If you experience issues, please see the \"Report Bug\" section in settings."
@@ -215,8 +222,47 @@
       "playback": "Playback",
       "appearance": "Appearance",
       "shortcuts": "Keyboard Shortcuts",
+      "dataManagement": "Data Management",
       "reportBug": "Report Bug",
       "about": "About"
+    },
+    "dataManagement": {
+      "title": "Data Management",
+      "description": "Manage your library data and application settings",
+      "warning": {
+        "title": "Important Information",
+        "description": "Uninstalling Soul Player on Linux preserves your user data by default. This includes your library, playlists, and settings stored in ~/.config/soul-player/."
+      },
+      "reset": {
+        "title": "Reset to Factory Settings",
+        "description": "Delete all user data and restore Soul Player to its initial state. The app will restart and show the onboarding screen.",
+        "button": "Reset to Factory Settings",
+        "effects": {
+          "library": "All tracks, albums, and artists will be removed",
+          "playlists": "All playlists will be deleted",
+          "settings": "All settings will be reset to defaults",
+          "logs": "All log files will be deleted",
+          "restart": "The app will close and you'll need to relaunch it"
+        }
+      },
+      "resetDialog": {
+        "title": "Confirm Factory Reset",
+        "description": "This will permanently delete all your Soul Player data. This action cannot be undone.",
+        "willBeDeleted": "The following will be deleted:",
+        "items": {
+          "library": "Library database (all tracks, albums, artists)",
+          "playlists": "All playlists",
+          "settings": "All custom settings",
+          "logs": "Log files",
+          "cache": "Cached artwork and thumbnails"
+        },
+        "confirmLabel": "Type \"reset\" to confirm",
+        "confirmPlaceholder": "reset",
+        "confirmHint": "Type the word \"reset\" exactly as shown to enable the button",
+        "cancel": "Cancel",
+        "confirm": "Reset Soul Player"
+      },
+      "resetError": "Failed to reset Soul Player. Please try again or manually delete ~/.config/soul-player/ (Linux) or %APPDATA%\\Soul Player (Windows)"
     }
   },
   "scan": {
@@ -729,10 +775,16 @@
     "title": "Update Available",
     "versionAvailable": "A new version is available",
     "releaseNotes": "What's New",
+    "viewFullReleaseNotes": "View full release notes →",
     "downloading": "Downloading update",
     "installing": "Installing...",
     "installNow": "Install Now",
-    "later": "Later"
+    "later": "Later",
+    "packageManagerUpdateRequired": "Package Manager Update Required",
+    "packageManagerUpdateDescription": "Your installation method requires updating via your system package manager. Copy and run the command below:",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "viewRelease": "View Release"
   },
   "marketing": {
     "hero": {

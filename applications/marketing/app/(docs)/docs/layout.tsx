@@ -42,7 +42,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
               href={DISCORD_INVITE}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-foreground transition-colors hover:opacity-80"
+              className="text-foreground transition-colors hover:opacity-[var(--hover-text-opacity)]"
               aria-label="Discord"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -53,7 +53,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
               href={GITHUB_REPO}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-foreground transition-colors hover:opacity-80"
+              className="text-foreground transition-colors hover:opacity-[var(--hover-text-opacity)]"
               aria-label="GitHub"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -86,7 +86,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
               href={GITHUB_EDIT_DOCS}
               target="_blank"
               rel="noopener noreferrer"
-              className="block rounded-lg p-4 bg-muted/20 transition-all duration-200 hover:bg-muted/40 hover:scale-[1.02]"
+              className="block rounded-lg p-4 bg-muted/20 transition-all duration-[var(--transition-duration)] hover:bg-foreground/[var(--hover-bg-opacity)] hover:scale-[1.02]"
             >
               <div className="flex items-start justify-between mb-2">
                 <h4 className="text-sm font-medium text-foreground">
@@ -106,7 +106,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
               href={DISCORD_INVITE}
               target="_blank"
               rel="noopener noreferrer"
-              className="block rounded-lg p-4 bg-muted/20 transition-all duration-200 hover:bg-muted/40 hover:scale-[1.02]"
+              className="block rounded-lg p-4 bg-muted/20 transition-all duration-[var(--transition-duration)] hover:bg-foreground/[var(--hover-bg-opacity)] hover:scale-[1.02]"
             >
               <div className="flex items-start justify-between mb-2">
                 <h4 className="text-sm font-medium text-foreground">
@@ -126,7 +126,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
               href={GITHUB_REPO}
               target="_blank"
               rel="noopener noreferrer"
-              className="block rounded-lg p-4 bg-muted/20 transition-all duration-200 hover:bg-muted/40 hover:scale-[1.02]"
+              className="block rounded-lg p-4 bg-muted/20 transition-all duration-[var(--transition-duration)] hover:bg-foreground/[var(--hover-bg-opacity)] hover:scale-[1.02]"
             >
               <div className="flex items-start justify-between mb-2">
                 <h4 className="text-sm font-medium text-foreground">

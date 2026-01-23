@@ -43,7 +43,7 @@ export function SyncAlert() {
     <div className="relative group">
       <button
         onClick={handleClick}
-        className="p-2 rounded-lg hover:bg-accent transition-colors"
+        className="p-2 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
         aria-label="Sync Status"
         title={getTooltipContent()}
       >

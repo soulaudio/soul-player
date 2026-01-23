@@ -10,6 +10,7 @@ import {
   Info,
   Keyboard,
   Bug,
+  Database,
 } from 'lucide-react';
 
 interface NavItem {
@@ -51,6 +52,12 @@ const navigationItems: NavItem[] = [
     icon: Keyboard,
   },
   {
+    id: 'dataManagement',
+    labelKey: 'settings.sections.dataManagement',
+    path: '/settings/data-management',
+    icon: Database,
+  },
+  {
     id: 'reportBug',
     labelKey: 'settings.sections.reportBug',
     path: '/settings/report-bug',
@@ -87,7 +94,7 @@ export function SettingsSidebar() {
                   ${
                     isActive
                       ? 'bg-primary text-primary-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-all duration-[var(--transition-duration)]'
                   }
                 `}
               >

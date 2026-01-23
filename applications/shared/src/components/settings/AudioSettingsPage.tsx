@@ -10,6 +10,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import { usePlatform } from '../../contexts/PlatformContext';
+import { useBackend } from '../../contexts/BackendContext';
 import { ConfirmDialog } from '../ui/Dialog';
 import { PipelineVisualization } from './audio/PipelineVisualization';
 import { PipelineStage } from './audio/PipelineStage';
@@ -141,15 +142,7 @@ function FeatureCard({ title, description }: { title: string; description: strin
 // Full audio settings for desktop with Tauri integration
 function AudioSettingsDesktop() {
   const { t } = useTranslation();
-
-  // Dynamic import of invoke to avoid errors on web
-  const [invoke, setInvoke] = useState<typeof import('@tauri-apps/api/core').invoke | null>(null);
-
-  useEffect(() => {
-    import('@tauri-apps/api/core').then(mod => {
-      setInvoke(() => mod.invoke);
-    });
-  }, []);
+  const backend = useBackend();
 
   const [backends, setBackends] = useState<AudioBackend[]>([]);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -177,10 +170,8 @@ function AudioSettingsDesktop() {
   const [showResetDialog, setShowResetDialog] = useState(false);
 
   useEffect(() => {
-    if (invoke) {
-      loadAudioSettings();
-    }
-  }, [invoke]);
+    loadAudioSettings();
+  }, []);
 
   // Auto-hide notification after 3 seconds
   useEffect(() => {
@@ -195,24 +186,20 @@ function AudioSettingsDesktop() {
   };
 
   const loadAudioSettings = async () => {
-    if (!invoke) return;
-
     try {
       setLoading(true);
 
       // Load backends
-      const backendsData = await invoke<AudioBackend[]>('get_audio_backends');
+      const backendsData = await backend.getAudioBackends();
       setBackends(backendsData);
 
       // Load devices for current backend
       const currentBackend = settings.backend;
-      const devicesData = await invoke<AudioDevice[]>('get_audio_devices', { backendStr: currentBackend });
+      const devicesData = await backend.getAudioDevices(currentBackend);
       setDevices(devicesData);
 
       // Load settings from database
-      const savedSettings = await invoke<string | null>('get_user_setting', {
-        key: 'audio.pipeline'
-      });
+      const savedSettings = await backend.getUserSetting('audio.pipeline');
 
       if (savedSettings) {
         try {
@@ -248,7 +235,7 @@ function AudioSettingsDesktop() {
 
       // Check if r8brain backend is available
       try {
-        const r8brainStatus = await invoke<boolean>('is_r8brain_available');
+        const r8brainStatus = await backend.isR8brainAvailable();
         setR8brainAvailable(r8brainStatus);
       } catch {
         setR8brainAvailable(false);
@@ -261,28 +248,22 @@ function AudioSettingsDesktop() {
   };
 
   const updateSettings = async (updates: Partial<AudioSettings>) => {
-    if (!invoke) return;
-
     const newSettings = { ...settings, ...updates };
     setSettings(newSettings);
 
     try {
-      await invoke('set_user_setting', {
-        key: 'audio.pipeline',
-        value: JSON.stringify(newSettings)
-      });
+      await backend.setUserSetting('audio.pipeline', JSON.stringify(newSettings));
     } catch (error) {
       debug.error('Failed to save audio settings:', error);
     }
   };
 
-  const handleBackendChange = async (backend: 'default' | 'asio' | 'jack') => {
-    if (!invoke) return;
-    updateSettings({ backend });
+  const handleBackendChange = async (selectedBackend: 'default' | 'asio' | 'jack') => {
+    updateSettings({ backend: selectedBackend });
 
     // Reload devices for new backend
     try {
-      const devicesData = await invoke<AudioDevice[]>('get_audio_devices', { backendStr: backend });
+      const devicesData = await backend.getAudioDevices(selectedBackend);
       setDevices(devicesData);
     } catch (error) {
       debug.error('Failed to load devices:', error);
@@ -290,14 +271,10 @@ function AudioSettingsDesktop() {
   };
 
   const handleDeviceChange = async (deviceName: string) => {
-    if (!invoke) return;
     updateSettings({ device_name: deviceName });
 
     try {
-      await invoke('set_audio_device', {
-        backendStr: settings.backend,
-        deviceName
-      });
+      await backend.setAudioDevice(settings.backend, deviceName);
       showNotification('success', `Switched to audio device: ${deviceName}`);
     } catch (error) {
       debug.error('Failed to set audio device:', error);
@@ -311,9 +288,8 @@ function AudioSettingsDesktop() {
   };
 
   const loadDspChainCount = async () => {
-    if (!invoke) return;
     try {
-      const chain = await invoke<{ effect: unknown }[]>('get_dsp_chain');
+      const chain = await backend.getDspChain();
       setDspEffectCount(chain.filter(slot => slot.effect !== null).length);
       setSettings(prev => ({ ...prev, dsp_enabled: chain.some(slot => slot.effect !== null) }));
     } catch {
@@ -322,13 +298,10 @@ function AudioSettingsDesktop() {
   };
 
   useEffect(() => {
-    if (invoke) {
-      loadDspChainCount();
-    }
-  }, [invoke]);
+    loadDspChainCount();
+  }, []);
 
   const resetToDefaults = async () => {
-    if (!invoke) return;
     updateSettings({
       backend: 'default',
       device_name: null,
@@ -346,17 +319,13 @@ function AudioSettingsDesktop() {
       crossfade_duration_ms: 3000,
       crossfade_curve: 'equal_power',
     });
-    // Also reset the backend settings via Tauri commands
+    // Also reset the backend settings via backend methods
     try {
-      await invoke('set_volume_leveling_mode', { mode: 'disabled' });
-      await invoke('set_volume_leveling_preamp', { preampDb: 0 });
-      await invoke('set_volume_leveling_prevent_clipping', { prevent: true });
+      await backend.setVolumeLevelingMode('disabled');
+      await backend.setVolumeLevelingPreamp(0);
+      await backend.setVolumeLevelingPreventClipping(true);
       // Reset crossfade settings to defaults
-      await invoke('set_crossfade_settings', {
-        enabled: false,
-        durationMs: 3000,
-        curve: 'equal_power',
-      });
+      await backend.setCrossfadeSettings(false, 3000, 'equal_power');
     } catch (error) {
       debug.error('Failed to reset audio settings:', error);
     }
@@ -381,10 +350,9 @@ function AudioSettingsDesktop() {
 
   // Handle preamp change
   const handlePreampChange = async (preampDb: number) => {
-    if (!invoke) return;
     updateSettings({ volume_leveling_preamp_db: preampDb });
     try {
-      await invoke('set_volume_leveling_preamp', { preampDb });
+      await backend.setVolumeLevelingPreamp(preampDb);
     } catch (error) {
       debug.error('Failed to set preamp:', error);
     }
@@ -392,10 +360,9 @@ function AudioSettingsDesktop() {
 
   // Handle prevent clipping change
   const handlePreventClippingChange = async (prevent: boolean) => {
-    if (!invoke) return;
     updateSettings({ volume_leveling_prevent_clipping: prevent });
     try {
-      await invoke('set_volume_leveling_prevent_clipping', { prevent });
+      await backend.setVolumeLevelingPreventClipping(prevent);
     } catch (error) {
       debug.error('Failed to set prevent clipping:', error);
     }
@@ -407,7 +374,6 @@ function AudioSettingsDesktop() {
     durationMs: number;
     curve: 'linear' | 'logarithmic' | 's_curve' | 'equal_power';
   }) => {
-    if (!invoke) return;
     // Update local state and persist to JSON settings
     updateSettings({
       crossfade_enabled: crossfade.enabled,
@@ -425,11 +391,11 @@ function AudioSettingsDesktop() {
         'equal_power': 'equal_power',
       };
 
-      await invoke('set_crossfade_settings', {
-        enabled: crossfade.enabled,
-        durationMs: crossfade.durationMs,
-        curve: curveMapping[crossfade.curve] || 'equal_power',
-      });
+      await backend.setCrossfadeSettings(
+        crossfade.enabled,
+        crossfade.durationMs,
+        curveMapping[crossfade.curve] || 'equal_power'
+      );
     } catch (error) {
       debug.error('Failed to apply crossfade settings:', error);
       showNotification('error', 'Failed to apply crossfade settings');
@@ -438,13 +404,12 @@ function AudioSettingsDesktop() {
 
   // Handle resampling quality change
   const handleResamplingQualityChange = async (quality: 'fast' | 'balanced' | 'high' | 'maximum') => {
-    if (!invoke) return;
     // Update local state and persist to JSON
     updateSettings({ resampling_quality: quality });
 
     // Apply to audio engine (takes effect on next track)
     try {
-      await invoke('set_resampling_quality', { quality });
+      await backend.setResamplingQuality(quality);
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
       debug.error('Failed to apply resampling quality:', error);
@@ -454,7 +419,6 @@ function AudioSettingsDesktop() {
 
   // Handle resampling target rate change
   const handleResamplingTargetRateChange = async (rate: 'auto' | number) => {
-    if (!invoke) return;
     // Update local state and persist to JSON
     updateSettings({ resampling_target_rate: rate });
 
@@ -462,7 +426,7 @@ function AudioSettingsDesktop() {
     try {
       // Convert 'auto' to 0 for backend
       const targetRate = rate === 'auto' ? 0 : rate;
-      await invoke('set_resampling_target_rate', { rate: targetRate });
+      await backend.setResamplingTargetRate(targetRate);
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
       debug.error('Failed to apply resampling target rate:', error);
@@ -471,29 +435,19 @@ function AudioSettingsDesktop() {
   };
 
   // Handle resampling backend change
-  const handleResamplingBackendChange = async (backend: 'auto' | 'rubato' | 'r8brain') => {
-    if (!invoke) return;
+  const handleResamplingBackendChange = async (resamplingBackend: 'auto' | 'rubato' | 'r8brain') => {
     // Update local state and persist to JSON
-    updateSettings({ resampling_backend: backend });
+    updateSettings({ resampling_backend: resamplingBackend });
 
     // Apply to audio engine (takes effect on next track)
     try {
-      await invoke('set_resampling_backend', { backend });
+      await backend.setResamplingBackend(resamplingBackend);
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
       debug.error('Failed to apply resampling backend:', error);
       showNotification('error', 'Failed to apply resampling backend');
     }
   };
-
-  // Show loading state while Tauri invoke is being loaded
-  if (!invoke) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-muted-foreground">Loading audio settings...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -545,7 +499,7 @@ function AudioSettingsDesktop() {
         {/* Reset Button */}
         <button
           onClick={() => setShowResetDialog(true)}
-          className="flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+          className="flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <RotateCcw className="w-4 h-4" />
           Reset All
@@ -626,10 +580,9 @@ function AudioSettingsDesktop() {
             preampDb={settings.volume_leveling_preamp_db}
             preventClipping={settings.volume_leveling_prevent_clipping}
             onModeChange={async (mode) => {
-              if (!invoke) return;
               // First apply to audio engine immediately
               try {
-                await invoke('set_volume_leveling_mode', { mode });
+                await backend.setVolumeLevelingMode(mode);
               } catch (error) {
                 debug.error('Failed to set volume leveling mode:', error);
               }

@@ -20,6 +20,7 @@ mod deep_link;
 mod dsp_commands;
 mod fingerprint;
 mod import;
+mod installation;
 mod lazy_workers;
 mod library_settings;
 mod loudness;
@@ -568,6 +569,11 @@ async fn get_shuffle(playback: State<'_, LazyPlaybackManager>) -> Result<String,
 #[tauri::command]
 async fn get_repeat(playback: State<'_, LazyPlaybackManager>) -> Result<String, String> {
     Ok(playback.get().await?.get_repeat().as_str().to_string())
+}
+
+#[tauri::command]
+async fn cycle_repeat(playback: State<'_, LazyPlaybackManager>) -> Result<String, String> {
+    playback.get().await?.cycle_repeat()
 }
 
 #[tauri::command]
@@ -1477,6 +1483,63 @@ async fn set_logging_enabled(
     Ok(())
 }
 
+/// Reset Soul Player to factory settings by deleting all user data
+///
+/// This command:
+/// 1. Closes all database connections
+/// 2. Deletes the app data directory (database, logs, cache, config)
+/// 3. Exits the application (user must manually relaunch)
+///
+/// WARNING: This is a destructive operation that cannot be undone!
+#[tauri::command]
+async fn reset_to_factory_settings(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    playback: tauri::State<'_, LazyPlaybackManager>,
+) -> Result<(), String> {
+    tracing::warn!("[RESET] User requested factory reset - deleting all user data");
+
+    // Get app data directory path before we close connections
+    let app_data_dir = get_app_data_dir();
+
+    tracing::info!("[RESET] App data directory: {}", app_data_dir.display());
+
+    // Verify directory exists before attempting deletion
+    if !app_data_dir.exists() {
+        tracing::warn!("[RESET] App data directory does not exist, nothing to delete");
+        return Err("App data directory does not exist".to_string());
+    }
+
+    // Step 1: Close database connection
+    tracing::info!("[RESET] Closing database connection...");
+    state.pool.close().await;
+
+    // Step 2: Stop playback and release audio resources
+    tracing::info!("[RESET] Stopping playback...");
+    if let Ok(manager) = playback.get().await {
+        if let Err(e) = manager.stop() {
+            tracing::warn!("[RESET] Failed to stop playback: {}", e);
+            // Continue anyway - we're deleting everything
+        }
+    }
+
+    // Step 3: Delete the entire app data directory
+    tracing::info!("[RESET] Deleting app data directory...");
+    if let Err(e) = std::fs::remove_dir_all(&app_data_dir) {
+        tracing::error!("[RESET] Failed to delete app data directory: {}", e);
+        return Err(format!("Failed to delete app data: {}", e));
+    }
+
+    tracing::info!("[RESET] Successfully deleted all user data");
+    tracing::info!("[RESET] Exiting application...");
+
+    // Step 4: Exit the application
+    // User must manually relaunch to see onboarding screen
+    app_handle.exit(0);
+
+    Ok(())
+}
+
 /// Get artwork as data URL for a track
 #[tauri::command]
 async fn get_track_artwork(
@@ -2350,6 +2413,7 @@ fn main() {
             cycle_shuffle,
             get_shuffle,
             get_repeat,
+            cycle_repeat,
             get_queue,
             skip_to_queue_index,
             get_playback_capabilities,
@@ -2499,6 +2563,7 @@ fn main() {
             set_user_setting,
             get_user_setting,
             set_logging_enabled,
+            reset_to_factory_settings,
             // Artwork
             get_track_artwork,
             get_album_artwork,
@@ -2518,6 +2583,8 @@ fn main() {
             // Window state
             window_state_manager::save_window_state_cmd,
             window_state_manager::save_window_state_with_route,
+            // Installation detection
+            installation::get_installation_info,
             // Updater
             updater::check_for_updates,
             updater::install_update,

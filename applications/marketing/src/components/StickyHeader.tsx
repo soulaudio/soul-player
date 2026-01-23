@@ -23,7 +23,7 @@ export function StickyHeader() {
         <div className="flex items-center gap-4">
           <Link
             href="/docs"
-            className="text-sm font-medium transition-colors duration-300 hover:opacity-80"
+            className="text-sm font-medium transition-colors duration-300 hover:opacity-[var(--hover-text-opacity)]"
             style={{
               color: 'hsl(var(--foreground))',
               textShadow: '0 1px 2px hsl(var(--background) / 0.8)',
@@ -35,7 +35,7 @@ export function StickyHeader() {
             href={DISCORD_INVITE}
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:opacity-80"
+            className="transition-colors hover:opacity-[var(--hover-text-opacity)]"
             style={{ color: 'hsl(var(--foreground))' }}
             title="Join Discord"
           >
@@ -47,7 +47,7 @@ export function StickyHeader() {
             href={GITHUB_REPO}
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:opacity-80"
+            className="transition-colors hover:opacity-[var(--hover-text-opacity)]"
             style={{ color: 'hsl(var(--foreground))' }}
             title="View on GitHub"
           >

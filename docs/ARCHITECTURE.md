@@ -764,6 +764,249 @@ class NativeBackendProvider extends AbstractBackendProvider {
 ---
 
 
+## Web Playback Architecture
+
+### **Overview**
+
+The web playback system uses a **three-layer architecture** that enables browser-based audio playback while reusing the same queue management and state logic as the desktop application:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Application Layer                                              │
+│  ├── DemoPlayerCommandsProvider (marketing demo)                │
+│  ├── WebPlayerCommandsProvider (future web app)                 │
+│  └── Uses: WebPlaybackProvider + PlaybackDataStorage interface  │
+├─────────────────────────────────────────────────────────────────┤
+│  Shared Layer (@soul-player/shared)                             │
+│  └── WebPlaybackProvider.tsx                                    │
+│      ├── Accepts any storage implementing PlaybackDataStorage   │
+│      ├── Initializes WasmPlaybackAdapter from playback-web lib  │
+│      ├── Wires WASM events → Zustand store automatically        │
+│      └── Provides PlayerCommandsContext to children             │
+├─────────────────────────────────────────────────────────────────┤
+│  Library Layer (@soul-player/playback-web)                      │
+│  ├── WasmPlaybackAdapter.ts - TypeScript bridge                 │
+│  │   ├── Initializes WASM module                                │
+│  │   ├── Bridges WASM ↔ Web Audio API                           │
+│  │   ├── Emits events: stateChange, trackChange, queueChange    │
+│  │   └── Handles track loading, volume, seeking                 │
+│  ├── WebAudioPlayer.ts - Web Audio output                       │
+│  │   ├── HTMLAudioElement + Web Audio API                       │
+│  │   ├── GainNode for volume control                            │
+│  │   └── Future: Effect chain support (EQ, compressor)          │
+│  └── WASM (soul-playback Rust crate)                            │
+│      ├── Queue management (shuffle, repeat, history)            │
+│      ├── State machine (Playing, Paused, Stopped, Loading)      │
+│      └── Same logic as desktop playback!                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### **Key Design Decisions**
+
+1. **WASM for Queue Logic**: Queue management, shuffle, and repeat modes are handled by the same Rust `soul-playback` crate used on desktop. This ensures **zero behavioral differences** between platforms.
+
+2. **TypeScript for Audio**: Web Audio API is TypeScript-only (no WASM bindings). The `WasmPlaybackAdapter` bridges WASM queue logic with browser audio APIs.
+
+3. **Automatic Event Emission**: Events are emitted automatically by the WASM adapter - providers never manually emit events. This prevents desync and duplicate events.
+
+4. **Storage Interface Abstraction**: `PlaybackDataStorage` interface decouples playback from data source. Marketing demo uses `DemoStorage` (JSON), future web app can use REST API client.
+
+### **Component Responsibilities**
+
+#### **WasmPlaybackAdapter** (TypeScript)
+- **Responsibilities**:
+  - Initialize WASM module (`soul_playback.wasm`)
+  - Bridge WASM PlaybackManager ↔ WebAudioPlayer
+  - Map TypeScript types ↔ WASM types (e.g., `QueueTrack`, `PlaybackState`)
+  - Emit events when WASM state changes
+  - Handle track loading and Web Audio playback
+
+- **What it does NOT do**:
+  - Queue management logic (delegated to WASM)
+  - Manual event emission from providers (automatic only)
+  - Data fetching (delegated to PlaybackDataStorage)
+
+#### **WebAudioPlayer** (TypeScript)
+- **Responsibilities**:
+  - Load audio files via `HTMLAudioElement`
+  - Control playback (play, pause, stop, seek)
+  - Volume control via Web Audio `GainNode`
+  - Emit time updates and track-ended events
+
+- **Future enhancements**:
+  - Effect chain (EQ, compressor) via Web Audio `AudioWorklet`
+  - Gapless playback using dual audio elements
+  - Audio visualization via `AnalyserNode`
+
+#### **WebPlaybackProvider** (React Context Provider)
+- **Responsibilities**:
+  - Accept any storage implementing `PlaybackDataStorage`
+  - Initialize `WasmPlaybackAdapter` on mount
+  - Wire WASM events → Zustand store (automatic bridge)
+  - Provide `PlayerCommandsContext` to children
+  - Cleanup on unmount
+
+- **Reusability**: Used by both marketing demo and future web player - just swap the storage implementation!
+
+### **Data Flow Example: Play Album**
+
+```
+User clicks "Play Album" button in UI
+  ↓
+AlbumPage.tsx calls: commands.playQueue(queue, 0)
+  ↓
+WebPlaybackProvider.commands.playQueue()
+  ↓
+1. Convert shared QueueTrack[] → WASM format
+2. Call wasmAdapter.loadPlaylist(wasmQueue)
+   ↓
+   WASM PlaybackManager
+   - Loads queue into internal state
+   - Sets current index to 0
+   - Transitions to Loading state
+   - Emits onTrackChange(track)
+   ↓
+3. WasmPlaybackAdapter.onTrackChange callback
+   - Receives WASM track data
+   - Calls webAudioPlayer.loadTrack(track.path)
+   - Calls webAudioPlayer.play()
+   - Sets audioPlaybackState = 'playing'
+   - Emits 'trackChange' event (to React)
+   - Emits 'stateChange' event with Playing state
+   ↓
+4. setupEventBridge() listeners
+   - Update Zustand store: currentTrack, isPlaying, queue
+   - UI re-renders automatically
+   ↓
+Audio plays through Web Audio API → Browser speakers
+```
+
+### **Event Emission Rules (CRITICAL)**
+
+**Rule 1: Events are emitted AUTOMATICALLY by WasmPlaybackAdapter**
+- When WASM state changes, adapter emits events via `.on()` listeners
+- Application providers (DemoPlayerCommandsProvider, WebPlayerCommandsProvider) should NEVER manually emit events
+
+**Rule 2: Single Source of Truth**
+- WASM PlaybackManager is the source of truth for queue state
+- TypeScript tracks audio playback state independently (to work around WASM quirks)
+- Store is updated via event bridge, not direct mutations
+
+**Rule 3: No Duplicate Events**
+- Each state change emits ONE event automatically
+- Providers return event listeners, don't create new ones
+
+**Example (CORRECT)**:
+```typescript
+// WebPlaybackProvider - events automatically wired
+const events: PlaybackEventsInterface = {
+  onStateChange(callback) {
+    return wasmAdapter.on('stateChange', callback);  // ✅ Passthrough
+  },
+};
+```
+
+**Example (WRONG)**:
+```typescript
+// ❌ DON'T DO THIS - manual emission creates duplicate events!
+async pausePlayback() {
+  wasmAdapter.pause();
+  this.emit('stateChange', PlaybackState.Paused);  // ❌ Duplicate!
+}
+```
+
+### **Storage Interface Pattern**
+
+The `PlaybackDataStorage` interface decouples playback from data source:
+
+```typescript
+export interface PlaybackDataStorage {
+  /**
+   * Get a track by its ID
+   * Used to fetch metadata not stored in WASM (e.g., cover art URLs)
+   */
+  getTrackById(id: string): DemoTrack | null;
+}
+```
+
+**Why this interface?**
+- WASM doesn't store cover art URLs (only core playback fields)
+- Providers need to look up additional metadata from storage
+- Allows swapping storage implementations without changing playback code
+
+**Implementations**:
+- **Marketing demo**: `DemoStorage` (JSON file)
+- **Future web player**: `ApiStorage` (REST API client)
+- **Future offline mode**: `IndexedDBStorage` (browser database)
+
+### **Desktop vs. Web Playback Comparison**
+
+| Aspect | Desktop (Rust + Native) | Web (WASM + Web Audio) |
+|--------|------------------------|------------------------|
+| **Queue Logic** | `soul-playback` (Rust) | `soul-playback` (WASM) - **Same crate!** |
+| **Audio Decoding** | Symphonia (Rust) | Browser native (HTMLAudioElement) |
+| **Audio Output** | CPAL → OS audio APIs | Web Audio API → Browser |
+| **Effect Chain** | Rust DSP (EQ, compressor) | Future: Web Audio AudioWorklet |
+| **State Events** | Tauri events | WASM → TypeScript → React Context |
+| **File Access** | Local filesystem | HTTP URLs (demo MP3s) |
+| **Gapless** | Native (Symphonia) | Future: Dual HTMLAudioElement |
+
+**Key Insight**: By using WASM for queue logic, desktop and web have **identical shuffle, repeat, and history behavior**. Only the audio I/O layer differs.
+
+### **Testing Strategy**
+
+**Unit Tests** (`libraries/soul-playback-web/tests/`):
+- WasmPlaybackAdapter state transitions
+- Queue operations (add, remove, skip)
+- Event emission (no duplicates!)
+- Volume/mute handling
+- Shuffle/repeat mode changes
+
+**Integration Tests** (future):
+- WebPlaybackProvider + DemoStorage
+- Full playback flow (load → play → skip → stop)
+- Error handling (invalid tracks, network failures)
+
+**Manual Testing**:
+- Marketing demo (`yarn workspace @soul-player/marketing dev`)
+- Test all playback controls in browser DevTools
+
+### **Performance Considerations**
+
+1. **WASM Initialization**: ~50ms one-time cost on page load
+2. **Track Loading**: Network latency (demo MP3s served from `/public`)
+3. **Queue Operations**: O(1) for most operations (WASM is fast!)
+4. **Event Bridge**: Minimal overhead (direct function calls)
+
+**Optimization Opportunities**:
+- Pre-fetch next track audio in background
+- Use Service Worker for offline caching
+- Implement gapless playback with dual audio elements
+
+### **Future Enhancements**
+
+1. **Audio Effects via AudioWorklet**:
+   - Port Rust DSP code to WASM AudioWorklet
+   - Real-time EQ and compression in browser
+   - Share effect presets with desktop
+
+2. **Gapless Playback**:
+   - Use two `HTMLAudioElement` instances
+   - Crossfade between tracks seamlessly
+   - Matches desktop crossfade behavior
+
+3. **Offline Support**:
+   - Service Worker + IndexedDB for caching
+   - Queue persisted across sessions
+   - Background sync with server
+
+4. **Visualizer**:
+   - Web Audio `AnalyserNode` for frequency data
+   - Canvas/WebGL visualizations
+   - Reusable component for desktop (future Tauri v3 integration)
+
+---
+
 ## Scalability
 
 ### **Database**

@@ -181,7 +181,10 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
 
       // Trigger initial scan if we have watched folders
       if ((setupType === 'watched' || setupType === 'both') && watchedFolders.length > 0) {
-        invoke('rescan_all_sources');
+        // Note: Fire this asynchronously - we don't wait for scan to complete
+        invoke('rescan_all_sources').catch((error) => {
+          console.error('[OnboardingPage] Failed to start initial scan:', error);
+        });
       }
 
       setStep('complete');
@@ -206,8 +209,15 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
   };
 
   const handleSkip = () => {
-    invoke('complete_onboarding', { setupType: 'watched' });
-    onComplete();
+    invoke('complete_onboarding', { setupType: 'watched' })
+      .then(() => {
+        onComplete();
+      })
+      .catch((error) => {
+        console.error('[OnboardingPage] Failed to complete onboarding on skip:', error);
+        // Still call onComplete to avoid stuck state
+        onComplete();
+      });
   };
 
   return (
@@ -374,7 +384,7 @@ function ThemeStep({ selectedTheme, onThemeSelect, onContinue, t }: ThemeStepPro
       <div className="flex justify-center">
         <button
           onClick={onContinue}
-          className="flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
+          className="flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] font-medium"
         >
           {t('common.continue')}
           <ArrowRight className="w-4 h-4" />
@@ -494,20 +504,20 @@ function StrategyStep({ setupType, onStrategySelect, onBack, onSkip, t }: Strate
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
         >
           <ArrowLeft className="w-4 h-4" />
           {t('common.back')}
         </button>
 
         <div className="flex items-center gap-4">
-          <button onClick={onSkip} className="text-sm text-muted-foreground hover:text-foreground">
+          <button onClick={onSkip} className="text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]">
             {t('onboarding.changeLaterSkip')}
           </button>
           <button
             onClick={() => selected && onStrategySelect(selected)}
             disabled={!selected}
-            className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)] disabled:cursor-not-allowed transition-opacity duration-[var(--transition-duration)]"
           >
             {t('common.continue')}
             <ArrowRight className="w-4 h-4" />
@@ -594,7 +604,7 @@ function SetupStep({
           <div className="flex justify-center">
             <button
               onClick={onBrowseFolder}
-              className="flex items-center gap-2 px-6 py-3 border-2 border-dashed border-border rounded-lg hover:border-primary hover:bg-primary/5 transition-colors"
+              className="flex items-center gap-2 px-6 py-3 border-2 border-dashed border-border rounded-lg hover:border-primary hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             >
               <Plus className="w-5 h-5" />
               {t('onboarding.browseForFolder')}
@@ -627,7 +637,7 @@ function SetupStep({
                 />
                 <button
                   onClick={onBrowseLibraryPath}
-                  className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+                  className="px-4 py-2 bg-muted rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
                 >
                   {t('onboarding.browse')}
                 </button>
@@ -639,7 +649,7 @@ function SetupStep({
                 {t('onboarding.organizationStyle')}
               </label>
               <div className="space-y-2">
-                <label className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
+                <label className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
                   <input
                     type="radio"
                     checked={pathTemplate === '{AlbumArtist}/{Year} - {Album}/{TrackNo} - {Title}'}
@@ -655,7 +665,7 @@ function SetupStep({
                     </p>
                   </div>
                 </label>
-                <label className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
+                <label className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
                   <input
                     type="radio"
                     checked={pathTemplate === '{AlbumArtist}/{Album}/{TrackNo} - {Title}'}
@@ -681,7 +691,7 @@ function SetupStep({
       <div className="flex items-center justify-between pt-4">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
         >
           <ArrowLeft className="w-4 h-4" />
           {t('common.back')}
@@ -690,7 +700,7 @@ function SetupStep({
         <button
           onClick={onComplete}
           disabled={!canProceed || loading}
-          className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)] disabled:cursor-not-allowed transition-opacity duration-[var(--transition-duration)]"
         >
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />

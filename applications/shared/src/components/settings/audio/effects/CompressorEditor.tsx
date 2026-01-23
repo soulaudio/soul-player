@@ -163,7 +163,7 @@ export function CompressorEditor({
           <button
             data-testid="compressor-preset-select"
             onClick={() => setIsPresetOpen(!isPresetOpen)}
-            className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg border border-border hover:bg-muted transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
           >
             <span className="text-sm font-medium">
               {t('effects.compressor.presets', 'Presets')}
@@ -182,7 +182,7 @@ export function CompressorEditor({
                   <button
                     key={preset.name}
                     onClick={() => applyPreset(preset)}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors"
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
                   >
                     {preset.name}
                   </button>
@@ -194,7 +194,7 @@ export function CompressorEditor({
 
         <button
           onClick={resetToDefault}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
           title={t('effects.compressor.reset', 'Reset to Default')}
         >
           <RotateCcw className="w-4 h-4" />

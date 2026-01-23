@@ -25,12 +25,16 @@ mod error;
 mod types;
 
 // Core modules
+pub mod artwork_discovery;
 pub mod copy;
+pub mod file_processor;
 pub mod fuzzy;
+pub mod hash_computer;
 pub mod importer;
 pub mod library_scanner;
 pub mod managed_import;
 pub mod metadata;
+pub mod metadata_extractor;
 pub mod path_template;
 pub mod scanner;
 pub mod watcher;

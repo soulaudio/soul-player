@@ -235,7 +235,7 @@ export function LibraryPage() {
           <p className="text-sm">{error instanceof Error ? error.message : String(error)}</p>
           <button
             onClick={refreshLibrary}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
           >
             {t('common.retry')}
           </button>
@@ -277,7 +277,7 @@ export function LibraryPage() {
               className={`px-2 sm:px-4 py-2 rounded-md transition-colors flex items-center gap-1.5 sm:gap-2 flex-shrink-0 ${
                 activeTab === tab.id
                   ? 'bg-background shadow-sm'
-                  : 'hover:bg-background/50'
+                  : 'hover:bg-foreground/[var(--hover-bg-opacity)]'
               }`}
               aria-label={t(tab.labelKey)}
             >
@@ -291,7 +291,7 @@ export function LibraryPage() {
           <FeatureGate feature="canCreatePlaylists">
             <button
               onClick={handleCreatePlaylist}
-              className="flex-shrink-0 p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+              className="flex-shrink-0 p-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
               aria-label={t('playlist.create')}
             >
               <Plus className="w-4 h-4" />
@@ -319,7 +319,7 @@ export function LibraryPage() {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -408,7 +408,7 @@ export function LibraryPage() {
               <FeatureGate feature="canCreatePlaylists">
                 <button
                   onClick={handleCreatePlaylist}
-                  className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+                  className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
                 >
                   {t('playlist.create')}
                 </button>

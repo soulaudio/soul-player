@@ -7,7 +7,7 @@ import type { Theme } from '../types';
  */
 export const darkTheme: Theme = {
   id: 'dark',
-  name: 'Dark',
+  name: 'Night',
   version: '1.0.0',
   author: 'Soul Player Team',
   description: 'Deep midnight theme with violet undertones and elegant contrast',
