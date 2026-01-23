@@ -155,7 +155,7 @@ describe('AlbumPage - Race Condition Handling', () => {
 
   describe('basic rendering', () => {
     it('should render album details when data loads successfully', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       const album = createSampleAlbum(1);
       const tracks = createSampleTracks(1);
 
@@ -179,7 +179,7 @@ describe('AlbumPage - Race Condition Handling', () => {
     });
 
     it('should show error state when album not found', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       mockBackend.getAlbumById = vi.fn().mockResolvedValue(null);
 
       renderAlbumPage('999', mockBackend);
@@ -190,7 +190,7 @@ describe('AlbumPage - Race Condition Handling', () => {
     });
 
     it('should show error state when loading fails', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       mockBackend.getAlbumById = vi.fn().mockRejectedValue(new Error('Network error'));
 
       renderAlbumPage('1', mockBackend);
@@ -203,7 +203,7 @@ describe('AlbumPage - Race Condition Handling', () => {
 
   describe('race condition prevention', () => {
     it('should ignore stale responses when navigating rapidly', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       const album1 = createSampleAlbum(1);
       const album2 = createSampleAlbum(2);
       const tracks1 = createSampleTracks(1);
@@ -241,7 +241,7 @@ describe('AlbumPage - Race Condition Handling', () => {
       // Immediately navigate to album ID 2 (before album 1 loads)
       rerender(
         <MemoryRouter initialEntries={['/albums/2']}>
-          <BackendContext.Provider value={mockBackend as BackendInterface}>
+          <BackendContext.Provider value={mockBackend}>
             <PlayerCommandsProvider value={createMockPlayerCommands()}>
               <PlatformProvider platform="desktop">
                 <Routes>
@@ -279,7 +279,7 @@ describe('AlbumPage - Race Condition Handling', () => {
     });
 
     it('should handle multiple rapid navigations correctly', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
 
       // Create 3 albums
       const albums = [1, 2, 3].map(createSampleAlbum);
@@ -311,7 +311,7 @@ describe('AlbumPage - Race Condition Handling', () => {
       // Rapidly navigate: 1 → 2 → 3
       rerender(
         <MemoryRouter initialEntries={['/albums/2']}>
-          <BackendContext.Provider value={mockBackend as BackendInterface}>
+          <BackendContext.Provider value={mockBackend}>
             <PlayerCommandsProvider value={createMockPlayerCommands()}>
               <PlatformProvider platform="desktop">
                 <Routes>
@@ -325,7 +325,7 @@ describe('AlbumPage - Race Condition Handling', () => {
 
       rerender(
         <MemoryRouter initialEntries={['/albums/3']}>
-          <BackendContext.Provider value={mockBackend as BackendInterface}>
+          <BackendContext.Provider value={mockBackend}>
             <PlayerCommandsProvider value={createMockPlayerCommands()}>
               <PlatformProvider platform="desktop">
                 <Routes>
@@ -369,7 +369,7 @@ describe('AlbumPage - Race Condition Handling', () => {
 
   describe('error handling with race conditions', () => {
     it('should ignore errors from stale requests', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       const album2 = createSampleAlbum(2);
       const tracks2 = createSampleTracks(2);
 
@@ -401,7 +401,7 @@ describe('AlbumPage - Race Condition Handling', () => {
       // Navigate to album 2
       rerender(
         <MemoryRouter initialEntries={['/albums/2']}>
-          <BackendContext.Provider value={mockBackend as BackendInterface}>
+          <BackendContext.Provider value={mockBackend}>
             <PlayerCommandsProvider value={createMockPlayerCommands()}>
               <PlatformProvider platform="desktop">
                 <Routes>
@@ -439,7 +439,7 @@ describe('AlbumPage - Race Condition Handling', () => {
 
   describe('loading state management', () => {
     it('should clear loading state only for current request', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       const album2 = createSampleAlbum(2);
       const tracks2 = createSampleTracks(2);
 
@@ -467,7 +467,7 @@ describe('AlbumPage - Race Condition Handling', () => {
       // Navigate to album 2
       rerender(
         <MemoryRouter initialEntries={['/albums/2']}>
-          <BackendContext.Provider value={mockBackend as BackendInterface}>
+          <BackendContext.Provider value={mockBackend}>
             <PlayerCommandsProvider value={createMockPlayerCommands()}>
               <PlatformProvider platform="desktop">
                 <Routes>
@@ -496,7 +496,7 @@ describe('AlbumPage - Race Condition Handling', () => {
 
   describe('dependency array correctness', () => {
     it('should reload album when ID changes', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       const album1 = createSampleAlbum(1);
       const album2 = createSampleAlbum(2);
       const tracks1 = createSampleTracks(1);
@@ -520,7 +520,7 @@ describe('AlbumPage - Race Condition Handling', () => {
       // Navigate to album 2
       rerender(
         <MemoryRouter initialEntries={['/albums/2']}>
-          <BackendContext.Provider value={mockBackend as BackendInterface}>
+          <BackendContext.Provider value={mockBackend}>
             <PlayerCommandsProvider value={createMockPlayerCommands()}>
               <PlatformProvider platform="desktop">
                 <Routes>

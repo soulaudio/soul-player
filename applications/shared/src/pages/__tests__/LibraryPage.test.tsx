@@ -183,7 +183,7 @@ describe('LibraryPage - Mount State Handling', () => {
 
   describe('basic rendering', () => {
     it('should render library with all data loaded', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       mockBackend.getAllTracks = vi.fn().mockResolvedValue(createSampleTracks());
       mockBackend.getAllAlbums = vi.fn().mockResolvedValue(createSampleAlbums());
       mockBackend.getAllArtists = vi.fn().mockResolvedValue(createSampleArtists());
@@ -208,7 +208,7 @@ describe('LibraryPage - Mount State Handling', () => {
     });
 
     it('should show error state when loading fails', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       mockBackend.getAllTracks = vi.fn().mockRejectedValue(new Error('Database error'));
       mockBackend.getAllAlbums = vi.fn().mockRejectedValue(new Error('Database error'));
       mockBackend.getAllArtists = vi.fn().mockRejectedValue(new Error('Database error'));
@@ -225,7 +225,7 @@ describe('LibraryPage - Mount State Handling', () => {
 
   describe('mount state prevention', () => {
     it('should not update state after unmount', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
 
       let resolveData: () => void;
       const dataPromise = new Promise<void>((resolve) => {
@@ -276,7 +276,7 @@ describe('LibraryPage - Mount State Handling', () => {
     });
 
     it('should handle navigation away during loading', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
 
       let resolveData: () => void;
       const dataPromise = new Promise<void>((resolve) => {
@@ -320,7 +320,7 @@ describe('LibraryPage - Mount State Handling', () => {
     });
 
     it('should ignore errors after unmount', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
 
       let rejectData: (error: Error) => void;
       const dataPromise = new Promise<BackendTrack[]>((_resolve, reject) => {
@@ -351,7 +351,7 @@ describe('LibraryPage - Mount State Handling', () => {
 
   describe('cleanup behavior', () => {
     it('should set isMounted to false on cleanup', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       mockBackend.getAllTracks = vi.fn().mockResolvedValue(createSampleTracks());
       mockBackend.getAllAlbums = vi.fn().mockResolvedValue(createSampleAlbums());
       mockBackend.getAllArtists = vi.fn().mockResolvedValue(createSampleArtists());
@@ -373,7 +373,7 @@ describe('LibraryPage - Mount State Handling', () => {
 
   describe('concurrent request handling', () => {
     it('should handle all 5 parallel requests correctly', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       const tracks = createSampleTracks();
       const albums = createSampleAlbums();
       const artists = createSampleArtists();
@@ -400,7 +400,7 @@ describe('LibraryPage - Mount State Handling', () => {
     });
 
     it('should handle partial failures gracefully', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       mockBackend.getAllTracks = vi.fn().mockRejectedValue(new Error('Tracks failed'));
       mockBackend.getAllAlbums = vi.fn().mockRejectedValue(new Error('Albums failed'));
       mockBackend.getAllArtists = vi.fn().mockRejectedValue(new Error('Artists failed'));

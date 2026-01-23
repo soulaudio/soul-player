@@ -89,7 +89,7 @@ describe('HomePage - Mount State Handling', () => {
 
   describe('basic rendering', () => {
     it('should render home page with albums', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       mockBackend.getAllAlbums = vi.fn().mockResolvedValue(createSampleAlbums());
       mockBackend.getRecentContexts = vi.fn().mockResolvedValue([]);
 
@@ -104,7 +104,7 @@ describe('HomePage - Mount State Handling', () => {
 
   describe('mount state prevention', () => {
     it('should not update state after unmount', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
 
       let resolveData: () => void;
       const dataPromise = new Promise<void>((resolve) => {
@@ -137,7 +137,7 @@ describe('HomePage - Mount State Handling', () => {
     });
 
     it('should handle navigation away during loading', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
 
       let resolveData: () => void;
       const dataPromise = new Promise<void>((resolve) => {
@@ -169,7 +169,7 @@ describe('HomePage - Mount State Handling', () => {
     });
 
     it('should ignore errors after unmount', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
 
       let rejectData: (error: Error) => void;
       const dataPromise = new Promise<BackendAlbum[]>((_resolve, reject) => {
@@ -197,7 +197,7 @@ describe('HomePage - Mount State Handling', () => {
 
   describe('concurrent request handling', () => {
     it('should handle parallel requests correctly', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       const albums = createSampleAlbums();
 
       mockBackend.getAllAlbums = vi.fn().mockResolvedValue(albums);
@@ -212,7 +212,7 @@ describe('HomePage - Mount State Handling', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      const mockBackend = createMockBackend();
+      const mockBackend = createMockBackend() as any;
       mockBackend.getAllAlbums = vi.fn().mockRejectedValue(new Error('Failed'));
       mockBackend.getRecentContexts = vi.fn().mockRejectedValue(new Error('Failed'));
 
