@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM fingerprint_queue WHERE attempts >= 3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "6d08d3c7d990a4c48874f1994ac35784e639846931a787a90c116bd5e99c2677"
+}

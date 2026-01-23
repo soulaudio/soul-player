@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE tracks\n        SET file_path = ?,\n            library_source_id = ?,\n            file_size = ?,\n            file_mtime = ?,\n            is_available = 1,\n            unavailable_since = NULL,\n            updated_at = datetime('now')\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "dc273cce1a6d5e6a279225f25cc02732d338378faa6d8bad37620a1e5bbda5fc"
+}

@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT id, file_path, file_size, file_mtime, content_hash\n        FROM tracks\n        WHERE library_source_id = ? AND is_available = 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "file_path",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "file_size",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "file_mtime",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "content_hash",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "84c39351aa08cdb04ee1cc32e4f03ccf5ef0b037d51ecaacc419c0adce927d1e"
+}

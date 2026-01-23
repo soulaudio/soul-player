@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE external_file_settings\n        SET show_import_notification = ?, updated_at = ?\n        WHERE user_id = ? AND device_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "ba3991e9a781a58c3e070fdfca5899c14729b06b70b637bb9a80889348e57dfc"
+}

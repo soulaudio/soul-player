@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         JOIN tracks t ON t.album_id = a.id\n         JOIN track_genres tg ON tg.track_id = t.id\n         WHERE tg.genre_id = ?\n         ORDER BY RANDOM()\n         LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "artist_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "year",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cover_art_path",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "artwork_source",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "musicbrainz_id",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "5be70e5584d50d2af7cdd71049c816048d7f9597cf0da8c41c568e55f164b078"
+}

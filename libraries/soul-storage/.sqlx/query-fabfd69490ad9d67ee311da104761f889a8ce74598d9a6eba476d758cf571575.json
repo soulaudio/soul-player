@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO track_stats (user_id, track_id, skip_count)\n            VALUES (?, ?, 1)\n            ON CONFLICT(user_id, track_id) DO UPDATE SET\n                skip_count = skip_count + 1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "fabfd69490ad9d67ee311da104761f889a8ce74598d9a6eba476d758cf571575"
+}

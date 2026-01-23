@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO scan_progress (library_source_id, started_at, total_files, status)\n        VALUES (?, ?, ?, 'running')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6c5e199162265c104c213bc070845aedcb12a376687e7db85b3f2592a51a1cea"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM devices WHERE last_seen_at < ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c08dc0222ef1a37cd2f42b3cf55072263639ee5d669e8e2e484347b65b44bf57"
+}

@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT id, user_id, device_id, library_path, path_template,\n               import_action, created_at, updated_at\n        FROM managed_library_settings\n        WHERE user_id = ? AND device_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "device_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "library_path",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "path_template",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "import_action",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8438f35e58b68b5bc6e5cd6d2a6c8280673fdf88bc0ae97afdde5997f2acf08b"
+}

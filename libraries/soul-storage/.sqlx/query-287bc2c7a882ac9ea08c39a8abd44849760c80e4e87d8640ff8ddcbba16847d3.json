@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE fingerprint_queue SET attempts = 0, last_error = NULL WHERE attempts >= 3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "287bc2c7a882ac9ea08c39a8abd44849760c80e4e87d8640ff8ddcbba16847d3"
+}

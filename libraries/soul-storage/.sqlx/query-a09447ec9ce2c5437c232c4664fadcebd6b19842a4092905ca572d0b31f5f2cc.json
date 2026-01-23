@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE loudness_analysis_queue\n        SET status = 'failed', completed_at = ?, error_message = ?\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a09447ec9ce2c5437c232c4664fadcebd6b19842a4092905ca572d0b31f5f2cc"
+}

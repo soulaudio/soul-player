@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE library_sources\n        SET last_scan_at = ?, scan_status = 'idle', error_message = NULL, updated_at = ?\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "212595e1409af9bd65dd988a946a6470ad15d8bed0f750dc2fb68806e1e841d4"
+}

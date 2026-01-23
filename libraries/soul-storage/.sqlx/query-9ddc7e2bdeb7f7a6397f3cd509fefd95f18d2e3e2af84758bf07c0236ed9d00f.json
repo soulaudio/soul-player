@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE playlist_tracks\n        SET position = (\n            SELECT COUNT(*)\n            FROM playlist_tracks pt2\n            WHERE pt2.playlist_id = playlist_tracks.playlist_id\n              AND pt2.position < playlist_tracks.position\n        )\n        WHERE playlist_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "9ddc7e2bdeb7f7a6397f3cd509fefd95f18d2e3e2af84758bf07c0236ed9d00f"
+}

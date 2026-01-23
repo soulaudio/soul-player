@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE external_file_settings\n        SET import_destination = ?, import_to_source_id = ?, updated_at = ?\n        WHERE user_id = ? AND device_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "e7e12c60e55aa9135dfcae158d387c05d172c1326050ebc4914248f5319378bd"
+}

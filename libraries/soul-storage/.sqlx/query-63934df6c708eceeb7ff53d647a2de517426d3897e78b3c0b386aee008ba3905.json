@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO track_sources (track_id, source_id, status, local_file_path)\n            VALUES (?, ?, 'local_file', ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "63934df6c708eceeb7ff53d647a2de517426d3897e78b3c0b386aee008ba3905"
+}

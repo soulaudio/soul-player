@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        DELETE FROM loudness_analysis_queue\n        WHERE status = 'completed'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "1027c7ce13d370d0873ca695d5d4d55641c5b7cb62b6190e10e1626aa9c61e9a"
+}

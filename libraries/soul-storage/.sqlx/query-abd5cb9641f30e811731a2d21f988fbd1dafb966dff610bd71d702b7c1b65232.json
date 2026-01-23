@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM playback_contexts WHERE user_id = ? AND context_type = ? AND COALESCE(context_id, '') = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "abd5cb9641f30e811731a2d21f988fbd1dafb966dff610bd71d702b7c1b65232"
+}

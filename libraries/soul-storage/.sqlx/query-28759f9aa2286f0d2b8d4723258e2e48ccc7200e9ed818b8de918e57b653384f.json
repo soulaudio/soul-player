@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_id, active_device_id, is_playing, current_track_id, position_ms,\n                volume, shuffle_enabled, repeat_mode, queue_json, updated_at\n         FROM user_playback_state WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "active_device_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_playing",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "current_track_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "position_ms",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "volume",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "shuffle_enabled",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "repeat_mode",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "queue_json",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 9,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "28759f9aa2286f0d2b8d4723258e2e48ccc7200e9ed818b8de918e57b653384f"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE user_playback_state SET active_device_id = ?, updated_at = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "4e161ce444dd7c9878a812349cafc67a53a545a9d46f7cbea220ce1e96a013c9"
+}

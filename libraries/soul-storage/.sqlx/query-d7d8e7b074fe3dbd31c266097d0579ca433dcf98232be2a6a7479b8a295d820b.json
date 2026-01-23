@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO playlist_shares (playlist_id, shared_with_user_id, permission, shared_at)\n        VALUES (?, ?, ?, ?)\n        ON CONFLICT(playlist_id, shared_with_user_id) DO UPDATE SET\n            permission = excluded.permission,\n            shared_at = excluded.shared_at\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "d7d8e7b074fe3dbd31c266097d0579ca433dcf98232be2a6a7479b8a295d820b"
+}

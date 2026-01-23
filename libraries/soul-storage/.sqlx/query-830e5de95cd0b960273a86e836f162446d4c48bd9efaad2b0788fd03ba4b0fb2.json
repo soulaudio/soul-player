@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO fingerprint_queue (track_id, priority)\n            VALUES (?, ?)\n            ON CONFLICT(track_id) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "830e5de95cd0b960273a86e836f162446d4c48bd9efaad2b0788fd03ba4b0fb2"
+}

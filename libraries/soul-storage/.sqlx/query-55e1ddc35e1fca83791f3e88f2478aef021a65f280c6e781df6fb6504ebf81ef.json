@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT id, user_id, device_id, default_action, import_destination,\n               import_to_source_id, show_import_notification, created_at, updated_at\n        FROM external_file_settings\n        WHERE user_id = ? AND device_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "device_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "default_action",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "import_destination",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "import_to_source_id",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "show_import_notification",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "55e1ddc35e1fca83791f3e88f2478aef021a65f280c6e781df6fb6504ebf81ef"
+}

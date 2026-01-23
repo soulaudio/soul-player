@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, source_type, server_url, server_username, server_token,\n                is_active, is_online, last_sync_at\n         FROM sources\n         WHERE source_type = 'server' AND is_active = 1\n         LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_type",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_url",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_username",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_token",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_active",
+        "ordinal": 6,
+        "type_info": "Bool"
+      },
+      {
+        "name": "is_online",
+        "ordinal": 7,
+        "type_info": "Bool"
+      },
+      {
+        "name": "last_sync_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "44cbcd4f6a2b4089d4efac7ae4c47babd7d00bc437d4c87dbcc54e5b35a0a907"
+}

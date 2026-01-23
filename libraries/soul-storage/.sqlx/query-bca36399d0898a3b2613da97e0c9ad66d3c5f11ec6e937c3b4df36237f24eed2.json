@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO external_file_settings\n            (user_id, device_id, default_action, import_destination,\n             import_to_source_id, show_import_notification, created_at, updated_at)\n        VALUES (?, ?, ?, ?, ?, ?, ?, ?)\n        ON CONFLICT(user_id, device_id) DO UPDATE SET\n            default_action = excluded.default_action,\n            import_destination = excluded.import_destination,\n            import_to_source_id = excluded.import_to_source_id,\n            show_import_notification = excluded.show_import_notification,\n            updated_at = excluded.updated_at\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "bca36399d0898a3b2613da97e0c9ad66d3c5f11ec6e937c3b4df36237f24eed2"
+}

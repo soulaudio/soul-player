@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE scan_progress SET processed_files = processed_files + ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "290d43fccc02aa87cfef5b2ab46a313c50a00a127686442208967629ed4ec45b"
+}

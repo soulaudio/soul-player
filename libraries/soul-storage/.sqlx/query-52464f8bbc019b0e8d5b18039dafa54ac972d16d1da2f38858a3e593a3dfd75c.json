@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO track_stats (user_id, track_id, play_count, last_played_at)\n            VALUES (?, ?, 1, datetime('now'))\n            ON CONFLICT(user_id, track_id) DO UPDATE SET\n                play_count = play_count + 1,\n                last_played_at = datetime('now')\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "52464f8bbc019b0e8d5b18039dafa54ac972d16d1da2f38858a3e593a3dfd75c"
+}

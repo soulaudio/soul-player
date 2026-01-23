@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO loudness_analysis_queue (track_id, priority, status, created_at)\n        SELECT id, 0, 'pending', ?\n        FROM tracks\n        WHERE loudness_analyzed_at IS NULL\n        ON CONFLICT(track_id) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "7cfb5235f63b68c18dbe3373d8020d8306665b70040e24d020c6dcd03a51d9eb"
+}

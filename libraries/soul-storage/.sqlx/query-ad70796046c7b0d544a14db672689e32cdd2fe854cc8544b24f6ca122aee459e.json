@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE tracks SET\n            replaygain_track_gain = ?,\n            replaygain_track_peak = ?,\n            lufs_integrated = ?,\n            lufs_range = ?,\n            true_peak_dbfs = ?,\n            loudness_analyzed_at = ?,\n            loudness_version = ?\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "ad70796046c7b0d544a14db672689e32cdd2fe854cc8544b24f6ca122aee459e"
+}

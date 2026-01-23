@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM server_auth_tokens WHERE source_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "e66f7797fccb385ed71627ed9decf47a4308eba0df54ec9d90f794a3d05e1e0f"
+}

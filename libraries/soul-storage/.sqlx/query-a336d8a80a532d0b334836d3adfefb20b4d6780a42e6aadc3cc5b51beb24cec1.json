@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO playback_contexts (user_id, context_type, context_id, context_name, context_artwork_path, last_played_at)\n        VALUES (?, ?, ?, ?, ?, ?)\n        ON CONFLICT(user_id, context_type, COALESCE(context_id, ''))\n        DO UPDATE SET\n            context_name = excluded.context_name,\n            context_artwork_path = excluded.context_artwork_path,\n            last_played_at = excluded.last_played_at\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "a336d8a80a532d0b334836d3adfefb20b4d6780a42e6aadc3cc5b51beb24cec1"
+}

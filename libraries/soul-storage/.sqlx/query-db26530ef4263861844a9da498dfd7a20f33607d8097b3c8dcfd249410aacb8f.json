@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE loudness_analysis_queue\n        SET status = 'processing', started_at = ?\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "db26530ef4263861844a9da498dfd7a20f33607d8097b3c8dcfd249410aacb8f"
+}

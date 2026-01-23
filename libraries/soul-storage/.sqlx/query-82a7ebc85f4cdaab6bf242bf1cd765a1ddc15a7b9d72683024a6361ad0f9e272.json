@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            COUNT(*) as total,\n            SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,\n            SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing,\n            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,\n            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed\n        FROM loudness_analysis_queue\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "total",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "pending",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "processing",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "completed",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "failed",
+        "ordinal": 4,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "82a7ebc85f4cdaab6bf242bf1cd765a1ddc15a7b9d72683024a6361ad0f9e272"
+}

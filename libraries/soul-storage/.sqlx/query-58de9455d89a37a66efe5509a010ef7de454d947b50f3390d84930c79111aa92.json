@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE external_file_settings\n        SET default_action = ?, updated_at = ?\n        WHERE user_id = ? AND device_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "58de9455d89a37a66efe5509a010ef7de454d947b50f3390d84930c79111aa92"
+}

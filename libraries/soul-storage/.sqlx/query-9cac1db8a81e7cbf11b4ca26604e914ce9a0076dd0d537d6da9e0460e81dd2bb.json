@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE sources SET is_active = 0 WHERE source_type = 'server'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "9cac1db8a81e7cbf11b4ca26604e914ce9a0076dd0d537d6da9e0460e81dd2bb"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM external_file_settings WHERE user_id = ? AND device_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4e040cd53714ff0c1ad8d23c033b01ed9e5144209d6164052bf603d57ebd342a"
+}

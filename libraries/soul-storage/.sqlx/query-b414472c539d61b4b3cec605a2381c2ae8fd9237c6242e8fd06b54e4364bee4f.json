@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO library_sources (user_id, device_id, name, path, sync_deletes, created_at, updated_at)\n        VALUES (?, ?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "b414472c539d61b4b3cec605a2381c2ae8fd9237c6242e8fd06b54e4364bee4f"
+}

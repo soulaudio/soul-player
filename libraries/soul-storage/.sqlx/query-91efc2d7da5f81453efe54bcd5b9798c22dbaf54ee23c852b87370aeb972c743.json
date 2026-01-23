@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE managed_library_settings\n        SET library_path = ?, updated_at = ?\n        WHERE user_id = ? AND device_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "91efc2d7da5f81453efe54bcd5b9798c22dbaf54ee23c852b87370aeb972c743"
+}
