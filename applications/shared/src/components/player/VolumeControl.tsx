@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useVolume } from '../../stores/player';
+import { usePlayerStore, useVolume } from '../../stores/player';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
 import { Volume2, VolumeX } from 'lucide-react';
 import { debug } from '../../utils/debug';

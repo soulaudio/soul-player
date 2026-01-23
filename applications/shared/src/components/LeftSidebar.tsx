@@ -19,7 +19,7 @@ import {
   Music,
   Heart,
 } from 'lucide-react';
-import { useCurrentTrack, useIsPlaying, usePlayerProgress, useVolume, usePlayerModes } from '../stores/player';
+import { usePlayerStore, useCurrentTrack, useIsPlaying, usePlayerProgress, useVolume, usePlayerModes } from '../stores/player';
 import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext';
 import { ArtworkImage } from './ArtworkImage';
 import {
