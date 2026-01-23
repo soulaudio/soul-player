@@ -179,7 +179,7 @@ export interface BackendInterface {
 // Context
 // =============================================================================
 
-const BackendContext = createContext<BackendInterface | null>(null)
+export const BackendContext = createContext<BackendInterface | null>(null)
 
 export function useBackend(): BackendInterface {
   const context = useContext(BackendContext)

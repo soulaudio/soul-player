@@ -11,13 +11,13 @@ import { BackendContext, BackendInterface, BackendAlbum } from '../../contexts/B
 import { ScrollVisibilityProvider } from '../../contexts/ScrollVisibilityContext';
 
 // Helper to create mock backend
-const createMockBackend = (): BackendInterface => ({
+const createMockBackend = (): Partial<BackendInterface> => ({
   // Album operations
   getAlbumById: vi.fn(),
   getAlbumTracks: vi.fn(),
   getAllAlbums: vi.fn().mockResolvedValue([]),
-  getAlbumsByArtist: vi.fn(),
-  updateAlbumArtwork: vi.fn(),
+  
+  
 
   // Artist operations
   getArtistById: vi.fn(),
@@ -27,7 +27,7 @@ const createMockBackend = (): BackendInterface => ({
   // Track operations
   getAllTracks: vi.fn(),
   deleteTrack: vi.fn(),
-  getTrackById: vi.fn(),
+  
 
   // Playlist operations
   getAllPlaylists: vi.fn(),
@@ -37,7 +37,7 @@ const createMockBackend = (): BackendInterface => ({
   deletePlaylist: vi.fn(),
   addTrackToPlaylist: vi.fn(),
   removeTrackFromPlaylist: vi.fn(),
-  updatePlaylistName: vi.fn(),
+  
 
   // Context operations
   recordContext: vi.fn(),
@@ -77,8 +77,8 @@ const createSampleAlbums = (count: number = 5): BackendAlbum[] => {
     year: 2020 + i,
     cover_art_path: `/covers/album${i + 1}.jpg`,
     track_count: 10,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    
+    
   }));
 };
 

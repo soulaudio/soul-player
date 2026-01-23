@@ -10,7 +10,7 @@ import { LibraryPage } from '../LibraryPage';
 import { BackendContext, BackendInterface, BackendTrack, BackendAlbum, BackendArtist, BackendPlaylist } from '../../contexts/BackendContext';
 import { PlayerCommandsProvider, PlayerContextValue } from '../../contexts/PlayerCommandsContext';
 import { PlatformProvider } from '../../contexts/PlatformContext';
-import { useNavigateWithHistory } from '../../hooks/useNavigateWithHistory';
+
 
 // Mock useNavigateWithHistory hook
 vi.mock('../../hooks/useNavigateWithHistory', () => ({
@@ -22,13 +22,13 @@ vi.mock('../../hooks/useNavigateWithHistory', () => ({
 }));
 
 // Helper to create mock backend
-const createMockBackend = (): BackendInterface => ({
+const createMockBackend = (): Partial<BackendInterface> => ({
   // Album operations
   getAlbumById: vi.fn(),
   getAlbumTracks: vi.fn(),
   getAllAlbums: vi.fn().mockResolvedValue([]),
-  getAlbumsByArtist: vi.fn(),
-  updateAlbumArtwork: vi.fn(),
+  
+  
 
   // Artist operations
   getArtistById: vi.fn(),
@@ -38,7 +38,7 @@ const createMockBackend = (): BackendInterface => ({
   // Track operations
   getAllTracks: vi.fn().mockResolvedValue([]),
   deleteTrack: vi.fn(),
-  getTrackById: vi.fn(),
+  
 
   // Playlist operations
   getAllPlaylists: vi.fn().mockResolvedValue([]),
@@ -48,7 +48,7 @@ const createMockBackend = (): BackendInterface => ({
   deletePlaylist: vi.fn(),
   addTrackToPlaylist: vi.fn(),
   removeTrackFromPlaylist: vi.fn(),
-  updatePlaylistName: vi.fn(),
+  
 
   // Context operations
   recordContext: vi.fn(),
@@ -136,8 +136,8 @@ const createSampleTracks = (count: number = 5): BackendTrack[] => {
     sample_rate: 44100,
     channels: 2,
     cover_art_path: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    
+    
   }));
 };
 
@@ -150,8 +150,8 @@ const createSampleAlbums = (count: number = 5): BackendAlbum[] => {
     year: 2020 + i,
     cover_art_path: `/covers/album${i + 1}.jpg`,
     track_count: 10,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    
+    
   }));
 };
 
@@ -160,8 +160,8 @@ const createSampleArtists = (count: number = 5): BackendArtist[] => {
     id: i + 1,
     name: `Artist ${i + 1}`,
     album_count: 5,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    
+    
   }));
 };
 
@@ -171,8 +171,8 @@ const createSamplePlaylists = (count: number = 5): BackendPlaylist[] => {
     owner_id: 1,
     name: `Playlist ${i + 1}`,
     track_count: 10,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    
+    
   }));
 };
 
