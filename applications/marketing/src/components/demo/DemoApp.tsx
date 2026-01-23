@@ -60,6 +60,11 @@ export function DemoApp() {
   const currentTrack = useCurrentTrack()
   const { version } = useGitHubRelease()
 
+  // Debug version
+  useEffect(() => {
+    console.log('[DemoApp] Version from useGitHubRelease:', version)
+  }, [version])
+
   // Initialize demo storage on mount
   useEffect(() => {
     demoStorage

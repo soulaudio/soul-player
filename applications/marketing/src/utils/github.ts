@@ -21,7 +21,7 @@ interface CachedRelease {
   timestamp: number
 }
 
-const CACHE_KEY = 'soul-player-release-info'
+const CACHE_KEY = 'soul-player-release-info-v2' // Changed to bust old cache
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 /**
@@ -86,8 +86,14 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo | null> {
 
     const data: GitHubRelease = await response.json()
 
+    const strippedVersion = data.tag_name.replace(/^v/, ''); // Strip leading 'v'
+    console.log('[GitHub] Processing version:', {
+      tagName: data.tag_name,
+      strippedVersion: strippedVersion
+    });
+
     const releaseInfo: ReleaseInfo = {
-      version: data.tag_name.replace(/^v/, ''), // Strip leading 'v'
+      version: strippedVersion,
       tagName: data.tag_name,
       publishedAt: data.published_at,
       assets: data.assets.map((asset) => ({

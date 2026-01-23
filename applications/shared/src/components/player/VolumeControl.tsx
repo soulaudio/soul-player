@@ -91,7 +91,7 @@ export function VolumeControl() {
   const displayVolume = isMuted ? 0 : volume;
 
   return (
-    <div className="flex items-center gap-2 shrink-0">
+    <div className="flex items-center gap-2 shrink-0" style={{ border: '1px solid red', padding: '4px' }}>
       <button
         onClick={handleMuteToggle}
         className="p-2 rounded-full hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors shrink-0"
@@ -107,7 +107,13 @@ export function VolumeControl() {
       <div
         ref={sliderContainerRef}
         className="relative shrink-0"
-        style={{ width: '96px', minWidth: '96px' }}
+        style={{
+          width: '96px',
+          minWidth: '96px',
+          maxWidth: '96px',
+          border: '2px solid blue',
+          backgroundColor: 'rgba(255,0,0,0.1)'
+        }}
       >
         <input
           type="range"
@@ -127,15 +133,17 @@ export function VolumeControl() {
           style={{
             height: '8px',
             width: '96px',
-            backgroundColor: '#374151'
+            backgroundColor: '#374151',
+            border: '1px solid yellow'
           }}
         >
           {/* Filled portion */}
           <div
-            className="h-full bg-primary transition-all duration-100"
+            className="bg-primary transition-all duration-100"
             style={{
               width: `${displayVolume * 100}%`,
-              height: '8px'
+              height: '8px',
+              backgroundColor: '#3b82f6'
             }}
           />
         </div>
