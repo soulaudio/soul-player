@@ -1182,11 +1182,16 @@ mod tests {
         let mut source = LocalAudioSource::new(&path, 44100).expect("Failed to load MP3");
         let mut buffer = vec![0.0f32; 1024];
 
-        // Should be able to read samples
-        let read = source.read_samples(&mut buffer);
-        assert!(read.is_ok(), "Failed to read samples: {:?}", read.err());
+        // Wait for background decoder thread to fill buffer (max 1 second)
+        let start = std::time::Instant::now();
+        let mut samples_read = 0;
+        while samples_read == 0 && start.elapsed() < Duration::from_secs(1) {
+            std::thread::sleep(Duration::from_millis(10));
+            let read = source.read_samples(&mut buffer);
+            assert!(read.is_ok(), "Failed to read samples: {:?}", read.err());
+            samples_read = read.unwrap();
+        }
 
-        let samples_read = read.unwrap();
         assert!(samples_read > 0, "Should read at least some samples");
         assert!(
             samples_read <= buffer.len(),
@@ -1217,9 +1222,16 @@ mod tests {
         // Initial position should be 0
         assert_eq!(source.position(), Duration::from_secs(0));
 
-        // Read some samples
+        // Wait for background decoder to fill buffer and read samples (max 1 second)
         let mut buffer = vec![0.0f32; 4410]; // ~0.05 seconds at 44.1kHz stereo
-        let _ = source.read_samples(&mut buffer);
+        let start = std::time::Instant::now();
+        let mut samples_read = 0;
+        while samples_read == 0 && start.elapsed() < Duration::from_secs(1) {
+            std::thread::sleep(Duration::from_millis(10));
+            samples_read = source.read_samples(&mut buffer).unwrap_or(0);
+        }
+
+        assert!(samples_read > 0, "Should have read samples after waiting");
 
         // Position should have advanced
         assert!(
