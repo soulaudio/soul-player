@@ -663,13 +663,15 @@ jobs:
           # REFERENCE: https://v2.tauri.app/distribute/sign/macos/
           # ============================================================================
 
-          # Build DMG (Rust binary with embedded frontend)
+          # Build DMG and app bundle (Rust binary with embedded frontend)
+          # - DMG: For manual user installation
+          # - app.tar.gz: For Tauri auto-updater
           # Ad-hoc signing configured in tauri.conf.json
           # Note: Code signature verification is skipped because:
           #   - Tauri v2 doesn't reliably apply ad-hoc signatures in CI
           #   - Users can still run the app by right-clicking and selecting "Open"
           #   - DMG validation below ensures the package is properly created
-          yarn build:desktop --target ${{ matrix.target }} --bundles dmg
+          yarn build:desktop --target ${{ matrix.target }} --bundles dmg,app
 
       - name: Validate DMG contains frontend files
         run: |
@@ -968,12 +970,13 @@ jobs:
           echo ""
           echo "Fetching release notes from GitHub..."
 
-          # Fetch release body from GitHub API
-          RELEASE_BODY=$(gh api repos/${REPO}/releases/tags/${TAG} --jq '.body' 2>/dev/null || echo "")
+          # Fetch release body from GitHub API using release ID (works for draft releases)
+          RELEASE_ID="${{ steps.create-release.outputs.id }}"
+          RELEASE_BODY=$(gh api repos/${REPO}/releases/${RELEASE_ID} --jq '.body' 2>/dev/null || echo "")
 
           if [ -z "$RELEASE_BODY" ]; then
             echo "⚠️  No release notes found, using default message"
-            RELEASE_NOTES="See release notes at: https://github.com/${REPO}/releases/tag/${TAG}"
+            RELEASE_NOTES="\"See release notes at: https://github.com/${REPO}/releases/tag/${TAG}\""
           else
             # Escape newlines and quotes for JSON
             RELEASE_NOTES=$(echo "$RELEASE_BODY" | jq -Rs .)

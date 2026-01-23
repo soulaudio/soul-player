@@ -114,13 +114,20 @@ if [ -n "$APPIMAGE_FILE" ] && [ -f "$APPIMAGE_FILE" ]; then
         fi
 
         # Generate signature using tauri signer
-        if command -v tauri &> /dev/null; then
+        # Note: cargo install tauri-cli installs "cargo-tauri" binary
+        if command -v cargo-tauri &> /dev/null || command -v tauri &> /dev/null; then
             # Save private key to temp file
             TEMP_KEY_FILE=$(mktemp)
             echo "$TAURI_SIGNING_PRIVATE_KEY" > "$TEMP_KEY_FILE"
 
-            # Sign the AppImage
-            tauri signer sign "$TARGET_NAME" \
+            # Sign the AppImage using cargo tauri (tauri-cli installs as cargo-tauri)
+            TAURI_CMD="cargo tauri"
+            if ! command -v cargo-tauri &> /dev/null && command -v tauri &> /dev/null; then
+                TAURI_CMD="tauri"
+            fi
+
+            echo "Using command: $TAURI_CMD signer sign"
+            $TAURI_CMD signer sign "$TARGET_NAME" \
                 --private-key "$TEMP_KEY_FILE" \
                 --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" || {
                 echo "⚠️  Warning: Signature generation failed"
@@ -132,7 +139,11 @@ if [ -n "$APPIMAGE_FILE" ] && [ -f "$APPIMAGE_FILE" ]; then
 
             if [ -f "${TARGET_NAME}.sig" ]; then
                 echo "✅ Tauri signature created: ${TARGET_NAME}.sig"
+            else
+                echo "⚠️  Warning: Signature file not created"
             fi
+        else
+            echo "⚠️  Warning: tauri-cli not found in PATH"
         fi
     else
         echo "ℹ️  Tauri signing keys not found (TAURI_SIGNING_PRIVATE_KEY not set)"
