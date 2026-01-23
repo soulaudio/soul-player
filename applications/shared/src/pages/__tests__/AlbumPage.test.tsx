@@ -99,7 +99,7 @@ const createMockPlayerCommands = (): PlayerContextValue => ({
 // Helper to render AlbumPage with all providers
 const renderAlbumPage = (
   albumId: string,
-  backend: BackendInterface = createMockBackend(),
+  backend: BackendInterface = createMockBackend() as any,
   playerCommands: PlayerContextValue = createMockPlayerCommands()
 ) => {
   return render(
@@ -141,10 +141,10 @@ const createSampleTracks = (albumId: number, count: number = 3): BackendTrack[] 
     duration_seconds: 180 + i * 10,
     file_path: `/music/album${albumId}/track${i + 1}.flac`,
     file_format: 'flac',
-    bit_rate: null,
+    bit_rate: undefined,
     sample_rate: 44100,
     channels: 2,
-    cover_art_path: null,
+    cover_art_path: undefined,
   }));
 };
 

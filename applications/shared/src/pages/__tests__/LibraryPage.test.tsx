@@ -103,7 +103,7 @@ const createMockPlayerCommands = (): PlayerContextValue => ({
 
 // Helper to render LibraryPage with all providers
 const renderLibraryPage = (
-  backend: BackendInterface = createMockBackend(),
+  backend: BackendInterface = createMockBackend() as any,
   playerCommands: PlayerContextValue = createMockPlayerCommands()
 ) => {
   return render(
@@ -132,10 +132,10 @@ const createSampleTracks = (count: number = 5): BackendTrack[] => {
     duration_seconds: 180,
     file_path: `/music/track${i + 1}.flac`,
     file_format: 'flac',
-    bit_rate: null,
+    bit_rate: undefined,
     sample_rate: 44100,
     channels: 2,
-    cover_art_path: null,
+    cover_art_path: undefined,
     
     
   }));
@@ -159,20 +159,21 @@ const createSampleArtists = (count: number = 5): BackendArtist[] => {
   return Array.from({ length: count }, (_, i) => ({
     id: i + 1,
     name: `Artist ${i + 1}`,
+    track_count: 50,
     album_count: 5,
-    
-    
   }));
 };
 
 const createSamplePlaylists = (count: number = 5): BackendPlaylist[] => {
   return Array.from({ length: count }, (_, i) => ({
-    id: i + 1,
+    id: String(i + 1),
     owner_id: 1,
     name: `Playlist ${i + 1}`,
+    is_public: false,
+    is_favorite: false,
     track_count: 10,
-    
-    
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }));
 };
 

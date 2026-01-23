@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { HomePage } from '../HomePage';
 import { BackendContext, BackendInterface, BackendAlbum } from '../../contexts/BackendContext';
@@ -55,7 +55,7 @@ const createMockBackend = (): Partial<BackendInterface> => ({
 });
 
 // Helper to render HomePage with providers
-const renderHomePage = (backend: BackendInterface = createMockBackend()) => {
+const renderHomePage = (backend: BackendInterface = createMockBackend() as any) => {
   return render(
     <MemoryRouter>
       <BackendContext.Provider value={backend}>
