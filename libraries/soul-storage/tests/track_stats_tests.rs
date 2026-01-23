@@ -9,6 +9,7 @@
 
 mod test_helpers;
 
+use sqlx::Row;
 use test_helpers::*;
 
 #[tokio::test]
@@ -84,39 +85,40 @@ async fn test_record_skip_increments_skip_count() {
         .expect("Failed to record skip");
 
     // Query track_stats directly to check skip_count
-    let stats = sqlx::query!(
+    let stats = sqlx::query(
         "SELECT play_count, skip_count FROM track_stats WHERE user_id = ? AND track_id = ?",
-        user_id,
-        track_id
     )
+    .bind(&user_id)
+    .bind(&track_id)
     .fetch_optional(pool)
     .await
     .expect("Failed to fetch track stats");
 
     let stats = stats.expect("No stats record found");
-    assert_eq!(
-        stats.play_count, 0,
-        "Play count should be 0 for skipped track"
-    );
-    assert_eq!(stats.skip_count, 1, "Skip count should be 1");
+    let play_count: i64 = stats.get("play_count");
+    let skip_count: i64 = stats.get("skip_count");
+    assert_eq!(play_count, 0, "Play count should be 0 for skipped track");
+    assert_eq!(skip_count, 1, "Skip count should be 1");
 
     // Record another skip
     soul_storage::tracks::record_play(pool, user_id.clone(), track_id.clone(), Some(180.0), false)
         .await
         .expect("Failed to record second skip");
 
-    let stats = sqlx::query!(
+    let stats = sqlx::query(
         "SELECT play_count, skip_count FROM track_stats WHERE user_id = ? AND track_id = ?",
-        user_id,
-        track_id
     )
+    .bind(&user_id)
+    .bind(&track_id)
     .fetch_optional(pool)
     .await
     .expect("Failed to fetch track stats");
 
     let stats = stats.expect("No stats record found");
-    assert_eq!(stats.play_count, 0, "Play count should still be 0");
-    assert_eq!(stats.skip_count, 2, "Skip count should be 2");
+    let play_count: i64 = stats.get("play_count");
+    let skip_count: i64 = stats.get("skip_count");
+    assert_eq!(play_count, 0, "Play count should still be 0");
+    assert_eq!(skip_count, 2, "Skip count should be 2");
 }
 
 #[tokio::test]
@@ -354,22 +356,21 @@ async fn test_completion_threshold_behavior() {
         .await
         .expect("Failed to record completed play");
 
-    let stats_after_complete = sqlx::query!(
+    let stats_after_complete = sqlx::query(
         "SELECT play_count, skip_count FROM track_stats WHERE user_id = ? AND track_id = ?",
-        user_id,
-        track_id
     )
+    .bind(&user_id)
+    .bind(&track_id)
     .fetch_optional(pool)
     .await
     .expect("Failed to fetch stats");
 
     let stats = stats_after_complete.expect("No stats found");
+    let play_count: i64 = stats.get("play_count");
+    let skip_count: i64 = stats.get("skip_count");
+    assert_eq!(play_count, 1, "Completed play should increment play_count");
     assert_eq!(
-        stats.play_count, 1,
-        "Completed play should increment play_count"
-    );
-    assert_eq!(
-        stats.skip_count, 0,
+        skip_count, 0,
         "Completed play should not increment skip_count"
     );
 
@@ -378,18 +379,20 @@ async fn test_completion_threshold_behavior() {
         .await
         .expect("Failed to record incomplete play");
 
-    let stats_after_skip = sqlx::query!(
+    let stats_after_skip = sqlx::query(
         "SELECT play_count, skip_count FROM track_stats WHERE user_id = ? AND track_id = ?",
-        user_id,
-        track_id
     )
+    .bind(&user_id)
+    .bind(&track_id)
     .fetch_optional(pool)
     .await
     .expect("Failed to fetch stats");
 
     let stats = stats_after_skip.expect("No stats found");
-    assert_eq!(stats.play_count, 1, "Skip should not increment play_count");
-    assert_eq!(stats.skip_count, 1, "Skip should increment skip_count");
+    let play_count: i64 = stats.get("play_count");
+    let skip_count: i64 = stats.get("skip_count");
+    assert_eq!(play_count, 1, "Skip should not increment play_count");
+    assert_eq!(skip_count, 1, "Skip should increment skip_count");
 }
 
 #[tokio::test]
@@ -508,16 +511,16 @@ async fn test_last_played_at_updates() {
         .await
         .expect("Failed to record play");
 
-    let first_stats = sqlx::query!(
-        "SELECT last_played_at FROM track_stats WHERE user_id = ? AND track_id = ?",
-        user_id,
-        track_id
-    )
-    .fetch_optional(pool)
-    .await
-    .expect("Failed to fetch stats");
+    let first_stats =
+        sqlx::query("SELECT last_played_at FROM track_stats WHERE user_id = ? AND track_id = ?")
+            .bind(&user_id)
+            .bind(&track_id)
+            .fetch_optional(pool)
+            .await
+            .expect("Failed to fetch stats");
 
-    let first_last_played = first_stats.expect("No stats found").last_played_at;
+    let first_stats = first_stats.expect("No stats found");
+    let first_last_played: Option<String> = first_stats.get("last_played_at");
     assert!(first_last_played.is_some(), "last_played_at should be set");
 
     // Wait a tiny bit to ensure timestamp differs
@@ -528,16 +531,16 @@ async fn test_last_played_at_updates() {
         .await
         .expect("Failed to record second play");
 
-    let second_stats = sqlx::query!(
-        "SELECT last_played_at FROM track_stats WHERE user_id = ? AND track_id = ?",
-        user_id,
-        track_id
-    )
-    .fetch_optional(pool)
-    .await
-    .expect("Failed to fetch stats");
+    let second_stats =
+        sqlx::query("SELECT last_played_at FROM track_stats WHERE user_id = ? AND track_id = ?")
+            .bind(&user_id)
+            .bind(&track_id)
+            .fetch_optional(pool)
+            .await
+            .expect("Failed to fetch stats");
 
-    let second_last_played = second_stats.expect("No stats found").last_played_at;
+    let second_stats = second_stats.expect("No stats found");
+    let second_last_played: Option<String> = second_stats.get("last_played_at");
 
     // last_played_at should have been updated (newer timestamp)
     assert!(

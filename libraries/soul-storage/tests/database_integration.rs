@@ -236,12 +236,12 @@ async fn test_multi_source_tracks() {
     let track_id = create_test_track(pool, "Shared Song", None, None, server1, None).await;
 
     // Add availability from server2 (same track available on multiple servers)
-    sqlx::query!(
+    sqlx::query(
         "INSERT INTO track_sources (track_id, source_id, status, server_path)
          VALUES (?, ?, 'stream_only', '/api/stream')",
-        track_id,
-        server2
     )
+    .bind(&track_id)
+    .bind(server2)
     .execute(pool)
     .await
     .unwrap();
@@ -762,7 +762,8 @@ async fn test_delete_user_cleans_associations() {
 
     // Delete user (cascade should remove playlists)
     let user_id = user.as_str();
-    sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(user_id)
         .execute(pool)
         .await
         .unwrap();

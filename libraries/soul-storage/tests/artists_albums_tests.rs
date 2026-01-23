@@ -362,7 +362,8 @@ async fn test_artist_deletion_sets_album_artist_to_null() {
     .unwrap();
 
     // Delete artist (ON DELETE SET NULL)
-    sqlx::query!("DELETE FROM artists WHERE id = ?", artist)
+    sqlx::query("DELETE FROM artists WHERE id = ?")
+        .bind(artist)
         .execute(pool)
         .await
         .unwrap();

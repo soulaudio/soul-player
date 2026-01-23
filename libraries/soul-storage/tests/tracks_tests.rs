@@ -105,23 +105,23 @@ async fn test_track_with_multiple_sources() {
     let track_id = create_test_track(pool, "Multi-Source Track", None, None, server_id, None).await;
 
     // Add track availability in local cache
-    sqlx::query!(
+    sqlx::query(
         "INSERT INTO track_sources (track_id, source_id, status, local_file_path)
          VALUES (?, 1, 'cached', '/cache/track.mp3')",
-        track_id
     )
+    .bind(&track_id)
     .execute(pool)
     .await
     .unwrap();
 
     // Add stream-only availability from another source
     let server2_id = create_test_source(pool, "Server 2", "server").await;
-    sqlx::query!(
+    sqlx::query(
         "INSERT INTO track_sources (track_id, source_id, status, server_path)
          VALUES (?, ?, 'stream_only', '/api/tracks/stream')",
-        track_id,
-        server2_id
     )
+    .bind(&track_id)
+    .bind(server2_id)
     .execute(pool)
     .await
     .unwrap();

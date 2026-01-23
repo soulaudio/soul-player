@@ -35,10 +35,7 @@ export function ReportBugSettingsPage() {
     if (isWeb) return;
 
     try {
-      await invoke('set_user_setting', {
-        key: 'app.logging_enabled',
-        value: JSON.stringify(enabled),
-      });
+      await invoke('set_logging_enabled', { enabled });
       setLoggingEnabled(enabled);
       setShowRestartMessage(true);
 
