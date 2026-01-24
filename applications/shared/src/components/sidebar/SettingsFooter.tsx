@@ -15,11 +15,11 @@ export function SettingsFooter({ version }: SettingsFooterProps) {
   const location = useLocation();
 
   return (
-    <div className="border-t border-border px-4 py-3 flex items-center justify-between">
+    <div className="border-t border-border px-3 py-2 flex items-center justify-between">
       <button
         onClick={() => navigate('/settings')}
         className={cn(
-          'p-2 rounded-lg transition-opacity',
+          'p-1.5 rounded-lg transition-opacity',
           location.pathname === '/settings'
             ? 'text-primary bg-accent/20'
             : 'text-muted-foreground hover:opacity-[var(--hover-text-opacity)] hover:bg-foreground/10'
@@ -29,7 +29,7 @@ export function SettingsFooter({ version }: SettingsFooterProps) {
         <Settings className="w-4 h-4" />
       </button>
       {version && (
-        <div className="text-sm text-muted-foreground/60 font-mono">v{version}</div>
+        <div className="text-xs text-muted-foreground/60 font-mono">{version}</div>
       )}
     </div>
   );

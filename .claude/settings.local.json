@@ -229,7 +229,8 @@
       "Bash(else)",
       "Bash(git fetch:*)",
       "WebFetch(domain:rustsec.org)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npm pkg:*)"
     ]
   },
   "hooks": {

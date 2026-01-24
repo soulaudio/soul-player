@@ -291,7 +291,7 @@ export function PlayerPanel({
         onAddToPlaylist={onAddToPlaylist}
       />
 
-      <div className="px-4 space-y-3">
+      <div className="px-4 pt-2 pb-4 space-y-3">
         <ProgressBar
           progress={progress}
           duration={duration}

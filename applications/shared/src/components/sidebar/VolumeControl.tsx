@@ -20,10 +20,10 @@ export function VolumeControl({
   const displayVolume = isMuted ? 0 : volume;
 
   return (
-    <div className="flex items-center gap-2" onWheel={onWheel}>
+    <div className="flex items-center gap-2 flex-1 min-w-0" onWheel={onWheel}>
       <button
         onClick={onMuteToggle}
-        className="p-1 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity"
+        className="p-1 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity shrink-0"
       >
         {isMuted || volume === 0 ? (
           <VolumeX className="w-4 h-4" />
@@ -31,7 +31,10 @@ export function VolumeControl({
           <Volume2 className="w-4 h-4" />
         )}
       </button>
-      <div className="flex-1 relative h-4 flex items-center cursor-pointer group">
+      <div
+        className="relative flex items-center cursor-pointer group flex-1 min-w-0"
+        style={{ height: '16px' }}
+      >
         <input
           type="range"
           min="0"
@@ -41,13 +44,26 @@ export function VolumeControl({
           onChange={onVolumeChange}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
         />
-        <div className="absolute inset-x-0 h-1 bg-muted rounded-full" />
         <div
-          className="absolute left-0 h-1 bg-primary rounded-full"
-          style={{ width: `${displayVolume * 100}%` }}
+          className="rounded-full bg-muted"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            height: '4px'
+          }}
+        />
+        <div
+          className="rounded-full bg-primary transition-all duration-100"
+          style={{
+            position: 'absolute',
+            left: 0,
+            height: '4px',
+            width: `${displayVolume * 100}%`
+          }}
         />
       </div>
-      <span className="text-[10px] text-muted-foreground font-mono w-6 text-right">
+      <span className="text-[10px] text-muted-foreground font-mono w-6 text-right shrink-0">
         {Math.round(displayVolume * 100)}
       </span>
     </div>

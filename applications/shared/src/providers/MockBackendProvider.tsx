@@ -555,18 +555,19 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
     // App metadata
     async getVersion() {
       // If version provided (from GitHub API), format as "v{version} (Demo)"
-      // Strip any leading "v" just in case (defensive), then add it back
-      console.log('[MockBackendProvider] getVersion called, versionProp:', versionProp)
+      console.log('[MockBackendProvider] getVersion called, versionProp:', versionProp, 'type:', typeof versionProp)
 
-      if (versionProp && versionProp.trim() !== '') {
-        console.log('[MockBackendProvider] getVersion input:', versionProp)
-        const cleanVersion = versionProp.replace(/^v/, '').trim()
+      // Check if version is valid (not null, not empty)
+      if (versionProp && typeof versionProp === 'string' && versionProp.trim().length > 0) {
+        // Version should already be stripped of "v" by github.ts
+        // e.g., "0.1.7" not "v0.1.7"
+        const cleanVersion = versionProp.trim()
         const result = `v${cleanVersion} (Demo)`
-        console.log('[MockBackendProvider] getVersion output:', result)
+        console.log('[MockBackendProvider] Formatted version:', result)
         return result
       }
 
-      console.log('[MockBackendProvider] No version prop, returning "Demo"')
+      console.log('[MockBackendProvider] No valid version, returning "Demo"')
       return 'Demo'
     },
 
@@ -736,7 +737,7 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
       debug.log('[MockBackend] File dialog not supported in demo mode')
       return null
     },
-  }), [storage, getArtistsFromTracks, getArtistIdMap, getMockPlaylists])
+  }), [storage, getArtistsFromTracks, getArtistIdMap, getMockPlaylists, versionProp])
 
   return (
     <BackendProvider value={backend}>

@@ -107,12 +107,12 @@ export { ThemePicker } from './theme/components/ThemePicker';
 export { useTheme } from './theme/useTheme';
 export * from './theme/types';
 
-// Player components
-export { PlayerFooter } from './components/player/PlayerFooter';
+// Player components (UNUSED - kept for potential future use)
+// export { PlayerFooter } from './components/player/PlayerFooter'; // DELETED - dead code
 export { PlayerControls } from './components/player/PlayerControls';
 export { TrackInfo } from './components/player/TrackInfo';
 export { ProgressBar } from './components/player/ProgressBar';
-export { VolumeControl } from './components/player/VolumeControl';
+// export { VolumeControl } from './components/player/VolumeControl'; // DELETED - dead code
 export { ShuffleRepeatControls } from './components/player/ShuffleRepeatControls';
 export { DeviceSelector } from './components/player/DeviceSelector';
 
