@@ -720,6 +720,35 @@ jobs:
             fi
           fi
 
+      - name: Rename .app.tar.gz files for release
+        run: |
+          # Get version from release-config.json
+          VERSION=$(jq -r '.version' .github/release-config.json)
+
+          # Determine architecture suffix based on target
+          if [ "${{ matrix.target }}" == "aarch64-apple-darwin" ]; then
+            ARCH_SUFFIX="aarch64"
+          else
+            ARCH_SUFFIX="x64"
+          fi
+
+          BUNDLE_DIR="target/${{ matrix.target }}/release/bundle/macos"
+
+          # Rename .app.tar.gz file
+          if [ -f "${BUNDLE_DIR}/Soul Player.app.tar.gz" ]; then
+            mv "${BUNDLE_DIR}/Soul Player.app.tar.gz" "${BUNDLE_DIR}/Soul Player_${VERSION}_${ARCH_SUFFIX}.app.tar.gz"
+            echo "✅ Renamed: Soul Player.app.tar.gz → Soul Player_${VERSION}_${ARCH_SUFFIX}.app.tar.gz"
+          fi
+
+          # Rename .app.tar.gz.sig file if it exists
+          if [ -f "${BUNDLE_DIR}/Soul Player.app.tar.gz.sig" ]; then
+            mv "${BUNDLE_DIR}/Soul Player.app.tar.gz.sig" "${BUNDLE_DIR}/Soul Player_${VERSION}_${ARCH_SUFFIX}.app.tar.gz.sig"
+            echo "✅ Renamed: Soul Player.app.tar.gz.sig → Soul Player_${VERSION}_${ARCH_SUFFIX}.app.tar.gz.sig"
+          fi
+
+          # List files to verify
+          ls -lh "${BUNDLE_DIR}/"*.app.tar.gz* || true
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -728,6 +757,7 @@ jobs:
             target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             target/${{ matrix.target }}/release/bundle/dmg/*.dmg.sig
             target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
+            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
             target/universal-apple-darwin/release/bundle/macos/*.app
           retention-days: 30
           if-no-files-found: warn
