@@ -728,9 +728,9 @@ jobs:
             target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             target/${{ matrix.target }}/release/bundle/dmg/*.dmg.sig
             target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
-            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
             target/universal-apple-darwin/release/bundle/macos/*.app
           retention-days: 30
+          if-no-files-found: warn
 
   # DISABLED: Server Docker build temporarily disabled
   # build-server:
