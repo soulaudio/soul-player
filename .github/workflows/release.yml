@@ -1081,7 +1081,7 @@ jobs:
   test-windows-install:
     name: Test Windows Installation
     needs: create-draft-release
-    if: needs.create-draft-release.result == 'success'
+    if: always() && needs.create-draft-release.result == 'success'
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -1351,7 +1351,7 @@ jobs:
   test-linux-install:
     name: Test Linux Installation
     needs: create-draft-release
-    if: needs.create-draft-release.result == 'success'
+    if: always() && needs.create-draft-release.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1530,7 +1530,7 @@ jobs:
   test-macos-install:
     name: Test macOS Installation
     needs: create-draft-release
-    if: needs.create-draft-release.result == 'success'
+    if: always() && needs.create-draft-release.result == 'success'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -1812,7 +1812,7 @@ jobs:
   publish-aur:
     name: Publish to AUR
     needs: [create-draft-release, publish-release]
-    if: needs.publish-release.result == 'success'
+    if: always() && needs.publish-release.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
