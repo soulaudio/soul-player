@@ -56,6 +56,11 @@ cpal = { version = "0.17", default-features = true } # Desktop audio I/O - 0.17 
 # iOS/Android use native bridges (Swift/Kotlin)
 # ESP32 uses awedio_esp32
 
+# Platform-specific device monitoring (for async device enumeration)
+coreaudio-rs = { version = "0.11" } # macOS CoreAudio async device monitoring
+pipewire = { version = "0.8" } # Linux PipeWire async device monitoring
+windows = { version = "0.58", features = ["Media_Devices", "Foundation", "Foundation_Collections"] } # Windows WinRT async device monitoring
+
 # Audio - DSP & Effects
 dasp = "0.11" # Digital Audio Signal Processing primitives
 fundsp = "0.18" # Advanced DSP graph synthesis
@@ -99,6 +104,8 @@ tauri-plugin-updater = "2.0"
 tauri-plugin-global-shortcut = "2.0"
 tauri-plugin-deep-link = "2.0"
 tauri-plugin-notification = "2.0"
+tauri-plugin-os = "2.0"
+tauri-plugin-process = "2.0"
 url = "2.5"
 
 # Testing

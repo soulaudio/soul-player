@@ -182,6 +182,6 @@ impl SyncManager {
         .fetch_one(pool)
         .await?;
 
-        Ok(row.version.map(|v| v.to_string()).unwrap_or_default())
+        Ok(row.version.map(|v: i64| v.to_string()).unwrap_or_default())
     }
 }

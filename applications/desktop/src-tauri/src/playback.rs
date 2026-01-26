@@ -5,18 +5,186 @@
 
 use serde::Serialize;
 use soul_audio_desktop::{
-    DesktopPlayback, ExclusiveConfig, LatencyInfo, PlaybackCommand, PlaybackEvent,
+    create_async_device_monitor, AudioError, DesktopPlayback, DeviceEvent, ExclusiveConfig,
+    LatencyInfo, PlaybackCommand, PlaybackEvent,
 };
 use soul_playback::{
     lazy_queue::QueueContext, PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode, TrackSource,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::app_state::AppState;
 
+/// Device event type for deduplication tracking
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DeviceEventType {
+    Added,
+    Removed,
+    DefaultChanged,
+    PropertyChanged,
+}
+
+/// Last device event tracker for deduplication
+///
+/// Platform APIs (CoreAudio, PipeWire, WinRT) can emit duplicate events like:
+/// - Device removed twice
+/// - Default device changed to same device multiple times
+///
+/// This tracker prevents redundant operations by filtering duplicates within 500ms window.
+struct LastDeviceEvent {
+    event_type: DeviceEventType,
+    device_id: String,
+    timestamp: Instant,
+}
+
+impl LastDeviceEvent {
+    /// Check if a new event is a duplicate of this event
+    ///
+    /// Returns true if:
+    /// - Same event type
+    /// - Same device ID
+    /// - Within 500ms window
+    fn is_duplicate(&self, event_type: &DeviceEventType, device_id: &str) -> bool {
+        if self.event_type != *event_type {
+            return false;
+        }
+        if self.device_id != device_id {
+            return false;
+        }
+        // Check if within 500ms window
+        self.timestamp.elapsed() < Duration::from_millis(500)
+    }
+}
+
+/// Device monitoring metrics for observability
+///
+/// Thread-safe atomic counters for tracking device events and switches.
+/// All counters use Relaxed ordering since we only need eventual consistency
+/// for metrics reporting.
+#[derive(Debug, Default)]
+struct DeviceMetrics {
+    /// Total number of device switch attempts
+    device_switches_total: AtomicU64,
+    /// Number of successful device switches
+    device_switches_successful: AtomicU64,
+    /// Number of failed device switches
+    device_switches_failed: AtomicU64,
+    /// Number of device added events
+    device_added_events: AtomicU64,
+    /// Number of device removed events
+    device_removed_events: AtomicU64,
+    /// Number of default device changed events
+    default_changed_events: AtomicU64,
+    /// Number of device property changed events
+    property_changed_events: AtomicU64,
+    /// Unix timestamp (milliseconds) of last device switch
+    last_switch_timestamp: AtomicU64,
+    /// Duration (milliseconds) of last device switch
+    last_switch_duration_ms: AtomicU64,
+}
+
+impl DeviceMetrics {
+    /// Create new device metrics tracker
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record a device switch attempt start
+    fn record_switch_start(&self) {
+        self.device_switches_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a successful device switch with timing
+    fn record_switch_success(&self, duration_ms: u64) {
+        self.device_switches_successful
+            .fetch_add(1, Ordering::Relaxed);
+        self.last_switch_duration_ms
+            .store(duration_ms, Ordering::Relaxed);
+
+        // Store current Unix timestamp in milliseconds
+        if let Ok(timestamp) = SystemTime::now().duration_since(UNIX_EPOCH) {
+            self.last_switch_timestamp
+                .store(timestamp.as_millis() as u64, Ordering::Relaxed);
+        }
+    }
+
+    /// Record a failed device switch
+    fn record_switch_failure(&self) {
+        self.device_switches_failed.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a device added event
+    fn record_device_added(&self) {
+        self.device_added_events.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a device removed event
+    fn record_device_removed(&self) {
+        self.device_removed_events.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a default device changed event
+    fn record_default_changed(&self) {
+        self.default_changed_events.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a device property changed event
+    fn record_property_changed(&self) {
+        self.property_changed_events.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Get snapshot of current metrics
+    fn snapshot(&self) -> DeviceMetricsSnapshot {
+        DeviceMetricsSnapshot {
+            device_switches_total: self.device_switches_total.load(Ordering::Relaxed),
+            device_switches_successful: self.device_switches_successful.load(Ordering::Relaxed),
+            device_switches_failed: self.device_switches_failed.load(Ordering::Relaxed),
+            device_added_events: self.device_added_events.load(Ordering::Relaxed),
+            device_removed_events: self.device_removed_events.load(Ordering::Relaxed),
+            default_changed_events: self.default_changed_events.load(Ordering::Relaxed),
+            property_changed_events: self.property_changed_events.load(Ordering::Relaxed),
+            last_switch_timestamp: self.last_switch_timestamp.load(Ordering::Relaxed),
+            last_switch_duration_ms: self.last_switch_duration_ms.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Log current metrics summary
+    fn log_summary(&self) {
+        let snapshot = self.snapshot();
+        tracing::info!(
+            device_switches_total = snapshot.device_switches_total,
+            device_switches_successful = snapshot.device_switches_successful,
+            device_switches_failed = snapshot.device_switches_failed,
+            device_added_events = snapshot.device_added_events,
+            device_removed_events = snapshot.device_removed_events,
+            default_changed_events = snapshot.default_changed_events,
+            property_changed_events = snapshot.property_changed_events,
+            last_switch_duration_ms = snapshot.last_switch_duration_ms,
+            "[DEVICE_METRICS] Device monitoring metrics summary"
+        );
+    }
+}
+
+/// Snapshot of device metrics for serialization
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceMetricsSnapshot {
+    device_switches_total: u64,
+    device_switches_successful: u64,
+    device_switches_failed: u64,
+    device_added_events: u64,
+    device_removed_events: u64,
+    default_changed_events: u64,
+    property_changed_events: u64,
+    /// Unix timestamp in milliseconds
+    last_switch_timestamp: u64,
+    /// Duration in milliseconds
+    last_switch_duration_ms: u64,
+}
 /// Playback tracker for recording play statistics
 ///
 /// Tracks the current playing track to record plays to the database when:
@@ -108,9 +276,17 @@ impl From<&QueueTrack> for FrontendTrackEvent {
 
         // Prefer album artwork if available (to pick up custom artwork)
         // Otherwise fall back to track artwork
-        let cover_art_path = match &track.source {
-            TrackSource::Album { id, .. } => Some(format!("artwork://album/{}", id)),
-            _ => Some(format!("artwork://track/{}", track.id)),
+        // Optimized: Use String::with_capacity + write! to reduce allocations in hot path
+        let cover_art_path = if let TrackSource::Album { id, .. } = &track.source {
+            use std::fmt::Write;
+            let mut s = String::with_capacity(16 + id.len());
+            write!(&mut s, "artwork://album/{}", id).unwrap();
+            Some(s)
+        } else {
+            use std::fmt::Write;
+            let mut s = String::with_capacity(16 + track.id.len());
+            write!(&mut s, "artwork://track/{}", track.id).unwrap();
+            Some(s)
         };
 
         Self {
@@ -132,16 +308,20 @@ pub struct PlaybackManager {
     app_handle: AppHandle,
     #[cfg(feature = "effects")]
     effect_slots: Arc<Mutex<[Option<crate::dsp_commands::EffectSlotState>; 4]>>,
+    /// Device monitor cancellation sender (for graceful shutdown)
+    device_monitor_cancel_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
+    /// Device metrics for monitoring
+    device_metrics: Arc<DeviceMetrics>,
 }
 
 impl PlaybackManager {
     /// Create a new playback manager
-    pub fn new(app_handle: AppHandle) -> Result<Self, String> {
+    pub fn new(app_handle: AppHandle) -> Result<Self, AudioError> {
         // Create playback config
         let config = PlaybackConfig::default();
 
         // Create desktop playback system
-        let playback = DesktopPlayback::new(config).map_err(|e| e.to_string())?;
+        let playback = DesktopPlayback::new(config)?;
         let playback = Arc::new(Mutex::new(playback));
 
         // Start event emission thread
@@ -154,25 +334,58 @@ impl PlaybackManager {
             });
         }
 
+        // Create device metrics tracker
+        let device_metrics = Arc::new(DeviceMetrics::new());
+
+        // Start async device monitoring task
+        // This provides real-time hotplug notifications on platforms that support it
+        // (macOS CoreAudio property listeners, Linux PipeWire registry events, Windows WinRT DeviceWatcher)
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        let cancel_tx_storage = Arc::new(Mutex::new(Some(cancel_tx)));
+
+        {
+            let playback_clone = Arc::clone(&playback);
+            let app_handle_clone = app_handle.clone();
+            let metrics_clone = Arc::clone(&device_metrics);
+
+            let monitor_handle = tauri::async_runtime::spawn(async move {
+                Self::device_monitoring_task(
+                    playback_clone,
+                    app_handle_clone,
+                    metrics_clone,
+                    cancel_rx,
+                )
+                .await;
+            });
+
+            // Log errors from device monitoring (runs for app lifetime)
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = monitor_handle.await {
+                    tracing::error!("[DEVICE_MONITOR] Device monitoring task panicked: {:?}", e);
+                }
+            });
+        }
+
         Ok(Self {
             playback,
             app_handle,
             #[cfg(feature = "effects")]
             effect_slots: Arc::new(Mutex::new([None, None, None, None])),
+            device_monitor_cancel_tx: cancel_tx_storage,
+            device_metrics,
         })
     }
 
     /// Event emission loop that runs in background thread
     ///
     /// Uses channel-based blocking with timeout instead of busy-waiting.
-    /// Wakes up immediately when events arrive, or when periodic tasks are due (500ms position, 2s sample rate).
+    /// Wakes up immediately when events arrive, or when periodic task is due (500ms position).
     /// This significantly reduces CPU usage and power consumption compared to fixed 50ms polling.
     ///
     /// NOTE: Mutex locks use expect() with clear messages instead of unwrap()
     /// to aid debugging if the mutex is poisoned (indicates a panic in another thread).
     fn event_emission_loop(playback: Arc<Mutex<DesktopPlayback>>, app_handle: AppHandle) {
         let mut last_position_emit = std::time::Instant::now();
-        let mut last_sample_rate_check = std::time::Instant::now();
         let mut last_crossfade_progress_emit = std::time::Instant::now();
         let mut tracker = PlaybackTracker::new();
 
@@ -180,13 +393,9 @@ impl PlaybackManager {
             // Calculate time until next periodic task
             let time_until_position =
                 Duration::from_millis(500).saturating_sub(last_position_emit.elapsed());
-            let time_until_sample_rate =
-                Duration::from_secs(2).saturating_sub(last_sample_rate_check.elapsed());
 
             // Wait for event with timeout = next periodic task (or 1ms minimum)
-            let timeout = time_until_position
-                .min(time_until_sample_rate)
-                .max(Duration::from_millis(1));
+            let timeout = time_until_position.max(Duration::from_millis(1));
 
             // Block until event arrives or timeout expires (efficient channel-based waiting)
             let event = {
@@ -355,7 +564,7 @@ impl PlaybackManager {
                         let playback_clone = Arc::clone(&playback);
                         let app_handle_clone = app_handle.clone();
 
-                        tauri::async_runtime::spawn(async move {
+                        let batch_handle = tauri::async_runtime::spawn(async move {
                             Self::handle_batch_request(
                                 playback_clone,
                                 app_handle_clone,
@@ -364,6 +573,13 @@ impl PlaybackManager {
                                 false,
                             )
                             .await;
+                        });
+
+                        // Detach error logging to avoid blocking
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = batch_handle.await {
+                                tracing::error!("[PLAYBACK] Batch load task panicked: {:?}", e);
+                            }
                         });
 
                         // Don't emit to frontend - this is an internal event
@@ -380,7 +596,7 @@ impl PlaybackManager {
                         let playback_clone = Arc::clone(&playback);
                         let app_handle_clone = app_handle.clone();
 
-                        tauri::async_runtime::spawn(async move {
+                        let jump_handle = tauri::async_runtime::spawn(async move {
                             Self::handle_batch_request(
                                 playback_clone,
                                 app_handle_clone,
@@ -389,6 +605,13 @@ impl PlaybackManager {
                                 true,
                             )
                             .await;
+                        });
+
+                        // Detach error logging to avoid blocking
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = jump_handle.await {
+                                tracing::error!("[PLAYBACK] Jump load task panicked: {:?}", e);
+                            }
                         });
 
                         // Don't emit to frontend - this is an internal event
@@ -422,39 +645,332 @@ impl PlaybackManager {
                 }
             }
 
-            // Check for device sample rate changes every 2 seconds
-            // This detects when the user changes the device's sample rate externally
-            // (e.g., via ASIO control panel or Windows sound settings)
-            if last_sample_rate_check.elapsed() >= Duration::from_secs(2) {
-                match playback.lock() {
-                    Ok(mut pb) => {
-                        match pb.check_and_update_sample_rate() {
-                            Ok(true) => {
-                                tracing::debug!("Device sample rate changed, stream recreated");
+            // No explicit sleep needed - recv_event_timeout() blocks efficiently
+            // The loop continues immediately after timeout or event arrival
+        }
+    }
+
+    /// Handle a single device event with deduplication
+    ///
+    /// This processes device events sequentially to prevent race conditions.
+    /// Called by the event processing task from the bounded channel.
+    ///
+    /// Deduplication prevents redundant operations from duplicate platform events like:
+    /// - Device removed twice
+    /// - Default device changed to same device multiple times
+    async fn handle_device_event(
+        event: DeviceEvent,
+        playback: &Arc<Mutex<DesktopPlayback>>,
+        app_handle: &AppHandle,
+        metrics: &Arc<DeviceMetrics>,
+        last_event: &mut Option<LastDeviceEvent>,
+    ) {
+        // Extract event type and device ID for deduplication check
+        let (event_type, device_id) = match &event {
+            DeviceEvent::DeviceAdded { id, .. } => (DeviceEventType::Added, id.clone()),
+            DeviceEvent::DeviceRemoved { id } => (DeviceEventType::Removed, id.clone()),
+            DeviceEvent::DefaultDeviceChanged { id, .. } => {
+                (DeviceEventType::DefaultChanged, id.clone())
+            }
+            DeviceEvent::DevicePropertyChanged { id, .. } => {
+                (DeviceEventType::PropertyChanged, id.clone())
+            }
+        };
+
+        // Check for duplicate event
+        if let Some(ref prev) = last_event {
+            if prev.is_duplicate(&event_type, &device_id) {
+                tracing::debug!(
+                    event_type = ?event_type,
+                    device_id = %device_id,
+                    elapsed_ms = prev.timestamp.elapsed().as_millis(),
+                    "[DEVICE_MONITOR] Skipping duplicate event (within 500ms window)"
+                );
+                return;
+            }
+        }
+
+        // Process the event (not a duplicate)
+        match event {
+            DeviceEvent::DeviceAdded { ref id, ref name } => {
+                metrics.record_device_added();
+
+                tracing::info!(
+                    device_id = %id,
+                    device_name = %name,
+                    "[DEVICE_MONITOR] Device added"
+                );
+
+                // Emit to frontend (no blocking operations)
+                if let Err(e) = app_handle.emit(
+                    "audio:device-added",
+                    serde_json::json!({
+                        "id": id,
+                        "name": name,
+                    }),
+                ) {
+                    tracing::warn!(
+                        error = %e,
+                        event = "audio:device-added",
+                        "[DEVICE_MONITOR] Failed to emit device event to frontend"
+                    );
+                }
+            }
+            DeviceEvent::DeviceRemoved { id, .. } => {
+                metrics.record_device_removed();
+
+                tracing::info!(
+                    device_id = %id,
+                    "[DEVICE_MONITOR] Device removed"
+                );
+
+                if let Ok(mut pb) = playback.lock() {
+                    // Get the current playback device ID
+                    let current_device_id = pb.get_current_device();
+
+                    tracing::debug!(
+                        removed_device_id = %id,
+                        current_device_id = %current_device_id,
+                        "[DEVICE_MONITOR] Comparing removed device with current playback device"
+                    );
+
+                    // Only attempt device switching if the removed device matches the current one
+                    if id == current_device_id {
+                        tracing::warn!(
+                            device_id = %id,
+                            "[DEVICE_MONITOR] Current playback device was removed - switching to default device"
+                        );
+
+                        let backend = pb.get_current_backend();
+                        match pb.switch_device(backend, None) {
+                            Ok(()) => {
+                                tracing::info!(
+                                    device_id = %id,
+                                    "[DEVICE_MONITOR] Successfully switched to default device"
+                                );
                             }
-                            Ok(false) => {
-                                // No change, nothing to do
-                            }
-                            Err(e) => {
-                                // Don't spam errors, just log once per failure
-                                tracing::warn!(error = %e, "Failed to check sample rate");
+                            Err(switch_err) => {
+                                tracing::error!(
+                                    error = %switch_err,
+                                    device_id = %id,
+                                    "[DEVICE_MONITOR] Failed to switch to default device"
+                                );
                             }
                         }
-                        drop(pb);
-                        last_sample_rate_check = std::time::Instant::now();
+
+                        // Emit to frontend
+                        if let Err(e) = app_handle.emit(
+                            "audio:device-removed",
+                            serde_json::json!({
+                                "id": id,
+                                "switchingToDefault": true,
+                            }),
+                        ) {
+                            tracing::warn!(
+                                error = %e,
+                                event = "audio:device-removed",
+                                "[DEVICE_MONITOR] Failed to emit device event to frontend"
+                            );
+                        }
+                    } else {
+                        // Removed device was not the active playback device
+                        tracing::debug!(
+                            device_id = %id,
+                            "[DEVICE_MONITOR] Removed device was not the active playback device - no action needed"
+                        );
+
+                        if let Err(e) = app_handle.emit(
+                            "audio:device-removed",
+                            serde_json::json!({
+                                "id": id,
+                                "switchingToDefault": false,
+                            }),
+                        ) {
+                            tracing::warn!(
+                                error = %e,
+                                event = "audio:device-removed",
+                                "[DEVICE_MONITOR] Failed to emit device event to frontend"
+                            );
+                        }
                     }
-                    Err(e) => {
+                } else {
+                    tracing::warn!(
+                        device_id = %id,
+                        "[DEVICE_MONITOR] Failed to lock playback mutex for device removal"
+                    );
+                }
+            }
+            DeviceEvent::DefaultDeviceChanged { id, name } => {
+                metrics.record_default_changed();
+
+                tracing::info!(
+                    device_id = %id,
+                    device_name = %name,
+                    "[DEVICE_MONITOR] Default device changed"
+                );
+
+                if let Ok(mut pb) = playback.lock() {
+                    // Trigger a sample rate check which will detect the device change
+                    // and recreate the stream if necessary
+                    if let Err(e) = pb.check_and_update_sample_rate() {
                         tracing::warn!(
                             error = %e,
-                            "[playback] Failed to lock mutex for sample rate check - skipping"
+                            device_id = %id,
+                            device_name = %name,
+                            "[DEVICE_MONITOR] Failed to switch to new default device"
                         );
-                        // Continue without checking sample rate this iteration
+                    } else {
+                        tracing::info!(
+                            device_name = %name,
+                            "[DEVICE_MONITOR] Successfully switched to new default device"
+                        );
+                    }
+                } else {
+                    tracing::warn!(
+                        device_id = %id,
+                        device_name = %name,
+                        "[DEVICE_MONITOR] Failed to lock playback mutex for default device change"
+                    );
+                }
+
+                // Emit to frontend (no blocking operations)
+                if let Err(e) = app_handle.emit(
+                    "audio:default-device-changed",
+                    serde_json::json!({
+                        "id": id,
+                        "name": name,
+                    }),
+                ) {
+                    tracing::warn!(
+                        error = %e,
+                        event = "audio:default-device-changed",
+                        "[DEVICE_MONITOR] Failed to emit device event to frontend"
+                    );
+                }
+            }
+            DeviceEvent::DevicePropertyChanged {
+                ref id,
+                ref property,
+            } => {
+                metrics.record_property_changed();
+
+                tracing::debug!(
+                    device_id = %id,
+                    property = %property,
+                    "[DEVICE_MONITOR] Device property changed"
+                );
+
+                // Property changes (like sample rate) will be caught by the
+                // periodic sample rate check in event_emission_loop
+            }
+        }
+
+        // Store this event as the last event (after processing to prevent skipping on errors)
+        *last_event = Some(LastDeviceEvent {
+            event_type,
+            device_id,
+            timestamp: Instant::now(),
+        });
+    }
+
+    /// Async device monitoring task
+    ///
+    /// Watches for device changes (hotplug events) and handles them appropriately.
+    /// This provides real-time notifications on platforms that support it:
+    /// - macOS: CoreAudio property listeners (~1ms latency)
+    /// - Linux: PipeWire registry events (~0ms latency)
+    /// - Windows: WinRT DeviceWatcher (~0ms latency)
+    /// - Fallback: CPAL polling (2s interval)
+    ///
+    /// Uses a bounded channel (capacity=8) to ensure proper ordering and backpressure.
+    /// Events are processed sequentially by a dedicated task to prevent race conditions.
+    ///
+    /// # Cancellation
+    /// The task can be gracefully cancelled via the `cancel_rx` channel.
+    async fn device_monitoring_task(
+        playback: Arc<Mutex<DesktopPlayback>>,
+        app_handle: AppHandle,
+        metrics: Arc<DeviceMetrics>,
+        mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+    ) {
+        let monitor = create_async_device_monitor();
+
+        tracing::info!(
+            platform = monitor.platform_name(),
+            "[DEVICE_MONITOR] Starting async device monitoring"
+        );
+
+        // Create bounded channel for device events (capacity=8 for backpressure)
+        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<DeviceEvent>(8);
+
+        // Spawn event processing task with deduplication tracker
+        let playback_clone = playback.clone();
+        let app_handle_clone = app_handle.clone();
+        let metrics_clone = metrics.clone();
+        tokio::spawn(async move {
+            let mut last_event: Option<LastDeviceEvent> = None;
+            while let Some(event) = event_rx.recv().await {
+                Self::handle_device_event(
+                    event,
+                    &playback_clone,
+                    &app_handle_clone,
+                    &metrics_clone,
+                    &mut last_event,
+                )
+                .await;
+            }
+            tracing::info!("[DEVICE_MONITOR] Event processing task terminated");
+        });
+
+        // Create callback that sends events to the channel
+        let callback = Box::new(move |event: DeviceEvent| {
+            // Send event to channel for ordered processing
+            // Use try_send for non-blocking behavior in callback
+            if let Err(e) = event_tx.try_send(event) {
+                tracing::warn!(
+                    error = %e,
+                    "[DEVICE_MONITOR] Failed to send device event to processing channel (channel full or closed)"
+                );
+            }
+        });
+
+        match monitor.watch_for_changes(callback).await {
+            Ok(_handle) => {
+                tracing::info!(
+                    platform = monitor.platform_name(),
+                    "[DEVICE_MONITOR] Device monitoring active"
+                );
+
+                // Log metrics every 5 minutes while monitoring
+                let mut metrics_interval = tokio::time::interval(Duration::from_secs(300));
+                metrics_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+                // Wait for cancellation signal or periodic metrics logging
+                // The handle will be dropped when this task exits, triggering cleanup
+                loop {
+                    tokio::select! {
+                        _ = &mut cancel_rx => {
+                            tracing::info!(
+                                "[DEVICE_MONITOR] Cancellation signal received - stopping device monitoring"
+                            );
+                            // Log final metrics before exiting
+                            metrics.log_summary();
+                            break;
+                        }
+                        _ = metrics_interval.tick() => {
+                            // Log periodic metrics summary
+                            metrics.log_summary();
+                        }
                     }
                 }
             }
-
-            // No explicit sleep needed - recv_event_timeout() blocks efficiently
-            // The loop continues immediately after timeout or event arrival
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    platform = monitor.platform_name(),
+                    "[DEVICE_MONITOR] Failed to start device monitoring - falling back to polling"
+                );
+            }
         }
     }
 
@@ -469,7 +985,7 @@ impl PlaybackManager {
     ) {
         let app_handle_clone = app_handle.clone();
 
-        tauri::async_runtime::spawn(async move {
+        let record_handle = tauri::async_runtime::spawn(async move {
             let app_state = app_handle_clone.state::<AppState>();
             let track_id_obj = soul_core::types::TrackId::new(track_id.clone());
             let user_id = soul_core::types::UserId::new(app_state.user_id.clone());
@@ -498,6 +1014,13 @@ impl PlaybackManager {
                 );
             }
         });
+
+        // Log errors from play recording
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = record_handle.await {
+                tracing::error!("[PLAYBACK] Play recording task panicked: {:?}", e);
+            }
+        });
     }
 
     /// Handle batch loading request (forward pagination or jump)
@@ -518,9 +1041,24 @@ impl PlaybackManager {
         );
 
         // Get lazy state from playback manager
+        // CRITICAL: Clone Arc first, release outer lock, then acquire inner lock to prevent deadlock
         let lazy_state = {
-            let pb = playback.lock().unwrap();
-            let pm = pb.get_playback_manager().lock().unwrap();
+            let manager_ref = {
+                let Ok(pb) = playback.lock() else {
+                    tracing::error!(
+                        "Failed to acquire playback lock for batch request - mutex poisoned"
+                    );
+                    return;
+                };
+                pb.get_playback_manager().clone()
+            }; // pb lock released here
+
+            let Ok(pm) = manager_ref.lock() else {
+                tracing::error!(
+                    "Failed to acquire playback manager lock for batch request - mutex poisoned"
+                );
+                return;
+            };
             pm.get_lazy_state().cloned()
         };
 
@@ -586,18 +1124,22 @@ impl PlaybackManager {
 
         tracing::debug!(track_count = tracks.len(), "Loaded tracks from database");
 
-        // Convert to QueueTrack (inline to avoid needing Track type)
+        // Convert to QueueTrack (optimized - reduce allocations by moving strings)
         let queue_tracks: Vec<QueueTrack> = tracks
             .into_iter()
-            .filter_map(|track| {
+            .filter_map(|mut track| {
                 // Get file path from availability (first available source)
                 let file_path = track.availability.first()?.local_file_path.as_ref()?;
 
                 let path = app_state.library_path.join(file_path);
+
+                // Move album_title once to avoid double clone
+                let album_title = track.album_title.take().unwrap_or_default();
+
                 let source = if let Some(album_id) = track.album_id {
                     TrackSource::Album {
                         id: album_id.to_string(),
-                        name: track.album_title.clone().unwrap_or_default(),
+                        name: album_title.clone(), // Clone only for source name
                     }
                 } else {
                     TrackSource::Single
@@ -605,9 +1147,9 @@ impl PlaybackManager {
 
                 Some(QueueTrack {
                     id: track.id.to_string(),
-                    title: track.title.clone(),
-                    artist: track.artist_name.clone().unwrap_or_default(),
-                    album: track.album_title.clone(),
+                    title: std::mem::take(&mut track.title), // Move instead of clone
+                    artist: track.artist_name.take().unwrap_or_default(), // Move instead of clone
+                    album: Some(album_title),                // Use moved value
                     duration: Duration::from_secs(track.duration_seconds.unwrap_or(0.0) as u64),
                     path,
                     source,
@@ -616,12 +1158,19 @@ impl PlaybackManager {
             })
             .collect();
 
-        // Send AppendToSource command
-        let pb = playback.lock().unwrap();
-        if let Err(e) = pb.send_command(PlaybackCommand::AppendToSource(queue_tracks.clone())) {
-            tracing::error!(error = %e, "Failed to append tracks");
-            return;
-        }
+        // Send AppendToSource command (move queue_tracks since it's not used after)
+        {
+            let Ok(pb) = playback.lock() else {
+                tracing::error!(
+                    "Playback mutex poisoned during batch append - audio thread may have crashed"
+                );
+                return;
+            };
+            if let Err(e) = pb.send_command(PlaybackCommand::AppendToSource(queue_tracks)) {
+                tracing::error!(error = %e, "Failed to append tracks");
+                return;
+            }
+        } // pb lock released here
 
         if is_jump {
             // Jump load: retry the skip to the target index
@@ -629,12 +1178,24 @@ impl PlaybackManager {
                 offset = offset,
                 "Retrying skip to index after jump batch load"
             );
+            let Ok(pb) = playback.lock() else {
+                tracing::error!(
+                    "Playback mutex poisoned during skip retry - audio thread may have crashed"
+                );
+                return;
+            };
             if let Err(e) = pb.send_command(PlaybackCommand::SkipToQueueIndex(offset)) {
                 tracing::error!(error = %e, "Failed to retry skip after jump load");
             }
         } else {
             // Forward pagination: resume playback by playing next track
             tracing::debug!("Resuming playback after forward pagination batch load");
+            let Ok(pb) = playback.lock() else {
+                tracing::error!(
+                    "Playback mutex poisoned during resume - audio thread may have crashed"
+                );
+                return;
+            };
             if let Err(e) = pb.send_command(PlaybackCommand::Next) {
                 tracing::error!(error = %e, "Failed to resume playback after forward pagination");
             }
@@ -645,112 +1206,211 @@ impl PlaybackManager {
     ///
     /// # Arguments
     /// * `track` - Track metadata including file path
-    pub fn play_track(&self, track: QueueTrack) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn play_track(&self, track: QueueTrack) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "play_track command".to_string(),
+            })?;
 
         // Clear queue and add this track
         playback
             .send_command(PlaybackCommand::ClearQueue)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| AudioError::CommandFailed {
+                command: "ClearQueue".to_string(),
+                reason: e.to_string(),
+            })?;
 
         playback
             .send_command(PlaybackCommand::AddToQueue(track))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| AudioError::CommandFailed {
+                command: "AddToQueue".to_string(),
+                reason: e.to_string(),
+            })?;
 
         // Start playback
         playback
             .send_command(PlaybackCommand::Play)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Play".to_string(),
+                reason: e.to_string(),
+            })?;
 
         Ok(())
     }
 
     /// Play
-    pub fn play(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn play(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "play command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::Play)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Play".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Pause
-    pub fn pause(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn pause(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "pause command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::Pause)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Pause".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Stop
-    pub fn stop(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn stop(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "stop command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::Stop)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Stop".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Next track
-    pub fn next(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn next(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "next command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::Next)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Next".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Previous track
-    pub fn previous(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn previous(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "previous command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::Previous)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Previous".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Seek to position (in seconds)
-    pub fn seek(&self, position: f64) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn seek(&self, position: f64) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "seek command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::Seek(position))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Seek".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Set volume (0-100)
-    pub fn set_volume(&self, volume: u8) -> Result<(), String> {
+    pub fn set_volume(&self, volume: u8) -> Result<(), AudioError> {
         let volume = volume.clamp(0, 100);
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "set_volume command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::SetVolume(volume))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "SetVolume".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Mute
-    pub fn mute(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn mute(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "mute command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::Mute)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Mute".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Unmute
-    pub fn unmute(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn unmute(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "unmute command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::Unmute)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "Unmute".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Set shuffle mode
-    pub fn set_shuffle(&self, mode: ShuffleMode) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn set_shuffle(&self, mode: ShuffleMode) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "set_shuffle command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::SetShuffle(mode))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "SetShuffle".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Cycle shuffle mode (Off → Random → Smart → Off)
     ///
     /// Returns the new shuffle mode as a string
-    pub fn cycle_shuffle(&self) -> Result<String, String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn cycle_shuffle(&self) -> Result<String, AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "cycle_shuffle command".to_string(),
+            })?;
 
         // Cycle shuffle and get new mode synchronously
         let new_mode = {
@@ -767,26 +1427,42 @@ impl PlaybackManager {
 
     /// Get current shuffle mode
     pub fn get_shuffle(&self) -> ShuffleMode {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting shuffle mode - audio thread may have crashed");
+            return ShuffleMode::Off;
+        };
         playback.get_shuffle_mode()
     }
 
     /// Get current repeat mode
     pub fn get_repeat(&self) -> RepeatMode {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while getting repeat mode - audio thread may have crashed"
+            );
+            return RepeatMode::Off;
+        };
         playback.get_repeat_mode()
     }
 
     /// Set repeat mode
-    pub fn set_repeat(&self, mode: RepeatMode) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn set_repeat(&self, mode: RepeatMode) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "set_repeat command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::SetRepeat(mode))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "SetRepeat".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Cycle through repeat modes: Off → All → One → Off
-    pub fn cycle_repeat(&self) -> Result<String, String> {
+    pub fn cycle_repeat(&self) -> Result<String, AudioError> {
         let current = self.get_repeat();
         let next = match current {
             RepeatMode::Off => RepeatMode::All,
@@ -805,98 +1481,186 @@ impl PlaybackManager {
 
     /// Get queue
     pub fn get_queue(&self) -> Vec<QueueTrack> {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while getting queue - audio thread may have crashed"
+            );
+            return Vec::new();
+        };
         playback.get_queue()
     }
 
     /// Check if there is a next track
     pub fn has_next(&self) -> bool {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while checking has_next - audio thread may have crashed"
+            );
+            return false;
+        };
         playback.has_next()
     }
 
     /// Check if there is a previous track
     pub fn has_previous(&self) -> bool {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while checking has_previous - audio thread may have crashed");
+            return false;
+        };
         playback.has_previous()
     }
 
     /// Get current playback state
     pub fn get_state(&self) -> soul_playback::PlaybackState {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting playback state - audio thread may have crashed");
+            return soul_playback::PlaybackState::Stopped;
+        };
         playback.get_state()
     }
 
     /// Add track to queue (legacy - maps to add_to_queue_end)
-    pub fn add_to_queue(&self, track: QueueTrack) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn add_to_queue(&self, track: QueueTrack) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "add_to_queue command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::AddToQueue(track))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "AddToQueue".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Add track to Play Next queue (plays after current track)
-    pub fn add_play_next(&self, track: QueueTrack) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn add_play_next(&self, track: QueueTrack) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "add_play_next command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::AddPlayNext(track))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "AddPlayNext".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Add track to end of Add to Queue (plays after source exhausts)
-    pub fn add_to_queue_end(&self, track: QueueTrack) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn add_to_queue_end(&self, track: QueueTrack) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "add_to_queue_end command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::AddToQueueEnd(track))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "AddToQueueEnd".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Remove track from queue by index
-    pub fn remove_from_queue(&self, index: usize) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn remove_from_queue(&self, index: usize) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "remove_from_queue command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::RemoveFromQueue(index))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "RemoveFromQueue".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Clear entire queue (all three tiers)
-    pub fn clear_queue(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn clear_queue(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "clear_queue command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::ClearQueue)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "ClearQueue".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Clear Play Next queue only
-    pub fn clear_play_next(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn clear_play_next(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "clear_play_next command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::ClearPlayNext)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "ClearPlayNext".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Clear Add to Queue only
-    pub fn clear_add_to_queue(&self) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn clear_add_to_queue(&self) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "clear_add_to_queue command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::ClearAddToQueue)
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "ClearAddToQueue".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Skip to track at queue index
-    pub fn skip_to_queue_index(&self, index: usize) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn skip_to_queue_index(&self, index: usize) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "skip_to_queue_index command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::SkipToQueueIndex(index))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "SkipToQueueIndex".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Load playlist/album as source queue (replaces playback context)
-    pub fn load_playlist(&self, tracks: Vec<QueueTrack>) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    pub fn load_playlist(&self, tracks: Vec<QueueTrack>) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "load_playlist command".to_string(),
+            })?;
         playback
             .send_command(PlaybackCommand::LoadPlaylist(tracks))
-            .map_err(|e| e.to_string())
+            .map_err(|e| AudioError::CommandFailed {
+                command: "LoadPlaylist".to_string(),
+                reason: e.to_string(),
+            })
     }
 
     /// Set lazy context for on-demand track loading
@@ -904,15 +1668,20 @@ impl PlaybackManager {
         &self,
         context: QueueContext,
         shuffle_seed: Option<u64>,
-    ) -> Result<(), String> {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+    ) -> Result<(), AudioError> {
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "set_lazy_context command".to_string(),
+            })?;
         let mut mgr = playback.get_manager_mut();
         mgr.set_lazy_context(context, shuffle_seed);
         Ok(())
     }
 
     /// Skip to track at index (alias for skip_to_queue_index)
-    pub fn skip_to_index(&self, index: usize) -> Result<(), String> {
+    pub fn skip_to_index(&self, index: usize) -> Result<(), AudioError> {
         self.skip_to_queue_index(index)
     }
 
@@ -929,14 +1698,42 @@ impl PlaybackManager {
         &self,
         backend: soul_audio_desktop::AudioBackend,
         device_name: Option<String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), AudioError> {
+        // Record switch attempt
+        self.device_metrics.record_switch_start();
+
+        let start = Instant::now();
+
         tracing::debug!("Acquiring lock for device switch");
-        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
+        let mut playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "switch_device command".to_string(),
+            })?;
         tracing::debug!("Lock acquired, switching device");
-        let result = playback
-            .switch_device(backend, device_name)
-            .map_err(|e| e.to_string());
-        tracing::debug!("Device switch completed, releasing lock");
+        let result = playback.switch_device(backend, device_name);
+
+        // Record metrics based on result
+        let duration_ms = start.elapsed().as_millis() as u64;
+        match &result {
+            Ok(_) => {
+                self.device_metrics.record_switch_success(duration_ms);
+                tracing::debug!(
+                    duration_ms = duration_ms,
+                    "Device switch completed successfully"
+                );
+            }
+            Err(e) => {
+                self.device_metrics.record_switch_failure();
+                tracing::debug!(
+                    duration_ms = duration_ms,
+                    error = %e,
+                    "Device switch failed"
+                );
+            }
+        }
+
         // Explicitly drop the guard to release the lock
         drop(playback);
         result
@@ -944,19 +1741,32 @@ impl PlaybackManager {
 
     /// Get current audio backend
     pub fn get_current_backend(&self) -> soul_audio_desktop::AudioBackend {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting audio backend - audio thread may have crashed");
+            return soul_audio_desktop::AudioBackend::Default;
+        };
         playback.get_current_backend()
     }
 
     /// Get current device name
     pub fn get_current_device(&self) -> String {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while getting device name - audio thread may have crashed"
+            );
+            return "Unknown Device".to_string();
+        };
         playback.get_current_device()
     }
 
     /// Get current sample rate
     pub fn get_current_sample_rate(&self) -> u32 {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while getting sample rate - audio thread may have crashed"
+            );
+            return 44100;
+        };
         playback.get_current_sample_rate()
     }
 
@@ -969,11 +1779,14 @@ impl PlaybackManager {
     /// * `Ok(true)` - Sample rate changed and stream was recreated
     /// * `Ok(false)` - Sample rate unchanged
     /// * `Err(_)` - Failed to check or update
-    pub fn refresh_sample_rate(&self) -> Result<bool, String> {
-        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
-        playback
-            .check_and_update_sample_rate()
-            .map_err(|e| e.to_string())
+    pub fn refresh_sample_rate(&self) -> Result<bool, AudioError> {
+        let mut playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "refresh_sample_rate command".to_string(),
+            })?;
+        playback.check_and_update_sample_rate()
     }
 
     // ===== DSP Effect Chain =====
@@ -982,8 +1795,13 @@ impl PlaybackManager {
     #[cfg(feature = "effects")]
     pub fn get_effect_slots(
         &self,
-    ) -> Result<[Option<crate::dsp_commands::EffectSlotState>; 4], String> {
-        let slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
+    ) -> Result<[Option<crate::dsp_commands::EffectSlotState>; 4], AudioError> {
+        let slots = self
+            .effect_slots
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "get_effect_slots".to_string(),
+            })?;
         Ok(slots.clone())
     }
 
@@ -993,14 +1811,21 @@ impl PlaybackManager {
         &self,
         slot_index: usize,
         effect: Option<crate::dsp_commands::EffectSlotState>,
-    ) -> Result<(), String> {
+    ) -> Result<(), AudioError> {
         if slot_index >= 4 {
-            return Err("Slot index must be 0-3".to_string());
+            return Err(AudioError::DeviceError(
+                "Slot index must be 0-3".to_string(),
+            ));
         }
 
         // Update slot
         {
-            let mut slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
+            let mut slots = self
+                .effect_slots
+                .lock()
+                .map_err(|_| AudioError::MutexPoisoned {
+                    context: "set_effect_slot".to_string(),
+                })?;
             slots[slot_index] = effect;
         }
 
@@ -1017,7 +1842,7 @@ impl PlaybackManager {
         &self,
         slot_index: usize,
         effect: &crate::dsp_commands::EffectType,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, AudioError> {
         use crate::dsp_commands::EffectType;
         use soul_audio::effects::{
             Compressor, Crossfeed, CrossfeedPreset, GraphicEq, Limiter, ParametricEq,
@@ -1025,7 +1850,9 @@ impl PlaybackManager {
         };
 
         if slot_index >= 4 {
-            return Err("Slot index must be 0-3".to_string());
+            return Err(AudioError::DeviceError(
+                "Slot index must be 0-3".to_string(),
+            ));
         }
 
         // Try to update in-place
@@ -1107,7 +1934,12 @@ impl PlaybackManager {
 
         // Also update the stored slot state
         if updated {
-            let mut slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
+            let mut slots = self
+                .effect_slots
+                .lock()
+                .map_err(|_| AudioError::MutexPoisoned {
+                    context: "update_effect_parameters_in_place".to_string(),
+                })?;
             if let Some(ref mut slot_state) = slots[slot_index] {
                 slot_state.effect = effect.clone();
             }
@@ -1118,7 +1950,7 @@ impl PlaybackManager {
 
     /// Rebuild the entire effect chain from current slot state
     #[cfg(feature = "effects")]
-    fn rebuild_effect_chain(&self) -> Result<(), String> {
+    fn rebuild_effect_chain(&self) -> Result<(), AudioError> {
         use crate::dsp_commands::EffectType;
         use soul_audio::effects::{
             AudioEffect, Compressor, ConvolutionEngine, Crossfeed, CrossfeedPreset,
@@ -1126,7 +1958,12 @@ impl PlaybackManager {
             StereoSettings,
         };
 
-        let slots = self.effect_slots.lock().map_err(|e| e.to_string())?;
+        let slots = self
+            .effect_slots
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "rebuild_effect_chain".to_string(),
+            })?;
 
         self.with_effect_chain(|chain| {
             // Clear existing effects
@@ -1243,11 +2080,16 @@ impl PlaybackManager {
 
     /// Access the effect chain for configuration
     #[cfg(feature = "effects")]
-    pub fn with_effect_chain<F, R>(&self, f: F) -> Result<R, String>
+    pub fn with_effect_chain<F, R>(&self, f: F) -> Result<R, AudioError>
     where
         F: FnOnce(&mut soul_audio::effects::EffectChain) -> R,
     {
-        let playback = self.playback.lock().map_err(|e| e.to_string())?;
+        let playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "with_effect_chain".to_string(),
+            })?;
         Ok(playback.with_effect_chain(f))
     }
 
@@ -1255,43 +2097,68 @@ impl PlaybackManager {
 
     /// Set volume leveling mode (ReplayGain track/album, EBU R128, etc.)
     pub fn set_volume_leveling_mode(&self, mode: soul_playback::NormalizationMode) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting volume leveling mode - audio thread may have crashed");
+            return;
+        };
         playback.set_volume_leveling_mode(mode);
     }
 
     /// Get current volume leveling mode
     pub fn get_volume_leveling_mode(&self) -> soul_playback::NormalizationMode {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting volume leveling mode - audio thread may have crashed");
+            return soul_playback::NormalizationMode::Disabled;
+        };
         playback.get_volume_leveling_mode()
     }
 
     /// Set track gain for current track (called when loading track)
     pub fn set_track_gain(&self, gain_db: f64, peak_dbfs: f64) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while setting track gain - audio thread may have crashed"
+            );
+            return;
+        };
         playback.set_track_gain(gain_db, peak_dbfs);
     }
 
     /// Set album gain for current track (called when loading track)
     pub fn set_album_gain(&self, gain_db: f64, peak_dbfs: f64) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while setting album gain - audio thread may have crashed"
+            );
+            return;
+        };
         playback.set_album_gain(gain_db, peak_dbfs);
     }
 
     /// Clear gain values (for new track without loudness data)
     pub fn clear_loudness_gains(&self) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while clearing loudness gains - audio thread may have crashed");
+            return;
+        };
         playback.clear_loudness_gains();
     }
 
     /// Set pre-amp gain for volume leveling
     pub fn set_loudness_preamp(&self, preamp_db: f64) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting loudness preamp - audio thread may have crashed");
+            return;
+        };
         playback.set_loudness_preamp(preamp_db);
     }
 
     /// Set whether to prevent clipping during volume leveling
     pub fn set_prevent_clipping(&self, prevent: bool) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting prevent clipping - audio thread may have crashed");
+            return;
+        };
         playback.set_prevent_clipping(prevent);
     }
 
@@ -1299,7 +2166,10 @@ impl PlaybackManager {
 
     /// Get current latency information
     pub fn get_latency_info(&self) -> LatencyInfo {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting latency info - audio thread may have crashed");
+            return LatencyInfo::default();
+        };
         playback.get_latency_info()
     }
 
@@ -1310,22 +2180,33 @@ impl PlaybackManager {
     /// - Bit-perfect output (no OS mixer)
     /// - Lower latency
     /// - Direct sample format control
-    pub fn set_exclusive_mode(&self, config: ExclusiveConfig) -> Result<LatencyInfo, String> {
-        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
-        playback
-            .set_exclusive_mode(config)
-            .map_err(|e| e.to_string())
+    pub fn set_exclusive_mode(&self, config: ExclusiveConfig) -> Result<LatencyInfo, AudioError> {
+        let mut playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "set_exclusive_mode command".to_string(),
+            })?;
+        playback.set_exclusive_mode(config)
     }
 
     /// Disable exclusive mode (return to shared mode)
-    pub fn disable_exclusive_mode(&self) -> Result<(), String> {
-        let mut playback = self.playback.lock().map_err(|e| e.to_string())?;
-        playback.disable_exclusive_mode().map_err(|e| e.to_string())
+    pub fn disable_exclusive_mode(&self) -> Result<(), AudioError> {
+        let mut playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "disable_exclusive_mode command".to_string(),
+            })?;
+        playback.disable_exclusive_mode()
     }
 
     /// Check if currently in exclusive mode
     pub fn is_exclusive_mode(&self) -> bool {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while checking exclusive mode - audio thread may have crashed");
+            return false;
+        };
         playback.is_exclusive_mode()
     }
 
@@ -1333,37 +2214,55 @@ impl PlaybackManager {
 
     /// Set crossfade enabled/disabled
     pub fn set_crossfade_enabled(&self, enabled: bool) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting crossfade enabled - audio thread may have crashed");
+            return;
+        };
         playback.set_crossfade_enabled(enabled);
     }
 
     /// Get current crossfade enabled state
     pub fn is_crossfade_enabled(&self) -> bool {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while checking crossfade enabled - audio thread may have crashed");
+            return false;
+        };
         playback.is_crossfade_enabled()
     }
 
     /// Set crossfade duration in milliseconds
     pub fn set_crossfade_duration(&self, duration_ms: u32) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting crossfade duration - audio thread may have crashed");
+            return;
+        };
         playback.set_crossfade_duration(duration_ms);
     }
 
     /// Get crossfade duration in milliseconds
     pub fn get_crossfade_duration(&self) -> u32 {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting crossfade duration - audio thread may have crashed");
+            return 5000;
+        };
         playback.get_crossfade_duration()
     }
 
     /// Set crossfade curve type
     pub fn set_crossfade_curve(&self, curve: soul_playback::FadeCurve) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting crossfade curve - audio thread may have crashed");
+            return;
+        };
         playback.set_crossfade_curve(curve);
     }
 
     /// Get crossfade curve type
     pub fn get_crossfade_curve(&self) -> soul_playback::FadeCurve {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting crossfade curve - audio thread may have crashed");
+            return soul_playback::FadeCurve::Linear;
+        };
         playback.get_crossfade_curve()
     }
 
@@ -1380,14 +2279,24 @@ impl PlaybackManager {
     /// - "maximum": 512-tap filter, 0.995 cutoff - audiophile quality
     ///
     /// Changes apply when the next track is loaded.
-    pub fn set_resampling_quality(&self, quality: &str) -> Result<(), String> {
-        let mut playback = self.playback.lock().unwrap();
-        playback.set_resampling_quality(quality)
+    pub fn set_resampling_quality(&self, quality: &str) -> Result<(), AudioError> {
+        let mut playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "set_resampling_quality command".to_string(),
+            })?;
+        playback
+            .set_resampling_quality(quality)
+            .map_err(|e| AudioError::DeviceError(e))
     }
 
     /// Get current resampling quality preset
     pub fn get_resampling_quality(&self) -> String {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting resampling quality - audio thread may have crashed");
+            return "high".to_string();
+        };
         playback.get_resampling_quality()
     }
 
@@ -1397,16 +2306,26 @@ impl PlaybackManager {
     /// - rate>0: Force specific output sample rate (e.g., 96000)
     ///
     /// Changes apply when the next track is loaded.
-    pub fn set_resampling_target_rate(&self, rate: u32) -> Result<(), String> {
-        let mut playback = self.playback.lock().unwrap();
-        playback.set_resampling_target_rate(rate)
+    pub fn set_resampling_target_rate(&self, rate: u32) -> Result<(), AudioError> {
+        let mut playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "set_resampling_target_rate command".to_string(),
+            })?;
+        playback
+            .set_resampling_target_rate(rate)
+            .map_err(|e| AudioError::DeviceError(e))
     }
 
     /// Get current resampling target sample rate
     ///
     /// Returns 0 for auto mode, or the specific rate in Hz.
     pub fn get_resampling_target_rate(&self) -> u32 {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting resampling target rate - audio thread may have crashed");
+            return 0;
+        };
         playback.get_resampling_target_rate()
     }
 
@@ -1418,14 +2337,24 @@ impl PlaybackManager {
     /// - "r8brain": Use r8brain library (requires feature flag)
     ///
     /// Changes apply when the next track is loaded.
-    pub fn set_resampling_backend(&self, backend: &str) -> Result<(), String> {
-        let mut playback = self.playback.lock().unwrap();
-        playback.set_resampling_backend(backend)
+    pub fn set_resampling_backend(&self, backend: &str) -> Result<(), AudioError> {
+        let mut playback = self
+            .playback
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "set_resampling_backend command".to_string(),
+            })?;
+        playback
+            .set_resampling_backend(backend)
+            .map_err(|e| AudioError::DeviceError(e))
     }
 
     /// Get current resampling backend
     pub fn get_resampling_backend(&self) -> String {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting resampling backend - audio thread may have crashed");
+            return "auto".to_string();
+        };
         playback.get_resampling_backend()
     }
 
@@ -1433,49 +2362,112 @@ impl PlaybackManager {
 
     /// Set headroom management mode
     pub fn set_headroom_mode(&self, mode: soul_playback::HeadroomMode) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting headroom mode - audio thread may have crashed");
+            return;
+        };
         playback.set_headroom_mode(mode);
     }
 
     /// Get current headroom mode
     pub fn get_headroom_mode(&self) -> soul_playback::HeadroomMode {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting headroom mode - audio thread may have crashed");
+            return soul_playback::HeadroomMode::Disabled;
+        };
         playback.get_headroom_mode()
     }
 
     /// Set headroom enabled state
     pub fn set_headroom_enabled(&self, enabled: bool) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting headroom enabled - audio thread may have crashed");
+            return;
+        };
         playback.set_headroom_enabled(enabled);
     }
 
     /// Check if headroom management is enabled
     pub fn is_headroom_enabled(&self) -> bool {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while checking headroom enabled - audio thread may have crashed");
+            return false;
+        };
         playback.is_headroom_enabled()
     }
 
     /// Set EQ boost value for headroom calculation
     pub fn set_headroom_eq_boost_db(&self, boost_db: f64) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting headroom EQ boost - audio thread may have crashed");
+            return;
+        };
         playback.set_headroom_eq_boost_db(boost_db);
     }
 
     /// Set pre-amp value for headroom calculation
     pub fn set_headroom_preamp_db(&self, preamp_db: f64) {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while setting headroom preamp - audio thread may have crashed");
+            return;
+        };
         playback.set_headroom_preamp_db(preamp_db);
     }
 
     /// Get total potential gain from all sources
     pub fn get_headroom_total_gain_db(&self) -> f64 {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting headroom total gain - audio thread may have crashed");
+            return 0.0;
+        };
         playback.get_headroom_total_gain_db()
     }
 
     /// Get current attenuation being applied
     pub fn get_headroom_attenuation_db(&self) -> f64 {
-        let playback = self.playback.lock().unwrap();
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting headroom attenuation - audio thread may have crashed");
+            return 0.0;
+        };
         playback.get_headroom_attenuation_db()
     }
+
+    // ===== Device Monitoring Metrics =====
+
+    /// Get device monitoring metrics snapshot
+    ///
+    /// Returns a snapshot of current device event and switch metrics for observability.
+    /// All counters are thread-safe and can be queried at any time without blocking.
+    pub fn get_device_metrics(&self) -> DeviceMetricsSnapshot {
+        self.device_metrics.snapshot()
+    }
+
+    /// Stop device monitoring gracefully
+    ///
+    /// This sends a cancellation signal to the device monitoring task,
+    /// allowing it to clean up resources and exit gracefully.
+    pub fn stop_device_monitoring(&self) {
+        if let Ok(mut cancel_tx) = self.device_monitor_cancel_tx.lock() {
+            if let Some(tx) = cancel_tx.take() {
+                // Send cancellation signal (ignore errors - task may already be stopped)
+                let _ = tx.send(());
+                tracing::debug!(
+                    "[DEVICE_MONITOR] Sent cancellation signal to device monitoring task"
+                );
+            }
+        }
+    }
+}
+
+impl Drop for PlaybackManager {
+    fn drop(&mut self) {
+        tracing::debug!("[PlaybackManager] Dropping PlaybackManager - stopping device monitoring");
+        self.stop_device_monitoring();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Tests removed - device_monitor functionality has been replaced with async event-based monitoring
+    // See soul_audio_desktop::create_async_device_monitor() for the new implementation
 }

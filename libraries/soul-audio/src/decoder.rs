@@ -54,13 +54,20 @@ impl SymphoniaDecoder {
 
     /// Open a file and create stream state
     fn create_stream_state(path: &Path) -> Result<StreamState> {
+        tracing::debug!(file_path = %path.display(), "[Decoder] Opening audio file");
+        let start = std::time::Instant::now();
+
         // Check if file exists
         if !path.exists() {
+            tracing::error!(file_path = %path.display(), "[Decoder] File not found");
             return Err(AudioError::FileNotFound(path.display().to_string()));
         }
 
         // Open the file
-        let file = std::fs::File::open(path).map_err(|e| AudioError::Io(e))?;
+        let file = std::fs::File::open(path).map_err(|e| {
+            tracing::error!(file_path = %path.display(), error = %e, "[Decoder] Failed to open file");
+            AudioError::Io(e)
+        })?;
 
         // Create media source
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -72,6 +79,8 @@ impl SymphoniaDecoder {
         }
 
         // Probe the media source
+        tracing::debug!(file_path = %path.display(), "[Decoder] Probing audio format");
+        let probe_start = std::time::Instant::now();
         let probed = symphonia::default::get_probe()
             .format(
                 &hint,
@@ -79,7 +88,15 @@ impl SymphoniaDecoder {
                 &FormatOptions::default(),
                 &MetadataOptions::default(),
             )
-            .map_err(|e| AudioError::Symphonia(format!("Failed to probe file: {}", e)))?;
+            .map_err(|e| {
+                tracing::error!(file_path = %path.display(), error = %e, "[Decoder] Failed to probe file format");
+                AudioError::Symphonia(format!("Failed to probe file: {}", e))
+            })?;
+        let probe_duration = probe_start.elapsed();
+        tracing::debug!(
+            duration_ms = probe_duration.as_millis(),
+            "[Decoder] Format probe completed"
+        );
 
         let format = probed.format;
 
@@ -105,9 +122,29 @@ impl SymphoniaDecoder {
             .map(|n_frames| Duration::from_secs_f64(n_frames as f64 / sample_rate as f64));
 
         // Create decoder
+        tracing::debug!(
+            sample_rate,
+            channels,
+            codec = ?track.codec_params.codec,
+            "[Decoder] Creating audio decoder"
+        );
         let decoder = symphonia::default::get_codecs()
             .make(&track.codec_params, &DecoderOptions::default())
-            .map_err(|e| AudioError::Symphonia(format!("Failed to create decoder: {}", e)))?;
+            .map_err(|e| {
+                tracing::error!(error = %e, "[Decoder] Failed to create decoder");
+                AudioError::Symphonia(format!("Failed to create decoder: {}", e))
+            })?;
+
+        let total_duration = start.elapsed();
+        tracing::info!(
+            file_path = %path.display(),
+            sample_rate,
+            channels,
+            duration_secs = ?duration,
+            codec = ?track.codec_params.codec,
+            total_duration_ms = total_duration.as_millis(),
+            "[Decoder] Stream state created successfully"
+        );
 
         Ok(StreamState {
             format,
@@ -381,14 +418,21 @@ impl SymphoniaDecoder {
 
 impl AudioDecoderTrait for SymphoniaDecoder {
     fn decode(&mut self, path: &Path) -> soul_core::Result<AudioBuffer> {
+        tracing::info!(file_path = %path.display(), "[Decoder] Starting full file decode");
+        let decode_start = std::time::Instant::now();
+
         // Check if file exists
         if !path.exists() {
+            tracing::error!(file_path = %path.display(), "[Decoder] File not found");
             return Err(AudioError::FileNotFound(path.display().to_string()).into());
         }
 
         // Open the file
         let file =
-            std::fs::File::open(path).map_err(|e| soul_core::SoulError::audio(e.to_string()))?;
+            std::fs::File::open(path).map_err(|e| {
+                tracing::error!(file_path = %path.display(), error = %e, "[Decoder] Failed to open file");
+                soul_core::SoulError::audio(e.to_string())
+            })?;
 
         // Create media source
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -423,10 +467,22 @@ impl AudioDecoderTrait for SymphoniaDecoder {
         // Create decoder
         let mut decoder = symphonia::default::get_codecs()
             .make(&track.codec_params, &DecoderOptions::default())
-            .map_err(|e| soul_core::SoulError::audio(format!("Failed to create decoder: {}", e)))?;
+            .map_err(|e| {
+                tracing::error!(error = %e, "[Decoder] Failed to create decoder");
+                soul_core::SoulError::audio(format!("Failed to create decoder: {}", e))
+            })?;
+
+        tracing::debug!(
+            sample_rate,
+            track_id,
+            codec = ?track.codec_params.codec,
+            "[Decoder] Starting packet decoding loop"
+        );
 
         // Decode all packets and collect into single buffer
         let mut all_samples = Vec::new();
+        let mut packet_count = 0;
+        let decode_loop_start = std::time::Instant::now();
 
         loop {
             // Get the next packet
@@ -438,6 +494,11 @@ impl AudioDecoderTrait for SymphoniaDecoder {
                     break;
                 }
                 Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        packets_decoded = packet_count,
+                        "[Decoder] Error reading packet"
+                    );
                     return Err(soul_core::SoulError::audio(format!(
                         "Error reading packet: {}",
                         e
@@ -450,18 +511,54 @@ impl AudioDecoderTrait for SymphoniaDecoder {
                 continue;
             }
 
+            packet_count += 1;
+
             // Decode the packet
-            let decoded = decoder
-                .decode(&packet)
-                .map_err(|e| soul_core::SoulError::audio(format!("Decode error: {}", e)))?;
+            let decoded = decoder.decode(&packet).map_err(|e| {
+                tracing::error!(
+                    error = %e,
+                    packet_num = packet_count,
+                    "[Decoder] Packet decode error"
+                );
+                soul_core::SoulError::audio(format!("Decode error: {}", e))
+            })?;
 
             // Convert and append to buffer (always outputs stereo)
             let buffer = Self::convert_buffer(decoded, sample_rate)?;
             all_samples.extend_from_slice(&buffer.samples);
+
+            // Log slow packet processing
+            if packet_count % 1000 == 0 {
+                let elapsed = decode_loop_start.elapsed();
+                if elapsed.as_secs() > 1 {
+                    tracing::warn!(
+                        packets_decoded = packet_count,
+                        elapsed_secs = elapsed.as_secs(),
+                        "[Decoder] Slow decode detected"
+                    );
+                }
+            }
         }
+
+        let decode_loop_duration = decode_loop_start.elapsed();
 
         // Output is always stereo (2 channels) since convert_buffer downmixes
         let format = AudioFormat::new(SampleRate::new(sample_rate), 2, 32);
+
+        let total_duration = decode_start.elapsed();
+        let total_frames = all_samples.len() / 2;
+        let duration_secs = total_frames as f64 / sample_rate as f64;
+
+        tracing::info!(
+            file_path = %path.display(),
+            packet_count,
+            total_frames,
+            duration_secs = format!("{:.2}", duration_secs),
+            sample_rate,
+            decode_loop_ms = decode_loop_duration.as_millis(),
+            total_duration_ms = total_duration.as_millis(),
+            "[Decoder] Full file decode completed"
+        );
 
         Ok(AudioBuffer::new(all_samples, format))
     }

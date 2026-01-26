@@ -21,7 +21,7 @@ fn cpal_sample_rate_to_u32(sr: cpal::SampleRate) -> u32 {
     sr
 }
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
@@ -230,8 +230,8 @@ struct ExclusiveState {
     playing: AtomicBool,
     /// Is paused
     paused: AtomicBool,
-    /// Volume (0.0 - 1.0)
-    volume: Mutex<f32>,
+    /// Volume (0.0 - 1.0) - stored as AtomicU32 using f32::to_bits/from_bits
+    volume: AtomicU32,
     /// Loop flag
     looping: AtomicBool,
 }
@@ -243,9 +243,21 @@ impl ExclusiveState {
             position: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
             paused: AtomicBool::new(false),
-            volume: Mutex::new(1.0),
+            volume: AtomicU32::new(1.0f32.to_bits()),
             looping: AtomicBool::new(false),
         }
+    }
+
+    /// Get current volume (0.0 - 1.0)
+    #[inline]
+    fn get_volume(&self) -> f32 {
+        f32::from_bits(self.volume.load(Ordering::Relaxed))
+    }
+
+    /// Set volume (0.0 - 1.0)
+    #[inline]
+    fn set_volume(&self, vol: f32) {
+        self.volume.store(vol.to_bits(), Ordering::Relaxed);
     }
 }
 
@@ -271,23 +283,49 @@ pub struct ExclusiveOutput {
 impl ExclusiveOutput {
     /// Create new exclusive output with configuration
     pub fn new(config: ExclusiveConfig) -> Result<Self> {
+        tracing::info!(
+            backend = ?config.backend,
+            device_name = ?config.device_name,
+            sample_rate = config.sample_rate,
+            bit_depth = ?config.bit_depth,
+            exclusive_mode = config.exclusive_mode,
+            "[Exclusive] Creating exclusive output"
+        );
+        let start = std::time::Instant::now();
+
         // Get the host for the configured backend
-        let host = config
-            .backend
-            .to_cpal_host()
-            .map_err(|_e| AudioOutputError::DeviceNotFound)?;
+        tracing::debug!(backend = ?config.backend, "[Exclusive] Acquiring audio host");
+        let host = config.backend.to_cpal_host().map_err(|_e| {
+            tracing::error!(backend = ?config.backend, "[Exclusive] Failed to acquire audio host");
+            AudioOutputError::DeviceNotFound
+        })?;
 
         // Get device
+        let device_lookup_start = std::time::Instant::now();
         let device = if let Some(ref name) = config.device_name {
+            tracing::debug!(device_name = %name, "[Exclusive] Looking up device by name");
             find_device_by_name(config.backend, name)
-                .map_err(|_| AudioOutputError::DeviceNotFound)?
+                .map_err(|e| {
+                    tracing::error!(device_name = %name, error = ?e, "[Exclusive] Device lookup failed");
+                    AudioOutputError::DeviceNotFound
+                })?
         } else {
-            host.default_output_device()
-                .ok_or(AudioOutputError::DeviceNotFound)?
+            tracing::debug!("[Exclusive] Using default output device");
+            host.default_output_device().ok_or_else(|| {
+                tracing::error!("[Exclusive] No default output device found");
+                AudioOutputError::DeviceNotFound
+            })?
         };
+        let device_lookup_duration = device_lookup_start.elapsed();
+        tracing::debug!(
+            duration_ms = device_lookup_duration.as_millis(),
+            "[Exclusive] Device lookup completed"
+        );
 
         // Find the best matching configuration
+        let config_start = std::time::Instant::now();
         let (stream_config, sample_format, buffer_size) = Self::find_best_config(&device, &config)?;
+        let config_duration = config_start.elapsed();
 
         let sample_rate = stream_config.sample_rate;
 
@@ -309,6 +347,14 @@ impl ExclusiveOutput {
         let (command_tx, command_rx) = bounded::<ExclusiveCommand>(32);
 
         // Spawn audio thread
+        tracing::debug!(
+            sample_rate,
+            sample_format = ?sample_format,
+            buffer_samples,
+            latency_ms = latency.buffer_ms,
+            "[Exclusive] Spawning audio thread"
+        );
+        let thread_start = std::time::Instant::now();
         let state_clone = Arc::clone(&state);
         let audio_thread = thread::spawn(move || {
             Self::audio_thread_run(
@@ -319,6 +365,21 @@ impl ExclusiveOutput {
                 command_rx,
             );
         });
+        let thread_duration = thread_start.elapsed();
+
+        let total_duration = start.elapsed();
+        tracing::info!(
+            sample_rate,
+            sample_format = ?sample_format,
+            buffer_samples,
+            latency_ms = latency.buffer_ms,
+            exclusive = latency.exclusive,
+            device_lookup_ms = device_lookup_duration.as_millis(),
+            config_selection_ms = config_duration.as_millis(),
+            thread_spawn_ms = thread_duration.as_millis(),
+            total_duration_ms = total_duration.as_millis(),
+            "[Exclusive] Exclusive output created successfully"
+        );
 
         Ok(Self {
             command_tx,
@@ -347,9 +408,17 @@ impl ExclusiveOutput {
         // This follows WASAPI best practices: zero buffer is invalid and should use a safe default
         const DEFAULT_BUFFER_FRAMES: u32 = 1024;
 
-        let supported_configs = device
-            .supported_output_configs()
-            .map_err(|e| AudioOutputError::StreamBuildError(e.to_string()))?;
+        tracing::debug!(
+            target_sample_rate = config.sample_rate,
+            target_bit_depth = ?config.bit_depth,
+            buffer_frames = ?config.buffer_frames,
+            "[Exclusive] Searching for matching device configuration"
+        );
+
+        let supported_configs = device.supported_output_configs().map_err(|e| {
+            tracing::error!(error = %e, "[Exclusive] Failed to query supported output configs");
+            AudioOutputError::StreamBuildError(e.to_string())
+        })?;
 
         // Target sample format based on bit depth
         let target_format = match config.bit_depth {
@@ -358,12 +427,15 @@ impl ExclusiveOutput {
             SupportedBitDepth::Float32 => SampleFormat::F32,
             SupportedBitDepth::Float64 => SampleFormat::F64,
         };
+        tracing::debug!(target_format = ?target_format, "[Exclusive] Target sample format selected");
 
         // Find a matching config
         let mut best_config = None;
         let mut fallback_config = None;
+        let mut config_iteration_count = 0;
 
         for supported in supported_configs {
+            config_iteration_count += 1;
             let format = supported.sample_format();
             // Extract sample rate from cpal::SampleRate (inner .0 field)
             let min_sample_rate = supported.min_sample_rate();
@@ -400,10 +472,30 @@ impl ExclusiveOutput {
         }
 
         let (selected_config, target_rate) = best_config.or(fallback_config).ok_or_else(|| {
+            tracing::error!(
+                configs_checked = config_iteration_count,
+                target_format = ?target_format,
+                "[Exclusive] No compatible configuration found"
+            );
             AudioOutputError::StreamBuildError("No compatible config found".into())
         })?;
 
         let sample_format = selected_config.sample_format();
+        let is_fallback = best_config.is_none();
+        if is_fallback {
+            tracing::warn!(
+                configs_checked = config_iteration_count,
+                selected_format = ?sample_format,
+                target_format = ?target_format,
+                "[Exclusive] Using fallback configuration (exact format not available)"
+            );
+        } else {
+            tracing::debug!(
+                configs_checked = config_iteration_count,
+                selected_format = ?sample_format,
+                "[Exclusive] Found exact format match"
+            );
+        }
 
         // Determine buffer size
         // If zero buffer size is requested, fall back to DEFAULT_BUFFER_FRAMES
@@ -432,6 +524,14 @@ impl ExclusiveOutput {
             buffer_size,
         };
 
+        tracing::debug!(
+            sample_rate = target_rate,
+            channels = selected_config.channels(),
+            buffer_size = ?buffer_size,
+            sample_format = ?sample_format,
+            "[Exclusive] Stream configuration finalized"
+        );
+
         Ok((stream_config, sample_format, buffer_size))
     }
 
@@ -443,21 +543,33 @@ impl ExclusiveOutput {
         state: Arc<ExclusiveState>,
         command_rx: Receiver<ExclusiveCommand>,
     ) {
+        tracing::info!(
+            sample_rate = config.sample_rate,
+            channels = config.channels,
+            sample_format = ?sample_format,
+            "[Exclusive] Audio thread started"
+        );
         let mut stream: Option<Stream> = None;
 
         while let Ok(cmd) = command_rx.recv() {
             match cmd {
                 ExclusiveCommand::Play { samples } => {
+                    tracing::debug!(
+                        sample_count = samples.len(),
+                        "[Exclusive] Play command received"
+                    );
                     // Stop existing stream
                     if let Some(s) = stream.take() {
                         drop(s);
                     }
 
                     // Update buffer
+                    let buffer_update_start = std::time::Instant::now();
                     {
                         let mut buffer = state.buffer.lock().unwrap();
                         *buffer = samples;
                     }
+                    let buffer_update_duration = buffer_update_start.elapsed();
 
                     // Reset position
                     state.position.store(0, Ordering::Relaxed);
@@ -465,6 +577,8 @@ impl ExclusiveOutput {
                     state.paused.store(false, Ordering::Relaxed);
 
                     // Build stream based on sample format
+                    tracing::debug!(sample_format = ?sample_format, "[Exclusive] Building audio stream");
+                    let stream_build_start = std::time::Instant::now();
                     let new_stream = match sample_format {
                         SampleFormat::I16 => Self::build_stream_i16(&device, &config, &state),
                         SampleFormat::I32 => Self::build_stream_i32(&device, &config, &state),
@@ -472,11 +586,24 @@ impl ExclusiveOutput {
                         SampleFormat::F64 => Self::build_stream_f64(&device, &config, &state),
                         _ => Self::build_stream_f32(&device, &config, &state), // Fallback
                     };
+                    let stream_build_duration = stream_build_start.elapsed();
 
                     if let Ok(s) = new_stream {
                         if s.play().is_ok() {
                             stream = Some(s);
+                            tracing::info!(
+                                buffer_update_us = buffer_update_duration.as_micros(),
+                                stream_build_ms = stream_build_duration.as_millis(),
+                                "[Exclusive] Stream started successfully"
+                            );
+                        } else {
+                            tracing::error!("[Exclusive] Failed to start stream playback");
                         }
+                    } else {
+                        tracing::error!(
+                            stream_build_ms = stream_build_duration.as_millis(),
+                            "[Exclusive] Failed to build stream"
+                        );
                     }
                 }
                 ExclusiveCommand::Pause => {
@@ -499,10 +626,11 @@ impl ExclusiveOutput {
                     state.position.store(0, Ordering::Relaxed);
                 }
                 ExclusiveCommand::SetVolume(vol) => {
-                    let mut volume = state.volume.lock().unwrap();
-                    *volume = vol;
+                    tracing::debug!(volume = vol, "[Exclusive] Setting volume");
+                    state.set_volume(vol);
                 }
                 ExclusiveCommand::Shutdown => {
+                    tracing::info!("[Exclusive] Shutting down audio thread");
                     if let Some(s) = stream.take() {
                         drop(s);
                     }
@@ -510,6 +638,7 @@ impl ExclusiveOutput {
                 }
             }
         }
+        tracing::info!("[Exclusive] Audio thread terminated");
     }
 
     /// Build i16 stream
@@ -579,7 +708,7 @@ impl ExclusiveOutput {
             return;
         }
 
-        let volume = *state.volume.lock().unwrap();
+        let volume = state.get_volume();
         let buffer = {
             let b = state.buffer.lock().unwrap();
             Arc::clone(&b)
@@ -631,7 +760,7 @@ impl ExclusiveOutput {
             return;
         }
 
-        let volume = *state.volume.lock().unwrap();
+        let volume = state.get_volume();
         let buffer = {
             let b = state.buffer.lock().unwrap();
             Arc::clone(&b)
@@ -683,7 +812,7 @@ impl ExclusiveOutput {
             return;
         }
 
-        let volume = *state.volume.lock().unwrap();
+        let volume = state.get_volume();
         let buffer = {
             let b = state.buffer.lock().unwrap();
             Arc::clone(&b)
@@ -746,7 +875,7 @@ impl ExclusiveOutput {
             return;
         }
 
-        let volume = *state.volume.lock().unwrap() as f64;
+        let volume = state.get_volume() as f64;
         let buffer = {
             let b = state.buffer.lock().unwrap();
             Arc::clone(&b)
@@ -823,15 +952,14 @@ impl ExclusiveOutput {
         self.command_tx
             .send(ExclusiveCommand::SetVolume(vol))
             .map_err(|e| AudioOutputError::StreamBuildError(format!("Channel error: {}", e)))?;
-        // Update local state
-        let mut v = self.state.volume.lock().unwrap();
-        *v = vol;
+        // Update local state atomically
+        self.state.set_volume(vol);
         Ok(())
     }
 
     /// Get current volume
     pub fn volume(&self) -> f32 {
-        *self.state.volume.lock().unwrap()
+        self.state.get_volume()
     }
 
     /// Get sample rate
@@ -915,33 +1043,27 @@ mod tests {
 
         // Test i16 conversion
         let data16 = AudioData::from_f32(&samples, SupportedBitDepth::Int16);
-        match data16 {
-            AudioData::Int16(v) => {
-                assert_eq!(v.len(), 5);
-                assert_eq!(v[0], 0);
-                assert!(v[1] > 0);
-                assert!(v[2] < 0);
-            }
-            _ => panic!("Expected Int16"),
-        }
+        let AudioData::Int16(v) = data16 else {
+            panic!("Expected Int16 audio data format");
+        };
+        assert_eq!(v.len(), 5);
+        assert_eq!(v[0], 0);
+        assert!(v[1] > 0);
+        assert!(v[2] < 0);
 
         // Test i32 conversion
         let data32 = AudioData::from_f32(&samples, SupportedBitDepth::Int32);
-        match data32 {
-            AudioData::Int32(v) => {
-                assert_eq!(v.len(), 5);
-            }
-            _ => panic!("Expected Int32"),
-        }
+        let AudioData::Int32(v) = data32 else {
+            panic!("Expected Int32 audio data format");
+        };
+        assert_eq!(v.len(), 5);
 
         // Test f32 passthrough
         let dataf32 = AudioData::from_f32(&samples, SupportedBitDepth::Float32);
-        match dataf32 {
-            AudioData::Float32(v) => {
-                assert_eq!(v, samples);
-            }
-            _ => panic!("Expected Float32"),
-        }
+        let AudioData::Float32(v) = dataf32 else {
+            panic!("Expected Float32 audio data format");
+        };
+        assert_eq!(v, samples);
     }
 
     #[test]

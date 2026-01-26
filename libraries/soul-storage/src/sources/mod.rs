@@ -3,7 +3,7 @@ use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Source>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         "SELECT id, name, source_type, server_url, server_username, server_token,
                 is_active, is_online, last_sync_at
          FROM sources
@@ -43,7 +43,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Source>> {
 }
 
 pub async fn get_by_id(pool: &SqlitePool, id: SourceId) -> Result<Option<Source>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT id, name, source_type, server_url, server_username, server_token,
                 is_active, is_online, last_sync_at
          FROM sources
@@ -81,7 +81,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: SourceId) -> Result<Option<Source>
 }
 
 pub async fn get_active_server(pool: &SqlitePool) -> Result<Option<Source>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT id, name, source_type, server_url, server_username, server_token,
                 is_active, is_online, last_sync_at
          FROM sources
@@ -127,7 +127,7 @@ pub async fn create(pool: &SqlitePool, source: CreateSource) -> Result<Source> {
         ),
     };
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "INSERT INTO sources (name, source_type, server_url, server_username, server_token)
          VALUES (?, ?, ?, ?, ?)",
         source.name,
@@ -231,7 +231,7 @@ pub async fn get_server_sources_for_user(
     user_id: UserId,
 ) -> Result<Vec<Source>> {
     let user_id_str = user_id.as_str();
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         "SELECT id, name, source_type, server_url, server_username, server_token,
                 is_active, is_online, last_sync_at
          FROM sources
@@ -271,7 +271,7 @@ pub async fn add_server_source(
     url: &str,
 ) -> Result<Source> {
     let user_id_str = user_id.as_str();
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "INSERT INTO sources (name, source_type, server_url, user_id, is_online)
          VALUES (?, 'server', ?, ?, 0)",
         name,
@@ -351,7 +351,7 @@ pub async fn store_auth_token(
 
 /// Get authentication token for a source
 pub async fn get_auth_token(pool: &SqlitePool, source_id: i64) -> Result<Option<AuthToken>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT source_id, access_token, refresh_token, token_expires_at
          FROM server_auth_tokens
          WHERE source_id = ?",
@@ -431,7 +431,7 @@ pub async fn get_sync_state(
     user_id: UserId,
 ) -> Result<Option<SourceSyncState>> {
     let user_id_str = user_id.as_str();
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT source_id, user_id, last_sync_at, last_sync_direction, sync_status,
                current_operation, current_item, total_items, processed_items,
@@ -639,7 +639,7 @@ pub async fn get_server_sync_token(
     user_id: UserId,
 ) -> Result<Option<String>> {
     let user_id_str = user_id.as_str();
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT server_sync_token FROM source_sync_state WHERE source_id = ? AND user_id = ?",
         source_id,
         user_id_str

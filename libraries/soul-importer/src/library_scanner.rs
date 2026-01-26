@@ -115,8 +115,8 @@ impl LibraryScanner {
         let start_time = Instant::now();
         let source_path = Path::new(&source.path);
 
-        // Verify path exists
-        if !source_path.exists() {
+        // Verify path exists (async to avoid blocking on network/slow storage)
+        if !tokio::fs::try_exists(source_path).await.unwrap_or(false) {
             soul_storage::library_sources::set_scan_status(
                 &self.pool,
                 source.id,
@@ -139,11 +139,16 @@ impl LibraryScanner {
         // Start scan progress tracking
         let progress = soul_storage::scan_progress::start(&self.pool, source.id, None).await?;
 
-        // Scan the directory
-        let scanner = FileScanner::new();
-        let files = match scanner.scan_directory(source_path) {
-            Ok(files) => files,
-            Err(e) => {
+        // Scan the directory (wrap blocking WalkDir in spawn_blocking to avoid macOS spinning wheel)
+        let source_path_buf = source_path.to_path_buf();
+        let files = match tokio::task::spawn_blocking(move || {
+            let scanner = FileScanner::new();
+            scanner.scan_directory(&source_path_buf)
+        })
+        .await
+        {
+            Ok(Ok(files)) => files,
+            Ok(Err(e)) => {
                 soul_storage::scan_progress::fail(&self.pool, progress.id, &e.to_string()).await?;
                 soul_storage::library_sources::set_scan_status(
                     &self.pool,
@@ -153,6 +158,18 @@ impl LibraryScanner {
                 )
                 .await?;
                 return Err(e);
+            }
+            Err(e) => {
+                let err_msg = format!("Directory scan task panicked: {}", e);
+                soul_storage::scan_progress::fail(&self.pool, progress.id, &err_msg).await?;
+                soul_storage::library_sources::set_scan_status(
+                    &self.pool,
+                    source.id,
+                    ScanStatus::Error,
+                    Some(&err_msg),
+                )
+                .await?;
+                return Err(ImportError::Unknown(err_msg));
             }
         };
 

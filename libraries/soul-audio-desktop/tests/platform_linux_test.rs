@@ -13,6 +13,10 @@
 //! ```bash
 //! cargo test -p soul-audio-desktop platform_linux_test -- --ignored
 //! ```
+
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::single_match_else)]
+#![allow(clippy::single_match)]
 //!
 //! Or to run all tests including ignored:
 //!

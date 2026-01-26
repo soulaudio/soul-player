@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = ["effects", "volume-leveling"]
+default = ["effects", "volume-leveling"]  # Don't enable native-device-monitor by default (requires system libs)
 effects = ["soul-playback/effects"]  # DSP effects (EQ, compressor, limiter)
 volume-leveling = ["soul-playback/volume-leveling"]  # ReplayGain, headroom management
 asio = ["cpal/asio"]  # Windows ASIO support (low-latency, exclusive mode)
@@ -16,6 +16,12 @@ r8brain = ["dep:r8brain-rs"]  # High-quality r8brain resampling (requires cmake)
 docker-tests = []  # Enable Docker-based E2E tests (requires Docker Desktop)
 testcontainers = []  # Enable testcontainers-based audio tests (requires Docker)
 
+# Platform-specific native async device monitoring (requires system libraries)
+# macOS: Requires CoreAudio framework (built-in on macOS)
+# Linux: Requires libpipewire-0.3-dev (install: sudo apt install libpipewire-0.3-dev)
+# Windows: Requires Windows SDK (built-in on Windows)
+native-device-monitor = ["coreaudio-rs", "core-foundation", "pipewire", "windows"]
+
 [dependencies]
 soul-core.workspace = true
 soul-audio.workspace = true
@@ -23,6 +29,7 @@ soul-playback.workspace = true
 thiserror.workspace = true
 serde = { workspace = true }
 tracing = { workspace = true }
+lru = { workspace = true }
 
 # Audio I/O
 cpal = { workspace = true }
@@ -45,9 +52,21 @@ ebur128 = { workspace = true }
 # Concurrency
 crossbeam-channel = "0.5"  # Thread-safe channels for audio thread communication
 tokio = { workspace = true, features = ["sync"] }  # For async streaming
+async-trait = "0.1"  # Async trait support for device monitoring
 
 # Networking (for streaming from server)
 reqwest = { workspace = true, features = ["stream"] }
+
+# Platform-specific async device monitoring (optional - enabled via feature)
+[target.'cfg(target_os = "macos")'.dependencies]
+coreaudio-rs = { workspace = true, optional = true }  # macOS CoreAudio async device monitoring
+core-foundation = { version = "0.9", optional = true }  # For CFString conversion on macOS
+
+[target.'cfg(target_os = "linux")'.dependencies]
+pipewire = { workspace = true, optional = true }  # Linux PipeWire async device monitoring
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, optional = true }  # Windows WinRT async device monitoring
 
 [dev-dependencies]
 tempfile = "3.24"

@@ -30,6 +30,7 @@ import {
 } from '../contexts/PlayerCommandsContext';
 import { WasmPlaybackAdapter, PlaybackState, toQueueTrack } from '@soul-player/playback-web';
 import { usePlayerStore } from '../stores/player';
+import { usePlaybackSession } from '../contexts/PlaybackSessionContext';
 import type { PlaybackDataStorage } from '../types/storage';
 import type { Track } from '../types';
 
@@ -41,6 +42,8 @@ interface WebPlaybackProviderProps {
 export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderProps) {
   const [isInitialized, setIsInitialized] = useState(false);
   const managerRef = useRef<WasmPlaybackAdapter | null>(null);
+  const instanceId = useRef(Math.random().toString(36).substring(7));
+  const { updateSession, clearSession } = usePlaybackSession();
 
   // Initialize WASM manager on mount
   useEffect(() => {
@@ -50,15 +53,28 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
     manager
       .initialize()
       .then(() => {
-        console.log('[WebPlaybackProvider] WASM manager initialized');
+        console.log(`[WebPlaybackProvider:${instanceId.current}] WASM manager initialized`);
 
-        // Setup event bridge to shared store
-        setupEventBridge(manager, storage);
+        // Setup event bridge to shared store and session context
+        setupEventBridge(manager, storage, updateSession);
+
+        // CRITICAL FIX: Clear any stale UI state if queue is empty
+        if (manager.queueLength() === 0) {
+          console.log('[WebPlaybackProvider] Queue is empty on init, clearing stale UI state');
+          usePlayerStore.setState({
+            currentTrack: null,
+            queue: [],
+            queueIndex: -1,
+            isPlaying: false,
+            progress: 0,
+            duration: 0,
+          });
+        }
 
         setIsInitialized(true);
       })
       .catch((err) => {
-        console.error('[WebPlaybackProvider] Failed to initialize WASM:', err);
+        console.error(`[WebPlaybackProvider:${instanceId.current}] Failed to initialize WASM:`, err);
       });
 
     // Cleanup on unmount
@@ -89,6 +105,8 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
 
         const queueTrack = toQueueTrack(track);
         const manager = getManagerOrThrow();
+        // Unlock audio during user gesture
+        await manager.unlock();
         manager.clearQueue();
         manager.addToQueueNext(queueTrack);
 
@@ -101,15 +119,31 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
       },
 
       async pausePlayback() {
-        getManagerOrThrow().pause();
+        const manager = getManagerOrThrow();
+        // Validate queue exists before pausing
+        if (manager.queueLength() === 0) {
+          console.warn('[WebPlaybackProvider] Cannot pause - queue is empty');
+          return;
+        }
+        manager.pause();
       },
 
       async resumePlayback() {
-        await getManagerOrThrow().play();
+        const manager = getManagerOrThrow();
+        // Validate queue exists before resuming
+        if (manager.queueLength() === 0) {
+          console.warn('[WebPlaybackProvider] Cannot resume - queue is empty');
+          return;
+        }
+        // Unlock audio during user gesture
+        await manager.unlock();
+        await manager.play();
       },
 
       async stopPlayback() {
         getManagerOrThrow().stop();
+        // Clear session when playback stops
+        clearSession();
       },
 
       async skipNext() {
@@ -252,30 +286,68 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
         }
       },
 
-      async playQueue(queue, startIndex = 0) {
-        console.log('[WebPlaybackProvider] playQueue called:', {
-          queueLength: queue.length,
-          startIndex,
-          firstTrack: queue[0]?.title,
-        });
+      async playQueue(queue, startIndex = 0, context) {
+        try {
+          console.log(`[WebPlaybackProvider:${instanceId.current}] playQueue called:`, {
+            queueLength: queue.length,
+            startIndex,
+            context,
+            firstTrack: queue[0]?.title,
+          });
 
-        // Convert QueueTrack[] to WASM QueueTrack format
-        const wasmQueue = queue.map((track) => {
-          const demoTrack = storage.getTrackById(track.trackId);
-          if (!demoTrack) {
-            console.error('[WebPlaybackProvider] Track not found:', track.trackId);
+          // CRITICAL: Unlock audio during user gesture (browser autoplay policy)
+          // This must be called synchronously in the click handler, before any async operations
+          const manager = getManagerOrThrow();
+          await manager.unlock();
+
+          // CRITICAL FIX: Update session context IMMEDIATELY (before WASM operations)
+          // This ensures isActiveContext() returns true instantly, fixing play/pause toggle
+          if (context) {
+            let contextType: 'album' | 'artist' | 'playlist' | null = null;
+            let contextId = '';
+
+            // Extract context ID based on type (type narrowing for union type)
+            if (context.type === 'Album') {
+              contextType = 'album';
+              contextId = String(context.albumId);
+            } else if (context.type === 'Artist') {
+              contextType = 'artist';
+              contextId = String(context.artistId);
+            } else if (context.type === 'Playlist') {
+              contextType = 'playlist';
+              contextId = String(context.playlistId);
+            }
+
+            // Only update session for album/artist/playlist contexts (not AllTracks or Search)
+            if (contextType) {
+              updateSession({
+                contextType,
+                contextId,
+                contextName: queue[0]?.album || queue[0]?.artist || 'Unknown',
+                contextArtworkPath: null, // Will be set by event bridge when track changes
+                startedAt: new Date(),
+              });
+              console.log('[WebPlaybackProvider] Session context updated:', { contextType, contextId });
+            }
           }
-          return {
-            id: track.trackId,
-            title: track.title || 'Unknown',
-            artist: track.artist || 'Unknown Artist', // CRITICAL: artist must be a string, never undefined
-            album: track.album || undefined,
-            path: track.filePath,
-            duration_secs: track.durationSeconds || 0,
-            track_number: track.trackNumber || undefined,
-            coverUrl: demoTrack?.coverUrl,
-          };
-        });
+
+          // Convert QueueTrack[] to WASM QueueTrack format
+          const wasmQueue = queue.map((track) => {
+            const demoTrack = storage.getTrackById(track.trackId);
+            if (!demoTrack) {
+              console.error('[WebPlaybackProvider] Track not found:', track.trackId);
+            }
+            return {
+              id: track.trackId,
+              title: track.title || 'Unknown',
+              artist: track.artist || 'Unknown Artist', // CRITICAL: artist must be a string, never undefined
+              album: track.album || undefined,
+              path: track.filePath,
+              duration_secs: track.durationSeconds || 0,
+              track_number: track.trackNumber || undefined,
+              coverUrl: demoTrack?.coverUrl,
+            };
+          });
 
         console.log('[WebPlaybackProvider] Converted to WASM queue:', {
           length: wasmQueue.length,
@@ -328,6 +400,10 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
           console.log('[WebPlaybackProvider] Playback started successfully');
         } catch (error) {
           console.error('[WebPlaybackProvider] Failed to start playback:', error);
+          throw error;
+        }
+        } catch (error) {
+          console.error('[WebPlaybackProvider] ERROR in playQueue:', error);
           throw error;
         }
       },
@@ -442,9 +518,11 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
 
   // Don't render children until WASM is initialized
   if (!isInitialized) {
+    console.log('[WebPlaybackProvider] Not initialized yet, returning null');
     return null;
   }
 
+  console.log('[WebPlaybackProvider] Initialized, rendering children');
   return <PlayerCommandsProvider value={value}>{children}</PlayerCommandsProvider>;
 }
 
@@ -452,13 +530,16 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
  * Setup event bridge between WASM manager and shared Zustand store
  * This keeps the store in sync with playback events
  */
-function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataStorage) {
+function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataStorage, updateSession: (updates: any) => void) {
   console.log('[WebPlaybackProvider] Setting up event bridge');
 
-  // Bridge WASM events to shared store
+  // Bridge WASM events to shared store AND session context
   manager.on('stateChange', (state: PlaybackState) => {
     console.log('[WebPlaybackProvider] State change:', state);
-    usePlayerStore.setState({ isPlaying: state === PlaybackState.Playing });
+    const isPlaying = state === PlaybackState.Playing;
+    usePlayerStore.setState({ isPlaying });
+    // Sync to session context
+    updateSession({ isPlaying });
   });
 
   manager.on('trackChange', (track) => {
@@ -489,9 +570,16 @@ function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataSto
       };
 
       usePlayerStore.setState({ currentTrack: sharedTrack, duration: track.duration_secs || 0 });
+      // Sync to session context
+      updateSession({
+        currentTrack: sharedTrack,
+        contextArtworkPath: coverUrl || null
+      });
     } else {
       console.log('[WebPlaybackProvider] Track cleared');
       usePlayerStore.setState({ currentTrack: null, duration: 0 });
+      // Sync to session context
+      updateSession({ currentTrack: null });
     }
   });
 
@@ -542,5 +630,7 @@ function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataSto
     });
     console.log('[WebPlaybackProvider] Queue change, syncing', tracks.length, 'tracks to store');
     usePlayerStore.setState({ queue: tracks });
+    // Sync to session context
+    updateSession({ queue: tracks });
   });
 }

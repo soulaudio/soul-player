@@ -105,7 +105,7 @@ pub async fn get_recent(
     user_id: &str,
     limit: i32,
 ) -> Result<Vec<PlaybackContext>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT id, user_id, context_type, context_id, context_name, context_artwork_path, last_played_at
         FROM playback_contexts
@@ -157,7 +157,7 @@ pub async fn get_by_type_and_id(
     let context_type_str = context_type.as_str();
     let context_id_str = context_id.unwrap_or("");
 
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, user_id, context_type, context_id, context_name, context_artwork_path, last_played_at
         FROM playback_contexts
@@ -199,7 +199,7 @@ pub async fn delete(
     let context_type_str = context_type.as_str();
     let context_id_str = context_id.unwrap_or("");
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM playback_contexts WHERE user_id = ? AND context_type = ? AND COALESCE(context_id, '') = ?",
         user_id,
         context_type_str,
@@ -213,9 +213,10 @@ pub async fn delete(
 
 /// Clear all playback contexts for a user
 pub async fn clear_all(pool: &SqlitePool, user_id: &str) -> Result<u64> {
-    let result = sqlx::query!("DELETE FROM playback_contexts WHERE user_id = ?", user_id)
-        .execute(pool)
-        .await?;
+    let result: sqlx::sqlite::SqliteQueryResult =
+        sqlx::query!("DELETE FROM playback_contexts WHERE user_id = ?", user_id)
+            .execute(pool)
+            .await?;
 
     Ok(result.rows_affected())
 }

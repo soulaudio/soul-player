@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { screen } from '@testing-library/react';
 import { renderDemoApp, createSampleDemoData } from './test-setup';
-import { setupAudioMocks, getMostRecentAudioElement } from './mocks';
+import { setupAudioMocks } from './mocks';
 
 describe('E2E Test Setup', () => {
   describe('Test Infrastructure', () => {

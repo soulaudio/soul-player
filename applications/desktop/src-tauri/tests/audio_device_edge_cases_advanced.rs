@@ -9,7 +9,9 @@
 //! - Concurrent operations
 
 use serde_json::json;
-use soul_audio_desktop::{backend, device, AudioBackend};
+#[cfg(feature = "asio")]
+use soul_audio_desktop::backend;
+use soul_audio_desktop::{device, AudioBackend};
 use sqlx::SqlitePool;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -308,6 +310,7 @@ async fn test_empty_string_device_name_roundtrip() {
 /// Scenario: User switches backend but device name format doesn't match
 /// Expected: Device not found, fallback to default, helpful error message
 #[tokio::test]
+#[cfg(feature = "asio")]
 async fn test_backend_device_name_format_mismatch() {
     let test_db = TestDb::new().await;
     let pool = test_db.open().await;
@@ -444,6 +447,7 @@ async fn test_device_removed_after_verification() {
 /// Scenario: "Speakers" exists on both Default and ASIO backends
 /// Expected: Backend-specific device lookup, not confused
 #[tokio::test]
+#[cfg(feature = "asio")]
 async fn test_same_device_name_different_backends() {
     // Get default device
     let Ok(default_device) = device::get_default_device(AudioBackend::Default) else {

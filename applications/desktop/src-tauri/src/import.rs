@@ -338,8 +338,14 @@ impl ImportManager {
             tracing::error!("Importer error: {}", e);
             // Clear state on error
             let current_import = self.current_import.clone();
-            tokio::spawn(async move {
+            let cleanup_handle = tokio::spawn(async move {
                 *current_import.lock().await = None;
+            });
+            // Log errors from cleanup task
+            tokio::spawn(async move {
+                if let Err(e) = cleanup_handle.await {
+                    tracing::error!("[IMPORT] Cleanup task panicked: {:?}", e);
+                }
             });
             e.to_string()
         })?;
@@ -348,7 +354,7 @@ impl ImportManager {
 
         // Spawn task to handle progress updates
         let app_clone = app.clone();
-        tokio::spawn(async move {
+        let progress_handle = tokio::spawn(async move {
             tracing::debug!("Starting progress listener");
             while let Some(progress) = progress_rx.recv().await {
                 let update = ImportProgressUpdate::from(progress);
@@ -358,14 +364,23 @@ impl ImportManager {
                     update.total_files
                 );
                 // Emit progress to frontend
-                let _ = app_clone.emit("import-progress", update);
+                if let Err(e) = app_clone.emit("import-progress", update) {
+                    tracing::warn!(error = %e, event = "import-progress", "Failed to emit event to frontend");
+                }
             }
             tracing::debug!("Progress channel closed");
         });
 
+        // Log errors from progress listener
+        tokio::spawn(async move {
+            if let Err(e) = progress_handle.await {
+                tracing::error!("[IMPORT] Progress listener task panicked: {:?}", e);
+            }
+        });
+
         // Wait for import to complete in background
         let current_import = self.current_import.clone();
-        tokio::spawn(async move {
+        let completion_handle = tokio::spawn(async move {
             tracing::debug!("Waiting for import to complete");
             match handle.await {
                 Ok(Ok(summary)) => {
@@ -376,20 +391,33 @@ impl ImportManager {
                     );
                     // Emit completion
                     let response = ImportSummaryResponse::from(summary);
-                    let _ = app.emit("import-complete", response);
+                    if let Err(e) = app.emit("import-complete", response) {
+                        tracing::error!(error = %e, event = "import-complete", "Failed to emit event to frontend");
+                    }
                 }
                 Ok(Err(e)) => {
                     tracing::error!("Import error: {}", e);
-                    let _ = app.emit("import-error", e.to_string());
+                    if let Err(e) = app.emit("import-error", e.to_string()) {
+                        tracing::error!(error = %e, event = "import-error", "Failed to emit event to frontend");
+                    }
                 }
                 Err(e) => {
                     tracing::error!("Task panicked: {}", e);
-                    let _ = app.emit("import-error", format!("Task panicked: {}", e));
+                    if let Err(e) = app.emit("import-error", format!("Task panicked: {}", e)) {
+                        tracing::error!(error = %e, event = "import-error", "Failed to emit event to frontend");
+                    }
                 }
             }
             // Clear import state
             tracing::debug!("Clearing import state");
             *current_import.lock().await = None;
+        });
+
+        // Log errors from completion handler
+        tokio::spawn(async move {
+            if let Err(e) = completion_handle.await {
+                tracing::error!("[IMPORT] Completion handler task panicked: {:?}", e);
+            }
         });
 
         tracing::debug!("Background tasks spawned, returning Ok");
@@ -588,21 +616,30 @@ pub async fn open_folder_dialog(_app: AppHandle) -> Result<Option<String>, Strin
 /// Check if a path is a directory
 #[tauri::command]
 pub async fn is_directory(path: String) -> Result<bool, String> {
-    use std::path::Path;
+    let path_buf = std::path::PathBuf::from(&path);
 
-    let p = Path::new(&path);
-    Ok(p.is_dir())
+    // Use async metadata to avoid blocking on slow/network storage
+    match tokio::fs::metadata(&path_buf).await {
+        Ok(metadata) => Ok(metadata.is_dir()),
+        Err(_) => Ok(false), // Path doesn't exist or can't be read
+    }
 }
 
 /// Scan a directory for audio files (for play-without-import feature)
 #[tauri::command]
 pub async fn scan_directory_for_audio(path: String) -> Result<Vec<String>, String> {
-    let scanner = soul_importer::scanner::FileScanner::new();
-    let files = scanner
-        .scan_directory(&std::path::PathBuf::from(&path))
-        .map_err(|e| e.to_string())?;
+    // Wrap blocking WalkDir operations in spawn_blocking to avoid macOS spinning wheel
+    let path_buf = std::path::PathBuf::from(&path);
 
-    Ok(files.into_iter().map(|p| p.display().to_string()).collect())
+    tokio::task::spawn_blocking(move || {
+        let scanner = soul_importer::scanner::FileScanner::new();
+        scanner
+            .scan_directory(&path_buf)
+            .map(|files| files.into_iter().map(|p| p.display().to_string()).collect())
+    })
+    .await
+    .map_err(|e| format!("Scan task failed: {}", e))?
+    .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

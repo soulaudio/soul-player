@@ -46,7 +46,7 @@ pub async fn cleanup_orphans(
 
 /// Remove track_stats for non-existent tracks
 async fn cleanup_orphaned_track_stats(pool: &SqlitePool) -> Result<usize> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM track_stats
          WHERE track_id NOT IN (SELECT id FROM tracks)"
     )
@@ -63,7 +63,7 @@ async fn cleanup_orphaned_track_stats(pool: &SqlitePool) -> Result<usize> {
 
 /// Remove track_sources for non-existent tracks or sources
 async fn cleanup_orphaned_track_sources(pool: &SqlitePool) -> Result<usize> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM track_sources
          WHERE track_id NOT IN (SELECT id FROM tracks)
          OR source_id NOT IN (SELECT id FROM sources)"
@@ -81,7 +81,7 @@ async fn cleanup_orphaned_track_sources(pool: &SqlitePool) -> Result<usize> {
 
 /// Remove playlist_tracks for non-existent tracks
 async fn cleanup_orphaned_playlist_tracks(pool: &SqlitePool) -> Result<usize> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM playlist_tracks
          WHERE track_id NOT IN (SELECT id FROM tracks)"
     )
@@ -98,7 +98,7 @@ async fn cleanup_orphaned_playlist_tracks(pool: &SqlitePool) -> Result<usize> {
 
 /// Remove artists with no tracks
 async fn cleanup_orphaned_artists(pool: &SqlitePool) -> Result<usize> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM artists
          WHERE id NOT IN (SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL)"
     )
@@ -115,7 +115,7 @@ async fn cleanup_orphaned_artists(pool: &SqlitePool) -> Result<usize> {
 
 /// Remove albums with no tracks
 async fn cleanup_orphaned_albums(pool: &SqlitePool) -> Result<usize> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM albums
          WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE album_id IS NOT NULL)"
     )
@@ -133,7 +133,7 @@ async fn cleanup_orphaned_albums(pool: &SqlitePool) -> Result<usize> {
 /// Remove genres with no tracks
 async fn cleanup_orphaned_genres(pool: &SqlitePool) -> Result<usize> {
     // Note: genres are linked via track_genres junction table
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM genres
          WHERE id NOT IN (SELECT DISTINCT genre_id FROM track_genres)"
     )

@@ -49,10 +49,10 @@ impl AppState {
             db_path
         };
 
-        // Ensure parent directory exists
+        // Ensure parent directory exists (async)
         if let Some(parent) = db_path.parent() {
             tracing::debug!("Creating directory: {}", parent.display());
-            std::fs::create_dir_all(parent).map_err(|e| {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
                 format!(
                     "Failed to create database directory '{}': {}",
                     parent.display(),
@@ -61,12 +61,12 @@ impl AppState {
             })?;
             tracing::debug!("✓ Directory created/verified");
 
-            // Test write permissions by creating a test file
+            // Test write permissions by creating a test file (async)
             let test_file = parent.join(".write_test");
-            match std::fs::write(&test_file, b"test") {
+            match tokio::fs::write(&test_file, b"test").await {
                 Ok(_) => {
                     tracing::debug!("✓ Write permissions verified");
-                    let _ = std::fs::remove_file(&test_file); // Clean up
+                    let _ = tokio::fs::remove_file(&test_file).await; // Clean up
                 }
                 Err(e) => {
                     return Err(format!(

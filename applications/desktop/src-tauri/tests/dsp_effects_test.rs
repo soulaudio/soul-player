@@ -8,10 +8,6 @@
 //! 5. Effect parameters can be updated
 //! 6. Multiple effects work together in chain
 
-use soul_audio::effects::AudioEffect;
-use soul_audio_desktop::DesktopPlayback;
-use soul_playback::{CrossfadeSettings, PlaybackConfig, RepeatMode, ShuffleMode};
-
 /// Test that effects can be added and retrieved from slots
 #[test]
 #[cfg(feature = "effects")]

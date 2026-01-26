@@ -19,8 +19,9 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
             ws.maximized
         );
 
-        // On macOS with frameless windows (decorations: false), there's a known Tauri v2 bug
-        // where set_size() doesn't work reliably on hidden windows (GitHub issue #12168).
+        // On macOS, there's a known Tauri v2 bug where set_size() doesn't work reliably
+        // on hidden windows (GitHub issue #12168). Note: macOS now uses native decorations,
+        // but this workaround is still needed during window initialization.
         // The window will be shown first in main.rs, then this function will be called again
         // to apply the size. For now, we only set position on hidden windows.
         #[cfg(target_os = "macos")]
@@ -42,21 +43,19 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
                 return Ok(());
             }
 
-            // Window is visible, now set the size with retries
-            // Initial delay to let WKWebView fully initialize
+            // Window is visible, now set the size with reduced retries
+            // First attempt is immediate (no sleep), retries only if needed
             tracing::debug!(
-                "[window_state] macOS: Window is visible, waiting for WKWebView to settle..."
-            );
-            std::thread::sleep(std::time::Duration::from_millis(100));
-
-            tracing::debug!(
-                "[window_state] macOS: Setting size {}x{}",
+                "[window_state] macOS: Window is visible, applying size {}x{} with retries",
                 ws.width,
                 ws.height
             );
-            let mut size_applied = false;
 
-            for attempt in 1..=5 {
+            let mut size_applied = false;
+            const MAX_ATTEMPTS: u32 = 2; // Reduced from 3 to 2 (5-10ms faster)
+            const RETRY_DELAY_MS: u64 = 16; // Single frame at 60fps
+
+            for attempt in 1..=MAX_ATTEMPTS {
                 match window.set_size(Size::Physical(PhysicalSize {
                     width: ws.width as u32,
                     height: ws.height as u32,
@@ -70,22 +69,24 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
                         break;
                     }
                     Err(e) => {
-                        tracing::warn!(
+                        tracing::debug!(
                             "[window_state] macOS: set_size failed on attempt {}: {}",
                             attempt,
                             e
                         );
-                        if attempt < 5 {
-                            // 50ms delay between retries for WKWebView to stabilize
-                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        // Only sleep AFTER failure, not before first attempt
+                        if attempt < MAX_ATTEMPTS {
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS))
+                                .await;
                         }
                     }
                 }
             }
 
             if !size_applied {
-                tracing::error!(
-                    "[window_state] macOS: Failed to apply size after 5 attempts, WKWebView may not be ready"
+                tracing::warn!(
+                    "[window_state] macOS: Failed to apply size after {} attempts, using default size",
+                    MAX_ATTEMPTS
                 );
             }
         }

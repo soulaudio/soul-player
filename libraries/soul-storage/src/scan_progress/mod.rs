@@ -29,7 +29,7 @@ type Result<T> = std::result::Result<T, StorageError>;
 
 /// Get a scan progress by ID
 pub async fn get_by_id(pool: &SqlitePool, id: i64) -> Result<Option<ScanProgress>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, library_source_id, started_at, completed_at, total_files,
                processed_files, new_files, updated_files, removed_files,
@@ -63,7 +63,7 @@ pub async fn get_running(
     pool: &SqlitePool,
     library_source_id: i64,
 ) -> Result<Option<ScanProgress>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, library_source_id, started_at, completed_at, total_files,
                processed_files, new_files, updated_files, removed_files,
@@ -105,7 +105,7 @@ pub async fn get_running(
 
 /// Get the most recent scan for a library source
 pub async fn get_latest(pool: &SqlitePool, library_source_id: i64) -> Result<Option<ScanProgress>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, library_source_id, started_at, completed_at, total_files,
                processed_files, new_files, updated_files, removed_files,
@@ -153,7 +153,7 @@ pub async fn start(
 ) -> Result<ScanProgress> {
     let now = chrono::Utc::now().timestamp();
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         INSERT INTO scan_progress (library_source_id, started_at, total_files, status)
         VALUES (?, ?, ?, 'running')
@@ -313,7 +313,7 @@ pub async fn cleanup_old(
     library_source_id: i64,
     keep_count: i64,
 ) -> Result<u64> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         DELETE FROM scan_progress
         WHERE library_source_id = ?

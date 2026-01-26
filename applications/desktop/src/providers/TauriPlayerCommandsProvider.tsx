@@ -10,6 +10,7 @@ import { listen } from '@tauri-apps/api/event';
 import {
   PlayerCommandsProvider,
   usePlayerStore,
+  usePlaybackSession,
   type PlayerContextValue,
   type PlayerCommandsInterface,
   type PlaybackEventsInterface,
@@ -25,6 +26,7 @@ function KeyboardShortcutsInitializer() {
 }
 
 export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
+  const { updateSession } = usePlaybackSession();
 
   // Set up event listeners to update store (similar to old usePlaybackEvents hook)
   useEffect(() => {
@@ -32,9 +34,12 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     const unlistenFunctions: (() => void)[] = [];
     let isMounted = true;
 
-    // Sync initial state from backend on mount
-    // This ensures the UI reflects the actual audio layer state
+    // Sync initial state from backend on mount (non-blocking)
+    // Deferred to allow React tree to render first, then update state
     const syncInitialState = async () => {
+      // Defer state sync to next tick to avoid blocking initial render
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       try {
         const [state, shuffleMode, repeatMode] = await Promise.all([
           invoke<string>('get_playback_state'),
@@ -62,6 +67,8 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         const unlistenStateChanged = await listen<string>('playback:state-changed', (event) => {
           const isPlaying = event.payload === 'Playing';
           usePlayerStore.setState({ isPlaying });
+          // Update session state
+          updateSession({ isPlaying });
         });
         unlistenFunctions.push(unlistenStateChanged);
 
@@ -77,7 +84,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         unlistenFunctions.push(unlistenPositionUpdated);
 
         // Listen for track changes
-        const unlistenTrackChanged = await listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string }>('playback:track-changed', (event) => {
+        const unlistenTrackChanged = await listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string }>('playback:track-changed', async (event) => {
           const trackPayload = event.payload;
           // Only update if track is valid - don't clear current track on null/undefined
           // (e.g., when skipPrevious is called at the start of queue)
@@ -92,6 +99,25 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
               duration: track.duration || 0,
               progress: 0
             });
+
+            // Update session with current track and fetch latest context from backend
+            try {
+              const context = await invoke<{ contextType: string; contextId: string; contextName: string; contextArtworkPath: string | null } | null>('get_current_playback_context');
+              if (context) {
+                updateSession({
+                  currentTrack: track,
+                  contextType: context.contextType as 'album' | 'artist' | 'playlist',
+                  contextId: context.contextId,
+                  contextName: context.contextName,
+                  contextArtworkPath: context.contextArtworkPath,
+                });
+              } else {
+                updateSession({ currentTrack: track });
+              }
+            } catch (error) {
+              console.error('[TauriPlayerCommandsProvider] Failed to get context:', error);
+              updateSession({ currentTrack: track });
+            }
           }
         });
         unlistenFunctions.push(unlistenTrackChanged);
@@ -136,7 +162,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       isMounted = false;
       unlistenFunctions.forEach(fn => fn());
     };
-  }, []);
+  }, [updateSession]);
 
   const value = useMemo<PlayerContextValue>(() => {
     // Commands implementation using Tauri

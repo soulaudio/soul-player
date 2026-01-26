@@ -10,7 +10,7 @@ type Result<T> = std::result::Result<T, StorageError>;
 ///
 /// Returns default state if none exists
 pub async fn get(pool: &SqlitePool, user_id: &str) -> Result<PlaybackState> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT user_id, active_device_id, is_playing, current_track_id, position_ms,
                 volume, shuffle_enabled, repeat_mode, queue_json, updated_at
          FROM user_playback_state WHERE user_id = ?",
@@ -149,9 +149,10 @@ pub async fn set_active_device(
 
 /// Delete playback state for a user
 pub async fn delete(pool: &SqlitePool, user_id: &str) -> Result<bool> {
-    let result = sqlx::query!("DELETE FROM user_playback_state WHERE user_id = ?", user_id)
-        .execute(pool)
-        .await?;
+    let result: sqlx::sqlite::SqliteQueryResult =
+        sqlx::query!("DELETE FROM user_playback_state WHERE user_id = ?", user_id)
+            .execute(pool)
+            .await?;
 
     Ok(result.rows_affected() > 0)
 }

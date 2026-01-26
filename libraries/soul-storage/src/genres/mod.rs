@@ -3,7 +3,7 @@ use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Genre>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         "SELECT id, name, canonical_name, created_at
          FROM genres
          ORDER BY name"
@@ -26,7 +26,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Genre>> {
 }
 
 pub async fn get_by_id(pool: &SqlitePool, id: GenreId) -> Result<Option<Genre>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT id, name, canonical_name, created_at
          FROM genres
          WHERE id = ?",
@@ -44,7 +44,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: GenreId) -> Result<Option<Genre>> 
 }
 
 pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Genre>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT id, name, canonical_name, created_at
          FROM genres
          WHERE name = ?",
@@ -71,7 +71,7 @@ pub async fn find_by_canonical_name(
     pool: &SqlitePool,
     canonical_name: &str,
 ) -> Result<Option<Genre>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT id, name, canonical_name, created_at
          FROM genres
          WHERE canonical_name = ?",
@@ -95,7 +95,7 @@ pub async fn find_by_canonical_name(
 }
 
 pub async fn create(pool: &SqlitePool, genre: CreateGenre) -> Result<Genre> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "INSERT INTO genres (name, canonical_name)
          VALUES (?, ?)",
         genre.name,
@@ -113,7 +113,7 @@ pub async fn create(pool: &SqlitePool, genre: CreateGenre) -> Result<Genre> {
 
 /// Get all genres for a specific track
 pub async fn get_by_track(pool: &SqlitePool, track_id: TrackId) -> Result<Vec<Genre>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         "SELECT g.id, g.name, g.canonical_name, g.created_at
          FROM genres g
          INNER JOIN track_genres tg ON g.id = tg.genre_id

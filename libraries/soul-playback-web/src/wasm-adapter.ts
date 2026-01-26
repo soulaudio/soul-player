@@ -179,6 +179,16 @@ export class WasmPlaybackAdapter {
     }
   }
 
+  /**
+   * Unlock audio for playback (browser autoplay policy)
+   *
+   * Modern browsers require audio to be "unlocked" with a user gesture.
+   * Call this synchronously during user interaction (click/touch) to enable playback.
+   */
+  async unlock(): Promise<void> {
+    await this.audioPlayer.unlock()
+  }
+
   // ===== Playback Control =====
 
   /**

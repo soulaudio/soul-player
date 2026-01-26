@@ -1,11 +1,13 @@
 /// Audio output errors
+use serde::Serialize;
 use thiserror::Error;
 
 /// Result type for audio operations
 pub type Result<T> = std::result::Result<T, AudioError>;
 
 /// Audio errors
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize)]
+#[serde(tag = "type", content = "message")]
 pub enum AudioError {
     /// Device not found
     #[error("Audio device not found")]
@@ -50,6 +52,22 @@ pub enum AudioError {
     /// CPAL error
     #[error("CPAL error: {0}")]
     CpalError(String),
+
+    /// Mutex poisoned error
+    #[error("Mutex poisoned: {context}")]
+    MutexPoisoned { context: String },
+
+    /// Command failed
+    #[error("Command failed: {command} - {reason}")]
+    CommandFailed { command: String, reason: String },
+
+    /// Audio thread crashed
+    #[error("Audio thread crashed")]
+    AudioThreadCrashed,
+
+    /// Command channel full
+    #[error("Command channel full")]
+    ChannelFull,
 }
 
 // Backwards compatibility alias
@@ -88,6 +106,12 @@ impl From<soul_playback::PlaybackError> for AudioError {
 impl From<String> for AudioError {
     fn from(err: String) -> Self {
         AudioError::DeviceError(err)
+    }
+}
+
+impl From<AudioError> for String {
+    fn from(err: AudioError) -> Self {
+        err.to_string()
     }
 }
 

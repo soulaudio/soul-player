@@ -168,7 +168,15 @@ impl Queue {
         if from_index < play_next_len && to_index < play_next_len {
             // Both in Play Next queue
             let track = self.play_next.remove(from_index);
-            self.play_next.insert(to_index, track);
+
+            // Adjust insertion index if moving forward (indices shift after remove)
+            let adjusted_to = if from_index < to_index {
+                to_index - 1
+            } else {
+                to_index
+            };
+
+            self.play_next.insert(adjusted_to, track);
             Ok(())
         } else if from_index >= play_next_len
             && from_index < source_end
@@ -179,14 +187,30 @@ impl Queue {
             let from_source = self.source_index + (from_index - play_next_len);
             let to_source = self.source_index + (to_index - play_next_len);
             let track = self.source.remove(from_source);
-            self.source.insert(to_source, track);
+
+            // Adjust insertion index if moving forward (indices shift after remove)
+            let adjusted_to = if from_source < to_source {
+                to_source - 1
+            } else {
+                to_source
+            };
+
+            self.source.insert(adjusted_to, track);
             Ok(())
         } else if from_index >= source_end && to_index >= source_end {
             // Both in Add to Queue
             let from_add = from_index - source_end;
             let to_add = to_index - source_end;
             let track = self.queued_later.remove(from_add);
-            self.queued_later.insert(to_add, track);
+
+            // Adjust insertion index if moving forward (indices shift after remove)
+            let adjusted_to = if from_add < to_add {
+                to_add - 1
+            } else {
+                to_add
+            };
+
+            self.queued_later.insert(adjusted_to, track);
             Ok(())
         } else {
             Err("Cannot move tracks between different queue tiers".to_string())
@@ -776,5 +800,226 @@ mod tests {
         queue.restore_original_order();
         assert_eq!(queue.get(0).unwrap().id, "1"); // Back to original
         assert!(!queue.is_shuffled());
+    }
+
+    #[test]
+    fn reorder_source_forward_basic() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+        ]);
+
+        // Move track at index 0 to where track at index 2 is
+        // [1, 2, 3, 4] -> [2, 1, 3, 4] (1 takes the place of 3)
+        assert!(queue.reorder(0, 2).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "2");
+        assert_eq!(all[1].id, "1");
+        assert_eq!(all[2].id, "3");
+        assert_eq!(all[3].id, "4");
+    }
+
+    #[test]
+    fn reorder_source_forward_to_end() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Move track at index 0 to where track at index 2 (last) is
+        // [1, 2, 3] -> [2, 1, 3] (1 takes the place of 3)
+        assert!(queue.reorder(0, 2).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "2");
+        assert_eq!(all[1].id, "1");
+        assert_eq!(all[2].id, "3");
+    }
+
+    #[test]
+    fn reorder_source_backward() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+        ]);
+
+        // Move track at index 3 to where track at index 1 is
+        // [1, 2, 3, 4] -> [1, 4, 2, 3] (4 takes the place of 2)
+        assert!(queue.reorder(3, 1).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "1");
+        assert_eq!(all[1].id, "4");
+        assert_eq!(all[2].id, "2");
+        assert_eq!(all[3].id, "3");
+    }
+
+    #[test]
+    fn reorder_play_next_forward() {
+        let mut queue = Queue::new();
+        queue.add_next(create_test_track("1", "Track 1"));
+        queue.add_next(create_test_track("2", "Track 2"));
+        queue.add_next(create_test_track("3", "Track 3"));
+        queue.add_next(create_test_track("4", "Track 4"));
+
+        // Order is [4, 3, 2, 1] due to LIFO
+        // Move index 0 (track 4) to where index 2 (track 2) is
+        // [4, 3, 2, 1] -> [3, 4, 2, 1] (4 takes the place of 2)
+        assert!(queue.reorder(0, 2).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "3");
+        assert_eq!(all[1].id, "4");
+        assert_eq!(all[2].id, "2");
+        assert_eq!(all[3].id, "1");
+    }
+
+    #[test]
+    fn reorder_play_next_backward() {
+        let mut queue = Queue::new();
+        queue.add_next(create_test_track("1", "Track 1"));
+        queue.add_next(create_test_track("2", "Track 2"));
+        queue.add_next(create_test_track("3", "Track 3"));
+        queue.add_next(create_test_track("4", "Track 4"));
+
+        // Order is [4, 3, 2, 1] due to LIFO
+        // Move index 2 (track 2) to where index 0 (track 4) is
+        // [4, 3, 2, 1] -> [2, 4, 3, 1] (2 takes the place of 4)
+        assert!(queue.reorder(2, 0).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "2");
+        assert_eq!(all[1].id, "4");
+        assert_eq!(all[2].id, "3");
+        assert_eq!(all[3].id, "1");
+    }
+
+    #[test]
+    fn reorder_add_to_queue_forward() {
+        let mut queue = Queue::new();
+        // Set empty source to access Add to Queue
+        queue.set_source(vec![]);
+        queue.add_to_end(create_test_track("1", "Track 1"));
+        queue.add_to_end(create_test_track("2", "Track 2"));
+        queue.add_to_end(create_test_track("3", "Track 3"));
+        queue.add_to_end(create_test_track("4", "Track 4"));
+
+        // Move track at index 0 to where track at index 2 is
+        // [1, 2, 3, 4] -> [2, 1, 3, 4] (1 takes the place of 3)
+        assert!(queue.reorder(0, 2).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "2");
+        assert_eq!(all[1].id, "1");
+        assert_eq!(all[2].id, "3");
+        assert_eq!(all[3].id, "4");
+    }
+
+    #[test]
+    fn reorder_add_to_queue_backward() {
+        let mut queue = Queue::new();
+        // Set empty source to access Add to Queue
+        queue.set_source(vec![]);
+        queue.add_to_end(create_test_track("1", "Track 1"));
+        queue.add_to_end(create_test_track("2", "Track 2"));
+        queue.add_to_end(create_test_track("3", "Track 3"));
+        queue.add_to_end(create_test_track("4", "Track 4"));
+
+        // Move track at index 2 to where track at index 0 is
+        // [1, 2, 3, 4] -> [3, 1, 2, 4] (3 takes the place of 1)
+        assert!(queue.reorder(2, 0).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "3");
+        assert_eq!(all[1].id, "1");
+        assert_eq!(all[2].id, "2");
+        assert_eq!(all[3].id, "4");
+    }
+
+    #[test]
+    fn reorder_same_index() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+        ]);
+
+        // Reordering to same index should be no-op
+        assert!(queue.reorder(0, 0).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "1");
+        assert_eq!(all[1].id, "2");
+    }
+
+    #[test]
+    fn reorder_across_tiers_fails() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+        queue.add_next(create_test_track("n1", "Next 1"));
+
+        // Cannot move from Play Next (index 0) to Source (index 1)
+        assert!(queue.reorder(0, 1).is_err());
+    }
+
+    #[test]
+    fn reorder_out_of_bounds() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+        ]);
+
+        // Out of bounds indices
+        assert!(queue.reorder(0, 10).is_err());
+        assert!(queue.reorder(10, 0).is_err());
+    }
+
+    #[test]
+    fn reorder_adjacent_forward() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Move index 0 to index 1 (adjacent swap)
+        // [1, 2, 3] -> [1, 2, 3] (no change because after remove, index 1 becomes index 0)
+        // Actually: Remove 1 -> [2, 3], adjusted to = 1 - 1 = 0, insert at 0 -> [1, 2, 3]
+        assert!(queue.reorder(0, 1).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "1");
+        assert_eq!(all[1].id, "2");
+        assert_eq!(all[2].id, "3");
+    }
+
+    #[test]
+    fn reorder_adjacent_backward() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Move index 1 to index 0 (adjacent swap backward)
+        // [1, 2, 3] -> [2, 1, 3]
+        assert!(queue.reorder(1, 0).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "2");
+        assert_eq!(all[1].id, "1");
+        assert_eq!(all[2].id, "3");
     }
 }

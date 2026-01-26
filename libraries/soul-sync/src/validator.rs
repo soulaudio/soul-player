@@ -38,7 +38,7 @@ async fn validate_track_files(
 ) -> Result<usize> {
     debug!("Validating track file paths");
 
-    let track_sources = sqlx::query!(
+    let track_sources: Vec<_> = sqlx::query!(
         "SELECT track_id, local_file_path FROM track_sources
          WHERE local_file_path IS NOT NULL"
     )
@@ -48,8 +48,8 @@ async fn validate_track_files(
     let mut missing_count = 0;
 
     for ts in track_sources {
-        if let Some(ref file_path) = ts.local_file_path {
-            let path = Path::new(file_path);
+        if let Some(file_path) = ts.local_file_path {
+            let path = Path::new(&file_path);
 
             if !path.exists() {
                 warn!("Track {} has missing file: {}", ts.track_id, file_path);
@@ -58,7 +58,7 @@ async fn validate_track_files(
                     .log_error(
                         session_id,
                         SyncPhase::Validation,
-                        Some(file_path),
+                        Some(&file_path),
                         "file_missing",
                         &format!("Track file not found: {}", file_path),
                     )

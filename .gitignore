@@ -1,7 +1,10 @@
 # Rust
 /target/
 /target-*/
+target-wsl/
 *.rs.bk
+*.rlib
+*.backup
 
 # Node / Yarn
 node_modules/
@@ -79,6 +82,7 @@ libraries/soul-storage/.tmp/
 **/WASM_PLAYBACK_*.md
 **/NEXTJS_*_FIX.md
 clippy-errors.txt
+docs/archive/
 
 # Flatpak vendored dependencies
 # cargo-sources.json and cargo-config.toml are committed (Flatpak standard)

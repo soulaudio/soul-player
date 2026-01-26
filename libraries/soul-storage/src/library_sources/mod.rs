@@ -30,7 +30,7 @@ type Result<T> = std::result::Result<T, StorageError>;
 
 /// Get a library source by ID
 pub async fn get_by_id(pool: &SqlitePool, id: i64) -> Result<Option<LibrarySource>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, user_id, device_id, name, path, enabled, sync_deletes,
                last_scan_at, scan_status, error_message, created_at, updated_at
@@ -68,7 +68,7 @@ pub async fn get_by_user_device(
     user_id: &str,
     device_id: &str,
 ) -> Result<Vec<LibrarySource>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT id, user_id, device_id, name, path, enabled, sync_deletes,
                last_scan_at, scan_status, error_message, created_at, updated_at
@@ -114,7 +114,7 @@ pub async fn get_enabled(
     user_id: &str,
     device_id: &str,
 ) -> Result<Vec<LibrarySource>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT id, user_id, device_id, name, path, enabled, sync_deletes,
                last_scan_at, scan_status, error_message, created_at, updated_at
@@ -164,7 +164,7 @@ pub async fn create(
     let now = chrono::Utc::now().timestamp();
     let sync_deletes = i32::from(source.sync_deletes);
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         INSERT INTO library_sources (user_id, device_id, name, path, sync_deletes, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -214,7 +214,7 @@ pub async fn update(pool: &SqlitePool, id: i64, update: &UpdateLibrarySource) ->
     let sync_deletes = update.sync_deletes.unwrap_or(current.sync_deletes);
     let sync_deletes_int = i32::from(sync_deletes);
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         UPDATE library_sources
         SET name = ?, enabled = ?, sync_deletes = ?, updated_at = ?
@@ -234,9 +234,10 @@ pub async fn update(pool: &SqlitePool, id: i64, update: &UpdateLibrarySource) ->
 
 /// Delete a library source
 pub async fn delete(pool: &SqlitePool, id: i64) -> Result<bool> {
-    let result = sqlx::query!("DELETE FROM library_sources WHERE id = ?", id)
-        .execute(pool)
-        .await?;
+    let result: sqlx::sqlite::SqliteQueryResult =
+        sqlx::query!("DELETE FROM library_sources WHERE id = ?", id)
+            .execute(pool)
+            .await?;
 
     Ok(result.rows_affected() > 0)
 }
@@ -331,7 +332,7 @@ pub async fn path_exists(
     device_id: &str,
     path: &str,
 ) -> Result<bool> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT id FROM library_sources WHERE user_id = ? AND device_id = ? AND path = ?",
         user_id,
         device_id,
@@ -361,7 +362,7 @@ pub async fn set_enabled(pool: &SqlitePool, id: i64, enabled: bool) -> Result<bo
     let now = chrono::Utc::now().timestamp();
     let enabled_int = i32::from(enabled);
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         UPDATE library_sources
         SET enabled = ?, updated_at = ?

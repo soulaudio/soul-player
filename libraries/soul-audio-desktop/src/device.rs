@@ -174,6 +174,14 @@ pub fn detect_device_capabilities(
 ) -> DeviceCapabilities {
     use std::collections::HashSet;
 
+    let device_name = device
+        .description()
+        .ok()
+        .map(|d| d.name().to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+    tracing::debug!(device = %device_name, backend = ?backend, "[Device] Starting capability detection");
+    let start = std::time::Instant::now();
+
     let mut sample_rates = HashSet::new();
     let mut bit_depths = HashSet::new();
     let mut max_channels: u16 = 2;
@@ -181,8 +189,10 @@ pub fn detect_device_capabilities(
     // Query all supported output configurations
     // Limit to 50 configs to prevent performance issues on macOS with professional audio interfaces
     // that can expose 50-200+ configurations (each sample rate × bit depth × channel count combination)
+    let mut config_count = 0;
     if let Ok(configs) = device.supported_output_configs() {
         for config in configs.take(50) {
+            config_count += 1;
             // Extract sample format / bit depth
             if let Some(depth) = SupportedBitDepth::from_cpal(config.sample_format()) {
                 bit_depths.insert(depth);
@@ -255,6 +265,21 @@ pub fn detect_device_capabilities(
         }
     };
 
+    let duration = start.elapsed();
+    tracing::debug!(
+        device = %device_name,
+        backend = ?backend,
+        config_count,
+        sample_rate_count = sample_rates.len(),
+        bit_depth_count = bit_depths.len(),
+        max_channels,
+        supports_exclusive,
+        supports_dsd,
+        dsd_rate_count = dsd_rates.len(),
+        duration_ms = duration.as_millis(),
+        "[Device] Capability detection completed"
+    );
+
     DeviceCapabilities {
         sample_rates,
         bit_depths,
@@ -281,6 +306,9 @@ pub fn list_devices_with_capabilities(
     backend: AudioBackend,
     include_capabilities: bool,
 ) -> Result<Vec<AudioDeviceInfo>, DeviceError> {
+    tracing::info!(backend = ?backend, include_capabilities, "[Device] Starting device enumeration");
+    let start = std::time::Instant::now();
+
     let host = backend
         .to_cpal_host()
         .map_err(|_| DeviceError::BackendUnavailable(backend.name()))?;
@@ -291,20 +319,28 @@ pub fn list_devices_with_capabilities(
         .and_then(|d| d.description().ok())
         .map(|desc| desc.name().to_string());
 
+    tracing::debug!(backend = ?backend, default_device = ?default_name, "[Device] Default device identified");
+
     // Use output_devices() instead of devices() to only enumerate output devices.
     // This is more efficient and avoids issues with input-only devices.
     let devices = host
         .output_devices()
-        .map_err(|e| DeviceError::EnumerationFailed(e.to_string()))?;
+        .map_err(|e| {
+            tracing::error!(backend = ?backend, error = %e, "[Device] Failed to enumerate output devices");
+            DeviceError::EnumerationFailed(e.to_string())
+        })?;
 
     let mut device_list = Vec::new();
+    let mut device_iteration_count = 0;
 
     for device in devices {
+        device_iteration_count += 1;
         // Wrap device info extraction in individual error handling to prevent
         // one problematic device from failing the entire enumeration.
         // This is especially important for ASIO where some drivers are unreliable.
         let device_info = (|| -> Option<AudioDeviceInfo> {
             let name = device.description().ok()?.name().to_string();
+            tracing::debug!(device = %name, iteration = device_iteration_count, "[Device] Processing device");
 
             // Try to get default output config; skip device if unavailable
             let config = device.default_output_config().ok()?;
@@ -342,6 +378,11 @@ pub fn list_devices_with_capabilities(
 
         if let Some(info) = device_info {
             device_list.push(info);
+        } else {
+            tracing::warn!(
+                iteration = device_iteration_count,
+                "[Device] Failed to get info for device (skipping)"
+            );
         }
     }
 
@@ -351,6 +392,16 @@ pub fn list_devices_with_capabilities(
         (false, true) => std::cmp::Ordering::Greater,
         _ => a.name.cmp(&b.name),
     });
+
+    let duration = start.elapsed();
+    tracing::info!(
+        backend = ?backend,
+        device_count = device_list.len(),
+        devices_processed = device_iteration_count,
+        include_capabilities,
+        duration_ms = duration.as_millis(),
+        "[Device] Device enumeration completed"
+    );
 
     Ok(device_list)
 }
@@ -365,13 +416,18 @@ pub fn get_default_device_with_capabilities(
     backend: AudioBackend,
     include_capabilities: bool,
 ) -> Result<AudioDeviceInfo, DeviceError> {
-    let host = backend
-        .to_cpal_host()
-        .map_err(|_| DeviceError::BackendUnavailable(backend.name()))?;
+    tracing::debug!(backend = ?backend, include_capabilities, "[Device] Getting default device");
+    let start = std::time::Instant::now();
 
-    let device = host
-        .default_output_device()
-        .ok_or(DeviceError::NoDeviceFound)?;
+    let host = backend.to_cpal_host().map_err(|_| {
+        tracing::error!(backend = ?backend, "[Device] Backend unavailable");
+        DeviceError::BackendUnavailable(backend.name())
+    })?;
+
+    let device = host.default_output_device().ok_or_else(|| {
+        tracing::error!(backend = ?backend, "[Device] No default output device found");
+        DeviceError::NoDeviceFound
+    })?;
 
     let name = device
         .description()
@@ -401,6 +457,16 @@ pub fn get_default_device_with_capabilities(
         None
     };
 
+    let duration = start.elapsed();
+    tracing::debug!(
+        backend = ?backend,
+        device = %name,
+        sample_rate,
+        channels,
+        duration_ms = duration.as_millis(),
+        "[Device] Default device retrieved"
+    );
+
     Ok(AudioDeviceInfo {
         name,
         backend,
@@ -426,6 +492,9 @@ pub fn find_device_by_name(
     backend: AudioBackend,
     device_name: &str,
 ) -> Result<cpal::Device, DeviceError> {
+    tracing::debug!(backend = ?backend, device_name, "[Device] Searching for device by name");
+    let start = std::time::Instant::now();
+
     let host = backend
         .to_cpal_host()
         .map_err(|_| DeviceError::BackendUnavailable(backend.name()))?;
@@ -435,18 +504,36 @@ pub fn find_device_by_name(
         .output_devices()
         .map_err(|e| DeviceError::EnumerationFailed(e.to_string()))?;
 
+    let mut search_count = 0;
     for device in devices {
+        search_count += 1;
         if let Some(name) = device
             .description()
             .ok()
             .map(|desc| desc.name().to_string())
         {
             if name == device_name {
+                let duration = start.elapsed();
+                tracing::info!(
+                    backend = ?backend,
+                    device_name,
+                    devices_searched = search_count,
+                    duration_ms = duration.as_millis(),
+                    "[Device] Device found"
+                );
                 return Ok(device);
             }
         }
     }
 
+    let duration = start.elapsed();
+    tracing::warn!(
+        backend = ?backend,
+        device_name,
+        devices_searched = search_count,
+        duration_ms = duration.as_millis(),
+        "[Device] Device not found"
+    );
     Err(DeviceError::DeviceNotFound(device_name.to_string()))
 }
 
@@ -499,7 +586,7 @@ mod tests {
             "Should be able to list devices for default backend"
         );
 
-        let devices = devices.unwrap();
+        let devices = devices.expect("Failed to list devices for default backend");
         assert!(!devices.is_empty(), "Should find at least one audio device");
 
         // At least one device should be default
@@ -523,7 +610,7 @@ mod tests {
 
         assert!(device.is_ok(), "Should be able to get default device");
 
-        let device = device.unwrap();
+        let device = device.expect("Failed to get default device");
         assert!(device.is_default, "Device should be marked as default");
         assert!(!device.name.is_empty(), "Device should have a name");
         assert!(
@@ -536,7 +623,8 @@ mod tests {
     #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_find_device_by_name() {
         let backend = AudioBackend::Default;
-        let devices = list_devices(backend).unwrap();
+        let devices =
+            list_devices(backend).expect("Failed to list devices for test_find_device_by_name");
 
         if let Some(first_device) = devices.first() {
             let found = find_device_by_name(backend, &first_device.name);
@@ -564,7 +652,8 @@ mod tests {
     #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_device_sorting() {
         let backend = AudioBackend::Default;
-        let devices = list_devices(backend).unwrap();
+        let devices =
+            list_devices(backend).expect("Failed to list devices for test_device_sorting");
 
         if devices.len() > 1 {
             // Default device should be first
@@ -667,7 +756,7 @@ mod tests {
             "Should be able to list devices with capabilities"
         );
 
-        let devices = devices.unwrap();
+        let devices = devices.expect("Failed to list devices with capabilities");
         if !devices.is_empty() {
             // At least one device should have capabilities when requested
             let device = &devices[0];
@@ -676,7 +765,10 @@ mod tests {
                 "Device should have capabilities when requested"
             );
 
-            let caps = device.capabilities.as_ref().unwrap();
+            let caps = device
+                .capabilities
+                .as_ref()
+                .expect("Device capabilities should be present");
             assert!(!caps.sample_rates.is_empty(), "Should detect sample rates");
             assert!(!caps.bit_depths.is_empty(), "Should detect bit depths");
             assert!(caps.max_channels > 0, "Should detect channels");
@@ -694,10 +786,13 @@ mod tests {
             "Should be able to get default device with capabilities"
         );
 
-        let device = device.unwrap();
+        let device = device.expect("Failed to get default device with capabilities");
         assert!(device.capabilities.is_some(), "Should have capabilities");
 
-        let caps = device.capabilities.as_ref().unwrap();
+        let caps = device
+            .capabilities
+            .as_ref()
+            .expect("Device capabilities should be present");
         assert!(!caps.sample_rates.is_empty(), "Should detect sample rates");
 
         // Sample rates should be sorted
@@ -713,13 +808,14 @@ mod tests {
     #[ignore = "Requires real audio hardware - not available in CI environments"]
     fn test_get_device_capabilities_by_name() {
         let backend = AudioBackend::Default;
-        let devices = list_devices(backend).unwrap();
+        let devices = list_devices(backend)
+            .expect("Failed to list devices for test_get_device_capabilities_by_name");
 
         if let Some(first_device) = devices.first() {
             let caps = get_device_capabilities(backend, &first_device.name);
             assert!(caps.is_ok(), "Should be able to get capabilities by name");
 
-            let caps = caps.unwrap();
+            let caps = caps.expect("Failed to get device capabilities by name");
             assert!(!caps.sample_rates.is_empty(), "Should detect sample rates");
             assert!(!caps.bit_depths.is_empty(), "Should detect bit depths");
         }

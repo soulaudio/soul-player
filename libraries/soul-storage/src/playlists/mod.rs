@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 
 /// Get user's playlists (owned + shared with them)
 pub async fn get_user_playlists(pool: &SqlitePool, user_id: UserId) -> Result<Vec<Playlist>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT DISTINCT
             p.id, p.name, p.description, p.owner_id, p.is_public, p.is_favorite,
@@ -52,7 +52,7 @@ pub async fn get_by_id(
     id: PlaylistId,
     user_id: UserId,
 ) -> Result<Option<Playlist>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT p.id, p.name, p.description, p.owner_id, p.is_public, p.is_favorite,
                p.cover_art_path, p.created_at, p.updated_at
@@ -104,7 +104,7 @@ pub async fn get_with_tracks(
     };
 
     // Then get tracks
-    let track_rows = sqlx::query!(
+    let track_rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             pt.track_id, pt.position, pt.added_at,
@@ -306,7 +306,7 @@ pub async fn reorder_tracks(
     let mut tx = pool.begin().await?;
 
     // Get current position
-    let current_pos = sqlx::query!(
+    let current_pos: Option<_> = sqlx::query!(
         "SELECT position FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?",
         playlist_id,
         track_id
@@ -460,7 +460,7 @@ pub async fn get_playlists_containing_track(
         .parse()
         .map_err(|_| soul_core::SoulError::InvalidInput("Invalid track ID".to_string()))?;
 
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT DISTINCT p.id
         FROM playlists p
@@ -489,7 +489,7 @@ async fn check_write_permission(
     playlist_id: PlaylistId,
     user_id: UserId,
 ) -> Result<bool> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT
             COALESCE(

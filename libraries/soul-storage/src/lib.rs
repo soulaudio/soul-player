@@ -125,7 +125,7 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
     // Optimized for concurrent operations (library scanning, playback init, import, etc.)
     let pool = SqlitePoolOptions::new()
         .max_connections(20) // Increased from 5 to handle concurrent background tasks
-        .min_connections(2) // Keep minimum connections ready to reduce latency
+        .min_connections(0) // Set to 0 for fastest startup (lazy connection, pool scales up as needed)
         .acquire_timeout(std::time::Duration::from_secs(10)) // Timeout for pool acquisition
         .connect_with(options)
         .await?;

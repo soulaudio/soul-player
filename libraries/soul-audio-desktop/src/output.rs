@@ -4,7 +4,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream, StreamConfig};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use soul_core::{AudioBuffer, AudioOutput};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
@@ -76,25 +76,46 @@ enum AudioCommand {
 
 /// Playback state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 enum PlaybackState {
     /// Not playing
-    Stopped,
+    Stopped = 0,
     /// Playing audio
-    Playing,
+    Playing = 1,
     /// Paused (buffer retained)
-    Paused,
+    Paused = 2,
+}
+
+impl PlaybackState {
+    /// Load from atomic u8
+    #[inline]
+    fn load(atomic: &AtomicU8) -> Self {
+        match atomic.load(Ordering::Relaxed) {
+            1 => Self::Playing,
+            2 => Self::Paused,
+            _ => Self::Stopped,
+        }
+    }
+
+    /// Store to atomic u8
+    #[inline]
+    fn store(self, atomic: &AtomicU8) {
+        atomic.store(self as u8, Ordering::Relaxed);
+    }
 }
 
 /// Shared audio state between main thread and audio callback
+/// CRITICAL: Uses atomic types for lock-free access in real-time audio thread
 struct AudioState {
     /// Audio samples (interleaved f32) - Arc for lock-free reading
+    /// Mutex is acceptable here because we only swap the Arc pointer, not the data
     buffer: Mutex<Arc<Vec<f32>>>,
     /// Current playback position (in samples, not frames)
     position: AtomicUsize,
-    /// Playback state
-    state: Mutex<PlaybackState>,
-    /// Volume level (0.0 to 1.0)
-    volume: Mutex<f32>,
+    /// Playback state (stored as u8)
+    state: AtomicU8,
+    /// Volume level (0.0 to 1.0) - stored as u32 bit pattern
+    volume: AtomicU32,
     /// Loop flag
     looping: AtomicBool,
 }
@@ -104,10 +125,22 @@ impl AudioState {
         Self {
             buffer: Mutex::new(Arc::new(Vec::new())),
             position: AtomicUsize::new(0),
-            state: Mutex::new(PlaybackState::Stopped),
-            volume: Mutex::new(1.0),
+            state: AtomicU8::new(PlaybackState::Stopped as u8),
+            volume: AtomicU32::new(1.0_f32.to_bits()),
             looping: AtomicBool::new(false),
         }
+    }
+
+    /// Get current volume (lock-free)
+    #[inline]
+    fn get_volume(&self) -> f32 {
+        f32::from_bits(self.volume.load(Ordering::Relaxed))
+    }
+
+    /// Set volume (lock-free)
+    #[inline]
+    fn set_volume(&self, vol: f32) {
+        self.volume.store(vol.to_bits(), Ordering::Relaxed);
     }
 }
 
@@ -220,11 +253,8 @@ impl CpalOutput {
                     // Reset position
                     state.position.store(0, Ordering::Relaxed);
 
-                    // Update state
-                    {
-                        let mut state_guard = state.state.lock().unwrap();
-                        *state_guard = PlaybackState::Playing;
-                    }
+                    // Update state (lock-free)
+                    PlaybackState::Playing.store(&state.state);
 
                     // Create new stream
                     let state_for_callback = Arc::clone(&state);
@@ -249,28 +279,24 @@ impl CpalOutput {
                 AudioCommand::Pause => {
                     if let Some(s) = &stream {
                         let _ = s.pause();
-                        let mut state_guard = state.state.lock().unwrap();
-                        *state_guard = PlaybackState::Paused;
+                        PlaybackState::Paused.store(&state.state);
                     }
                 }
                 AudioCommand::Resume => {
                     if let Some(s) = &stream {
                         let _ = s.play();
-                        let mut state_guard = state.state.lock().unwrap();
-                        *state_guard = PlaybackState::Playing;
+                        PlaybackState::Playing.store(&state.state);
                     }
                 }
                 AudioCommand::Stop => {
                     if let Some(s) = stream.take() {
                         drop(s);
                     }
-                    let mut state_guard = state.state.lock().unwrap();
-                    *state_guard = PlaybackState::Stopped;
+                    PlaybackState::Stopped.store(&state.state);
                     state.position.store(0, Ordering::Relaxed);
                 }
                 AudioCommand::SetVolume(vol) => {
-                    let mut volume_guard = state.volume.lock().unwrap();
-                    *volume_guard = vol;
+                    state.set_volume(vol);
                 }
                 AudioCommand::Shutdown => {
                     if let Some(s) = stream.take() {
@@ -283,17 +309,18 @@ impl CpalOutput {
     }
 
     /// Audio callback function (runs in real-time audio thread)
+    /// CRITICAL: Lock-free for real-time performance
     fn audio_callback(output: &mut [f32], state: &AudioState) {
-        // Check playback state
-        let playback_state = *state.state.lock().unwrap();
+        // Check playback state (lock-free)
+        let playback_state = PlaybackState::load(&state.state);
         if playback_state != PlaybackState::Playing {
             // Fill with silence
             output.fill(0.0);
             return;
         }
 
-        // Get volume
-        let volume = *state.volume.lock().unwrap();
+        // Get volume (lock-free)
+        let volume = state.get_volume();
 
         // Get buffer reference (Arc clone is cheap)
         let buffer = {
@@ -327,9 +354,8 @@ impl CpalOutput {
 
         // Update position
         if pos >= buffer_len && !state.looping.load(Ordering::Relaxed) {
-            // Reached end, stop playback
-            let mut playback_state = state.state.lock().unwrap();
-            *playback_state = PlaybackState::Stopped;
+            // Reached end, stop playback (lock-free)
+            PlaybackState::Stopped.store(&state.state);
         } else {
             state
                 .position
@@ -454,15 +480,14 @@ impl AudioOutput for CpalOutput {
                 soul_core::SoulError::audio(format!("Failed to send volume command: {}", e))
             })?;
 
-        // Also update local state for volume() getter
-        let mut vol = self.state.volume.lock().unwrap();
-        *vol = volume;
+        // Also update local state for volume() getter (lock-free)
+        self.state.set_volume(volume);
 
         Ok(())
     }
 
     fn volume(&self) -> f32 {
-        *self.state.volume.lock().unwrap()
+        self.state.get_volume()
     }
 }
 
@@ -496,7 +521,9 @@ mod tests {
             Err(AudioOutputError::DeviceNotFound | AudioOutputError::StreamBuildError(_)) => {
                 // Expected in headless environments
             }
-            Err(e) => panic!("Unexpected error: {}", e),
+            Err(e) => {
+                panic!("Unexpected error creating audio output: {}", e);
+            }
         }
     }
 

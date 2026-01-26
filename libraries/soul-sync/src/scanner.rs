@@ -66,9 +66,10 @@ pub async fn scan_all_sources(
 
 /// Helper to get active sources
 async fn get_active_sources(pool: &SqlitePool) -> Result<Vec<SourceInfo>> {
-    let rows = sqlx::query!("SELECT id, name, source_type FROM sources WHERE is_active = 1")
-        .fetch_all(pool)
-        .await?;
+    let rows: Vec<_> =
+        sqlx::query!("SELECT id, name, source_type FROM sources WHERE is_active = 1")
+            .fetch_all(pool)
+            .await?;
 
     Ok(rows
         .into_iter()
@@ -83,7 +84,7 @@ async fn get_active_sources(pool: &SqlitePool) -> Result<Vec<SourceInfo>> {
 /// Helper to get library path from settings
 async fn get_library_path(pool: &SqlitePool) -> Result<Option<PathBuf>> {
     // Get library path for default user (user_id = '1')
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT value FROM user_settings
          WHERE user_id = '1' AND key = 'import.library_path'"
     )

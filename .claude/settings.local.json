@@ -230,7 +230,15 @@
       "Bash(git fetch:*)",
       "WebFetch(domain:rustsec.org)",
       "Bash(taskkill:*)",
-      "Bash(npm pkg:*)"
+      "Bash(npm pkg:*)",
+      "Bash(jq:*)",
+      "Bash(git diff:*)",
+      "Bash(rg:*)",
+      "Bash(git status:*)",
+      "Bash(awk:*)",
+      "WebFetch(domain:docs.pipewire.org)",
+      "Bash(CARGO_TARGET_DIR=/tmp/soul-player-target cargo clippy:*)",
+      "Bash(./scripts/bump-version.sh:*)"
     ]
   },
   "hooks": {

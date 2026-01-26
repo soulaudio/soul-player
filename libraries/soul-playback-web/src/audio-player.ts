@@ -42,6 +42,19 @@ export class WebAudioPlayer {
   }
 
   /**
+   * Unlock audio for playback (call during user interaction)
+   *
+   * Browsers require audio to be "unlocked" with a user gesture.
+   * Call this synchronously during click/touch events to enable playback.
+   */
+  async unlock(): Promise<void> {
+    if (this.audioContext.state === 'suspended') {
+      console.log('[WebAudioPlayer] Unlocking audio context')
+      await this.audioContext.resume()
+    }
+  }
+
+  /**
    * Load an audio track from URL
    *
    * Stops current playback and loads new audio file. Audio is ready to play

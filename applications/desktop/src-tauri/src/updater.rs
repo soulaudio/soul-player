@@ -7,7 +7,7 @@ use tauri_plugin_updater::UpdaterExt;
 ///
 /// Checks for updates immediately on startup, then every hour if auto-update is enabled
 pub fn start_update_checker(app: AppHandle) {
-    tokio::spawn(async move {
+    let update_handle = tokio::spawn(async move {
         // Check immediately on startup (after a small delay to let app initialize)
         tokio::time::sleep(Duration::from_secs(3)).await;
         tracing::info!("[UPDATER] Starting initial update check on startup");
@@ -21,6 +21,13 @@ pub fn start_update_checker(app: AppHandle) {
             interval.tick().await;
             tracing::info!("[UPDATER] Running scheduled update check");
             check_and_handle_updates(&app).await;
+        }
+    });
+
+    // Log errors from update checker (runs for app lifetime)
+    tokio::spawn(async move {
+        if let Err(e) = update_handle.await {
+            tracing::error!("[UPDATER] Update checker task panicked: {:?}", e);
         }
     });
 }
@@ -93,7 +100,9 @@ async fn check_and_handle_updates(app: &AppHandle) {
                         "date": update.date,
                         "body": update.body
                     });
-                    let _ = app.emit("update-available", &update_info);
+                    if let Err(e) = app.emit("update-available", &update_info) {
+                        tracing::error!(error = %e, event = "update-available", "Failed to emit event to frontend");
+                    }
                 }
             }
             Ok(None) => {
@@ -149,7 +158,9 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
                     } else {
                         0
                     };
-                    let _ = app_clone.emit("update-progress", progress);
+                    if let Err(e) = app_clone.emit("update-progress", progress) {
+                        tracing::warn!(error = %e, event = "update-progress", "Failed to emit event to frontend");
+                    }
                 },
                 || {},
             )

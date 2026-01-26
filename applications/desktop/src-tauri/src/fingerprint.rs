@@ -11,6 +11,7 @@
 use crate::app_state::AppState;
 use serde::{Deserialize, Serialize};
 use soul_audio::fingerprint::{FingerprintConfig, Fingerprinter};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
@@ -119,8 +120,15 @@ pub async fn start_fingerprinting(
     let worker_clone = worker_ref.clone();
 
     // Spawn background task
-    tokio::spawn(async move {
+    let fingerprint_handle = tokio::spawn(async move {
         run_fingerprint_worker(app, pool, worker_clone).await;
+    });
+
+    // Log errors from fingerprint worker
+    tokio::spawn(async move {
+        if let Err(e) = fingerprint_handle.await {
+            tracing::error!("[FINGERPRINT] Fingerprint worker task panicked: {:?}", e);
+        }
     });
 
     Ok(())
@@ -275,7 +283,9 @@ async fn run_fingerprint_worker(
     tracing::info!("Fingerprint worker started");
 
     // Emit initial status
-    let _ = app.emit("fingerprint-started", ());
+    if let Err(e) = app.emit("fingerprint-started", ()) {
+        tracing::warn!(error = %e, event = "fingerprint-started", "Failed to emit event to frontend");
+    }
 
     loop {
         // Check for cancellation
@@ -320,13 +330,15 @@ async fn run_fingerprint_worker(
                     let pending = soul_storage::fingerprint_queue::pending_count(&pool)
                         .await
                         .unwrap_or(0);
-                    let _ = app.emit(
+                    if let Err(e) = app.emit(
                         "fingerprint-progress",
                         FingerprintProgressEvent {
                             processed: worker.processed_count(),
                             pending,
                         },
-                    );
+                    ) {
+                        tracing::warn!(error = %e, event = "fingerprint-progress", "Failed to emit event to frontend");
+                    }
                 }
             }
             Err(e) => {
@@ -343,12 +355,14 @@ async fn run_fingerprint_worker(
     worker.running.store(false, Ordering::SeqCst);
 
     // Emit completion event
-    let _ = app.emit(
+    if let Err(e) = app.emit(
         "fingerprint-complete",
         FingerprintCompleteEvent {
             processed: worker.processed_count(),
         },
-    );
+    ) {
+        tracing::error!(error = %e, event = "fingerprint-complete", "Failed to emit event to frontend");
+    }
 
     tracing::info!(
         "Fingerprint worker stopped. Processed {} items.",
@@ -379,8 +393,10 @@ async fn process_fingerprint(
         .ok_or_else(|| format!("Track {} has no local file path", item.track_id))?;
 
     // Compute fingerprint using Chromaprint
-    let path = Path::new(&file_path);
-    if !path.exists() {
+    let path = PathBuf::from(&file_path);
+    // Use async exists check to avoid blocking on slow/network storage
+    let exists: bool = tokio::fs::try_exists(&path).await.unwrap_or(false);
+    if !exists {
         return Err(format!("File not found: {}", file_path));
     }
 

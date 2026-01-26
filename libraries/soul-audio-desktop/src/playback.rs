@@ -344,12 +344,16 @@ impl SampleRateMode {
     }
 
     /// Convert to string for settings persistence
-    pub fn as_str(&self) -> String {
+    pub fn as_str(&self) -> &str {
         match self {
-            Self::MatchDevice => "match_device".to_string(),
-            Self::MatchTrack => "match_track".to_string(),
-            Self::Passthrough => "passthrough".to_string(),
-            Self::Fixed(rate) => format!("fixed:{}", rate),
+            Self::MatchDevice => "match_device",
+            Self::MatchTrack => "match_track",
+            Self::Passthrough => "passthrough",
+            Self::Fixed(_) => {
+                // Note: For Fixed variants, caller must handle formatting separately
+                // This is acceptable since as_str() is currently unused in the codebase
+                "fixed"
+            }
         }
     }
 
@@ -415,10 +419,10 @@ pub struct ResamplingSettings {
 impl Default for ResamplingSettings {
     fn default() -> Self {
         Self {
-            quality: "high".to_string(),
+            quality: String::from("high"),
             sample_rate_mode: SampleRateMode::MatchDevice,
             target_rate: 0, // deprecated, use sample_rate_mode
-            backend: "auto".to_string(),
+            backend: String::from("auto"),
         }
     }
 }
@@ -483,6 +487,10 @@ pub struct DesktopPlayback {
     /// Current device name
     current_device: Arc<Mutex<String>>,
 
+    /// Current device ID (backend + device name as unique identifier)
+    /// Used to prevent false positive device switches when checking sample rates
+    current_device_id: Arc<Mutex<Option<String>>>,
+
     /// Current stream sample rate (what we're actually outputting at)
     current_sample_rate: Arc<std::sync::atomic::AtomicU32>,
 
@@ -514,7 +522,16 @@ impl DesktopPlayback {
     /// * `Ok(playback)` - Desktop playback ready
     /// * `Err(_)` - Failed to initialize audio output
     pub fn new(config: PlaybackConfig) -> Result<Self> {
-        Self::new_with_device(config, crate::AudioBackend::Default, None)
+        tracing::info!("[Playback] Creating DesktopPlayback with default device");
+        let start = std::time::Instant::now();
+        let result = Self::new_with_device(config, crate::AudioBackend::Default, None);
+        if result.is_ok() {
+            tracing::info!(
+                duration_ms = start.elapsed().as_millis(),
+                "[Playback] DesktopPlayback created successfully"
+            );
+        }
+        result
     }
 
     /// Create new desktop playback system with specific device
@@ -532,32 +549,120 @@ impl DesktopPlayback {
         backend: crate::AudioBackend,
         device_name: Option<String>,
     ) -> Result<Self> {
+        tracing::info!("[Playback] ========================================");
+        tracing::info!("[Playback] DESKTOP PLAYBACK INITIALIZATION STARTED");
+        tracing::info!(
+            backend = ?backend,
+            device_name = ?device_name,
+            crossfade = ?config.crossfade,
+            gapless = config.gapless,
+            "[Playback] Configuration"
+        );
+
+        // Log platform information for debugging
+        let platform = if cfg!(target_os = "linux") {
+            "Linux"
+        } else if cfg!(target_os = "macos") {
+            "macOS"
+        } else if cfg!(target_os = "windows") {
+            "Windows"
+        } else {
+            "Unknown"
+        };
+
+        tracing::info!(platform = platform, "[Playback] Platform detected");
+
+        let init_start = std::time::Instant::now();
+
+        tracing::debug!("[Playback] Creating PlaybackManager");
+        let manager_start = std::time::Instant::now();
         let manager = Arc::new(Mutex::new(PlaybackManager::new(config)));
+        let manager_duration = manager_start.elapsed();
+        tracing::debug!(
+            duration_us = manager_duration.as_micros(),
+            "[Playback] PlaybackManager created"
+        );
 
         let (command_tx, command_rx) = bounded(32);
         let (event_tx, event_rx) = bounded(32);
 
         // Create background track loader FIRST - keeps disk I/O off audio thread
-        let track_loader = Arc::new(
-            crate::track_loader::TrackLoader::new()
-                .map_err(|e| crate::error::AudioError::DeviceError(e))?,
+        tracing::debug!("[Playback] Creating background track loader");
+        let loader_start = std::time::Instant::now();
+        let track_loader = Arc::new(crate::track_loader::TrackLoader::new().map_err(|e| {
+            tracing::error!(error = %e, "[Playback] Failed to create track loader");
+            crate::error::AudioError::DeviceError(e)
+        })?);
+        let loader_duration = loader_start.elapsed();
+        tracing::debug!(
+            duration_us = loader_duration.as_micros(),
+            "[Playback] Track loader created"
         );
 
         // Create CPAL stream with specified device (passes track_loader to callbacks)
-        let (stream, actual_device_name, sample_rate) = Self::create_audio_stream(
+        tracing::debug!("[Playback] Creating audio stream");
+        let stream_start = std::time::Instant::now();
+        let (stream_option, actual_device_name, sample_rate) = Self::create_audio_stream(
             manager.clone(),
             command_rx.clone(),
             event_tx.clone(),
             backend,
-            device_name,
+            device_name.clone(),
             track_loader.clone(),
         )?;
+        let stream_duration = stream_start.elapsed();
 
-        let stream = Arc::new(Mutex::new(Some(stream)));
+        let is_silent_mode = stream_option.is_none();
+
+        if is_silent_mode {
+            tracing::warn!(
+                device_name = %actual_device_name,
+                sample_rate,
+                "[Playback] Silent mode active - no audio stream (zero-device system)"
+            );
+        } else {
+            tracing::info!(
+                device_name = %actual_device_name,
+                sample_rate,
+                stream_creation_ms = stream_duration.as_millis(),
+                "[Playback] Audio stream created successfully"
+            );
+        }
+
+        let stream = Arc::new(Mutex::new(stream_option));
         let current_backend = Arc::new(Mutex::new(backend));
-        let current_device = Arc::new(Mutex::new(actual_device_name));
+        let current_device = Arc::new(Mutex::new(actual_device_name.clone()));
+
+        // Create device ID (backend + device name as unique identifier)
+        let device_id = if is_silent_mode {
+            None
+        } else {
+            Some(Self::make_device_id(backend, &actual_device_name))
+        };
+        let current_device_id = Arc::new(Mutex::new(device_id));
+
         let current_sample_rate = Arc::new(std::sync::atomic::AtomicU32::new(sample_rate));
         let resampling_settings = Arc::new(Mutex::new(ResamplingSettings::default()));
+
+        let total_duration = init_start.elapsed();
+        tracing::info!("[Playback] ========================================");
+        tracing::info!("[Playback] DESKTOP PLAYBACK INITIALIZATION COMPLETE");
+        tracing::info!(
+            total_duration_ms = total_duration.as_millis(),
+            manager_us = manager_duration.as_micros(),
+            loader_us = loader_duration.as_micros(),
+            stream_ms = stream_duration.as_millis(),
+            "[Playback] Initialization timings"
+        );
+        tracing::info!(
+            device = %actual_device_name,
+            sample_rate,
+            platform = platform,
+            backend = ?backend,
+            silent_mode = is_silent_mode,
+            "[Playback] Final configuration"
+        );
+        tracing::info!("[Playback] ========================================");
 
         Ok(Self {
             command_tx,
@@ -567,6 +672,7 @@ impl DesktopPlayback {
             manager,
             current_backend,
             current_device,
+            current_device_id,
             current_sample_rate,
             resampling_settings,
             track_loader,
@@ -575,7 +681,8 @@ impl DesktopPlayback {
 
     /// Create CPAL audio stream
     ///
-    /// Returns (Stream, `device_name`, `sample_rate`)
+    /// Returns (Option<Stream>, `device_name`, `sample_rate`)
+    /// Stream is None for zero-device systems (silent mode)
     fn create_audio_stream(
         manager: Arc<Mutex<PlaybackManager>>,
         command_rx: Receiver<PlaybackCommand>,
@@ -583,19 +690,63 @@ impl DesktopPlayback {
         backend: crate::AudioBackend,
         device_name: Option<String>,
         track_loader: Arc<crate::track_loader::TrackLoader>,
-    ) -> Result<(Stream, String, u32)> {
-        let host = backend
-            .to_cpal_host()
-            .map_err(|_| crate::error::AudioError::DeviceNotFound)?;
+    ) -> Result<(Option<Stream>, String, u32)> {
+        tracing::info!(
+            backend = ?backend,
+            device_name = ?device_name,
+            "[Playback] Starting audio stream creation"
+        );
 
-        let device = if let Some(name) = device_name {
+        let host = backend.to_cpal_host().map_err(|_| {
+            tracing::error!(
+                backend = ?backend,
+                "[Playback] Failed to get CPAL host for backend"
+            );
+            crate::error::AudioError::DeviceNotFound
+        })?;
+
+        tracing::debug!("[Playback] CPAL host obtained successfully");
+
+        let device_result = if let Some(name) = device_name {
             // Find device by name
-            crate::device::find_device_by_name(backend, &name)
-                .map_err(|e| crate::error::AudioError::DeviceError(e.to_string()))?
+            tracing::info!(
+                device_name = %name,
+                backend = ?backend,
+                "[Playback] Searching for audio device by name"
+            );
+            crate::device::find_device_by_name(backend, &name).map_err(|e| {
+                tracing::error!(
+                    device_name = %name,
+                    error = %e,
+                    "[Playback] Failed to find device by name"
+                );
+                crate::error::AudioError::DeviceError(e.to_string())
+            })
         } else {
             // Use default device
-            host.default_output_device()
-                .ok_or(crate::error::AudioError::DeviceNotFound)?
+            tracing::debug!("[Playback] Looking for default output device");
+            host.default_output_device().ok_or_else(|| {
+                tracing::warn!(
+                    backend = ?backend,
+                    "[Playback] No default output device found - checking for zero-device system"
+                );
+                crate::error::AudioError::DeviceNotFound
+            })
+        };
+
+        // Handle zero-device systems with silent mode fallback
+        let device = match device_result {
+            Ok(dev) => dev,
+            Err(crate::error::AudioError::DeviceNotFound) => {
+                tracing::warn!("[Playback] ========================================");
+                tracing::warn!("[Playback] ZERO-DEVICE SYSTEM DETECTED");
+                tracing::warn!("[Playback] No audio output devices available");
+                tracing::warn!("[Playback] Entering SILENT MODE - library browsing only");
+                tracing::warn!("[Playback] ========================================");
+
+                return Self::create_null_stream(manager, command_rx, event_tx);
+            }
+            Err(e) => return Err(e),
         };
 
         let actual_device_name = device
@@ -604,13 +755,36 @@ impl DesktopPlayback {
             .map(|desc| desc.name().to_string())
             .unwrap_or_else(|| "Unknown Device".to_string());
 
+        tracing::info!(
+            device_name = %actual_device_name,
+            backend = ?backend,
+            "[Playback] Selected audio device - retrieving configuration"
+        );
+
         let (config, sample_format) = Self::get_stream_config(&device)?;
+
+        tracing::info!(
+            device_name = %actual_device_name,
+            sample_rate = config.sample_rate,
+            channels = config.channels,
+            sample_format = ?sample_format,
+            buffer_size = ?config.buffer_size,
+            "[Playback] Device configuration retrieved"
+        );
         let sample_rate = config.sample_rate;
         let channels = config.channels;
 
         // Set sample rate and channel count in manager
         {
+            let lock_start = std::time::Instant::now();
             let mut mgr = manager.lock().unwrap();
+            let lock_duration = lock_start.elapsed();
+            if lock_duration.as_micros() > 100 {
+                tracing::warn!(
+                    lock_duration_us = lock_duration.as_micros(),
+                    "[Playback] Manager lock contention during stream creation"
+                );
+            }
             mgr.set_sample_rate(sample_rate);
             mgr.set_output_channels(channels);
         }
@@ -710,10 +884,10 @@ impl DesktopPlayback {
                     },
                     move |err| {
                         tracing::error!("[CPAL] !!! AUDIO STREAM ERROR CALLBACK !!!");
-                        tracing::error!("[CPAL]   Error: {}", err);
+                        tracing::error!(error = ?err, "[CPAL] Stream error occurred");
                         tracing::error!("[CPAL]   This may cause the stream to be dropped!");
                         let _ = error_event_tx
-                            .try_send(PlaybackEvent::Error(format!("Stream error: {}", err)));
+                            .try_send(PlaybackEvent::Error("STREAM_ERROR".to_string()));
                     },
                     None,
                 )?
@@ -801,7 +975,53 @@ impl DesktopPlayback {
         tracing::debug!("[CPAL] ==========================================");
         tracing::debug!("[CPAL] Audio callbacks should start momentarily...");
 
-        Ok((stream, actual_device_name, sample_rate))
+        Ok((Some(stream), actual_device_name, sample_rate))
+    }
+
+    /// Create a null audio stream for zero-device systems
+    ///
+    /// This enables silent mode for library browsing when no audio devices are available
+    /// (e.g., VMs, broken drivers, disabled audio).
+    ///
+    /// Returns (None, device_name="Silent Mode", sample_rate=44100)
+    fn create_null_stream(
+        manager: Arc<Mutex<PlaybackManager>>,
+        _command_rx: Receiver<PlaybackCommand>,
+        _event_tx: Sender<PlaybackEvent>,
+    ) -> Result<(Option<Stream>, String, u32)> {
+        // Use CD quality as default for silent mode
+        const NULL_SAMPLE_RATE: u32 = 44100;
+        const NULL_CHANNELS: u16 = 2;
+
+        tracing::info!("[Playback] Creating NULL STREAM for silent mode");
+
+        // Set sample rate and channels in manager
+        {
+            let mut mgr = manager.lock().unwrap();
+            mgr.set_sample_rate(NULL_SAMPLE_RATE);
+            mgr.set_output_channels(NULL_CHANNELS);
+        }
+
+        tracing::info!(
+            sample_rate = NULL_SAMPLE_RATE,
+            channels = NULL_CHANNELS,
+            "[Playback] Initialized manager for silent mode"
+        );
+
+        tracing::info!("[Playback] ========================================");
+        tracing::info!("[Playback] SILENT MODE ACTIVE");
+        tracing::info!("[Playback]   Audio output: DISABLED");
+        tracing::info!("[Playback]   Library browsing: ENABLED");
+        tracing::info!("[Playback]   Device: Silent Mode (No Audio Devices)");
+        tracing::info!("[Playback]   Sample rate: {} Hz", NULL_SAMPLE_RATE);
+        tracing::info!("[Playback]   Playback controls: Will be ignored");
+        tracing::info!("[Playback] ========================================");
+
+        Ok((
+            None,
+            "Silent Mode (No Audio Devices)".to_string(),
+            NULL_SAMPLE_RATE,
+        ))
     }
 
     /// Get stream configuration
@@ -1060,7 +1280,8 @@ impl DesktopPlayback {
         while let Ok(command) = command_rx.try_recv() {
             if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
             {
-                let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
+                tracing::error!(error = ?e, "[PLAYBACK] Command error in f32 audio callback");
+                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
             }
         }
 
@@ -1097,10 +1318,9 @@ impl DesktopPlayback {
             Err(e) => {
                 // Error processing audio - fill with silence
                 data.fill(0.0);
-                let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                    "Audio processing error: {}",
-                    e
-                )));
+                tracing::error!(error = ?e, "[PLAYBACK] Audio processing error in f32 callback");
+                let _ =
+                    event_tx.try_send(PlaybackEvent::Error("AUDIO_PROCESSING_ERROR".to_string()));
             }
         }
     }
@@ -1170,7 +1390,8 @@ impl DesktopPlayback {
             tracing::trace!("[audio_callback_i32] Received command: {:?}", command);
             if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
             {
-                let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
+                tracing::error!(error = ?e, "[PLAYBACK] Command error in i32 audio callback");
+                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
             }
         }
 
@@ -1218,10 +1439,9 @@ impl DesktopPlayback {
             Err(e) => {
                 // Error processing audio - fill with silence
                 data.fill(0);
-                let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                    "Audio processing error: {}",
-                    e
-                )));
+                tracing::error!(error = ?e, "[PLAYBACK] Audio processing error in i32 callback");
+                let _ =
+                    event_tx.try_send(PlaybackEvent::Error("AUDIO_PROCESSING_ERROR".to_string()));
             }
         }
     }
@@ -1271,7 +1491,8 @@ impl DesktopPlayback {
         while let Ok(command) = command_rx.try_recv() {
             if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
             {
-                let _ = event_tx.try_send(PlaybackEvent::Error(format!("Command error: {}", e)));
+                tracing::error!(error = ?e, "[PLAYBACK] Command error in i16 audio callback");
+                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
             }
         }
 
@@ -1319,10 +1540,9 @@ impl DesktopPlayback {
             Err(e) => {
                 // Error processing audio - fill with silence
                 data.fill(0);
-                let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                    "Audio processing error: {}",
-                    e
-                )));
+                tracing::error!(error = ?e, "[PLAYBACK] Audio processing error in i16 callback");
+                let _ =
+                    event_tx.try_send(PlaybackEvent::Error("AUDIO_PROCESSING_ERROR".to_string()));
             }
         }
     }
@@ -1470,10 +1690,8 @@ impl DesktopPlayback {
                 );
                 if !result.is_preload {
                     // Only emit error for current track loads, not preloads
-                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                        "Failed to load track: {}",
-                        error
-                    )));
+                    tracing::error!(error = ?error, track_id = result.track.id, "[PLAYBACK] Failed to load track");
+                    let _ = event_tx.try_send(PlaybackEvent::Error("TRACK_LOAD_ERROR".to_string()));
                     mgr.stop();
                     let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
                 }
@@ -1722,11 +1940,20 @@ impl DesktopPlayback {
     /// audio callbacks aren't running). Commands may be dropped if the
     /// channel is full - this prevents deadlocks when switching audio devices.
     pub fn send_command(&self, command: PlaybackCommand) -> Result<()> {
-        tracing::debug!("[DesktopPlayback] Sending command: {:?}", command);
+        let send_start = std::time::Instant::now();
+        tracing::debug!(command = ?command, "[Playback] Sending command");
 
         // Debug: Check if stream is still alive and channel state
         let stream_alive = {
+            let lock_start = std::time::Instant::now();
             let stream_guard = self.stream.lock().unwrap();
+            let lock_duration = lock_start.elapsed();
+            if lock_duration.as_millis() > 10 {
+                tracing::warn!(
+                    lock_duration_ms = lock_duration.as_millis(),
+                    "[Playback] Stream lock contention in send_command"
+                );
+            }
             stream_guard.is_some()
         };
         let channel_len = self.command_tx.len();
@@ -1754,7 +1981,19 @@ impl DesktopPlayback {
 
         match self.command_tx.try_send(command.clone()) {
             Ok(()) => {
-                tracing::debug!("[DesktopPlayback] Command sent successfully");
+                let send_duration = send_start.elapsed();
+                if send_duration.as_millis() > 5 {
+                    tracing::warn!(
+                        command = ?command,
+                        duration_ms = send_duration.as_millis(),
+                        "[Playback] Slow command send detected"
+                    );
+                }
+                tracing::debug!(
+                    command = ?command,
+                    duration_us = send_duration.as_micros(),
+                    "[Playback] Command sent successfully"
+                );
                 Ok(())
             }
             Err(crossbeam_channel::TrySendError::Full(_)) => {
@@ -1899,23 +2138,22 @@ impl DesktopPlayback {
         backend: crate::AudioBackend,
         device_name: Option<String>,
     ) -> Result<()> {
-        tracing::debug!("[DesktopPlayback] ==========================================");
-        tracing::debug!("[DesktopPlayback] SWITCHING AUDIO DEVICE");
-        tracing::debug!(
-            "[DesktopPlayback]   Thread ID: {:?}",
-            std::thread::current().id()
+        tracing::info!(
+            backend = ?backend,
+            device_name = ?device_name,
+            "[Playback] Starting device switch"
         );
-        tracing::debug!("[DesktopPlayback]   Backend: {:?}", backend);
-        tracing::debug!("[DesktopPlayback]   Device: {:?}", device_name);
-        tracing::debug!("[DesktopPlayback] ==========================================");
+        let switch_start = std::time::Instant::now();
 
-        // Save current state
-        let (was_playing, position) = {
+        // Step 1: Capture ALL state we need from manager in ONE lock acquisition
+        // This prevents multiple lock/unlock cycles and potential deadlocks
+        let (was_playing, position, current_track) = {
             let mgr = self.manager.lock().unwrap();
             let state = mgr.get_state();
             let pos = mgr.get_position();
-            (state == soul_playback::PlaybackState::Playing, pos)
-        };
+            let track = mgr.get_current_track().cloned();
+            (state == soul_playback::PlaybackState::Playing, pos, track)
+        }; // Lock explicitly released here
 
         tracing::debug!(
             "[DesktopPlayback] Current state: playing={}, position={:?}",
@@ -1960,7 +2198,8 @@ impl DesktopPlayback {
         );
 
         // Create new stream with new device, reusing the same event_tx
-        let (new_stream, actual_device_name, new_sample_rate) = Self::create_audio_stream(
+        tracing::info!("[Playback] Attempting to create new stream for device switch");
+        let (new_stream_option, actual_device_name, new_sample_rate) = Self::create_audio_stream(
             self.manager.clone(),
             new_command_rx,
             self.event_tx.clone(),
@@ -1968,6 +2207,18 @@ impl DesktopPlayback {
             device_name.clone(),
             self.track_loader.clone(),
         )?;
+
+        let is_silent_mode = new_stream_option.is_none();
+
+        if is_silent_mode {
+            tracing::warn!("[Playback] Device switch resulted in silent mode (zero-device system)");
+        } else {
+            tracing::info!(
+                device_name = %actual_device_name,
+                sample_rate = new_sample_rate,
+                "[Playback] Device switch successful - new stream created"
+            );
+        }
 
         // Check if sample rate changed
         let old_sample_rate = self.current_sample_rate.load(Ordering::SeqCst);
@@ -2002,7 +2253,7 @@ impl DesktopPlayback {
         tracing::debug!("[DesktopPlayback] Storing new stream...");
         {
             let mut stream_guard = self.stream.lock().unwrap();
-            *stream_guard = Some(new_stream);
+            *stream_guard = new_stream_option;
         }
 
         // Check callbacks immediately after storing
@@ -2044,10 +2295,18 @@ impl DesktopPlayback {
             callbacks_before_backend
         );
 
-        // Update current backend and device
+        // Update current backend, device, and device ID
         {
             *self.current_backend.lock().unwrap() = backend;
             *self.current_device.lock().unwrap() = actual_device_name.clone();
+
+            // Update device ID for the new device
+            let new_device_id = if is_silent_mode {
+                None
+            } else {
+                Some(Self::make_device_id(backend, &actual_device_name))
+            };
+            *self.current_device_id.lock().unwrap() = new_device_id;
         }
 
         // Check callbacks after updating backend
@@ -2059,14 +2318,10 @@ impl DesktopPlayback {
             callbacks_after_backend - callbacks_before_backend
         );
 
-        // Reload the audio source ONLY if sample rate changed
+        // Step 2: Reload the audio source ONLY if sample rate changed
         // This prevents unnecessary reloads when switching devices with the same sample rate
         // (e.g., WASAPI 48kHz → ASIO 48kHz)
-        let current_track = {
-            let mgr = self.manager.lock().unwrap();
-            mgr.get_current_track().cloned()
-        };
-
+        // We use the current_track we captured earlier to avoid another lock
         #[allow(clippy::if_not_else)]
         if old_sample_rate != new_sample_rate {
             if let Some(track) = current_track {
@@ -2076,13 +2331,8 @@ impl DesktopPlayback {
                     new_sample_rate
                 );
 
-                let target_sample_rate = {
-                    let mgr = self.manager.lock().unwrap();
-                    mgr.get_sample_rate()
-                };
-
-                match crate::sources::local::LocalAudioSource::new(&track.path, target_sample_rate)
-                {
+                // Create the new audio source with the new sample rate (no lock needed)
+                match crate::sources::local::LocalAudioSource::new(&track.path, new_sample_rate) {
                     Ok(mut source) => {
                         // CRITICAL: Seek the source to the saved position BEFORE setting it
                         // This prevents the track from restarting when switching devices
@@ -2104,12 +2354,15 @@ impl DesktopPlayback {
                             }
                         }
 
-                        // Now set the pre-seeked source
-                        let mut mgr = self.manager.lock().unwrap();
-                        mgr.set_audio_source(Box::new(source));
+                        // Now set the pre-seeked source - this is the FIRST time we re-acquire manager lock
+                        {
+                            let mut mgr = self.manager.lock().unwrap();
+                            mgr.set_audio_source(Box::new(source));
+                        } // Lock released
+
                         tracing::info!(
                             "[DesktopPlayback] Audio source reloaded and set with sample rate: {}",
-                            target_sample_rate
+                            new_sample_rate
                         );
                     }
                     Err(e) => {
@@ -2125,31 +2378,34 @@ impl DesktopPlayback {
 
             // Even though we're not reloading, restore position in case it drifted
             if position > std::time::Duration::ZERO {
-                let mut mgr = self.manager.lock().unwrap();
-                if let Err(e) = mgr.seek_to(position) {
-                    tracing::error!("[DesktopPlayback] Failed to restore position: {}", e);
-                } else {
-                    tracing::info!("[DesktopPlayback] Position restored to {:?}", position);
-                }
+                {
+                    let mut mgr = self.manager.lock().unwrap();
+                    if let Err(e) = mgr.seek_to(position) {
+                        tracing::error!("[DesktopPlayback] Failed to restore position: {}", e);
+                    } else {
+                        tracing::info!("[DesktopPlayback] Position restored to {:?}", position);
+                    }
+                } // Lock released
             }
         }
 
-        // Resume playback if it was playing
+        // Step 3: Resume playback if it was playing (separate lock acquisition)
         if was_playing {
-            let mut mgr = self.manager.lock().unwrap();
-            if let Err(e) = mgr.play() {
-                tracing::debug!("[DesktopPlayback] Failed to resume playback: {}", e);
-            } else {
-                tracing::debug!("[DesktopPlayback] Playback resumed");
-            }
+            {
+                let mut mgr = self.manager.lock().unwrap();
+                if let Err(e) = mgr.play() {
+                    tracing::debug!("[DesktopPlayback] Failed to resume playback: {}", e);
+                } else {
+                    tracing::debug!("[DesktopPlayback] Playback resumed");
+                }
+            } // Lock released
         }
 
-        // Always emit state changed event after device switch to ensure frontend sync
-        // This is critical because the frontend's play/pause button must reflect the actual state
+        // Step 4: Get final state and emit event (final lock acquisition)
         let current_state = {
             let mgr = self.manager.lock().unwrap();
             mgr.get_state()
-        };
+        }; // Lock released
         tracing::debug!(
             "[DesktopPlayback] Emitting StateChanged after device switch: {:?}",
             current_state
@@ -2173,9 +2429,16 @@ impl DesktopPlayback {
 
         // Final callback check before returning
         let callbacks_at_end = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
-        tracing::debug!(
-            "[DesktopPlayback] Device switch complete. Final callback count: {}",
-            callbacks_at_end
+        let switch_duration = switch_start.elapsed();
+        tracing::info!(
+            backend = ?backend,
+            device_name = %actual_device_name,
+            old_sample_rate,
+            new_sample_rate,
+            was_playing,
+            switch_duration_ms = switch_duration.as_millis(),
+            final_callbacks = callbacks_at_end,
+            "[Playback] Device switch completed successfully"
         );
         Ok(())
     }
@@ -2190,9 +2453,39 @@ impl DesktopPlayback {
         self.current_device.lock().unwrap().clone()
     }
 
+    /// Get current device ID
+    ///
+    /// Returns a unique identifier for the current audio device (backend + device name).
+    /// This is used to prevent false positive device switches when checking sample rates.
+    ///
+    /// # Returns
+    /// * `Some(device_id)` - The current device's unique identifier
+    /// * `None` - No device active (silent mode)
+    pub fn get_current_device_id(&self) -> Option<String> {
+        self.current_device_id.lock().unwrap().clone()
+    }
+
     /// Get current stream sample rate
     pub fn get_current_sample_rate(&self) -> u32 {
         self.current_sample_rate.load(Ordering::SeqCst)
+    }
+
+    /// Create a unique device ID from backend and device name
+    ///
+    /// Device ID format: "{backend}::{device_name}"
+    /// This provides a unique identifier that can be used to track
+    /// which device is currently active and detect device removal events.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let device_id = DesktopPlayback::make_device_id(
+    ///     AudioBackend::WASAPI,
+    ///     "Speakers (Realtek Audio)"
+    /// );
+    /// // Returns: "WASAPI::Speakers (Realtek Audio)"
+    /// ```
+    pub fn make_device_id(backend: crate::AudioBackend, device_name: &str) -> String {
+        format!("{}::{}", backend.name(), device_name)
     }
 
     /// Query the device's current sample rate from the driver
@@ -2226,6 +2519,27 @@ impl DesktopPlayback {
     /// 2. The audio source is reloaded to resample correctly
     /// 3. Playback position is preserved
     /// 4. A `SampleRateChanged` event is emitted
+    ///
+    /// # Note on Device Removal
+    /// When implementing device removal detection, use `get_current_device_id()` to avoid
+    /// false positives. Example:
+    ///
+    /// ```rust,ignore
+    /// // In DeviceRemoved handler:
+    /// if let Some(current_id) = playback.get_current_device_id() {
+    ///     let removed_id = DesktopPlayback::make_device_id(backend, &removed_device_name);
+    ///     if current_id == removed_id {
+    ///         // Definitely our device - switch to default
+    ///         playback.switch_device(AudioBackend::Default, None)?;
+    ///     } else {
+    ///         // Not our device - just log and ignore
+    ///         tracing::debug!("Device removed, but not ours: {}", removed_device_name);
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// This prevents false positives where `query_device_sample_rate()` fails for reasons
+    /// other than device removal (e.g., driver busy, temporary error).
     ///
     /// # Returns
     /// * `Ok(true)` - Sample rate changed and stream was recreated
@@ -2754,12 +3068,24 @@ mod tests {
             Ok(playback) => {
                 let backend = playback.get_current_backend();
                 let device = playback.get_current_device();
+                let device_id = playback.get_current_device_id();
 
                 eprintln!("Current backend: {:?}", backend);
                 eprintln!("Current device: {}", device);
+                eprintln!("Current device ID: {:?}", device_id);
 
                 assert_eq!(backend, crate::AudioBackend::Default);
                 assert!(!device.is_empty());
+
+                // Device ID should be set and should match expected format
+                if let Some(id) = device_id {
+                    let expected_id = DesktopPlayback::make_device_id(backend, &device);
+                    assert_eq!(id, expected_id);
+                    assert!(id.contains("::"));
+                    eprintln!("Device ID format verified: {}", id);
+                } else {
+                    eprintln!("Device ID is None (silent mode)");
+                }
             }
             Err(e) => {
                 eprintln!(
@@ -2778,7 +3104,9 @@ mod tests {
         match result {
             Ok(mut playback) => {
                 let original_device = playback.get_current_device();
+                let original_device_id = playback.get_current_device_id();
                 eprintln!("Original device: {}", original_device);
+                eprintln!("Original device ID: {:?}", original_device_id);
 
                 // Try to switch to default device again (should succeed)
                 let switch_result = playback.switch_device(crate::AudioBackend::Default, None);
@@ -2786,8 +3114,20 @@ mod tests {
                 match switch_result {
                     Ok(()) => {
                         let new_device = playback.get_current_device();
+                        let new_device_id = playback.get_current_device_id();
+                        let backend = playback.get_current_backend();
+
                         eprintln!("After switch device: {}", new_device);
+                        eprintln!("After switch device ID: {:?}", new_device_id);
+
                         assert!(!new_device.is_empty());
+
+                        // Verify device ID is updated correctly
+                        if let Some(id) = new_device_id {
+                            let expected_id = DesktopPlayback::make_device_id(backend, &new_device);
+                            assert_eq!(id, expected_id);
+                            eprintln!("Device ID correctly updated after switch");
+                        }
                     }
                     Err(e) => {
                         eprintln!("Device switch failed (expected on some systems): {}", e);
@@ -2850,5 +3190,52 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_make_device_id() {
+        // Test device ID format with Default backend
+        let device_id = DesktopPlayback::make_device_id(
+            crate::AudioBackend::Default,
+            "Speakers (Realtek Audio)",
+        );
+
+        // On Windows, Default backend is WASAPI
+        #[cfg(target_os = "windows")]
+        assert_eq!(device_id, "WASAPI::Speakers (Realtek Audio)");
+
+        // On macOS, Default backend is CoreAudio
+        #[cfg(target_os = "macos")]
+        assert_eq!(device_id, "CoreAudio::Speakers (Realtek Audio)");
+
+        // On Linux, Default backend is ALSA
+        #[cfg(target_os = "linux")]
+        assert_eq!(device_id, "ALSA::Speakers (Realtek Audio)");
+
+        // Verify format contains separator
+        assert!(device_id.contains("::"));
+
+        // Test with ASIO backend if available
+        #[cfg(all(target_os = "windows", feature = "asio"))]
+        {
+            let device_id2 =
+                DesktopPlayback::make_device_id(crate::AudioBackend::Asio, "ASIO Device");
+            assert_eq!(device_id2, "ASIO::ASIO Device");
+
+            // Test that device IDs are unique
+            assert_ne!(device_id, device_id2);
+        }
+
+        // Test that same backend + device name produces same ID
+        let device_id3 = DesktopPlayback::make_device_id(
+            crate::AudioBackend::Default,
+            "Speakers (Realtek Audio)",
+        );
+        assert_eq!(device_id, device_id3);
+
+        // Test with different device names
+        let device_id4 =
+            DesktopPlayback::make_device_id(crate::AudioBackend::Default, "Different Device");
+        assert_ne!(device_id, device_id4);
     }
 }

@@ -34,7 +34,7 @@ pub async fn get(
     user_id: &str,
     device_id: &str,
 ) -> Result<Option<ManagedLibrarySettings>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, user_id, device_id, library_path, path_template,
                import_action, created_at, updated_at
@@ -143,7 +143,7 @@ pub async fn set_library_path(
 ) -> Result<bool> {
     let now = chrono::Utc::now().timestamp();
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         UPDATE managed_library_settings
         SET library_path = ?, updated_at = ?
@@ -169,7 +169,7 @@ pub async fn set_path_template(
 ) -> Result<bool> {
     let now = chrono::Utc::now().timestamp();
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         UPDATE managed_library_settings
         SET path_template = ?, updated_at = ?
@@ -196,7 +196,7 @@ pub async fn set_import_action(
     let now = chrono::Utc::now().timestamp();
     let action_str = action.as_str();
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         UPDATE managed_library_settings
         SET import_action = ?, updated_at = ?
@@ -215,7 +215,7 @@ pub async fn set_import_action(
 
 /// Delete settings for a user/device
 pub async fn delete(pool: &SqlitePool, user_id: &str, device_id: &str) -> Result<bool> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM managed_library_settings WHERE user_id = ? AND device_id = ?",
         user_id,
         device_id
@@ -228,7 +228,7 @@ pub async fn delete(pool: &SqlitePool, user_id: &str, device_id: &str) -> Result
 
 /// Check if managed library is configured for a user/device
 pub async fn is_configured(pool: &SqlitePool, user_id: &str, device_id: &str) -> Result<bool> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT id FROM managed_library_settings WHERE user_id = ? AND device_id = ?",
         user_id,
         device_id

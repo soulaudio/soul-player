@@ -39,16 +39,30 @@ impl ArtworkExtractor {
     /// # Arguments
     /// * `path` - Path to the audio file
     pub fn extract(&self, path: &Path) -> Result<Option<ArtworkData>> {
+        tracing::debug!(file_path = %path.display(), "[Artwork] Extracting artwork");
+        let extract_start = std::time::Instant::now();
+
         // Canonicalize path for consistent cache keys
         let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Check cache first
         {
+            let cache_lookup_start = std::time::Instant::now();
             let mut cache = self.cache.lock().unwrap();
             if let Some(cached) = cache.get(&canonical_path) {
+                let cache_duration = cache_lookup_start.elapsed();
+                tracing::debug!(
+                    file_path = %path.display(),
+                    size_bytes = cached.data.len(),
+                    mime_type = %cached.mime_type,
+                    cache_lookup_us = cache_duration.as_micros(),
+                    "[Artwork] Cache hit"
+                );
                 return Ok(Some((**cached).clone()));
             }
         }
+
+        tracing::debug!(file_path = %path.display(), "[Artwork] Cache miss, extracting from file");
 
         // Not in cache, extract from file
         match Self::extract_from_file(path) {
@@ -57,10 +71,29 @@ impl ArtworkExtractor {
                 let arc_artwork = Arc::new(artwork.clone());
                 let mut cache = self.cache.lock().unwrap();
                 cache.put(canonical_path, arc_artwork);
+
+                let total_duration = extract_start.elapsed();
+                tracing::info!(
+                    file_path = %path.display(),
+                    size_bytes = artwork.data.len(),
+                    mime_type = %artwork.mime_type,
+                    duration_ms = total_duration.as_millis(),
+                    "[Artwork] Artwork extracted and cached"
+                );
                 Ok(Some(artwork))
             }
-            Ok(None) => Ok(None),
-            Err(e) => Err(e),
+            Ok(None) => {
+                tracing::debug!(file_path = %path.display(), "[Artwork] No artwork found in file");
+                Ok(None)
+            }
+            Err(e) => {
+                tracing::error!(
+                    file_path = %path.display(),
+                    error = %e,
+                    "[Artwork] Failed to extract artwork"
+                );
+                Err(e)
+            }
         }
     }
 
@@ -85,13 +118,29 @@ impl ArtworkExtractor {
 
     /// Extract artwork from a file without caching
     fn extract_from_file(path: &Path) -> Result<Option<ArtworkData>> {
+        tracing::debug!(file_path = %path.display(), "[Artwork] Reading file tags");
+        let read_start = std::time::Instant::now();
+
         // Check if file exists
         if !path.exists() {
+            tracing::error!(file_path = %path.display(), "[Artwork] File not found");
             return Err(ArtworkError::FileNotFound(path.to_path_buf()));
         }
 
         // Read the file with lofty
-        let tagged_file = lofty::read_from_path(path)?;
+        let tagged_file = lofty::read_from_path(path).map_err(|e| {
+            tracing::error!(
+                file_path = %path.display(),
+                error = %e,
+                "[Artwork] Failed to read file tags"
+            );
+            e
+        })?;
+        let read_duration = read_start.elapsed();
+        tracing::debug!(
+            duration_ms = read_duration.as_millis(),
+            "[Artwork] File tags read"
+        );
 
         // Get primary tag or first available tag
         let tag = tagged_file
@@ -99,14 +148,22 @@ impl ArtworkExtractor {
             .or_else(|| tagged_file.first_tag());
 
         let Some(tag) = tag else {
+            tracing::debug!(file_path = %path.display(), "[Artwork] No tags found in file");
             return Ok(None);
         };
 
         // Extract pictures from tag
         let pictures = tag.pictures();
         if pictures.is_empty() {
+            tracing::debug!(file_path = %path.display(), "[Artwork] No pictures found in tags");
             return Ok(None);
         }
+
+        tracing::debug!(
+            file_path = %path.display(),
+            picture_count = pictures.len(),
+            "[Artwork] Found pictures in tags"
+        );
 
         // Prefer front cover, otherwise use first picture
         let picture = pictures
@@ -118,16 +175,36 @@ impl ArtworkExtractor {
             return Ok(None);
         };
 
+        let pic_type = picture.pic_type();
+        let is_front_cover = matches!(pic_type, PictureType::CoverFront);
+        tracing::debug!(
+            pic_type = ?pic_type,
+            is_front_cover,
+            "[Artwork] Selected picture"
+        );
+
         // Check size limit
         let data = picture.data();
-        if data.len() > MAX_ARTWORK_SIZE {
+        let size_bytes = data.len();
+
+        // Warn about large images (>1MB)
+        if size_bytes > 1_000_000 {
             tracing::warn!(
-                path = %path.display(),
-                size_bytes = data.len(),
-                max_bytes = MAX_ARTWORK_SIZE,
-                "Artwork size exceeds limit, skipping"
+                file_path = %path.display(),
+                size_mb = size_bytes as f32 / 1_000_000.0,
+                "[Artwork] Large embedded image detected"
             );
-            return Err(ArtworkError::TooLarge(data.len(), MAX_ARTWORK_SIZE));
+        }
+
+        if size_bytes > MAX_ARTWORK_SIZE {
+            tracing::error!(
+                file_path = %path.display(),
+                size_bytes,
+                max_bytes = MAX_ARTWORK_SIZE,
+                size_mb = size_bytes as f32 / 1_000_000.0,
+                "[Artwork] Artwork size exceeds limit"
+            );
+            return Err(ArtworkError::TooLarge(size_bytes, MAX_ARTWORK_SIZE));
         }
 
         // Get MIME type (default to "image/jpeg" if not specified)
@@ -135,6 +212,14 @@ impl ArtworkExtractor {
             .mime_type()
             .map(|m| m.as_str().to_string())
             .unwrap_or_else(|| "image/jpeg".to_string());
+
+        tracing::debug!(
+            file_path = %path.display(),
+            size_bytes,
+            mime_type = %mime_type,
+            pic_type = ?pic_type,
+            "[Artwork] Artwork data prepared"
+        );
 
         Ok(Some(ArtworkData::new(data.to_vec(), mime_type)))
     }

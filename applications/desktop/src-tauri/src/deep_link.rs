@@ -67,7 +67,7 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.clone();
     app.deep_link().on_open_url(move |event| {
         let app = app_handle.clone();
-        tauri::async_runtime::spawn(async move {
+        let link_handle = tauri::async_runtime::spawn(async move {
             if let Some(url) = event.urls().first() {
                 let url_str = url.as_str();
                 if let Ok(action) = parse_deep_link(url_str) {
@@ -78,8 +78,17 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     }
 
                     // Emit to frontend
-                    let _ = app.emit("deep-link", &action);
+                    if let Err(e) = app.emit("deep-link", &action) {
+                        tracing::warn!(error = %e, event = "deep-link", "Failed to emit event to frontend");
+                    }
                 }
+            }
+        });
+
+        // Log errors from deep link handler
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = link_handle.await {
+                tracing::error!("[DEEP_LINK] Deep link handler task panicked: {:?}", e);
             }
         });
     });

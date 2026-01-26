@@ -93,7 +93,7 @@ pub async fn get_setting(
     user_id: &str,
     key: &str,
 ) -> Result<Option<serde_json::Value>> {
-    let result = sqlx::query!(
+    let result: Option<_> = sqlx::query!(
         "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
         user_id,
         key
@@ -163,7 +163,7 @@ pub async fn set_setting(
 ///
 /// Returns an error if the database query fails or JSON deserialization fails
 pub async fn get_all_settings(pool: &SqlitePool, user_id: &str) -> Result<Vec<UserSetting>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         "SELECT key, value FROM user_settings WHERE user_id = ?",
         user_id
     )
@@ -198,7 +198,7 @@ pub async fn get_all_settings(pool: &SqlitePool, user_id: &str) -> Result<Vec<Us
 ///
 /// Returns an error if the database query fails
 pub async fn delete_setting(pool: &SqlitePool, user_id: &str, key: &str) -> Result<bool> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM user_settings WHERE user_id = ? AND key = ?",
         user_id,
         key

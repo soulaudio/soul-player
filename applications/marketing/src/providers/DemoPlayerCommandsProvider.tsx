@@ -1,24 +1,79 @@
 /**
  * Demo implementation of PlayerCommands context
- * Uses WebPlaybackProvider from shared package
- *
- * This is now a thin wrapper around WebPlaybackProvider,
- * which handles all the heavy lifting of WASM initialization,
- * event wiring, and command implementation.
+ * Provides a no-op PlayerCommandsProvider for non-interactive demos
  */
 
-import { ReactNode } from 'react';
-import { WebPlaybackProvider, type DemoStorage } from '@soul-player/shared';
+import { ReactNode, useMemo } from 'react';
+import { PlayerCommandsProvider, type PlayerContextValue, type PlayerCommandsInterface, type PlaybackEventsInterface } from '@soul-player/shared';
 
 interface DemoPlayerCommandsProviderProps {
-  storage: DemoStorage;
+  storage?: unknown;
   children: ReactNode;
 }
 
 /**
- * Demo-specific player commands provider
- * Delegates to WebPlaybackProvider with DemoStorage as data source
+ * Simple mock player commands provider for showcase demos
+ * All commands are no-ops since the demo is non-interactive
  */
-export function DemoPlayerCommandsProvider({ storage, children }: DemoPlayerCommandsProviderProps) {
-  return <WebPlaybackProvider storage={storage}>{children}</WebPlaybackProvider>;
+export function DemoPlayerCommandsProvider({ children }: DemoPlayerCommandsProviderProps) {
+  const value = useMemo<PlayerContextValue>(() => {
+    // Complete no-op implementation of PlayerCommandsInterface
+    const commands: PlayerCommandsInterface = {
+      // Playback control
+      async playTrack() {},
+      async pausePlayback() {},
+      async resumePlayback() {},
+      async stopPlayback() {},
+
+      // Navigation
+      async skipNext() {},
+      async skipPrevious() {},
+
+      // Seek and volume
+      async seek() {},
+      async setVolume() {},
+
+      // Shuffle and repeat
+      async setShuffle() {},
+      async cycleShuffle() { return 'off'; },
+      async getShuffle() { return 'off'; },
+      async setRepeatMode() {},
+      async cycleRepeat() { return 'off'; },
+      async getRepeat() { return 'off'; },
+
+      // Capabilities
+      async getPlaybackCapabilities() {
+        return { hasNext: false, hasPrevious: false };
+      },
+
+      // Queue management
+      async getQueue() { return []; },
+      async playQueue() {},
+      async playQueueWithContext() {},
+      async skipToQueueIndex() {},
+
+      // Three-tier queue operations
+      async addPlayNext() {},
+      async addToQueueEnd() {},
+      async clearPlayNext() {},
+      async clearAddToQueue() {},
+
+      // Sources management
+      async getAllSources() { return []; },
+    };
+
+    // No-op events that return empty cleanup functions
+    const events: PlaybackEventsInterface = {
+      onStateChange: () => () => {},
+      onTrackChange: () => () => {},
+      onPositionUpdate: () => () => {},
+      onVolumeChange: () => () => {},
+      onQueueUpdate: () => () => {},
+      onError: () => () => {},
+    };
+
+    return { commands, events };
+  }, []);
+
+  return <PlayerCommandsProvider value={value}>{children}</PlayerCommandsProvider>;
 }

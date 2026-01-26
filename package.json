@@ -33,11 +33,15 @@
     "seed-test-data": "node scripts/seed-test-data.js seed",
     "cleanup-test-data": "node scripts/seed-test-data.js cleanup",
     "lint": "yarn workspaces foreach run lint",
-    "type-check": "yarn workspaces foreach run type-check"
+    "type-check": "yarn workspaces foreach run type-check",
+    "knip": "knip",
+    "knip:fix": "knip --fix"
   },
   "devDependencies": {
+    "@esbuild/win32-x64": "0.21.5",
     "better-sqlite3": "^11.7.0",
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "knip": "^5.82.1"
   },
   "packageManager": "yarn@4.0.2",
   "engines": {

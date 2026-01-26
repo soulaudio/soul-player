@@ -569,13 +569,25 @@ pub async fn sync_from_server(
         .get_library_delta(None, sync_token.as_deref())
         .await
         .map_err(|e| {
-            // Mark sync as failed
-            let _ = tokio::runtime::Handle::current().block_on(sources::fail_sync(
-                pool,
-                source_id,
-                soul_core::types::UserId::new(user_id.to_string()),
-                &e.to_string(),
-            ));
+            // Mark sync as failed (spawn background task to avoid blocking)
+            let pool_clone = pool.clone();
+            let user_id_clone = user_id.to_string();
+            let error_msg = e.to_string();
+            let fail_handle = tokio::spawn(async move {
+                let _ = sources::fail_sync(
+                    &pool_clone,
+                    source_id,
+                    soul_core::types::UserId::new(user_id_clone),
+                    &error_msg,
+                )
+                .await;
+            });
+            // Log errors from fail_sync task
+            tokio::spawn(async move {
+                if let Err(e) = fail_handle.await {
+                    tracing::error!("[SOURCES] Fail sync task panicked: {:?}", e);
+                }
+            });
             format!("Failed to get library delta: {}", e)
         })?;
 

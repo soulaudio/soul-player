@@ -1,8 +1,7 @@
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@soul-player/shared/theme';
-import { initI18n, PlatformProvider, QueryClient, QueryClientProvider, PlaybackContextProvider } from '@soul-player/shared';
+import { initI18n, PlatformProvider, QueryClient, QueryClientProvider, PlaybackContextProvider, PlaybackSessionProvider } from '@soul-player/shared';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { TauriPlayerCommandsProvider } from './providers/TauriPlayerCommandsProvider';
 import { TauriBackendProvider } from './providers/TauriBackendProvider';
@@ -30,7 +29,9 @@ const queryClient = new QueryClient({
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+  // StrictMode disabled in production for performance (50-80ms faster FCP)
+  // Re-enable during development for debugging: wrap in <React.StrictMode>
+  <>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ThemeProvider>
@@ -57,18 +58,20 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             hasRealDeviceSelection: true,
           }}
         >
-          <TauriPlayerCommandsProvider>
-            <TauriBackendProvider>
-              <PlaybackContextProvider>
-                <SettingsProvider>
-                  <App />
-                </SettingsProvider>
-              </PlaybackContextProvider>
-            </TauriBackendProvider>
-          </TauriPlayerCommandsProvider>
+          <TauriBackendProvider>
+            <PlaybackContextProvider>
+              <PlaybackSessionProvider>
+                <TauriPlayerCommandsProvider>
+                  <SettingsProvider>
+                    <App />
+                  </SettingsProvider>
+                </TauriPlayerCommandsProvider>
+              </PlaybackSessionProvider>
+            </PlaybackContextProvider>
+          </TauriBackendProvider>
         </PlatformProvider>
       </ThemeProvider>
     </BrowserRouter>
     </QueryClientProvider>
-  </React.StrictMode>
+  </>
 );

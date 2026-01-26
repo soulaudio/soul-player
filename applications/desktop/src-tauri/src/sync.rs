@@ -39,24 +39,46 @@ pub async fn start_sync(
 
     // Spawn task to forward progress
     let app_clone = app.clone();
-    tokio::spawn(async move {
+    let progress_handle = tokio::spawn(async move {
         while let Some(progress) = progress_rx.recv().await {
-            let _ = app_clone.emit("sync-progress", progress);
+            if let Err(e) = app_clone.emit("sync-progress", progress) {
+                tracing::warn!(error = %e, event = "sync-progress", "Failed to emit event to frontend");
+            }
+        }
+    });
+
+    // Log errors from progress forwarder
+    tokio::spawn(async move {
+        if let Err(e) = progress_handle.await {
+            tracing::error!("[SYNC] Progress forwarder task panicked: {:?}", e);
         }
     });
 
     // Wait for completion in background
-    tokio::spawn(async move {
+    let completion_handle = tokio::spawn(async move {
         match handle.await {
             Ok(Ok(summary)) => {
-                let _ = app.emit("sync-complete", summary);
+                if let Err(e) = app.emit("sync-complete", summary) {
+                    tracing::error!(error = %e, event = "sync-complete", "Failed to emit event to frontend");
+                }
             }
             Ok(Err(e)) => {
-                let _ = app.emit("sync-error", e.to_string());
+                if let Err(e) = app.emit("sync-error", e.to_string()) {
+                    tracing::error!(error = %e, event = "sync-error", "Failed to emit event to frontend");
+                }
             }
             Err(e) => {
-                let _ = app.emit("sync-error", format!("Task panicked: {}", e));
+                if let Err(e) = app.emit("sync-error", format!("Task panicked: {}", e)) {
+                    tracing::error!(error = %e, event = "sync-error", "Failed to emit event to frontend");
+                }
             }
+        }
+    });
+
+    // Log errors from completion handler
+    tokio::spawn(async move {
+        if let Err(e) = completion_handle.await {
+            tracing::error!("[SYNC] Completion handler task panicked: {:?}", e);
         }
     });
 

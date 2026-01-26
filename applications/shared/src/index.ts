@@ -74,6 +74,9 @@ export { ScrollVisibilityProvider, useScrollVisibility } from './contexts/Scroll
 export { PlaybackContextProvider, usePlaybackContext } from './contexts/PlaybackContextProvider';
 export type { PlaybackContextData } from './contexts/PlaybackContextProvider';
 
+export { PlaybackSessionProvider, usePlaybackSession } from './contexts/PlaybackSessionContext';
+export type { PlaybackSession, PlaybackSessionContextValue } from './contexts/PlaybackSessionContext';
+
 // Backend Providers
 export { AbstractBackendProvider, createBackendProvider } from './providers/AbstractBackendProvider';
 export { MockBackendProvider } from './providers/MockBackendProvider';

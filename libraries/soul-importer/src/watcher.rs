@@ -126,8 +126,8 @@ impl LibraryWatcher {
     pub async fn watch_source(&self, source: &LibrarySource) -> Result<()> {
         let source_path = Path::new(&source.path);
 
-        // Verify path exists
-        if !source_path.exists() {
+        // Verify path exists (async to avoid blocking on network/slow storage)
+        if !tokio::fs::try_exists(source_path).await.unwrap_or(false) {
             warn!("Cannot watch non-existent path: {}", source.path);
             return Ok(());
         }

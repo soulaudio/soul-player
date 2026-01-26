@@ -213,6 +213,45 @@ mod tests {
         assert!(InstallationMethod::Deb.update_command().is_some());
         assert!(InstallationMethod::Rpm.update_command().is_some());
         assert!(InstallationMethod::Flatpak.update_command().is_some());
+        assert!(InstallationMethod::Snap.update_command().is_some());
+        assert!(InstallationMethod::Aur.update_command().is_some());
+        assert_eq!(InstallationMethod::Unknown.update_command(), None);
+    }
+
+    #[test]
+    fn test_deb_update_command() {
+        let command = InstallationMethod::Deb.update_command();
+        assert_eq!(
+            command,
+            Some("sudo apt update && sudo apt upgrade soul-player".to_string())
+        );
+    }
+
+    #[test]
+    fn test_rpm_update_command() {
+        let command = InstallationMethod::Rpm.update_command();
+        assert_eq!(command, Some("sudo dnf upgrade soul-player".to_string()));
+    }
+
+    #[test]
+    fn test_flatpak_update_command() {
+        let command = InstallationMethod::Flatpak.update_command();
+        assert_eq!(
+            command,
+            Some("flatpak update io.github.soulaudio.SoulPlayer".to_string())
+        );
+    }
+
+    #[test]
+    fn test_snap_update_command() {
+        let command = InstallationMethod::Snap.update_command();
+        assert_eq!(command, Some("sudo snap refresh soul-player".to_string()));
+    }
+
+    #[test]
+    fn test_aur_update_command() {
+        let command = InstallationMethod::Aur.update_command();
+        assert_eq!(command, Some("yay -Syu soul-player".to_string()));
     }
 
     #[test]
@@ -221,6 +260,9 @@ mod tests {
         assert!(!InstallationMethod::Deb.supports_auto_update());
         assert!(!InstallationMethod::Rpm.supports_auto_update());
         assert!(!InstallationMethod::Flatpak.supports_auto_update());
+        assert!(!InstallationMethod::Snap.supports_auto_update());
+        assert!(!InstallationMethod::Aur.supports_auto_update());
+        assert!(!InstallationMethod::Unknown.supports_auto_update());
     }
 
     #[test]
@@ -234,5 +276,117 @@ mod tests {
         assert_eq!(info.method, InstallationMethod::Deb);
         assert_eq!(info.update_command, Some("test command".to_string()));
         assert!(!info.supports_auto_update);
+    }
+
+    #[test]
+    fn test_installation_info_appimage() {
+        let info = InstallationInfo {
+            method: InstallationMethod::AppImage,
+            update_command: None,
+            supports_auto_update: true,
+        };
+
+        assert_eq!(info.method, InstallationMethod::AppImage);
+        assert_eq!(info.update_command, None);
+        assert!(info.supports_auto_update);
+    }
+
+    #[test]
+    fn test_installation_info_consistency() {
+        // Test that each installation method's info matches its method's capabilities
+        let methods = vec![
+            InstallationMethod::AppImage,
+            InstallationMethod::Deb,
+            InstallationMethod::Rpm,
+            InstallationMethod::Flatpak,
+            InstallationMethod::Snap,
+            InstallationMethod::Aur,
+            InstallationMethod::Unknown,
+        ];
+
+        for method in methods {
+            let info = InstallationInfo {
+                method: method.clone(),
+                update_command: method.update_command(),
+                supports_auto_update: method.supports_auto_update(),
+            };
+
+            assert_eq!(info.update_command, method.update_command());
+            assert_eq!(info.supports_auto_update, method.supports_auto_update());
+        }
+    }
+
+    #[test]
+    fn test_installation_method_serialization() {
+        // Test that installation methods can be serialized/deserialized
+        let methods = vec![
+            InstallationMethod::AppImage,
+            InstallationMethod::Deb,
+            InstallationMethod::Rpm,
+            InstallationMethod::Flatpak,
+            InstallationMethod::Snap,
+            InstallationMethod::Aur,
+            InstallationMethod::Unknown,
+        ];
+
+        for method in methods {
+            let info = InstallationInfo {
+                method: method.clone(),
+                update_command: method.update_command(),
+                supports_auto_update: method.supports_auto_update(),
+            };
+
+            // Serialize and deserialize
+            let json = serde_json::to_string(&info).expect("Failed to serialize");
+            let deserialized: InstallationInfo =
+                serde_json::from_str(&json).expect("Failed to deserialize");
+
+            assert_eq!(deserialized.method, method);
+            assert_eq!(deserialized.update_command, method.update_command());
+            assert_eq!(
+                deserialized.supports_auto_update,
+                method.supports_auto_update()
+            );
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn test_non_linux_detection() {
+        // On non-Linux platforms, should always return AppImage equivalent
+        let info = detect_installation_method();
+        assert_eq!(info.method, InstallationMethod::AppImage);
+        assert_eq!(info.update_command, None);
+        assert!(info.supports_auto_update);
+    }
+
+    #[test]
+    fn test_installation_method_equality() {
+        assert_eq!(InstallationMethod::AppImage, InstallationMethod::AppImage);
+        assert_ne!(InstallationMethod::AppImage, InstallationMethod::Deb);
+        assert_ne!(InstallationMethod::Deb, InstallationMethod::Rpm);
+    }
+
+    #[test]
+    fn test_installation_info_with_none_command() {
+        let info = InstallationInfo {
+            method: InstallationMethod::Unknown,
+            update_command: None,
+            supports_auto_update: false,
+        };
+
+        assert_eq!(info.update_command, None);
+    }
+
+    #[test]
+    fn test_installation_info_with_empty_command() {
+        // This shouldn't happen in practice, but test it anyway
+        let info = InstallationInfo {
+            method: InstallationMethod::Deb,
+            update_command: Some(String::new()),
+            supports_auto_update: false,
+        };
+
+        assert_eq!(info.update_command, Some(String::new()));
     }
 }

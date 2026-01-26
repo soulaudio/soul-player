@@ -9,11 +9,13 @@ pub struct InitProgress {
 
 /// Emit initialization progress to the splash screen
 pub async fn emit_init_progress(app: &AppHandle, step: &str, progress: u8) {
-    let _ = app.emit(
+    if let Err(e) = app.emit(
         "init-progress",
         InitProgress {
             step: step.to_string(),
             progress,
         },
-    );
+    ) {
+        tracing::warn!(error = %e, event = "init-progress", step = %step, progress = %progress, "Failed to emit event to frontend");
+    }
 }

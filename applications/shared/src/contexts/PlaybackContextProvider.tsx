@@ -42,6 +42,12 @@ export interface PlaybackContextData {
    * Loading state
    */
   isLoading: boolean
+
+  /**
+   * Manually refresh contexts (bypasses debounce)
+   * Use this when you need immediate context updates (e.g., after starting playback)
+   */
+  refreshContexts?: () => void
 }
 
 const PlaybackContextContext = createContext<PlaybackContextData | null>(null)
@@ -68,6 +74,21 @@ export function PlaybackContextProvider({ children }: PlaybackContextProviderPro
   const [contexts, setContexts] = useState<PlaybackContext[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  // Shared fetch function
+  const fetchContexts = useCallback(async () => {
+    try {
+      debug.log('[PlaybackContextProvider] Fetching recent contexts...')
+      const recentContexts = await backend.getRecentContexts(10)
+      setContexts(recentContexts)
+      setIsLoading(false)
+      debug.log(`[PlaybackContextProvider] Loaded ${recentContexts.length} contexts`)
+    } catch (error) {
+      debug.error('[PlaybackContextProvider] Failed to fetch contexts:', error)
+      setContexts([])
+      setIsLoading(false)
+    }
+  }, [backend])
+
   // Fetch recent contexts (limit to 10 - we only need the most recent for active context check)
   // PERFORMANCE: Debounce to avoid excessive queries on rapid track changes (e.g., skipping)
   useEffect(() => {
@@ -75,33 +96,16 @@ export function PlaybackContextProvider({ children }: PlaybackContextProviderPro
 
     // Debounce: wait 500ms after track change before fetching
     const timer = setTimeout(() => {
-      const fetchContexts = async () => {
-        try {
-          debug.log('[PlaybackContextProvider] Fetching recent contexts...')
-          const recentContexts = await backend.getRecentContexts(10)
-
-          if (!isCancelled) {
-            setContexts(recentContexts)
-            setIsLoading(false)
-            debug.log(`[PlaybackContextProvider] Loaded ${recentContexts.length} contexts`)
-          }
-        } catch (error) {
-          if (!isCancelled) {
-            debug.error('[PlaybackContextProvider] Failed to fetch contexts:', error)
-            setContexts([])
-            setIsLoading(false)
-          }
-        }
+      if (!isCancelled) {
+        fetchContexts()
       }
-
-      fetchContexts()
     }, 500) // 500ms debounce - batches rapid track skips into a single query
 
     return () => {
       isCancelled = true
       clearTimeout(timer)
     }
-  }, [backend, currentTrack]) // Re-fetch when track changes
+  }, [backend, currentTrack, fetchContexts]) // Re-fetch when track changes
 
   // Lookup function: check if entity is active context
   const isActiveContext = useCallback((type: 'album' | 'artist' | 'playlist', id: number | string): boolean => {
@@ -115,6 +119,7 @@ export function PlaybackContextProvider({ children }: PlaybackContextProviderPro
     isActiveContext,
     contexts,
     isLoading,
+    refreshContexts: fetchContexts,
   }
 
   return (

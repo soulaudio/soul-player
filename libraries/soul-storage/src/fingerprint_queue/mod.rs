@@ -46,7 +46,7 @@ pub struct FingerprintQueueStats {
 
 /// Add a track to the fingerprint queue
 pub async fn enqueue(pool: &SqlitePool, track_id: &str, priority: i32) -> Result<i64> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         INSERT INTO fingerprint_queue (track_id, priority)
         VALUES (?, ?)
@@ -85,7 +85,7 @@ pub async fn enqueue_batch(pool: &SqlitePool, track_ids: &[&str], priority: i32)
 
 /// Get the next item to process (highest priority, oldest first)
 pub async fn get_next(pool: &SqlitePool) -> Result<Option<FingerprintQueueItem>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, track_id, priority, attempts, last_error, created_at
         FROM fingerprint_queue
@@ -117,7 +117,7 @@ pub async fn get_next(pool: &SqlitePool) -> Result<Option<FingerprintQueueItem>>
 
 /// Get a batch of items to process
 pub async fn get_batch(pool: &SqlitePool, limit: i32) -> Result<Vec<FingerprintQueueItem>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT id, track_id, priority, attempts, last_error, created_at
         FROM fingerprint_queue
@@ -211,16 +211,17 @@ pub async fn pending_count(pool: &SqlitePool) -> Result<i64> {
 
 /// Clear all failed items (attempts >= 3)
 pub async fn clear_failed(pool: &SqlitePool) -> Result<u64> {
-    let result = sqlx::query!("DELETE FROM fingerprint_queue WHERE attempts >= 3")
-        .execute(pool)
-        .await?;
+    let result: sqlx::sqlite::SqliteQueryResult =
+        sqlx::query!("DELETE FROM fingerprint_queue WHERE attempts >= 3")
+            .execute(pool)
+            .await?;
 
     Ok(result.rows_affected())
 }
 
 /// Reset failed items to retry
 pub async fn retry_failed(pool: &SqlitePool) -> Result<u64> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "UPDATE fingerprint_queue SET attempts = 0, last_error = NULL WHERE attempts >= 3"
     )
     .execute(pool)

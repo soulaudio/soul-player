@@ -21,7 +21,9 @@
 //! - Test quality: Focus on meaningful tests, no shallow tests
 
 use serde_json::json;
-use soul_audio_desktop::{backend, device, AudioBackend};
+#[cfg(feature = "asio")]
+use soul_audio_desktop::backend;
+use soul_audio_desktop::{device, AudioBackend};
 use sqlx::SqlitePool;
 use tempfile::TempDir;
 
@@ -351,6 +353,7 @@ async fn test_device_settings_missing_fields() {
 /// Scenario: ASIO saved on Windows, but running on Linux
 /// Expected: Falls back to default backend
 #[tokio::test]
+#[cfg(feature = "asio")]
 async fn test_unavailable_backend_fallback() {
     let test_db = TestDb::new().await;
     let pool = test_db.open().await;

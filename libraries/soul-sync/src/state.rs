@@ -187,7 +187,7 @@ impl StateManager {
             _ => SyncStatus::Idle,
         };
 
-        let phase = row.phase.and_then(|p| match p.as_str() {
+        let phase = row.phase.and_then(|p: String| match p.as_str() {
             "scanning" => Some(SyncPhase::Scanning),
             "metadata_extraction" => Some(SyncPhase::MetadataExtraction),
             "validation" => Some(SyncPhase::Validation),

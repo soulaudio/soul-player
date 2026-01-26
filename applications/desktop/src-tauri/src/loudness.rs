@@ -9,7 +9,7 @@ use crate::playback::PlaybackManager;
 use crate::playback_lazy::LazyPlaybackManager;
 use serde::{Deserialize, Serialize};
 use soul_loudness::{LoudnessAnalyzer, LoudnessInfo, NormalizationMode, ReplayGainCalculator};
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use tauri::{Emitter, State};
@@ -195,7 +195,9 @@ pub async fn analyze_track(
     .map_err(|e| e.to_string())?;
 
     // Emit event for UI update
-    let _ = app.emit("loudness-analysis-complete", track_id);
+    if let Err(e) = app.emit("loudness-analysis-complete", track_id) {
+        tracing::warn!(error = %e, event = "loudness-analysis-complete", track_id = %track_id, "Failed to emit event to frontend");
+    }
 
     Ok(FrontendLoudnessInfo::from(track_loudness))
 }
@@ -255,8 +257,15 @@ pub async fn start_analysis_worker(
     let worker_arc_clone = worker_arc.clone();
 
     // Spawn background analysis task
-    tokio::spawn(async move {
+    let worker_handle = tokio::spawn(async move {
         run_analysis_worker(pool, worker_arc_clone, app).await;
+    });
+
+    // Log errors from analysis worker
+    tokio::spawn(async move {
+        if let Err(e) = worker_handle.await {
+            tracing::error!("[LOUDNESS] Analysis worker task panicked: {:?}", e);
+        }
     });
 
     Ok(())
@@ -407,27 +416,32 @@ pub async fn clear_completed_analysis(state: State<'_, AppState>) -> Result<i64,
 
 /// Analyze an audio file and return loudness information
 async fn analyze_audio_file(file_path: &str) -> Result<LoudnessInfo, String> {
-    let path = Path::new(file_path);
+    let path = PathBuf::from(file_path);
 
-    if !path.exists() {
+    // Use async exists check to avoid blocking on slow/network storage
+    let exists: bool = tokio::fs::try_exists(&path).await.unwrap_or(false);
+    if !exists {
         return Err(format!("File not found: {}", file_path));
     }
 
-    // Security: Canonicalize path to prevent path traversal attacks
-    // Even though paths come from database, validate to prevent issues if DB is compromised
-    let canonical_path = path
-        .canonicalize()
-        .map_err(|e| format!("Failed to canonicalize path: {}", e))?;
-
-    // Verify it's a file (not a directory or symlink to dangerous location)
-    if !canonical_path.is_file() {
-        return Err(format!("Path is not a file: {}", file_path));
-    }
-
-    // Use symphonia to decode and analyze
-    let file_path = canonical_path.to_string_lossy().to_string();
+    // Move blocking operations (canonicalize, is_file check) into spawn_blocking
+    // to avoid blocking the async runtime on slow/network storage
+    let file_path_clone = file_path.to_string();
 
     tokio::task::spawn_blocking(move || {
+        // Security: Canonicalize path to prevent path traversal attacks
+        // This is blocking but now runs in dedicated blocking thread pool
+        let path = std::path::PathBuf::from(&file_path_clone);
+        let canonical_path = path
+            .canonicalize()
+            .map_err(|e| format!("Failed to canonicalize path: {}", e))?;
+
+        // Verify it's a file (not a directory or symlink to dangerous location)
+        if !canonical_path.is_file() {
+            return Err(format!("Path is not a file: {}", file_path_clone));
+        }
+
+        let file_path = canonical_path.to_string_lossy().to_string();
         use symphonia::core::audio::SampleBuffer;
         use symphonia::core::codecs::DecoderOptions;
         use symphonia::core::formats::FormatOptions;
@@ -549,7 +563,9 @@ async fn run_analysis_worker(
             if w.cancel_requested.load(Ordering::SeqCst) {
                 tracing::info!("[analysis_worker] Cancel requested, stopping");
                 w.is_running.store(false, Ordering::SeqCst);
-                let _ = app.emit("analysis-worker-stopped", ());
+                if let Err(e) = app.emit("analysis-worker-stopped", ()) {
+                    tracing::error!(error = %e, event = "analysis-worker-stopped", "Failed to emit event to frontend");
+                }
                 return;
             }
         }
@@ -561,7 +577,9 @@ async fn run_analysis_worker(
                 tracing::info!("[analysis_worker] Queue empty, stopping");
                 let w = worker.lock().await;
                 w.is_running.store(false, Ordering::SeqCst);
-                let _ = app.emit("analysis-worker-complete", ());
+                if let Err(e) = app.emit("analysis-worker-complete", ()) {
+                    tracing::error!(error = %e, event = "analysis-worker-complete", "Failed to emit event to frontend");
+                }
                 return;
             }
             Err(e) => {
@@ -672,7 +690,7 @@ async fn run_analysis_worker(
                 }
 
                 // Emit progress event
-                let _ = app.emit(
+                if let Err(e) = app.emit(
                     "loudness-analysis-progress",
                     serde_json::json!({
                         "trackId": item.track_id,
@@ -680,7 +698,9 @@ async fn run_analysis_worker(
                         "lufsIntegrated": loudness_info.integrated_lufs,
                         "replaygainGain": track_gain.gain_db,
                     }),
-                );
+                ) {
+                    tracing::warn!(error = %e, event = "loudness-analysis-progress", track_id = %item.track_id, "Failed to emit event to frontend");
+                }
 
                 tracing::info!(
                     track_id = %item.track_id,

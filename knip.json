@@ -1,0 +1,61 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.{js,mjs}"]
+    },
+    "applications/shared": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignore": ["**/__tests__/**", "**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+      "ignoreDependencies": ["vitest"]
+    },
+    "applications/desktop": {
+      "entry": ["src/main.tsx", "src/**/*.tsx"],
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignore": ["**/__tests__/**", "**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"]
+    },
+    "applications/marketing": {
+      "entry": ["src/main.tsx", "src/**/*.tsx"],
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignore": ["**/__tests__/**", "**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"]
+    },
+    "applications/web": {
+      "entry": ["src/main.tsx"],
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignore": ["**/__tests__/**", "**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"]
+    },
+    "applications/mobile": {
+      "entry": ["src/main.tsx"],
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignore": ["**/__tests__/**", "**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"]
+    },
+    "libraries/soul-playback-web": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"],
+      "ignore": ["**/__tests__/**", "**/*.test.ts", "**/*.spec.ts"]
+    }
+  },
+  "ignore": [
+    "**/__tests__/**",
+    "**/*.test.{ts,tsx}",
+    "**/*.spec.{ts,tsx}",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/node_modules/**",
+    "**/*.d.ts"
+  ],
+  "ignoreDependencies": [
+    "@types/*",
+    "typescript",
+    "eslint",
+    "prettier",
+    "vite",
+    "vitest",
+    "@vitejs/*",
+    "tailwindcss",
+    "postcss",
+    "autoprefixer"
+  ]
+}

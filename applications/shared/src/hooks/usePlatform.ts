@@ -10,7 +10,6 @@ export function usePlatform(): Platform {
     const detectPlatform = async () => {
       try {
         // Try to import Tauri platform detection
-        // @ts-expect-error - Tauri plugin not available in shared package, runtime check
         const { platform: getPlatform } = await import('@tauri-apps/plugin-os');
         const platformName = await getPlatform();
 

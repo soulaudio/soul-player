@@ -421,8 +421,10 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
       }
     },
 
-    // Playback context - return mock "Jump Back In" data
+    // Playback context - return current context + mock "Jump Back In" data
     async getRecentContexts(limit: number): Promise<PlaybackContext[]> {
+      // Return mock recent contexts for demo
+      // NOTE: Current context is tracked by PlaybackSessionContext, not here
       const contexts: PlaybackContext[] = []
       const albums = storage.getAllAlbums()
       const playlists = getMockPlaylists()
@@ -464,8 +466,9 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
       return contexts.slice(0, limit)
     },
 
-    async recordContext(_context: Omit<PlaybackContext, 'id' | 'playedAt'>) {
-      // No-op for mock
+    async recordContext(context: Omit<PlaybackContext, 'id' | 'playedAt'>) {
+      // No-op for mock backend - actual context tracking handled by PlaybackSessionContext
+      debug.log('[MockBackendProvider] Recording playback context (no-op):', context)
     },
 
     // Playlist operations - supported in-memory
@@ -737,6 +740,7 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
       debug.log('[MockBackend] File dialog not supported in demo mode')
       return null
     },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [storage, getArtistsFromTracks, getArtistIdMap, getMockPlaylists, versionProp])
 
   return (

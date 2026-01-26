@@ -31,13 +31,19 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
                 "play_pause" => {
                     // Emit event to frontend to toggle playback
-                    let _ = app.emit("tray-play-pause", ());
+                    if let Err(e) = app.emit("tray-play-pause", ()) {
+                        tracing::warn!(error = %e, event = "tray-play-pause", "Failed to emit event to frontend");
+                    }
                 }
                 "next" => {
-                    let _ = app.emit("tray-next", ());
+                    if let Err(e) = app.emit("tray-next", ()) {
+                        tracing::warn!(error = %e, event = "tray-next", "Failed to emit event to frontend");
+                    }
                 }
                 "previous" => {
-                    let _ = app.emit("tray-previous", ());
+                    if let Err(e) = app.emit("tray-previous", ()) {
+                        tracing::warn!(error = %e, event = "tray-previous", "Failed to emit event to frontend");
+                    }
                 }
                 _ => {}
             }

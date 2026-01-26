@@ -120,11 +120,17 @@ impl<'a> FileProcessor<'a> {
             .add_genres_to_track(self.pool, track_id_typed, &processed.genre_ids)
             .await?;
 
-        // Discover folder artwork if album exists
+        // Discover folder artwork if album exists (wrap in spawn_blocking to avoid blocking async runtime)
         if let Some(album_id) = processed.album_id {
             if let Some(folder_path) = file_path.parent() {
-                if let Some(artwork_path) = artwork_discovery::discover_folder_artwork(folder_path)
-                {
+                let folder_path_buf = folder_path.to_path_buf();
+                let artwork_path = tokio::task::spawn_blocking(move || {
+                    artwork_discovery::discover_folder_artwork(&folder_path_buf)
+                })
+                .await
+                .unwrap_or(None);
+
+                if let Some(artwork_path) = artwork_path {
                     // Record in database that this album has folder artwork
                     soul_storage::albums::set_artwork_source(
                         self.pool,
@@ -215,11 +221,17 @@ impl<'a> FileProcessor<'a> {
             .await?;
         }
 
-        // Discover folder artwork if album exists (same as on import)
+        // Discover folder artwork if album exists (same as on import, wrap in spawn_blocking to avoid blocking async runtime)
         if let Some(album_id) = processed.album_id {
             if let Some(folder_path) = file_path.parent() {
-                if let Some(artwork_path) = artwork_discovery::discover_folder_artwork(folder_path)
-                {
+                let folder_path_buf = folder_path.to_path_buf();
+                let artwork_path = tokio::task::spawn_blocking(move || {
+                    artwork_discovery::discover_folder_artwork(&folder_path_buf)
+                })
+                .await
+                .unwrap_or(None);
+
+                if let Some(artwork_path) = artwork_path {
                     // Record in database that this album has folder artwork
                     soul_storage::albums::set_artwork_source(
                         self.pool,

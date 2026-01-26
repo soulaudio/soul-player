@@ -20,39 +20,49 @@ async fn batch_fetch_availability(
         return Ok(Vec::new());
     }
 
-    // Convert track IDs to comma-separated string for subquery
-    let ids_str = track_ids
-        .iter()
-        .map(|id| id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+    // SQLite has a limit on the number of parameters (default 999).
+    // To avoid exceeding this, we chunk the IDs and run multiple queries.
+    const CHUNK_SIZE: usize = 500; // Safe limit well below 999
 
-    // Use subquery pattern with compile-time safe query
-    // SQLx doesn't support array binding in SQLite, but we can use a workaround
-    // by constructing the query string safely (no user input, only i64 IDs)
-    let query_str = format!(
-        "SELECT track_id, source_id, status, local_file_path, server_path, local_file_size \
-         FROM track_sources WHERE track_id IN ({})",
-        ids_str
-    );
+    let mut all_results = Vec::new();
 
-    let rows = sqlx::query(&query_str).fetch_all(pool).await?;
+    for chunk in track_ids.chunks(CHUNK_SIZE) {
+        // Convert track IDs to comma-separated string for subquery
+        let ids_str = chunk
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
 
-    let results = rows
-        .into_iter()
-        .map(|row| {
-            (
-                row.get::<i64, _>("track_id"),
-                row.get::<i64, _>("source_id"),
-                row.get::<String, _>("status"),
-                row.get::<Option<String>, _>("local_file_path"),
-                row.get::<Option<String>, _>("server_path"),
-                row.get::<Option<i64>, _>("local_file_size"),
-            )
-        })
-        .collect();
+        // Use subquery pattern with compile-time safe query
+        // SQLx doesn't support array binding in SQLite, but we can use a workaround
+        // by constructing the query string safely (no user input, only i64 IDs)
+        let query_str = format!(
+            "SELECT track_id, source_id, status, local_file_path, server_path, local_file_size \
+             FROM track_sources WHERE track_id IN ({})",
+            ids_str
+        );
 
-    Ok(results)
+        let rows = sqlx::query(&query_str).fetch_all(pool).await?;
+
+        let chunk_results = rows
+            .into_iter()
+            .map(|row| {
+                (
+                    row.get::<i64, _>("track_id"),
+                    row.get::<i64, _>("source_id"),
+                    row.get::<String, _>("status"),
+                    row.get::<Option<String>, _>("local_file_path"),
+                    row.get::<Option<String>, _>("server_path"),
+                    row.get::<Option<i64>, _>("local_file_size"),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        all_results.extend(chunk_results);
+    }
+
+    Ok(all_results)
 }
 
 /// Get all tracks with denormalized artist/album names
@@ -70,7 +80,7 @@ pub async fn get_all(
 
     // Optimized: Single query with LEFT JOIN to fetch tracks, artists, albums, and availability
     let query_start = std::time::Instant::now();
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -109,7 +119,10 @@ pub async fn get_all(
 
     // Group rows by track_id and build Track objects
     let build_start = std::time::Instant::now();
-    let mut tracks_map: std::collections::HashMap<i64, Track> = std::collections::HashMap::new();
+    // Pre-allocate HashMap with estimated capacity (rows typically have 1-3 availability per track)
+    let estimated_capacity = rows.len() / 2;
+    let mut tracks_map: std::collections::HashMap<i64, Track> =
+        std::collections::HashMap::with_capacity(estimated_capacity);
 
     for row in rows {
         let track_id_i64 = row.id;
@@ -179,7 +192,7 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
 
     // First, fetch all matching track data with artist/album info
     let query_start = std::time::Instant::now();
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT DISTINCT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -226,9 +239,9 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
     // Batch fetch availability data for matched tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -245,7 +258,7 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -275,7 +288,7 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
                 fingerprint: row.fingerprint,
                 metadata_source: row
                     .metadata_source
-                    .and_then(|s| match s.as_str() {
+                    .and_then(|s: String| match s.as_str() {
                         "file" => Some(MetadataSource::File),
                         "enriched" => Some(MetadataSource::Enriched),
                         "user_edited" => Some(MetadataSource::UserEdited),
@@ -294,12 +307,19 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
 
 /// Get track by ID
 pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> {
+    let start = std::time::Instant::now();
+    tracing::debug!(
+        track_id = %id,
+        "[Storage:get_by_id] Fetching track"
+    );
+
     let id_int: i64 = id
         .as_str()
         .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", id)))?;
 
-    let row = sqlx::query!(
+    let query_start = std::time::Instant::now();
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -318,46 +338,72 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
     )
     .fetch_optional(pool)
     .await?;
+    let query_duration = query_start.elapsed();
 
-    match row {
-        Some(row) => {
-            let track_id = TrackId::new(row.id.to_string());
-            let availability = get_availability(pool, track_id.clone()).await?;
+    if let Some(row) = row {
+        let track_id = TrackId::new(row.id.to_string());
+        let availability = get_availability(pool, track_id.clone()).await?;
 
-            Ok(Some(Track {
-                id: track_id,
-                title: row.title,
-                artist_id: row.artist_id,
-                artist_name: row.artist_name,
-                album_id: row.album_id,
-                album_title: row.album_title,
-                album_artist_id: row.album_artist_id,
-                track_number: row.track_number.map(|x| x as i32),
-                disc_number: row.disc_number.map(|x| x as i32),
-                year: row.year.map(|x| x as i32),
-                duration_seconds: row.duration_seconds,
-                bitrate: row.bitrate.map(|x| x as i32),
-                sample_rate: row.sample_rate.map(|x| x as i32),
-                channels: row.channels.map(|x| x as i32),
-                file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
-                origin_source_id: row.origin_source_id,
-                musicbrainz_recording_id: row.musicbrainz_recording_id,
-                fingerprint: row.fingerprint,
-                metadata_source: parse_metadata_source(
-                    row.metadata_source.as_deref().unwrap_or("file"),
-                ),
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-                availability,
-            }))
+        let total_duration = start.elapsed();
+
+        if total_duration.as_millis() > 100 {
+            tracing::warn!(
+                track_id = %id,
+                query_ms = query_duration.as_millis(),
+                total_ms = total_duration.as_millis(),
+                "[Storage:get_by_id] Slow query detected"
+            );
+        } else {
+            tracing::debug!(
+                track_id = %id,
+                found = true,
+                query_ms = query_duration.as_millis(),
+                total_ms = total_duration.as_millis(),
+                "[Storage:get_by_id] Completed"
+            );
         }
-        None => Ok(None),
+
+        Ok(Some(Track {
+            id: track_id,
+            title: row.title,
+            artist_id: row.artist_id,
+            artist_name: row.artist_name,
+            album_id: row.album_id,
+            album_title: row.album_title,
+            album_artist_id: row.album_artist_id,
+            track_number: row.track_number.map(|x| x as i32),
+            disc_number: row.disc_number.map(|x| x as i32),
+            year: row.year.map(|x| x as i32),
+            duration_seconds: row.duration_seconds,
+            bitrate: row.bitrate.map(|x| x as i32),
+            sample_rate: row.sample_rate.map(|x| x as i32),
+            channels: row.channels.map(|x| x as i32),
+            file_format: row.file_format.unwrap_or_else(|| "unknown".to_string()),
+            origin_source_id: row.origin_source_id,
+            musicbrainz_recording_id: row.musicbrainz_recording_id,
+            fingerprint: row.fingerprint,
+            metadata_source: parse_metadata_source(
+                row.metadata_source.as_deref().unwrap_or("file"),
+            ),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            availability,
+        }))
+    } else {
+        let total_duration = start.elapsed();
+        tracing::debug!(
+            track_id = %id,
+            found = false,
+            total_ms = total_duration.as_millis(),
+            "[Storage:get_by_id] Completed"
+        );
+        Ok(None)
     }
 }
 
 /// Get tracks by source
 pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT DISTINCT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -389,9 +435,9 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -408,7 +454,7 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -451,8 +497,15 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
 
 /// Get tracks by artist
 pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec<Track>> {
+    let start = std::time::Instant::now();
+    tracing::debug!(
+        artist_id = artist_id,
+        "[Storage:get_by_artist] Fetching tracks"
+    );
+
     // First, fetch all track data for the artist
-    let rows = sqlx::query!(
+    let query_start = std::time::Instant::now();
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -472,8 +525,15 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
     )
     .fetch_all(pool)
     .await?;
+    let query_duration = query_start.elapsed();
 
     if rows.is_empty() {
+        tracing::debug!(
+            artist_id = artist_id,
+            count = 0,
+            duration_ms = start.elapsed().as_millis(),
+            "[Storage:get_by_artist] Completed - no tracks found"
+        );
         return Ok(Vec::new());
     }
 
@@ -483,9 +543,9 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -502,7 +562,7 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -540,13 +600,39 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
         })
         .collect();
 
+    let total_duration = start.elapsed();
+    if total_duration.as_millis() > 100 {
+        tracing::warn!(
+            artist_id = artist_id,
+            count = tracks.len(),
+            query_ms = query_duration.as_millis(),
+            total_ms = total_duration.as_millis(),
+            "[Storage:get_by_artist] Slow query detected"
+        );
+    } else {
+        tracing::debug!(
+            artist_id = artist_id,
+            count = tracks.len(),
+            query_ms = query_duration.as_millis(),
+            total_ms = total_duration.as_millis(),
+            "[Storage:get_by_artist] Completed"
+        );
+    }
+
     Ok(tracks)
 }
 
 /// Get tracks by album
 pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Track>> {
+    let start = std::time::Instant::now();
+    tracing::debug!(
+        album_id = album_id,
+        "[Storage:get_by_album] Fetching tracks"
+    );
+
     // First, fetch all track data for the album
-    let rows = sqlx::query!(
+    let query_start = std::time::Instant::now();
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -566,8 +652,15 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
     )
     .fetch_all(pool)
     .await?;
+    let query_duration = query_start.elapsed();
 
     if rows.is_empty() {
+        tracing::debug!(
+            album_id = album_id,
+            count = 0,
+            duration_ms = start.elapsed().as_millis(),
+            "[Storage:get_by_album] Completed - no tracks found"
+        );
         return Ok(Vec::new());
     }
 
@@ -577,9 +670,9 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -596,7 +689,7 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -634,16 +727,44 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
         })
         .collect();
 
+    let total_duration = start.elapsed();
+    if total_duration.as_millis() > 100 {
+        tracing::warn!(
+            album_id = album_id,
+            count = tracks.len(),
+            query_ms = query_duration.as_millis(),
+            total_ms = total_duration.as_millis(),
+            "[Storage:get_by_album] Slow query detected"
+        );
+    } else {
+        tracing::debug!(
+            album_id = album_id,
+            count = tracks.len(),
+            query_ms = query_duration.as_millis(),
+            total_ms = total_duration.as_millis(),
+            "[Storage:get_by_album] Completed"
+        );
+    }
+
     Ok(tracks)
 }
 
 /// Create new track
 pub async fn create(pool: &SqlitePool, track: CreateTrack) -> Result<Track> {
+    let start = std::time::Instant::now();
+    tracing::debug!(
+        title = %track.title,
+        artist_id = ?track.artist_id,
+        album_id = ?track.album_id,
+        "[Storage:create] Creating track"
+    );
+
     // Start transaction
     let mut tx = pool.begin().await?;
 
     // Insert track
-    let result = sqlx::query!(
+    let insert_start = std::time::Instant::now();
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         INSERT INTO tracks (
             title, artist_id, album_id, album_artist_id, track_number, disc_number, year,
@@ -670,14 +791,22 @@ pub async fn create(pool: &SqlitePool, track: CreateTrack) -> Result<Track> {
     )
     .execute(&mut *tx)
     .await?;
+    let insert_duration = insert_start.elapsed();
 
     let track_id = result.last_insert_rowid();
+    tracing::debug!(
+        track_id = track_id,
+        insert_ms = insert_duration.as_millis(),
+        "[Storage:create] Track record inserted"
+    );
 
     // Create track_sources entry
     if let Some(local_file_path) = track.local_file_path {
-        eprintln!(
-            "[tracks::create] Creating track_sources entry: track_id={}, source_id={}, path={}",
-            track_id, track.origin_source_id, local_file_path
+        tracing::debug!(
+            track_id = track_id,
+            source_id = track.origin_source_id,
+            path = %local_file_path,
+            "[Storage:create] Creating track_sources entry"
         );
         sqlx::query!(
             r#"
@@ -690,24 +819,53 @@ pub async fn create(pool: &SqlitePool, track: CreateTrack) -> Result<Track> {
         )
         .execute(&mut *tx)
         .await?;
-        eprintln!("[tracks::create] ✓ track_sources entry created");
+        tracing::debug!(
+            track_id = track_id,
+            "[Storage:create] track_sources entry created"
+        );
     } else {
-        eprintln!(
-            "[tracks::create] ⚠ WARNING: No local_file_path provided, skipping track_sources entry"
+        tracing::warn!(
+            track_id = track_id,
+            "[Storage:create] No local_file_path provided, skipping track_sources entry"
         );
     }
 
     // Note: track_stats is now per-user and created on-demand when a user plays/rates a track
     // No automatic initialization needed here
 
+    let commit_start = std::time::Instant::now();
     tx.commit().await?;
+    let commit_duration = commit_start.elapsed();
 
     // Fetch and return the created track
-    get_by_id(pool, TrackId::new(track_id.to_string()))
+    let created_track = get_by_id(pool, TrackId::new(track_id.to_string()))
         .await?
         .ok_or_else(|| {
             soul_core::SoulError::Storage("Failed to retrieve created track".to_string())
-        })
+        })?;
+
+    let total_duration = start.elapsed();
+    if total_duration.as_millis() > 100 {
+        tracing::warn!(
+            track_id = track_id,
+            title = %track.title,
+            insert_ms = insert_duration.as_millis(),
+            commit_ms = commit_duration.as_millis(),
+            total_ms = total_duration.as_millis(),
+            "[Storage:create] Slow track creation detected"
+        );
+    } else {
+        tracing::debug!(
+            track_id = track_id,
+            title = %track.title,
+            insert_ms = insert_duration.as_millis(),
+            commit_ms = commit_duration.as_millis(),
+            total_ms = total_duration.as_millis(),
+            "[Storage:create] Track created successfully"
+        );
+    }
+
+    Ok(created_track)
 }
 
 /// Update track metadata
@@ -867,7 +1025,7 @@ pub async fn get_availability(
         .parse()
         .map_err(|_| soul_core::SoulError::Storage(format!("Invalid track ID: {}", track_id)))?;
 
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT source_id, status, local_file_path, server_path, local_file_size
         FROM track_sources
@@ -898,6 +1056,15 @@ pub async fn record_play(
     duration_seconds: Option<f64>,
     completed: bool,
 ) -> Result<()> {
+    let start = std::time::Instant::now();
+    tracing::debug!(
+        user_id = %user_id,
+        track_id = %track_id,
+        completed = completed,
+        duration_secs = ?duration_seconds,
+        "[Storage:record_play] Recording playback"
+    );
+
     let track_id_int: i64 = track_id
         .as_str()
         .parse()
@@ -950,6 +1117,26 @@ pub async fn record_play(
     }
 
     tx.commit().await?;
+
+    let total_duration = start.elapsed();
+    if total_duration.as_millis() > 100 {
+        tracing::warn!(
+            user_id = %user_id,
+            track_id = %track_id,
+            completed = completed,
+            total_ms = total_duration.as_millis(),
+            "[Storage:record_play] Slow query detected"
+        );
+    } else {
+        tracing::debug!(
+            user_id = %user_id,
+            track_id = %track_id,
+            completed = completed,
+            total_ms = total_duration.as_millis(),
+            "[Storage:record_play] Completed"
+        );
+    }
+
     Ok(())
 }
 
@@ -960,7 +1147,7 @@ pub async fn get_top_tracks_by_artist(
     artist_id: ArtistId,
     limit: i32,
 ) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -995,9 +1182,9 @@ pub async fn get_top_tracks_by_artist(
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -1014,7 +1201,7 @@ pub async fn get_top_tracks_by_artist(
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1061,7 +1248,7 @@ pub async fn get_recently_played(
     user_id: UserId,
     limit: i32,
 ) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT DISTINCT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -1096,9 +1283,9 @@ pub async fn get_recently_played(
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -1115,7 +1302,7 @@ pub async fn get_recently_played(
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1165,7 +1352,7 @@ pub async fn get_play_count(pool: &SqlitePool, user_id: UserId, track_id: TrackI
 
     let user_id_str = user_id.as_str();
 
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT play_count FROM track_stats WHERE user_id = ? AND track_id = ?",
         user_id_str,
         track_id_int
@@ -1178,7 +1365,14 @@ pub async fn get_play_count(pool: &SqlitePool, user_id: UserId, track_id: TrackI
 
 /// Find track by file hash (for duplicate detection)
 pub async fn find_by_hash(pool: &SqlitePool, file_hash: &str) -> Result<Option<Track>> {
-    let row = sqlx::query!(
+    let start = std::time::Instant::now();
+    tracing::debug!(
+        file_hash = %file_hash,
+        "[Storage:find_by_hash] Checking for duplicate"
+    );
+
+    let query_start = std::time::Instant::now();
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -1197,10 +1391,32 @@ pub async fn find_by_hash(pool: &SqlitePool, file_hash: &str) -> Result<Option<T
     )
     .fetch_optional(pool)
     .await?;
+    let query_duration = query_start.elapsed();
 
     if let Some(row) = row {
         let track_id = TrackId::new(row.id.to_string());
         let availability = get_availability(pool, track_id.clone()).await?;
+
+        let total_duration = start.elapsed();
+        if total_duration.as_millis() > 100 {
+            tracing::warn!(
+                file_hash = %file_hash,
+                track_id = %track_id,
+                found = true,
+                query_ms = query_duration.as_millis(),
+                total_ms = total_duration.as_millis(),
+                "[Storage:find_by_hash] Slow query detected"
+            );
+        } else {
+            tracing::debug!(
+                file_hash = %file_hash,
+                track_id = %track_id,
+                found = true,
+                query_ms = query_duration.as_millis(),
+                total_ms = total_duration.as_millis(),
+                "[Storage:find_by_hash] Duplicate found"
+            );
+        }
 
         Ok(Some(Track {
             id: track_id,
@@ -1229,6 +1445,13 @@ pub async fn find_by_hash(pool: &SqlitePool, file_hash: &str) -> Result<Option<T
             availability,
         }))
     } else {
+        let total_duration = start.elapsed();
+        tracing::debug!(
+            file_hash = %file_hash,
+            found = false,
+            total_ms = total_duration.as_millis(),
+            "[Storage:find_by_hash] No duplicate found"
+        );
         Ok(None)
     }
 }
@@ -1238,7 +1461,7 @@ pub async fn find_path_by_content_hash(
     pool: &SqlitePool,
     content_hash: &str,
 ) -> Result<Option<String>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT file_path
         FROM tracks
@@ -1259,7 +1482,7 @@ pub async fn find_path_by_content_hash(
 
 /// Get all tracks with pagination
 pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -1291,9 +1514,9 @@ pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Re
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -1310,7 +1533,7 @@ pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Re
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1358,7 +1581,7 @@ pub async fn get_by_artist_paginated(
     offset: i64,
     limit: i64,
 ) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -1392,9 +1615,9 @@ pub async fn get_by_artist_paginated(
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -1411,7 +1634,7 @@ pub async fn get_by_artist_paginated(
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1459,7 +1682,7 @@ pub async fn get_by_album_paginated(
     offset: i64,
     limit: i64,
 ) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -1493,9 +1716,9 @@ pub async fn get_by_album_paginated(
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -1512,7 +1735,7 @@ pub async fn get_by_album_paginated(
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1560,7 +1783,7 @@ pub async fn get_by_playlist_paginated(
     offset: i64,
     limit: i64,
 ) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -1595,9 +1818,9 @@ pub async fn get_by_playlist_paginated(
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -1614,7 +1837,7 @@ pub async fn get_by_playlist_paginated(
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1685,7 +1908,7 @@ pub async fn get_by_library_source(
     pool: &SqlitePool,
     source_id: i64,
 ) -> Result<Vec<TrackFileInfo>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT id, file_path, file_size, file_mtime, content_hash
         FROM tracks
@@ -1886,7 +2109,7 @@ pub async fn get_unavailable_by_source(
     pool: &SqlitePool,
     source_id: i64,
 ) -> Result<Vec<TrackFileInfo>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT id, file_path, file_size, file_mtime, content_hash
         FROM tracks
@@ -1933,7 +2156,7 @@ pub async fn set_fingerprint(pool: &SqlitePool, track_id: &str, fingerprint: &st
 
 /// Get tracks that don't have fingerprints yet
 pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -1964,9 +2187,9 @@ pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Ve
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -1983,7 +2206,7 @@ pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Ve
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2035,7 +2258,7 @@ pub async fn get_with_fingerprints(
     let limit = limit.unwrap_or(1000);
     let after_id_int: Option<i64> = after_id.as_ref().and_then(|id| id.parse::<i64>().ok());
 
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -2070,9 +2293,9 @@ pub async fn get_with_fingerprints(
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -2089,7 +2312,7 @@ pub async fn get_with_fingerprints(
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2134,7 +2357,7 @@ pub async fn get_with_fingerprints(
 
 /// Get tracks by genre
 pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -2166,9 +2389,9 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -2185,7 +2408,7 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2228,7 +2451,7 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
 
 /// Get tracks by playlist
 pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Result<Vec<Track>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
@@ -2260,9 +2483,9 @@ pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Resu
     // Batch fetch availability data for these tracks using compile-time safe queries
     let availability_rows = batch_fetch_availability(pool, &track_ids).await?;
 
-    // Group availability by track_id
+    // Group availability by track_id (pre-allocate with capacity for better performance)
     let mut availability_map: std::collections::HashMap<String, Vec<TrackAvailability>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(track_ids.len());
     for (track_id, source_id, status, local_file_path, server_path, local_file_size) in
         availability_rows
     {
@@ -2279,7 +2502,7 @@ pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Resu
     }
 
     // Build track objects with availability data
-    let tracks = rows
+    let tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());

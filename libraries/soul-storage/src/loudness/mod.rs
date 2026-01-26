@@ -110,7 +110,7 @@ pub struct AnalysisQueueItem {
 
 /// Get loudness metadata for a track
 pub async fn get_track_loudness(pool: &SqlitePool, track_id: i64) -> Result<Option<TrackLoudness>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT
             id,
@@ -207,7 +207,7 @@ pub async fn update_album_loudness(
 
 /// Get tracks without loudness analysis
 pub async fn get_tracks_without_analysis(pool: &SqlitePool, limit: i32) -> Result<Vec<i64>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT id
         FROM tracks
@@ -224,7 +224,7 @@ pub async fn get_tracks_without_analysis(pool: &SqlitePool, limit: i32) -> Resul
 
 /// Get tracks in an album for album gain calculation
 pub async fn get_album_track_ids(pool: &SqlitePool, album_id: i64) -> Result<Vec<i64>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         r#"
         SELECT id
         FROM tracks
@@ -267,7 +267,7 @@ pub async fn queue_track_for_analysis(
 
 /// Get next item from analysis queue
 pub async fn get_next_queue_item(pool: &SqlitePool) -> Result<Option<AnalysisQueueItem>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, track_id as "track_id: i64", priority, status, error_message, created_at, started_at, completed_at
         FROM loudness_analysis_queue
@@ -386,7 +386,7 @@ pub struct QueueStats {
 
 /// Clear completed items from queue
 pub async fn clear_completed_queue_items(pool: &SqlitePool) -> Result<i64> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         DELETE FROM loudness_analysis_queue
         WHERE status = 'completed'
@@ -402,7 +402,7 @@ pub async fn clear_completed_queue_items(pool: &SqlitePool) -> Result<i64> {
 pub async fn queue_all_unanalyzed(pool: &SqlitePool) -> Result<i64> {
     let now = chrono::Utc::now().timestamp();
 
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
         INSERT INTO loudness_analysis_queue (track_id, priority, status, created_at)
         SELECT id, 0, 'pending', ?

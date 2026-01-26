@@ -19,6 +19,10 @@ impl Database {
     /// # Errors
     /// Returns an error if the connection fails or migrations fail
     pub async fn new(database_url: &str) -> Result<Self> {
+        tracing::info!(database_url, "[Database] Starting database initialization");
+        let start = std::time::Instant::now();
+
+        tracing::debug!("[Database] Configuring SQLite connection options");
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(true)
             // Enable WAL mode for better concurrent read performance
@@ -26,18 +30,42 @@ impl Database {
             // Optimize for macOS and other platforms with many concurrent queries
             .busy_timeout(std::time::Duration::from_secs(5));
 
+        tracing::debug!(
+            max_connections = 20,
+            min_connections = 0,
+            acquire_timeout_secs = 10,
+            "[Database] Creating connection pool"
+        );
+        let pool_start = std::time::Instant::now();
         let pool = SqlitePoolOptions::new()
             // Increased from 5 to 20 to handle concurrent operations
             .max_connections(20)
-            // Keep minimum connections ready to reduce latency
-            .min_connections(2)
+            // Set to 0 for fastest startup (lazy connection creation, pool grows as needed)
+            .min_connections(0)
             // Reduce slow acquisition threshold for earlier warnings
             .acquire_timeout(std::time::Duration::from_secs(10))
             .connect_with(options)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "[Database] Failed to create connection pool");
+                e
+            })?;
+
+        let pool_duration = pool_start.elapsed();
+        tracing::info!(
+            duration_ms = pool_duration.as_millis(),
+            "[Database] Connection pool created"
+        );
 
         // Run migrations manually for reliability across different execution contexts
         Self::run_migrations(&pool).await?;
+
+        let total_duration = start.elapsed();
+        tracing::info!(
+            total_duration_ms = total_duration.as_millis(),
+            pool_duration_ms = pool_duration.as_millis(),
+            "[Database] Database initialization completed"
+        );
 
         Ok(Self { pool })
     }
@@ -60,10 +88,22 @@ impl Database {
 
     /// Run database migrations
     async fn run_migrations(pool: &SqlitePool) -> Result<()> {
+        tracing::info!("[Database] Running database migrations");
+        let start = std::time::Instant::now();
+
         sqlx::migrate!("./migrations")
             .run(pool)
             .await
-            .map_err(|e| StorageError::Migration(e.to_string()))?;
+            .map_err(|e| {
+                tracing::error!(error = %e, "[Database] Migration failed");
+                StorageError::Migration(e.to_string())
+            })?;
+
+        let duration = start.elapsed();
+        tracing::info!(
+            duration_ms = duration.as_millis(),
+            "[Database] Migrations completed successfully"
+        );
         Ok(())
     }
 }

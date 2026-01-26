@@ -156,7 +156,7 @@ pub fn default_shortcuts() -> Vec<GlobalShortcut> {
 ///
 /// Returns an error if the database query fails
 pub async fn get_shortcuts(pool: &SqlitePool, user_id: &str) -> Result<Vec<GlobalShortcut>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         "SELECT action, accelerator, enabled, is_default FROM global_shortcuts WHERE user_id = ?",
         user_id
     )

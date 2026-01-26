@@ -41,7 +41,7 @@ pub async fn get(
     user_id: &str,
     device_id: &str,
 ) -> Result<Option<ExternalFileSettings>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         r#"
         SELECT id, user_id, device_id, default_action, import_destination,
                import_to_source_id, show_import_notification, created_at, updated_at
@@ -232,7 +232,7 @@ pub async fn set_show_import_notification(
 
 /// Delete settings for a user/device
 pub async fn delete(pool: &SqlitePool, user_id: &str, device_id: &str) -> Result<bool> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM external_file_settings WHERE user_id = ? AND device_id = ?",
         user_id,
         device_id
@@ -245,7 +245,7 @@ pub async fn delete(pool: &SqlitePool, user_id: &str, device_id: &str) -> Result
 
 /// Delete all settings for a user (useful when deleting user account)
 pub async fn delete_all_for_user(pool: &SqlitePool, user_id: &str) -> Result<u64> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM external_file_settings WHERE user_id = ?",
         user_id
     )
@@ -257,7 +257,7 @@ pub async fn delete_all_for_user(pool: &SqlitePool, user_id: &str) -> Result<u64
 
 /// Delete all settings for a device (useful when unregistering device)
 pub async fn delete_all_for_device(pool: &SqlitePool, device_id: &str) -> Result<u64> {
-    let result = sqlx::query!(
+    let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         "DELETE FROM external_file_settings WHERE device_id = ?",
         device_id
     )

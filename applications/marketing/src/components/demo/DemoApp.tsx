@@ -24,9 +24,9 @@ import {
   useCurrentTrack,
   QueryClient,
   QueryClientProvider,
-  PlaybackContextProvider,
+  PlaybackSessionProvider,
+  WebPlaybackProvider,
 } from '@soul-player/shared'
-import { DemoPlayerCommandsProvider } from '@/providers/DemoPlayerCommandsProvider'
 import { MockSettingsProvider } from './MockContexts'
 import { DemoInitializer } from './DemoInitializer'
 import { useGitHubRelease } from '@/hooks/useGitHubRelease'
@@ -150,9 +150,9 @@ export function DemoApp() {
               hasRealDeviceSelection: false,
             }}
           >
-            <DemoPlayerCommandsProvider storage={demoStorage}>
-              <MockBackendProvider storage={demoStorage} version={version}>
-                <PlaybackContextProvider>
+            <MockBackendProvider storage={demoStorage} version={version}>
+              <PlaybackSessionProvider>
+                <WebPlaybackProvider storage={demoStorage}>
                   <MockSettingsProvider>
                     <DemoInitializer storage={demoStorage}>
                     {/* Wrapper to ensure MainLayout fills available space */}
@@ -188,9 +188,9 @@ export function DemoApp() {
                     />
                   )}
                   </MockSettingsProvider>
-                </PlaybackContextProvider>
-              </MockBackendProvider>
-            </DemoPlayerCommandsProvider>
+                </WebPlaybackProvider>
+              </PlaybackSessionProvider>
+            </MockBackendProvider>
           </PlatformProvider>
         </MemoryRouter>
       </div>

@@ -50,7 +50,7 @@ pub async fn register(
 
 /// Get a device by ID
 pub async fn get_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Device>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT id, user_id, name, device_type, last_seen_at, created_at
          FROM devices WHERE id = ?",
         id
@@ -70,7 +70,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Device>> {
 
 /// Get all devices for a user
 pub async fn get_by_user(pool: &SqlitePool, user_id: &str) -> Result<Vec<Device>> {
-    let rows = sqlx::query!(
+    let rows: Vec<_> = sqlx::query!(
         "SELECT id, user_id, name, device_type, last_seen_at, created_at
          FROM devices WHERE user_id = ? ORDER BY last_seen_at DESC",
         user_id
@@ -106,9 +106,10 @@ pub async fn update_last_seen(pool: &SqlitePool, id: &str) -> Result<()> {
 
 /// Unregister (delete) a device
 pub async fn unregister(pool: &SqlitePool, id: &str) -> Result<bool> {
-    let result = sqlx::query!("DELETE FROM devices WHERE id = ?", id)
-        .execute(pool)
-        .await?;
+    let result: sqlx::sqlite::SqliteQueryResult =
+        sqlx::query!("DELETE FROM devices WHERE id = ?", id)
+            .execute(pool)
+            .await?;
 
     Ok(result.rows_affected() > 0)
 }
@@ -122,9 +123,10 @@ pub async fn unregister(pool: &SqlitePool, id: &str) -> Result<bool> {
 pub async fn cleanup_inactive(pool: &SqlitePool, threshold_seconds: i64) -> Result<u64> {
     let cutoff = chrono::Utc::now().timestamp() - threshold_seconds;
 
-    let result = sqlx::query!("DELETE FROM devices WHERE last_seen_at < ?", cutoff)
-        .execute(pool)
-        .await?;
+    let result: sqlx::sqlite::SqliteQueryResult =
+        sqlx::query!("DELETE FROM devices WHERE last_seen_at < ?", cutoff)
+            .execute(pool)
+            .await?;
 
     Ok(result.rows_affected())
 }

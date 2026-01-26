@@ -14,7 +14,7 @@ import { usePlayerPlayback } from '../stores/player'
 import { usePlayerCommands, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
-import { usePlaybackContext } from '../contexts/PlaybackContextProvider'
+import { usePlaybackSession } from '../contexts/PlaybackSessionContext'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 import { ArtistLink } from './ArtistLink'
 import { debug } from '../utils/debug'
@@ -83,20 +83,13 @@ const MediaCardComponent = ({
   const commands = usePlayerCommands()
   const backend = useBackend()
   const { isDesktop } = usePlatform()
-  const playbackContext = usePlaybackContext()
-
-  // Debug logging for album cards
-  if (type === 'album') {
-    debug.log('[MediaCard] Album card props:', { id, title, subtitle, artistId, type })
-  }
+  const { isActiveContext } = usePlaybackSession()
 
   const isCircle = type === 'artist'
   const FallbackIcon = getFallbackIcon(type)
 
-  // PERFORMANCE FIX: Use shared playback context instead of individual queries
-  // Before: Every card fetched contexts independently (50+ queries per track change)
-  // After: Single query shared across all cards via PlaybackContextProvider
-  const isActiveContext = playbackContext.isActiveContext(type, id)
+  // Check if this card's entity is the active playback context
+  const isActive = isActiveContext(type, id)
 
   const handleClick = () => {
     navigate(getRoute(type, id))
@@ -105,9 +98,12 @@ const MediaCardComponent = ({
   const handlePlayPause = async (e: React.MouseEvent) => {
     e.stopPropagation()
 
-    // If this context is active AND there's a track loaded, use pause/resume logic
+    // If this context is active AND there's a track loaded AND queue has items, use pause/resume logic
     // CRITICAL: Check currentTrack to prevent resume on empty player (fixes first play ignored bug)
-    if (isActiveContext && currentTrack) {
+    // ALSO CRITICAL: Check queue length - don't try to resume if queue is empty
+    const currentQueue = await commands.getQueue()
+
+    if (isActive && currentTrack && currentQueue.length > 0) {
       try {
         if (isPlaying) {
           await commands.pausePlayback()
@@ -156,7 +152,8 @@ const MediaCardComponent = ({
         trackNumber: t.track_number || null,
       }))
 
-      // Record playback context
+      // Record playback context BEFORE starting playback
+      // This ensures backend tracking is updated
       await backend.recordContext({
         contextType: type,
         contextId: String(id),
@@ -256,9 +253,9 @@ const MediaCardComponent = ({
           onClick={handlePlayPause}
           onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200"
-          aria-label={(isActiveContext && isPlaying) ? t('playback.pause') : t('playback.play')}
+          aria-label={(isActive && isPlaying) ? t('playback.pause') : t('playback.play')}
         >
-          {(isActiveContext && isPlaying) ? (
+          {(isActive && isPlaying) ? (
             <Pause className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" />
           ) : (
             <Play className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" />

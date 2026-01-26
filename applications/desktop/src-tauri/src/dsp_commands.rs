@@ -473,7 +473,7 @@ pub async fn get_available_effects() -> Result<Vec<String>, String> {
 #[tauri::command]
 pub async fn get_dsp_chain(
     #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
-) -> Result<Vec<EffectSlot>, String> {
+) -> Result<Vec<EffectSlot>, soul_audio_desktop::AudioError> {
     #[cfg(feature = "effects")]
     {
         let slots = playback.get_effect_slots()?;
@@ -521,10 +521,12 @@ pub async fn add_effect_to_chain(
     #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
     #[allow(unused_variables)] effect: EffectType,
-) -> Result<(), String> {
+) -> Result<(), soul_audio_desktop::AudioError> {
     // Validate slot index
     if slot_index >= 4 {
-        return Err("Slot index must be 0-3".to_string());
+        return Err(soul_audio_desktop::AudioError::DeviceError(
+            "Slot index must be 0-3".to_string(),
+        ));
     }
 
     #[cfg(feature = "effects")]
@@ -570,10 +572,12 @@ pub async fn remove_effect_from_chain(
     #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
     #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
-) -> Result<(), String> {
+) -> Result<(), soul_audio_desktop::AudioError> {
     // Validate slot index
     if slot_index >= 4 {
-        return Err("Slot index must be 0-3".to_string());
+        return Err(soul_audio_desktop::AudioError::DeviceError(
+            "Slot index must be 0-3".to_string(),
+        ));
     }
 
     #[cfg(feature = "effects")]
@@ -600,10 +604,12 @@ pub async fn toggle_effect(
     #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
     #[allow(unused_variables)] enabled: bool,
-) -> Result<(), String> {
+) -> Result<(), soul_audio_desktop::AudioError> {
     // Validate slot index
     if slot_index >= 4 {
-        return Err("Slot index must be 0-3".to_string());
+        return Err(soul_audio_desktop::AudioError::DeviceError(
+            "Slot index must be 0-3".to_string(),
+        ));
     }
 
     #[cfg(feature = "effects")]
@@ -621,7 +627,10 @@ pub async fn toggle_effect(
             // Persist the updated chain
             persist_current_chain(&playback, &app_state).await;
         } else {
-            return Err(format!("No effect at slot {}", slot_index));
+            return Err(soul_audio_desktop::AudioError::DeviceError(format!(
+                "No effect at slot {}",
+                slot_index
+            )));
         }
     }
 

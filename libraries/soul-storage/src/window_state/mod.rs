@@ -68,7 +68,7 @@ impl Default for WindowState {
 ///
 /// Returns an error if the database query fails
 pub async fn get_window_state(pool: &SqlitePool, user_id: &str) -> Result<WindowState> {
-    let result = sqlx::query!(
+    let result: Option<_> = sqlx::query!(
         "SELECT x, y, width, height, maximized, last_route FROM window_state WHERE user_id = ?",
         user_id
     )

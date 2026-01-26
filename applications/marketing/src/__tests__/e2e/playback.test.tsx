@@ -14,15 +14,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import {
   renderDemoApp,
   setupUser,
   createSampleDemoData,
   createLargeDemoData,
   findButton,
-  findAlbumCard,
-  findTrackRow,
   assertPlaybackState,
   clickAlbumCard,
   clickPlayOnTrack,

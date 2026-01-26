@@ -57,6 +57,12 @@ export function PlayerControls() {
       if (isPlaying) {
         await commands.pausePlayback();
       } else {
+        // Check if queue exists before trying to play
+        const queue = await commands.getQueue();
+        if (queue.length === 0) {
+          debug.warn('[PlayerControls] Cannot play - queue is empty');
+          return;
+        }
         await commands.resumePlayback();
       }
     } catch (error) {

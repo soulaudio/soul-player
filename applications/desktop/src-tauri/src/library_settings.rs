@@ -94,12 +94,16 @@ pub async fn add_library_source(
 ) -> Result<FrontendLibrarySource, String> {
     let device_id = get_device_id();
 
-    // Verify path exists
-    let path_buf = std::path::Path::new(&path);
-    if !path_buf.exists() {
+    // Verify path exists (use async to avoid blocking on slow/network storage)
+    let path_buf = std::path::PathBuf::from(&path);
+    if !tokio::fs::try_exists(&path_buf).await.unwrap_or(false) {
         return Err(format!("Path does not exist: {}", path));
     }
-    if !path_buf.is_dir() {
+
+    let metadata = tokio::fs::metadata(&path_buf)
+        .await
+        .map_err(|e| format!("Failed to read path metadata: {}", e))?;
+    if !metadata.is_dir() {
         return Err(format!("Path is not a directory: {}", path));
     }
 
@@ -243,10 +247,11 @@ pub async fn set_managed_library_settings(
 
     let device_id = get_device_id();
 
-    // Verify path exists or create it
-    let path_buf = std::path::Path::new(&library_path);
-    if !path_buf.exists() {
-        std::fs::create_dir_all(path_buf)
+    // Verify path exists or create it (async I/O - avoid blocking on slow/network storage)
+    let path_buf = std::path::PathBuf::from(&library_path);
+    if !tokio::fs::try_exists(&path_buf).await.unwrap_or(false) {
+        tokio::fs::create_dir_all(&path_buf)
+            .await
             .map_err(|e| format!("Failed to create library directory: {}", e))?;
     }
 

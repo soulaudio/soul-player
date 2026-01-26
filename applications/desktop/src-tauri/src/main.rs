@@ -239,10 +239,18 @@ async fn play_track(
     track_number: Option<u32>,
     playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
+    tracing::info!(
+        track_id = %track_id,
+        title = %title,
+        artist = %artist,
+        "[Command:play_track] Invoked"
+    );
+    let start = std::time::Instant::now();
+
     use std::time::Duration;
 
     let track = soul_playback::QueueTrack {
-        id: track_id,
+        id: track_id.clone(),
         path: PathBuf::from(file_path),
         title,
         artist,
@@ -254,7 +262,29 @@ async fn play_track(
         source: soul_playback::TrackSource::Single,
     };
 
-    playback.get().await?.play_track(track)
+    let result = playback
+        .get()
+        .await?
+        .play_track(track)
+        .map_err(|e| e.into());
+
+    let duration = start.elapsed();
+    if let Err(ref e) = result {
+        tracing::error!(
+            track_id = %track_id,
+            error = %e,
+            duration_ms = duration.as_millis(),
+            "[Command:play_track] Failed"
+        );
+    } else {
+        tracing::info!(
+            track_id = %track_id,
+            duration_ms = duration.as_millis(),
+            "[Command:play_track] Completed"
+        );
+    }
+
+    result
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -307,7 +337,11 @@ async fn play_queue(
 
     // Stop current playback
     tracing::debug!("[play_queue] Calling stop()...");
-    let stop_result = playback.get().await?.stop();
+    let stop_result = playback
+        .get()
+        .await?
+        .stop()
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() });
     tracing::debug!("[play_queue] stop() returned: {:?}", stop_result);
     stop_result?;
 
@@ -318,7 +352,11 @@ async fn play_queue(
         tracks.len()
     );
     let load_start = std::time::Instant::now();
-    let load_result = playback.get().await?.load_playlist(tracks);
+    let load_result = playback
+        .get()
+        .await?
+        .load_playlist(tracks)
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() });
     let load_duration = load_start.elapsed();
     tracing::debug!(
         load_duration_ms = load_duration.as_millis(),
@@ -330,7 +368,11 @@ async fn play_queue(
     // Start playback (will play first track in source queue)
     tracing::debug!("[play_queue] Calling play()...");
     let play_start = std::time::Instant::now();
-    let play_result = playback.get().await?.play();
+    let play_result = playback
+        .get()
+        .await?
+        .play()
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() });
     let play_duration = play_start.elapsed();
     tracing::debug!(
         play_duration_ms = play_duration.as_millis(),
@@ -425,26 +467,46 @@ async fn play_queue_with_context(
 
 #[tauri::command]
 async fn play(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    tracing::debug!("[Command:play] Invoked");
+    let start = std::time::Instant::now();
     let pm = playback.get().await?;
-    pm.play()
+    let result = pm.play().map_err(|e| e.into());
+    let duration = start.elapsed();
+    tracing::debug!(duration_us = duration.as_micros(), result = ?result, "[Command:play] Completed");
+    result
 }
 
 #[tauri::command]
 async fn pause_playback(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    tracing::debug!("[Command:pause_playback] Invoked");
+    let start = std::time::Instant::now();
     let pm = playback.get().await?;
-    pm.pause()
+    let result = pm.pause().map_err(|e| e.into());
+    let duration = start.elapsed();
+    tracing::debug!(duration_us = duration.as_micros(), result = ?result, "[Command:pause_playback] Completed");
+    result
 }
 
 #[tauri::command]
 async fn resume_playback(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    tracing::debug!("[Command:resume_playback] Invoked");
+    let start = std::time::Instant::now();
     let pm = playback.get().await?;
-    pm.play()
+    let result = pm.play().map_err(|e| e.into());
+    let duration = start.elapsed();
+    tracing::debug!(duration_us = duration.as_micros(), result = ?result, "[Command:resume_playback] Completed");
+    result
 }
 
 #[tauri::command]
 async fn stop_playback(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+    tracing::debug!("[Command:stop_playback] Invoked");
+    let start = std::time::Instant::now();
     let pm = playback.get().await?;
-    pm.stop()
+    let result = pm.stop().map_err(|e| e.into());
+    let duration = start.elapsed();
+    tracing::debug!(duration_us = duration.as_micros(), result = ?result, "[Command:stop_playback] Completed");
+    result
 }
 
 #[tauri::command]
@@ -452,7 +514,7 @@ async fn next_track(playback: State<'_, LazyPlaybackManager>) -> Result<(), Stri
     let start = std::time::Instant::now();
     tracing::debug!("[next_track] Skipping to next track");
 
-    let result = playback.get().await?.next();
+    let result = playback.get().await?.next().map_err(|e| e.into());
 
     let duration = start.elapsed();
     tracing::info!(
@@ -469,7 +531,7 @@ async fn previous_track(playback: State<'_, LazyPlaybackManager>) -> Result<(), 
     let start = std::time::Instant::now();
     tracing::debug!("[previous_track] Skipping to previous track");
 
-    let result = playback.get().await?.previous();
+    let result = playback.get().await?.previous().map_err(|e| e.into());
 
     let duration = start.elapsed();
     tracing::info!(
@@ -483,22 +545,22 @@ async fn previous_track(playback: State<'_, LazyPlaybackManager>) -> Result<(), 
 
 #[tauri::command]
 async fn set_volume(volume: u8, playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
-    playback.get().await?.set_volume(volume)
+    Ok(playback.get().await?.set_volume(volume)?)
 }
 
 #[tauri::command]
 async fn mute(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
-    playback.get().await?.mute()
+    Ok(playback.get().await?.mute()?)
 }
 
 #[tauri::command]
 async fn unmute(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
-    playback.get().await?.unmute()
+    Ok(playback.get().await?.unmute()?)
 }
 
 #[tauri::command]
 async fn seek_to(position: f64, playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
-    playback.get().await?.seek(position)
+    Ok(playback.get().await?.seek(position)?)
 }
 
 #[tauri::command]
@@ -509,7 +571,7 @@ async fn set_shuffle(mode: String, playback: State<'_, LazyPlaybackManager>) -> 
         "smart" => ShuffleMode::Smart,
         _ => return Err("Invalid shuffle mode".to_string()),
     };
-    playback.get().await?.set_shuffle(shuffle_mode)
+    Ok(playback.get().await?.set_shuffle(shuffle_mode)?)
 }
 
 #[tauri::command]
@@ -520,12 +582,12 @@ async fn set_repeat(mode: String, playback: State<'_, LazyPlaybackManager>) -> R
         "one" => RepeatMode::One,
         _ => return Err("Invalid repeat mode".to_string()),
     };
-    playback.get().await?.set_repeat(repeat_mode)
+    Ok(playback.get().await?.set_repeat(repeat_mode)?)
 }
 
 #[tauri::command]
 async fn clear_queue(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
-    playback.get().await?.clear_queue()
+    Ok(playback.get().await?.clear_queue()?)
 }
 
 #[tauri::command]
@@ -534,7 +596,7 @@ async fn add_play_next(
     playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     let queue_track = track.to_queue_track();
-    playback.get().await?.add_play_next(queue_track)
+    Ok(playback.get().await?.add_play_next(queue_track)?)
 }
 
 #[tauri::command]
@@ -543,22 +605,22 @@ async fn add_to_queue_end(
     playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     let queue_track = track.to_queue_track();
-    playback.get().await?.add_to_queue_end(queue_track)
+    Ok(playback.get().await?.add_to_queue_end(queue_track)?)
 }
 
 #[tauri::command]
 async fn clear_play_next(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
-    playback.get().await?.clear_play_next()
+    Ok(playback.get().await?.clear_play_next()?)
 }
 
 #[tauri::command]
 async fn clear_add_to_queue(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
-    playback.get().await?.clear_add_to_queue()
+    Ok(playback.get().await?.clear_add_to_queue()?)
 }
 
 #[tauri::command]
 async fn cycle_shuffle(playback: State<'_, LazyPlaybackManager>) -> Result<String, String> {
-    playback.get().await?.cycle_shuffle()
+    Ok(playback.get().await?.cycle_shuffle()?)
 }
 
 #[tauri::command]
@@ -573,7 +635,7 @@ async fn get_repeat(playback: State<'_, LazyPlaybackManager>) -> Result<String, 
 
 #[tauri::command]
 async fn cycle_repeat(playback: State<'_, LazyPlaybackManager>) -> Result<String, String> {
-    playback.get().await?.cycle_repeat()
+    Ok(playback.get().await?.cycle_repeat()?)
 }
 
 #[tauri::command]
@@ -614,7 +676,7 @@ async fn skip_to_queue_index(
     index: usize,
     playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
-    playback.get().await?.skip_to_queue_index(index)
+    Ok(playback.get().await?.skip_to_queue_index(index)?)
 }
 
 #[tauri::command]
@@ -808,9 +870,10 @@ async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String>
 async fn show_in_file_explorer(path: String) -> Result<(), String> {
     use std::process::Command;
 
-    let path = std::path::Path::new(&path);
+    let path = std::path::PathBuf::from(&path);
 
-    if !path.exists() {
+    // Use async exists check to avoid blocking on slow/network storage
+    if !tokio::fs::try_exists(&path).await.unwrap_or(false) {
         return Err(format!("File not found: {}", path.display()));
     }
 
@@ -835,7 +898,7 @@ async fn show_in_file_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         // Try different file managers in order of preference
-        let parent = path.parent().unwrap_or(path);
+        let parent = path.parent().unwrap_or(&path);
         let file_managers = [
             ("xdg-open", vec![parent.to_string_lossy().to_string()]),
             (
@@ -1504,8 +1567,8 @@ async fn reset_to_factory_settings(
 
     tracing::info!("[RESET] App data directory: {}", app_data_dir.display());
 
-    // Verify directory exists before attempting deletion
-    if !app_data_dir.exists() {
+    // Verify directory exists before attempting deletion (async to avoid blocking)
+    if !tokio::fs::try_exists(&app_data_dir).await.unwrap_or(false) {
         tracing::warn!("[RESET] App data directory does not exist, nothing to delete");
         return Err("App data directory does not exist".to_string());
     }
@@ -1523,20 +1586,21 @@ async fn reset_to_factory_settings(
         }
     }
 
-    // Step 3: Delete the entire app data directory
+    // Step 3: Delete the entire app data directory (async I/O)
     tracing::info!("[RESET] Deleting app data directory...");
-    if let Err(e) = std::fs::remove_dir_all(&app_data_dir) {
+    if let Err(e) = tokio::fs::remove_dir_all(&app_data_dir).await {
         tracing::error!("[RESET] Failed to delete app data directory: {}", e);
         return Err(format!("Failed to delete app data: {}", e));
     }
 
     tracing::info!("[RESET] Successfully deleted all user data");
-    tracing::info!("[RESET] Exiting application...");
+    tracing::info!("[RESET] Restarting application...");
 
-    // Step 4: Exit the application
-    // User must manually relaunch to see onboarding screen
-    app_handle.exit(0);
+    // Step 4: Restart the application
+    // App will relaunch and show onboarding screen since all data was deleted
+    app_handle.restart();
 
+    #[allow(unreachable_code)]
     Ok(())
 }
 
@@ -1955,9 +2019,9 @@ async fn test_artwork_extraction(
 
     tracing::info!("[test_artwork_extraction] File path: {}", file_path);
 
-    // Check if file exists
-    let path = std::path::Path::new(&file_path);
-    if !path.exists() {
+    // Check if file exists (async to avoid blocking on slow/network storage)
+    let path = std::path::PathBuf::from(&file_path);
+    if !tokio::fs::try_exists(&path).await.unwrap_or(false) {
         return Err(format!("File does not exist: {}", file_path));
     }
 
@@ -2056,11 +2120,14 @@ fn init_logging(enable_file_logging: bool) {
         std::mem::forget(guard);
 
         // Set up layers: console + file
-        // Use different default log levels for debug vs release builds
+        // When file logging is enabled, use info level even in release builds
+        // so users get meaningful logs
         let default_filter = if cfg!(debug_assertions) {
             "info,soul_importer=debug"
         } else {
-            "warn"
+            // Use info level in release builds when file logging is enabled
+            // Users who explicitly enable logging should get useful logs
+            "info"
         };
         let env_filter =
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
@@ -2114,8 +2181,17 @@ fn main() {
     // Initialize logging system
     init_logging(enable_file_logging);
 
+    // Log startup message (helps users verify logging is working)
+    tracing::info!(
+        "[STARTUP] Soul Player starting (version: {}, file_logging: {})",
+        env!("CARGO_PKG_VERSION"),
+        enable_file_logging
+    );
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
@@ -2151,7 +2227,7 @@ fn main() {
 
             // Get the artwork manager from app state
             let app_handle = app.app_handle().clone();
-            tauri::async_runtime::spawn(async move {
+            let artwork_handle = tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
                 let manager = &state.artwork_manager;
 
@@ -2165,6 +2241,13 @@ fn main() {
                             .unwrap();
                         responder.respond(error_response)
                     }
+                }
+            });
+
+            // Log errors from artwork protocol handler
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = artwork_handle.await {
+                    tracing::error!("[artwork protocol] Task panicked: {:?}", e);
                 }
             });
         })
@@ -2195,83 +2278,123 @@ fn main() {
 
             // Spawn async initialization task (non-blocking)
             // This allows the splash window to render immediately and show progress
-            tauri::async_runtime::spawn(async move {
+            let init_handle = tauri::async_runtime::spawn(async move {
                 use splash::emit_init_progress;
+
+                tracing::info!("[Startup] Beginning application initialization");
+                let startup_start = std::time::Instant::now();
 
                 emit_init_progress(&app_handle, "Initializing database...", 10).await;
 
                 // Get platform-specific app data directory
                 let app_data_dir = get_app_data_dir();
                 let db_path = app_data_dir.join("soul-player.db");
-                tracing::info!("App data directory: {}", db_path.display());
+                tracing::info!(path = %db_path.display(), "[Startup] App data directory resolved");
 
                 // Create AppState (handles migrations and default user)
                 // Uses .env file if available (for development)
+                tracing::debug!("[Startup] Creating AppState");
+                let appstate_start = std::time::Instant::now();
                 let app_state = AppState::from_env_or_default(db_path)
                     .await
                     .expect("Failed to initialize app state");
+                let appstate_duration = appstate_start.elapsed();
+                tracing::info!(
+                    duration_ms = appstate_duration.as_millis(),
+                    "[Startup] AppState initialized"
+                );
 
                 let pool = app_state.pool.as_ref().clone();
 
                 emit_init_progress(&app_handle, "Loading settings...", 30).await;
                 app_handle.manage(app_state);
 
-                // Sync logging preference from database to config.json cache
-                // This ensures config.json is always up-to-date for next startup
-                match soul_storage::settings::get_logging_enabled(&pool, "1").await {
-                    Ok(Some(enabled)) => {
-                        let config = config::AppConfig {
-                            enable_file_logging: enabled,
-                        };
-                        if let Err(e) = config.write(&app_data_dir) {
-                            tracing::warn!("Failed to write config.json: {}", e);
-                        } else {
-                            tracing::debug!("Synced logging preference to config.json: {}", enabled);
-                        }
-                    }
-                    Ok(None) => {
-                        // No preference set in database, create default config
-                        let config = config::AppConfig::default();
-                        if let Err(e) = config.write(&app_data_dir) {
-                            tracing::warn!("Failed to write default config.json: {}", e);
-                        } else {
-                            tracing::debug!("Created default config.json");
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to read logging preference from database: {}", e);
-                    }
-                }
-
-                // Cleanup any orphaned scans from previous app crash/quit
+                // Parallelize independent startup operations (saves ~30-80ms)
+                tracing::debug!("[Startup] Starting parallel operations (config sync + orphan cleanup)");
+                let parallel_start = std::time::Instant::now();
                 let device_id = library_settings::get_device_id();
-                match soul_storage::library_sources::cleanup_orphaned_scans(
-                    &pool, "1", // Desktop uses user_id = "1" as default user
-                    &device_id,
-                )
-                .await
-                {
-                    Ok(count) if count > 0 => {
-                        tracing::info!(
-                            "Cleaned up {} orphaned scan(s) from previous session",
-                            count
+                let pool_clone = pool.clone();
+                let app_data_dir_clone = app_data_dir.clone();
+
+                let (config_result, cleanup_result) = tokio::join!(
+                    // Sync logging preference from database to config.json cache (async I/O)
+                    async {
+                        let config_sync_start = std::time::Instant::now();
+                        match soul_storage::settings::get_logging_enabled(&pool, "1").await {
+                            Ok(Some(enabled)) => {
+                                let config = config::AppConfig {
+                                    enable_file_logging: enabled,
+                                };
+                                if let Err(e) = config.write_async(&app_data_dir_clone).await {
+                                    tracing::warn!("Failed to write config.json: {}", e);
+                                } else {
+                                    tracing::debug!("Synced logging preference to config.json: {}", enabled);
+                                }
+                            }
+                            Ok(None) => {
+                                let config = config::AppConfig::default();
+                                if let Err(e) = config.write_async(&app_data_dir_clone).await {
+                                    tracing::warn!("Failed to write default config.json: {}", e);
+                                } else {
+                                    tracing::debug!("Created default config.json");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to read logging preference from database: {}", e);
+                            }
+                        }
+                        let config_sync_duration = config_sync_start.elapsed();
+                        tracing::debug!(
+                            duration_ms = config_sync_duration.as_millis(),
+                            "[Startup] Config sync completed"
                         );
+                    },
+                    // Cleanup orphaned scans from previous app crash/quit
+                    async {
+                        let cleanup_start = std::time::Instant::now();
+                        match soul_storage::library_sources::cleanup_orphaned_scans(
+                            &pool_clone, "1", &device_id
+                        ).await {
+                            Ok(count) if count > 0 => {
+                                tracing::info!(
+                                    count,
+                                    duration_ms = cleanup_start.elapsed().as_millis(),
+                                    "[Startup] Cleaned up orphaned scan(s) from previous session"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to cleanup orphaned scans: {}", e);
+                            }
+                            _ => {}
+                        }
                     }
-                    Err(e) => {
-                        tracing::warn!("Failed to cleanup orphaned scans: {}", e);
-                    }
-                    _ => {}
-                }
+                );
+
+                let parallel_duration = parallel_start.elapsed();
+                tracing::info!(
+                    duration_ms = parallel_duration.as_millis(),
+                    "[Startup] Parallel operations completed"
+                );
+
+                // Results are already logged in the async blocks
+                let _ = (config_result, cleanup_result);
 
                 // Initialize lazy playback manager (audio engine initializes on first playback)
                 // This removes 200-800ms from startup time by deferring expensive audio
                 // device enumeration and stream initialization until first play command
+                tracing::debug!("[Startup] Creating LazyPlaybackManager");
+                let lazy_playback_start = std::time::Instant::now();
                 app_handle.manage(LazyPlaybackManager::new(app_handle.clone()));
-                tracing::info!("[main] LazyPlaybackManager created (audio engine will initialize on first playback)");
+                let lazy_playback_duration = lazy_playback_start.elapsed();
+                tracing::info!(
+                    duration_us = lazy_playback_duration.as_micros(),
+                    "[Startup] LazyPlaybackManager created (audio engine will initialize on first playback)"
+                );
 
                 // Phase 2A: Initialize lazy workers (defer initialization until first use)
                 // This removes 100-200ms from startup by deferring worker creation
-                tracing::info!("[main] Registering lazy workers (will initialize on first use)");
+                tracing::debug!("[Startup] Registering lazy workers (will initialize on first use)");
+                let lazy_workers_start = std::time::Instant::now();
 
                 // Loudness analyzer - deferred until first analysis request
                 app_handle.manage(LazyAnalysisWorker::new());
@@ -2288,23 +2411,44 @@ fn main() {
                 let lazy_sync = LazySyncState::new(pool.clone());
                 app_handle.manage(lazy_sync.clone());
 
-                // Check if auto-sync is needed (schema changes)
-                // This triggers lazy initialization only if needed
-                {
-                    let sync_state = lazy_sync.get_for_startup_check().await.expect("Failed to get sync state");
-                    let sync_guard = sync_state.lock().await;
-                    if let Ok(Some(trigger)) = sync_guard.manager.should_auto_sync().await {
-                        drop(sync_guard);
-                        let app_clone = app_handle.clone();
-                        tokio::spawn(async move {
+                // Defer auto-sync check to background task AFTER window is shown
+                // This removes 20-50ms from the critical startup path
+                let lazy_sync_clone = lazy_sync.clone();
+                let app_handle_sync = app_handle.clone();
+                let sync_handle = tokio::spawn(async move {
+                    // Wait for window to be shown and settled
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+                    tracing::debug!("[Background] Checking if auto-sync is needed");
+                    if let Ok(sync_state) = lazy_sync_clone.get_for_startup_check().await {
+                        let sync_guard = sync_state.lock().await;
+                        if let Ok(Some(trigger)) = sync_guard.manager.should_auto_sync().await {
+                            drop(sync_guard);
+                            tracing::info!("[Background] Auto-sync required, will emit event after 2s");
+                            // Consolidated: no nested spawn, just sleep in same task
                             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                            let _ = app_clone.emit("sync-required", trigger);
-                        });
+                            if let Err(e) = app_handle_sync.emit("sync-required", trigger) {
+                                tracing::error!(error = %e, event = "sync-required", "Failed to emit event to frontend");
+                            }
+                        }
                     }
-                }
+                });
+
+                // Log errors from sync check task
+                tokio::spawn(async move {
+                    if let Err(e) = sync_handle.await {
+                        tracing::error!("[Background] Auto-sync check task panicked: {:?}", e);
+                    }
+                });
 
                 // Fingerprint worker - deferred until first fingerprinting request
                 app_handle.manage(LazyFingerprintWorker::new());
+
+                let lazy_workers_duration = lazy_workers_start.elapsed();
+                tracing::info!(
+                    duration_us = lazy_workers_duration.as_micros(),
+                    "[Startup] Lazy workers registered"
+                );
 
                 emit_init_progress(&app_handle, "Setting up system tray...", 70).await;
 
@@ -2316,37 +2460,107 @@ fn main() {
 
                 emit_init_progress(&app_handle, "Loading window state...", 80).await;
 
-                // Load window state
-                if let Err(e) = window_state_manager::load_window_state(&app_handle).await {
-                    tracing::warn!("Failed to load window state: {}", e);
-                }
+                // Defer window state load on all platforms (saves 10-30ms from critical path)
+                // Previously only macOS deferred this due to Tauri bug, but it's beneficial for all platforms
+                tracing::debug!("[Startup] Deferring window state load until after window shows (optimized)");
 
                 emit_init_progress(&app_handle, "Starting update checker...", 90).await;
 
                 // Start update checker
+                let updater_start = std::time::Instant::now();
                 updater::start_update_checker(app_handle.clone());
+                tracing::debug!(
+                    duration_us = updater_start.elapsed().as_micros(),
+                    "[Startup] Update checker started"
+                );
 
                 emit_init_progress(&app_handle, "Ready!", 100).await;
 
-                // Close splash screen and show main window immediately
-                if let Some(splash) = app_handle.get_webview_window("splash") {
-                    let _ = splash.close();
-                }
-                if let Some(main) = app_handle.get_webview_window("main") {
-                    let _ = main.show();
+                let total_startup_duration = startup_start.elapsed();
+                tracing::info!(
+                    total_duration_ms = total_startup_duration.as_millis(),
+                    appstate_ms = appstate_duration.as_millis(),
+                    parallel_ops_ms = parallel_duration.as_millis(),
+                    "[Startup] Application initialization completed"
+                );
 
-                    // On macOS, we need to set the window size AFTER showing it due to a Tauri bug
-                    // with frameless windows. Wait a brief moment for the window to actually appear,
-                    // then call load_window_state again to apply the size.
+                // Show main window first, then close splash to avoid compositor blocking
+                // Showing first ensures at least one window exists during transition
+                if let Some(main) = app_handle.get_webview_window("main") {
+                    // On macOS, enable decorations BEFORE showing for smoother visual transition
                     #[cfg(target_os = "macos")]
                     {
-                        tracing::debug!("[startup] macOS: Waiting for window to appear...");
-                        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-                        tracing::debug!("[startup] macOS: Re-applying window state after show()");
-                        if let Err(e) = window_state_manager::load_window_state(&app_handle).await {
-                            tracing::warn!("Failed to re-apply window state on macOS: {}", e);
+                        tracing::debug!("[startup] macOS: Enabling window decorations");
+                        if let Err(e) = main.set_decorations(true) {
+                            tracing::warn!("Failed to enable window decorations on macOS: {}", e);
                         }
+                    }
+
+                    let _ = main.show();
+
+                    // Close splash in background after main window is shown (minimal delay for compositor)
+                    let app_handle_splash = app_handle.clone();
+                    let splash_handle = tokio::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                        if let Some(splash) = app_handle_splash.get_webview_window("splash") {
+                            let _ = splash.close();
+                        }
+                    });
+
+                    // Log errors from splash close task
+                    tokio::spawn(async move {
+                        if let Err(e) = splash_handle.await {
+                            tracing::error!("[Startup] Splash close task panicked: {:?}", e);
+                        }
+                    });
+
+                    // Apply window state in background after window is visible (all platforms)
+                    // macOS needs this due to Tauri bug #12168, but it's beneficial for all platforms
+                    // as it saves 10-30ms from the critical startup path
+                    {
+                        let app_handle_clone = app_handle.clone();
+                        let state_handle = tokio::spawn(async move {
+                            tracing::debug!("[startup] Waiting for window compositor to settle...");
+
+                            // Wait for window to be fully visible
+                            #[cfg(target_os = "macos")]
+                            {
+                                let start = tokio::time::Instant::now();
+                                let timeout = std::time::Duration::from_millis(50);
+
+                                // Poll for visibility (macOS WKWebView needs this)
+                                while start.elapsed() < timeout {
+                                    if let Some(window) = app_handle_clone.get_webview_window("main") {
+                                        if window.is_visible().unwrap_or(false) {
+                                            tracing::debug!("[startup] macOS: Window visible after {:?}", start.elapsed());
+                                            break;
+                                        }
+                                    }
+                                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                                }
+                            }
+
+                            // Non-macOS platforms: minimal delay for compositor
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                            }
+
+                            // Apply window state (non-blocking from main startup thread)
+                            tracing::debug!("[startup] Applying window state after show()");
+                            if let Err(e) = window_state_manager::load_window_state(&app_handle_clone).await {
+                                tracing::warn!("Failed to apply window state: {}", e);
+                            } else {
+                                tracing::debug!("[startup] Window state applied successfully");
+                            }
+                        });
+
+                        // Log errors from window state task
+                        tokio::spawn(async move {
+                            if let Err(e) = state_handle.await {
+                                tracing::error!("[Startup] Window state task panicked: {:?}", e);
+                            }
+                        });
                     }
                 }
 
@@ -2355,7 +2569,7 @@ fn main() {
                 let app_handle_bg = app_handle.clone();
                 tokio::spawn(async move {
                     // Small delay to ensure window is fully shown and settled
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
                     tracing::info!("[Background] Registering global shortcuts...");
                     if let Err(e) = shortcuts::register_shortcuts(&app_handle_bg).await {
@@ -2377,14 +2591,28 @@ fn main() {
                 }
             });
 
+            // Log errors from initialization task
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = init_handle.await {
+                    tracing::error!("[Startup] Initialization task panicked: {:?}", e);
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Save window state on close
-                let app = window.app_handle();
-                tauri::async_runtime::block_on(async {
+                // Save window state on close (spawn async task to avoid blocking)
+                let app = window.app_handle().clone();
+                let save_handle = tauri::async_runtime::spawn(async move {
                     let _ = window_state_manager::save_window_state(&app).await;
+                });
+
+                // Log errors from window state save
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = save_handle.await {
+                        tracing::error!("[WindowEvent] Window state save task panicked: {:?}", e);
+                    }
                 });
             }
         })
@@ -2458,6 +2686,8 @@ fn main() {
             audio_settings::set_headroom_enabled,
             audio_settings::set_headroom_eq_boost,
             audio_settings::set_headroom_preamp,
+            // Device monitoring metrics
+            audio_settings::get_device_metrics,
             // DSP effects chain
             dsp_commands::get_available_effects,
             dsp_commands::get_dsp_chain,

@@ -27,6 +27,10 @@
     "core:webview:allow-webview-position",
     "core:webview:allow-webview-size",
     "core:webview:allow-internal-toggle-devtools",
-    "updater:default"
+    "updater:default",
+    "os:default",
+    "os:allow-platform",
+    "process:default",
+    "process:allow-restart"
   ]
 }

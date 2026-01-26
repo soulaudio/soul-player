@@ -31,8 +31,20 @@ impl MusicImporter {
         mpsc::Receiver<ImportProgress>,
         tokio::task::JoinHandle<Result<ImportSummary>>,
     )> {
+        tracing::info!(directory = %directory.display(), "[Importer] Starting directory import");
+        let scan_start = std::time::Instant::now();
+
         let scanner = FileScanner::new();
         let files = scanner.scan_directory(directory)?;
+
+        let scan_duration = scan_start.elapsed();
+        tracing::info!(
+            directory = %directory.display(),
+            file_count = files.len(),
+            scan_duration_ms = scan_duration.as_millis(),
+            "[Importer] Directory scan completed"
+        );
+
         self.import_files(&files).await
     }
 
@@ -68,6 +80,12 @@ impl MusicImporter {
         fuzzy_matcher: FuzzyMatcher,
         progress_tx: mpsc::Sender<ImportProgress>,
     ) -> Result<ImportSummary> {
+        tracing::info!(
+            total_files = files.len(),
+            strategy = ?config.file_strategy,
+            skip_duplicates = config.skip_duplicates,
+            "[Importer] Starting batch import"
+        );
         let start_time = Instant::now();
         let total_files = files.len();
 
@@ -78,16 +96,36 @@ impl MusicImporter {
         // Send initial progress
         let _ = progress_tx.send(progress.clone()).await;
 
-        for file_path in files {
+        for (idx, file_path) in files.iter().enumerate() {
+            let file_start = std::time::Instant::now();
             progress.current_file = Some(file_path.clone());
             let _ = progress_tx.send(progress.clone()).await;
 
-            match Self::import_single_file(&file_path, &pool, &config, &fuzzy_matcher).await {
+            tracing::debug!(
+                file_path = %file_path.display(),
+                progress = format!("{}/{}", idx + 1, total_files),
+                "[Importer] Processing file"
+            );
+
+            match Self::import_single_file(file_path, &pool, &config, &fuzzy_matcher).await {
                 Ok(result) => {
+                    let file_duration = file_start.elapsed();
                     tracing::info!(
-                        file_path = ?file_path,
+                        file_path = %file_path.display(),
+                        requires_review = result.requires_review,
+                        duration_ms = file_duration.as_millis(),
                         "[Importer] Successfully imported"
                     );
+
+                    // Warn about slow imports
+                    if file_duration.as_millis() > 5000 {
+                        tracing::warn!(
+                            file_path = %file_path.display(),
+                            duration_ms = file_duration.as_millis(),
+                            "[Importer] Slow file import detected"
+                        );
+                    }
+
                     if result.requires_review {
                         require_review.push(result);
                     }
@@ -95,16 +133,19 @@ impl MusicImporter {
                 }
                 Err(ImportError::Duplicate(msg)) => {
                     tracing::debug!(
+                        file_path = %file_path.display(),
                         message = %msg,
                         "[Importer] Skipping duplicate"
                     );
                     progress.skipped_duplicates += 1;
                 }
                 Err(e) => {
+                    let file_duration = file_start.elapsed();
                     tracing::error!(
-                        file_path = ?file_path,
+                        file_path = %file_path.display(),
                         error = %e,
-                        "[Importer] FAILED to import"
+                        duration_ms = file_duration.as_millis(),
+                        "[Importer] Failed to import"
                     );
                     errors.push((file_path.clone(), e.to_string()));
                     progress.failed_imports += 1;
@@ -124,6 +165,24 @@ impl MusicImporter {
             let _ = progress_tx.send(progress.clone()).await;
         }
 
+        let total_duration = start_time.elapsed();
+        let avg_per_file = if progress.processed_files > 0 {
+            total_duration.as_millis() / progress.processed_files as u128
+        } else {
+            0
+        };
+
+        tracing::info!(
+            total_processed = progress.processed_files,
+            successful = progress.successful_imports,
+            duplicates = progress.skipped_duplicates,
+            failed = progress.failed_imports,
+            require_review = require_review.len(),
+            total_duration_secs = total_duration.as_secs(),
+            avg_per_file_ms = avg_per_file,
+            "[Importer] Batch import completed"
+        );
+
         Ok(ImportSummary {
             total_processed: progress.processed_files,
             successful: progress.successful_imports,
@@ -131,7 +190,7 @@ impl MusicImporter {
             failed: progress.failed_imports,
             require_review,
             errors,
-            duration_seconds: start_time.elapsed().as_secs(),
+            duration_seconds: total_duration.as_secs(),
         })
     }
 
@@ -142,11 +201,43 @@ impl MusicImporter {
         config: &ImportConfig,
         fuzzy_matcher: &FuzzyMatcher,
     ) -> Result<ImportResult> {
-        // Extract metadata
-        let metadata = metadata::extract_metadata(file_path)?;
+        // Extract metadata (wrap in spawn_blocking to avoid blocking async runtime)
+        tracing::debug!(file_path = %file_path.display(), "[Importer] Extracting metadata");
+        let metadata_start = std::time::Instant::now();
+        let file_path_clone = file_path.to_path_buf();
+        let metadata =
+            tokio::task::spawn_blocking(move || metadata::extract_metadata(&file_path_clone))
+                .await
+                .map_err(|e| {
+                    ImportError::Unknown(format!("Metadata extraction task failed: {}", e))
+                })??;
+        let metadata_duration = metadata_start.elapsed();
 
-        // Calculate file hash for duplicate detection
-        let file_hash = metadata::calculate_file_hash(file_path)?;
+        if metadata_duration.as_millis() > 1000 {
+            tracing::warn!(
+                file_path = %file_path.display(),
+                duration_ms = metadata_duration.as_millis(),
+                "[Importer] Slow metadata extraction"
+            );
+        }
+
+        // Calculate file hash for duplicate detection (wrap in spawn_blocking)
+        tracing::debug!(file_path = %file_path.display(), "[Importer] Calculating file hash");
+        let hash_start = std::time::Instant::now();
+        let file_path_clone = file_path.to_path_buf();
+        let file_hash =
+            tokio::task::spawn_blocking(move || metadata::calculate_file_hash(&file_path_clone))
+                .await
+                .map_err(|e| {
+                    ImportError::Unknown(format!("Hash calculation task failed: {}", e))
+                })??;
+        let hash_duration = hash_start.elapsed();
+
+        tracing::debug!(
+            metadata_ms = metadata_duration.as_millis(),
+            hash_ms = hash_duration.as_millis(),
+            "[Importer] Metadata and hash completed"
+        );
 
         // Check for duplicates
         if config.skip_duplicates
@@ -197,7 +288,10 @@ impl MusicImporter {
         );
 
         // Fuzzy match artist
-        let artist_match = if let Some(ref artist_name) = metadata.artist {
+        tracing::debug!("[Importer] Fuzzy matching artist/album/genres");
+        let fuzzy_start = std::time::Instant::now();
+
+        let artist_match = if let Some(artist_name) = &metadata.artist {
             Some(
                 fuzzy_matcher
                     .find_or_create_artist(pool, artist_name)
@@ -208,7 +302,7 @@ impl MusicImporter {
         };
 
         // Fuzzy match album
-        let album_match = if let Some(ref album_title) = metadata.album {
+        let album_match = if let Some(album_title) = &metadata.album {
             let artist_id = artist_match.as_ref().map(|m| m.entity.id);
             Some(
                 fuzzy_matcher
@@ -225,6 +319,15 @@ impl MusicImporter {
             let genre_match = fuzzy_matcher.find_or_create_genre(pool, genre_name).await?;
             genre_matches.push(genre_match);
         }
+
+        let fuzzy_duration = fuzzy_start.elapsed();
+        tracing::debug!(
+            duration_ms = fuzzy_duration.as_millis(),
+            artist_matched = artist_match.is_some(),
+            album_matched = album_match.is_some(),
+            genre_count = genre_matches.len(),
+            "[Importer] Fuzzy matching completed"
+        );
 
         // Determine if review is required (any match below threshold)
         let requires_review = artist_match
@@ -277,6 +380,11 @@ impl MusicImporter {
         };
 
         // Insert track into database
+        tracing::debug!(
+            title = %create_track.title,
+            "[Importer] Inserting track into database"
+        );
+        let db_start = std::time::Instant::now();
         let created_track = tracks::create(pool, create_track).await?;
 
         // Insert track-genre relationships
@@ -288,6 +396,13 @@ impl MusicImporter {
             )
             .await?;
         }
+
+        let db_duration = db_start.elapsed();
+        tracing::debug!(
+            duration_ms = db_duration.as_millis(),
+            track_id = %created_track.id,
+            "[Importer] Database insertion completed"
+        );
 
         Ok(ImportResult {
             track_id: 0, // Legacy field, track ID is now the string

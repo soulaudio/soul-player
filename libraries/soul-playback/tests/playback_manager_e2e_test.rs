@@ -390,13 +390,14 @@ mod queue_management {
         manager.add_to_queue_end(create_track("2", "Track 2", "Artist", 180));
         manager.add_to_queue_end(create_track("3", "Track 3", "Artist", 180));
 
-        // Reorder: move first to last
+        // Reorder: move index 0 to position where index 2 currently is
+        // [1, 2, 3] -> [2, 1, 3] (1 takes the place of 3)
         manager.reorder_queue(0, 2).unwrap();
 
         let queue = manager.get_queue();
         assert_eq!(queue[0].id, "2");
-        assert_eq!(queue[1].id, "3");
-        assert_eq!(queue[2].id, "1");
+        assert_eq!(queue[1].id, "1");
+        assert_eq!(queue[2].id, "3");
     }
 
     #[test]

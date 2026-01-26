@@ -20,6 +20,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadSettings = async () => {
+    // Defer to next tick to avoid blocking initial render
+    await new Promise(resolve => setTimeout(resolve, 0));
+
     try {
       const [shortcutsSetting, windowControlsSetting] = await Promise.all([
         invoke<string | null>('get_user_setting', {

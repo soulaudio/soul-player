@@ -52,10 +52,28 @@
 //! # }
 //! ```
 
-#![deny(unsafe_code)]
+// Allow unsafe code for platform-specific device monitoring (CoreAudio FFI, WinRT, PipeWire)
+// The unsafe code is isolated to device_monitor_* modules and wraps low-level platform APIs
+#![cfg_attr(
+    any(target_os = "macos", target_os = "linux", target_os = "windows"),
+    allow(unsafe_code)
+)]
+#![cfg_attr(
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows")),
+    deny(unsafe_code)
+)]
 
 pub mod backend;
 pub mod device;
+pub mod device_check_timeout;
+pub mod device_monitor_async;
+mod device_monitor_cpal_fallback;
+#[cfg(all(target_os = "linux", feature = "native-device-monitor"))]
+mod device_monitor_linux;
+#[cfg(all(target_os = "macos", feature = "native-device-monitor"))]
+mod device_monitor_macos;
+#[cfg(all(target_os = "windows", feature = "native-device-monitor"))]
+mod device_monitor_windows;
 mod error;
 pub mod exclusive;
 mod output;
@@ -64,10 +82,33 @@ pub mod sources;
 pub mod track_loader;
 
 pub use backend::{AudioBackend, BackendError, BackendInfo};
+// Device module exports
+// NOTE: Some functions are deprecated in favor of AsyncDeviceMonitor
+#[allow(deprecated)]
 pub use device::{
-    detect_device_capabilities, get_default_device_with_capabilities, get_device_capabilities,
-    list_devices_with_capabilities, AudioDeviceInfo, DeviceCapabilities, DeviceError,
-    SupportedBitDepth, DSD_RATES, STANDARD_SAMPLE_RATES,
+    // Still useful: Capability detection, device lookup, and types
+    detect_device_capabilities,
+    find_device_by_name,
+    // DEPRECATED: Use AsyncDeviceMonitor instead
+    get_default_device,
+    get_default_device_with_capabilities,
+    get_device_capabilities,
+    list_devices,
+    list_devices_with_capabilities,
+    AudioDeviceInfo,
+    DeviceCapabilities,
+    DeviceError,
+    SupportedBitDepth,
+    DSD_RATES,
+    STANDARD_SAMPLE_RATES,
+};
+pub use device_check_timeout::{
+    device_check_with_timeout_sync, device_check_with_timeout_sync_custom, TimeoutConfig,
+    TimeoutTracker, DEFAULT_DEVICE_CHECK_TIMEOUT,
+};
+pub use device_monitor_async::{
+    create_async_device_monitor, AsyncDeviceInfo, AsyncDeviceMonitor, DeviceChangeCallback,
+    DeviceEvent, DeviceMonitorError, WatchHandle,
 };
 pub use error::{AudioError, AudioOutputError, Result};
 pub use exclusive::{AudioData, ExclusiveConfig, ExclusiveOutput, LatencyInfo};

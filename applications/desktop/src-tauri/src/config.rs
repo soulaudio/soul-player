@@ -29,7 +29,27 @@ impl AppConfig {
         Some(config)
     }
 
-    /// Write config to config.json in the app data directory
+    /// Write config to config.json in the app data directory (async version)
+    pub async fn write_async(&self, app_data_dir: &std::path::Path) -> Result<(), std::io::Error> {
+        let config_path = app_data_dir.join("config.json");
+
+        tracing::debug!("Writing config to: {}", config_path.display());
+        tracing::debug!("Config: enable_file_logging={}", self.enable_file_logging);
+
+        // Ensure parent directory exists
+        if let Some(parent) = config_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+
+        let json = serde_json::to_string_pretty(self)?;
+        tokio::fs::write(&config_path, json).await?;
+
+        tracing::debug!("Config written successfully");
+
+        Ok(())
+    }
+
+    /// Write config to config.json in the app data directory (sync version - prefer write_async)
     pub fn write(&self, app_data_dir: &std::path::Path) -> Result<(), std::io::Error> {
         let config_path = app_data_dir.join("config.json");
 

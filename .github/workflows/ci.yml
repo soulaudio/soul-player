@@ -137,6 +137,10 @@ jobs:
       - name: Lint - Shared
         run: yarn workspace @soul-player/shared run lint
 
+      - name: Dead Code Detection (Knip)
+        run: yarn knip --no-exit-code
+        continue-on-error: true
+
   # ============================================================================
   # Security
   # ============================================================================

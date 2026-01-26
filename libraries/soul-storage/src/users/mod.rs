@@ -17,7 +17,7 @@ type Result<T> = std::result::Result<T, StorageError>;
 ///
 /// Returns the password hash if found, or None if user has no credentials
 pub async fn get_password_hash(pool: &SqlitePool, user_id: &str) -> Result<Option<String>> {
-    let row = sqlx::query!(
+    let row: Option<_> = sqlx::query!(
         "SELECT password_hash FROM user_credentials WHERE user_id = ?",
         user_id
     )
@@ -76,7 +76,7 @@ pub async fn delete_credentials(pool: &SqlitePool, user_id: &str) -> Result<()> 
 
 /// Get all users
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<User>> {
-    let rows = sqlx::query!("SELECT id, name, created_at FROM users ORDER BY name")
+    let rows: Vec<_> = sqlx::query!("SELECT id, name, created_at FROM users ORDER BY name")
         .fetch_all(pool)
         .await?;
 

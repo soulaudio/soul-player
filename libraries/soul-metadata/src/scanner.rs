@@ -115,8 +115,14 @@ impl<S: Storage + 'static> LibraryScanner<S> {
     ) -> Result<ScanStats> {
         let mut stats = ScanStats::default();
 
-        // Discover audio files
-        let files = self.discover_files(path)?;
+        // Discover audio files (wrap in spawn_blocking to avoid blocking async runtime with WalkDir)
+        let path_buf = path.to_path_buf();
+        let config = self.config.clone();
+        let files = tokio::task::spawn_blocking(move || {
+            Self::discover_files_sync(&path_buf, &config)
+        })
+        .await
+        .map_err(|e| crate::error::MetadataError::Other(format!("Discovery task failed: {}", e)))??;
         stats.files_discovered = files.len();
 
         // Send started progress
@@ -175,8 +181,8 @@ impl<S: Storage + 'static> LibraryScanner<S> {
         Ok(stats)
     }
 
-    /// Discover audio files in a directory recursively
-    fn discover_files(&self, path: &Path) -> Result<Vec<PathBuf>> {
+    /// Discover audio files in a directory recursively (synchronous helper for spawn_blocking)
+    fn discover_files_sync(path: &Path, config: &ScanConfig) -> Result<Vec<PathBuf>> {
         // Check if path exists
         if !path.exists() {
             return Err(crate::error::MetadataError::FileNotFound(
@@ -187,7 +193,7 @@ impl<S: Storage + 'static> LibraryScanner<S> {
         let mut files = Vec::new();
 
         if path.is_file() {
-            if self.is_supported_file(path) {
+            if Self::is_supported_file_static(path, config) {
                 files.push(path.to_path_buf());
             }
             return Ok(files);
@@ -199,12 +205,20 @@ impl<S: Storage + 'static> LibraryScanner<S> {
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if path.is_file() && self.is_supported_file(path) {
+            if path.is_file() && Self::is_supported_file_static(path, config) {
                 files.push(path.to_path_buf());
             }
         }
 
         Ok(files)
+    }
+
+    /// Static version of is_supported_file for use in spawn_blocking
+    fn is_supported_file_static(path: &Path, config: &ScanConfig) -> bool {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| config.extensions.contains(&e.to_lowercase()))
+            .unwrap_or(false)
     }
 
     /// Check if file is a supported audio format

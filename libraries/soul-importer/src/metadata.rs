@@ -214,13 +214,26 @@ fn find_best_tag(file: &TaggedFile) -> Option<&lofty::Tag> {
 
 /// Extract metadata from an audio file
 pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
+    tracing::debug!(file_path = %path.display(), "[Metadata] Extracting metadata");
+    let start = std::time::Instant::now();
+
+    let probe_start = std::time::Instant::now();
     let tagged_file = Probe::open(path)
-        .map_err(|e| ImportError::Metadata(format!("Failed to open file: {}", e)))?
+        .map_err(|e| {
+            tracing::error!(file_path = %path.display(), error = %e, "[Metadata] Failed to open file");
+            ImportError::Metadata(format!("Failed to open file: {}", e))
+        })?
         .read()
-        .map_err(|e| ImportError::Metadata(format!("Failed to read file: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!(file_path = %path.display(), error = %e, "[Metadata] Failed to read file");
+            ImportError::Metadata(format!("Failed to read file: {}", e))
+        })?;
+    let probe_duration = probe_start.elapsed();
 
     // Find the best tag - prefer one with artist metadata
     // Files may have multiple tag types (ID3v1, ID3v2, APEv2, Vorbis) with data in different places
+    let tag_count = tagged_file.tags().len();
+    tracing::debug!(tag_count, "[Metadata] Finding best tag from available tags");
     let tag = find_best_tag(&tagged_file);
 
     // Extract audio properties
@@ -382,6 +395,29 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         })
     });
 
+    let total_duration = start.elapsed();
+    let _has_metadata = artist.is_some() || album.is_some();
+
+    tracing::info!(
+        file_path = %path.display(),
+        has_title = title.is_some(),
+        has_artist = artist.is_some(),
+        has_album = album.is_some(),
+        genre_count = genres.len(),
+        tag_count,
+        probe_ms = probe_duration.as_millis(),
+        total_ms = total_duration.as_millis(),
+        "[Metadata] Extraction completed"
+    );
+
+    if total_duration.as_millis() > 500 {
+        tracing::warn!(
+            file_path = %path.display(),
+            duration_ms = total_duration.as_millis(),
+            "[Metadata] Slow metadata extraction detected"
+        );
+    }
+
     Ok(ExtractedMetadata {
         title,
         artist,
@@ -408,9 +444,28 @@ pub fn calculate_file_hash(path: &Path) -> Result<String> {
     use std::fs::File;
     use std::io::Read;
 
-    let mut file = File::open(path)?;
+    tracing::debug!(file_path = %path.display(), "[Metadata] Calculating file hash");
+    let start = std::time::Instant::now();
+
+    let mut file = File::open(path).map_err(|e| {
+        tracing::error!(file_path = %path.display(), error = %e, "[Metadata] Failed to open file for hashing");
+        e
+    })?;
+
+    let file_size = file.metadata().ok().map(|m| m.len()).unwrap_or(0);
+
+    // Warn about large files (>100MB)
+    if file_size > 100_000_000 {
+        tracing::warn!(
+            file_path = %path.display(),
+            size_mb = file_size as f32 / 1_000_000.0,
+            "[Metadata] Large file detected - hashing may take time"
+        );
+    }
+
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
+    let mut total_bytes = 0u64;
 
     loop {
         let bytes_read = file.read(&mut buffer)?;
@@ -418,10 +473,32 @@ pub fn calculate_file_hash(path: &Path) -> Result<String> {
             break;
         }
         hasher.update(&buffer[..bytes_read]);
+        total_bytes += bytes_read as u64;
     }
 
     let hash = hasher.finalize();
-    Ok(hex::encode(hash))
+    let hash_string = hex::encode(hash);
+
+    let duration = start.elapsed();
+
+    tracing::debug!(
+        file_path = %path.display(),
+        size_bytes = total_bytes,
+        duration_ms = duration.as_millis(),
+        hash = &hash_string[..16], // Log first 16 chars of hash
+        "[Metadata] Hash calculation completed"
+    );
+
+    if duration.as_millis() > 1000 {
+        tracing::warn!(
+            file_path = %path.display(),
+            size_mb = total_bytes as f32 / 1_000_000.0,
+            duration_ms = duration.as_millis(),
+            "[Metadata] Slow hash calculation detected"
+        );
+    }
+
+    Ok(hash_string)
 }
 
 /// Extract metadata from an audio file using Symphonia

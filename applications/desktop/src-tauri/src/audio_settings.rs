@@ -315,7 +315,7 @@ pub async fn set_audio_device(
 
     let now = chrono::Utc::now().timestamp();
 
-    sqlx::query(
+    let query_future = sqlx::query(
         "INSERT INTO user_settings (user_id, key, value, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, key) DO UPDATE SET
@@ -326,9 +326,13 @@ pub async fn set_audio_device(
     .bind("audio.output_device")
     .bind(settings.to_string())
     .bind(now)
-    .execute(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to save device setting: {}", e))?;
+    .execute(&*app_state.pool);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => return Err(format!("Failed to save device setting: {}", e)),
+        Err(_) => return Err("Database query timeout (5s)".to_string()),
+    }
 
     tracing::debug!("[audio_settings] Device setting saved to database");
 
@@ -358,14 +362,19 @@ pub async fn initialize_audio_device(
     tracing::info!("[audio_settings] Initializing audio device from settings");
 
     // Try to load saved device setting
-    let saved_setting = sqlx::query_as::<_, (String,)>(
+    let query_future = sqlx::query_as::<_, (String,)>(
         "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
     )
     .bind(&app_state.user_id)
     .bind("audio.output_device")
-    .fetch_optional(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to load device setting: {}", e))?;
+    .fetch_optional(&*app_state.pool);
+
+    let saved_setting =
+        match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) => return Err(format!("Failed to load device setting: {}", e)),
+            Err(_) => return Err("Database query timeout (5s)".to_string()),
+        };
 
     if let Some((value,)) = saved_setting {
         // Parse saved settings with error recovery
@@ -378,17 +387,25 @@ pub async fn initialize_audio_device(
                     "[audio_settings] Failed to parse device settings JSON - using default device"
                 );
                 // Clear corrupted setting
-                if let Err(e) =
+                let delete_future =
                     sqlx::query("DELETE FROM user_settings WHERE user_id = ? AND key = ?")
                         .bind(&app_state.user_id)
                         .bind("audio.output_device")
-                        .execute(&*app_state.pool)
-                        .await
-                {
-                    tracing::warn!(
-                        error = %e,
-                        "[audio_settings] Failed to delete corrupted device setting"
-                    );
+                        .execute(&*app_state.pool);
+
+                match tokio::time::timeout(std::time::Duration::from_secs(5), delete_future).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => {
+                        tracing::warn!(
+                            error = %e,
+                            "[audio_settings] Failed to delete corrupted device setting"
+                        );
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            "[audio_settings] Database query timeout while deleting corrupted device setting"
+                        );
+                    }
                 }
                 return Ok(());
             }
@@ -420,17 +437,25 @@ pub async fn initialize_audio_device(
                      (3) unknown backend string - falling back to default"
                 );
                 // Clear invalid backend setting
-                if let Err(e) =
+                let delete_future =
                     sqlx::query("DELETE FROM user_settings WHERE user_id = ? AND key = ?")
                         .bind(&app_state.user_id)
                         .bind("audio.output_device")
-                        .execute(&*app_state.pool)
-                        .await
-                {
-                    tracing::warn!(
-                        error = %e,
-                        "[audio_settings] Failed to delete invalid backend setting"
-                    );
+                        .execute(&*app_state.pool);
+
+                match tokio::time::timeout(std::time::Duration::from_secs(5), delete_future).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => {
+                        tracing::warn!(
+                            error = %e,
+                            "[audio_settings] Failed to delete invalid backend setting"
+                        );
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            "[audio_settings] Database query timeout while deleting invalid backend setting"
+                        );
+                    }
                 }
                 return Ok(());
             }
@@ -500,20 +525,28 @@ pub async fn initialize_audio_device(
                 });
 
                 let now = chrono::Utc::now().timestamp();
-                if let Err(e) = sqlx::query(
+                let update_future = sqlx::query(
                     "UPDATE user_settings SET value = ?, updated_at = ? WHERE user_id = ? AND key = ?"
                 )
                 .bind(new_settings.to_string())
                 .bind(now)
                 .bind(&app_state.user_id)
                 .bind("audio.output_device")
-                .execute(&*app_state.pool)
-                .await
-                {
-                    tracing::error!(
-                        error = %e,
-                        "[audio_settings] Failed to update device setting - continuing anyway"
-                    );
+                .execute(&*app_state.pool);
+
+                match tokio::time::timeout(std::time::Duration::from_secs(5), update_future).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => {
+                        tracing::error!(
+                            error = %e,
+                            "[audio_settings] Failed to update device setting - continuing anyway"
+                        );
+                    }
+                    Err(_) => {
+                        tracing::error!(
+                            "[audio_settings] Database query timeout while updating device setting - continuing anyway"
+                        );
+                    }
                 }
 
                 return Ok(());
@@ -603,7 +636,9 @@ pub async fn get_current_audio_device(
 /// This is useful when the user knows they've changed device settings
 /// (e.g., via ASIO control panel) and wants to immediately update.
 #[tauri::command]
-pub async fn refresh_sample_rate(playback: State<'_, PlaybackManager>) -> Result<bool, String> {
+pub async fn refresh_sample_rate(
+    playback: State<'_, PlaybackManager>,
+) -> Result<bool, soul_audio_desktop::AudioError> {
     let start = std::time::Instant::now();
     tracing::debug!("[audio_settings] Refreshing sample rate");
 
@@ -919,7 +954,7 @@ pub async fn set_exclusive_mode(
 
     let now = chrono::Utc::now().timestamp();
 
-    sqlx::query(
+    let query_future = sqlx::query(
         "INSERT INTO user_settings (user_id, key, value, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, key) DO UPDATE SET
@@ -930,9 +965,13 @@ pub async fn set_exclusive_mode(
     .bind("audio.exclusive_mode")
     .bind(settings.to_string())
     .bind(now)
-    .execute(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to save exclusive mode setting: {}", e))?;
+    .execute(&*app_state.pool);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => return Err(format!("Failed to save exclusive mode setting: {}", e)),
+        Err(_) => return Err("Database query timeout (5s)".to_string()),
+    }
 
     let duration = start.elapsed();
     let info = FrontendLatencyInfo::from(latency);
@@ -963,7 +1002,7 @@ pub async fn disable_exclusive_mode(
     let user_id = &app_state.user_id;
     let now = chrono::Utc::now().timestamp();
 
-    sqlx::query(
+    let query_future = sqlx::query(
         "INSERT INTO user_settings (user_id, key, value, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, key) DO UPDATE SET
@@ -974,9 +1013,13 @@ pub async fn disable_exclusive_mode(
     .bind("audio.exclusive_mode")
     .bind("{\"exclusive_mode\": false}")
     .bind(now)
-    .execute(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to save exclusive mode setting: {}", e))?;
+    .execute(&*app_state.pool);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => return Err(format!("Failed to save exclusive mode setting: {}", e)),
+        Err(_) => return Err("Database query timeout (5s)".to_string()),
+    }
 
     let duration = start.elapsed();
     tracing::info!(
@@ -1328,7 +1371,7 @@ pub async fn set_resampling_quality(
     quality: String,
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), soul_audio_desktop::AudioError> {
     tracing::info!(
         quality = %quality,
         "[audio_settings] Setting resampling quality"
@@ -1337,11 +1380,11 @@ pub async fn set_resampling_quality(
     // Validate quality value
     let valid_qualities = ["fast", "balanced", "high", "maximum"];
     if !valid_qualities.contains(&quality.as_str()) {
-        return Err(format!(
+        return Err(soul_audio_desktop::AudioError::DeviceError(format!(
             "Invalid quality '{}'. Must be one of: {}",
             quality,
             valid_qualities.join(", ")
-        ));
+        )));
     }
 
     // Apply to playback manager
@@ -1352,14 +1395,28 @@ pub async fn set_resampling_quality(
     let now = chrono::Utc::now().timestamp();
 
     // Load existing settings
-    let existing = sqlx::query_as::<_, (String,)>(
+    let query_future = sqlx::query_as::<_, (String,)>(
         "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
     )
     .bind(user_id)
     .bind("audio.resampling")
-    .fetch_optional(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to load existing settings: {}", e))?;
+    .fetch_optional(&*app_state.pool);
+
+    let existing = match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(format!(
+                "Failed to load existing settings: {}",
+                e
+            )))
+        }
+        Err(_) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(
+                "Database query timeout (5s)".to_string(),
+            ))
+        }
+    };
 
     let mut settings: serde_json::Value = existing
         .and_then(|(v,)| serde_json::from_str(&v).ok())
@@ -1373,7 +1430,7 @@ pub async fn set_resampling_quality(
 
     settings["quality"] = serde_json::Value::String(quality.clone());
 
-    sqlx::query(
+    let query_future = sqlx::query(
         "INSERT INTO user_settings (user_id, key, value, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, key) DO UPDATE SET
@@ -1384,9 +1441,22 @@ pub async fn set_resampling_quality(
     .bind("audio.resampling")
     .bind(settings.to_string())
     .bind(now)
-    .execute(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to save resampling quality: {}", e))?;
+    .execute(&*app_state.pool);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(format!(
+                "Failed to save resampling quality: {}",
+                e
+            )))
+        }
+        Err(_) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(
+                "Database query timeout (5s)".to_string(),
+            ))
+        }
+    }
 
     tracing::info!(
         quality = %quality,
@@ -1415,7 +1485,7 @@ pub async fn set_resampling_target_rate(
     rate: u32,
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), soul_audio_desktop::AudioError> {
     tracing::info!(
         target_rate = rate,
         mode = if rate == 0 { "auto" } else { "fixed" },
@@ -1424,10 +1494,10 @@ pub async fn set_resampling_target_rate(
 
     // Validate rate (0 = auto, otherwise must be a reasonable sample rate)
     if rate != 0 && (rate < 8000 || rate > 384000) {
-        return Err(format!(
+        return Err(soul_audio_desktop::AudioError::DeviceError(format!(
             "Invalid target rate {}. Must be 0 (auto) or between 8000 and 384000 Hz",
             rate
-        ));
+        )));
     }
 
     // Apply to playback manager
@@ -1438,14 +1508,28 @@ pub async fn set_resampling_target_rate(
     let now = chrono::Utc::now().timestamp();
 
     // Load existing settings
-    let existing = sqlx::query_as::<_, (String,)>(
+    let query_future = sqlx::query_as::<_, (String,)>(
         "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
     )
     .bind(user_id)
     .bind("audio.resampling")
-    .fetch_optional(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to load existing settings: {}", e))?;
+    .fetch_optional(&*app_state.pool);
+
+    let existing = match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(format!(
+                "Failed to load existing settings: {}",
+                e
+            )))
+        }
+        Err(_) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(
+                "Database query timeout (5s)".to_string(),
+            ))
+        }
+    };
 
     let mut settings: serde_json::Value = existing
         .and_then(|(v,)| serde_json::from_str(&v).ok())
@@ -1459,7 +1543,7 @@ pub async fn set_resampling_target_rate(
 
     settings["target_rate"] = serde_json::Value::Number(rate.into());
 
-    sqlx::query(
+    let query_future = sqlx::query(
         "INSERT INTO user_settings (user_id, key, value, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, key) DO UPDATE SET
@@ -1470,9 +1554,22 @@ pub async fn set_resampling_target_rate(
     .bind("audio.resampling")
     .bind(settings.to_string())
     .bind(now)
-    .execute(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to save resampling target rate: {}", e))?;
+    .execute(&*app_state.pool);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(format!(
+                "Failed to save resampling target rate: {}",
+                e
+            )))
+        }
+        Err(_) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(
+                "Database query timeout (5s)".to_string(),
+            ))
+        }
+    }
 
     tracing::info!(
         target_rate = rate,
@@ -1504,7 +1601,7 @@ pub async fn set_resampling_backend(
     backend: String,
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), soul_audio_desktop::AudioError> {
     tracing::info!(
         backend = %backend,
         "[audio_settings] Setting resampling backend"
@@ -1513,11 +1610,11 @@ pub async fn set_resampling_backend(
     // Validate backend value
     let valid_backends = ["auto", "rubato", "r8brain"];
     if !valid_backends.contains(&backend.as_str()) {
-        return Err(format!(
+        return Err(soul_audio_desktop::AudioError::DeviceError(format!(
             "Invalid backend '{}'. Must be one of: {}",
             backend,
             valid_backends.join(", ")
-        ));
+        )));
     }
 
     // Check if r8brain is available when explicitly requested
@@ -1525,7 +1622,9 @@ pub async fn set_resampling_backend(
     if backend == "r8brain" {
         #[cfg(not(feature = "r8brain"))]
         {
-            return Err("r8brain backend is not available in this build".to_string());
+            return Err(soul_audio_desktop::AudioError::DeviceError(
+                "r8brain backend is not available in this build".to_string(),
+            ));
         }
     }
 
@@ -1537,14 +1636,28 @@ pub async fn set_resampling_backend(
     let now = chrono::Utc::now().timestamp();
 
     // Load existing settings
-    let existing = sqlx::query_as::<_, (String,)>(
+    let query_future = sqlx::query_as::<_, (String,)>(
         "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
     )
     .bind(user_id)
     .bind("audio.resampling")
-    .fetch_optional(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to load existing settings: {}", e))?;
+    .fetch_optional(&*app_state.pool);
+
+    let existing = match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(format!(
+                "Failed to load existing settings: {}",
+                e
+            )))
+        }
+        Err(_) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(
+                "Database query timeout (5s)".to_string(),
+            ))
+        }
+    };
 
     let mut settings: serde_json::Value = existing
         .and_then(|(v,)| serde_json::from_str(&v).ok())
@@ -1560,7 +1673,7 @@ pub async fn set_resampling_backend(
     let backend_copy = backend.clone();
     settings["backend"] = serde_json::Value::String(backend);
 
-    sqlx::query(
+    let query_future = sqlx::query(
         "INSERT INTO user_settings (user_id, key, value, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, key) DO UPDATE SET
@@ -1571,9 +1684,22 @@ pub async fn set_resampling_backend(
     .bind("audio.resampling")
     .bind(settings.to_string())
     .bind(now)
-    .execute(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to save resampling backend: {}", e))?;
+    .execute(&*app_state.pool);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(format!(
+                "Failed to save resampling backend: {}",
+                e
+            )))
+        }
+        Err(_) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(
+                "Database query timeout (5s)".to_string(),
+            ))
+        }
+    }
 
     tracing::info!(
         backend = %backend_copy,
@@ -1601,7 +1727,7 @@ pub async fn set_resampling_settings(
     backend: String,
     playback: State<'_, PlaybackManager>,
     app_state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), soul_audio_desktop::AudioError> {
     tracing::info!(
         quality = %quality,
         target_rate = target_rate,
@@ -1612,27 +1738,27 @@ pub async fn set_resampling_settings(
     // Validate all values
     let valid_qualities = ["fast", "balanced", "high", "maximum"];
     if !valid_qualities.contains(&quality.as_str()) {
-        return Err(format!(
+        return Err(soul_audio_desktop::AudioError::DeviceError(format!(
             "Invalid quality '{}'. Must be one of: {}",
             quality,
             valid_qualities.join(", ")
-        ));
+        )));
     }
 
     if target_rate != 0 && (target_rate < 8000 || target_rate > 384000) {
-        return Err(format!(
+        return Err(soul_audio_desktop::AudioError::DeviceError(format!(
             "Invalid target rate {}. Must be 0 (auto) or between 8000 and 384000 Hz",
             target_rate
-        ));
+        )));
     }
 
     let valid_backends = ["auto", "rubato", "r8brain"];
     if !valid_backends.contains(&backend.as_str()) {
-        return Err(format!(
+        return Err(soul_audio_desktop::AudioError::DeviceError(format!(
             "Invalid backend '{}'. Must be one of: {}",
             backend,
             valid_backends.join(", ")
-        ));
+        )));
     }
 
     // Apply to playback manager
@@ -1650,7 +1776,7 @@ pub async fn set_resampling_settings(
 
     let now = chrono::Utc::now().timestamp();
 
-    sqlx::query(
+    let query_future = sqlx::query(
         "INSERT INTO user_settings (user_id, key, value, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, key) DO UPDATE SET
@@ -1661,9 +1787,22 @@ pub async fn set_resampling_settings(
     .bind("audio.resampling")
     .bind(settings.to_string())
     .bind(now)
-    .execute(&*app_state.pool)
-    .await
-    .map_err(|e| format!("Failed to save resampling settings: {}", e))?;
+    .execute(&*app_state.pool);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), query_future).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(format!(
+                "Failed to save resampling settings: {}",
+                e
+            )))
+        }
+        Err(_) => {
+            return Err(soul_audio_desktop::AudioError::DeviceError(
+                "Database query timeout (5s)".to_string(),
+            ))
+        }
+    }
 
     tracing::info!(
         quality = %quality,
@@ -1798,4 +1937,19 @@ pub async fn set_headroom_preamp(
 ) -> Result<(), String> {
     playback.set_headroom_preamp_db(preamp_db);
     Ok(())
+}
+
+// ===========================================================================
+// Device Monitoring Metrics
+// ===========================================================================
+
+/// Get device monitoring metrics
+///
+/// Returns current metrics for device event counts and switch timing.
+/// Thread-safe and non-blocking.
+#[tauri::command]
+pub async fn get_device_metrics(
+    playback: State<'_, PlaybackManager>,
+) -> Result<crate::playback::DeviceMetricsSnapshot, String> {
+    Ok(playback.get_device_metrics())
 }
