@@ -802,14 +802,14 @@ jobs:
   create-draft-release:
     name: Create Draft Release
     needs: [check-release-exists, build-windows, build-linux-tauri, build-linux-appimage, build-linux-flatpak, build-macos]
-    # All builds must succeed before creating draft release
+    # Core builds must succeed; Flatpak is optional (often fails due to disk space in container)
     if: |
       always() &&
       needs.check-release-exists.outputs.should_continue == 'true' &&
       needs.build-windows.result == 'success' &&
       needs.build-linux-tauri.result == 'success' &&
       needs.build-linux-appimage.result == 'success' &&
-      needs.build-linux-flatpak.result == 'success' &&
+      (needs.build-linux-flatpak.result == 'success' || needs.build-linux-flatpak.result == 'failure') &&
       needs.build-macos.result == 'success'
     runs-on: ubuntu-latest
     permissions:
