@@ -278,6 +278,13 @@ impl LocalAudioSource {
     pub fn new(path: impl AsRef<Path>, target_sample_rate: u32) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
+        // Log buffer settings for debugging - this confirms new code is running
+        tracing::info!(
+            "[LocalAudioSource] INIT: MIN_BUFFER_SAMPLES={} (~{}ms at 48kHz stereo)",
+            MIN_BUFFER_SAMPLES,
+            MIN_BUFFER_SAMPLES * 1000 / 96000
+        );
+
         // Open the file and probe it to get metadata
         let file = File::open(&path)
             .map_err(|e| PlaybackError::AudioSource(format!("Failed to open file: {}", e)))?;
