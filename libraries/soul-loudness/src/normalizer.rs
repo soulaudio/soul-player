@@ -460,4 +460,676 @@ mod tests {
         let gain_db = normalizer.effective_gain_db();
         assert!((gain_db - (-5.0)).abs() < 0.1);
     }
+
+    // ==================== Fallback Behavior Tests ====================
+
+    /// Test: Track with no ReplayGain tags should use fallback gain
+    #[test]
+    fn test_no_replaygain_tags_uses_fallback() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        // No track or album gain set - should use fallback
+        normalizer.set_fallback_gain_db(-3.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - (-3.0)).abs() < 0.1,
+            "Expected fallback gain -3.0 dB, got {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Fallback gain with default value (0 dB)
+    #[test]
+    fn test_no_tags_default_fallback_is_zero() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        // No tags, no custom fallback - should be 0 dB
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - 0.0).abs() < 0.1,
+            "Expected default fallback 0.0 dB, got {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Album mode with no tags falls back to fallback_gain_db
+    #[test]
+    fn test_album_mode_no_tags_uses_fallback() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainAlbum);
+        normalizer.set_prevent_clipping(false);
+        normalizer.set_fallback_gain_db(-6.0);
+
+        // No album or track gain set
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - (-6.0)).abs() < 0.1,
+            "Album mode without tags should use fallback"
+        );
+    }
+
+    /// Test: EBU R128 mode with no tags applies reference adjustment to fallback
+    #[test]
+    fn test_ebu_mode_no_tags_adjusts_fallback() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::EbuR128Broadcast);
+        normalizer.set_prevent_clipping(false);
+        normalizer.set_fallback_gain_db(0.0);
+
+        // EBU R128 broadcast is -23 LUFS, RG reference is -18 LUFS
+        // Adjustment: -23 - (-18) = -5 dB
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - (-5.0)).abs() < 0.1,
+            "EBU mode should apply -5 dB adjustment to fallback, got {} dB",
+            gain_db
+        );
+    }
+
+    // ==================== Track Gain vs Album Gain Preference Tests ====================
+
+    /// Test: Album mode prefers album gain over track gain
+    #[test]
+    fn test_album_mode_prefers_album_gain() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainAlbum);
+        normalizer.set_prevent_clipping(false);
+
+        // Set both track and album gain
+        normalizer.set_track_gain(-5.0, -6.0);
+        normalizer.set_album_gain(-8.0, -4.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - (-8.0)).abs() < 0.1,
+            "Album mode should prefer album gain (-8 dB), got {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Track mode always uses track gain, ignoring album gain
+    #[test]
+    fn test_track_mode_uses_track_gain_only() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        normalizer.set_track_gain(-5.0, -6.0);
+        normalizer.set_album_gain(-8.0, -4.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - (-5.0)).abs() < 0.1,
+            "Track mode should use track gain (-5 dB), got {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Album mode uses album peak for clipping prevention
+    #[test]
+    fn test_album_mode_uses_album_peak() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainAlbum);
+        normalizer.set_prevent_clipping(true);
+        normalizer.set_use_internal_limiter(false); // Test gain limiting only
+
+        // Album gain would cause clipping: -1 dBFS peak + 5 dB gain = +4 dBTP
+        normalizer.set_track_gain(3.0, -6.0);
+        normalizer.set_album_gain(5.0, -1.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        // Safe gain should be limited to +1 dB to prevent clipping
+        assert!(
+            (gain_db - 1.0).abs() < 0.1,
+            "Should limit gain to prevent clipping, got {} dB",
+            gain_db
+        );
+    }
+
+    // ==================== Extreme Gain Values Tests ====================
+
+    /// Test: Extreme positive gain (+20 dB)
+    #[test]
+    fn test_extreme_positive_gain() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        // +20 dB gain (very quiet track)
+        normalizer.set_track_gain(20.0, -30.0);
+
+        // +20 dB = 10x amplitude
+        let mut samples = vec![0.05, 0.05];
+        normalizer.process(&mut samples);
+
+        let expected = 0.05 * 10.0; // 0.5
+        for sample in &samples {
+            assert!(
+                (*sample - expected).abs() < 0.01,
+                "Expected ~{}, got {}",
+                expected,
+                sample
+            );
+        }
+    }
+
+    /// Test: Extreme negative gain (-20 dB)
+    #[test]
+    fn test_extreme_negative_gain() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        // -20 dB gain (very loud track)
+        normalizer.set_track_gain(-20.0, -0.5);
+
+        // -20 dB = 0.1x amplitude
+        let mut samples = vec![0.5, 0.5];
+        normalizer.process(&mut samples);
+
+        let expected = 0.5 * 0.1; // 0.05
+        for sample in &samples {
+            assert!(
+                (*sample - expected).abs() < 0.01,
+                "Expected ~{}, got {}",
+                expected,
+                sample
+            );
+        }
+    }
+
+    /// Test: Zero gain passthrough (track at reference level)
+    #[test]
+    fn test_zero_gain_passthrough() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        normalizer.set_track_gain(0.0, -6.0);
+
+        let mut samples = vec![0.5, -0.5, 0.3, -0.3];
+        let original = samples.clone();
+        normalizer.process(&mut samples);
+
+        for (orig, processed) in original.iter().zip(samples.iter()) {
+            assert!(
+                (orig - processed).abs() < 0.001,
+                "Zero gain should pass through unchanged"
+            );
+        }
+    }
+
+    // ==================== Clipping Prevention Tests ====================
+
+    /// Test: High gain + loud track triggers clipping prevention
+    #[test]
+    fn test_clipping_prevention_high_gain_loud_track() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(true);
+        normalizer.set_use_internal_limiter(false); // Test gain limiting only
+
+        // Track with -1 dBFS peak and +10 dB gain would clip
+        // Safe gain should be limited to +1 dB (-peak_dbfs)
+        normalizer.set_track_gain(10.0, -1.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - 1.0).abs() < 0.1,
+            "Gain should be limited to +1 dB to prevent clipping, got {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Clipping prevention disabled allows over-unity gain
+    #[test]
+    fn test_clipping_prevention_disabled_allows_clipping() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        // Would clip but prevention is disabled
+        normalizer.set_track_gain(10.0, -1.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - 10.0).abs() < 0.1,
+            "Without clipping prevention, full gain should apply: {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Clipping prevention with 0 dBFS peak
+    #[test]
+    fn test_clipping_prevention_zero_peak() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(true);
+        normalizer.set_use_internal_limiter(false);
+
+        // Peak at 0 dBFS - any positive gain would clip
+        normalizer.set_track_gain(5.0, 0.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - 0.0).abs() < 0.1,
+            "With 0 dBFS peak, gain should be limited to 0 dB, got {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Track with headroom allows full gain
+    #[test]
+    fn test_track_with_headroom_allows_full_gain() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(true);
+        normalizer.set_use_internal_limiter(false);
+
+        // Track with -10 dBFS peak and +5 dB gain = -5 dBTP (safe)
+        normalizer.set_track_gain(5.0, -10.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - 5.0).abs() < 0.1,
+            "Track with headroom should allow full gain: {} dB",
+            gain_db
+        );
+    }
+
+    // ==================== Preamp Interaction Tests ====================
+
+    /// Test: Preamp combined with track gain
+    #[test]
+    fn test_preamp_combines_with_track_gain() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        normalizer.set_track_gain(3.0, -10.0);
+        normalizer.set_preamp_db(3.0);
+
+        // Total: 3 + 3 = 6 dB
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - 6.0).abs() < 0.1,
+            "Preamp + track gain should combine: {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Preamp triggers clipping prevention
+    #[test]
+    fn test_preamp_triggers_clipping_prevention() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(true);
+        normalizer.set_use_internal_limiter(false);
+
+        // Track gain alone is safe, but preamp pushes over
+        normalizer.set_track_gain(2.0, -3.0); // 2 + (-3) = -1 dBTP, safe
+        normalizer.set_preamp_db(5.0); // 2 + 5 + (-3) = +4 dBTP, would clip
+
+        let gain_db = normalizer.effective_gain_db();
+        // Should be limited to 3 dB (to get 0 dBTP)
+        assert!(
+            (gain_db - 3.0).abs() < 0.1,
+            "Preamp should trigger clipping prevention, got {} dB",
+            gain_db
+        );
+    }
+
+    /// Test: Negative preamp reduces overall gain
+    #[test]
+    fn test_negative_preamp_reduces_gain() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        normalizer.set_track_gain(6.0, -10.0);
+        normalizer.set_preamp_db(-3.0);
+
+        // Total: 6 - 3 = 3 dB
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - 3.0).abs() < 0.1,
+            "Negative preamp should reduce gain: {} dB",
+            gain_db
+        );
+    }
+
+    // ==================== Gain Changes Between Tracks Tests ====================
+
+    /// Test: Switching tracks updates gain correctly
+    #[test]
+    fn test_gain_changes_between_tracks() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        // First track
+        normalizer.set_track_gain(-5.0, -6.0);
+        let gain1 = normalizer.effective_gain_db();
+        assert!(
+            (gain1 - (-5.0)).abs() < 0.1,
+            "First track gain should be -5 dB"
+        );
+
+        // Second track (clear and set new gain)
+        normalizer.clear_gains();
+        normalizer.set_track_gain(3.0, -10.0);
+        let gain2 = normalizer.effective_gain_db();
+        assert!(
+            (gain2 - 3.0).abs() < 0.1,
+            "Second track gain should be 3 dB"
+        );
+    }
+
+    /// Test: Clear gains resets to fallback
+    #[test]
+    fn test_clear_gains_resets_to_fallback() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+        normalizer.set_fallback_gain_db(-2.0);
+
+        normalizer.set_track_gain(5.0, -6.0);
+        let _ = normalizer.effective_gain_db(); // Process
+
+        normalizer.clear_gains();
+        let gain = normalizer.effective_gain_db();
+        assert!(
+            (gain - (-2.0)).abs() < 0.1,
+            "After clear, should use fallback gain"
+        );
+    }
+
+    /// Test: Reset clears limiter state
+    #[test]
+    fn test_reset_clears_limiter_state() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(true);
+        normalizer.set_track_gain(10.0, -2.0);
+
+        // Process loud signal to engage limiter
+        let mut samples = vec![0.9_f32; 1000];
+        normalizer.process(&mut samples);
+
+        // Reset should clear limiter state
+        normalizer.reset();
+
+        // Latency should still be reported correctly
+        assert!(normalizer.latency_samples() > 0);
+    }
+
+    // ==================== Target Loudness Changes Tests ====================
+
+    /// Test: Switching from track to album mode
+    #[test]
+    fn test_switch_track_to_album_mode() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_prevent_clipping(false);
+
+        normalizer.set_track_gain(-3.0, -6.0);
+        normalizer.set_album_gain(-7.0, -4.0);
+
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        let track_gain = normalizer.effective_gain_db();
+        assert!((track_gain - (-3.0)).abs() < 0.1);
+
+        normalizer.set_mode(NormalizationMode::ReplayGainAlbum);
+        let album_gain = normalizer.effective_gain_db();
+        assert!((album_gain - (-7.0)).abs() < 0.1);
+    }
+
+    /// Test: EBU R128 streaming vs broadcast
+    #[test]
+    fn test_ebu_streaming_vs_broadcast() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_prevent_clipping(false);
+        normalizer.set_track_gain(0.0, -10.0);
+
+        // Broadcast: -23 LUFS (5 dB quieter than RG reference)
+        normalizer.set_mode(NormalizationMode::EbuR128Broadcast);
+        let broadcast_gain = normalizer.effective_gain_db();
+        assert!(
+            (broadcast_gain - (-5.0)).abs() < 0.1,
+            "Broadcast should be -5 dB adjustment"
+        );
+
+        // Streaming: -14 LUFS (4 dB louder than RG reference)
+        normalizer.set_mode(NormalizationMode::EbuR128Streaming);
+        let streaming_gain = normalizer.effective_gain_db();
+        assert!(
+            (streaming_gain - 4.0).abs() < 0.1,
+            "Streaming should be +4 dB adjustment"
+        );
+    }
+
+    /// Test: Disabled mode ignores all settings
+    #[test]
+    fn test_disabled_mode_ignores_settings() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::Disabled);
+
+        normalizer.set_track_gain(10.0, -1.0);
+        normalizer.set_album_gain(15.0, -0.5);
+        normalizer.set_preamp_db(12.0);
+
+        let mut samples = vec![0.5, -0.5];
+        let original = samples.clone();
+        normalizer.process(&mut samples);
+
+        for (orig, processed) in original.iter().zip(samples.iter()) {
+            assert!(
+                (orig - processed).abs() < 0.001,
+                "Disabled mode should pass through unchanged"
+            );
+        }
+    }
+
+    // ==================== Internal Limiter Control Tests ====================
+
+    /// Test: External limiter mode disables internal limiter
+    #[test]
+    fn test_external_limiter_mode() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(true);
+        normalizer.set_use_internal_limiter(false);
+
+        assert!(!normalizer.uses_internal_limiter());
+        assert_eq!(
+            normalizer.latency_samples(),
+            0,
+            "External limiter mode should report 0 latency"
+        );
+    }
+
+    /// Test: Internal limiter mode reports latency
+    #[test]
+    fn test_internal_limiter_reports_latency() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(true);
+        normalizer.set_use_internal_limiter(true);
+
+        assert!(normalizer.uses_internal_limiter());
+        assert!(
+            normalizer.latency_samples() > 0,
+            "Internal limiter should report latency"
+        );
+    }
+
+    // ==================== ReplayGainTags Integration Tests ====================
+
+    /// Test: Setting gains from ReplayGainTags struct
+    #[test]
+    fn test_set_gains_from_tags() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+
+        let tags = ReplayGainTags {
+            track_gain: Some(-5.5),
+            track_peak: Some(0.5), // Linear peak ~-6 dBFS
+            album_gain: Some(-3.0),
+            album_peak: Some(0.707), // Linear peak ~-3 dBFS
+            reference_loudness: Some(-18.0),
+        };
+
+        normalizer.set_gains_from_tags(&tags);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - (-5.5)).abs() < 0.1,
+            "Should use track gain from tags"
+        );
+    }
+
+    /// Test: Tags with only album gain in track mode uses fallback
+    #[test]
+    fn test_tags_album_only_in_track_mode() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+        normalizer.set_fallback_gain_db(-1.0);
+
+        let tags = ReplayGainTags {
+            track_gain: None,
+            track_peak: None,
+            album_gain: Some(-5.0),
+            album_peak: Some(0.707),
+            reference_loudness: Some(-18.0),
+        };
+
+        normalizer.set_gains_from_tags(&tags);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - (-1.0)).abs() < 0.1,
+            "Track mode with no track gain should use fallback"
+        );
+    }
+
+    // ==================== Edge Cases ====================
+
+    /// Test: Empty buffer processing
+    #[test]
+    fn test_empty_buffer_processing() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_track_gain(6.0, -6.0);
+
+        let mut empty: Vec<f32> = vec![];
+        normalizer.process(&mut empty); // Should not panic
+        assert_eq!(empty.len(), 0);
+    }
+
+    /// Test: Single sample processing
+    #[test]
+    fn test_single_sample_processing() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 1);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+        normalizer.set_track_gain(6.0, -20.0); // +6 dB = 2x
+
+        let mut single = vec![0.25_f32];
+        normalizer.process(&mut single);
+
+        assert!(
+            (single[0] - 0.5).abs() < 0.01,
+            "Single sample should be processed correctly"
+        );
+    }
+
+    /// Test: Very small gain values
+    #[test]
+    fn test_very_small_gain() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+        normalizer.set_track_gain(0.001, -10.0);
+
+        let gain_db = normalizer.effective_gain_db();
+        assert!(
+            (gain_db - 0.001).abs() < 0.01,
+            "Very small gain should be applied correctly"
+        );
+    }
+
+    /// Test: Gain dirty flag optimization
+    #[test]
+    fn test_gain_dirty_flag_optimization() {
+        let mut normalizer = LoudnessNormalizer::new(44100, 2);
+        normalizer.set_mode(NormalizationMode::ReplayGainTrack);
+        normalizer.set_prevent_clipping(false);
+        normalizer.set_track_gain(3.0, -10.0);
+
+        // First call calculates
+        let gain1 = normalizer.effective_gain_db();
+
+        // Second call without changes should return same value (cached)
+        let gain2 = normalizer.effective_gain_db();
+        assert_eq!(gain1, gain2, "Cached gain should be same");
+
+        // Change should trigger recalculation
+        normalizer.set_track_gain(5.0, -10.0);
+        let gain3 = normalizer.effective_gain_db();
+        assert!(
+            (gain3 - gain1).abs() > 1.0,
+            "Should recalculate after change"
+        );
+    }
+
+    /// Test: Mode string roundtrip
+    #[test]
+    fn test_mode_string_roundtrip() {
+        let modes = [
+            NormalizationMode::Disabled,
+            NormalizationMode::ReplayGainTrack,
+            NormalizationMode::ReplayGainAlbum,
+            NormalizationMode::EbuR128Broadcast,
+            NormalizationMode::EbuR128Streaming,
+        ];
+
+        for mode in modes {
+            let s = mode.as_str();
+            let parsed = NormalizationMode::from_str(s);
+            assert_eq!(
+                parsed,
+                Some(mode),
+                "Mode {:?} should roundtrip through string",
+                mode
+            );
+        }
+    }
+
+    /// Test: Reference LUFS for all modes
+    #[test]
+    fn test_reference_lufs_all_modes() {
+        assert_eq!(NormalizationMode::Disabled.reference_lufs(), None);
+        assert_eq!(
+            NormalizationMode::ReplayGainTrack.reference_lufs(),
+            Some(-18.0)
+        );
+        assert_eq!(
+            NormalizationMode::ReplayGainAlbum.reference_lufs(),
+            Some(-18.0)
+        );
+        assert_eq!(
+            NormalizationMode::EbuR128Broadcast.reference_lufs(),
+            Some(-23.0)
+        );
+        assert_eq!(
+            NormalizationMode::EbuR128Streaming.reference_lufs(),
+            Some(-14.0)
+        );
+    }
 }

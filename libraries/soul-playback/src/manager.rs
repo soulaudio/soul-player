@@ -3694,7 +3694,11 @@ mod tests {
         // Emit same state again - should be suppressed
         manager.emit_state_changed(PlaybackState::Playing);
         let events = manager.drain_events();
-        assert_eq!(events.len(), 0, "Duplicate state change should be suppressed");
+        assert_eq!(
+            events.len(),
+            0,
+            "Duplicate state change should be suppressed"
+        );
 
         // Emit different state - should emit
         manager.emit_state_changed(PlaybackState::Paused);
@@ -3759,11 +3763,7 @@ mod tests {
         // Emit larger progress change (>= 5%) - should emit
         manager.emit_crossfade_progress(0.06, false);
         let events = manager.drain_events();
-        assert_eq!(
-            events.len(),
-            1,
-            "Progress change >= 5% should emit"
-        );
+        assert_eq!(events.len(), 1, "Progress change >= 5% should emit");
     }
 
     #[test]
@@ -3818,11 +3818,7 @@ mod tests {
         // The last event should be one of the later ones
         if let Some(PlaybackEvent::Error { message }) = events.last() {
             // Parse the index from the message
-            let idx: usize = message
-                .strip_prefix("error_")
-                .unwrap()
-                .parse()
-                .unwrap();
+            let idx: usize = message.strip_prefix("error_").unwrap().parse().unwrap();
             assert!(
                 idx > EVENT_OVERFLOW_DROP_COUNT,
                 "Should have kept recent events, not oldest"

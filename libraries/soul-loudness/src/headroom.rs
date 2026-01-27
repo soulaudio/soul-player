@@ -905,4 +905,563 @@ mod tests {
             assert!((sample - expected).abs() < 0.01);
         }
     }
+
+    // ==================== Auto Mode with Various Gain Combinations ====================
+
+    /// Test: Auto mode with only ReplayGain (no EQ or additional gains)
+    #[test]
+    fn test_auto_mode_replaygain_only() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(8.0);
+        manager.set_preamp_db(0.0);
+        manager.set_eq_max_boost_db(0.0);
+        manager.set_additional_gain_db(0.0);
+
+        // Total: 8 dB, headroom should be -8 dB
+        assert!((manager.total_potential_gain_db() - 8.0).abs() < 0.001);
+        assert!((manager.attenuation_db() - (-8.0)).abs() < 0.1);
+    }
+
+    /// Test: Auto mode with only EQ boost (no ReplayGain)
+    #[test]
+    fn test_auto_mode_eq_only() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(0.0);
+        manager.set_preamp_db(0.0);
+        manager.set_eq_max_boost_db(9.0);
+        manager.set_additional_gain_db(0.0);
+
+        // Total: 9 dB from EQ
+        assert!((manager.total_potential_gain_db() - 9.0).abs() < 0.001);
+        assert!((manager.attenuation_db() - (-9.0)).abs() < 0.1);
+    }
+
+    /// Test: Auto mode with all gain sources active
+    #[test]
+    fn test_auto_mode_all_gains_active() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(4.0);
+        manager.set_preamp_db(2.0);
+        manager.set_eq_max_boost_db(5.0);
+        manager.set_additional_gain_db(3.0);
+
+        // Total: 4 + 2 + 5 + 3 = 14 dB
+        assert!((manager.total_potential_gain_db() - 14.0).abs() < 0.001);
+        assert!((manager.attenuation_db() - (-14.0)).abs() < 0.1);
+    }
+
+    /// Test: Auto mode with mixed positive and negative gains
+    #[test]
+    fn test_auto_mode_mixed_gains() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(-3.0); // Negative (loud track)
+        manager.set_preamp_db(5.0); // User boost
+        manager.set_eq_max_boost_db(4.0); // EQ boost
+        manager.set_additional_gain_db(-2.0); // Compressor cut
+
+        // Total: -3 + 5 + 4 + (-2) = 4 dB
+        assert!((manager.total_potential_gain_db() - 4.0).abs() < 0.001);
+        assert!((manager.attenuation_db() - (-4.0)).abs() < 0.1);
+    }
+
+    /// Test: Auto mode resulting in zero or negative total gain
+    #[test]
+    fn test_auto_mode_no_attenuation_needed() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(-10.0);
+        manager.set_preamp_db(0.0);
+        manager.set_eq_max_boost_db(2.0);
+        manager.set_additional_gain_db(0.0);
+
+        // Total: -10 + 2 = -8 dB (negative, no attenuation needed)
+        assert!(manager.total_potential_gain_db() < 0.0);
+        assert!((manager.attenuation_linear() - 1.0).abs() < 0.001);
+    }
+
+    /// Test: Auto mode with extremely high gains
+    #[test]
+    fn test_auto_mode_extreme_gains() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(20.0);
+        manager.set_preamp_db(12.0);
+        manager.set_eq_max_boost_db(15.0);
+        manager.set_additional_gain_db(10.0);
+
+        // Total: 57 dB
+        assert!((manager.total_potential_gain_db() - 57.0).abs() < 0.001);
+
+        let attn = manager.attenuation_linear();
+        // Very small attenuation factor expected
+        assert!(
+            attn < 0.01 && attn > 0.0,
+            "Extreme gains should produce very small attenuation factor"
+        );
+    }
+
+    // ==================== Manual Mode Tests ====================
+
+    /// Test: Manual mode respects user setting regardless of gains
+    #[test]
+    fn test_manual_mode_respects_user_setting() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Manual(-4.0));
+
+        // Set high gains that would require more attenuation in auto mode
+        manager.set_replaygain_db(15.0);
+        manager.set_preamp_db(10.0);
+        manager.set_eq_max_boost_db(8.0);
+
+        // Manual mode should still use -4 dB
+        assert!(
+            (manager.attenuation_db() - (-4.0)).abs() < 0.1,
+            "Manual mode should use specified value regardless of gains"
+        );
+    }
+
+    /// Test: Manual mode with zero headroom
+    #[test]
+    fn test_manual_mode_zero_headroom() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Manual(0.0));
+
+        manager.set_replaygain_db(10.0);
+        manager.set_eq_max_boost_db(6.0);
+
+        // Manual 0 dB = no attenuation
+        assert!(
+            (manager.attenuation_linear() - 1.0).abs() < 0.001,
+            "Manual 0 dB should result in no attenuation"
+        );
+    }
+
+    /// Test: Manual mode positive value is clamped to 0 or negative
+    #[test]
+    fn test_manual_mode_positive_value_clamped() {
+        let mut manager = HeadroomManager::new();
+        // Positive values don't make sense for headroom (gain, not attenuation)
+        manager.set_mode(HeadroomMode::Manual(5.0));
+
+        // Implementation clamps to 0 or below for safety
+        let attn = manager.attenuation_db();
+        assert!(
+            attn <= 0.0,
+            "Manual mode should clamp positive values to 0 or negative"
+        );
+    }
+
+    /// Test: Manual mode with deep attenuation
+    #[test]
+    fn test_manual_mode_deep_attenuation() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Manual(-20.0));
+
+        let attn = manager.attenuation_db();
+        assert!(
+            (attn - (-20.0)).abs() < 0.1,
+            "Manual mode should allow deep attenuation"
+        );
+
+        // -20 dB = 0.1 linear
+        let expected_linear = 10.0_f32.powf(-20.0 / 20.0);
+        assert!((manager.attenuation_linear() - expected_linear).abs() < 0.01);
+    }
+
+    // ==================== EQ Boost Accounting Tests ====================
+
+    /// Test: EQ boost only counts positive values
+    #[test]
+    fn test_eq_boost_ignores_negative() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+        manager.set_replaygain_db(0.0);
+        manager.set_preamp_db(0.0);
+
+        // Set negative EQ boost (should be clamped to 0)
+        manager.set_eq_max_boost_db(-6.0);
+
+        // No positive gain, so no attenuation
+        assert!(
+            (manager.total_potential_gain_db() - 0.0).abs() < 0.001,
+            "Negative EQ should not add to headroom"
+        );
+        assert!((manager.attenuation_linear() - 1.0).abs() < 0.001);
+    }
+
+    /// Test: EQ boost from multiple bands (max value)
+    #[test]
+    fn test_eq_boost_max_from_bands() {
+        // Using the calculate_eq_headroom helper
+        let bands = [2.0, -3.0, 6.0, 1.0, -2.0, 4.0];
+        let headroom = calculate_eq_headroom(&bands);
+
+        // Max positive is 6.0
+        assert!(
+            (headroom - 6.0).abs() < 0.001,
+            "Should use max positive EQ band"
+        );
+    }
+
+    /// Test: EQ boost with all negative bands
+    #[test]
+    fn test_eq_boost_all_negative() {
+        let bands = [-2.0, -4.0, -1.0, -3.0];
+        let headroom = calculate_eq_headroom(&bands);
+
+        assert!(
+            (headroom - 0.0).abs() < 0.001,
+            "All negative bands should result in 0 headroom"
+        );
+    }
+
+    /// Test: EQ boost with single band
+    #[test]
+    fn test_eq_boost_single_band() {
+        let positive_band = [8.5];
+        let negative_band = [-5.0];
+
+        assert!((calculate_eq_headroom(&positive_band) - 8.5).abs() < 0.001);
+        assert!((calculate_eq_headroom(&negative_band) - 0.0).abs() < 0.001);
+    }
+
+    /// Test: EQ headroom calculation with empty array
+    #[test]
+    fn test_eq_boost_empty_bands() {
+        let empty: [f64; 0] = [];
+        let headroom = calculate_eq_headroom(&empty);
+
+        assert!((headroom - 0.0).abs() < 0.001, "Empty bands should give 0");
+    }
+
+    // ==================== Multiple Gain Sources Interaction ====================
+
+    /// Test: Additional gain accumulates with EQ boost
+    #[test]
+    fn test_additional_gain_accumulates_with_eq() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(0.0);
+        manager.set_preamp_db(0.0);
+        manager.set_eq_max_boost_db(5.0);
+        manager.set_additional_gain_db(3.0);
+
+        // 5 + 3 = 8 dB
+        assert!((manager.total_potential_gain_db() - 8.0).abs() < 0.001);
+    }
+
+    /// Test: All gain sources combine correctly
+    #[test]
+    fn test_all_gain_sources_combine() {
+        let eq_gains = [3.0, 7.0, -2.0, 4.0]; // Max: 7.0
+        let other_gains = [2.0, -1.0, 4.0]; // Sum positive: 6.0
+
+        let headroom = calculate_auto_headroom(5.0, 3.0, &eq_gains, &other_gains);
+
+        // RG=5, preamp=3, EQ max=7, other positive sum=6 -> total=21, headroom=-21
+        assert!(
+            (headroom - (-21.0)).abs() < 0.001,
+            "All gains should combine correctly"
+        );
+    }
+
+    /// Test: calculate_auto_headroom with all zeros
+    #[test]
+    fn test_auto_headroom_all_zeros() {
+        let headroom = calculate_auto_headroom(0.0, 0.0, &[], &[]);
+        assert!(
+            (headroom - 0.0).abs() < 0.001,
+            "All zeros should give no headroom"
+        );
+    }
+
+    /// Test: calculate_auto_headroom with all negative
+    #[test]
+    fn test_auto_headroom_all_negative() {
+        let headroom = calculate_auto_headroom(-5.0, -2.0, &[-3.0, -1.0], &[-2.0]);
+        assert!(
+            (headroom - 0.0).abs() < 0.001,
+            "All negative should give no headroom (0)"
+        );
+    }
+
+    // ==================== Coordination with Normalizer Tests ====================
+
+    /// Test: exclude_replaygain setting works in auto mode
+    #[test]
+    fn test_exclude_rg_in_auto_mode() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(10.0);
+        manager.set_preamp_db(5.0);
+        manager.set_eq_max_boost_db(6.0);
+
+        // Without exclusion: 10 + 5 + 6 = 21 dB
+        assert!((manager.total_potential_gain_db() - 21.0).abs() < 0.001);
+
+        // With exclusion: only 6 dB (EQ)
+        manager.set_exclude_replaygain(true);
+        assert!((manager.total_potential_gain_db() - 6.0).abs() < 0.001);
+    }
+
+    /// Test: exclude_replaygain has no effect in manual mode
+    #[test]
+    fn test_exclude_rg_in_manual_mode() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Manual(-5.0));
+
+        manager.set_replaygain_db(10.0);
+        manager.set_exclude_replaygain(true);
+
+        // Manual mode ignores the exclusion setting
+        assert!(
+            (manager.attenuation_db() - (-5.0)).abs() < 0.1,
+            "Manual mode should not be affected by exclude_replaygain"
+        );
+    }
+
+    /// Test: exclude_replaygain with additional DSP gains
+    #[test]
+    fn test_exclude_rg_with_additional_gains() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        manager.set_replaygain_db(8.0);
+        manager.set_preamp_db(4.0);
+        manager.set_eq_max_boost_db(3.0);
+        manager.set_additional_gain_db(2.0); // Makeup gain from compressor
+
+        manager.set_exclude_replaygain(true);
+
+        // With exclusion: 3 + 2 = 5 dB (RG and preamp excluded)
+        assert!(
+            (manager.total_potential_gain_db() - 5.0).abs() < 0.001,
+            "Additional gain should still be included when RG is excluded"
+        );
+    }
+
+    // ==================== Process Output Verification ====================
+
+    /// Test: Processed samples match expected attenuation
+    #[test]
+    fn test_process_applies_correct_attenuation() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+        manager.set_replaygain_db(6.0); // 6 dB total -> -6 dB attenuation
+
+        let mut samples = vec![1.0_f32, -1.0, 0.5, -0.5];
+        manager.process(&mut samples);
+
+        // -6 dB = 10^(-6/20) ≈ 0.501
+        let expected_factor = 10.0_f32.powf(-6.0 / 20.0);
+        assert!(
+            (samples[0] - expected_factor).abs() < 0.01,
+            "Sample 0 should be attenuated"
+        );
+        assert!(
+            (samples[1] - (-expected_factor)).abs() < 0.01,
+            "Sample 1 should be attenuated (negative)"
+        );
+        assert!(
+            (samples[2] - (0.5 * expected_factor)).abs() < 0.01,
+            "Sample 2 should be attenuated"
+        );
+    }
+
+    /// Test: No attenuation when gains are negative
+    #[test]
+    fn test_process_no_attenuation_negative_gains() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+        manager.set_replaygain_db(-10.0);
+        manager.set_eq_max_boost_db(0.0);
+
+        let mut samples = vec![0.8_f32, -0.6, 0.3];
+        let original = samples.clone();
+        manager.process(&mut samples);
+
+        for (orig, processed) in original.iter().zip(samples.iter()) {
+            assert!(
+                (orig - processed).abs() < 0.001,
+                "No attenuation should be applied for negative total gain"
+            );
+        }
+    }
+
+    /// Test: Disabled manager bypasses processing
+    #[test]
+    fn test_disabled_manager_bypasses() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+        manager.set_replaygain_db(20.0);
+        manager.set_enabled(false);
+
+        let mut samples = vec![1.0_f32; 10];
+        let original = samples.clone();
+        manager.process(&mut samples);
+
+        for (orig, processed) in original.iter().zip(samples.iter()) {
+            assert!(
+                (orig - processed).abs() < 0.001,
+                "Disabled manager should bypass"
+            );
+        }
+    }
+
+    /// Test: Disabled mode (not just enabled flag) applies no attenuation
+    #[test]
+    fn test_disabled_mode_vs_enabled_flag() {
+        let mut manager = HeadroomManager::new();
+
+        // Case 1: Mode disabled
+        manager.set_mode(HeadroomMode::Disabled);
+        manager.set_enabled(true);
+        manager.set_replaygain_db(10.0);
+
+        let mut samples1 = vec![1.0_f32; 5];
+        manager.process(&mut samples1);
+        assert!(
+            (samples1[0] - 1.0).abs() < 0.001,
+            "Disabled mode should bypass"
+        );
+
+        // Case 2: Mode auto but manager disabled
+        manager.set_mode(HeadroomMode::Auto);
+        manager.set_enabled(false);
+
+        let mut samples2 = vec![1.0_f32; 5];
+        manager.process(&mut samples2);
+        assert!(
+            (samples2[0] - 1.0).abs() < 0.001,
+            "Disabled manager should bypass"
+        );
+    }
+
+    // ==================== State Management Tests ====================
+
+    /// Test: Reset clears all gain values
+    #[test]
+    fn test_reset_clears_all() {
+        let mut manager = HeadroomManager::new();
+        manager.set_replaygain_db(10.0);
+        manager.set_preamp_db(5.0);
+        manager.set_eq_max_boost_db(6.0);
+        manager.set_additional_gain_db(3.0);
+
+        manager.reset();
+
+        assert!((manager.total_potential_gain_db() - 0.0).abs() < 0.001);
+    }
+
+    /// Test: clear_track_gains only clears ReplayGain
+    #[test]
+    fn test_clear_track_gains_preserves_dsp() {
+        let mut manager = HeadroomManager::new();
+        manager.set_replaygain_db(10.0);
+        manager.set_preamp_db(5.0);
+        manager.set_eq_max_boost_db(6.0);
+        manager.set_additional_gain_db(3.0);
+
+        manager.clear_track_gains();
+
+        // Only RG cleared, preamp is part of RG chain but implementation only clears RG
+        // EQ and additional should remain
+        // Note: preamp remains (it's a user setting, not per-track)
+        let total = manager.total_potential_gain_db();
+        // 0 (RG cleared) + 5 (preamp) + 6 (EQ) + 3 (additional) = 14
+        assert!(
+            (total - 14.0).abs() < 0.001,
+            "Only RG should be cleared, got total: {}",
+            total
+        );
+    }
+
+    /// Test: Changing mode triggers recalculation
+    #[test]
+    fn test_mode_change_triggers_recalc() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+        manager.set_replaygain_db(10.0);
+
+        // Get attenuation in auto mode
+        let auto_attn = manager.attenuation_db();
+        assert!((auto_attn - (-10.0)).abs() < 0.1);
+
+        // Switch to manual
+        manager.set_mode(HeadroomMode::Manual(-3.0));
+        let manual_attn = manager.attenuation_db();
+        assert!((manual_attn - (-3.0)).abs() < 0.1);
+
+        // Switch to disabled
+        manager.set_mode(HeadroomMode::Disabled);
+        let disabled_attn = manager.attenuation_linear();
+        assert!((disabled_attn - 1.0).abs() < 0.001);
+    }
+
+    // ==================== Precision and Edge Cases ====================
+
+    /// Test: Very small gain changes trigger recalculation
+    #[test]
+    fn test_small_gain_change_threshold() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+        manager.set_replaygain_db(5.0);
+
+        let attn1 = manager.attenuation_linear();
+
+        // Very small change (below threshold) should not trigger recalc
+        manager.set_replaygain_db(5.0001); // 0.0001 < threshold (0.001)
+        let attn2 = manager.attenuation_linear();
+        assert_eq!(attn1, attn2, "Small change should not trigger recalc");
+
+        // Larger change should trigger recalc
+        manager.set_replaygain_db(5.1);
+        let attn3 = manager.attenuation_linear();
+        assert!(attn1 != attn3, "Larger change should trigger recalc");
+    }
+
+    /// Test: Finite values for extreme attenuation
+    #[test]
+    fn test_extreme_attenuation_finite() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+        manager.set_replaygain_db(100.0); // Extreme value
+
+        let linear = manager.attenuation_linear();
+        let db = manager.attenuation_db();
+
+        assert!(linear.is_finite(), "Linear attenuation should be finite");
+        assert!(db.is_finite(), "dB attenuation should be finite");
+        assert!(linear > 0.0, "Linear attenuation should be positive");
+    }
+
+    /// Test: Zero total gain produces unity attenuation
+    #[test]
+    fn test_zero_gain_unity_attenuation() {
+        let mut manager = HeadroomManager::new();
+        manager.set_mode(HeadroomMode::Auto);
+
+        // Gains that sum to zero
+        manager.set_replaygain_db(-5.0);
+        manager.set_preamp_db(3.0);
+        manager.set_eq_max_boost_db(2.0);
+        manager.set_additional_gain_db(0.0);
+
+        // Total: -5 + 3 + 2 = 0
+        assert!((manager.total_potential_gain_db() - 0.0).abs() < 0.001);
+        // Zero or negative gain -> unity attenuation
+        assert!((manager.attenuation_linear() - 1.0).abs() < 0.001);
+    }
 }

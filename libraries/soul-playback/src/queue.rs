@@ -1799,7 +1799,7 @@ mod tests {
         // Play tracks 1 and 2
         queue.pop_next();
         queue.pop_next();
-        let original_index = queue.current_source_index();
+        let _original_index = queue.current_source_index();
 
         // Turn shuffle ON
         queue.apply_shuffle(crate::types::ShuffleMode::Random);
@@ -1862,5 +1862,1004 @@ mod tests {
         // Should reset to beginning
         assert!(new_index.is_some());
         assert_eq!(queue.current_source_index(), 0);
+    }
+
+    // =====================================================
+    // Comprehensive Queue Operations Tests
+    // =====================================================
+
+    // --- Test 1: Add 10000 tracks then clear ---
+
+    #[test]
+    fn large_queue_10000_tracks_then_clear() {
+        let mut queue = Queue::new();
+        let track_count = 10000;
+
+        // Create and add 10000 tracks
+        let tracks: Vec<QueueTrack> = (0..track_count)
+            .map(|i| create_test_track(&i.to_string(), &format!("Track {}", i)))
+            .collect();
+
+        queue.set_source(tracks);
+        assert_eq!(queue.len(), track_count);
+        assert!(!queue.is_empty());
+
+        // Verify first and last tracks are accessible
+        assert_eq!(queue.get(0).unwrap().id, "0");
+        assert_eq!(queue.get(track_count - 1).unwrap().id, "9999");
+
+        // Clear the queue
+        queue.clear();
+
+        // Verify queue is empty
+        assert_eq!(queue.len(), 0);
+        assert!(queue.is_empty());
+        assert!(queue.get(0).is_none());
+        assert!(queue.pop_next().is_none());
+        assert!(queue.peek_next().is_none());
+
+        // Verify internal state is reset
+        assert_eq!(queue.current_source_index(), 0);
+        assert!(!queue.is_shuffled());
+    }
+
+    #[test]
+    fn large_queue_10000_tracks_memory_efficient_clear() {
+        let mut queue = Queue::new();
+        let track_count = 10000;
+
+        let tracks: Vec<QueueTrack> = (0..track_count)
+            .map(|i| create_test_track(&i.to_string(), &format!("Track {}", i)))
+            .collect();
+
+        queue.set_source(tracks);
+
+        // Clear and shrink to release memory
+        queue.clear_and_shrink();
+
+        assert!(queue.is_empty());
+        assert_eq!(queue.len(), 0);
+    }
+
+    // --- Test 2: Remove track that doesn't exist ---
+
+    #[test]
+    fn remove_nonexistent_track_from_empty_queue() {
+        let mut queue = Queue::new();
+
+        // Try to remove from empty queue
+        assert!(queue.remove(0).is_none());
+        assert!(queue.remove(1).is_none());
+        assert!(queue.remove(100).is_none());
+        assert!(queue.remove(usize::MAX).is_none());
+    }
+
+    #[test]
+    fn remove_nonexistent_track_index_out_of_bounds() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Queue has 3 tracks (indices 0, 1, 2)
+        assert!(queue.remove(3).is_none()); // Just out of bounds
+        assert!(queue.remove(10).is_none()); // Way out of bounds
+        assert!(queue.remove(usize::MAX).is_none()); // Maximum usize
+
+        // Verify queue is unchanged
+        assert_eq!(queue.len(), 3);
+    }
+
+    #[test]
+    fn remove_nonexistent_after_partial_consumption() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Pop 2 tracks
+        queue.pop_next();
+        queue.pop_next();
+
+        // Now only 1 track remaining (index 0)
+        assert_eq!(queue.len(), 1);
+        assert!(queue.remove(1).is_none()); // Index 1 doesn't exist
+        assert!(queue.remove(2).is_none()); // Index 2 doesn't exist
+
+        // Valid removal still works
+        assert!(queue.remove(0).is_some());
+        assert!(queue.is_empty());
+    }
+
+    // --- Test 3: Reorder to same position ---
+
+    #[test]
+    fn reorder_to_same_position_source_queue() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Reorder each track to its own position
+        assert!(queue.reorder(0, 0).is_ok());
+        assert!(queue.reorder(1, 1).is_ok());
+        assert!(queue.reorder(2, 2).is_ok());
+
+        // Verify order unchanged
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "1");
+        assert_eq!(all[1].id, "2");
+        assert_eq!(all[2].id, "3");
+    }
+
+    #[test]
+    fn reorder_to_same_position_play_next_queue() {
+        let mut queue = Queue::new();
+        queue.add_next(create_test_track("1", "Track 1"));
+        queue.add_next(create_test_track("2", "Track 2"));
+        queue.add_next(create_test_track("3", "Track 3"));
+
+        // Order is [3, 2, 1] due to LIFO
+        assert!(queue.reorder(0, 0).is_ok());
+        assert!(queue.reorder(1, 1).is_ok());
+        assert!(queue.reorder(2, 2).is_ok());
+
+        // Verify order unchanged
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "3");
+        assert_eq!(all[1].id, "2");
+        assert_eq!(all[2].id, "1");
+    }
+
+    #[test]
+    fn reorder_to_same_position_queued_later() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![]); // Empty source to access queued_later directly
+        queue.add_to_end(create_test_track("1", "Track 1"));
+        queue.add_to_end(create_test_track("2", "Track 2"));
+        queue.add_to_end(create_test_track("3", "Track 3"));
+
+        assert!(queue.reorder(0, 0).is_ok());
+        assert!(queue.reorder(1, 1).is_ok());
+        assert!(queue.reorder(2, 2).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "1");
+        assert_eq!(all[1].id, "2");
+        assert_eq!(all[2].id, "3");
+    }
+
+    // --- Test 4: Reorder first to last and vice versa ---
+
+    #[test]
+    fn reorder_first_to_last_source_queue() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+        ]);
+
+        // Move first (index 0) to last (index 3)
+        // [1, 2, 3, 4] -> After remove: [2, 3, 4], adjusted_to = 3-1 = 2, insert at 2
+        // Result: [2, 3, 1, 4] - this is the actual behavior
+        assert!(queue.reorder(0, 3).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "2");
+        assert_eq!(all[1].id, "3");
+        assert_eq!(all[2].id, "1");
+        assert_eq!(all[3].id, "4");
+    }
+
+    #[test]
+    fn reorder_last_to_first_source_queue() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+        ]);
+
+        // Move last (index 3) to first (index 0)
+        // [1, 2, 3, 4] -> After remove 4: [1, 2, 3], insert at 0
+        // Result: [4, 1, 2, 3]
+        assert!(queue.reorder(3, 0).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "4");
+        assert_eq!(all[1].id, "1");
+        assert_eq!(all[2].id, "2");
+        assert_eq!(all[3].id, "3");
+    }
+
+    #[test]
+    fn reorder_first_to_last_play_next() {
+        let mut queue = Queue::new();
+        queue.add_next(create_test_track("1", "Track 1"));
+        queue.add_next(create_test_track("2", "Track 2"));
+        queue.add_next(create_test_track("3", "Track 3"));
+        queue.add_next(create_test_track("4", "Track 4"));
+
+        // LIFO order: [4, 3, 2, 1]
+        // Move first (4) to last position
+        assert!(queue.reorder(0, 3).is_ok());
+
+        let all = queue.get_all();
+        // Expected: [3, 2, 4, 1] based on reorder behavior
+        assert_eq!(all[0].id, "3");
+        assert_eq!(all[1].id, "2");
+        assert_eq!(all[2].id, "4");
+        assert_eq!(all[3].id, "1");
+    }
+
+    #[test]
+    fn reorder_last_to_first_play_next() {
+        let mut queue = Queue::new();
+        queue.add_next(create_test_track("1", "Track 1"));
+        queue.add_next(create_test_track("2", "Track 2"));
+        queue.add_next(create_test_track("3", "Track 3"));
+        queue.add_next(create_test_track("4", "Track 4"));
+
+        // LIFO order: [4, 3, 2, 1]
+        // Move last (1) to first position
+        assert!(queue.reorder(3, 0).is_ok());
+
+        let all = queue.get_all();
+        // Expected: [1, 4, 3, 2]
+        assert_eq!(all[0].id, "1");
+        assert_eq!(all[1].id, "4");
+        assert_eq!(all[2].id, "3");
+        assert_eq!(all[3].id, "2");
+    }
+
+    #[test]
+    fn reorder_first_to_last_queued_later() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![]);
+        queue.add_to_end(create_test_track("1", "Track 1"));
+        queue.add_to_end(create_test_track("2", "Track 2"));
+        queue.add_to_end(create_test_track("3", "Track 3"));
+        queue.add_to_end(create_test_track("4", "Track 4"));
+
+        assert!(queue.reorder(0, 3).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "2");
+        assert_eq!(all[1].id, "3");
+        assert_eq!(all[2].id, "1");
+        assert_eq!(all[3].id, "4");
+    }
+
+    #[test]
+    fn reorder_last_to_first_queued_later() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![]);
+        queue.add_to_end(create_test_track("1", "Track 1"));
+        queue.add_to_end(create_test_track("2", "Track 2"));
+        queue.add_to_end(create_test_track("3", "Track 3"));
+        queue.add_to_end(create_test_track("4", "Track 4"));
+
+        assert!(queue.reorder(3, 0).is_ok());
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "4");
+        assert_eq!(all[1].id, "1");
+        assert_eq!(all[2].id, "2");
+        assert_eq!(all[3].id, "3");
+    }
+
+    // --- Test 5: Shuffle then unshuffle preserves order ---
+
+    #[test]
+    fn shuffle_then_unshuffle_preserves_original_order() {
+        let mut queue = Queue::new();
+        let original_tracks = vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+        ];
+
+        queue.set_source(original_tracks.clone());
+
+        // Capture original order
+        let original_order: Vec<String> = queue.get_all().iter().map(|t| t.id.clone()).collect();
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        assert!(queue.is_shuffled());
+
+        // Restore original order
+        queue.restore_original_order();
+        assert!(!queue.is_shuffled());
+
+        // Verify order is restored
+        let restored_order: Vec<String> = queue.get_all().iter().map(|t| t.id.clone()).collect();
+        assert_eq!(
+            original_order, restored_order,
+            "Original order should be preserved after shuffle/unshuffle"
+        );
+    }
+
+    #[test]
+    fn shuffle_unshuffle_with_partial_playback() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+        ]);
+
+        // Play first 2 tracks
+        queue.pop_next(); // Track 1
+        queue.pop_next(); // Track 2
+
+        // Apply shuffle to remaining tracks
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        assert!(queue.is_shuffled());
+
+        // Play one more track while shuffled
+        let shuffled_track = queue.pop_next();
+        assert!(shuffled_track.is_some());
+
+        // Restore original order
+        queue.restore_original_order();
+        assert!(!queue.is_shuffled());
+
+        // All original tracks should still be in the source
+        let source_ids: std::collections::HashSet<String> =
+            queue.source.iter().map(|t| t.id.clone()).collect();
+        assert!(source_ids.contains("1"));
+        assert!(source_ids.contains("2"));
+        assert!(source_ids.contains("3"));
+        assert!(source_ids.contains("4"));
+        assert!(source_ids.contains("5"));
+    }
+
+    #[test]
+    fn shuffle_unshuffle_empty_remaining_queue() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+        ]);
+
+        // Play all tracks
+        queue.pop_next();
+        queue.pop_next();
+        assert!(queue.is_empty());
+
+        // Apply and restore shuffle (should not panic)
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        queue.restore_original_order();
+
+        // Queue should still be "empty" (no remaining tracks)
+        assert_eq!(queue.len(), 0);
+    }
+
+    // --- Test 6: Multiple shuffle toggles ---
+
+    #[test]
+    fn multiple_shuffle_toggles() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+        ]);
+
+        let original_order: Vec<String> = queue.get_all().iter().map(|t| t.id.clone()).collect();
+
+        // Toggle shuffle on/off multiple times
+        for _ in 0..5 {
+            // Turn shuffle ON
+            queue.apply_shuffle(crate::types::ShuffleMode::Random);
+            assert!(queue.is_shuffled());
+
+            // Turn shuffle OFF
+            queue.restore_original_order();
+            assert!(!queue.is_shuffled());
+
+            // Verify order is restored each time
+            let current_order: Vec<String> = queue.get_all().iter().map(|t| t.id.clone()).collect();
+            assert_eq!(
+                original_order, current_order,
+                "Order should be restored after each toggle cycle"
+            );
+        }
+    }
+
+    #[test]
+    fn multiple_shuffle_toggles_with_playback_between() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+            create_test_track("6", "Track 6"),
+            create_test_track("7", "Track 7"),
+            create_test_track("8", "Track 8"),
+        ]);
+
+        // Toggle 1: Shuffle ON, play 1 track, shuffle OFF
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        queue.pop_next();
+        queue.restore_original_order();
+
+        // Toggle 2: Shuffle ON, play 1 track, shuffle OFF
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        queue.pop_next();
+        queue.restore_original_order();
+
+        // Toggle 3: Shuffle ON, play 1 track, shuffle OFF
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        queue.pop_next();
+        queue.restore_original_order();
+
+        // All original tracks should still exist in source
+        let source_ids: std::collections::HashSet<String> =
+            queue.source.iter().map(|t| t.id.clone()).collect();
+        assert_eq!(source_ids.len(), 8);
+    }
+
+    #[test]
+    fn rapid_shuffle_toggle_stress_test() {
+        let mut queue = Queue::new();
+        queue.set_source(
+            (0..100)
+                .map(|i| create_test_track(&i.to_string(), &format!("Track {}", i)))
+                .collect(),
+        );
+
+        // Rapidly toggle shuffle 50 times
+        for _ in 0..50 {
+            queue.apply_shuffle(crate::types::ShuffleMode::Random);
+            queue.restore_original_order();
+        }
+
+        // Queue should still have all 100 tracks
+        assert_eq!(queue.len(), 100);
+
+        // Verify all tracks are present
+        let all_ids: std::collections::HashSet<String> =
+            queue.get_all().iter().map(|t| t.id.clone()).collect();
+        for i in 0..100 {
+            assert!(all_ids.contains(&i.to_string()));
+        }
+    }
+
+    // --- Test 7: Add to queue during shuffle ---
+
+    #[test]
+    fn add_next_during_shuffle() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+            create_test_track("s3", "Source 3"),
+        ]);
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        assert!(queue.is_shuffled());
+
+        // Add tracks to play next (these should be separate from shuffled source)
+        queue.add_next(create_test_track("n1", "Next 1"));
+        queue.add_next(create_test_track("n2", "Next 2"));
+
+        // Play next tracks should be first
+        assert_eq!(queue.get(0).unwrap().id, "n2"); // LIFO
+        assert_eq!(queue.get(1).unwrap().id, "n1");
+
+        // Source should be after play_next
+        // Total: 2 play_next + 3 source = 5
+        assert_eq!(queue.len(), 5);
+    }
+
+    #[test]
+    fn add_to_end_during_shuffle() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+            create_test_track("s3", "Source 3"),
+        ]);
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+
+        // Add tracks to end (queued_later)
+        queue.add_to_end(create_test_track("e1", "End 1"));
+        queue.add_to_end(create_test_track("e2", "End 2"));
+
+        // Total: 3 source + 2 queued_later = 5
+        assert_eq!(queue.len(), 5);
+
+        // End tracks should be at the end
+        assert_eq!(queue.get(3).unwrap().id, "e1");
+        assert_eq!(queue.get(4).unwrap().id, "e2");
+    }
+
+    #[test]
+    fn add_to_queue_during_shuffle_then_unshuffle() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+            create_test_track("s3", "Source 3"),
+        ]);
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+
+        // Add tracks during shuffle
+        queue.add_next(create_test_track("n1", "Next 1"));
+        queue.add_to_end(create_test_track("e1", "End 1"));
+
+        // Unshuffle
+        queue.restore_original_order();
+
+        // Play next should still be first
+        assert_eq!(queue.get(0).unwrap().id, "n1");
+
+        // Queued later should still be at the end
+        // play_next(1) + source(3) + queued_later(1) = 5
+        assert_eq!(queue.len(), 5);
+        assert_eq!(queue.get(4).unwrap().id, "e1");
+    }
+
+    // --- Test 8: Remove from queue during shuffle ---
+
+    #[test]
+    fn remove_from_play_next_during_shuffle() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+        ]);
+
+        // Add play next then shuffle
+        queue.add_next(create_test_track("n1", "Next 1"));
+        queue.add_next(create_test_track("n2", "Next 2"));
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+
+        // Remove from play_next (index 0 = n2 due to LIFO)
+        let removed = queue.remove(0).unwrap();
+        assert_eq!(removed.id, "n2");
+
+        // Queue should have 3 tracks left
+        assert_eq!(queue.len(), 3);
+        assert_eq!(queue.get(0).unwrap().id, "n1");
+    }
+
+    #[test]
+    fn remove_from_source_during_shuffle() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+            create_test_track("s3", "Source 3"),
+        ]);
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+
+        // Remember the ID at index 1 (from shuffled source)
+        let id_at_1 = queue.get(1).unwrap().id.clone();
+
+        // Remove track at index 1
+        let removed = queue.remove(1).unwrap();
+        assert_eq!(removed.id, id_at_1);
+
+        // Queue should have 2 tracks left
+        assert_eq!(queue.len(), 2);
+    }
+
+    #[test]
+    fn remove_from_queued_later_during_shuffle() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+        ]);
+        queue.add_to_end(create_test_track("e1", "End 1"));
+        queue.add_to_end(create_test_track("e2", "End 2"));
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+
+        // Remove from queued_later (index 2 = first in queued_later)
+        // source(2) + queued_later(2) = 4, indices 2 and 3 are queued_later
+        let removed = queue.remove(2).unwrap();
+        assert_eq!(removed.id, "e1");
+
+        // Queue should have 3 tracks left
+        assert_eq!(queue.len(), 3);
+    }
+
+    #[test]
+    fn remove_during_shuffle_then_unshuffle() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+            create_test_track("s3", "Source 3"),
+            create_test_track("s4", "Source 4"),
+        ]);
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+
+        // Remember what we're removing (from shuffled view)
+        let removed_id = queue.get(1).unwrap().id.clone();
+
+        // Remove track from shuffled queue
+        queue.remove(1);
+
+        // Unshuffle
+        queue.restore_original_order();
+
+        // The removed track should be gone from source
+        let source_ids: std::collections::HashSet<String> =
+            queue.source.iter().map(|t| t.id.clone()).collect();
+        assert!(!source_ids.contains(&removed_id));
+        assert_eq!(queue.source.len(), 3);
+    }
+
+    // --- Test 9: Queue with all same track (duplicates) ---
+
+    #[test]
+    fn queue_with_all_duplicate_tracks() {
+        let mut queue = Queue::new();
+
+        // Create 10 tracks with the same ID (duplicates)
+        let tracks: Vec<QueueTrack> = (0..10)
+            .map(|_| create_test_track("same_id", "Same Track"))
+            .collect();
+
+        queue.set_source(tracks);
+        assert_eq!(queue.len(), 10);
+
+        // All tracks should be accessible
+        for i in 0..10 {
+            let track = queue.get(i).unwrap();
+            assert_eq!(track.id, "same_id");
+        }
+
+        // Pop all tracks
+        for _ in 0..10 {
+            let track = queue.pop_next().unwrap();
+            assert_eq!(track.id, "same_id");
+        }
+
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn shuffle_queue_with_all_duplicates() {
+        let mut queue = Queue::new();
+
+        let tracks: Vec<QueueTrack> = (0..10)
+            .map(|_| create_test_track("same_id", "Same Track"))
+            .collect();
+
+        queue.set_source(tracks);
+
+        // Apply shuffle (should not panic)
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        assert!(queue.is_shuffled());
+
+        // All tracks should still be same_id
+        for i in 0..10 {
+            assert_eq!(queue.get(i).unwrap().id, "same_id");
+        }
+
+        // Restore original order
+        queue.restore_original_order();
+        assert!(!queue.is_shuffled());
+        assert_eq!(queue.len(), 10);
+    }
+
+    #[test]
+    fn remove_consecutive_duplicates_all_same() {
+        let mut queue = Queue::new();
+
+        let tracks: Vec<QueueTrack> = (0..10)
+            .map(|_| create_test_track("same_id", "Same Track"))
+            .collect();
+
+        queue.set_source(tracks);
+
+        // Remove consecutive duplicates should leave only 1 track
+        queue.remove_consecutive_duplicates();
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue.get(0).unwrap().id, "same_id");
+    }
+
+    #[test]
+    fn queue_with_alternating_duplicates() {
+        let mut queue = Queue::new();
+
+        // Create alternating pattern: A, B, A, B, A, B
+        let tracks: Vec<QueueTrack> = (0..6)
+            .map(|i| {
+                if i % 2 == 0 {
+                    create_test_track("A", "Track A")
+                } else {
+                    create_test_track("B", "Track B")
+                }
+            })
+            .collect();
+
+        queue.set_source(tracks);
+
+        // Remove consecutive duplicates should not remove anything (no consecutive dupes)
+        queue.remove_consecutive_duplicates();
+        assert_eq!(queue.len(), 6);
+    }
+
+    #[test]
+    fn reorder_with_duplicates() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("A", "Track A"),
+            create_test_track("A", "Track A"),
+            create_test_track("A", "Track A"),
+        ]);
+
+        // Reorder should still work even with duplicate IDs
+        assert!(queue.reorder(0, 2).is_ok());
+        assert_eq!(queue.len(), 3);
+    }
+
+    // --- Test 10: Queue index after various operations ---
+
+    #[test]
+    fn source_index_after_pop_next() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        assert_eq!(queue.current_source_index(), 0);
+
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 1);
+
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 2);
+
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 3);
+
+        // Index stays at 3 even though queue is empty
+        assert!(queue.is_empty());
+        assert_eq!(queue.current_source_index(), 3);
+    }
+
+    #[test]
+    fn source_index_after_go_back() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Advance to the end
+        queue.pop_next();
+        queue.pop_next();
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 3);
+
+        // Go back
+        queue.go_back();
+        assert_eq!(queue.current_source_index(), 2);
+
+        queue.go_back();
+        assert_eq!(queue.current_source_index(), 1);
+
+        queue.go_back();
+        assert_eq!(queue.current_source_index(), 0);
+
+        // Can't go back further
+        assert!(!queue.can_go_back());
+        assert!(queue.go_back().is_none());
+        assert_eq!(queue.current_source_index(), 0);
+    }
+
+    #[test]
+    fn source_index_after_skip_to_index() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+        ]);
+
+        assert_eq!(queue.current_source_index(), 0);
+
+        // Skip to index 3
+        queue.skip_to_index(3);
+        assert_eq!(queue.current_source_index(), 3);
+
+        // Skip to last track
+        // After skip_to_index(3), remaining tracks are [4, 5] at indices 0, 1
+        queue.skip_to_index(1); // Skip to index 1 of remaining
+        assert_eq!(queue.current_source_index(), 4);
+    }
+
+    #[test]
+    fn source_index_after_reload() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Exhaust the queue
+        queue.pop_next();
+        queue.pop_next();
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 3);
+        assert!(queue.is_empty());
+
+        // Reload
+        queue.reload_source(crate::types::ShuffleMode::Off);
+        assert_eq!(queue.current_source_index(), 0);
+        assert_eq!(queue.len(), 3);
+    }
+
+    #[test]
+    fn source_index_after_shuffle_and_restore() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+        ]);
+
+        // Play 2 tracks
+        queue.pop_next();
+        queue.pop_next();
+        let index_before_shuffle = queue.current_source_index();
+        assert_eq!(index_before_shuffle, 2);
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        // Index should still point to same position (tracks after it shuffled)
+        assert_eq!(queue.current_source_index(), 2);
+
+        // Play one more track while shuffled
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 3);
+
+        // Restore original order
+        // Index should be adjusted to point after the last played track in original order
+        queue.restore_original_order();
+        // The restored index should be valid
+        assert!(queue.current_source_index() <= queue.source.len());
+    }
+
+    #[test]
+    fn source_index_with_play_next_queue() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+        ]);
+        queue.add_next(create_test_track("n1", "Next 1"));
+
+        assert_eq!(queue.current_source_index(), 0);
+
+        // Pop play_next track (does not affect source_index)
+        let track = queue.pop_next().unwrap();
+        assert_eq!(track.id, "n1");
+        assert_eq!(queue.current_source_index(), 0);
+
+        // Pop source track (advances source_index)
+        let track = queue.pop_next().unwrap();
+        assert_eq!(track.id, "s1");
+        assert_eq!(queue.current_source_index(), 1);
+    }
+
+    #[test]
+    fn source_index_after_remove_at_various_positions() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+        ]);
+
+        // Advance to track 3
+        queue.pop_next(); // Now at index 1
+        queue.pop_next(); // Now at index 2
+        assert_eq!(queue.current_source_index(), 2);
+
+        // Remove track at current position (index 0 in remaining queue = source index 2)
+        let removed = queue.remove(0).unwrap();
+        assert_eq!(removed.id, "3");
+
+        // Removing at source_index should not affect index (it's removed AT the index)
+        // After removal: source = [1, 2, 4, 5], source_index = 2
+        // But the condition in remove is source_idx < self.source_index
+        // source_idx = source_index + (index - play_next_len) = 2 + (0 - 0) = 2
+        // 2 < 2 is false, so source_index is not decremented
+        assert_eq!(queue.current_source_index(), 2);
+
+        // Remaining tracks should be [4, 5]
+        assert_eq!(queue.len(), 2);
+        assert_eq!(queue.get(0).unwrap().id, "4");
+    }
+
+    #[test]
+    fn queue_index_comprehensive_operations() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+            create_test_track("6", "Track 6"),
+        ]);
+
+        // Initial state
+        assert_eq!(queue.current_source_index(), 0);
+        assert_eq!(queue.len(), 6);
+
+        // Pop 2 tracks
+        queue.pop_next();
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 2);
+        assert_eq!(queue.len(), 4);
+
+        // Go back 1
+        queue.go_back();
+        assert_eq!(queue.current_source_index(), 1);
+        assert_eq!(queue.len(), 5);
+
+        // Skip to index 3 (relative to current position)
+        queue.skip_to_index(3);
+        assert_eq!(queue.len(), 2); // Only 2 tracks remaining
+
+        // Add play_next (doesn't affect source_index)
+        queue.add_next(create_test_track("n1", "Next 1"));
+        assert_eq!(queue.len(), 3); // 1 play_next + 2 source
+
+        // Pop play_next
+        queue.pop_next();
+        assert_eq!(queue.len(), 2); // Back to 2 source
+
+        // Clear
+        queue.clear();
+        assert_eq!(queue.current_source_index(), 0);
+        assert_eq!(queue.len(), 0);
     }
 }

@@ -1035,4 +1035,1023 @@ mod tests {
             gain
         );
     }
+
+    // ========================================
+    // Volume Boundary Edge Case Tests
+    // ========================================
+
+    #[test]
+    fn volume_boundary_exact_zero() {
+        let vol = Volume::new(0);
+        assert_eq!(vol.level(), 0);
+        assert_eq!(vol.gain(), 0.0);
+        assert_eq!(vol.current_gain(), 0.0);
+
+        // Verify applying to buffer produces silence
+        let mut vol = Volume::new(0);
+        let mut buffer = vec![0.5, 0.8, -0.3, -0.9, 1.0];
+        vol.apply(&mut buffer);
+        assert!(
+            buffer.iter().all(|&s| s == 0.0),
+            "All samples should be zero at volume 0"
+        );
+    }
+
+    #[test]
+    fn volume_boundary_exact_one() {
+        let vol = Volume::new(1);
+        assert_eq!(vol.level(), 1);
+        // At 1%, gain should be very small but non-zero
+        let gain = vol.gain();
+        assert!(gain > 0.0, "Volume 1 should have non-zero gain");
+        assert!(
+            gain < 0.01,
+            "Volume 1 should have very small gain: {}",
+            gain
+        );
+    }
+
+    #[test]
+    fn volume_boundary_exact_fifty() {
+        let vol = Volume::new(50);
+        assert_eq!(vol.level(), 50);
+        // 50% should be -30 dB = 10^(-30/20) = 0.0316
+        let expected_gain = 0.0316;
+        assert!(
+            (vol.gain() - expected_gain).abs() < 0.001,
+            "50% volume should be ~0.0316, got {}",
+            vol.gain()
+        );
+    }
+
+    #[test]
+    fn volume_boundary_exact_ninety_nine() {
+        let vol = Volume::new(99);
+        assert_eq!(vol.level(), 99);
+        // 99% should be -0.6 dB = 10^(-0.6/20) = 0.933
+        let expected_gain = 0.933;
+        assert!(
+            (vol.gain() - expected_gain).abs() < 0.01,
+            "99% volume should be ~0.933, got {}",
+            vol.gain()
+        );
+    }
+
+    #[test]
+    fn volume_boundary_exact_hundred() {
+        let vol = Volume::new(100);
+        assert_eq!(vol.level(), 100);
+        // 100% should be 0 dB = 1.0 unity gain
+        assert!(
+            (vol.gain() - 1.0).abs() < 0.001,
+            "100% volume should be unity gain, got {}",
+            vol.gain()
+        );
+
+        // Verify applying to buffer doesn't modify samples
+        let mut vol = Volume::new(100);
+        let original = vec![0.5, 0.8, -0.3, -0.9, 1.0];
+        let mut buffer = original.clone();
+        vol.apply(&mut buffer);
+        for (i, (&orig, &result)) in original.iter().zip(buffer.iter()).enumerate() {
+            assert!(
+                (orig - result).abs() < 0.001,
+                "Sample {} should be unchanged at 100%: {} vs {}",
+                i,
+                orig,
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn volume_transitions_between_boundaries() {
+        let mut vol = Volume::new(0);
+
+        // 0 -> 100
+        vol.set_level(100);
+        assert!(vol.is_ramping());
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+        assert!((vol.current_gain() - 1.0).abs() < 0.001);
+
+        // 100 -> 0
+        vol.set_level(0);
+        assert!(vol.is_ramping());
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+        assert_eq!(vol.current_gain(), 0.0);
+
+        // 0 -> 50 -> 100
+        vol.set_level(50);
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+        assert!((vol.current_gain() - 0.0316).abs() < 0.001);
+
+        vol.set_level(100);
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+        assert!((vol.current_gain() - 1.0).abs() < 0.001);
+    }
+
+    // ========================================
+    // Rapid Volume Change Tests
+    // ========================================
+
+    #[test]
+    fn rapid_volume_change_every_sample() {
+        // Simulate changing volume on every sample - stress test for click prevention
+        let mut vol = Volume::new(50);
+
+        let mut prev_gain = vol.current_gain();
+        let mut max_delta = 0.0f32;
+
+        // Alternate between two different volumes each sample
+        for i in 0..1000 {
+            let level = if i % 2 == 0 { 30 } else { 70 };
+            vol.set_level(level);
+
+            // Process one sample at a time
+            let mut buffer = vec![1.0f32; 1];
+            vol.apply(&mut buffer);
+
+            let delta = (vol.current_gain() - prev_gain).abs();
+            max_delta = max_delta.max(delta);
+            prev_gain = vol.current_gain();
+        }
+
+        // Despite rapid changes, per-sample delta should be small enough to prevent clicks
+        assert!(
+            max_delta < 0.02,
+            "Rapid changes should not cause large gain jumps: max_delta={}",
+            max_delta
+        );
+    }
+
+    #[test]
+    fn rapid_random_volume_changes() {
+        let mut vol = Volume::new(50);
+
+        let levels = [0, 100, 25, 75, 50, 10, 90, 33, 67, 100, 0, 50];
+        let mut all_gains = Vec::new();
+
+        for &level in &levels {
+            vol.set_level(level);
+
+            // Process small amounts between each change
+            for _ in 0..10 {
+                all_gains.push(vol.current_gain());
+                let mut buffer = vec![1.0f32; 10];
+                vol.apply(&mut buffer);
+            }
+        }
+
+        // Check for smooth transitions - no large jumps between consecutive gains
+        let mut max_jump = 0.0f32;
+        for i in 1..all_gains.len() {
+            let jump = (all_gains[i] - all_gains[i - 1]).abs();
+            max_jump = max_jump.max(jump);
+        }
+
+        assert!(
+            max_jump < 0.1,
+            "Random volume changes should not cause large gain jumps: max_jump={}",
+            max_jump
+        );
+    }
+
+    #[test]
+    fn rapid_mute_unmute_cycles() {
+        let mut vol = Volume::new(80);
+        let mut prev_gain = vol.current_gain();
+        let mut max_delta = 0.0f32;
+
+        for _ in 0..100 {
+            vol.toggle_mute();
+
+            // Process a few samples
+            for _ in 0..5 {
+                let mut buffer = vec![1.0f32; 2];
+                vol.apply(&mut buffer);
+
+                let delta = (vol.current_gain() - prev_gain).abs();
+                max_delta = max_delta.max(delta);
+                prev_gain = vol.current_gain();
+            }
+        }
+
+        assert!(
+            max_delta < 0.02,
+            "Rapid mute/unmute should not cause clicks: max_delta={}",
+            max_delta
+        );
+    }
+
+    // ========================================
+    // Mute During Volume Ramp Tests
+    // ========================================
+
+    #[test]
+    fn mute_during_volume_increase_ramp() {
+        let mut vol = Volume::new(20);
+
+        // Start ramping up
+        vol.set_level(80);
+        assert!(vol.is_ramping());
+
+        // Process partway
+        let mut buffer = vec![1.0f32; 200];
+        vol.apply(&mut buffer);
+        let mid_ramp_gain = vol.current_gain();
+
+        // Mute while ramping up
+        vol.mute();
+        assert!(vol.is_ramping());
+        assert!(vol.is_muted());
+
+        // Should start from current position and ramp to 0
+        assert!(
+            (vol.current_gain() - mid_ramp_gain).abs() < 0.01,
+            "Mute should start from current gain"
+        );
+
+        // Process and verify decreasing
+        let mut buffer = vec![1.0f32; 100];
+        vol.apply(&mut buffer);
+        assert!(
+            vol.current_gain() < mid_ramp_gain,
+            "Gain should decrease during mute ramp"
+        );
+    }
+
+    #[test]
+    fn mute_during_volume_decrease_ramp() {
+        let mut vol = Volume::new(80);
+
+        // Start ramping down
+        vol.set_level(20);
+        assert!(vol.is_ramping());
+
+        // Process partway
+        let mut buffer = vec![1.0f32; 200];
+        vol.apply(&mut buffer);
+        let _mid_ramp_gain = vol.current_gain();
+
+        // Mute while already ramping down
+        vol.mute();
+        assert!(vol.is_ramping());
+
+        // Mute ramp should continue from current gain to 0
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        assert!(
+            vol.current_gain() < 0.001,
+            "Should reach near-zero after mute"
+        );
+    }
+
+    #[test]
+    fn mute_preserves_level_during_ramp() {
+        let mut vol = Volume::new(50);
+
+        // Start a ramp
+        vol.set_level(80);
+
+        // Mute mid-ramp
+        let mut buffer = vec![1.0f32; 200];
+        vol.apply(&mut buffer);
+        vol.mute();
+
+        // Level should be preserved as 80
+        assert_eq!(vol.level(), 80);
+
+        // Complete the mute
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        // Unmute should restore to 80%
+        vol.unmute();
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        let expected_gain = Volume::new(80).gain();
+        assert!(
+            (vol.current_gain() - expected_gain).abs() < 0.01,
+            "Should restore to 80% gain: {} vs {}",
+            vol.current_gain(),
+            expected_gain
+        );
+    }
+
+    // ========================================
+    // Unmute to Different Volume Tests
+    // ========================================
+
+    #[test]
+    fn unmute_to_different_volume_than_before_mute() {
+        let mut vol = Volume::new(80);
+        let gain_before_mute = vol.gain();
+
+        // Mute
+        vol.mute();
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        // Change volume while muted
+        vol.set_level(30);
+        assert_eq!(vol.level(), 30);
+        assert!(
+            vol.current_gain() < 0.001,
+            "Gain should stay zero while muted"
+        );
+
+        // Unmute - should go to 30%, not 80%
+        vol.unmute();
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        let expected_gain = Volume::new(30).gain();
+        assert!(
+            (vol.current_gain() - expected_gain).abs() < 0.01,
+            "Should unmute to new volume (30%), not original (80%): {} vs {}",
+            vol.current_gain(),
+            expected_gain
+        );
+        assert!(
+            (vol.current_gain() - gain_before_mute).abs() > 0.1,
+            "Should be different from original gain"
+        );
+    }
+
+    #[test]
+    fn unmute_to_zero_volume() {
+        let mut vol = Volume::new(80);
+
+        vol.mute();
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        // Set volume to 0 while muted
+        vol.set_level(0);
+
+        // Unmute - should stay at 0
+        vol.unmute();
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        assert_eq!(
+            vol.current_gain(),
+            0.0,
+            "Unmuting to 0% should result in 0 gain"
+        );
+    }
+
+    #[test]
+    fn unmute_to_max_volume() {
+        let mut vol = Volume::new(30);
+
+        vol.mute();
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        // Set volume to 100 while muted
+        vol.set_level(100);
+
+        // Unmute - should go to unity gain
+        vol.unmute();
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        assert!(
+            (vol.current_gain() - 1.0).abs() < 0.001,
+            "Unmuting to 100% should result in unity gain"
+        );
+    }
+
+    // ========================================
+    // Volume Change During Mute Tests
+    // ========================================
+
+    #[test]
+    fn volume_change_while_muted_does_not_affect_current_gain() {
+        let mut vol = Volume::new(80);
+
+        vol.mute();
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        assert!(vol.current_gain() < 0.001);
+
+        // Change volume multiple times while muted
+        for level in [50, 30, 90, 10, 70] {
+            vol.set_level(level);
+
+            // Gain should remain zero
+            assert!(
+                vol.current_gain() < 0.001,
+                "Gain should stay zero while muted even after setting level to {}",
+                level
+            );
+
+            // Process some samples
+            let mut buffer = vec![1.0f32; 100];
+            vol.apply(&mut buffer);
+
+            // Still zero
+            assert!(
+                vol.current_gain() < 0.001,
+                "Gain should stay zero after processing while muted"
+            );
+        }
+
+        // Final level should be preserved
+        assert_eq!(vol.level(), 70);
+    }
+
+    #[test]
+    fn volume_change_during_mute_ramp() {
+        let mut vol = Volume::new(80);
+
+        // Start mute
+        vol.mute();
+
+        // Process partway through mute ramp
+        let mut buffer = vec![1.0f32; 200];
+        vol.apply(&mut buffer);
+        let _mid_mute_gain = vol.current_gain();
+
+        // Change volume during mute ramp
+        vol.set_level(30);
+        assert_eq!(vol.level(), 30);
+
+        // Should continue ramping to 0 (mute takes precedence)
+        assert_eq!(vol.gain(), 0.0, "Target should still be 0 (muted)");
+
+        // Complete the mute
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        assert!(
+            vol.current_gain() < 0.001,
+            "Should reach zero despite volume change"
+        );
+    }
+
+    // ========================================
+    // Sample Rate Change During Ramp Tests
+    // ========================================
+
+    #[test]
+    fn sample_rate_change_during_active_ramp() {
+        let mut vol = Volume::with_sample_rate(100, 44100);
+
+        // Start a ramp
+        vol.set_level(50);
+        assert!(vol.is_ramping());
+
+        // Process partway
+        let mut buffer = vec![1.0f32; 200];
+        vol.apply(&mut buffer);
+        let mid_ramp_gain = vol.current_gain();
+
+        // Change sample rate while ramping
+        let initial_remaining = vol.ramp_samples_remaining;
+        vol.set_sample_rate(96000);
+
+        // The ramp samples remaining should NOT change mid-ramp
+        // (sample rate affects future ramps, not current one)
+        assert_eq!(
+            vol.ramp_samples_remaining, initial_remaining,
+            "Changing sample rate should not affect current ramp"
+        );
+
+        // Current gain should not jump
+        assert!(
+            (vol.current_gain() - mid_ramp_gain).abs() < 0.001,
+            "Gain should not jump on sample rate change"
+        );
+
+        // Complete the current ramp
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        // Start a NEW ramp - this should use the new sample rate
+        vol.set_level(100);
+        assert!(vol.is_ramping());
+
+        // The new ramp should have more samples due to higher sample rate
+        let expected_samples_96k = (96000 * RAMP_DURATION_MS * 2 / 1000) as usize;
+        assert_eq!(
+            vol.ramp_samples_total, expected_samples_96k,
+            "New ramp should use updated sample rate"
+        );
+    }
+
+    #[test]
+    fn sample_rate_change_between_ramps() {
+        let mut vol = Volume::with_sample_rate(100, 44100);
+
+        // Complete a ramp at 44.1kHz
+        vol.set_level(50);
+        let initial_total = vol.ramp_samples_total;
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+        assert!(!vol.is_ramping());
+
+        // Change sample rate
+        vol.set_sample_rate(192000);
+
+        // Start a new ramp - should have more samples
+        vol.set_level(100);
+        let new_total = vol.ramp_samples_total;
+
+        assert!(
+            new_total > initial_total,
+            "192kHz ramp should have more samples than 44.1kHz: {} vs {}",
+            new_total,
+            initial_total
+        );
+
+        // Verify the ratio is approximately correct
+        let expected_ratio = 192000.0 / 44100.0;
+        let actual_ratio = new_total as f32 / initial_total as f32;
+        assert!(
+            (actual_ratio - expected_ratio).abs() < 0.1,
+            "Ramp sample ratio should match sample rate ratio: {} vs {}",
+            actual_ratio,
+            expected_ratio
+        );
+    }
+
+    // ========================================
+    // High Sample Rate (192kHz) Tests
+    // ========================================
+
+    #[test]
+    fn high_sample_rate_192khz_ramp_duration() {
+        let vol = Volume::with_sample_rate(80, 192000);
+
+        // 10ms at 192kHz = 1920 samples, stereo = 3840
+        let expected_samples = (192000 * RAMP_DURATION_MS * 2 / 1000) as usize;
+        assert_eq!(
+            vol.ramp_duration_samples, expected_samples,
+            "192kHz should have correct ramp duration: {} vs {}",
+            vol.ramp_duration_samples, expected_samples
+        );
+    }
+
+    #[test]
+    fn high_sample_rate_192khz_smooth_ramp() {
+        let mut vol = Volume::with_sample_rate(100, 192000);
+        vol.set_level(0);
+
+        let mut prev_gain = vol.current_gain();
+        let mut max_delta = 0.0f32;
+
+        // Process the entire ramp in small chunks
+        while vol.is_ramping() {
+            let mut buffer = vec![1.0f32; 10];
+            vol.apply(&mut buffer);
+
+            let delta = (vol.current_gain() - prev_gain).abs();
+            max_delta = max_delta.max(delta);
+            prev_gain = vol.current_gain();
+        }
+
+        // High sample rate should have very smooth transitions
+        assert!(
+            max_delta < 0.01,
+            "192kHz should have very smooth ramping: max_delta={}",
+            max_delta
+        );
+    }
+
+    #[test]
+    fn high_sample_rate_192khz_ramp_completes_in_10ms() {
+        let mut vol = Volume::with_sample_rate(100, 192000);
+        vol.set_level(50);
+
+        // 10ms at 192kHz = 1920 mono samples = 3840 stereo samples
+        let samples_for_10ms = (192000.0 * 0.01 * 2.0) as usize;
+        let mut buffer = vec![1.0f32; samples_for_10ms];
+        vol.apply(&mut buffer);
+
+        assert!(
+            !vol.is_ramping(),
+            "Ramp should complete within 10ms worth of samples at 192kHz"
+        );
+    }
+
+    #[test]
+    fn high_sample_rate_no_clicks_on_volume_change() {
+        let mut vol = Volume::with_sample_rate(100, 192000);
+        vol.set_level(0);
+
+        // Collect all samples during the ramp
+        let mut all_samples = Vec::new();
+        while vol.is_ramping() || all_samples.is_empty() {
+            let mut buffer = vec![1.0f32; 100];
+            vol.apply(&mut buffer);
+            all_samples.extend(buffer);
+        }
+
+        // Check that maximum sample-to-sample change is small
+        let mut max_sample_delta = 0.0f32;
+        for i in 1..all_samples.len() {
+            let delta = (all_samples[i] - all_samples[i - 1]).abs();
+            max_sample_delta = max_sample_delta.max(delta);
+        }
+
+        assert!(
+            max_sample_delta < 0.01,
+            "No sample should change by more than 0.01 at 192kHz: max={}",
+            max_sample_delta
+        );
+    }
+
+    // ========================================
+    // Low Sample Rate (8kHz) Tests
+    // ========================================
+
+    #[test]
+    fn low_sample_rate_8khz_ramp_duration() {
+        let vol = Volume::with_sample_rate(80, 8000);
+
+        // 10ms at 8kHz = 80 samples, stereo = 160
+        let expected_samples = (8000 * RAMP_DURATION_MS * 2 / 1000) as usize;
+        assert_eq!(
+            vol.ramp_duration_samples, expected_samples,
+            "8kHz should have correct ramp duration: {} vs {}",
+            vol.ramp_duration_samples, expected_samples
+        );
+    }
+
+    #[test]
+    fn low_sample_rate_8khz_still_smooth() {
+        let mut vol = Volume::with_sample_rate(100, 8000);
+        vol.set_level(0);
+
+        let mut prev_gain = vol.current_gain();
+        let mut max_delta = 0.0f32;
+
+        // Process the entire ramp
+        while vol.is_ramping() {
+            let mut buffer = vec![1.0f32; 2];
+            vol.apply(&mut buffer);
+
+            let delta = (vol.current_gain() - prev_gain).abs();
+            max_delta = max_delta.max(delta);
+            prev_gain = vol.current_gain();
+        }
+
+        // Even at low sample rates, ramping should be reasonably smooth
+        // Delta will be larger due to fewer samples, but still should avoid clicks
+        assert!(
+            max_delta < 0.02,
+            "8kHz should still have acceptably smooth ramping: max_delta={}",
+            max_delta
+        );
+    }
+
+    #[test]
+    fn low_sample_rate_8khz_ramp_completes_in_10ms() {
+        let mut vol = Volume::with_sample_rate(100, 8000);
+        vol.set_level(50);
+
+        // 10ms at 8kHz = 80 mono samples = 160 stereo samples
+        let samples_for_10ms = (8000.0 * 0.01 * 2.0) as usize;
+        let mut buffer = vec![1.0f32; samples_for_10ms];
+        vol.apply(&mut buffer);
+
+        assert!(
+            !vol.is_ramping(),
+            "Ramp should complete within 10ms worth of samples at 8kHz"
+        );
+    }
+
+    #[test]
+    fn low_sample_rate_8khz_no_clicks() {
+        let mut vol = Volume::with_sample_rate(100, 8000);
+        vol.set_level(0);
+
+        // Process the entire ramp
+        let mut all_samples = Vec::new();
+        while vol.is_ramping() || all_samples.is_empty() {
+            let mut buffer = vec![1.0f32; 10];
+            vol.apply(&mut buffer);
+            all_samples.extend(buffer);
+        }
+
+        // Check sample-to-sample changes
+        let mut max_sample_delta = 0.0f32;
+        for i in 1..all_samples.len() {
+            let delta = (all_samples[i] - all_samples[i - 1]).abs();
+            max_sample_delta = max_sample_delta.max(delta);
+        }
+
+        // At 8kHz, deltas will be larger but should still be below click threshold
+        assert!(
+            max_sample_delta < 0.02,
+            "Sample changes should not cause clicks at 8kHz: max={}",
+            max_sample_delta
+        );
+    }
+
+    #[test]
+    fn low_sample_rate_handles_tiny_buffers() {
+        // At 8kHz with 160 samples for 10ms, using 1-sample buffers should still work
+        let mut vol = Volume::with_sample_rate(100, 8000);
+        vol.set_level(50);
+
+        let mut samples_processed = 0;
+        while vol.is_ramping() {
+            let mut buffer = vec![1.0f32; 1];
+            vol.apply(&mut buffer);
+            samples_processed += 1;
+
+            // Safety: prevent infinite loop
+            if samples_processed > 200 {
+                break;
+            }
+        }
+
+        assert!(
+            !vol.is_ramping(),
+            "Should complete ramp even with 1-sample buffers"
+        );
+        assert!(
+            samples_processed <= 160,
+            "Should not require more than ramp duration samples: {}",
+            samples_processed
+        );
+    }
+
+    // ========================================
+    // Comprehensive Click Prevention Tests
+    // ========================================
+
+    #[test]
+    fn click_test_extreme_volume_jump_high_to_zero() {
+        // Most likely to cause clicks: 100% -> 0%
+        let mut vol = Volume::new(100);
+        vol.set_level(0);
+
+        let mut all_samples = Vec::new();
+        while vol.is_ramping() {
+            let mut buffer = vec![1.0f32; 50];
+            vol.apply(&mut buffer);
+            all_samples.extend(buffer);
+        }
+
+        verify_no_clicks(&all_samples, "100% to 0%");
+    }
+
+    #[test]
+    fn click_test_extreme_volume_jump_zero_to_high() {
+        // Also likely to cause clicks: 0% -> 100%
+        let mut vol = Volume::new(0);
+        vol.set_level(100);
+
+        let mut all_samples = Vec::new();
+        // Initial samples at 0 gain
+        let mut buffer = vec![1.0f32; 50];
+        vol.apply(&mut buffer);
+        all_samples.extend(buffer);
+
+        // Continue processing
+        while vol.is_ramping() {
+            let mut buffer = vec![1.0f32; 50];
+            vol.apply(&mut buffer);
+            all_samples.extend(buffer);
+        }
+
+        verify_no_clicks(&all_samples, "0% to 100%");
+    }
+
+    #[test]
+    fn click_test_mute_at_full_volume() {
+        let mut vol = Volume::new(100);
+        vol.mute();
+
+        let mut all_samples = Vec::new();
+        while vol.is_ramping() {
+            let mut buffer = vec![1.0f32; 50];
+            vol.apply(&mut buffer);
+            all_samples.extend(buffer);
+        }
+
+        verify_no_clicks(&all_samples, "mute from 100%");
+    }
+
+    #[test]
+    fn click_test_unmute_to_full_volume() {
+        let mut vol = Volume::new(100);
+        vol.mute();
+
+        // Complete mute
+        let mut buffer = vec![1.0f32; 1000];
+        vol.apply(&mut buffer);
+
+        vol.unmute();
+
+        let mut all_samples = Vec::new();
+        while vol.is_ramping() {
+            let mut buffer = vec![1.0f32; 50];
+            vol.apply(&mut buffer);
+            all_samples.extend(buffer);
+        }
+
+        verify_no_clicks(&all_samples, "unmute to 100%");
+    }
+
+    #[test]
+    fn click_test_rapid_mute_unmute() {
+        let mut vol = Volume::new(80);
+
+        let mut all_samples = Vec::new();
+
+        // Rapid mute/unmute without completing ramps
+        for _ in 0..20 {
+            vol.toggle_mute();
+            let mut buffer = vec![1.0f32; 20];
+            vol.apply(&mut buffer);
+            all_samples.extend(buffer);
+        }
+
+        verify_no_clicks(&all_samples, "rapid mute/unmute");
+    }
+
+    /// Helper function to verify no audible clicks in a sample buffer
+    fn verify_no_clicks(samples: &[f32], test_name: &str) {
+        // Click threshold: maximum acceptable sample-to-sample change
+        // Values above ~0.05 per sample are typically audible as clicks
+        const CLICK_THRESHOLD: f32 = 0.05;
+
+        let mut max_delta = 0.0f32;
+        let mut click_positions = Vec::new();
+
+        for i in 1..samples.len() {
+            let delta = (samples[i] - samples[i - 1]).abs();
+            if delta > CLICK_THRESHOLD {
+                click_positions.push((i, delta));
+            }
+            max_delta = max_delta.max(delta);
+        }
+
+        assert!(
+            click_positions.is_empty(),
+            "{}: Found {} potential clicks (max delta: {}). Positions: {:?}",
+            test_name,
+            click_positions.len(),
+            max_delta,
+            click_positions.iter().take(5).collect::<Vec<_>>()
+        );
+    }
+
+    // ========================================
+    // Gain Calculation Verification Tests
+    // ========================================
+
+    #[test]
+    fn verify_gain_at_all_boundary_levels() {
+        let test_cases = [
+            (0, 0.0),     // Silence
+            (1, 0.00105), // Near minimum (-59.4 dB)
+            (50, 0.0316), // -30 dB
+            (99, 0.933),  // -0.6 dB
+            (100, 1.0),   // Unity gain
+        ];
+
+        for (level, expected_gain) in test_cases {
+            let vol = Volume::new(level);
+            let actual_gain = vol.gain();
+
+            // Use relative tolerance for non-zero values
+            if expected_gain == 0.0 {
+                assert_eq!(actual_gain, 0.0, "Level {} should have 0 gain", level);
+            } else {
+                let tolerance = expected_gain * 0.05; // 5% tolerance
+                assert!(
+                    (actual_gain - expected_gain).abs() < tolerance,
+                    "Level {} should have gain ~{}, got {}",
+                    level,
+                    expected_gain,
+                    actual_gain
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn verify_db_conversion_accuracy() {
+        let test_cases = [
+            (0, -60.0),  // Minimum
+            (50, -30.0), // Half
+            (100, 0.0),  // Unity
+        ];
+
+        for (level, expected_db) in test_cases {
+            let vol = Volume::new(level);
+            let actual_db = vol.to_db();
+
+            assert!(
+                (actual_db - expected_db).abs() < 0.5,
+                "Level {} should be ~{} dB, got {}",
+                level,
+                expected_db,
+                actual_db
+            );
+        }
+    }
+
+    #[test]
+    fn verify_gain_monotonic_increase() {
+        // Verify that gain increases monotonically with level
+        let mut prev_gain = 0.0f32;
+
+        for level in 0..=100 {
+            let vol = Volume::new(level);
+            let gain = vol.gain();
+
+            assert!(
+                gain >= prev_gain,
+                "Gain should increase monotonically: level {} has gain {} < previous {}",
+                level,
+                gain,
+                prev_gain
+            );
+
+            prev_gain = gain;
+        }
+    }
+
+    // ========================================
+    // Smooth Transition Verification Tests
+    // ========================================
+
+    #[test]
+    fn verify_ramp_is_linear_interpolation() {
+        let mut vol = Volume::new(100);
+        vol.set_level(0);
+
+        let start_gain = vol.current_gain();
+        let target_gain = vol.gain();
+        let total_samples = vol.ramp_samples_total;
+
+        // Collect gains after processing each sample
+        // The apply() function updates current_gain during processing
+        let mut gains = Vec::new();
+        for _ in 0..total_samples {
+            let mut buffer = vec![1.0f32; 1];
+            vol.apply(&mut buffer);
+            gains.push(vol.current_gain());
+        }
+
+        // Verify linear interpolation
+        // After processing sample i, progress should be (i+1)/total_samples
+        for (i, &gain) in gains.iter().enumerate() {
+            let progress = (i + 1) as f32 / total_samples as f32;
+            let expected_gain = start_gain + (target_gain - start_gain) * progress;
+
+            // Allow small tolerance due to floating point
+            assert!(
+                (gain - expected_gain).abs() < 0.01,
+                "Sample {}: expected gain {}, got {}",
+                i,
+                expected_gain,
+                gain
+            );
+        }
+    }
+
+    #[test]
+    fn verify_ramp_ends_exactly_at_target() {
+        let mut vol = Volume::new(100);
+        let target_level = 50;
+        vol.set_level(target_level);
+
+        // Process enough to complete ramp
+        let mut buffer = vec![1.0f32; 2000];
+        vol.apply(&mut buffer);
+
+        let expected_gain = Volume::new(target_level).gain();
+        assert!(
+            (vol.current_gain() - expected_gain).abs() < 0.0001,
+            "Ramp should end exactly at target gain: {} vs {}",
+            vol.current_gain(),
+            expected_gain
+        );
+
+        // Process more - gain should stay stable
+        let gain_after = vol.current_gain();
+        let mut buffer = vec![1.0f32; 100];
+        vol.apply(&mut buffer);
+
+        assert_eq!(
+            vol.current_gain(),
+            gain_after,
+            "Gain should remain stable after ramp completes"
+        );
+    }
 }
