@@ -998,47 +998,50 @@ impl AudioSource for LocalAudioSource {
     /// This method NEVER blocks on disk I/O - it only reads from the buffer
     /// that the background decoder thread has filled. If the buffer is empty,
     /// it fills with silence to prevent glitches.
+    ///
+    /// Uses try_lock to avoid blocking the real-time audio thread. If the lock
+    /// is contended (decoder thread is writing), returns silence for this callback.
     fn read_samples(&mut self, output: &mut [f32]) -> Result<usize> {
-        let mut state = self.shared.lock().unwrap();
+        let mut state = match self.shared.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => {
+                // Lock contention with decoder thread - fill with silence
+                // This is rare since the decoder thread releases the lock quickly
+                output.fill(0.0);
+                return Ok(0);
+            }
+        };
 
         // Copy from output buffer to output (non-blocking)
         let available = state.output_buffer.len().min(output.len());
 
-        // Log first read and any underruns
+        // Track first read and underruns for logging AFTER the critical section
+        // Using trace! level to avoid allocation overhead in the hot path
         let is_first_read = state.samples_read == 0;
-        let is_underrun = available < output.len();
-
-        if is_first_read {
-            tracing::info!(
-                "[LocalAudioSource::read_samples] FIRST READ: requested={}, available={}, buffer_remaining={}, samples_read={}",
-                output.len(),
-                available,
-                state.output_buffer.len(),
-                state.samples_read
-            );
-        } else if is_underrun {
-            tracing::warn!(
-                "[LocalAudioSource::read_samples] UNDERRUN: requested={}, available={}, buffer_remaining={}, samples_read={}",
-                output.len(),
-                available,
-                state.output_buffer.len(),
-                state.samples_read
-            );
-        }
+        let is_underrun = available < output.len() && !state.is_eof;
 
         for i in 0..available {
             output[i] = state.output_buffer.pop_front().unwrap();
         }
 
-        // Log first samples on first read
-        if is_first_read && available >= 8 {
+        state.samples_read += available;
+
+        // Log diagnostics using trace! to minimize overhead in hot path
+        // These are typically filtered out in production but available for debugging
+        if is_first_read {
+            tracing::trace!(
+                "[LocalAudioSource::read_samples] First read: requested={}, available={}",
+                output.len(),
+                available
+            );
+        } else if is_underrun {
+            // Underruns are logged at debug level since they indicate potential issues
             tracing::debug!(
-                "[LocalAudioSource::read_samples] First 8 samples: [{:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}]",
-                output[0], output[1], output[2], output[3], output[4], output[5], output[6], output[7]
+                "[LocalAudioSource::read_samples] Buffer underrun: requested={}, available={}",
+                output.len(),
+                available
             );
         }
-
-        state.samples_read += available;
 
         // Fill remainder with silence if buffer is empty
         if available < output.len() {
@@ -1075,14 +1078,26 @@ impl AudioSource for LocalAudioSource {
 
     fn position(&self) -> Duration {
         // Calculate position based on samples read (at target sample rate)
-        let state = self.shared.lock().unwrap();
-        let frames = state.samples_read / self.channels as usize;
-        Duration::from_secs_f64(frames as f64 / self.target_sample_rate as f64)
+        // Uses try_lock to avoid blocking the real-time audio thread
+        match self.shared.try_lock() {
+            Ok(state) => {
+                let frames = state.samples_read / self.channels as usize;
+                Duration::from_secs_f64(frames as f64 / self.target_sample_rate as f64)
+            }
+            Err(_) => {
+                // Lock contention - return zero duration rather than blocking
+                // The next callback will get the correct position
+                Duration::ZERO
+            }
+        }
     }
 
     fn is_finished(&self) -> bool {
-        let state = self.shared.lock().unwrap();
-        state.is_eof && state.output_buffer.is_empty()
+        // Uses try_lock to avoid blocking the real-time audio thread
+        match self.shared.try_lock() {
+            Ok(state) => state.is_eof && state.output_buffer.is_empty(),
+            Err(_) => false, // If lock is contended, assume not finished
+        }
     }
 
     /// Check if source is ready for glitch-free playback
@@ -1092,10 +1107,15 @@ impl AudioSource for LocalAudioSource {
     /// - OR we've reached EOF (short files)
     ///
     /// This prevents buffer underrun at playback start when disk I/O is slow.
+    /// Uses try_lock to avoid blocking the real-time audio thread.
     fn is_ready(&self) -> bool {
-        let state = self.shared.lock().unwrap();
-        // Ready if we have enough samples OR if we've reached EOF (short files)
-        state.output_buffer.len() >= MIN_BUFFER_SAMPLES || state.is_eof
+        match self.shared.try_lock() {
+            Ok(state) => {
+                // Ready if we have enough samples OR if we've reached EOF (short files)
+                state.output_buffer.len() >= MIN_BUFFER_SAMPLES || state.is_eof
+            }
+            Err(_) => false, // If lock is contended, report not ready yet
+        }
     }
 
     /// Get sample rate of the audio source (target/output rate)

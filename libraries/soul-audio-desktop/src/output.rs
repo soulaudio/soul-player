@@ -322,11 +322,15 @@ impl CpalOutput {
         // Get volume (lock-free)
         let volume = state.get_volume();
 
-        // Get buffer reference (Arc clone is cheap)
-        let buffer = {
-            let buffer_guard = state.buffer.lock().unwrap();
-            Arc::clone(&*buffer_guard)
+        // Get buffer reference using try_lock to avoid blocking the real-time audio thread
+        // Arc clone is cheap, we just need to avoid blocking if the buffer is being swapped
+        let Ok(buffer_guard) = state.buffer.try_lock() else {
+            // Lock contention - fill with silence to prevent blocking
+            // This is very rare since buffer swaps are fast, but prevents glitches
+            output.fill(0.0);
+            return;
         };
+        let buffer = Arc::clone(&*buffer_guard);
 
         // Get current position
         let mut pos = state.position.load(Ordering::Relaxed);

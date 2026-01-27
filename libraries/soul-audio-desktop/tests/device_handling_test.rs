@@ -873,12 +873,19 @@ mod device_switching_tests {
 
         match result {
             Ok(mut playback) => {
+                // Disable auto_fallback to ensure the switch fails for invalid devices
+                // By default, auto_fallback is enabled which would make this test pass
+                // by falling back to the default device
+                let mut config = playback.get_device_switch_config();
+                config.auto_fallback = false;
+                playback.set_device_switch_config(config);
+
                 let switch_result = playback.switch_device(
                     AudioBackend::Default,
                     Some("NonexistentDevice12345XYZ".to_string()),
                 );
 
-                assert!(switch_result.is_err(), "Should fail for invalid device");
+                assert!(switch_result.is_err(), "Should fail for invalid device when auto_fallback is disabled");
             }
             Err(e) => {
                 eprintln!("Could not create playback: {}", e);

@@ -1473,9 +1473,22 @@ impl DesktopPlayback {
             );
         }
 
-        // Acquire manager lock ONCE for the entire callback
-        // This reduces latency by avoiding multiple lock/unlock cycles
-        let mut mgr = manager.lock().unwrap();
+        // Acquire manager lock using try_lock to avoid blocking the real-time audio thread
+        // If the lock is contended (another thread holds it), output DAC keepalive noise
+        // instead of blocking. This prevents audio glitches from mutex contention.
+        let Ok(mut mgr) = manager.try_lock() else {
+            // Lock contention - output DAC keepalive noise to prevent glitches
+            // This is better than blocking which could cause a much longer glitch
+            const DAC_KEEPALIVE: f32 = 0.000016; // -96dB - inaudible but keeps DAC active
+            for sample in &mut *data {
+                // Simple LFSR noise to keep DAC active
+                *error_noise_state ^= *error_noise_state << 13;
+                *error_noise_state ^= *error_noise_state >> 17;
+                *error_noise_state ^= *error_noise_state << 5;
+                *sample = ((*error_noise_state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE;
+            }
+            return;
+        };
 
         // Process any pending commands while holding the lock
         while let Ok(command) = command_rx.try_recv() {
@@ -3136,6 +3149,100 @@ impl DesktopPlayback {
         )?;
 
         Ok(true)
+    }
+
+    /// Switch to the system default audio device
+    ///
+    /// This method is used when the system default device changes (e.g., user
+    /// plugs in headphones, changes default in sound settings). It switches
+    /// playback to whatever the OS currently considers the default device.
+    ///
+    /// Unlike `check_and_update_sample_rate()` which only detects sample rate
+    /// changes on the *current* device, this method actually switches to the
+    /// new system default.
+    ///
+    /// # Returns
+    /// * `Ok(())` - Successfully switched to default device
+    /// * `Err(_)` - Failed to switch (will attempt fallback if configured)
+    pub fn switch_to_system_default(&mut self) -> Result<()> {
+        let current_device = self.current_device.lock().unwrap().clone();
+        let backend = *self.current_backend.lock().unwrap();
+
+        // Query what the system thinks is the default device now
+        let new_default = match crate::device::get_default_device(backend) {
+            Ok(device) => device,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "[DesktopPlayback] Failed to get system default device"
+                );
+                return Err(crate::error::AudioError::DeviceError(e.to_string()));
+            }
+        };
+
+        // Check if we're already using the default device
+        if new_default.name == current_device {
+            tracing::debug!(
+                device = %current_device,
+                "[DesktopPlayback] Already using system default device"
+            );
+            return Ok(());
+        }
+
+        tracing::info!(
+            old_device = %current_device,
+            new_device = %new_default.name,
+            "[DesktopPlayback] Switching to system default device"
+        );
+
+        // Switch to the new default device
+        self.switch_device_with_reason(
+            backend,
+            None, // None means use default device
+            DeviceSwitchReason::DefaultDeviceChanged,
+        )
+    }
+
+    /// Check if a device name matches our current device
+    ///
+    /// Device IDs from platform APIs (WinRT, CoreAudio) may differ in format
+    /// from the device names we store. This method handles the comparison
+    /// by checking both the full device ID and the device name.
+    ///
+    /// # Arguments
+    /// * `device_id_or_name` - The device identifier to check (from platform API)
+    ///
+    /// # Returns
+    /// * `true` if the device matches our current device
+    /// * `false` otherwise
+    pub fn is_current_device(&self, device_id_or_name: &str) -> bool {
+        let current_device = self.current_device.lock().unwrap();
+        let current_device_id = self.current_device_id.lock().unwrap();
+
+        // Check exact match with device name
+        if *current_device == device_id_or_name {
+            return true;
+        }
+
+        // Check if device_id contains our device name (handles WinRT full IDs)
+        if device_id_or_name.contains(current_device.as_str()) {
+            return true;
+        }
+
+        // Check against our stored device ID
+        if let Some(ref stored_id) = *current_device_id {
+            if stored_id == device_id_or_name {
+                return true;
+            }
+            // Also check if the provided ID contains our stored ID or vice versa
+            if device_id_or_name.contains(stored_id.as_str())
+                || stored_id.contains(device_id_or_name)
+            {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Refresh the audio stream

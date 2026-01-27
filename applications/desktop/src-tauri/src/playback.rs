@@ -776,17 +776,18 @@ impl PlaybackManager {
                 );
 
                 if let Ok(mut pb) = playback.lock() {
-                    // Get the current playback device ID
-                    let current_device_id = pb.get_current_device();
+                    // Get the current playback device name for logging
+                    let current_device_name = pb.get_current_device();
 
                     tracing::debug!(
                         removed_device_id = %id,
-                        current_device_id = %current_device_id,
+                        current_device_name = %current_device_name,
                         "[DEVICE_MONITOR] Comparing removed device with current playback device"
                     );
 
-                    // Only attempt device switching if the removed device matches the current one
-                    if id == current_device_id {
+                    // Use is_current_device for robust comparison
+                    // This handles WinRT device IDs vs device names properly
+                    if pb.is_current_device(&id) {
                         tracing::warn!(
                             device_id = %id,
                             "[DEVICE_MONITOR] Current playback device was removed - switching to default device"
@@ -872,20 +873,28 @@ impl PlaybackManager {
                 );
 
                 if let Ok(mut pb) = playback.lock() {
-                    // Trigger a sample rate check which will detect the device change
-                    // and recreate the stream if necessary
-                    if let Err(e) = pb.check_and_update_sample_rate() {
-                        tracing::warn!(
-                            error = %e,
-                            device_id = %id,
-                            device_name = %name,
-                            "[DEVICE_MONITOR] Failed to switch to new default device"
+                    // Check if a switch is already in progress
+                    if pb.is_device_switching() {
+                        tracing::debug!(
+                            "[DEVICE_MONITOR] Device switch already in progress - skipping default device switch"
                         );
                     } else {
-                        tracing::info!(
-                            device_name = %name,
-                            "[DEVICE_MONITOR] Successfully switched to new default device"
-                        );
+                        // Switch to the new system default device
+                        // This properly detects if we need to switch, unlike check_and_update_sample_rate
+                        // which only checks sample rate on the *current* device
+                        if let Err(e) = pb.switch_to_system_default() {
+                            tracing::warn!(
+                                error = %e,
+                                device_id = %id,
+                                device_name = %name,
+                                "[DEVICE_MONITOR] Failed to switch to new default device"
+                            );
+                        } else {
+                            tracing::info!(
+                                device_name = %name,
+                                "[DEVICE_MONITOR] Successfully switched to new default device"
+                            );
+                        }
                     }
                 } else {
                     tracing::warn!(
