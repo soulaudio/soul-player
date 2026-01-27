@@ -512,10 +512,23 @@ mod playback_state {
     #[test]
     fn seek_accuracy_within_tolerance() {
         let mut manager = PlaybackManager::default();
+
+        // Add a track to queue and start playback first
+        let track = create_track("test", "Test Track", "Artist", 100);
+        manager.add_to_queue_end(track);
+        let _ = manager.play();
+
         manager.set_audio_source(Box::new(MockAudioSource::new(
             Duration::from_secs(100),
             44100,
         )));
+
+        // Verify we're in Playing state
+        assert_eq!(
+            manager.get_state(),
+            PlaybackState::Playing,
+            "Should be in Playing state"
+        );
 
         // Seek to 50 seconds
         manager.seek_to(Duration::from_secs(50)).unwrap();
@@ -528,10 +541,23 @@ mod playback_state {
     #[test]
     fn seek_percent_calculates_correctly() {
         let mut manager = PlaybackManager::default();
+
+        // Add a track to queue and start playback first
+        let track = create_track("test", "Test Track", "Artist", 200);
+        manager.add_to_queue_end(track);
+        let _ = manager.play();
+
         manager.set_audio_source(Box::new(MockAudioSource::new(
             Duration::from_secs(200),
             44100,
         )));
+
+        // Verify we're in Playing state
+        assert_eq!(
+            manager.get_state(),
+            PlaybackState::Playing,
+            "Should be in Playing state"
+        );
 
         // Seek to 25%
         manager.seek_to_percent(0.25).unwrap();
@@ -1499,16 +1525,20 @@ mod edge_cases {
     #[test]
     fn very_long_track() {
         let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(44100);
+        manager.set_output_channels(2);
 
         // 10 hour track
         manager.add_to_queue_end(create_track("1", "Long", "Artist", 36000));
+        manager.play().ok(); // Must start playback before seeking
         manager.set_audio_source(Box::new(MockAudioSource::new(
             Duration::from_secs(36000),
             44100,
         )));
 
-        // Seek to end-ish
-        manager.seek_to(Duration::from_secs(35900)).ok();
+        // Seek to end-ish - must be in Playing state for seek to work
+        let seek_result = manager.seek_to(Duration::from_secs(35900));
+        assert!(seek_result.is_ok(), "Seek should succeed");
 
         let pos = manager.get_position();
         assert!(pos >= Duration::from_secs(35900));
@@ -1667,5 +1697,335 @@ mod edge_cases {
         assert!(config.crossfade.enabled);
         assert_eq!(config.crossfade.duration_ms, 5000);
         assert_eq!(config.crossfade.curve, FadeCurve::SCurve);
+    }
+
+    // ========================================================================
+    // Unusual Sample Rate Tests
+    // ========================================================================
+
+    #[test]
+    fn legacy_sample_rate_11025hz() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(11025);
+        manager.set_output_channels(2);
+
+        manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_secs(10),
+            11025,
+        )));
+
+        let mut buffer = vec![0.0f32; 1024];
+        let result = manager.process_audio(&mut buffer);
+        assert!(result.is_ok(), "11.025kHz should process audio correctly");
+    }
+
+    #[test]
+    fn legacy_sample_rate_22050hz() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(22050);
+        manager.set_output_channels(2);
+
+        manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_secs(10),
+            22050,
+        )));
+
+        let mut buffer = vec![0.0f32; 1024];
+        let result = manager.process_audio(&mut buffer);
+        assert!(result.is_ok(), "22.05kHz should process audio correctly");
+    }
+
+    #[test]
+    fn high_res_sample_rate_88200hz() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(88200);
+        manager.set_output_channels(2);
+
+        manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_secs(10),
+            88200,
+        )));
+
+        let mut buffer = vec![0.0f32; 1024];
+        let result = manager.process_audio(&mut buffer);
+        assert!(result.is_ok(), "88.2kHz should process audio correctly");
+    }
+
+    #[test]
+    fn high_res_sample_rate_176400hz() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(176400);
+        manager.set_output_channels(2);
+
+        manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_secs(10),
+            176400,
+        )));
+
+        let mut buffer = vec![0.0f32; 1024];
+        let result = manager.process_audio(&mut buffer);
+        assert!(result.is_ok(), "176.4kHz should process audio correctly");
+    }
+
+    #[test]
+    fn very_low_sample_rate_8000hz() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(8000);
+        manager.set_output_channels(2);
+
+        manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_secs(10),
+            8000,
+        )));
+
+        let mut buffer = vec![0.0f32; 1024];
+        let result = manager.process_audio(&mut buffer);
+        assert!(result.is_ok(), "8kHz should process audio correctly");
+    }
+
+    // ========================================================================
+    // Very Long File Tests
+    // ========================================================================
+
+    #[test]
+    fn very_long_track_position_accuracy() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(44100);
+        manager.set_output_channels(2);
+
+        // 24 hour track (86400 seconds)
+        let duration_secs = 86400;
+        manager.add_to_queue_end(create_track("1", "Long", "Artist", duration_secs));
+        manager.set_audio_source(Box::new(
+            MockAudioSource::new(Duration::from_secs(duration_secs), 44100)
+                .with_position(Duration::from_secs(43200)), // Halfway through (12 hours)
+        ));
+
+        // Verify position is accurate
+        let pos = manager.get_position();
+        assert!(
+            pos >= Duration::from_secs(43200),
+            "Position should be at 12 hours"
+        );
+    }
+
+    #[test]
+    fn very_long_track_seek_to_end() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(44100);
+        manager.set_output_channels(2);
+
+        // 4 hour track (14400 seconds)
+        let duration_secs = 14400;
+        manager.add_to_queue_end(create_track("1", "Long", "Artist", duration_secs));
+        manager.play().ok(); // Must start playback before seeking
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_secs(duration_secs),
+            44100,
+        )));
+
+        // Seek to near end (4 hours - 1 second)
+        let seek_result = manager.seek_to(Duration::from_secs(14399));
+        assert!(seek_result.is_ok(), "Seek should succeed");
+
+        let pos = manager.get_position();
+        assert!(
+            pos >= Duration::from_secs(14399),
+            "Position should be near 4 hours"
+        );
+    }
+
+    #[test]
+    fn very_long_track_with_crossfade() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(44100);
+        manager.set_output_channels(2);
+        manager.set_crossfade_enabled(true);
+        manager.set_crossfade_duration(5000);
+
+        // Two 5-hour tracks
+        let duration_secs = 18000;
+        manager.add_to_queue_end(create_track("1", "Long1", "Artist", duration_secs));
+        manager.add_to_queue_end(create_track("2", "Long2", "Artist", duration_secs));
+
+        manager.play().ok(); // Must start playback before seeking
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_secs(duration_secs),
+            44100,
+        )));
+
+        // Seek near end to test crossfade trigger
+        manager
+            .seek_to(Duration::from_secs(duration_secs - 10))
+            .ok();
+
+        let mut buffer = vec![0.0f32; 4096];
+        let result = manager.process_audio(&mut buffer);
+        assert!(
+            result.is_ok(),
+            "Crossfade near end of long track should work"
+        );
+    }
+
+    // ========================================================================
+    // Very Short File Tests
+    // ========================================================================
+
+    #[test]
+    fn extremely_short_track_50ms() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(44100);
+        manager.set_output_channels(2);
+
+        // 50ms track
+        manager.add_to_queue_end(QueueTrack {
+            id: "short".to_string(),
+            path: PathBuf::from("/music/short.mp3"),
+            title: "Short".to_string(),
+            artist: "Artist".to_string(),
+            album: None,
+            duration: Duration::from_millis(50),
+            track_number: None,
+            source: TrackSource::Single,
+        });
+
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_millis(50),
+            44100,
+        )));
+
+        let mut buffer = vec![0.0f32; 4096];
+        let result = manager.process_audio(&mut buffer);
+        assert!(result.is_ok(), "50ms track should process correctly");
+    }
+
+    #[test]
+    fn extremely_short_track_10ms() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(44100);
+        manager.set_output_channels(2);
+
+        // 10ms track
+        manager.add_to_queue_end(QueueTrack {
+            id: "very_short".to_string(),
+            path: PathBuf::from("/music/very_short.mp3"),
+            title: "Very Short".to_string(),
+            artist: "Artist".to_string(),
+            album: None,
+            duration: Duration::from_millis(10),
+            track_number: None,
+            source: TrackSource::Single,
+        });
+
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_millis(10),
+            44100,
+        )));
+
+        let mut buffer = vec![0.0f32; 4096];
+        let result = manager.process_audio(&mut buffer);
+        assert!(result.is_ok(), "10ms track should process correctly");
+    }
+
+    #[test]
+    fn track_shorter_than_buffer_size() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(44100);
+        manager.set_output_channels(2);
+
+        // Track with only ~100 stereo samples (~2.3ms at 44.1kHz)
+        let duration = Duration::from_micros(2300);
+        manager.add_to_queue_end(QueueTrack {
+            id: "tiny".to_string(),
+            path: PathBuf::from("/music/tiny.mp3"),
+            title: "Tiny".to_string(),
+            artist: "Artist".to_string(),
+            album: None,
+            duration,
+            track_number: None,
+            source: TrackSource::Single,
+        });
+
+        manager.set_audio_source(Box::new(MockAudioSource::new(duration, 44100)));
+
+        // Request more samples than the track contains
+        let mut buffer = vec![0.0f32; 4096];
+        let result = manager.process_audio(&mut buffer);
+        assert!(
+            result.is_ok(),
+            "Track shorter than buffer should process correctly"
+        );
+    }
+
+    #[test]
+    fn rapid_short_track_transitions() {
+        let mut manager = PlaybackManager::default();
+        manager.set_sample_rate(44100);
+        manager.set_output_channels(2);
+        manager.set_crossfade_enabled(false); // Disable crossfade for fast transitions
+
+        // Add several very short tracks (100ms each)
+        for i in 1..=10 {
+            manager.add_to_queue_end(QueueTrack {
+                id: format!("{}", i),
+                path: PathBuf::from(format!("/music/{}.mp3", i)),
+                title: format!("Track {}", i),
+                artist: "Artist".to_string(),
+                album: None,
+                duration: Duration::from_millis(100),
+                track_number: Some(i as u32),
+                source: TrackSource::Single,
+            });
+        }
+
+        // Process through multiple tracks
+        let mut total_processed = 0;
+        for _ in 0..20 {
+            manager.set_audio_source(Box::new(MockAudioSource::new(
+                Duration::from_millis(100),
+                44100,
+            )));
+
+            let mut buffer = vec![0.0f32; 8820]; // ~100ms of audio
+            match manager.process_audio(&mut buffer) {
+                Ok(n) => total_processed += n,
+                Err(_) => break,
+            }
+        }
+
+        assert!(
+            total_processed > 0,
+            "Should have processed some audio samples"
+        );
+    }
+
+    // ========================================================================
+    // Sample Rate Mismatch Tests
+    // ========================================================================
+
+    #[test]
+    fn sample_rate_mismatch_source_and_manager() {
+        let mut manager = PlaybackManager::default();
+        // Manager set to 48kHz
+        manager.set_sample_rate(48000);
+        manager.set_output_channels(2);
+
+        manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
+
+        // Source at 44.1kHz (different from manager's 48kHz)
+        manager.set_audio_source(Box::new(MockAudioSource::new(
+            Duration::from_secs(10),
+            44100,
+        )));
+
+        // Should still process (platform handles resampling)
+        let mut buffer = vec![0.0f32; 1024];
+        let result = manager.process_audio(&mut buffer);
+        assert!(result.is_ok(), "Sample rate mismatch should not crash");
     }
 }

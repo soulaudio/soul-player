@@ -49,25 +49,25 @@ fn test_crossfade_duration_calculation_consistency() {
         on_skip: true,
     };
 
-    // At 1000 Hz sample rate:
-    // duration_samples() returns: (1000 * 1000) / 1000 = 1000 (frames)
-    assert_eq!(settings.duration_samples(1000), 1000);
+    // At 8000 Hz sample rate (minimum valid rate):
+    // duration_samples() returns: (1000 * 8000) / 1000 = 8000 (frames)
+    assert_eq!(settings.duration_samples(8000), 8000);
 
     // The CrossfadeEngine multiplies this by 2 for stereo
     let mut engine = CrossfadeEngine::with_settings(settings);
-    engine.set_sample_rate(1000);
+    engine.set_sample_rate(8000);
     engine.start(false);
 
-    // So internal duration_samples should be 2000 (samples)
-    // Process exactly 2000 samples should complete the crossfade
-    let outgoing = vec![1.0f32; 2000];
-    let incoming = vec![0.0f32; 2000];
-    let mut output = vec![0.0f32; 2000];
+    // So internal duration_samples should be 16000 (samples)
+    // Process exactly 16000 samples should complete the crossfade
+    let outgoing = vec![1.0f32; 16000];
+    let incoming = vec![0.0f32; 16000];
+    let mut output = vec![0.0f32; 16000];
 
     let (processed, completed) = engine.process(&outgoing, &incoming, &mut output);
 
-    // This SHOULD complete after 2000 samples (1 second at 1000Hz stereo)
-    assert_eq!(processed, 2000);
+    // This SHOULD complete after 16000 samples (1 second at 8000Hz stereo)
+    assert_eq!(processed, 16000);
     assert!(
         completed,
         "Crossfade should complete after processing duration_samples"
@@ -678,15 +678,17 @@ fn test_gapless_instant_switch() {
 #[test]
 fn test_crossfade_progress_accuracy() {
     let mut engine = CrossfadeEngine::with_settings(CrossfadeSettings::with_duration(1000));
-    engine.set_sample_rate(1000); // 1000 Hz for easy math
+    // Use valid sample rate (minimum is 8000 Hz)
+    engine.set_sample_rate(8000);
 
     engine.start(false);
     assert!((engine.progress() - 0.0).abs() < 0.001);
 
-    // Process half the crossfade (1000 samples = 500 frames * 2)
-    let outgoing = vec![1.0f32; 1000];
-    let incoming = vec![0.0f32; 1000];
-    let mut output = vec![0.0f32; 1000];
+    // At 8000 Hz, 1000ms = 8000 samples (stereo = 16000)
+    // Process half = 8000 samples
+    let outgoing = vec![1.0f32; 8000];
+    let incoming = vec![0.0f32; 8000];
+    let mut output = vec![0.0f32; 8000];
 
     engine.process(&outgoing, &incoming, &mut output);
 

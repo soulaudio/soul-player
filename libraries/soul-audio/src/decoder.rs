@@ -672,16 +672,34 @@ impl AudioDecoderTrait for SymphoniaDecoder {
     fn seek(&mut self, position: Duration) -> soul_core::Result<Duration> {
         let state = self.stream_state.as_mut().ok_or(AudioError::NoFileOpen)?;
 
-        // Clamp position to duration if known
+        // Clamp position to valid range
+        // - Minimum: 0 (start of track)
+        // - Maximum: duration - 1ms (to avoid seeking exactly to EOF)
         let clamped_position = if let Some(duration) = state.duration {
-            if position > duration {
-                duration
-            } else {
-                position
-            }
+            // Leave 1ms margin before end to avoid EOF edge case
+            let max_position = duration.saturating_sub(Duration::from_millis(1));
+            position.min(max_position)
         } else {
             position
         };
+
+        // Log edge case seeks for debugging
+        if position.as_millis() < 100 {
+            tracing::debug!(
+                position_ms = position.as_millis(),
+                "[Decoder] Seek near start (0-100ms)"
+            );
+        } else if let Some(duration) = state.duration {
+            let remaining = duration.saturating_sub(position);
+            if remaining.as_millis() < 100 {
+                tracing::debug!(
+                    position_ms = position.as_millis(),
+                    duration_ms = duration.as_millis(),
+                    remaining_ms = remaining.as_millis(),
+                    "[Decoder] Seek near end (last 100ms)"
+                );
+            }
+        }
 
         // Convert duration to Time for Symphonia
         let secs = clamped_position.as_secs();
@@ -712,16 +730,57 @@ impl AudioDecoderTrait for SymphoniaDecoder {
                     Duration::from_secs_f64(seeked_to.actual_ts as f64 / state.sample_rate as f64)
                 };
 
-                // Update position tracking
+                // Update position tracking using high-precision calculation
+                // Use u128 intermediate to avoid overflow for very long files
+                let sample_rate_u64 = state.sample_rate as u64;
+                let position_nanos = actual_position.as_nanos();
                 state.position_samples =
-                    (actual_position.as_secs_f64() * state.sample_rate as f64) as u64;
+                    ((position_nanos * sample_rate_u64 as u128) / 1_000_000_000) as u64;
+
+                // Calculate seek accuracy (difference between requested and actual)
+                // Use saturating_sub to handle potential underflow gracefully
+                let seek_error_ms = actual_position
+                    .saturating_sub(clamped_position)
+                    .max(clamped_position.saturating_sub(actual_position))
+                    .as_millis();
+
+                tracing::debug!(
+                    requested_position_ms = clamped_position.as_millis(),
+                    actual_position_ms = actual_position.as_millis(),
+                    seek_error_ms = seek_error_ms,
+                    "[Decoder] Seek completed"
+                );
+
+                // Warn if seek accuracy is poor (> 50ms difference)
+                // This can happen with frame-based formats like MP3/AAC
+                if seek_error_ms > 50 {
+                    tracing::warn!(
+                        requested_ms = clamped_position.as_millis(),
+                        actual_ms = actual_position.as_millis(),
+                        error_ms = seek_error_ms,
+                        "[Decoder] Seek accuracy issue: landed {}ms from target",
+                        seek_error_ms
+                    );
+                }
 
                 Ok(actual_position)
             }
             Err(symphonia::core::errors::Error::SeekError(kind)) => {
+                tracing::warn!(
+                    requested_position_ms = clamped_position.as_millis(),
+                    error = ?kind,
+                    "[Decoder] Seek failed"
+                );
                 Err(AudioError::SeekError(format!("Seek failed: {:?}", kind)).into())
             }
-            Err(e) => Err(AudioError::SeekError(format!("Seek error: {}", e)).into()),
+            Err(e) => {
+                tracing::warn!(
+                    requested_position_ms = clamped_position.as_millis(),
+                    error = %e,
+                    "[Decoder] Seek error"
+                );
+                Err(AudioError::SeekError(format!("Seek error: {}", e)).into())
+            }
         }
     }
 

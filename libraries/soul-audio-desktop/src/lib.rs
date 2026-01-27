@@ -114,7 +114,8 @@ pub use error::{AudioError, AudioOutputError, Result};
 pub use exclusive::{AudioData, ExclusiveConfig, ExclusiveOutput, LatencyInfo};
 pub use output::{CpalOutput, ResamplingQuality};
 pub use playback::{
-    DesktopPlayback, PlaybackCommand, PlaybackEvent, ResamplingSettings, SampleRateMode,
+    DesktopPlayback, DeviceSwitchConfig, DeviceSwitchReason, DeviceSwitchState, PlaybackCommand,
+    PlaybackEvent, ResamplingSettings, SampleRateMode,
 };
 pub use sources::{LocalAudioSource, StreamingAudioSource};
 pub use track_loader::{LoadRequest, LoadResult, TrackLoader};

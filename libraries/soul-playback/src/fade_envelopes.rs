@@ -81,6 +81,12 @@ const DC_BLOCKER_COEFF: f32 = 0.9975;
 /// preventing power-save mode which can cause audible pops when audio starts.
 pub(crate) const DAC_KEEPALIVE_NOISE: f32 = 0.000016;
 
+/// Minimum allowed sample rate in Hz
+const MIN_SAMPLE_RATE: u32 = 8000;
+
+/// Maximum allowed sample rate in Hz
+const MAX_SAMPLE_RATE: u32 = 384000;
+
 /// Action to perform when stop fade completes
 ///
 /// This allows the fade-out to complete smoothly before executing the
@@ -245,12 +251,14 @@ impl StartFadeEnvelope {
     /// Update sample rate and recalculate duration
     ///
     /// Should be called when audio output format changes.
+    /// Sample rate is clamped to valid range (8000 - 384000 Hz).
     pub(crate) fn set_sample_rate(&mut self, sample_rate: u32) {
-        if self.sample_rate != sample_rate {
-            self.sample_rate = sample_rate;
+        let clamped_rate = sample_rate.clamp(MIN_SAMPLE_RATE, MAX_SAMPLE_RATE);
+        if self.sample_rate != clamped_rate {
+            self.sample_rate = clamped_rate;
             self.duration_samples =
-                Self::calculate_duration_samples(sample_rate, START_FADE_DURATION_MS);
-            self.max_wait_samples = Self::calculate_duration_samples(sample_rate, MAX_WAIT_MS);
+                Self::calculate_duration_samples(clamped_rate, START_FADE_DURATION_MS);
+            self.max_wait_samples = Self::calculate_duration_samples(clamped_rate, MAX_WAIT_MS);
         }
     }
 
@@ -394,6 +402,8 @@ impl StartFadeEnvelope {
         }
 
         // Process stereo frames (2 samples per frame)
+        // Note: If buffer has odd length, the last sample is ignored (should not happen with
+        // properly aligned stereo buffers, but we handle it safely via integer division)
         let frames = buffer.len() / 2;
 
         for frame in 0..frames {
@@ -565,11 +575,13 @@ impl StopFadeEnvelope {
     /// Update sample rate and recalculate duration
     ///
     /// Should be called when audio output format changes.
+    /// Sample rate is clamped to valid range (8000 - 384000 Hz).
     pub(crate) fn set_sample_rate(&mut self, sample_rate: u32) {
-        if self.sample_rate != sample_rate {
-            self.sample_rate = sample_rate;
+        let clamped_rate = sample_rate.clamp(MIN_SAMPLE_RATE, MAX_SAMPLE_RATE);
+        if self.sample_rate != clamped_rate {
+            self.sample_rate = clamped_rate;
             self.duration_samples =
-                Self::calculate_duration_samples(sample_rate, STOP_FADE_DURATION_MS);
+                Self::calculate_duration_samples(clamped_rate, STOP_FADE_DURATION_MS);
         }
     }
 
@@ -606,6 +618,8 @@ impl StopFadeEnvelope {
         }
 
         // Process stereo frames (2 samples per frame)
+        // Note: If buffer has odd length, the last sample is ignored (should not happen with
+        // properly aligned stereo buffers, but we handle it safely via integer division)
         let frames = buffer.len() / 2;
 
         for frame in 0..frames {
@@ -716,6 +730,92 @@ mod tests {
         assert_eq!(
             fade.fade_complete_action,
             FadeCompleteAction::TransitionToNext
+        );
+    }
+
+    // ========================================
+    // Sample Rate Validation Tests
+    // ========================================
+
+    #[test]
+    fn test_start_fade_sample_rate_clamping_low() {
+        let mut fade = StartFadeEnvelope::new(48000);
+
+        // Very low sample rate should be clamped
+        fade.set_sample_rate(100);
+        assert_eq!(fade.sample_rate, MIN_SAMPLE_RATE);
+    }
+
+    #[test]
+    fn test_start_fade_sample_rate_clamping_high() {
+        let mut fade = StartFadeEnvelope::new(48000);
+
+        // Very high sample rate should be clamped
+        fade.set_sample_rate(1000000);
+        assert_eq!(fade.sample_rate, MAX_SAMPLE_RATE);
+    }
+
+    #[test]
+    fn test_start_fade_sample_rate_valid() {
+        let mut fade = StartFadeEnvelope::new(48000);
+
+        // Valid sample rate should pass through
+        fade.set_sample_rate(96000);
+        assert_eq!(fade.sample_rate, 96000);
+    }
+
+    #[test]
+    fn test_stop_fade_sample_rate_clamping_low() {
+        let mut fade = StopFadeEnvelope::new(48000);
+
+        // Very low sample rate should be clamped
+        fade.set_sample_rate(100);
+        assert_eq!(fade.sample_rate, MIN_SAMPLE_RATE);
+    }
+
+    #[test]
+    fn test_stop_fade_sample_rate_clamping_high() {
+        let mut fade = StopFadeEnvelope::new(48000);
+
+        // Very high sample rate should be clamped
+        fade.set_sample_rate(1000000);
+        assert_eq!(fade.sample_rate, MAX_SAMPLE_RATE);
+    }
+
+    #[test]
+    fn test_stop_fade_sample_rate_valid() {
+        let mut fade = StopFadeEnvelope::new(48000);
+
+        // Valid sample rate should pass through
+        fade.set_sample_rate(96000);
+        assert_eq!(fade.sample_rate, 96000);
+    }
+
+    #[test]
+    fn test_start_fade_duration_updates_on_sample_rate_change() {
+        let mut fade = StartFadeEnvelope::new(44100);
+        let original_duration = fade.duration_samples;
+
+        fade.set_sample_rate(96000);
+
+        // Duration in samples should increase with higher sample rate
+        assert!(
+            fade.duration_samples > original_duration,
+            "Duration should increase with sample rate"
+        );
+    }
+
+    #[test]
+    fn test_stop_fade_duration_updates_on_sample_rate_change() {
+        let mut fade = StopFadeEnvelope::new(44100);
+        let original_duration = fade.duration_samples;
+
+        fade.set_sample_rate(96000);
+
+        // Duration in samples should increase with higher sample rate
+        assert!(
+            fade.duration_samples > original_duration,
+            "Duration should increase with sample rate"
         );
     }
 }

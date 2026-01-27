@@ -5,8 +5,8 @@
 
 use serde::Serialize;
 use soul_audio_desktop::{
-    create_async_device_monitor, AudioError, DesktopPlayback, DeviceEvent, ExclusiveConfig,
-    LatencyInfo, PlaybackCommand, PlaybackEvent,
+    create_async_device_monitor, AudioError, DesktopPlayback, DeviceEvent, DeviceSwitchReason,
+    ExclusiveConfig, LatencyInfo, PlaybackCommand, PlaybackEvent,
 };
 use soul_playback::{
     lazy_queue::QueueContext, PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode, TrackSource,
@@ -617,6 +617,57 @@ impl PlaybackManager {
                         // Don't emit to frontend - this is an internal event
                         continue;
                     }
+                    PlaybackEvent::DeviceSwitchStarted {
+                        target_device,
+                        reason,
+                    } => {
+                        tracing::info!(
+                            target_device = %target_device,
+                            reason = %reason,
+                            "[PLAYBACK] Device switch started"
+                        );
+                        app_handle.emit(
+                            "audio:device-switch-started",
+                            serde_json::json!({
+                                "target_device": target_device,
+                                "reason": reason.to_string()
+                            }),
+                        )
+                    }
+                    PlaybackEvent::DeviceSwitchCompleted {
+                        device_name,
+                        sample_rate,
+                    } => {
+                        tracing::info!(
+                            device_name = %device_name,
+                            sample_rate = sample_rate,
+                            "[PLAYBACK] Device switch completed"
+                        );
+                        app_handle.emit(
+                            "audio:device-switch-completed",
+                            serde_json::json!({
+                                "device_name": device_name,
+                                "sample_rate": sample_rate
+                            }),
+                        )
+                    }
+                    PlaybackEvent::DeviceSwitchFailed {
+                        error,
+                        fallback_attempted,
+                    } => {
+                        tracing::error!(
+                            error = %error,
+                            fallback_attempted = fallback_attempted,
+                            "[PLAYBACK] Device switch failed"
+                        );
+                        app_handle.emit(
+                            "audio:device-switch-failed",
+                            serde_json::json!({
+                                "error": error,
+                                "fallback_attempted": fallback_attempted
+                            }),
+                        )
+                    }
                 };
             }
 
@@ -741,20 +792,31 @@ impl PlaybackManager {
                             "[DEVICE_MONITOR] Current playback device was removed - switching to default device"
                         );
 
-                        let backend = pb.get_current_backend();
-                        match pb.switch_device(backend, None) {
-                            Ok(()) => {
-                                tracing::info!(
-                                    device_id = %id,
-                                    "[DEVICE_MONITOR] Successfully switched to default device"
-                                );
-                            }
-                            Err(switch_err) => {
-                                tracing::error!(
-                                    error = %switch_err,
-                                    device_id = %id,
-                                    "[DEVICE_MONITOR] Failed to switch to default device"
-                                );
+                        // Check if a switch is already in progress
+                        if pb.is_device_switching() {
+                            tracing::debug!(
+                                "[DEVICE_MONITOR] Device switch already in progress - skipping"
+                            );
+                        } else {
+                            let backend = pb.get_current_backend();
+                            match pb.switch_device_with_reason(
+                                backend,
+                                None,
+                                DeviceSwitchReason::DeviceDisconnected,
+                            ) {
+                                Ok(()) => {
+                                    tracing::info!(
+                                        device_id = %id,
+                                        "[DEVICE_MONITOR] Successfully switched to default device"
+                                    );
+                                }
+                                Err(switch_err) => {
+                                    tracing::error!(
+                                        error = %switch_err,
+                                        device_id = %id,
+                                        "[DEVICE_MONITOR] Failed to switch to default device"
+                                    );
+                                }
                             }
                         }
 

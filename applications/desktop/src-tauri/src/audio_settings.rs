@@ -1264,6 +1264,7 @@ pub async fn get_crossfade_curve(playback: State<'_, PlaybackManager>) -> Result
         soul_playback::FadeCurve::Logarithmic => "square_root",
         soul_playback::FadeCurve::SCurve => "s_curve",
         soul_playback::FadeCurve::EqualPower => "equal_power",
+        soul_playback::FadeCurve::Exponential => "exponential",
     };
     Ok(curve_str.to_string())
 }
@@ -1292,6 +1293,7 @@ pub async fn set_crossfade_settings(
         "square_root" | "logarithmic" => soul_playback::FadeCurve::SquareRoot,
         "s_curve" => soul_playback::FadeCurve::SCurve,
         "equal_power" => soul_playback::FadeCurve::EqualPower,
+        "exponential" => soul_playback::FadeCurve::Exponential,
         other => return Err(format!("Unknown crossfade curve: {}", other)),
     };
 
@@ -1319,6 +1321,7 @@ pub async fn get_crossfade_settings(
         soul_playback::FadeCurve::Logarithmic => "square_root",
         soul_playback::FadeCurve::SCurve => "s_curve",
         soul_playback::FadeCurve::EqualPower => "equal_power",
+        soul_playback::FadeCurve::Exponential => "exponential",
     };
 
     Ok(CrossfadeSettingsInfo {

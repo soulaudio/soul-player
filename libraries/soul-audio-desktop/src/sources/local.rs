@@ -1070,6 +1070,13 @@ impl AudioSource for LocalAudioSource {
         // Ready if we have enough samples OR if we've reached EOF (short files)
         state.output_buffer.len() >= MIN_BUFFER_SAMPLES || state.is_eof
     }
+
+    /// Get sample rate of the audio source (target/output rate)
+    ///
+    /// Returns the target sample rate after resampling, not the source file's rate.
+    fn sample_rate(&self) -> Option<u32> {
+        Some(self.target_sample_rate)
+    }
 }
 
 impl Drop for LocalAudioSource {

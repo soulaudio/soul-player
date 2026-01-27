@@ -873,6 +873,11 @@ fn test_no_click_on_seek() {
     manager.set_sample_rate(sample_rate);
     manager.set_output_channels(2);
 
+    // Add a track and start playback (required for seek to work)
+    let track = create_test_track("seek-test");
+    manager.add_to_queue_end(track);
+    manager.play().expect("Should start playback");
+
     // Use a sine wave source
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 5.0));
     manager.set_audio_source(source);
@@ -909,6 +914,11 @@ fn test_no_click_on_multiple_seeks() {
     let mut manager = PlaybackManager::new(PlaybackConfig::default());
     manager.set_sample_rate(sample_rate);
     manager.set_output_channels(2);
+
+    // Add a track and start playback (required for seek to work)
+    let track = create_test_track("seek-test");
+    manager.add_to_queue_end(track);
+    manager.play().expect("Should start playback");
 
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 10.0));
     manager.set_audio_source(source);
@@ -1052,6 +1062,11 @@ fn test_no_click_on_rapid_seeks() {
     let mut manager = PlaybackManager::new(PlaybackConfig::default());
     manager.set_sample_rate(sample_rate);
     manager.set_output_channels(2);
+
+    // Add a track and start playback (required for seek to work)
+    let track = create_test_track("seek-test");
+    manager.add_to_queue_end(track);
+    manager.play().expect("Should start playback");
 
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 10.0));
     manager.set_audio_source(source);

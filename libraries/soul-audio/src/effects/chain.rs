@@ -2,6 +2,31 @@
 ///
 /// This module provides a trait-based architecture for chaining audio effects.
 /// Effects are processed in order, and all operate on f32 samples in [-1.0, 1.0] range.
+///
+/// # Threading Model
+///
+/// `EffectChain` is NOT internally synchronized. The caller MUST provide external
+/// synchronization when the chain is shared between threads. In this codebase:
+///
+/// - `PlaybackManager` contains `effect_chain: EffectChain`
+/// - `DesktopPlayback` wraps `PlaybackManager` in `Arc<Mutex<PlaybackManager>>`
+/// - Both audio callback and configuration code lock this mutex before access
+///
+/// This external mutex approach is preferred over internal locking because:
+/// 1. Avoids lock contention overhead in the audio callback hot path
+/// 2. Allows batch operations on multiple fields under a single lock
+/// 3. Enables the audio callback to hold the lock for the entire `process()` call
+///
+/// # Parameter Updates During Processing
+///
+/// Individual effects (like `ParametricEq`) use coefficient smoothing to handle
+/// parameter changes gracefully. When parameters are updated while audio is processing:
+/// - New values are stored as "target" coefficients
+/// - Active coefficients smoothly interpolate toward targets
+/// - This prevents clicks, pops, and zipper noise
+///
+/// Effects that need smoothing implement it internally - the chain itself does not
+/// provide parameter smoothing.
 use std::any::Any;
 
 /// Trait for audio effects that can be chained together
@@ -41,9 +66,40 @@ pub trait AudioEffect: Send {
     /// Get a mutable reference to self as Any for downcasting
     /// Required for in-place parameter updates without rebuilding
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Notify effect of sample rate change
+    ///
+    /// Called when the audio device sample rate changes. Effects that cache
+    /// sample rate should update their internal state and recalculate
+    /// any sample-rate-dependent parameters (e.g., filter coefficients).
+    ///
+    /// Default implementation does nothing - effects that don't cache
+    /// sample rate can ignore this.
+    fn set_sample_rate(&mut self, _sample_rate: u32) {
+        // Default: no-op for effects that get sample_rate from process()
+    }
 }
 
 /// Chain of audio effects processed in order
+///
+/// # Thread Safety
+///
+/// This struct is `Send` but NOT `Sync`. It must be protected by external
+/// synchronization (typically `Mutex` or `RwLock`) when accessed from multiple
+/// threads. All methods (`add_effect`, `process`, `set_enabled`, etc.) require
+/// `&mut self` to enforce exclusive access.
+///
+/// # Concurrent Modification Safety
+///
+/// When wrapped in a mutex (as in `DesktopPlayback`):
+/// - `add_effect`/`clear`: Safe - mutex ensures exclusive access
+/// - `process`: Safe - mutex held for entire audio callback
+/// - `set_enabled` on effects: Safe - mutex held during modification
+/// - Parameter updates via `get_effect_as_mut`: Safe - mutex held during update
+///
+/// The audio callback locks the mutex for the entire `process_audio()` call,
+/// ensuring no other thread can modify the chain or effect parameters during
+/// processing.
 pub struct EffectChain {
     effects: Vec<Box<dyn AudioEffect>>,
 }
@@ -164,6 +220,20 @@ impl EffectChain {
         self.effects
             .get_mut(index)
             .and_then(|e| e.as_any_mut().downcast_mut::<T>())
+    }
+
+    /// Notify all effects of sample rate change
+    ///
+    /// Call this when the audio device sample rate changes. This propagates
+    /// the sample rate to all effects in the chain, allowing them to update
+    /// any cached sample-rate-dependent parameters (e.g., filter coefficients).
+    ///
+    /// Note: Effects also receive sample_rate via process(), but this method
+    /// allows proactive updates when the device changes before processing resumes.
+    pub fn set_sample_rate(&mut self, sample_rate: u32) {
+        for effect in &mut self.effects {
+            effect.set_sample_rate(sample_rate);
+        }
     }
 }
 
@@ -341,6 +411,392 @@ mod tests {
         // Should be unchanged (all effects disabled)
         for sample in &buffer {
             assert!((sample - 1.0).abs() < 0.0001);
+        }
+    }
+
+    // ==================== Multiple Effects Enable/Disable Tests ====================
+
+    #[test]
+    fn enable_disable_multiple_effects_simultaneously() {
+        // Test: Enabling/disabling all effects at once should work correctly
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.25,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(GainEffect {
+            gain: 2.0,
+            enabled: true,
+        }));
+
+        // All enabled: 0.5 * 0.25 * 2.0 = 0.25
+        let mut buffer = vec![1.0; 10];
+        chain.process(&mut buffer, 44100);
+        for sample in &buffer {
+            assert!(
+                (sample - 0.25).abs() < 0.0001,
+                "Expected 0.25, got {}",
+                sample
+            );
+        }
+
+        // Disable all simultaneously
+        chain.set_enabled(false);
+
+        let mut buffer2 = vec![1.0; 10];
+        chain.process(&mut buffer2, 44100);
+        for sample in &buffer2 {
+            assert!((sample - 1.0).abs() < 0.0001, "Should bypass when disabled");
+        }
+
+        // Re-enable all
+        chain.set_enabled(true);
+
+        let mut buffer3 = vec![1.0; 10];
+        chain.process(&mut buffer3, 44100);
+        for sample in &buffer3 {
+            assert!(
+                (sample - 0.25).abs() < 0.0001,
+                "Should process when re-enabled"
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_enable_disable_states() {
+        // Test: Chain processes correctly when effects have mixed enabled states
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.1, // Would significantly reduce if enabled
+            enabled: false,
+        }));
+        chain.add_effect(Box::new(GainEffect {
+            gain: 2.0,
+            enabled: true,
+        }));
+
+        // Only first and third effects: 0.5 * 2.0 = 1.0
+        let mut buffer = vec![0.5; 10];
+        chain.process(&mut buffer, 44100);
+        for sample in &buffer {
+            assert!(
+                (sample - 0.5).abs() < 0.0001,
+                "Expected 0.5, got {}",
+                sample
+            );
+        }
+    }
+
+    #[test]
+    fn toggle_individual_effects_during_processing() {
+        // Test: Toggling individual effects mid-stream
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+
+        // Process first buffer: 0.5 * 0.5 = 0.25
+        let mut buffer1 = vec![1.0; 10];
+        chain.process(&mut buffer1, 44100);
+
+        // Disable first effect
+        if let Some(effect) = chain.get_effect_mut(0) {
+            effect.set_enabled(false);
+        }
+
+        // Process second buffer: only second effect: 0.5
+        let mut buffer2 = vec![1.0; 10];
+        chain.process(&mut buffer2, 44100);
+        for sample in &buffer2 {
+            assert!((sample - 0.5).abs() < 0.0001);
+        }
+    }
+
+    // ==================== Odd Buffer Size Tests ====================
+
+    #[test]
+    fn chain_with_odd_buffer_size() {
+        // Test: Chain should handle odd buffer sizes gracefully
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+
+        // Process odd-sized buffer
+        let mut buffer = vec![1.0; 101]; // Odd length
+        chain.process(&mut buffer, 44100);
+
+        // All samples should be processed
+        for sample in &buffer {
+            assert!((sample - 0.5).abs() < 0.0001);
+        }
+    }
+
+    #[test]
+    fn chain_with_very_small_buffer() {
+        // Test: Very small buffers should still work
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(GainEffect {
+            gain: 2.0,
+            enabled: true,
+        }));
+
+        // Process single sample
+        let mut buffer = vec![0.8];
+        chain.process(&mut buffer, 44100);
+        assert!((buffer[0] - 0.8).abs() < 0.0001); // 0.8 * 0.5 * 2.0 = 0.8
+
+        // Process two samples (one stereo pair)
+        let mut buffer2 = vec![0.8, 0.6];
+        chain.process(&mut buffer2, 44100);
+        assert!((buffer2[0] - 0.8).abs() < 0.0001);
+        assert!((buffer2[1] - 0.6).abs() < 0.0001);
+    }
+
+    #[test]
+    fn chain_with_empty_buffer() {
+        // Test: Empty buffer should not crash
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+
+        let mut buffer: Vec<f32> = vec![];
+        chain.process(&mut buffer, 44100);
+        assert_eq!(buffer.len(), 0);
+    }
+
+    #[test]
+    fn chain_with_prime_number_buffer_size() {
+        // Test: Prime number buffer sizes to catch edge cases
+        let prime_sizes = [7, 11, 13, 17, 23, 29, 31, 37, 41];
+
+        for &size in &prime_sizes {
+            let mut chain = EffectChain::new();
+            chain.add_effect(Box::new(GainEffect {
+                gain: 0.5,
+                enabled: true,
+            }));
+
+            let mut buffer = vec![1.0; size];
+            chain.process(&mut buffer, 44100);
+
+            for sample in &buffer {
+                assert!(
+                    (sample - 0.5).abs() < 0.0001,
+                    "Buffer size {} failed: {}",
+                    size,
+                    sample
+                );
+            }
+        }
+    }
+
+    // ==================== Effect Chain Modification During Processing ====================
+
+    #[test]
+    fn replace_effect_preserves_chain_order() {
+        // Test: Replacing an effect should not affect other effects
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+
+        // Initial: 0.5^3 = 0.125
+        let mut buffer1 = vec![1.0; 10];
+        chain.process(&mut buffer1, 44100);
+        for sample in &buffer1 {
+            assert!((sample - 0.125).abs() < 0.001);
+        }
+
+        // Replace middle effect with 2x gain
+        chain.replace_effect(
+            1,
+            Box::new(GainEffect {
+                gain: 2.0,
+                enabled: true,
+            }),
+        );
+
+        // New: 0.5 * 2.0 * 0.5 = 0.5
+        let mut buffer2 = vec![1.0; 10];
+        chain.process(&mut buffer2, 44100);
+        for sample in &buffer2 {
+            assert!((sample - 0.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn get_effect_as_mut_allows_parameter_changes() {
+        // Test: get_effect_as_mut should allow modifying effect parameters
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(GainEffect {
+            gain: 0.5,
+            enabled: true,
+        }));
+
+        // Modify the effect's gain
+        if let Some(gain_effect) = chain.get_effect_as_mut::<GainEffect>(0) {
+            gain_effect.gain = 0.25;
+        }
+
+        // Process with new gain
+        let mut buffer = vec![1.0; 10];
+        chain.process(&mut buffer, 44100);
+        for sample in &buffer {
+            assert!((sample - 0.25).abs() < 0.0001);
+        }
+    }
+
+    #[test]
+    fn sample_rate_change_propagates_to_all_effects() {
+        // Test: Sample rate change should propagate to all effects
+        // Create a mock effect that tracks sample rate changes
+        struct SampleRateTrackingEffect {
+            last_sample_rate: u32,
+            enabled: bool,
+        }
+
+        impl AudioEffect for SampleRateTrackingEffect {
+            fn process(&mut self, _buffer: &mut [f32], sample_rate: u32) {
+                self.last_sample_rate = sample_rate;
+            }
+
+            fn reset(&mut self) {}
+
+            fn set_enabled(&mut self, enabled: bool) {
+                self.enabled = enabled;
+            }
+
+            fn is_enabled(&self) -> bool {
+                self.enabled
+            }
+
+            fn name(&self) -> &str {
+                "SampleRateTracker"
+            }
+
+            fn as_any(&self) -> &dyn Any {
+                self
+            }
+
+            fn as_any_mut(&mut self) -> &mut dyn Any {
+                self
+            }
+
+            fn set_sample_rate(&mut self, sample_rate: u32) {
+                self.last_sample_rate = sample_rate;
+            }
+        }
+
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(SampleRateTrackingEffect {
+            last_sample_rate: 0,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(SampleRateTrackingEffect {
+            last_sample_rate: 0,
+            enabled: true,
+        }));
+
+        // Set sample rate via chain method
+        chain.set_sample_rate(96000);
+
+        // Verify both effects received the sample rate
+        if let Some(effect) = chain.get_effect_as::<SampleRateTrackingEffect>(0) {
+            assert_eq!(effect.last_sample_rate, 96000);
+        }
+        if let Some(effect) = chain.get_effect_as::<SampleRateTrackingEffect>(1) {
+            assert_eq!(effect.last_sample_rate, 96000);
+        }
+    }
+
+    #[test]
+    fn reset_propagates_to_all_effects() {
+        // Test: Reset should propagate to all effects
+        struct ResetTrackingEffect {
+            reset_count: usize,
+            enabled: bool,
+        }
+
+        impl AudioEffect for ResetTrackingEffect {
+            fn process(&mut self, _buffer: &mut [f32], _sample_rate: u32) {}
+
+            fn reset(&mut self) {
+                self.reset_count += 1;
+            }
+
+            fn set_enabled(&mut self, enabled: bool) {
+                self.enabled = enabled;
+            }
+
+            fn is_enabled(&self) -> bool {
+                self.enabled
+            }
+
+            fn name(&self) -> &str {
+                "ResetTracker"
+            }
+
+            fn as_any(&self) -> &dyn Any {
+                self
+            }
+
+            fn as_any_mut(&mut self) -> &mut dyn Any {
+                self
+            }
+        }
+
+        let mut chain = EffectChain::new();
+        chain.add_effect(Box::new(ResetTrackingEffect {
+            reset_count: 0,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(ResetTrackingEffect {
+            reset_count: 0,
+            enabled: true,
+        }));
+        chain.add_effect(Box::new(ResetTrackingEffect {
+            reset_count: 0,
+            enabled: true,
+        }));
+
+        // Reset the chain
+        chain.reset();
+
+        // Verify all effects were reset
+        for i in 0..3 {
+            if let Some(effect) = chain.get_effect_as::<ResetTrackingEffect>(i) {
+                assert_eq!(effect.reset_count, 1, "Effect {} should be reset once", i);
+            }
         }
     }
 }

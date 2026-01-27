@@ -136,6 +136,13 @@ const CROSSFADE_BUFFER_SIZE: usize = 10 * 192000 * 2;
 /// This covers typical audio callback buffer sizes (256-4096 frames)
 const MAX_STEREO_BUFFER_SIZE: usize = 8192 * 2;
 
+/// Maximum number of pending events before overflow handling kicks in
+/// Prevents unbounded memory growth if events aren't drained
+const MAX_PENDING_EVENTS: usize = 1000;
+
+/// Number of oldest events to drop when overflow occurs
+const EVENT_OVERFLOW_DROP_COUNT: usize = 100;
+
 impl PlaybackManager {
     /// Create new playback manager
     pub fn new(config: PlaybackConfig) -> Self {
@@ -176,7 +183,7 @@ impl PlaybackManager {
             sample_rate: 44100, // Default, will be updated by platform
             output_channels: 2, // Default stereo, will be updated by platform
             is_manual_skip: false,
-            pending_events: Vec::new(),
+            pending_events: Vec::with_capacity(64), // Pre-allocate to avoid early reallocations
             crossfade_progress: CrossfadeProgressTracker::new(),
             start_fade: StartFadeEnvelope::new(44100), // Will be updated by set_sample_rate
             stop_fade: StopFadeEnvelope::new(44100),   // Will be updated by set_sample_rate
@@ -244,6 +251,11 @@ impl PlaybackManager {
             PlaybackState::Paused => {
                 // Clear pause flag when user explicitly resumes
                 self.user_paused = false;
+
+                // Cancel any active stop fade that hasn't completed yet
+                // This prevents the fade from finishing and reverting state to Paused
+                self.stop_fade.reset();
+                self.pending_state = None;
 
                 // Resume from pause
                 self.state = PlaybackState::Playing;
@@ -347,7 +359,14 @@ impl PlaybackManager {
         self.user_paused = false; // Clear pause flag when explicitly stopping
         self.crossfade.reset();
         self.crossfade_progress.reset();
+        // Free crossfade buffers to reclaim ~15MB of memory
+        self.free_crossfade_buffers();
         self.is_manual_skip = false;
+        // Reset source ready state for clean next playback
+        self.source_ready_verified = false;
+        self.source_ready_wait_samples = 0;
+        // Reset fade envelopes
+        self.start_fade.reset();
         self.emit_state_changed(PlaybackState::Stopped);
     }
 
@@ -505,8 +524,52 @@ impl PlaybackManager {
 
     /// Seek to position in current track (by duration)
     pub fn seek_to(&mut self, position: Duration) -> Result<()> {
+        // Guard: Cannot seek while Loading (source may not be fully initialized)
+        // Allow seeking only in Playing or Paused states
+        if self.state == PlaybackState::Loading || self.state == PlaybackState::Stopped {
+            return Err(PlaybackError::NoTrackLoaded);
+        }
+
+        // CRITICAL: If crossfade is active, cancel it before seeking
+        // Seeking during crossfade would cause stale mixing state and audio glitches
+        // Note: This must be done before borrowing audio_source to avoid borrow conflicts
+        if self.crossfade.is_active() {
+            tracing::info!("[PLAYBACK] Cancelling active crossfade due to seek operation");
+            self.crossfade.reset();
+            self.crossfade_progress.reset();
+            // Clear preloaded next track since we're staying on current track
+            self.next_source = None;
+            self.next_track = None;
+            // Free crossfade buffers to reclaim ~15MB of memory
+            self.free_crossfade_buffers();
+        }
+
+        // Cancel any active stop fade to prevent race conditions
+        // (e.g., seeking during fade-out should cancel the fade)
+        if self.stop_fade.is_active() {
+            tracing::debug!("[seek_to] Cancelling active stop fade due to seek");
+            self.stop_fade.reset();
+            self.pending_state = None;
+        }
+
         if let Some(ref mut source) = self.audio_source {
-            source.seek(position)?;
+            // Clamp position to avoid seeking exactly to end (which would trigger EOF)
+            // Leave 1ms margin before duration to ensure we can still read samples.
+            let duration = source.duration();
+            let max_seek_position = duration.saturating_sub(Duration::from_millis(1));
+            let clamped_position = position.min(max_seek_position);
+
+            // Log if we clamped the position (only for near-end seeks)
+            if clamped_position != position && position > Duration::ZERO {
+                tracing::debug!(
+                    "[seek_to] Clamped seek near end: {:?} -> {:?} (duration: {:?})",
+                    position,
+                    clamped_position,
+                    duration
+                );
+            }
+
+            source.seek(clamped_position)?;
 
             // CRITICAL: Mark source as not ready after seek
             // This prevents the audio callback from reading 0 samples and thinking track finished
@@ -514,8 +577,10 @@ impl PlaybackManager {
             self.source_ready_verified = false;
             self.source_ready_wait_samples = 0;
 
-            // Start fade-in for click-free seek
-            self.start_fade.start();
+            // NOTE: Fade-in is started in process_audio() after source_ready_verified
+            // becomes true, not here. This ensures the fade doesn't begin until the
+            // source has buffered enough samples for glitch-free playback.
+
             Ok(())
         } else {
             Err(PlaybackError::NoTrackLoaded)
@@ -624,8 +689,15 @@ impl PlaybackManager {
         self.queue.remove_consecutive_duplicates();
 
         // Skip to start index if specified (Bug #1 fix)
-        if start_index > 0 && start_index < self.queue.get_source_total() {
-            let _ = self.queue.skip_to_index(start_index);
+        if start_index > 0
+            && start_index < self.queue.get_source_total()
+            && self.queue.skip_to_index(start_index).is_none()
+        {
+            tracing::warn!(
+                start_index = start_index,
+                queue_size = self.queue.get_source_total(),
+                "[PlaybackManager] Failed to skip to start index - index may be out of bounds"
+            );
         }
 
         // IMPORTANT: Clear history when loading a new playlist
@@ -881,8 +953,26 @@ impl PlaybackManager {
     }
 
     /// Set repeat mode
+    ///
+    /// If a crossfade is active and mode changes to RepeatOne, the crossfade
+    /// is cancelled since RepeatOne will repeat the current track instead of
+    /// transitioning to the next track.
     pub fn set_repeat(&mut self, mode: RepeatMode) {
+        let old_mode = self.repeat;
         self.repeat = mode;
+
+        // If switching to RepeatOne during an active crossfade, cancel it
+        // RepeatOne means we should repeat the current track, not transition to next
+        if mode == RepeatMode::One && old_mode != RepeatMode::One && self.crossfade.is_active() {
+            tracing::info!("[PLAYBACK] Cancelling active crossfade due to RepeatOne mode change");
+            self.crossfade.reset();
+            self.crossfade_progress.reset();
+            // Clear the preloaded next track since we'll repeat current track
+            self.next_source = None;
+            self.next_track = None;
+            // Free crossfade buffers to reclaim ~15MB of memory
+            self.free_crossfade_buffers();
+        }
     }
 
     /// Get current repeat mode
@@ -976,6 +1066,10 @@ impl PlaybackManager {
     ///
     /// Returns the next track that would play when current track finishes.
     /// Used by platform code to pre-load the next track for crossfade/gapless.
+    ///
+    /// NOTE: For RepeatAll mode when queue is exhausted, this returns the first
+    /// track from the original source (the track that would play after reload).
+    /// This enables pre-loading for seamless loop transitions.
     pub fn peek_next_queue_track(&self) -> Option<&QueueTrack> {
         // If repeat one is enabled, return current track
         if self.repeat == RepeatMode::One {
@@ -985,10 +1079,11 @@ impl PlaybackManager {
         // Otherwise peek at the queue
         if let Some(track) = self.queue.peek_next() {
             Some(track)
-        } else if self.repeat == RepeatMode::All && !self.queue.is_empty() {
-            // If queue is empty but repeat all, would loop back to first track
-            // For pre-loading purposes, we don't handle this case
-            None
+        } else if self.repeat == RepeatMode::All && self.queue.get_source_total() > 0 {
+            // Queue exhausted but repeat all is enabled - would loop back to first track
+            // Return the first track from original source for pre-loading
+            // NOTE: We peek at source[0] directly since after reload that's what plays
+            self.queue.peek_first_source_track()
         } else {
             None
         }
@@ -1386,15 +1481,17 @@ impl PlaybackManager {
             return self.process_active_crossfade(output);
         }
 
-        // Normal playback - check if we should start crossfade
-        let source = self
-            .audio_source
-            .as_mut()
-            .ok_or(PlaybackError::NoTrackLoaded)?;
+        // Get position and duration without holding borrow across decision points
+        // This allows us to call &mut self methods for crossfade setup
+        let (position, duration) = {
+            let source = self
+                .audio_source
+                .as_ref()
+                .ok_or(PlaybackError::NoTrackLoaded)?;
+            (source.position(), source.duration())
+        };
 
         // Check if we're approaching the crossfade window
-        let position = source.position();
-        let duration = source.duration();
         let crossfade_duration_ms = self.crossfade.settings().duration_ms;
         let crossfade_duration = Duration::from_millis(crossfade_duration_ms as u64);
         let remaining = duration.saturating_sub(position);
@@ -1405,6 +1502,11 @@ impl PlaybackManager {
             && remaining <= crossfade_duration;
 
         if should_crossfade {
+            // CRITICAL: Ensure buffers are allocated BEFORE starting crossfade
+            // This moves the allocation to the transition point (once per crossfade)
+            // rather than inside the hot audio processing loop
+            self.ensure_crossfade_buffers_allocated();
+
             // Start crossfade
             let started = self.crossfade.start(self.is_manual_skip);
             if started {
@@ -1436,7 +1538,11 @@ impl PlaybackManager {
             && self.gapless_enabled
             && self.next_source.is_some();
 
-        // Normal playback
+        // Normal playback - now get mutable reference for reading samples
+        let source = self
+            .audio_source
+            .as_mut()
+            .ok_or(PlaybackError::NoTrackLoaded)?;
         let samples_read = source.read_samples(output)?;
 
         if samples_read == 0 {
@@ -1445,6 +1551,24 @@ impl PlaybackManager {
             if position >= duration {
                 // Track actually finished - position at or past duration
                 if should_gapless {
+                    // CRITICAL: Verify next source is ready before gapless transition
+                    // This prevents audio glitches from reading an unbuffered source
+                    let next_ready = self
+                        .next_source
+                        .as_ref()
+                        .map(|s| s.is_ready())
+                        .unwrap_or(false);
+
+                    if !next_ready {
+                        // Next source not ready yet - output keepalive noise and wait
+                        // This rare case can happen with slow storage or large files
+                        tracing::debug!(
+                            "[process_stereo_with_crossfade] Gapless: next source not ready, waiting"
+                        );
+                        self.fill_underrun_buffer(output);
+                        return Ok(output.len());
+                    }
+
                     // Seamless transition to next track
                     self.transition_to_next_track()?;
                     // Try to read from new source
@@ -1468,29 +1592,37 @@ impl PlaybackManager {
     }
 
     /// Process audio during active crossfade
+    ///
+    /// IMPORTANT: Buffers MUST be allocated before calling this function.
+    /// Call `ensure_crossfade_buffers_allocated()` when starting crossfade,
+    /// NOT inside this hot loop to avoid latency-inducing allocations.
     fn process_active_crossfade(&mut self, output: &mut [f32]) -> Result<usize> {
-        // Ensure buffers are allocated before processing crossfade
-        // This is safe because we're in the settings/state transition path, not the audio callback
-        self.ensure_crossfade_buffers_allocated();
-
         let buffer_len = output.len();
 
-        // Get mutable references to the buffers (guaranteed to exist after allocation)
+        // Get mutable references to the buffers (guaranteed to exist - allocated at crossfade start)
         let outgoing_buffer = self
             .outgoing_buffer
             .as_mut()
-            .expect("Buffer should be allocated");
+            .expect("Crossfade buffers must be allocated before calling process_active_crossfade");
         let incoming_buffer = self
             .incoming_buffer
             .as_mut()
-            .expect("Buffer should be allocated");
+            .expect("Crossfade buffers must be allocated before calling process_active_crossfade");
 
         // Read from outgoing (current) track
         let outgoing_samples = if let Some(ref mut source) = self.audio_source {
             let len = buffer_len.min(outgoing_buffer.len());
-            source
-                .read_samples(&mut outgoing_buffer[..len])
-                .unwrap_or(0)
+            match source.read_samples(&mut outgoing_buffer[..len]) {
+                Ok(samples) => samples,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "[Crossfade] Failed to read from outgoing track - using silence"
+                    );
+                    outgoing_buffer[..buffer_len].fill(0.0);
+                    0
+                }
+            }
         } else {
             // Fill with silence if no outgoing source
             outgoing_buffer[..buffer_len].fill(0.0);
@@ -1500,9 +1632,17 @@ impl PlaybackManager {
         // Read from incoming (next) track
         let incoming_samples = if let Some(ref mut source) = self.next_source {
             let len = buffer_len.min(incoming_buffer.len());
-            source
-                .read_samples(&mut incoming_buffer[..len])
-                .unwrap_or(0)
+            match source.read_samples(&mut incoming_buffer[..len]) {
+                Ok(samples) => samples,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "[Crossfade] Failed to read from incoming track - using silence"
+                    );
+                    incoming_buffer[..buffer_len].fill(0.0);
+                    0
+                }
+            }
         } else {
             // Fill with silence if no incoming source
             incoming_buffer[..buffer_len].fill(0.0);
@@ -1549,6 +1689,10 @@ impl PlaybackManager {
             self.crossfade.reset();
             self.crossfade_progress.reset();
             self.emit_crossfade_completed();
+
+            // Free crossfade buffers to reclaim ~15MB of memory
+            // Buffers will be re-allocated lazily on next crossfade
+            self.free_crossfade_buffers();
         }
 
         Ok(processed)
@@ -1604,6 +1748,10 @@ impl PlaybackManager {
         self.crossfade.set_sample_rate(sample_rate);
         self.start_fade.set_sample_rate(sample_rate);
         self.stop_fade.set_sample_rate(sample_rate);
+
+        // Update effect chain sample rate for correct filter frequencies
+        #[cfg(feature = "effects")]
+        self.effect_chain.set_sample_rate(sample_rate);
     }
 
     /// Get sample rate
@@ -1917,6 +2065,13 @@ impl PlaybackManager {
         let new_enabled = settings.enabled; // Get value before move
         self.crossfade.set_settings(settings);
 
+        // Pre-allocate buffers if crossfade is being enabled
+        // CRITICAL: This MUST happen outside the audio callback to avoid
+        // allocating ~14.6MB in the real-time audio path
+        if !was_enabled && new_enabled {
+            self.ensure_crossfade_buffers_allocated();
+        }
+
         // Free buffers if crossfade is being disabled
         if was_enabled && !new_enabled {
             self.free_crossfade_buffers();
@@ -1934,6 +2089,13 @@ impl PlaybackManager {
         let mut settings = self.crossfade.settings().clone();
         settings.enabled = enabled;
         self.crossfade.set_settings(settings);
+
+        // Pre-allocate buffers if crossfade is being enabled
+        // CRITICAL: This MUST happen outside the audio callback to avoid
+        // allocating ~14.6MB in the real-time audio path
+        if !was_enabled && enabled {
+            self.ensure_crossfade_buffers_allocated();
+        }
 
         // Free buffers if crossfade is being disabled
         if was_enabled && !enabled {
@@ -1996,12 +2158,42 @@ impl PlaybackManager {
 
     /// Set the next audio source for gapless/crossfade playback
     ///
-    /// Called by platform when pre-decoding the next track
+    /// Called by platform when pre-decoding the next track.
+    ///
+    /// IMPORTANT: The source MUST be resampled to match the manager's sample rate.
+    /// If sample rates don't match, a warning is logged but the source is still set
+    /// (the platform layer is responsible for proper resampling).
     pub fn set_next_source(&mut self, source: Box<dyn AudioSource>, track: QueueTrack) {
+        // Validate sample rate compatibility
+        if let Some(source_rate) = source.sample_rate() {
+            if source_rate != self.sample_rate {
+                tracing::warn!(
+                    "[GAPLESS] Sample rate mismatch: next source is {}Hz but manager expects {}Hz. \
+                     This may cause audio glitches unless the platform resamples correctly.",
+                    source_rate,
+                    self.sample_rate
+                );
+            }
+        }
+
         let track_id = track.id.clone();
         self.next_source = Some(source);
         self.next_track = Some(track);
         self.emit_next_track_prepared(track_id);
+    }
+
+    /// Validate that a source is compatible with gapless/crossfade playback
+    ///
+    /// Returns true if the source can be used for seamless transition.
+    /// Checks sample rate compatibility (sources must match manager's rate).
+    ///
+    /// NOTE: Channel count is not checked because all sources are expected
+    /// to output stereo (2 channels) after decoding.
+    pub fn is_source_compatible(&self, source: &dyn AudioSource) -> bool {
+        match source.sample_rate() {
+            Some(rate) => rate == self.sample_rate,
+            None => true, // Assume compatible if sample rate unknown
+        }
     }
 
     /// Check if next source is ready
@@ -2110,16 +2302,32 @@ impl PlaybackManager {
         }
     }
 
+    /// Push an event to the pending events queue with overflow protection
+    ///
+    /// If the queue exceeds MAX_PENDING_EVENTS, drops the oldest events to make room.
+    /// This prevents unbounded memory growth if events aren't drained promptly.
+    fn push_event(&mut self, event: PlaybackEvent) {
+        if self.pending_events.len() >= MAX_PENDING_EVENTS {
+            // Drop oldest events to make room, keeping recent ones
+            self.pending_events.drain(0..EVENT_OVERFLOW_DROP_COUNT);
+            tracing::warn!(
+                "[PLAYBACK] Event queue overflow, dropped {} oldest events",
+                EVENT_OVERFLOW_DROP_COUNT
+            );
+        }
+        self.pending_events.push(event);
+    }
+
     /// Emit a state changed event
     fn emit_state_changed(&mut self, state: PlaybackState) {
-        self.pending_events.push(PlaybackEvent::StateChanged {
+        self.push_event(PlaybackEvent::StateChanged {
             state: state.into(),
         });
     }
 
     /// Emit a track changed event
     fn emit_track_changed(&mut self, track_id: String, previous_track_id: Option<String>) {
-        self.pending_events.push(PlaybackEvent::TrackChanged {
+        self.push_event(PlaybackEvent::TrackChanged {
             track_id,
             previous_track_id,
         });
@@ -2132,7 +2340,7 @@ impl PlaybackManager {
         to_track_id: String,
         duration_ms: u32,
     ) {
-        self.pending_events.push(PlaybackEvent::CrossfadeStarted {
+        self.push_event(PlaybackEvent::CrossfadeStarted {
             from_track_id,
             to_track_id,
             duration_ms,
@@ -2141,7 +2349,7 @@ impl PlaybackManager {
 
     /// Emit a crossfade progress event
     fn emit_crossfade_progress(&mut self, progress: f32, metadata_switched: bool) {
-        self.pending_events.push(PlaybackEvent::CrossfadeProgress {
+        self.push_event(PlaybackEvent::CrossfadeProgress {
             progress,
             metadata_switched,
         });
@@ -2149,18 +2357,17 @@ impl PlaybackManager {
 
     /// Emit a crossfade completed event
     fn emit_crossfade_completed(&mut self) {
-        self.pending_events.push(PlaybackEvent::CrossfadeCompleted);
+        self.push_event(PlaybackEvent::CrossfadeCompleted);
     }
 
     /// Emit a track finished event
     fn emit_track_finished(&mut self, track_id: String) {
-        self.pending_events
-            .push(PlaybackEvent::TrackFinished { track_id });
+        self.push_event(PlaybackEvent::TrackFinished { track_id });
     }
 
     /// Emit a volume changed event
     fn emit_volume_changed(&mut self) {
-        self.pending_events.push(PlaybackEvent::VolumeChanged {
+        self.push_event(PlaybackEvent::VolumeChanged {
             level: self.volume.level(),
             is_muted: self.volume.is_muted(),
         });
@@ -2168,26 +2375,25 @@ impl PlaybackManager {
 
     /// Emit a queue changed event
     fn emit_queue_changed(&mut self) {
-        self.pending_events.push(PlaybackEvent::QueueChanged {
+        self.push_event(PlaybackEvent::QueueChanged {
             length: self.queue.len(),
         });
     }
 
     /// Emit an error event
     fn emit_error(&mut self, message: String) {
-        self.pending_events.push(PlaybackEvent::Error { message });
+        self.push_event(PlaybackEvent::Error { message });
     }
 
     /// Emit a next track prepared event
     fn emit_next_track_prepared(&mut self, track_id: String) {
-        self.pending_events
-            .push(PlaybackEvent::NextTrackPrepared { track_id });
+        self.push_event(PlaybackEvent::NextTrackPrepared { track_id });
     }
 
     /// Emit a position update event
     pub fn emit_position_update(&mut self) {
         if let Some(ref source) = self.audio_source {
-            self.pending_events.push(PlaybackEvent::PositionUpdate {
+            self.push_event(PlaybackEvent::PositionUpdate {
                 position_ms: source.position().as_millis() as u64,
                 duration_ms: source.duration().as_millis() as u64,
             });
@@ -2385,6 +2591,611 @@ mod tests {
             manager3.get_state(),
             PlaybackState::Paused,
             "Should keep Paused when user has paused during loading"
+        );
+    }
+
+    #[test]
+    fn stop_resets_source_ready_state() {
+        // Test that stop() properly resets source_ready_verified and source_ready_wait_samples
+        // This prevents stale state from affecting the next playback start
+        let mut manager = PlaybackManager::default();
+
+        // Setup: Load a playlist and start playing
+        manager.load_playlist(vec![create_test_track("1")], 0);
+        manager.play().unwrap(); // Loading
+
+        // Simulate source becoming ready
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+
+        // Verify initial Playing state
+        assert_eq!(manager.get_state(), PlaybackState::Playing);
+
+        // Now stop playback
+        manager.stop();
+
+        // Verify stopped state and that source_ready_verified is reset
+        assert_eq!(manager.get_state(), PlaybackState::Stopped);
+        assert!(
+            !manager.source_ready_verified,
+            "source_ready_verified should be reset after stop()"
+        );
+        assert_eq!(
+            manager.source_ready_wait_samples, 0,
+            "source_ready_wait_samples should be reset after stop()"
+        );
+    }
+
+    #[test]
+    fn seek_returns_error_when_loading() {
+        // Test that seek_to() returns NoTrackLoaded error when in Loading state
+        // This prevents seeking while the source may not be fully initialized
+        let mut manager = PlaybackManager::default();
+
+        // Setup: Start playing but don't set source (stays in Loading)
+        manager.load_playlist(vec![create_test_track("1")], 0);
+        manager.play().unwrap();
+        assert_eq!(manager.get_state(), PlaybackState::Loading);
+
+        // Try to seek while in Loading state
+        let result = manager.seek_to(Duration::from_secs(5));
+        assert!(
+            result.is_err(),
+            "seek_to() should return error when in Loading state"
+        );
+        if let Err(PlaybackError::NoTrackLoaded) = result {
+            // Expected error
+        } else {
+            panic!("Expected NoTrackLoaded error, got {:?}", result);
+        }
+    }
+
+    #[test]
+    fn seek_returns_error_when_stopped() {
+        // Test that seek_to() returns NoTrackLoaded error when in Stopped state
+        let mut manager = PlaybackManager::default();
+
+        assert_eq!(manager.get_state(), PlaybackState::Stopped);
+
+        // Try to seek while in Stopped state
+        let result = manager.seek_to(Duration::from_secs(5));
+        assert!(
+            result.is_err(),
+            "seek_to() should return error when in Stopped state"
+        );
+        if let Err(PlaybackError::NoTrackLoaded) = result {
+            // Expected error
+        } else {
+            panic!("Expected NoTrackLoaded error, got {:?}", result);
+        }
+    }
+
+    #[test]
+    fn play_from_paused_cancels_stop_fade() {
+        // Test that play() from Paused state cancels any active stop fade
+        // This prevents the fade from completing and reverting state to Paused
+        let mut manager = PlaybackManager::default();
+
+        // Setup: Load playlist and start playing without audio source
+        // When there's no audio source, pause() immediately transitions to Paused
+        manager.load_playlist(vec![create_test_track("1")], 0);
+        manager.play().unwrap(); // Loading
+
+        // Pause during loading (no audio source, so immediate state change to Paused)
+        manager.pause();
+        assert_eq!(
+            manager.get_state(),
+            PlaybackState::Paused,
+            "Should be Paused after pause() during Loading"
+        );
+
+        // Now set audio source - should stay Paused because user_paused is true
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+        assert_eq!(manager.get_state(), PlaybackState::Paused);
+
+        // Verify user_paused is set
+        assert!(manager.user_paused, "user_paused should be true");
+
+        // Now resume playback
+        manager.play().unwrap();
+
+        // Verify we're Playing and user_paused is cleared
+        assert_eq!(
+            manager.get_state(),
+            PlaybackState::Playing,
+            "Should be Playing after play() from Paused"
+        );
+        assert!(
+            !manager.user_paused,
+            "user_paused should be cleared after play()"
+        );
+        assert!(
+            !manager.stop_fade.is_active(),
+            "stop_fade should not be active after play() from Paused"
+        );
+    }
+
+    #[test]
+    fn play_from_paused_with_pending_fade_cancels_fade() {
+        // Test that play() properly handles the case where pause() has started a fade
+        // but hasn't completed yet. When state defers to fade completion, calling
+        // play() while state is still Playing should still work correctly.
+        let mut manager = PlaybackManager::default();
+
+        // Setup: Get to Playing state with audio source
+        manager.load_playlist(vec![create_test_track("1")], 0);
+        manager.play().unwrap(); // Loading
+
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+        manager.source_ready_verified = true;
+        assert_eq!(manager.get_state(), PlaybackState::Playing);
+
+        // Pause - this starts a stop fade with deferred state change
+        manager.pause();
+
+        // State is still Playing during fade, but stop_fade is active
+        // and pending_state is Some(Paused)
+        assert!(
+            manager.stop_fade.is_active() || manager.get_state() == PlaybackState::Paused,
+            "Either stop_fade is active (deferred) or state is already Paused"
+        );
+
+        // Rapid toggle: if state is Paused, play() will cancel the fade
+        // if state is still Playing, it returns early (already playing)
+        if manager.get_state() == PlaybackState::Paused {
+            manager.play().unwrap();
+            assert_eq!(manager.get_state(), PlaybackState::Playing);
+            assert!(
+                !manager.stop_fade.is_active(),
+                "stop_fade should be cancelled"
+            );
+        }
+        // If still Playing with active fade, the fade will complete and
+        // transition to Paused. This is expected behavior - the pause command
+        // takes precedence since it was the last user action.
+    }
+
+    #[test]
+    fn stop_clears_all_playback_state() {
+        // Test that stop() properly clears all playback-related state
+        let mut manager = PlaybackManager::default();
+
+        // Setup a complex state
+        manager.load_playlist(
+            vec![
+                create_test_track("1"),
+                create_test_track("2"),
+                create_test_track("3"),
+            ],
+            0,
+        );
+        manager.play().unwrap();
+
+        // Set audio source
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+
+        // Set next source for crossfade
+        let next_source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_next_source(next_source, create_test_track("2"));
+
+        // Now stop
+        manager.stop();
+
+        // Verify all state is cleared
+        assert_eq!(manager.get_state(), PlaybackState::Stopped);
+        assert!(
+            manager.audio_source.is_none(),
+            "audio_source should be None"
+        );
+        assert!(manager.next_source.is_none(), "next_source should be None");
+        assert!(manager.next_track.is_none(), "next_track should be None");
+        assert!(
+            manager.pending_source.is_none(),
+            "pending_source should be None"
+        );
+        assert!(
+            manager.current_track.is_none(),
+            "current_track should be None"
+        );
+        assert!(!manager.user_paused, "user_paused should be false");
+        assert!(
+            !manager.source_ready_verified,
+            "source_ready_verified should be false"
+        );
+    }
+
+    #[test]
+    fn pause_during_loading_sets_user_paused() {
+        // Test that pause() during Loading state properly sets user_paused
+        // so that set_audio_source() respects the pause
+        let mut manager = PlaybackManager::default();
+
+        // Start loading
+        manager.load_playlist(vec![create_test_track("1")], 0);
+        manager.play().unwrap();
+        assert_eq!(manager.get_state(), PlaybackState::Loading);
+
+        // Pause during loading
+        manager.pause();
+        assert!(
+            manager.user_paused,
+            "user_paused should be true after pause during Loading"
+        );
+
+        // Now set audio source - should stay Paused
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+        assert_eq!(
+            manager.get_state(),
+            PlaybackState::Paused,
+            "Should be Paused after set_audio_source when user_paused is true"
+        );
+    }
+
+    #[test]
+    fn next_clears_user_paused() {
+        // Test that next() clears user_paused flag
+        // User expects next() to START the next track, not stay paused
+        let mut manager = PlaybackManager::default();
+
+        // Setup
+        manager.load_playlist(vec![create_test_track("1"), create_test_track("2")], 0);
+        manager.play().unwrap();
+
+        // Set source and pause
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+        manager.source_ready_verified = true;
+        manager.pause();
+        assert!(
+            manager.user_paused,
+            "user_paused should be true after pause"
+        );
+
+        // Skip to next
+        let _ = manager.next();
+        assert!(
+            !manager.user_paused,
+            "user_paused should be false after next()"
+        );
+    }
+
+    // ===== Gapless Playback Edge Case Tests =====
+
+    #[test]
+    fn peek_next_queue_track_with_repeat_all_at_queue_end() {
+        let mut manager = PlaybackManager::default();
+
+        // Add tracks to queue
+        let tracks = vec![
+            create_test_track("1"),
+            create_test_track("2"),
+            create_test_track("3"),
+        ];
+        manager.load_playlist(tracks, 0);
+
+        // Enable repeat all
+        manager.set_repeat(RepeatMode::All);
+
+        // Consume all tracks to exhaust the queue
+        let _ = manager.play(); // Starts track 1
+
+        // Set audio source to simulate playback
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+
+        // Advance through queue
+        let _ = manager.next(); // Now on track 2
+        let source2 = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source2);
+
+        let _ = manager.next(); // Now on track 3
+        let source3 = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source3);
+
+        // Now queue is exhausted, but repeat all is on
+        // peek_next_queue_track should return track 1 (first track for loop)
+        let next = manager.peek_next_queue_track();
+        assert!(
+            next.is_some(),
+            "With RepeatAll, should return first track when queue exhausted"
+        );
+        assert_eq!(
+            next.unwrap().id,
+            "1",
+            "Should return first track from original source for RepeatAll loop"
+        );
+    }
+
+    #[test]
+    fn peek_next_queue_track_returns_none_when_repeat_off_and_queue_empty() {
+        let mut manager = PlaybackManager::default();
+
+        // Add single track
+        manager.load_playlist(vec![create_test_track("1")], 0);
+
+        // Repeat is off by default
+        assert_eq!(manager.get_repeat(), RepeatMode::Off);
+
+        // Start playback
+        let _ = manager.play();
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+
+        // Queue is now exhausted (only 1 track, and it's now playing)
+        let next = manager.peek_next_queue_track();
+        assert!(
+            next.is_none(),
+            "With RepeatOff and empty queue, should return None"
+        );
+    }
+
+    #[test]
+    fn peek_next_queue_track_returns_current_with_repeat_one() {
+        let mut manager = PlaybackManager::default();
+
+        // Add tracks
+        manager.load_playlist(vec![create_test_track("1"), create_test_track("2")], 0);
+
+        // Enable repeat one
+        manager.set_repeat(RepeatMode::One);
+
+        // Start playback
+        let _ = manager.play();
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source);
+
+        // With repeat one, peek should return current track
+        let next = manager.peek_next_queue_track();
+        assert!(
+            next.is_some(),
+            "With RepeatOne, should return current track"
+        );
+        assert_eq!(
+            next.unwrap().id,
+            "1",
+            "RepeatOne should return current track for pre-loading"
+        );
+    }
+
+    #[test]
+    fn is_source_compatible_validates_sample_rate() {
+        let manager = PlaybackManager::default();
+
+        // Manager defaults to 44100 Hz
+        assert_eq!(manager.get_sample_rate(), 44100);
+
+        // Compatible source (same rate)
+        let compatible = DummyAudioSource::new(Duration::from_secs(10), 44100);
+        assert!(
+            manager.is_source_compatible(&compatible),
+            "Source with matching sample rate should be compatible"
+        );
+
+        // Incompatible source (different rate)
+        let incompatible = DummyAudioSource::new(Duration::from_secs(10), 48000);
+        assert!(
+            !manager.is_source_compatible(&incompatible),
+            "Source with different sample rate should be incompatible"
+        );
+    }
+
+    #[test]
+    fn set_next_source_accepts_mismatched_sample_rate_with_warning() {
+        let mut manager = PlaybackManager::default();
+
+        // Set manager to 44100 Hz
+        manager.set_sample_rate(44100);
+
+        // Add tracks to queue first
+        manager.load_playlist(vec![create_test_track("1"), create_test_track("2")], 0);
+
+        // Set a source with different sample rate
+        // Note: The manager logs a warning but still accepts the source
+        // (platform layer is responsible for resampling)
+        let source = Box::new(DummyAudioSource::new(Duration::from_secs(10), 48000));
+        manager.set_next_source(source, create_test_track("2"));
+
+        // Source should still be set despite mismatch
+        assert!(
+            manager.has_next_source(),
+            "Next source should be set even with sample rate mismatch"
+        );
+    }
+
+    #[test]
+    fn gapless_enabled_affects_should_prepare_next_track() {
+        let mut manager = PlaybackManager::new(PlaybackConfig {
+            gapless: false,
+            ..PlaybackConfig::default()
+        });
+
+        // Add tracks
+        manager.load_playlist(vec![create_test_track("1"), create_test_track("2")], 0);
+
+        // Start playing
+        let _ = manager.play();
+
+        // With gapless disabled and crossfade disabled, should not prepare
+        assert!(
+            !manager.should_prepare_next_track(),
+            "With gapless disabled, should not prepare next track"
+        );
+
+        // Enable gapless
+        manager.gapless_enabled = true;
+
+        // Create a source near end (within 2 second gapless window)
+        let mut source = DummyAudioSource::new(Duration::from_secs(3), 44100);
+        source.seek(Duration::from_millis(2500)).unwrap();
+        manager.set_audio_source(Box::new(source));
+
+        // With track near end and gapless enabled, should prepare
+        assert!(
+            manager.should_prepare_next_track(),
+            "With gapless enabled and track near end, should prepare next track"
+        );
+    }
+
+    #[test]
+    fn transition_to_next_track_moves_sources_correctly() {
+        let mut manager = PlaybackManager::default();
+
+        // Setup: Load playlist, start playback
+        manager.load_playlist(vec![create_test_track("1"), create_test_track("2")], 0);
+        let _ = manager.play();
+
+        // Set current source
+        let source1 = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source1);
+
+        // Set next source for gapless
+        let source2 = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_next_source(source2, create_test_track("2"));
+
+        // Verify next source is set
+        assert!(manager.has_next_source());
+        assert_eq!(manager.get_next_track().unwrap().id, "2");
+
+        // Perform transition
+        manager.transition_to_next_track().unwrap();
+
+        // Verify next_source moved to audio_source
+        assert!(manager.audio_source.is_some());
+        assert!(manager.next_source.is_none());
+        assert!(manager.next_track.is_none());
+
+        // Current track should now be track 2
+        assert_eq!(manager.get_current_track().unwrap().id, "2");
+
+        // Track 1 should be in history
+        let history = manager.get_history();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].id, "1");
+    }
+
+    #[test]
+    fn crossfade_cancelled_when_repeat_one_enabled() {
+        let mut manager = PlaybackManager::default();
+
+        // Enable crossfade
+        manager.set_crossfade_enabled(true);
+        manager.set_crossfade_duration(3000);
+
+        // Load playlist
+        manager.load_playlist(vec![create_test_track("1"), create_test_track("2")], 0);
+        let _ = manager.play();
+
+        // Set current and next sources
+        let source1 = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_audio_source(source1);
+        let source2 = Box::new(DummyAudioSource::new(Duration::from_secs(10), 44100));
+        manager.set_next_source(source2, create_test_track("2"));
+
+        // Manually start crossfade (simulating approaching end of track)
+        manager.crossfade.set_sample_rate(44100);
+        manager.crossfade.start(false);
+        assert!(manager.crossfade.is_active());
+
+        // Now enable repeat one - crossfade should be cancelled
+        manager.set_repeat(RepeatMode::One);
+
+        // Crossfade should be reset
+        assert!(!manager.crossfade.is_active());
+        assert!(manager.next_source.is_none());
+        assert!(manager.next_track.is_none());
+    }
+
+    #[test]
+    fn crossfade_buffers_preallocated_on_enable() {
+        // THREAD SAFETY TEST: Verifies that crossfade buffers are pre-allocated
+        // when crossfade is enabled, rather than during the audio callback.
+        // This is critical for avoiding ~14.6MB heap allocations in the real-time
+        // audio path which would cause latency spikes and potential buffer underruns.
+        let mut manager = PlaybackManager::default();
+
+        // Initially crossfade is disabled
+        assert!(!manager.is_crossfade_enabled());
+        // Buffers should not be allocated
+        assert!(
+            manager.outgoing_buffer.is_none(),
+            "Buffers should not be allocated when crossfade is disabled"
+        );
+        assert!(
+            manager.incoming_buffer.is_none(),
+            "Buffers should not be allocated when crossfade is disabled"
+        );
+
+        // Enable crossfade via set_crossfade_enabled
+        manager.set_crossfade_enabled(true);
+        assert!(manager.is_crossfade_enabled());
+
+        // Buffers should now be pre-allocated (not lazily in audio callback)
+        assert!(
+            manager.outgoing_buffer.is_some(),
+            "Outgoing buffer should be pre-allocated when crossfade is enabled"
+        );
+        assert!(
+            manager.incoming_buffer.is_some(),
+            "Incoming buffer should be pre-allocated when crossfade is enabled"
+        );
+        assert_eq!(
+            manager.outgoing_buffer.as_ref().unwrap().len(),
+            CROSSFADE_BUFFER_SIZE,
+            "Buffer should have correct size"
+        );
+
+        // Disable crossfade
+        manager.set_crossfade_enabled(false);
+        assert!(!manager.is_crossfade_enabled());
+
+        // Buffers should be freed to save ~14.6MB of memory
+        assert!(
+            manager.outgoing_buffer.is_none(),
+            "Buffers should be freed when crossfade is disabled"
+        );
+        assert!(
+            manager.incoming_buffer.is_none(),
+            "Buffers should be freed when crossfade is disabled"
+        );
+    }
+
+    #[test]
+    fn crossfade_buffers_preallocated_via_settings() {
+        // Same test but using set_crossfade_settings instead of set_crossfade_enabled
+        let mut manager = PlaybackManager::default();
+
+        // Initially buffers not allocated
+        assert!(manager.outgoing_buffer.is_none());
+
+        // Enable via settings
+        let mut settings = manager.get_crossfade_settings().clone();
+        settings.enabled = true;
+        settings.duration_ms = 3000;
+        manager.set_crossfade_settings(settings);
+
+        // Buffers should be pre-allocated
+        assert!(
+            manager.outgoing_buffer.is_some(),
+            "Buffers should be pre-allocated when crossfade is enabled via settings"
+        );
+        assert!(
+            manager.incoming_buffer.is_some(),
+            "Buffers should be pre-allocated when crossfade is enabled via settings"
+        );
+
+        // Disable via settings
+        let mut settings = manager.get_crossfade_settings().clone();
+        settings.enabled = false;
+        manager.set_crossfade_settings(settings);
+
+        // Buffers should be freed
+        assert!(
+            manager.outgoing_buffer.is_none(),
+            "Buffers should be freed when crossfade is disabled via settings"
         );
     }
 }

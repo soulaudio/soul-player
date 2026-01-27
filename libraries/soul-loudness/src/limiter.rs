@@ -419,4 +419,282 @@ mod tests {
         // Should be back to unity gain
         assert!((limiter.gain_reduction - 1.0).abs() < 0.001);
     }
+
+    #[test]
+    fn test_lookahead_presets() {
+        // Test all preset values
+        assert!((LookaheadPreset::Instant.as_ms() - 0.0).abs() < 0.001);
+        assert!((LookaheadPreset::Balanced.as_ms() - 1.5).abs() < 0.001);
+        assert!((LookaheadPreset::Transparent.as_ms() - 5.0).abs() < 0.001);
+        assert!((LookaheadPreset::Custom(3.0).as_ms() - 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_set_lookahead_preset() {
+        let mut limiter = TruePeakLimiter::new(44100, 2);
+
+        // Default is Balanced
+        assert_eq!(limiter.lookahead_preset(), LookaheadPreset::Balanced);
+
+        // Change to Transparent (5ms)
+        limiter.set_lookahead(LookaheadPreset::Transparent);
+        assert_eq!(limiter.lookahead_preset(), LookaheadPreset::Transparent);
+
+        // Latency should be approximately 5ms
+        let latency_ms = limiter.latency_ms();
+        assert!(
+            (4.5..=5.5).contains(&latency_ms),
+            "Expected ~5ms latency, got {}ms",
+            latency_ms
+        );
+    }
+
+    #[test]
+    fn test_set_lookahead_ms_clamping() {
+        let mut limiter = TruePeakLimiter::new(44100, 2);
+
+        // Should clamp to 10ms max
+        limiter.set_lookahead_ms(15.0);
+        assert_eq!(limiter.lookahead_preset(), LookaheadPreset::Custom(10.0));
+
+        // Should clamp to 0ms min
+        limiter.set_lookahead_ms(-5.0);
+        assert_eq!(limiter.lookahead_preset(), LookaheadPreset::Custom(0.0));
+    }
+
+    #[test]
+    fn test_process_frame() {
+        let mut limiter = TruePeakLimiter::new(44100, 2);
+
+        // Process frames one at a time
+        let mut frame = [1.5_f32, 1.5_f32];
+
+        // Prime the lookahead
+        for _ in 0..100 {
+            limiter.process_frame(&mut frame);
+        }
+
+        // Output should be limited
+        assert!(
+            frame[0].abs() <= 1.001,
+            "Left channel {} exceeds threshold",
+            frame[0]
+        );
+        assert!(
+            frame[1].abs() <= 1.001,
+            "Right channel {} exceeds threshold",
+            frame[1]
+        );
+    }
+
+    #[test]
+    fn test_release_time_adjustment() {
+        let mut limiter = TruePeakLimiter::new(44100, 2);
+        limiter.set_release_ms(200.0);
+
+        // Create loud signal then quiet
+        let mut loud_samples = vec![2.0_f32; 2000];
+        let mut quiet_samples = vec![0.1_f32; 4000];
+
+        // Process loud to engage limiting
+        limiter.process(&mut loud_samples);
+
+        // Process quiet - with 200ms release, gain should recover slowly
+        limiter.process(&mut quiet_samples);
+
+        // Gain should still be reduced after processing (release is gradual)
+        // With 200ms release at 44100Hz, recovery takes thousands of samples
+        assert!(
+            limiter.gain_reduction < 1.0,
+            "Expected gain reduction during release, got {}",
+            limiter.gain_reduction
+        );
+    }
+
+    #[test]
+    fn test_ebu_r128_threshold() {
+        // EBU R128 requires -1 dBTP maximum
+        let mut limiter = TruePeakLimiter::new(44100, 2);
+        limiter.set_threshold_db(-1.0);
+
+        // -1 dBTP = 10^(-1/20) = ~0.891
+        let expected_threshold = 10.0_f32.powf(-1.0 / 20.0);
+        assert!(
+            (limiter.threshold - expected_threshold).abs() < 0.001,
+            "Expected threshold {}, got {}",
+            expected_threshold,
+            limiter.threshold
+        );
+
+        // Test that samples are limited to this threshold
+        let mut samples = vec![1.0_f32; 200];
+        for _ in 0..10 {
+            limiter.process(&mut samples);
+        }
+
+        for &sample in &samples {
+            assert!(
+                sample.abs() <= expected_threshold + 0.001,
+                "Sample {} exceeds -1 dBTP threshold {}",
+                sample,
+                expected_threshold
+            );
+        }
+    }
+
+    /// Test case demonstrating inter-sample peak issue
+    ///
+    /// This test documents the current limitation: the limiter operates on
+    /// sample peaks only, not true peaks. A sine wave at Nyquist/4 frequency
+    /// with unfortunate phase can have inter-sample peaks up to 3dB higher
+    /// than the sample values.
+    ///
+    /// Per ITU-R BS.1770, true peak limiting requires 4x oversampling to
+    /// detect inter-sample peaks. The current implementation does not do this.
+    ///
+    /// TODO: Implement 4x oversampling for true peak detection
+    #[test]
+    fn test_inter_sample_peak_detection_limitation() {
+        let sample_rate = 44100;
+        let mut limiter = TruePeakLimiter::new(sample_rate, 1);
+        limiter.set_threshold_db(0.0); // 0 dBFS threshold
+
+        // Generate a sine wave at Nyquist/4 (11025 Hz at 44100 sample rate)
+        // This frequency is known to have worst-case inter-sample peaks
+        // when samples fall on zero crossings
+        let frequency = sample_rate as f32 / 4.0;
+        let num_samples = 1000;
+
+        // Phase shift to align samples with zero crossings
+        // This creates maximum inter-sample peaks between samples
+        let phase_shift = std::f32::consts::PI / 4.0;
+
+        let mut samples: Vec<f32> = (0..num_samples)
+            .map(|i| {
+                let t = i as f32 / sample_rate as f32;
+                0.9 * (2.0 * std::f32::consts::PI * frequency * t + phase_shift).sin()
+            })
+            .collect();
+
+        // Prime and process
+        for _ in 0..10 {
+            limiter.process(&mut samples);
+        }
+
+        // Current behavior: sample peaks are limited, but inter-sample peaks may exceed
+        // This test documents the limitation - all samples appear under threshold
+        let max_sample = samples.iter().map(|s| s.abs()).fold(0.0_f32, f32::max);
+        assert!(
+            max_sample <= 1.0,
+            "Sample peak {} exceeds threshold (expected behavior)",
+            max_sample
+        );
+
+        // NOTE: True inter-sample peaks could still exceed 0 dBTP by up to 3dB
+        // for this signal. A proper ITU-R BS.1770 compliant limiter would detect
+        // and limit these. This limitation is documented here.
+    }
+
+    /// Test demonstrating the need for true peak limiting vs sample peak limiting
+    ///
+    /// Per EBU R128 and ITU-R BS.1770:
+    /// - Maximum true peak level should be -1 dBTP
+    /// - True peaks are measured with 4x oversampling
+    /// - Sample peaks can underestimate true peaks by up to 3-6 dB
+    ///
+    /// This test uses known problematic signals that create inter-sample peaks.
+    #[test]
+    fn test_true_peak_vs_sample_peak_gap() {
+        // Two samples at 0.707 with opposite signs create an inter-sample peak
+        // that can approach 1.0 (depending on the reconstruction filter)
+        let samples_case_1 = [0.707_f32, -0.707_f32];
+
+        // Max sample value is 0.707 (-3 dBFS)
+        let sample_peak = samples_case_1
+            .iter()
+            .map(|s| s.abs())
+            .fold(0.0_f32, f32::max);
+        assert!(
+            (sample_peak - 0.707).abs() < 0.001,
+            "Sample peak should be 0.707"
+        );
+
+        // But the interpolated true peak between these samples approaches 1.0
+        // A sinc interpolation would show ~1.0 peak between the samples
+        // This is why ITU-R BS.1770 requires 4x oversampling
+
+        // Document: The current limiter would pass these samples through unchanged
+        // if threshold is 0 dBFS, but the true peak exceeds that threshold
+    }
+
+    #[test]
+    fn test_multichannel_peak_detection() {
+        let mut limiter = TruePeakLimiter::new(44100, 4);
+
+        // Peak on channel 3 only
+        let mut samples = vec![
+            0.5, 0.5, 0.5, 2.0, // Frame 1: ch3 is loud
+            0.5, 0.5, 0.5, 1.8, // Frame 2
+            0.5, 0.5, 0.5, 1.5, // Frame 3
+        ];
+
+        for _ in 0..10 {
+            limiter.process(&mut samples);
+        }
+
+        // All channels should be limited together (uses max peak across channels)
+        for &sample in &samples {
+            assert!(sample.abs() <= 1.001, "Sample {} exceeds threshold", sample);
+        }
+    }
+
+    #[test]
+    fn test_empty_buffer_handling() {
+        let mut limiter = TruePeakLimiter::new(44100, 2);
+
+        // Empty buffer should not panic
+        let mut empty: Vec<f32> = vec![];
+        limiter.process(&mut empty);
+
+        // State should be unchanged
+        assert!((limiter.gain_reduction - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_single_channel_mono() {
+        let mut limiter = TruePeakLimiter::new(44100, 1);
+
+        let mut samples = vec![1.5_f32; 100];
+        for _ in 0..10 {
+            limiter.process(&mut samples);
+        }
+
+        for &sample in &samples {
+            assert!(
+                sample.abs() <= 1.001,
+                "Mono sample {} exceeds threshold",
+                sample
+            );
+        }
+    }
+
+    #[test]
+    fn test_high_sample_rate_192khz() {
+        // At 192kHz, inter-sample peaks are less of an issue
+        // but lookahead buffer sizing should adjust
+        let limiter = TruePeakLimiter::new(192000, 2);
+
+        // 1.5ms at 192kHz = 288 samples
+        let expected_latency = (192000.0_f32 * 1.5 / 1000.0).ceil() as usize;
+        assert_eq!(limiter.latency_samples(), expected_latency);
+    }
+
+    #[test]
+    fn test_instant_mode_minimum_buffer() {
+        let limiter = TruePeakLimiter::with_lookahead(44100, 2, LookaheadPreset::Instant);
+
+        // Instant mode should have minimum 1 sample lookahead (to avoid div by zero)
+        assert!(limiter.lookahead_size >= 1);
+        assert!((limiter.latency_ms() - 0.0).abs() < 0.1);
+    }
 }

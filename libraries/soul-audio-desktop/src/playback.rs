@@ -308,6 +308,166 @@ pub enum PlaybackEvent {
 
     /// Error occurred
     Error(String),
+
+    /// Device switch initiated (for UI feedback)
+    DeviceSwitchStarted {
+        /// Target device name
+        target_device: String,
+        /// Reason for switch
+        reason: DeviceSwitchReason,
+    },
+
+    /// Device switch completed successfully
+    DeviceSwitchCompleted {
+        /// New device name
+        device_name: String,
+        /// New sample rate
+        sample_rate: u32,
+    },
+
+    /// Device switch failed
+    DeviceSwitchFailed {
+        /// Error message
+        error: String,
+        /// Whether fallback to default was attempted
+        fallback_attempted: bool,
+    },
+}
+
+/// Reasons for device switching
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceSwitchReason {
+    /// User requested device change
+    UserRequested,
+    /// Current device was disconnected (hot-unplug)
+    DeviceDisconnected,
+    /// System default device changed
+    DefaultDeviceChanged,
+    /// Sample rate mismatch detected
+    SampleRateMismatch,
+    /// Device error recovery
+    ErrorRecovery,
+}
+
+impl std::fmt::Display for DeviceSwitchReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UserRequested => write!(f, "user_requested"),
+            Self::DeviceDisconnected => write!(f, "device_disconnected"),
+            Self::DefaultDeviceChanged => write!(f, "default_device_changed"),
+            Self::SampleRateMismatch => write!(f, "sample_rate_mismatch"),
+            Self::ErrorRecovery => write!(f, "error_recovery"),
+        }
+    }
+}
+
+/// Device switch state machine
+///
+/// Tracks the current state of device switching to prevent race conditions
+/// and ensure proper sequencing of device transitions.
+///
+/// Based on industry best practices from:
+/// - Microsoft WASAPI stream routing documentation
+/// - Apple CoreAudio device management guidelines
+/// - BigBlueButton audio device handling
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum DeviceSwitchState {
+    /// Normal operation, no switch in progress
+    #[default]
+    Idle,
+
+    /// Fadeout in progress before switch
+    FadingOut {
+        /// Target device for switch
+        target_device: Option<String>,
+        /// Target backend
+        target_backend: crate::AudioBackend,
+        /// Reason for switch
+        reason: DeviceSwitchReason,
+        /// Samples remaining in fadeout
+        samples_remaining: usize,
+    },
+
+    /// Switching to new device (stream recreation)
+    Switching {
+        /// Target device for switch
+        target_device: Option<String>,
+        /// Target backend
+        target_backend: crate::AudioBackend,
+        /// Reason for switch
+        reason: DeviceSwitchReason,
+        /// Playback position to restore
+        saved_position: std::time::Duration,
+        /// Whether playback was active before switch
+        was_playing: bool,
+    },
+
+    /// Fadein in progress after switch
+    FadingIn {
+        /// New device name
+        device_name: String,
+        /// Samples remaining in fadein
+        samples_remaining: usize,
+    },
+
+    /// Recovery mode after failed switch
+    Recovering {
+        /// Number of retry attempts
+        retry_count: u32,
+        /// Last error message
+        last_error: String,
+        /// Original position to restore
+        saved_position: std::time::Duration,
+    },
+}
+
+impl DeviceSwitchState {
+    /// Check if a switch is currently in progress
+    pub fn is_switching(&self) -> bool {
+        !matches!(self, Self::Idle)
+    }
+
+    /// Check if we can start a new switch
+    pub fn can_start_switch(&self) -> bool {
+        matches!(self, Self::Idle | Self::Recovering { .. })
+    }
+
+    /// Get the target device if currently switching
+    pub fn target_device(&self) -> Option<&str> {
+        match self {
+            Self::FadingOut { target_device, .. } | Self::Switching { target_device, .. } => {
+                target_device.as_deref()
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Configuration for device switch behavior
+#[derive(Debug, Clone)]
+pub struct DeviceSwitchConfig {
+    /// Duration of fadeout before switch (in milliseconds)
+    pub fadeout_ms: u32,
+    /// Duration of fadein after switch (in milliseconds)
+    pub fadein_ms: u32,
+    /// Maximum retry attempts for failed switches
+    pub max_retries: u32,
+    /// Delay between retry attempts (in milliseconds)
+    pub retry_delay_ms: u32,
+    /// Whether to automatically fallback to default device on failure
+    pub auto_fallback: bool,
+}
+
+impl Default for DeviceSwitchConfig {
+    fn default() -> Self {
+        Self {
+            fadeout_ms: 50, // 50ms fadeout (industry standard to prevent clicks)
+            fadein_ms: 30,  // 30ms fadein (matches StreamStartEnvelope)
+            max_retries: 3,
+            retry_delay_ms: 100,
+            auto_fallback: true,
+        }
+    }
 }
 
 /// Sample rate mode for playback
@@ -499,6 +659,13 @@ pub struct DesktopPlayback {
 
     /// Background track loader (keeps disk I/O off audio thread)
     track_loader: Arc<crate::track_loader::TrackLoader>,
+
+    /// Device switch state machine
+    /// Tracks current state of device switching to prevent race conditions
+    device_switch_state: Arc<Mutex<DeviceSwitchState>>,
+
+    /// Device switch configuration
+    device_switch_config: DeviceSwitchConfig,
 }
 
 // SAFETY: DesktopPlayback is safe to send between threads because:
@@ -676,6 +843,8 @@ impl DesktopPlayback {
             current_sample_rate,
             resampling_settings,
             track_loader,
+            device_switch_state: Arc::new(Mutex::new(DeviceSwitchState::Idle)),
+            device_switch_config: DeviceSwitchConfig::default(),
         })
     }
 
@@ -805,6 +974,9 @@ impl DesktopPlayback {
                 // Track if we've already requested a load for the current Loading state
                 // This prevents flooding the track loader with duplicate requests
                 let mut load_requested = false;
+                // Error recovery tracking - count consecutive errors and fade samples remaining
+                let mut error_count: u32 = 0;
+                let mut error_fade_samples_remaining: usize = 0;
                 tracing::debug!(
                     "[CPAL] Creating F32 stream callback (stream_id: {:?})",
                     stream_id
@@ -822,6 +994,8 @@ impl DesktopPlayback {
                             callback_count,
                             stream_id,
                             &mut load_requested,
+                            &mut error_count,
+                            &mut error_fade_samples_remaining,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process(data);
@@ -844,6 +1018,9 @@ impl DesktopPlayback {
                 // Track if we've already requested a load for the current Loading state
                 // This prevents flooding the track loader with duplicate requests
                 let mut load_requested = false;
+                // Error recovery tracking - count consecutive errors and fade samples remaining
+                let mut error_count: u32 = 0;
+                let mut error_fade_samples_remaining: usize = 0;
                 tracing::debug!(
                     "[CPAL] Creating I32 stream callback (stream_id: {:?})",
                     stream_id
@@ -878,6 +1055,8 @@ impl DesktopPlayback {
                             callback_count,
                             stream_id,
                             &mut load_requested,
+                            &mut error_count,
+                            &mut error_fade_samples_remaining,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i32(data);
@@ -905,6 +1084,9 @@ impl DesktopPlayback {
                 // Track if we've already requested a load for the current Loading state
                 // This prevents flooding the track loader with duplicate requests
                 let mut load_requested = false;
+                // Error recovery tracking - count consecutive errors and fade samples remaining
+                let mut error_count: u32 = 0;
+                let mut error_fade_samples_remaining: usize = 0;
                 tracing::debug!(
                     "[CPAL] Creating I16 stream callback (stream_id: {:?})",
                     stream_id
@@ -928,6 +1110,8 @@ impl DesktopPlayback {
                             callback_count,
                             stream_id,
                             &mut load_requested,
+                            &mut error_count,
+                            &mut error_fade_samples_remaining,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i16(data);
@@ -1241,6 +1425,7 @@ impl DesktopPlayback {
     }
 
     /// Audio callback for f32 sample format (WASAPI, `CoreAudio`, etc.)
+    #[allow(clippy::too_many_arguments)]
     fn audio_callback_f32(
         data: &mut [f32],
         manager: Arc<Mutex<PlaybackManager>>,
@@ -1250,6 +1435,8 @@ impl DesktopPlayback {
         callback_count: u32,
         stream_id: std::time::Instant,
         load_requested: &mut bool,
+        error_count: &mut u32,
+        error_fade_samples_remaining: &mut usize,
     ) {
         // Debug: log callback invocation with per-stream counter
         if callback_count == 1 {
@@ -1276,17 +1463,19 @@ impl DesktopPlayback {
             );
         }
 
-        // Process any pending commands
+        // Acquire manager lock ONCE for the entire callback
+        // This reduces latency by avoiding multiple lock/unlock cycles
+        let mut mgr = manager.lock().unwrap();
+
+        // Process any pending commands while holding the lock
         while let Ok(command) = command_rx.try_recv() {
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
+            if let Err(e) =
+                Self::process_command_with_lock(command, &mut mgr, event_tx, track_loader)
             {
                 tracing::error!(error = ?e, "[PLAYBACK] Command error in f32 audio callback");
                 let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
             }
         }
-
-        // Get audio from playback manager
-        let mut mgr = manager.lock().unwrap();
 
         // Poll for any ready track loads from the background loader (non-blocking)
         // This moves disk I/O results back to the audio thread without blocking
@@ -1299,6 +1488,9 @@ impl DesktopPlayback {
 
         match mgr.process_audio(data) {
             Ok(_) => {
+                // Reset error count on successful processing
+                *error_count = 0;
+
                 // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
                 Self::forward_manager_events(&mut mgr, event_tx);
 
@@ -1316,11 +1508,78 @@ impl DesktopPlayback {
                 }
             }
             Err(e) => {
-                // Error processing audio - fill with silence
-                data.fill(0.0);
-                tracing::error!(error = ?e, "[PLAYBACK] Audio processing error in f32 callback");
-                let _ =
-                    event_tx.try_send(PlaybackEvent::Error("AUDIO_PROCESSING_ERROR".to_string()));
+                // Error fade-out: 10ms at 48kHz = 480 samples (stereo = 960 total)
+                // Use a quick fade to DAC noise to prevent audible clicks
+                const ERROR_FADE_SAMPLES: usize = 960;
+                const DAC_KEEPALIVE: f32 = 0.000016; // -96dB - inaudible but keeps DAC active
+
+                // Increment error counter
+                *error_count += 1;
+
+                if *error_fade_samples_remaining == 0 && *error_count == 1 {
+                    // First error - start fade-out from current audio level
+                    *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
+                }
+
+                if *error_fade_samples_remaining > 0 {
+                    // Apply fade-out to prevent click
+                    let samples_to_fade = (*error_fade_samples_remaining).min(data.len());
+                    for (i, sample) in data[..samples_to_fade].iter_mut().enumerate() {
+                        let progress =
+                            (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
+                        // Fade from current value toward DAC keepalive noise
+                        let noise = if i % 2 == 0 {
+                            DAC_KEEPALIVE
+                        } else {
+                            -DAC_KEEPALIVE
+                        };
+                        *sample = *sample * progress + noise * (1.0 - progress);
+                    }
+                    *error_fade_samples_remaining =
+                        error_fade_samples_remaining.saturating_sub(data.len());
+
+                    // Fill remaining samples with DAC keepalive noise
+                    if samples_to_fade < data.len() {
+                        for (i, sample) in data[samples_to_fade..].iter_mut().enumerate() {
+                            *sample = if i % 2 == 0 {
+                                DAC_KEEPALIVE
+                            } else {
+                                -DAC_KEEPALIVE
+                            };
+                        }
+                    }
+                } else {
+                    // Fade complete - fill with DAC keepalive noise
+                    for (i, sample) in data.iter_mut().enumerate() {
+                        *sample = if i % 2 == 0 {
+                            DAC_KEEPALIVE
+                        } else {
+                            -DAC_KEEPALIVE
+                        };
+                    }
+                }
+
+                if *error_count >= 3 {
+                    // Persistent error - emit error event and stop
+                    tracing::error!(
+                        error = ?e,
+                        error_count = *error_count,
+                        "[PLAYBACK] Persistent audio error - stopping playback"
+                    );
+                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
+                        "Persistent audio error: {}",
+                        e
+                    )));
+                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(
+                        soul_playback::PlaybackState::Stopped,
+                    ));
+                } else {
+                    tracing::error!(
+                        error = ?e,
+                        error_count = *error_count,
+                        "[PLAYBACK] Audio processing error in f32 callback"
+                    );
+                }
             }
         }
     }
@@ -1329,6 +1588,7 @@ impl DesktopPlayback {
     ///
     /// Uses a pre-allocated f32 buffer to avoid allocation in the real-time audio thread.
     /// Uses TPDF dithering for high-quality F32→I32 conversion.
+    #[allow(clippy::too_many_arguments)]
     fn audio_callback_i32(
         data: &mut [i32],
         manager: Arc<Mutex<PlaybackManager>>,
@@ -1340,6 +1600,8 @@ impl DesktopPlayback {
         callback_count: u32,
         stream_id: std::time::Instant,
         load_requested: &mut bool,
+        error_count: &mut u32,
+        error_fade_samples_remaining: &mut usize,
     ) {
         // Update global counter for diagnostics
         let global_count = GLOBAL_I32_CALLBACK_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -1385,16 +1647,6 @@ impl DesktopPlayback {
             );
         }
 
-        // Process any pending commands
-        while let Ok(command) = command_rx.try_recv() {
-            tracing::trace!("[audio_callback_i32] Received command: {:?}", command);
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
-            {
-                tracing::error!(error = ?e, "[PLAYBACK] Command error in i32 audio callback");
-                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
-            }
-        }
-
         // Ensure f32 buffer is large enough (only reallocates if needed, and rarely)
         if f32_buffer.len() < data.len() {
             f32_buffer.resize(data.len(), 0.0);
@@ -1402,8 +1654,20 @@ impl DesktopPlayback {
         let f32_slice = &mut f32_buffer[..data.len()];
         f32_slice.fill(0.0);
 
-        // Get audio from playback manager into f32 buffer, then convert to i32
+        // Acquire manager lock ONCE for the entire callback
+        // This reduces latency by avoiding multiple lock/unlock cycles
         let mut mgr = manager.lock().unwrap();
+
+        // Process any pending commands while holding the lock
+        while let Ok(command) = command_rx.try_recv() {
+            tracing::trace!("[audio_callback_i32] Received command: {:?}", command);
+            if let Err(e) =
+                Self::process_command_with_lock(command, &mut mgr, event_tx, track_loader)
+            {
+                tracing::error!(error = ?e, "[PLAYBACK] Command error in i32 audio callback");
+                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
+            }
+        }
 
         // Poll for any ready track loads from the background loader (non-blocking)
         // This moves disk I/O results back to the audio thread without blocking
@@ -1416,6 +1680,9 @@ impl DesktopPlayback {
 
         match mgr.process_audio(f32_slice) {
             Ok(_) => {
+                // Reset error count on successful processing
+                *error_count = 0;
+
                 // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
                 Self::forward_manager_events(&mut mgr, event_tx);
 
@@ -1437,11 +1704,86 @@ impl DesktopPlayback {
                 dither.process_stereo_to_i32(f32_slice, data);
             }
             Err(e) => {
-                // Error processing audio - fill with silence
-                data.fill(0);
-                tracing::error!(error = ?e, "[PLAYBACK] Audio processing error in i32 callback");
-                let _ =
-                    event_tx.try_send(PlaybackEvent::Error("AUDIO_PROCESSING_ERROR".to_string()));
+                // Error fade-out: 10ms at 48kHz = 480 samples (stereo = 960 total)
+                // Use a quick fade to DAC noise to prevent audible clicks
+                const ERROR_FADE_SAMPLES: usize = 960;
+                const DAC_KEEPALIVE: i32 = (0.000016_f32 * 2147483647.0) as i32; // -96dB scaled to i32
+
+                // Increment error counter
+                *error_count += 1;
+
+                if *error_fade_samples_remaining == 0 && *error_count == 1 {
+                    // First error - start fade-out from current audio level
+                    *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
+                }
+
+                if *error_fade_samples_remaining > 0 {
+                    // Apply fade-out to prevent click
+                    // First convert f32 buffer to i32 with fade applied
+                    let samples_to_fade = (*error_fade_samples_remaining).min(data.len());
+                    for (i, (out_sample, in_sample)) in data[..samples_to_fade]
+                        .iter_mut()
+                        .zip(f32_slice[..samples_to_fade].iter())
+                        .enumerate()
+                    {
+                        let progress =
+                            (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
+                        let noise = if i % 2 == 0 {
+                            DAC_KEEPALIVE
+                        } else {
+                            -DAC_KEEPALIVE
+                        };
+                        // Convert f32 to i32 with fade
+                        let scaled = (*in_sample * 2147483647.0) as i32;
+                        *out_sample = ((scaled as f64 * progress as f64)
+                            + (noise as f64 * (1.0 - progress as f64)))
+                            as i32;
+                    }
+                    *error_fade_samples_remaining =
+                        error_fade_samples_remaining.saturating_sub(data.len());
+
+                    // Fill remaining samples with DAC keepalive noise
+                    if samples_to_fade < data.len() {
+                        for (i, sample) in data[samples_to_fade..].iter_mut().enumerate() {
+                            *sample = if i % 2 == 0 {
+                                DAC_KEEPALIVE
+                            } else {
+                                -DAC_KEEPALIVE
+                            };
+                        }
+                    }
+                } else {
+                    // Fade complete - fill with DAC keepalive noise
+                    for (i, sample) in data.iter_mut().enumerate() {
+                        *sample = if i % 2 == 0 {
+                            DAC_KEEPALIVE
+                        } else {
+                            -DAC_KEEPALIVE
+                        };
+                    }
+                }
+
+                if *error_count >= 3 {
+                    // Persistent error - emit error event and stop
+                    tracing::error!(
+                        error = ?e,
+                        error_count = *error_count,
+                        "[PLAYBACK] Persistent audio error - stopping playback"
+                    );
+                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
+                        "Persistent audio error: {}",
+                        e
+                    )));
+                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(
+                        soul_playback::PlaybackState::Stopped,
+                    ));
+                } else {
+                    tracing::error!(
+                        error = ?e,
+                        error_count = *error_count,
+                        "[PLAYBACK] Audio processing error in i32 callback"
+                    );
+                }
             }
         }
     }
@@ -1450,6 +1792,7 @@ impl DesktopPlayback {
     ///
     /// Uses a pre-allocated f32 buffer to avoid allocation in the real-time audio thread.
     /// Uses TPDF dithering for high-quality F32→I16 conversion.
+    #[allow(clippy::too_many_arguments)]
     fn audio_callback_i16(
         data: &mut [i16],
         manager: Arc<Mutex<PlaybackManager>>,
@@ -1461,6 +1804,8 @@ impl DesktopPlayback {
         callback_count: u32,
         stream_id: std::time::Instant,
         load_requested: &mut bool,
+        error_count: &mut u32,
+        error_fade_samples_remaining: &mut usize,
     ) {
         // Debug: log callback invocation with per-stream counter
         if callback_count == 1 {
@@ -1487,15 +1832,6 @@ impl DesktopPlayback {
             );
         }
 
-        // Process any pending commands
-        while let Ok(command) = command_rx.try_recv() {
-            if let Err(e) = Self::process_command(command, manager.clone(), event_tx, track_loader)
-            {
-                tracing::error!(error = ?e, "[PLAYBACK] Command error in i16 audio callback");
-                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
-            }
-        }
-
         // Ensure f32 buffer is large enough (only reallocates if needed, and rarely)
         if f32_buffer.len() < data.len() {
             f32_buffer.resize(data.len(), 0.0);
@@ -1503,8 +1839,19 @@ impl DesktopPlayback {
         let f32_slice = &mut f32_buffer[..data.len()];
         f32_slice.fill(0.0);
 
-        // Get audio from playback manager into f32 buffer, then convert to i16
+        // Acquire manager lock ONCE for the entire callback
+        // This reduces latency by avoiding multiple lock/unlock cycles
         let mut mgr = manager.lock().unwrap();
+
+        // Process any pending commands while holding the lock
+        while let Ok(command) = command_rx.try_recv() {
+            if let Err(e) =
+                Self::process_command_with_lock(command, &mut mgr, event_tx, track_loader)
+            {
+                tracing::error!(error = ?e, "[PLAYBACK] Command error in i16 audio callback");
+                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
+            }
+        }
 
         // Poll for any ready track loads from the background loader (non-blocking)
         // This moves disk I/O results back to the audio thread without blocking
@@ -1517,6 +1864,9 @@ impl DesktopPlayback {
 
         match mgr.process_audio(f32_slice) {
             Ok(_) => {
+                // Reset error count on successful processing
+                *error_count = 0;
+
                 // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
                 Self::forward_manager_events(&mut mgr, event_tx);
 
@@ -1538,11 +1888,85 @@ impl DesktopPlayback {
                 dither.process_stereo_to_i16(f32_slice, data);
             }
             Err(e) => {
-                // Error processing audio - fill with silence
-                data.fill(0);
-                tracing::error!(error = ?e, "[PLAYBACK] Audio processing error in i16 callback");
-                let _ =
-                    event_tx.try_send(PlaybackEvent::Error("AUDIO_PROCESSING_ERROR".to_string()));
+                // Error fade-out: 10ms at 48kHz = 480 samples (stereo = 960 total)
+                // Use a quick fade to DAC noise to prevent audible clicks
+                const ERROR_FADE_SAMPLES: usize = 960;
+                const DAC_KEEPALIVE: i16 = (0.000016_f32 * 32767.0) as i16; // -96dB scaled to i16
+
+                // Increment error counter
+                *error_count += 1;
+
+                if *error_fade_samples_remaining == 0 && *error_count == 1 {
+                    // First error - start fade-out from current audio level
+                    *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
+                }
+
+                if *error_fade_samples_remaining > 0 {
+                    // Apply fade-out to prevent click
+                    // First convert f32 buffer to i16 with fade applied
+                    let samples_to_fade = (*error_fade_samples_remaining).min(data.len());
+                    for (i, (out_sample, in_sample)) in data[..samples_to_fade]
+                        .iter_mut()
+                        .zip(f32_slice[..samples_to_fade].iter())
+                        .enumerate()
+                    {
+                        let progress =
+                            (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
+                        let noise = if i % 2 == 0 {
+                            DAC_KEEPALIVE
+                        } else {
+                            -DAC_KEEPALIVE
+                        };
+                        // Convert f32 to i16 with fade
+                        let scaled = (*in_sample * 32767.0) as i16;
+                        *out_sample =
+                            ((scaled as f32 * progress) + (noise as f32 * (1.0 - progress))) as i16;
+                    }
+                    *error_fade_samples_remaining =
+                        error_fade_samples_remaining.saturating_sub(data.len());
+
+                    // Fill remaining samples with DAC keepalive noise
+                    if samples_to_fade < data.len() {
+                        for (i, sample) in data[samples_to_fade..].iter_mut().enumerate() {
+                            *sample = if i % 2 == 0 {
+                                DAC_KEEPALIVE
+                            } else {
+                                -DAC_KEEPALIVE
+                            };
+                        }
+                    }
+                } else {
+                    // Fade complete - fill with DAC keepalive noise
+                    for (i, sample) in data.iter_mut().enumerate() {
+                        *sample = if i % 2 == 0 {
+                            DAC_KEEPALIVE
+                        } else {
+                            -DAC_KEEPALIVE
+                        };
+                    }
+                }
+
+                if *error_count >= 3 {
+                    // Persistent error - emit error event and stop
+                    tracing::error!(
+                        error = ?e,
+                        error_count = *error_count,
+                        "[PLAYBACK] Persistent audio error - stopping playback"
+                    );
+                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
+                        "Persistent audio error: {}",
+                        e
+                    )));
+                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(
+                        soul_playback::PlaybackState::Stopped,
+                    ));
+                } else {
+                    tracing::error!(
+                        error = ?e,
+                        error_count = *error_count,
+                        "[PLAYBACK] Audio processing error in i16 callback"
+                    );
+                }
             }
         }
     }
@@ -1643,7 +2067,12 @@ impl DesktopPlayback {
             };
 
             if let Some(event) = desktop_event {
-                let _ = event_tx.try_send(event);
+                if let Err(e) = event_tx.try_send(event) {
+                    tracing::warn!(
+                        error = %e,
+                        "[forward_manager_events] Event channel full - event dropped"
+                    );
+                }
             }
         }
     }
@@ -1699,7 +2128,11 @@ impl DesktopPlayback {
         }
     }
 
-    /// Process playback command
+    /// Process playback command (acquires manager lock internally)
+    ///
+    /// This is the external API used for commands that arrive outside the audio callback.
+    /// For commands processed within the audio callback, use `process_command_with_lock`
+    /// to avoid redundant mutex acquisition.
     fn process_command(
         command: PlaybackCommand,
         manager: Arc<Mutex<PlaybackManager>>,
@@ -1707,7 +2140,20 @@ impl DesktopPlayback {
         track_loader: &Arc<crate::track_loader::TrackLoader>,
     ) -> Result<()> {
         let mut mgr = manager.lock().unwrap();
+        Self::process_command_with_lock(command, &mut mgr, event_tx, track_loader)
+    }
 
+    /// Process playback command with an already-acquired manager lock
+    ///
+    /// This variant is used in the audio callback to avoid acquiring the mutex twice
+    /// (once for command processing, once for audio processing). This reduces latency
+    /// by eliminating redundant lock/unlock cycles in the real-time audio path.
+    fn process_command_with_lock(
+        command: PlaybackCommand,
+        mgr: &mut PlaybackManager,
+        event_tx: &Sender<PlaybackEvent>,
+        track_loader: &Arc<crate::track_loader::TrackLoader>,
+    ) -> Result<()> {
         match command {
             PlaybackCommand::Play => {
                 tracing::debug!("[PlaybackCommand::Play] Received");
@@ -1748,9 +2194,7 @@ impl DesktopPlayback {
                         "[PlaybackCommand::Play] State is {:?}, not loading audio",
                         state
                     );
-                    event_tx
-                        .send(PlaybackEvent::StateChanged(mgr.get_state()))
-                        .ok();
+                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
                 }
             }
             PlaybackCommand::Pause => {
@@ -1763,15 +2207,11 @@ impl DesktopPlayback {
                     "[PlaybackCommand::Pause] After pause(), state: {:?}",
                     mgr.get_state()
                 );
-                event_tx
-                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
-                    .ok();
+                let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
             }
             PlaybackCommand::Stop => {
                 mgr.stop();
-                event_tx
-                    .send(PlaybackEvent::StateChanged(mgr.get_state()))
-                    .ok();
+                let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
             }
             PlaybackCommand::Next => {
                 mgr.next()?;
@@ -1792,14 +2232,12 @@ impl DesktopPlayback {
                         // Result will be handled by poll_track_loader in next callback
                     }
                 } else {
-                    event_tx
-                        .send(PlaybackEvent::TrackChanged(
-                            mgr.get_current_track().cloned(),
-                        ))
-                        .ok();
+                    let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
+                        mgr.get_current_track().cloned(),
+                    ));
                 }
                 // Emit queue updated since position changed
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::Previous => {
                 mgr.previous()?;
@@ -1820,63 +2258,57 @@ impl DesktopPlayback {
                         // Result will be handled by poll_track_loader in next callback
                     }
                 } else {
-                    event_tx
-                        .send(PlaybackEvent::TrackChanged(
-                            mgr.get_current_track().cloned(),
-                        ))
-                        .ok();
+                    let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
+                        mgr.get_current_track().cloned(),
+                    ));
                 }
                 // Emit queue updated since position changed
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::Seek(seconds) => {
                 mgr.seek_to(std::time::Duration::from_secs_f64(seconds))?;
-                event_tx.send(PlaybackEvent::PositionUpdated(seconds)).ok();
+                let _ = event_tx.try_send(PlaybackEvent::PositionUpdated(seconds));
             }
             PlaybackCommand::SetVolume(volume) => {
                 mgr.set_volume(volume);
-                event_tx.send(PlaybackEvent::VolumeChanged(volume)).ok();
+                let _ = event_tx.try_send(PlaybackEvent::VolumeChanged(volume));
             }
             PlaybackCommand::Mute => {
                 mgr.mute();
-                event_tx
-                    .send(PlaybackEvent::VolumeChanged(mgr.get_volume()))
-                    .ok();
+                let _ = event_tx.try_send(PlaybackEvent::VolumeChanged(mgr.get_volume()));
             }
             PlaybackCommand::Unmute => {
                 mgr.unmute();
-                event_tx
-                    .send(PlaybackEvent::VolumeChanged(mgr.get_volume()))
-                    .ok();
+                let _ = event_tx.try_send(PlaybackEvent::VolumeChanged(mgr.get_volume()));
             }
             PlaybackCommand::AddToQueue(track) => {
                 // Legacy command - maps to AddToQueueEnd
                 mgr.add_to_queue_end(track);
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::AddPlayNext(track) => {
                 mgr.add_to_queue_next(track);
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::AddToQueueEnd(track) => {
                 mgr.add_to_queue_end(track);
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::RemoveFromQueue(index) => {
                 mgr.remove_from_queue(index)?;
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::ClearQueue => {
                 mgr.clear_queue();
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::ClearPlayNext => {
                 mgr.clear_play_next();
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::ClearAddToQueue => {
                 mgr.clear_add_to_queue();
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::SkipToQueueIndex(index) => {
                 mgr.skip_to_queue_index(index)?;
@@ -1899,25 +2331,26 @@ impl DesktopPlayback {
                         // Result will be handled by poll_track_loader in next callback
                     }
                 }
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::LoadPlaylist(tracks) => {
                 // Load playlist/album as source queue (Spotify-style context)
                 mgr.add_playlist_to_queue(tracks);
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::AppendToSource(tracks) => {
                 // Append tracks to source queue (for lazy loading)
                 mgr.append_to_source(tracks);
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::SetShuffle(mode) => {
                 mgr.set_shuffle(mode);
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::CycleShuffle => {
-                let _ = mgr.cycle_shuffle();
-                event_tx.send(PlaybackEvent::QueueUpdated).ok();
+                let new_mode = mgr.cycle_shuffle();
+                tracing::debug!(new_mode = ?new_mode, "[PlaybackCommand::CycleShuffle] Shuffle mode cycled");
+                let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::SetRepeat(mode) => {
                 mgr.set_repeat(mode);
@@ -1939,95 +2372,47 @@ impl DesktopPlayback {
     /// Uses `try_send` to avoid blocking if the channel is full (e.g., when
     /// audio callbacks aren't running). Commands may be dropped if the
     /// channel is full - this prevents deadlocks when switching audio devices.
+    ///
+    /// This function is optimized for low latency - it avoids mutex locks in the
+    /// success path. Debug information is only gathered when errors occur.
     pub fn send_command(&self, command: PlaybackCommand) -> Result<()> {
-        let send_start = std::time::Instant::now();
-        tracing::debug!(command = ?command, "[Playback] Sending command");
-
-        // Debug: Check if stream is still alive and channel state
-        let stream_alive = {
-            let lock_start = std::time::Instant::now();
-            let stream_guard = self.stream.lock().unwrap();
-            let lock_duration = lock_start.elapsed();
-            if lock_duration.as_millis() > 10 {
-                tracing::warn!(
-                    lock_duration_ms = lock_duration.as_millis(),
-                    "[Playback] Stream lock contention in send_command"
-                );
-            }
-            stream_guard.is_some()
-        };
-        let channel_len = self.command_tx.len();
-        let channel_capacity = self.command_tx.capacity().unwrap_or(0);
-        let channel_is_empty = self.command_tx.is_empty();
-        let channel_is_full = self.command_tx.is_full();
-
-        tracing::debug!(
-            "[DesktopPlayback] Stream alive: {}, Channel: len={}, cap={}, empty={}, full={}",
-            stream_alive,
-            channel_len,
-            channel_capacity,
-            channel_is_empty,
-            channel_is_full
-        );
-
-        // Get current backend for context
-        let backend = *self.current_backend.lock().unwrap();
-        let device = self.current_device.lock().unwrap().clone();
-        tracing::debug!(
-            "[DesktopPlayback] Current backend: {:?}, device: {}",
-            backend,
-            device
-        );
+        tracing::trace!(command = ?command, "[Playback] Sending command");
 
         match self.command_tx.try_send(command.clone()) {
             Ok(()) => {
-                let send_duration = send_start.elapsed();
-                if send_duration.as_millis() > 5 {
-                    tracing::warn!(
-                        command = ?command,
-                        duration_ms = send_duration.as_millis(),
-                        "[Playback] Slow command send detected"
-                    );
-                }
-                tracing::debug!(
-                    command = ?command,
-                    duration_us = send_duration.as_micros(),
-                    "[Playback] Command sent successfully"
-                );
+                tracing::trace!(command = ?command, "[Playback] Command sent successfully");
                 Ok(())
             }
             Err(crossbeam_channel::TrySendError::Full(_)) => {
-                tracing::debug!(
-                    "[DesktopPlayback] WARNING: Command channel FULL, dropping command: {:?}",
-                    command
+                tracing::warn!(
+                    command = ?command,
+                    "[Playback] Command channel full, dropping command"
                 );
                 // Return Ok to not fail the operation - the command is just dropped
                 // This can happen when switching audio devices and callbacks aren't running yet
                 Ok(())
             }
             Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
-                tracing::error!("[DesktopPlayback] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                tracing::error!("[DesktopPlayback] ERROR: Command channel disconnected!");
-                tracing::error!("[DesktopPlayback] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                tracing::error!("[DesktopPlayback] Stream is_some: {}", stream_alive);
-                tracing::error!("[DesktopPlayback] Backend: {:?}", backend);
-                tracing::error!("[DesktopPlayback] Device: {}", device);
-                tracing::error!("[DesktopPlayback] This means the stream's command receiver (command_rx) was dropped.");
-                tracing::error!("[DesktopPlayback] Possible causes:");
-                tracing::error!(
-                    "[DesktopPlayback]   1. ASIO driver silently terminated the stream"
-                );
-                tracing::error!("[DesktopPlayback]   2. Stream error callback was triggered");
-                tracing::error!("[DesktopPlayback]   3. Stream was dropped elsewhere");
-                tracing::error!(
-                    "[DesktopPlayback]   4. command_tx was not updated after device switch"
-                );
-
-                // Get the global callback counter for diagnostics
+                // Only acquire locks and gather debug info on error (rare case)
+                let stream_alive = self.stream.lock().map(|g| g.is_some()).unwrap_or(false);
+                let backend = self
+                    .current_backend
+                    .lock()
+                    .map(|g| *g)
+                    .unwrap_or(crate::AudioBackend::Default);
+                let device = self
+                    .current_device
+                    .lock()
+                    .map(|g| g.clone())
+                    .unwrap_or_else(|_| String::from("<unknown>"));
                 let global_count = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
+
                 tracing::error!(
-                    "[DesktopPlayback] Global I32 callback count: {}",
-                    global_count
+                    stream_alive = stream_alive,
+                    backend = ?backend,
+                    device = %device,
+                    global_i32_callbacks = global_count,
+                    "[Playback] Command channel disconnected - stream may have been terminated"
                 );
 
                 Err(crate::error::AudioError::PlaybackError(
@@ -2138,12 +2523,56 @@ impl DesktopPlayback {
         backend: crate::AudioBackend,
         device_name: Option<String>,
     ) -> Result<()> {
+        self.switch_device_with_reason(backend, device_name, DeviceSwitchReason::UserRequested)
+    }
+
+    /// Switch to a different audio output device with a specific reason
+    ///
+    /// This is the internal implementation that tracks the switch reason for
+    /// proper state machine transitions and error recovery.
+    ///
+    /// # Arguments
+    /// * `backend` - Audio backend to use
+    /// * `device_name` - Device name to switch to (None for default device)
+    /// * `reason` - Reason for the device switch
+    ///
+    /// # Returns
+    /// * `Ok(())` - Device switched successfully
+    /// * `Err(_)` - Failed to switch device
+    pub fn switch_device_with_reason(
+        &mut self,
+        backend: crate::AudioBackend,
+        device_name: Option<String>,
+        reason: DeviceSwitchReason,
+    ) -> Result<()> {
         tracing::info!(
             backend = ?backend,
             device_name = ?device_name,
+            reason = %reason,
             "[Playback] Starting device switch"
         );
         let switch_start = std::time::Instant::now();
+
+        // Check if we can start a new switch
+        {
+            let state = self.device_switch_state.lock().unwrap();
+            if !state.can_start_switch() {
+                tracing::warn!(
+                    current_state = ?*state,
+                    "[Playback] Cannot start device switch - another switch in progress"
+                );
+                return Err(crate::error::AudioError::DeviceError(
+                    "Device switch already in progress".to_string(),
+                ));
+            }
+        }
+
+        // Emit switch started event for UI feedback
+        let target_device_display = device_name.clone().unwrap_or_else(|| "default".to_string());
+        let _ = self.event_tx.try_send(PlaybackEvent::DeviceSwitchStarted {
+            target_device: target_device_display.clone(),
+            reason: reason.clone(),
+        });
 
         // Step 1: Capture ALL state we need from manager in ONE lock acquisition
         // This prevents multiple lock/unlock cycles and potential deadlocks
@@ -2160,6 +2589,19 @@ impl DesktopPlayback {
             was_playing,
             position
         );
+
+        // Update state machine: transition to Switching state
+        {
+            let mut state = self.device_switch_state.lock().unwrap();
+            *state = DeviceSwitchState::Switching {
+                target_device: device_name.clone(),
+                target_backend: backend,
+                reason: reason.clone(),
+                saved_position: position,
+                was_playing,
+            };
+            tracing::debug!("[DesktopPlayback] State machine: Idle -> Switching");
+        }
 
         // Stop and drop the old stream
         // IMPORTANT: ASIO requires proper cleanup between stream creations
@@ -2199,14 +2641,66 @@ impl DesktopPlayback {
 
         // Create new stream with new device, reusing the same event_tx
         tracing::info!("[Playback] Attempting to create new stream for device switch");
-        let (new_stream_option, actual_device_name, new_sample_rate) = Self::create_audio_stream(
+        let stream_result = Self::create_audio_stream(
             self.manager.clone(),
             new_command_rx,
             self.event_tx.clone(),
             backend,
             device_name.clone(),
             self.track_loader.clone(),
-        )?;
+        );
+
+        // Handle stream creation failure with recovery logic
+        let (new_stream_option, actual_device_name, new_sample_rate) = match stream_result {
+            Ok(result) => result,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "[Playback] Failed to create stream for device switch"
+                );
+
+                // Transition to Recovering state
+                {
+                    let mut state = self.device_switch_state.lock().unwrap();
+                    *state = DeviceSwitchState::Recovering {
+                        retry_count: 0,
+                        last_error: e.to_string(),
+                        saved_position: position,
+                    };
+                }
+
+                // Emit failure event
+                let _ = self.event_tx.try_send(PlaybackEvent::DeviceSwitchFailed {
+                    error: e.to_string(),
+                    fallback_attempted: self.device_switch_config.auto_fallback,
+                });
+
+                // Try fallback to default device if configured
+                if self.device_switch_config.auto_fallback && device_name.is_some() {
+                    tracing::warn!("[Playback] Attempting fallback to default device");
+
+                    // Recursive call to switch to default - reset state first
+                    {
+                        let mut state = self.device_switch_state.lock().unwrap();
+                        *state = DeviceSwitchState::Idle;
+                    }
+
+                    return self.switch_device_with_reason(
+                        crate::AudioBackend::Default,
+                        None,
+                        DeviceSwitchReason::ErrorRecovery,
+                    );
+                }
+
+                // Reset state machine on failure
+                {
+                    let mut state = self.device_switch_state.lock().unwrap();
+                    *state = DeviceSwitchState::Idle;
+                }
+
+                return Err(e);
+            }
+        };
 
         let is_silent_mode = new_stream_option.is_none();
 
@@ -2440,6 +2934,22 @@ impl DesktopPlayback {
             final_callbacks = callbacks_at_end,
             "[Playback] Device switch completed successfully"
         );
+
+        // Transition state machine back to Idle
+        {
+            let mut state = self.device_switch_state.lock().unwrap();
+            *state = DeviceSwitchState::Idle;
+            tracing::debug!("[DesktopPlayback] State machine: Switching -> Idle");
+        }
+
+        // Emit switch completed event
+        let _ = self
+            .event_tx
+            .try_send(PlaybackEvent::DeviceSwitchCompleted {
+                device_name: actual_device_name,
+                sample_rate: new_sample_rate,
+            });
+
         Ok(())
     }
 
@@ -2468,6 +2978,35 @@ impl DesktopPlayback {
     /// Get current stream sample rate
     pub fn get_current_sample_rate(&self) -> u32 {
         self.current_sample_rate.load(Ordering::SeqCst)
+    }
+
+    /// Get current device switch state
+    ///
+    /// Returns a clone of the current device switch state for inspection.
+    /// Use `is_device_switching()` for a simpler check.
+    pub fn get_device_switch_state(&self) -> DeviceSwitchState {
+        self.device_switch_state.lock().unwrap().clone()
+    }
+
+    /// Check if a device switch is currently in progress
+    ///
+    /// Returns true if the device switch state machine is not in Idle state.
+    pub fn is_device_switching(&self) -> bool {
+        self.device_switch_state.lock().unwrap().is_switching()
+    }
+
+    /// Get device switch configuration
+    ///
+    /// Returns a clone of the current device switch configuration.
+    pub fn get_device_switch_config(&self) -> DeviceSwitchConfig {
+        self.device_switch_config.clone()
+    }
+
+    /// Set device switch configuration
+    ///
+    /// Updates the device switch configuration for future switches.
+    pub fn set_device_switch_config(&mut self, config: DeviceSwitchConfig) {
+        self.device_switch_config = config;
     }
 
     /// Create a unique device ID from backend and device name
@@ -2575,7 +3114,11 @@ impl DesktopPlayback {
         let device_name = self.current_device.lock().unwrap().clone();
 
         // switch_device will handle everything: stream recreation, source reload, position preservation
-        self.switch_device(backend, Some(device_name))?;
+        self.switch_device_with_reason(
+            backend,
+            Some(device_name),
+            DeviceSwitchReason::SampleRateMismatch,
+        )?;
 
         Ok(true)
     }
@@ -3237,5 +3780,185 @@ mod tests {
         let device_id4 =
             DesktopPlayback::make_device_id(crate::AudioBackend::Default, "Different Device");
         assert_ne!(device_id, device_id4);
+    }
+
+    // ===== Device Switch State Machine Tests =====
+
+    #[test]
+    fn test_device_switch_state_idle_default() {
+        let state = DeviceSwitchState::default();
+        assert_eq!(state, DeviceSwitchState::Idle);
+        assert!(!state.is_switching());
+        assert!(state.can_start_switch());
+        assert!(state.target_device().is_none());
+    }
+
+    #[test]
+    fn test_device_switch_state_switching() {
+        let state = DeviceSwitchState::Switching {
+            target_device: Some("Speaker".to_string()),
+            target_backend: crate::AudioBackend::Default,
+            reason: DeviceSwitchReason::UserRequested,
+            saved_position: std::time::Duration::from_secs(10),
+            was_playing: true,
+        };
+
+        assert!(state.is_switching());
+        assert!(!state.can_start_switch());
+        assert_eq!(state.target_device(), Some("Speaker"));
+    }
+
+    #[test]
+    fn test_device_switch_state_recovering() {
+        let state = DeviceSwitchState::Recovering {
+            retry_count: 2,
+            last_error: "Connection failed".to_string(),
+            saved_position: std::time::Duration::from_secs(30),
+        };
+
+        assert!(state.is_switching());
+        // Recovery state DOES allow new switches (to recover from failed switch)
+        assert!(state.can_start_switch());
+        assert!(state.target_device().is_none());
+    }
+
+    #[test]
+    fn test_device_switch_state_fading_out() {
+        let state = DeviceSwitchState::FadingOut {
+            target_device: Some("Headphones".to_string()),
+            target_backend: crate::AudioBackend::Default,
+            reason: DeviceSwitchReason::DeviceDisconnected,
+            samples_remaining: 1024,
+        };
+
+        assert!(state.is_switching());
+        assert!(!state.can_start_switch());
+        assert_eq!(state.target_device(), Some("Headphones"));
+    }
+
+    #[test]
+    fn test_device_switch_state_fading_in() {
+        let state = DeviceSwitchState::FadingIn {
+            device_name: "New Speaker".to_string(),
+            samples_remaining: 512,
+        };
+
+        assert!(state.is_switching());
+        assert!(!state.can_start_switch());
+        assert!(state.target_device().is_none());
+    }
+
+    #[test]
+    fn test_device_switch_reason_display() {
+        assert_eq!(
+            format!("{}", DeviceSwitchReason::UserRequested),
+            "user_requested"
+        );
+        assert_eq!(
+            format!("{}", DeviceSwitchReason::DeviceDisconnected),
+            "device_disconnected"
+        );
+        assert_eq!(
+            format!("{}", DeviceSwitchReason::DefaultDeviceChanged),
+            "default_device_changed"
+        );
+        assert_eq!(
+            format!("{}", DeviceSwitchReason::SampleRateMismatch),
+            "sample_rate_mismatch"
+        );
+        assert_eq!(
+            format!("{}", DeviceSwitchReason::ErrorRecovery),
+            "error_recovery"
+        );
+    }
+
+    #[test]
+    fn test_device_switch_config_default() {
+        let config = DeviceSwitchConfig::default();
+
+        assert_eq!(config.fadeout_ms, 50);
+        assert_eq!(config.fadein_ms, 30);
+        assert_eq!(config.max_retries, 3);
+        assert_eq!(config.retry_delay_ms, 100);
+        assert!(config.auto_fallback);
+    }
+
+    #[test]
+    fn test_device_switch_config_custom() {
+        let config = DeviceSwitchConfig {
+            fadeout_ms: 100,
+            fadein_ms: 50,
+            max_retries: 5,
+            retry_delay_ms: 200,
+            auto_fallback: false,
+        };
+
+        assert_eq!(config.fadeout_ms, 100);
+        assert_eq!(config.fadein_ms, 50);
+        assert_eq!(config.max_retries, 5);
+        assert_eq!(config.retry_delay_ms, 200);
+        assert!(!config.auto_fallback);
+    }
+
+    #[test]
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
+    fn test_device_switch_state_machine_integration() {
+        let result = DesktopPlayback::new(PlaybackConfig::default());
+
+        match result {
+            Ok(playback) => {
+                // Initial state should be Idle
+                let state = playback.get_device_switch_state();
+                assert_eq!(state, DeviceSwitchState::Idle);
+                assert!(!playback.is_device_switching());
+
+                // Config should be default
+                let config = playback.get_device_switch_config();
+                assert_eq!(config.fadeout_ms, 50);
+            }
+            Err(e) => {
+                eprintln!(
+                    "Note: Audio device not available in test environment: {}",
+                    e
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
+    fn test_switch_device_with_reason() {
+        let result = DesktopPlayback::new(PlaybackConfig::default());
+
+        match result {
+            Ok(mut playback) => {
+                // Initial state should be Idle
+                assert!(!playback.is_device_switching());
+
+                // Switch with explicit reason
+                let switch_result = playback.switch_device_with_reason(
+                    crate::AudioBackend::Default,
+                    None,
+                    DeviceSwitchReason::UserRequested,
+                );
+
+                match switch_result {
+                    Ok(()) => {
+                        // After successful switch, state should be back to Idle
+                        assert!(!playback.is_device_switching());
+                        eprintln!("Device switch with reason succeeded");
+                    }
+                    Err(e) => {
+                        eprintln!("Device switch failed (expected on some systems): {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!(
+                    "Note: Audio device not available in test environment: {}",
+                    e
+                );
+            }
+        }
     }
 }

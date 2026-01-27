@@ -395,6 +395,209 @@ fn test_very_short_file_1ms() {
     assert!(buffer.samples.len() >= 80 && buffer.samples.len() <= 100);
 }
 
+#[test]
+fn test_extremely_short_file_100us() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("short_100us.wav");
+
+    // 100 microseconds = 0.0001 seconds
+    // At 44100 Hz, this is ~4 samples per channel, ~8 total stereo samples
+    create_test_wav(&path, 44100, 0.0001, 2);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&path);
+
+    assert!(result.is_ok(), "100us file should decode");
+
+    let buffer = result.unwrap();
+    // Should have at least a few samples (might be 0 due to rounding)
+    // The important thing is it doesn't crash
+    assert!(buffer.samples.len() <= 20, "Should have very few samples");
+}
+
+#[test]
+fn test_file_shorter_than_typical_buffer() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("short_sub_buffer.wav");
+
+    // Typical audio buffer is 256-4096 samples
+    // Create file with ~50 stereo samples (25 frames)
+    // 25 / 44100 = ~0.000567 seconds
+    create_test_wav(&path, 44100, 0.000567, 2);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&path);
+
+    assert!(
+        result.is_ok(),
+        "File shorter than typical buffer should decode"
+    );
+
+    let buffer = result.unwrap();
+    // Should have roughly 25 frames = 50 stereo samples
+    assert!(
+        buffer.samples.len() >= 40 && buffer.samples.len() <= 60,
+        "Expected ~50 samples, got {}",
+        buffer.samples.len()
+    );
+}
+
+// ============================================================================
+// FILES WITH SILENCE
+// ============================================================================
+
+/// Helper to create a WAV file with silence
+fn create_silent_wav(path: &PathBuf, sample_rate: u32, duration_secs: f32, channels: u16) {
+    let num_samples = (sample_rate as f32 * duration_secs) as usize;
+
+    let mut file = std::fs::File::create(path).expect("Failed to create test WAV file");
+
+    let byte_rate = sample_rate * channels as u32 * 2;
+    let block_align = channels * 2;
+    let data_size = (num_samples * channels as usize * 2) as u32;
+    let chunk_size = 36 + data_size;
+
+    use std::io::Write;
+    // Write RIFF header
+    file.write_all(b"RIFF").unwrap();
+    file.write_all(&chunk_size.to_le_bytes()).unwrap();
+    file.write_all(b"WAVE").unwrap();
+
+    // Write fmt chunk
+    file.write_all(b"fmt ").unwrap();
+    file.write_all(&16u32.to_le_bytes()).unwrap();
+    file.write_all(&1u16.to_le_bytes()).unwrap();
+    file.write_all(&channels.to_le_bytes()).unwrap();
+    file.write_all(&sample_rate.to_le_bytes()).unwrap();
+    file.write_all(&byte_rate.to_le_bytes()).unwrap();
+    file.write_all(&block_align.to_le_bytes()).unwrap();
+    file.write_all(&16u16.to_le_bytes()).unwrap();
+
+    // Write data chunk - all zeros (silence)
+    file.write_all(b"data").unwrap();
+    file.write_all(&data_size.to_le_bytes()).unwrap();
+
+    for _ in 0..num_samples * channels as usize {
+        file.write_all(&0i16.to_le_bytes()).unwrap();
+    }
+}
+
+/// Helper to create a WAV file with embedded silence sections
+fn create_wav_with_embedded_silence(
+    path: &PathBuf,
+    sample_rate: u32,
+    duration_secs: f32,
+    channels: u16,
+) {
+    let num_samples = (sample_rate as f32 * duration_secs) as usize;
+    let frequency = 440.0;
+
+    let mut file = std::fs::File::create(path).expect("Failed to create test WAV file");
+
+    let byte_rate = sample_rate * channels as u32 * 2;
+    let block_align = channels * 2;
+    let data_size = (num_samples * channels as usize * 2) as u32;
+    let chunk_size = 36 + data_size;
+
+    use std::io::Write;
+    // Write RIFF header
+    file.write_all(b"RIFF").unwrap();
+    file.write_all(&chunk_size.to_le_bytes()).unwrap();
+    file.write_all(b"WAVE").unwrap();
+
+    // Write fmt chunk
+    file.write_all(b"fmt ").unwrap();
+    file.write_all(&16u32.to_le_bytes()).unwrap();
+    file.write_all(&1u16.to_le_bytes()).unwrap();
+    file.write_all(&channels.to_le_bytes()).unwrap();
+    file.write_all(&sample_rate.to_le_bytes()).unwrap();
+    file.write_all(&byte_rate.to_le_bytes()).unwrap();
+    file.write_all(&block_align.to_le_bytes()).unwrap();
+    file.write_all(&16u16.to_le_bytes()).unwrap();
+
+    // Write data chunk
+    file.write_all(b"data").unwrap();
+    file.write_all(&data_size.to_le_bytes()).unwrap();
+
+    // Pattern: 1/4 audio, 1/4 silence, 1/4 audio, 1/4 silence
+    let quarter = num_samples / 4;
+    for i in 0..num_samples {
+        let in_silent_section = (i >= quarter && i < quarter * 2) || (i >= quarter * 3);
+
+        let sample_i16 = if in_silent_section {
+            0i16
+        } else {
+            let t = i as f32 / sample_rate as f32;
+            let sample_f = (2.0 * std::f32::consts::PI * frequency * t).sin();
+            (sample_f * i16::MAX as f32) as i16
+        };
+
+        for _ in 0..channels {
+            file.write_all(&sample_i16.to_le_bytes()).unwrap();
+        }
+    }
+}
+
+#[test]
+fn test_completely_silent_file() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("silent.wav");
+
+    create_silent_wav(&path, 44100, 1.0, 2);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&path);
+
+    assert!(result.is_ok(), "Silent file should decode");
+
+    let buffer = result.unwrap();
+    // All samples should be zero (or very close to it)
+    for sample in &buffer.samples {
+        assert!(
+            sample.abs() < 0.001,
+            "Silent file should have zero samples, got {}",
+            sample
+        );
+    }
+}
+
+#[test]
+fn test_file_with_embedded_silence_sections() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("embedded_silence.wav");
+
+    create_wav_with_embedded_silence(&path, 44100, 1.0, 2);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&path);
+
+    assert!(result.is_ok(), "File with embedded silence should decode");
+
+    let buffer = result.unwrap();
+
+    // Verify we have the expected number of samples
+    let expected_samples = 44100 * 2; // 1 second stereo
+    assert!(
+        (buffer.samples.len() as i64 - expected_samples as i64).abs() < 100,
+        "Expected ~{} samples, got {}",
+        expected_samples,
+        buffer.samples.len()
+    );
+
+    // Count silent and non-silent samples
+    let silent_count = buffer.samples.iter().filter(|&&s| s.abs() < 0.001).count();
+    let non_silent_count = buffer.samples.len() - silent_count;
+
+    // Should have roughly 50% silent (with some tolerance for transitions)
+    let silent_ratio = silent_count as f32 / buffer.samples.len() as f32;
+    assert!(
+        silent_ratio > 0.4 && silent_ratio < 0.6,
+        "Expected ~50% silence, got {:.1}%",
+        silent_ratio * 100.0
+    );
+    assert!(non_silent_count > 0, "Should have some non-silent samples");
+}
+
 // ============================================================================
 // SAMPLE RATE EDGE CASES
 // ============================================================================
@@ -445,6 +648,94 @@ fn test_non_standard_sample_rate() {
 
     let buffer = result.unwrap();
     assert_eq!(buffer.format.sample_rate.0, 37800);
+}
+
+#[test]
+fn test_legacy_sample_rate_11025hz() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("legacy_rate_11025.wav");
+
+    create_test_wav(&path, 11025, 0.1, 2);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&path);
+
+    assert!(result.is_ok(), "11.025kHz file should decode");
+
+    let buffer = result.unwrap();
+    assert_eq!(buffer.format.sample_rate.0, 11025);
+    // Verify sample count: 11025 * 0.1 * 2 channels = ~2205 samples
+    assert!(
+        buffer.samples.len() >= 2000 && buffer.samples.len() <= 2400,
+        "Expected ~2205 samples, got {}",
+        buffer.samples.len()
+    );
+}
+
+#[test]
+fn test_legacy_sample_rate_22050hz() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("legacy_rate_22050.wav");
+
+    create_test_wav(&path, 22050, 0.1, 2);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&path);
+
+    assert!(result.is_ok(), "22.05kHz file should decode");
+
+    let buffer = result.unwrap();
+    assert_eq!(buffer.format.sample_rate.0, 22050);
+    // Verify sample count: 22050 * 0.1 * 2 channels = ~4410 samples
+    assert!(
+        buffer.samples.len() >= 4200 && buffer.samples.len() <= 4600,
+        "Expected ~4410 samples, got {}",
+        buffer.samples.len()
+    );
+}
+
+#[test]
+fn test_high_res_sample_rate_88200hz() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("highres_rate_88200.wav");
+
+    create_test_wav(&path, 88200, 0.1, 2);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&path);
+
+    assert!(result.is_ok(), "88.2kHz file should decode");
+
+    let buffer = result.unwrap();
+    assert_eq!(buffer.format.sample_rate.0, 88200);
+    // Verify sample count: 88200 * 0.1 * 2 channels = ~17640 samples
+    assert!(
+        buffer.samples.len() >= 17000 && buffer.samples.len() <= 18000,
+        "Expected ~17640 samples, got {}",
+        buffer.samples.len()
+    );
+}
+
+#[test]
+fn test_high_res_sample_rate_176400hz() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("highres_rate_176400.wav");
+
+    create_test_wav(&path, 176400, 0.1, 2);
+
+    let mut decoder = SymphoniaDecoder::new();
+    let result = decoder.decode(&path);
+
+    assert!(result.is_ok(), "176.4kHz file should decode");
+
+    let buffer = result.unwrap();
+    assert_eq!(buffer.format.sample_rate.0, 176400);
+    // Verify sample count: 176400 * 0.1 * 2 channels = ~35280 samples
+    assert!(
+        buffer.samples.len() >= 34000 && buffer.samples.len() <= 36000,
+        "Expected ~35280 samples, got {}",
+        buffer.samples.len()
+    );
 }
 
 // ============================================================================

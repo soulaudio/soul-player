@@ -818,6 +818,10 @@ fn test_stop_clears_transition_state() {
 #[test]
 fn test_seek_updates_position() {
     let mut manager = PlaybackManager::default();
+
+    // Add track to queue and start playback (required for seek)
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 180));
+    manager.play().ok();
     manager.set_audio_source(Box::new(MockAudioSource::new(
         Duration::from_secs(180),
         44100,
@@ -826,8 +830,8 @@ fn test_seek_updates_position() {
     // Initial position is 0
     assert_eq!(manager.get_position(), Duration::ZERO);
 
-    // Seek to 60 seconds
-    manager.seek_to(Duration::from_secs(60)).ok();
+    // Seek to 60 seconds (now valid since we're in Playing state)
+    manager.seek_to(Duration::from_secs(60)).unwrap();
     let pos = manager.get_position();
 
     // Position should be around 60 seconds
@@ -841,13 +845,17 @@ fn test_seek_updates_position() {
 #[test]
 fn test_seek_percent() {
     let mut manager = PlaybackManager::default();
+
+    // Add track to queue and start playback (required for seek)
+    manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 100));
+    manager.play().ok();
     manager.set_audio_source(Box::new(MockAudioSource::new(
         Duration::from_secs(100),
         44100,
     )));
 
-    // Seek to 50%
-    manager.seek_to_percent(0.5).ok();
+    // Seek to 50% (now valid since we're in Playing state)
+    manager.seek_to_percent(0.5).unwrap();
 
     let pos = manager.get_position();
     assert!(
@@ -1531,7 +1539,8 @@ fn test_crossfade_engine_mixing_directly() {
     };
 
     let mut engine = CrossfadeEngine::with_settings(settings);
-    engine.set_sample_rate(1000); // 1000Hz for simple math
+    // Use valid sample rate (minimum is 8000 Hz)
+    engine.set_sample_rate(8000);
 
     // Start crossfade
     let started = engine.start(false);
@@ -1542,14 +1551,15 @@ fn test_crossfade_engine_mixing_directly() {
     // Outgoing track: all 1.0
     // Incoming track: all 0.0
     // With linear crossfade, output should go from 1.0 to 0.0
-    let outgoing = vec![1.0f32; 200]; // 100 stereo frames = 100ms at 1000Hz
-    let incoming = vec![0.0f32; 200];
-    let mut output = vec![0.0f32; 200];
+    // At 8000Hz, 100ms = 800 frames, stereo = 1600 samples
+    let outgoing = vec![1.0f32; 1600];
+    let incoming = vec![0.0f32; 1600];
+    let mut output = vec![0.0f32; 1600];
 
     let (samples, completed) = engine.process(&outgoing, &incoming, &mut output);
 
     // Should have processed all samples
-    assert_eq!(samples, 200, "Should process all samples");
+    assert_eq!(samples, 1600, "Should process all samples");
     assert!(completed, "Crossfade should complete");
 
     // Verify output: first sample should be mostly outgoing, last should be mostly incoming
@@ -1559,16 +1569,16 @@ fn test_crossfade_engine_mixing_directly() {
         output[0]
     );
     assert!(
-        output[198] < 0.1,
+        output[1598] < 0.1,
         "Last sample should be mostly incoming (0.0), got {}",
-        output[198]
+        output[1598]
     );
 
     // Middle should be roughly 0.5 (linear crossfade)
-    // 200 samples total = 100 stereo frames
-    // At frame 50, progress = 100/200 = 0.5, so output should be ~0.5
-    let mid_frame = 50;
-    let mid_sample_idx = mid_frame * 2; // Index 100
+    // 1600 samples total = 800 stereo frames
+    // At frame 400, progress = 800/1600 = 0.5, so output should be ~0.5
+    let mid_frame = 400;
+    let mid_sample_idx = mid_frame * 2; // Index 800
     assert!(
         output[mid_sample_idx] > 0.4 && output[mid_sample_idx] < 0.6,
         "Middle sample at index {} should be ~0.5 for linear crossfade, got {}",
@@ -1590,18 +1600,20 @@ fn test_crossfade_equal_power_constant_loudness() {
     };
 
     let mut engine = CrossfadeEngine::with_settings(settings);
-    engine.set_sample_rate(1000);
+    // Use valid sample rate (minimum is 8000 Hz)
+    engine.set_sample_rate(8000);
 
     engine.start(false);
 
     // Both tracks at full volume (1.0)
     // With equal power crossfade, sum of squares should be constant (~1.0)
-    let outgoing = vec![1.0f32; 200];
-    let incoming = vec![1.0f32; 200];
-    let mut output = vec![0.0f32; 200];
+    // At 8000Hz, 100ms = 800 frames, stereo = 1600 samples
+    let outgoing = vec![1.0f32; 1600];
+    let incoming = vec![1.0f32; 1600];
+    let mut output = vec![0.0f32; 1600];
 
     let (samples, _) = engine.process(&outgoing, &incoming, &mut output);
-    assert_eq!(samples, 200);
+    assert_eq!(samples, 1600);
 
     // Check that output maintains approximately constant power throughout
     // For equal power crossfade: out_gain^2 + in_gain^2 = 1
@@ -1613,8 +1625,8 @@ fn test_crossfade_equal_power_constant_loudness() {
     // At midpoint (t=0.5): out_gain=0.707, in_gain=0.707, output=0.707+0.707=1.414
 
     let start_sample = output[0];
-    let mid_sample = output[99 * 2]; // Approximately midpoint
-    let end_sample = output[198];
+    let mid_sample = output[799 * 2]; // Approximately midpoint
+    let end_sample = output[1598];
 
     // Start and end should be ~1.0 (one track at full, other at zero)
     assert!(
@@ -1710,18 +1722,20 @@ fn test_crossfade_curve_differences() {
         };
 
         let mut engine = CrossfadeEngine::with_settings(settings);
-        engine.set_sample_rate(1000);
+        // Use valid sample rate (minimum is 8000 Hz)
+        engine.set_sample_rate(8000);
         engine.start(false);
 
         // Process crossfade
-        let outgoing = vec![1.0f32; 200];
-        let incoming = vec![0.0f32; 200];
-        let mut output = vec![0.0f32; 200];
+        // At 8000Hz, 100ms = 800 frames, stereo = 1600 samples
+        let outgoing = vec![1.0f32; 1600];
+        let incoming = vec![0.0f32; 1600];
+        let mut output = vec![0.0f32; 1600];
 
         let (samples, completed) = engine.process(&outgoing, &incoming, &mut output);
 
         assert_eq!(
-            samples, 200,
+            samples, 1600,
             "Curve {:?}: Should process all samples",
             curve
         );
@@ -1734,7 +1748,7 @@ fn test_crossfade_curve_differences() {
             curve
         );
         assert!(
-            output[198] < 0.1,
+            output[1598] < 0.1,
             "Curve {:?}: End should be mostly incoming",
             curve
         );

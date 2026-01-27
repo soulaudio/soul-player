@@ -100,6 +100,10 @@ impl EqBand {
 /// Lower values = slower/smoother, higher = faster/more responsive.
 const SMOOTH_COEFF: f32 = 0.002;
 
+/// Number of samples for bypass fade (prevents clicks when enabling/disabling)
+/// At 44.1kHz, 256 samples = ~5.8ms, which is imperceptible but prevents clicks
+const BYPASS_FADE_SAMPLES: usize = 256;
+
 /// Biquad filter implementation
 /// Used internally by the EQ for each band
 ///
@@ -363,6 +367,10 @@ impl BiquadFilter {
 /// This EQ supports a variable number of bands (1 to MAX_EQ_BANDS).
 /// All filters are pre-allocated to avoid allocations during audio processing.
 /// Bands are treated as peaking filters by default.
+///
+/// # Bypass Fade
+/// When enabling/disabling the effect, a crossfade is applied over 256 samples
+/// (~5.8ms at 44.1kHz) to prevent audible clicks.
 pub struct ParametricEq {
     /// Pre-allocated filters (all MAX_EQ_BANDS slots)
     /// Only the first `band_count` filters are active
@@ -382,6 +390,13 @@ pub struct ParametricEq {
 
     /// Flag to recalculate filter coefficients
     needs_update: bool,
+
+    /// Remaining samples in bypass fade transition
+    /// When > 0, we're crossfading between dry and wet signal
+    bypass_fade_samples: usize,
+
+    /// Bypass fade direction: 1 = fading in (enabling), -1 = fading out (disabling), 0 = stable
+    bypass_fade_direction: i8,
 }
 
 impl ParametricEq {
@@ -423,6 +438,8 @@ impl ParametricEq {
             enabled: true,
             sample_rate: 44100,
             needs_update: true,
+            bypass_fade_samples: 0,
+            bypass_fade_direction: 0,
         }
     }
 
@@ -679,9 +696,20 @@ impl Default for ParametricEq {
 
 impl AudioEffect for ParametricEq {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        // Bypass if disabled
-        if !self.enabled {
+        // Check if we're in a bypass fade transition or enabled
+        let is_fading = self.bypass_fade_samples > 0;
+
+        // Skip processing entirely if disabled and not fading
+        if !self.enabled && !is_fading {
             return;
+        }
+
+        // Validate buffer is stereo-aligned
+        if buffer.len() % 2 != 0 {
+            tracing::warn!(
+                "[EQ] Odd buffer length {}, last sample will not be processed",
+                buffer.len()
+            );
         }
 
         // Update sample rate if changed
@@ -700,6 +728,10 @@ impl AudioEffect for ParametricEq {
         // Process interleaved stereo buffer
         // Process through all active bands in series
         for chunk in buffer.chunks_exact_mut(2) {
+            // Store dry signal for crossfade
+            let dry_left = chunk[0];
+            let dry_right = chunk[1];
+
             let mut left = chunk[0];
             let mut right = chunk[1];
 
@@ -710,8 +742,36 @@ impl AudioEffect for ParametricEq {
                 right = r;
             }
 
-            chunk[0] = left;
-            chunk[1] = right;
+            // Apply bypass fade if transitioning
+            if self.bypass_fade_samples > 0 {
+                // Calculate wet/dry mix based on fade progress
+                // fade_progress goes from 1.0 to 0.0 as bypass_fade_samples decreases
+                let fade_progress = self.bypass_fade_samples as f32 / BYPASS_FADE_SAMPLES as f32;
+
+                let wet_gain = if self.bypass_fade_direction == 1 {
+                    // Fading in (enabling): wet goes from 0 to 1
+                    1.0 - fade_progress
+                } else {
+                    // Fading out (disabling): wet goes from 1 to 0
+                    fade_progress
+                };
+                let dry_gain = 1.0 - wet_gain;
+
+                // Crossfade between dry and wet
+                chunk[0] = dry_left * dry_gain + left * wet_gain;
+                chunk[1] = dry_right * dry_gain + right * wet_gain;
+
+                self.bypass_fade_samples -= 1;
+
+                // Clear fade direction when done
+                if self.bypass_fade_samples == 0 {
+                    self.bypass_fade_direction = 0;
+                }
+            } else {
+                // No fade, use wet signal directly
+                chunk[0] = left;
+                chunk[1] = right;
+            }
         }
     }
 
@@ -724,9 +784,17 @@ impl AudioEffect for ParametricEq {
         for filter in &mut self.filters {
             filter.reset();
         }
+
+        // Clear bypass fade state on reset
+        self.bypass_fade_samples = 0;
+        self.bypass_fade_direction = 0;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
+        if enabled != self.enabled {
+            self.bypass_fade_samples = BYPASS_FADE_SAMPLES;
+            self.bypass_fade_direction = if enabled { 1 } else { -1 };
+        }
         self.enabled = enabled;
     }
 
@@ -744,6 +812,17 @@ impl AudioEffect for ParametricEq {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    fn set_sample_rate(&mut self, sample_rate: u32) {
+        if self.sample_rate != sample_rate {
+            self.sample_rate = sample_rate;
+            // Reset all filter states when sample rate changes
+            for filter in &mut self.filters {
+                filter.reset();
+            }
+            self.needs_update = true;
+        }
     }
 }
 
@@ -823,19 +902,24 @@ mod tests {
     }
 
     #[test]
-    fn disabled_eq_bypassed() {
+    fn disabled_eq_bypassed_after_fade() {
         let mut eq = ParametricEq::new();
         eq.set_enabled(false);
 
         // Extreme boost
         eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
 
+        // First, process enough samples to complete the bypass fade
+        let mut fade_buffer = vec![0.5f32; BYPASS_FADE_SAMPLES * 2];
+        eq.process(&mut fade_buffer, 44100);
+
+        // Now the fade is complete, subsequent processing should bypass entirely
         let mut buffer = vec![0.5; 100];
         let original = buffer.clone();
 
         eq.process(&mut buffer, 44100);
 
-        // Should be unchanged (EQ disabled)
+        // Should be unchanged (EQ disabled and fade complete)
         assert_eq!(buffer, original);
     }
 
@@ -1110,5 +1194,462 @@ mod tests {
 
         // Band count should not exceed MAX_EQ_BANDS
         assert!(eq.band_count() <= MAX_EQ_BANDS);
+    }
+
+    // ==================== Bypass Fade Tests ====================
+
+    #[test]
+    fn bypass_fade_on_disable() {
+        let mut eq = ParametricEq::new();
+
+        // Apply a significant boost that will affect a 100Hz sine wave
+        eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
+
+        // Use a dynamic signal instead of DC (sine wave at 100Hz)
+        let mut buffer = crate::effects::tests::generate_sine(100.0, 44100, 0.1);
+        eq.process(&mut buffer, 44100);
+
+        // Disable the effect - should trigger fade
+        eq.set_enabled(false);
+
+        // Process another buffer - should fade out, not instantly bypass
+        let mut fade_buffer = crate::effects::tests::generate_sine(100.0, 44100, 0.02); // ~882 stereo samples
+        let original_fade_buffer = fade_buffer.clone();
+        eq.process(&mut fade_buffer, 44100);
+
+        // The fade should cause the signal to transition from wet to dry
+        // Verify the output differs from both pure dry and pure wet
+
+        // During the fade, samples should be modified (crossfaded)
+        // At least some samples should differ from the original dry signal
+        let mut samples_differ = false;
+        for (processed, original) in fade_buffer.iter().zip(original_fade_buffer.iter()) {
+            if (processed - original).abs() > 1e-6 {
+                samples_differ = true;
+                break;
+            }
+        }
+        assert!(
+            samples_differ,
+            "During fade-out, signal should be a mix of dry and wet"
+        );
+
+        // Verify the fade is complete after processing enough samples
+        assert_eq!(
+            eq.bypass_fade_samples, 0,
+            "Fade should complete within the processed buffer"
+        );
+    }
+
+    #[test]
+    fn bypass_fade_on_enable() {
+        let mut eq = ParametricEq::new();
+        eq.set_enabled(false);
+
+        // Process enough samples to complete the disable fade first
+        let mut fade_buffer = vec![0.5f32; BYPASS_FADE_SAMPLES * 2];
+        eq.process(&mut fade_buffer, 44100);
+
+        // Apply a significant boost
+        eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
+
+        // Enable the effect - should trigger fade
+        eq.set_enabled(true);
+
+        // Process buffer with a sine wave - should fade in
+        let mut fade_in_buffer = crate::effects::tests::generate_sine(100.0, 44100, 0.02);
+        let original_buffer = fade_in_buffer.clone();
+        eq.process(&mut fade_in_buffer, 44100);
+
+        // Verify output is valid
+        for sample in &fade_in_buffer {
+            assert!(sample.is_finite(), "Sample should be finite during fade in");
+        }
+
+        // During fade-in, signal should progressively differ more from dry
+        let mut samples_differ = false;
+        for (processed, original) in fade_in_buffer.iter().zip(original_buffer.iter()) {
+            if (processed - original).abs() > 1e-6 {
+                samples_differ = true;
+                break;
+            }
+        }
+        assert!(
+            samples_differ,
+            "During fade-in, signal should be a mix of dry and wet"
+        );
+    }
+
+    #[test]
+    fn bypass_fade_continues_processing_when_disabled() {
+        let mut eq = ParametricEq::new();
+
+        // Process to initialize filters
+        let mut buffer = vec![0.5f32; 100];
+        eq.process(&mut buffer, 44100);
+
+        // Disable - triggers fade
+        eq.set_enabled(false);
+
+        // Verify fade state is set
+        assert!(
+            eq.bypass_fade_samples > 0,
+            "Fade should be in progress after disable"
+        );
+        assert_eq!(
+            eq.bypass_fade_direction, -1,
+            "Fade direction should be -1 (fading out)"
+        );
+
+        // Process buffer during fade - should not skip processing
+        let mut fade_buffer = vec![0.5f32; BYPASS_FADE_SAMPLES * 2];
+        eq.process(&mut fade_buffer, 44100);
+
+        // After processing enough samples, fade should be complete
+        assert_eq!(
+            eq.bypass_fade_samples, 0,
+            "Fade should be complete after processing"
+        );
+        assert_eq!(
+            eq.bypass_fade_direction, 0,
+            "Fade direction should be 0 (stable) after completion"
+        );
+    }
+
+    #[test]
+    fn reset_clears_bypass_fade() {
+        let mut eq = ParametricEq::new();
+
+        // Trigger a fade
+        eq.set_enabled(false);
+        assert!(eq.bypass_fade_samples > 0);
+
+        // Reset should clear fade state
+        eq.reset();
+        assert_eq!(eq.bypass_fade_samples, 0);
+        assert_eq!(eq.bypass_fade_direction, 0);
+    }
+
+    #[test]
+    fn no_fade_when_setting_same_enabled_state() {
+        let mut eq = ParametricEq::new();
+
+        // Set enabled to true (already true) - should not trigger fade
+        eq.set_enabled(true);
+        assert_eq!(eq.bypass_fade_samples, 0);
+
+        // Disable
+        eq.set_enabled(false);
+        assert!(eq.bypass_fade_samples > 0);
+
+        // Process to complete fade
+        let mut buffer = vec![0.5f32; BYPASS_FADE_SAMPLES * 2];
+        eq.process(&mut buffer, 44100);
+        assert_eq!(eq.bypass_fade_samples, 0);
+
+        // Set disabled again (already disabled) - should not trigger fade
+        eq.set_enabled(false);
+        assert_eq!(eq.bypass_fade_samples, 0);
+    }
+
+    // ==================== Bypass Fade Completion Edge Cases ====================
+
+    #[test]
+    fn bypass_fade_completes_exactly_at_samples_boundary() {
+        // Test: Verify fade completes precisely at BYPASS_FADE_SAMPLES
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
+
+        // Disable to trigger fade
+        eq.set_enabled(false);
+        assert_eq!(eq.bypass_fade_samples, BYPASS_FADE_SAMPLES);
+
+        // Process exactly BYPASS_FADE_SAMPLES stereo samples
+        let mut buffer = vec![0.5f32; BYPASS_FADE_SAMPLES * 2];
+        eq.process(&mut buffer, 44100);
+
+        // Fade should be exactly complete
+        assert_eq!(eq.bypass_fade_samples, 0);
+        assert_eq!(eq.bypass_fade_direction, 0);
+    }
+
+    #[test]
+    fn bypass_fade_handles_partial_buffer_processing() {
+        // Test: Fade should work correctly when buffers don't align with fade length
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
+
+        eq.set_enabled(false);
+
+        // Process in odd-sized chunks
+        let chunk_sizes = [17, 33, 47, 63, 101, 89];
+
+        for &size in &chunk_sizes {
+            if eq.bypass_fade_samples == 0 {
+                break;
+            }
+            let mut buffer = vec![0.5f32; size * 2];
+            eq.process(&mut buffer, 44100);
+        }
+
+        // Eventually fade should complete
+        while eq.bypass_fade_samples > 0 {
+            let mut buffer = vec![0.5f32; 100];
+            eq.process(&mut buffer, 44100);
+        }
+
+        assert_eq!(eq.bypass_fade_direction, 0);
+    }
+
+    #[test]
+    fn bypass_fade_toggle_mid_fade_changes_direction() {
+        // Test: Toggling enabled state mid-fade should restart fade in opposite direction
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
+
+        // Disable to start fade out
+        eq.set_enabled(false);
+        assert_eq!(eq.bypass_fade_direction, -1);
+
+        // Process partway through fade
+        let mut buffer = vec![0.5f32; BYPASS_FADE_SAMPLES / 2];
+        eq.process(&mut buffer, 44100);
+
+        let remaining_before = eq.bypass_fade_samples;
+        assert!(remaining_before > 0 && remaining_before < BYPASS_FADE_SAMPLES);
+
+        // Re-enable mid-fade
+        eq.set_enabled(true);
+        assert_eq!(eq.bypass_fade_direction, 1);
+        assert_eq!(eq.bypass_fade_samples, BYPASS_FADE_SAMPLES);
+    }
+
+    #[test]
+    fn bypass_fade_output_is_crossfade_not_jump() {
+        // Test: Verify the fade is actually a crossfade, not a jump
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 12.0)); // Significant boost
+
+        // Process to warm up filters
+        let mut warmup = crate::effects::tests::generate_sine(100.0, 44100, 0.1);
+        eq.process(&mut warmup, 44100);
+
+        // Start fade out
+        eq.set_enabled(false);
+
+        // Generate test signal and process through fade
+        let mut test_buffer = crate::effects::tests::generate_sine(100.0, 44100, 0.02);
+        eq.process(&mut test_buffer, 44100);
+
+        // Check that output is valid and no NaN/Inf
+        for &sample in &test_buffer {
+            assert!(
+                sample.is_finite(),
+                "Sample should be finite during fade: {}",
+                sample
+            );
+        }
+
+        // Check for smooth transitions (no large jumps)
+        for i in 1..test_buffer.len() {
+            let delta = (test_buffer[i] - test_buffer[i - 1]).abs();
+            assert!(
+                delta < 0.5,
+                "Large jump detected at sample {}: {} -> {}",
+                i,
+                test_buffer[i - 1],
+                test_buffer[i]
+            );
+        }
+    }
+
+    // ==================== Sample Rate Change Edge Cases ====================
+
+    #[test]
+    fn sample_rate_change_mid_processing_resets_filters() {
+        // Test: Changing sample rate should reset filter state to prevent artifacts
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 6.0));
+
+        // Process at 44100 Hz
+        let mut buffer_44k = crate::effects::tests::generate_sine(100.0, 44100, 0.1);
+        eq.process(&mut buffer_44k, 44100);
+
+        // Now change to 48000 Hz (simulating device change)
+        let mut buffer_48k = crate::effects::tests::generate_sine(100.0, 48000, 0.1);
+        eq.process(&mut buffer_48k, 48000);
+
+        // All samples should be finite (no NaN from filter instability)
+        for &sample in &buffer_48k {
+            assert!(
+                sample.is_finite(),
+                "Sample should be finite after sample rate change"
+            );
+        }
+    }
+
+    #[test]
+    fn sample_rate_change_updates_filter_coefficients() {
+        // Test: Filter coefficients should be recalculated for new sample rate
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(1000.0, 6.0)); // 1kHz shelf
+
+        // Process at 44100 Hz to get baseline
+        let mut buffer_44k = crate::effects::tests::generate_sine(1000.0, 44100, 0.05);
+        eq.process(&mut buffer_44k, 44100);
+        let peak_44k = buffer_44k.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+
+        // Reset EQ for fair comparison
+        eq.reset();
+
+        // Process same frequency at different sample rate
+        let mut buffer_96k = crate::effects::tests::generate_sine(1000.0, 96000, 0.05);
+        eq.process(&mut buffer_96k, 96000);
+        let peak_96k = buffer_96k.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+
+        // Both should boost the signal (filter is working at both sample rates)
+        assert!(
+            peak_44k > 0.5,
+            "44.1kHz processing should boost signal: {}",
+            peak_44k
+        );
+        assert!(
+            peak_96k > 0.5,
+            "96kHz processing should boost signal: {}",
+            peak_96k
+        );
+    }
+
+    #[test]
+    fn rapid_sample_rate_changes_remain_stable() {
+        // Test: Rapidly changing sample rate should not cause instability
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 6.0));
+        eq.set_mid_band(EqBand::peaking(1000.0, -3.0, 2.0));
+        eq.set_high_band(EqBand::high_shelf(8000.0, 3.0));
+
+        let sample_rates = [44100, 48000, 88200, 96000, 44100, 48000];
+
+        for &rate in &sample_rates {
+            let mut buffer = crate::effects::tests::generate_sine(440.0, rate, 0.02);
+            eq.process(&mut buffer, rate);
+
+            // Check all samples are valid
+            for &sample in &buffer {
+                assert!(sample.is_finite(), "Sample should be finite at {}Hz", rate);
+                assert!(
+                    sample.abs() < 10.0,
+                    "Sample amplitude should be reasonable at {}Hz: {}",
+                    rate,
+                    sample
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn sample_rate_change_preserves_band_settings() {
+        // Test: Sample rate change should preserve EQ band settings
+        let mut eq = ParametricEq::new();
+        let original_low = EqBand::low_shelf(80.0, 4.0);
+        let original_mid = EqBand::peaking(1500.0, -2.0, 1.5);
+        let original_high = EqBand::high_shelf(10000.0, 3.0);
+
+        eq.set_low_band(original_low);
+        eq.set_mid_band(original_mid);
+        eq.set_high_band(original_high);
+
+        // Process at 44100
+        let mut buffer = vec![0.5f32; 200];
+        eq.process(&mut buffer, 44100);
+
+        // Change sample rate
+        eq.set_sample_rate(96000);
+
+        // Verify band settings are preserved
+        let low = eq.low_band();
+        let mid = eq.mid_band();
+        let high = eq.high_band();
+
+        assert_eq!(low.frequency, 80.0);
+        assert!((low.gain_db() - 4.0).abs() < 0.001);
+        assert_eq!(mid.frequency, 1500.0);
+        assert!((mid.gain_db() - (-2.0)).abs() < 0.001);
+        assert_eq!(high.frequency, 10000.0);
+        assert!((high.gain_db() - 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn high_frequency_band_clamps_near_nyquist() {
+        // Test: High frequency bands should be clamped to prevent instability near Nyquist
+        let mut eq = ParametricEq::with_band_count(1);
+        eq.set_band(0, EqBand::high_shelf(20000.0, 6.0)); // Above Nyquist at 44.1kHz
+
+        // This should not crash or produce NaN
+        let mut buffer = crate::effects::tests::generate_sine(10000.0, 44100, 0.02);
+        eq.process(&mut buffer, 44100);
+
+        for &sample in &buffer {
+            assert!(sample.is_finite(), "Sample should be finite near Nyquist");
+        }
+    }
+
+    #[test]
+    fn very_low_sample_rate_handled_gracefully() {
+        // Test: Extremely low sample rates should not crash
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(80.0, 6.0));
+
+        // 8kHz is an extreme case (telephony)
+        let mut buffer = vec![0.5f32; 200];
+        eq.process(&mut buffer, 8000);
+
+        for &sample in &buffer {
+            assert!(sample.is_finite(), "Sample should be finite at 8kHz");
+        }
+    }
+
+    // ==================== Odd Buffer Size Edge Cases ====================
+
+    #[test]
+    fn odd_buffer_size_processes_correctly() {
+        // Test: Odd buffer sizes (not stereo-aligned) should be handled
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 6.0));
+
+        // Odd-length buffer (last sample won't be processed as stereo pair)
+        let mut buffer = vec![0.5f32; 101]; // Odd length
+        eq.process(&mut buffer, 44100);
+
+        // First 100 samples should be processed
+        // The chunks_exact_mut(2) will process pairs, leaving 1 sample unprocessed
+        for &sample in &buffer[..100] {
+            assert!(sample.is_finite(), "Processed samples should be finite");
+        }
+    }
+
+    #[test]
+    fn single_sample_buffer_handled() {
+        // Test: Single sample buffer should not crash
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 6.0));
+
+        let mut buffer = vec![0.5f32; 1];
+        eq.process(&mut buffer, 44100);
+
+        // Should not crash; single sample is not a stereo pair
+        assert_eq!(buffer.len(), 1);
+    }
+
+    #[test]
+    fn empty_buffer_handled() {
+        // Test: Empty buffer should not crash
+        let mut eq = ParametricEq::new();
+        eq.set_low_band(EqBand::low_shelf(100.0, 6.0));
+
+        let mut buffer: Vec<f32> = vec![];
+        eq.process(&mut buffer, 44100);
+
+        assert_eq!(buffer.len(), 0);
     }
 }

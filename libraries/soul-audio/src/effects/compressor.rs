@@ -398,6 +398,13 @@ impl AudioEffect for Compressor {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+
+    fn set_sample_rate(&mut self, sample_rate: u32) {
+        if self.sample_rate != sample_rate {
+            self.sample_rate = sample_rate;
+            self.needs_update = true;
+        }
+    }
 }
 
 #[cfg(test)]

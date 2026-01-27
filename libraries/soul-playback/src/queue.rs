@@ -7,6 +7,12 @@
 
 use crate::types::QueueTrack;
 
+/// Default capacity for source queue vectors to avoid early reallocations
+const DEFAULT_SOURCE_CAPACITY: usize = 64;
+
+/// Default capacity for user queue vectors (play_next, queued_later)
+const DEFAULT_USER_QUEUE_CAPACITY: usize = 16;
+
 /// Three-tier queue for playback
 ///
 /// Structure:
@@ -48,14 +54,18 @@ pub struct Queue {
 }
 
 impl Queue {
-    /// Create new empty queue
+    /// Create new empty queue with pre-allocated capacity
+    ///
+    /// Pre-allocates vectors to avoid repeated reallocations during typical use.
+    /// Play Next and Add to Queue are typically small (user-added tracks),
+    /// while source queues can be larger (playlist/album tracks).
     pub fn new() -> Self {
         Self {
-            play_next: Vec::new(),
-            queued_later: Vec::new(),
-            source: Vec::new(),
+            play_next: Vec::with_capacity(DEFAULT_USER_QUEUE_CAPACITY),
+            queued_later: Vec::with_capacity(DEFAULT_USER_QUEUE_CAPACITY),
+            source: Vec::with_capacity(DEFAULT_SOURCE_CAPACITY),
             source_index: 0,
-            original_source: Vec::new(),
+            original_source: Vec::with_capacity(DEFAULT_SOURCE_CAPACITY),
             is_shuffled: false,
         }
     }
@@ -218,6 +228,9 @@ impl Queue {
     }
 
     /// Clear entire queue (all three tiers)
+    ///
+    /// This clears all tracks but keeps allocated capacity for reuse.
+    /// Use `clear_and_shrink()` if you want to release memory as well.
     pub fn clear(&mut self) {
         self.play_next.clear();
         self.queued_later.clear();
@@ -225,6 +238,21 @@ impl Queue {
         self.source_index = 0;
         self.original_source.clear();
         self.is_shuffled = false;
+    }
+
+    /// Clear entire queue and release excess memory
+    ///
+    /// Unlike `clear()`, this also shrinks vectors to release memory.
+    /// Useful after playing very large playlists to reclaim memory.
+    #[allow(dead_code)]
+    pub fn clear_and_shrink(&mut self) {
+        self.clear();
+        // Shrink to default capacities instead of zero to avoid
+        // immediate reallocations on next use
+        self.play_next.shrink_to(DEFAULT_USER_QUEUE_CAPACITY);
+        self.queued_later.shrink_to(DEFAULT_USER_QUEUE_CAPACITY);
+        self.source.shrink_to(DEFAULT_SOURCE_CAPACITY);
+        self.original_source.shrink_to(DEFAULT_SOURCE_CAPACITY);
     }
 
     /// Clear only Play Next queue
@@ -306,7 +334,6 @@ impl Queue {
     /// Peek at next track without removing
     ///
     /// Returns the next track that would be played following priority order.
-    #[allow(dead_code)]
     pub fn peek_next(&self) -> Option<&QueueTrack> {
         if !self.play_next.is_empty() {
             self.play_next.first()
@@ -319,12 +346,23 @@ impl Queue {
         }
     }
 
+    /// Peek at the first track in the original source queue
+    ///
+    /// Used for RepeatAll mode pre-loading: when queue is exhausted but will loop,
+    /// returns the first track that would play after reload.
+    pub fn peek_first_source_track(&self) -> Option<&QueueTrack> {
+        self.original_source.first()
+    }
+
     /// Get all tracks in queue order from current position
     ///
     /// Returns tracks in priority order:
     /// Play Next → Source (from current position) → Add to Queue
     pub fn get_all(&self) -> Vec<&QueueTrack> {
-        let mut tracks = Vec::new();
+        // Pre-calculate total capacity to avoid reallocations
+        let remaining_source = self.source.len().saturating_sub(self.source_index);
+        let total_capacity = self.play_next.len() + remaining_source + self.queued_later.len();
+        let mut tracks = Vec::with_capacity(total_capacity);
 
         // Tier 1: Play Next queue
         tracks.extend(self.play_next.iter());
@@ -340,11 +378,7 @@ impl Queue {
         tracing::debug!(
             total_tracks = tracks.len(),
             play_next_count = self.play_next.len(),
-            source_count = if self.source_index < self.source.len() {
-                self.source.len() - self.source_index
-            } else {
-                0
-            },
+            source_count = remaining_source,
             queued_later_count = self.queued_later.len(),
             "[Queue] get_all() called"
         );
@@ -482,7 +516,8 @@ impl Queue {
             return None;
         }
 
-        let mut skipped = Vec::new();
+        // Pre-allocate with exact capacity to avoid reallocations
+        let mut skipped = Vec::with_capacity(index);
 
         if index < play_next_len {
             // Target is in Play Next queue
@@ -1021,5 +1056,586 @@ mod tests {
         assert_eq!(all[0].id, "2");
         assert_eq!(all[1].id, "1");
         assert_eq!(all[2].id, "3");
+    }
+
+    // ===== Edge Case Tests =====
+
+    // --- Empty Queue Edge Cases ---
+
+    #[test]
+    fn empty_queue_pop_next_returns_none() {
+        let mut queue = Queue::new();
+        assert!(queue.pop_next().is_none());
+    }
+
+    #[test]
+    fn empty_queue_peek_next_returns_none() {
+        let queue = Queue::new();
+        assert!(queue.peek_next().is_none());
+    }
+
+    #[test]
+    fn empty_queue_get_returns_none() {
+        let queue = Queue::new();
+        assert!(queue.get(0).is_none());
+        assert!(queue.get(100).is_none());
+    }
+
+    #[test]
+    fn empty_queue_remove_returns_none() {
+        let mut queue = Queue::new();
+        assert!(queue.remove(0).is_none());
+        assert!(queue.remove(100).is_none());
+    }
+
+    #[test]
+    fn empty_queue_reorder_fails() {
+        let mut queue = Queue::new();
+        assert!(queue.reorder(0, 0).is_err());
+        assert!(queue.reorder(0, 1).is_err());
+    }
+
+    #[test]
+    fn empty_queue_skip_to_index_returns_none() {
+        let mut queue = Queue::new();
+        assert!(queue.skip_to_index(0).is_none());
+    }
+
+    #[test]
+    fn empty_queue_go_back_returns_none() {
+        let mut queue = Queue::new();
+        assert!(queue.go_back().is_none());
+    }
+
+    #[test]
+    fn empty_queue_clear_is_safe() {
+        let mut queue = Queue::new();
+        queue.clear();
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn empty_queue_restore_original_order_is_safe() {
+        let mut queue = Queue::new();
+        queue.restore_original_order();
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn empty_queue_get_all_returns_empty() {
+        let queue = Queue::new();
+        assert!(queue.get_all().is_empty());
+    }
+
+    // --- Single Track Queue Edge Cases ---
+
+    #[test]
+    fn single_track_pop_exhausts_queue() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("1", "Track 1")]);
+
+        assert_eq!(queue.len(), 1);
+        let track = queue.pop_next().unwrap();
+        assert_eq!(track.id, "1");
+        assert!(queue.is_empty());
+        assert!(queue.pop_next().is_none());
+    }
+
+    #[test]
+    fn single_track_remove_exhausts_queue() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("1", "Track 1")]);
+
+        let track = queue.remove(0).unwrap();
+        assert_eq!(track.id, "1");
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn single_track_reorder_same_index_ok() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("1", "Track 1")]);
+
+        // Reordering to same index should be a no-op
+        assert!(queue.reorder(0, 0).is_ok());
+        assert_eq!(queue.len(), 1);
+    }
+
+    #[test]
+    fn single_track_skip_to_index_zero_returns_empty_skipped() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("1", "Track 1")]);
+
+        let skipped = queue.skip_to_index(0).unwrap();
+        assert!(skipped.is_empty());
+    }
+
+    #[test]
+    fn single_track_go_back_after_pop() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("1", "Track 1")]);
+
+        // Pop the track (advances source_index to 1)
+        let _ = queue.pop_next();
+        assert!(queue.is_empty());
+
+        // Go back should return None because we were at index 0 (now 1)
+        // and we need to verify we can go back
+        // Actually after pop, source_index is 1, so can_go_back() should be true
+        assert!(queue.can_go_back());
+        let track = queue.go_back().unwrap();
+        assert_eq!(track.id, "1");
+    }
+
+    #[test]
+    fn single_track_consecutive_duplicates_removal() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("1", "Track 1")]);
+
+        // Should be a no-op for single track
+        queue.remove_consecutive_duplicates();
+        assert_eq!(queue.len(), 1);
+    }
+
+    // --- Rapid Queue Modifications ---
+
+    #[test]
+    fn rapid_add_remove_operations() {
+        let mut queue = Queue::new();
+
+        // Rapidly add and remove tracks
+        for i in 0..100 {
+            queue.add_next(create_test_track(&i.to_string(), &format!("Track {}", i)));
+        }
+        assert_eq!(queue.len(), 100);
+
+        // Remove from the middle repeatedly
+        for _ in 0..50 {
+            queue.remove(queue.len() / 2);
+        }
+        assert_eq!(queue.len(), 50);
+
+        // Pop remaining
+        while queue.pop_next().is_some() {}
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn rapid_add_to_different_tiers() {
+        let mut queue = Queue::new();
+
+        // Add to all three tiers rapidly
+        for i in 0..30 {
+            if i % 3 == 0 {
+                queue.add_next(create_test_track(
+                    &format!("n{}", i),
+                    &format!("Next {}", i),
+                ));
+            } else if i % 3 == 1 {
+                queue.add_to_end(create_test_track(&format!("e{}", i), &format!("End {}", i)));
+            }
+        }
+
+        // Set source (this clears play_next)
+        queue.set_source(
+            (0..10)
+                .map(|i| create_test_track(&format!("s{}", i), &format!("Source {}", i)))
+                .collect(),
+        );
+
+        // Verify the queue state is consistent
+        assert!(!queue.is_empty());
+        // Play next should be cleared by set_source
+        // Queued later should persist
+    }
+
+    // --- Large Queue Tests (10000+ tracks) ---
+
+    #[test]
+    fn large_queue_basic_operations() {
+        let mut queue = Queue::new();
+        let track_count = 10000;
+
+        // Create large source queue
+        let tracks: Vec<QueueTrack> = (0..track_count)
+            .map(|i| create_test_track(&i.to_string(), &format!("Track {}", i)))
+            .collect();
+
+        queue.set_source(tracks);
+        assert_eq!(queue.len(), track_count);
+
+        // Verify random access works
+        assert!(queue.get(0).is_some());
+        assert!(queue.get(track_count / 2).is_some());
+        assert!(queue.get(track_count - 1).is_some());
+        assert!(queue.get(track_count).is_none());
+    }
+
+    #[test]
+    fn large_queue_skip_to_end() {
+        let mut queue = Queue::new();
+        let track_count = 10000;
+
+        let tracks: Vec<QueueTrack> = (0..track_count)
+            .map(|i| create_test_track(&i.to_string(), &format!("Track {}", i)))
+            .collect();
+
+        queue.set_source(tracks);
+
+        // Skip to near the end
+        let target = track_count - 10;
+        let skipped = queue.skip_to_index(target);
+        assert!(skipped.is_some());
+        let skipped = skipped.unwrap();
+        assert_eq!(skipped.len(), target);
+
+        // Remaining tracks should be 10
+        assert_eq!(queue.len(), 10);
+    }
+
+    #[test]
+    fn large_queue_pop_all() {
+        let mut queue = Queue::new();
+        let track_count = 1000; // Reduced for test speed
+
+        let tracks: Vec<QueueTrack> = (0..track_count)
+            .map(|i| create_test_track(&i.to_string(), &format!("Track {}", i)))
+            .collect();
+
+        queue.set_source(tracks);
+
+        // Pop all tracks and verify order
+        for i in 0..track_count {
+            let track = queue.pop_next().unwrap();
+            assert_eq!(track.id, i.to_string());
+        }
+
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn large_queue_get_all_performance() {
+        let mut queue = Queue::new();
+        let track_count = 10000;
+
+        let tracks: Vec<QueueTrack> = (0..track_count)
+            .map(|i| create_test_track(&i.to_string(), &format!("Track {}", i)))
+            .collect();
+
+        queue.set_source(tracks);
+
+        // get_all should work even for large queues
+        let all = queue.get_all();
+        assert_eq!(all.len(), track_count);
+    }
+
+    // --- Queue Index Bounds Checking ---
+
+    #[test]
+    fn bounds_check_at_tier_boundaries() {
+        let mut queue = Queue::new();
+
+        // Set up queue with tracks in all tiers
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+        ]);
+        queue.add_next(create_test_track("n1", "Next 1"));
+        queue.add_to_end(create_test_track("e1", "End 1"));
+
+        // Total: 4 tracks
+        // Index 0: n1 (play_next)
+        // Index 1: s1 (source)
+        // Index 2: s2 (source)
+        // Index 3: e1 (queued_later)
+
+        // Verify get at boundaries
+        assert_eq!(queue.get(0).unwrap().id, "n1");
+        assert_eq!(queue.get(1).unwrap().id, "s1");
+        assert_eq!(queue.get(2).unwrap().id, "s2");
+        assert_eq!(queue.get(3).unwrap().id, "e1");
+        assert!(queue.get(4).is_none());
+    }
+
+    #[test]
+    fn remove_at_tier_boundaries() {
+        let mut queue = Queue::new();
+
+        // Set up queue with tracks in all tiers
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+        ]);
+        queue.add_next(create_test_track("n1", "Next 1"));
+        queue.add_to_end(create_test_track("e1", "End 1"));
+
+        // Remove from play_next tier boundary (index 0)
+        let track = queue.remove(0).unwrap();
+        assert_eq!(track.id, "n1");
+
+        // Now queue is: s1, s2, e1
+        // Remove from queued_later tier (last item)
+        let track = queue.remove(2).unwrap();
+        assert_eq!(track.id, "e1");
+
+        // Now queue is: s1, s2
+        assert_eq!(queue.len(), 2);
+    }
+
+    #[test]
+    fn skip_to_index_at_tier_boundaries() {
+        let mut queue = Queue::new();
+
+        queue.set_source(vec![
+            create_test_track("s1", "Source 1"),
+            create_test_track("s2", "Source 2"),
+        ]);
+        queue.add_next(create_test_track("n1", "Next 1"));
+        queue.add_to_end(create_test_track("e1", "End 1"));
+
+        // Skip from start to the last source track (index 2)
+        let skipped = queue.skip_to_index(2).unwrap();
+
+        // Should skip n1 and s1
+        assert_eq!(skipped.len(), 2);
+        assert_eq!(skipped[0].id, "n1");
+        assert_eq!(skipped[1].id, "s1");
+    }
+
+    // --- Queue Modifications During Playback (source_index tests) ---
+
+    #[test]
+    fn pop_advances_source_index() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        assert_eq!(queue.current_source_index(), 0);
+
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 1);
+
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 2);
+    }
+
+    #[test]
+    fn remove_before_source_index_adjusts_index() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Advance to track 2
+        queue.pop_next(); // Now at index 1
+
+        // The condition in remove checks if source_idx < self.source_index
+        // After pop, source_index = 1
+        // If we remove track at queue index 0, that's source_idx = 1 (current position)
+        // So it won't adjust source_index
+
+        // This test verifies remove doesn't corrupt state
+        assert_eq!(queue.current_source_index(), 1);
+        assert_eq!(queue.len(), 2);
+
+        // Remove the current track (index 0 after pop)
+        let track = queue.remove(0).unwrap();
+        assert_eq!(track.id, "2");
+        assert_eq!(queue.len(), 1);
+    }
+
+    #[test]
+    fn go_back_decrements_source_index() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Advance to track 2
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 1);
+
+        // Go back
+        let track = queue.go_back().unwrap();
+        assert_eq!(track.id, "1");
+        assert_eq!(queue.current_source_index(), 0);
+    }
+
+    #[test]
+    fn reload_source_resets_index() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+        ]);
+
+        // Advance through queue
+        queue.pop_next();
+        queue.pop_next();
+        assert!(queue.is_empty());
+        assert_eq!(queue.current_source_index(), 2);
+
+        // Reload should reset index
+        queue.reload_source(crate::types::ShuffleMode::Off);
+        assert_eq!(queue.current_source_index(), 0);
+        assert_eq!(queue.len(), 2);
+    }
+
+    // --- Consecutive Duplicates Edge Cases ---
+
+    #[test]
+    fn consecutive_duplicates_multiple() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("1", "Track 1"), // duplicate
+            create_test_track("1", "Track 1"), // duplicate
+            create_test_track("2", "Track 2"),
+            create_test_track("2", "Track 2"), // duplicate
+            create_test_track("3", "Track 3"),
+        ]);
+
+        queue.remove_consecutive_duplicates();
+
+        // Should be: 1, 2, 3
+        assert_eq!(queue.len(), 3);
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "1");
+        assert_eq!(all[1].id, "2");
+        assert_eq!(all[2].id, "3");
+    }
+
+    #[test]
+    fn consecutive_duplicates_at_end() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("2", "Track 2"), // duplicate at end
+        ]);
+
+        queue.remove_consecutive_duplicates();
+
+        assert_eq!(queue.len(), 2);
+    }
+
+    #[test]
+    fn no_consecutive_duplicates_non_adjacent() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("1", "Track 1"), // non-adjacent duplicate - should NOT be removed
+        ]);
+
+        queue.remove_consecutive_duplicates();
+
+        // All three should remain (non-consecutive)
+        assert_eq!(queue.len(), 3);
+    }
+
+    // --- Shuffle and Original Order Edge Cases ---
+
+    #[test]
+    fn restore_order_when_not_shuffled_is_noop() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+        ]);
+
+        // Not shuffled, restore should be a no-op
+        queue.restore_original_order();
+
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "1");
+        assert_eq!(all[1].id, "2");
+    }
+
+    #[test]
+    fn update_original_source_when_not_shuffled() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+        ]);
+
+        // Manually modify source
+        queue.source_mut().reverse();
+
+        // Update original should sync when not shuffled
+        queue.update_original_source();
+
+        // Original should now match reversed order
+        queue.set_shuffled(true); // Mark as shuffled to test restore
+        queue.restore_original_order();
+
+        // After restore, should be reversed (since that's what original was updated to)
+        let all = queue.get_all();
+        assert_eq!(all[0].id, "2");
+        assert_eq!(all[1].id, "1");
+    }
+
+    // --- Pop Next Skip Play Next Edge Cases ---
+
+    #[test]
+    fn pop_next_skip_play_next_with_empty_source() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![]);
+        queue.add_to_end(create_test_track("e1", "End 1"));
+
+        // pop_next_skip_play_next should skip to queued_later when source is empty
+        let track = queue.pop_next_skip_play_next().unwrap();
+        assert_eq!(track.id, "e1");
+    }
+
+    #[test]
+    fn pop_next_skip_play_next_prefers_source_over_queued_later() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("s1", "Source 1")]);
+        queue.add_to_end(create_test_track("e1", "End 1"));
+
+        // Should get source track, not queued_later
+        let track = queue.pop_next_skip_play_next().unwrap();
+        assert_eq!(track.id, "s1");
+    }
+
+    // --- Append to Source Edge Cases ---
+
+    #[test]
+    fn append_to_source_with_empty_queue() {
+        let mut queue = Queue::new();
+
+        queue.append_to_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+        ]);
+
+        assert_eq!(queue.len(), 2);
+    }
+
+    #[test]
+    fn append_to_source_preserves_position() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![create_test_track("1", "Track 1")]);
+
+        // Advance position
+        queue.pop_next();
+        assert_eq!(queue.current_source_index(), 1);
+
+        // Append more tracks
+        queue.append_to_source(vec![create_test_track("2", "Track 2")]);
+
+        // Position should be preserved
+        assert_eq!(queue.current_source_index(), 1);
+        // Should have 1 remaining track
+        assert_eq!(queue.len(), 1);
     }
 }

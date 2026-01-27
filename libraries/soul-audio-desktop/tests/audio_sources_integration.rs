@@ -316,7 +316,7 @@ fn test_streaming_source_creation() {
 
     assert!(source.is_ok(), "Should create streaming source");
     let source = source.unwrap();
-    assert_eq!(source.sample_rate(), 44100);
+    assert_eq!(source.sample_rate(), Some(44100));
     assert_eq!(source.channels(), 2);
     assert_eq!(source.duration(), Duration::from_secs(180));
 }

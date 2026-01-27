@@ -273,11 +273,15 @@ impl AudioSource for StreamingAudioSource {
     fn is_finished(&self) -> bool {
         self.finished
     }
+
+    fn sample_rate(&self) -> Option<u32> {
+        Some(self.sample_rate)
+    }
 }
 
 impl StreamingAudioSource {
     /// Get sample rate
-    pub fn sample_rate(&self) -> u32 {
+    pub fn get_sample_rate(&self) -> u32 {
         self.sample_rate
     }
 
@@ -316,7 +320,7 @@ mod tests {
 
         assert!(source.is_ok());
         let source = source.unwrap();
-        assert_eq!(source.sample_rate(), 44100);
+        assert_eq!(source.get_sample_rate(), 44100);
         assert_eq!(source.channels(), 2);
     }
 }

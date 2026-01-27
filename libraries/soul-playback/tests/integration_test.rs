@@ -326,13 +326,29 @@ fn test_seek_changes_position() {
 #[test]
 fn test_seek_percent_calculates_correctly() {
     let mut manager = PlaybackManager::default();
+
+    // Add a track to queue
+    let track = create_test_track("test", "Test Track", "Artist", 100);
+    manager.add_to_queue_end(track);
+
+    // Start playback (transitions to Loading state)
+    let _ = manager.play();
+
+    // Set audio source while in Loading state (transitions to Playing)
     manager.set_audio_source(Box::new(MockAudioSource::new(
         Duration::from_secs(100),
         44100,
     )));
 
+    // Now we should be in Playing state and can seek
+    assert_eq!(
+        manager.get_state(),
+        PlaybackState::Playing,
+        "Should be in Playing state"
+    );
+
     // Seek to 50%
-    manager.seek_to_percent(0.5).ok();
+    manager.seek_to_percent(0.5).expect("Seek should succeed");
 
     let pos = manager.get_position();
     assert!(

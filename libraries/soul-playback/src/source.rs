@@ -57,6 +57,17 @@ pub trait AudioSource: Send {
         true
     }
 
+    /// Get sample rate of the audio source (in Hz)
+    ///
+    /// This is the output sample rate after any resampling.
+    /// Used for validating sample rate compatibility during gapless transitions.
+    ///
+    /// Default implementation returns None (sample rate unknown).
+    /// Implementations should override this to enable sample rate validation.
+    fn sample_rate(&self) -> Option<u32> {
+        None
+    }
+
     /// Reset to beginning of track
     ///
     /// Equivalent to `seek(Duration::ZERO)`
@@ -128,5 +139,9 @@ impl AudioSource for DummyAudioSource {
 
     fn is_finished(&self) -> bool {
         self.position >= self.duration
+    }
+
+    fn sample_rate(&self) -> Option<u32> {
+        Some(self.sample_rate)
     }
 }
