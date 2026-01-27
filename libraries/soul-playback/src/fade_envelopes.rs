@@ -67,7 +67,10 @@ pub(crate) const AUDIO_DETECT_THRESHOLD: f32 = 0.001; // -60dB
 /// Handles edge case of tracks that start with genuine silence (e.g., classical
 /// recordings with long quiet intros). After this timeout, the fade starts
 /// regardless of detected amplitude.
-const MAX_WAIT_MS: u32 = 200;
+///
+/// Set to 50ms since encoder delay is already skipped in the decoder thread.
+/// This provides enough time for resampler settling while minimizing latency.
+const MAX_WAIT_MS: u32 = 50;
 
 /// DC blocker coefficient (0.995-0.9999)
 ///

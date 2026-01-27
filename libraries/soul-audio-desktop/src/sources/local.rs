@@ -1018,14 +1018,11 @@ impl AudioSource for LocalAudioSource {
     /// Uses try_lock to avoid blocking the real-time audio thread. If the lock
     /// is contended (decoder thread is writing), returns silence for this callback.
     fn read_samples(&mut self, output: &mut [f32]) -> Result<usize> {
-        let mut state = match self.shared.try_lock() {
-            Ok(guard) => guard,
-            Err(_) => {
-                // Lock contention with decoder thread - fill with silence
-                // This is rare since the decoder thread releases the lock quickly
-                output.fill(0.0);
-                return Ok(0);
-            }
+        let Ok(mut state) = self.shared.try_lock() else {
+            // Lock contention with decoder thread - fill with silence
+            // This is rare since the decoder thread releases the lock quickly
+            output.fill(0.0);
+            return Ok(0);
         };
 
         // Copy from output buffer to output (non-blocking)

@@ -515,10 +515,8 @@ mod tests {
     fn test_track_loader_multiple_create_drop() {
         // Test that we can create and drop multiple loaders without leaking threads
         for i in 0..5 {
-            let loader = TrackLoader::new().expect(&format!(
-                "Failed to create TrackLoader on iteration {}",
-                i
-            ));
+            let loader = TrackLoader::new()
+                .expect(&format!("Failed to create TrackLoader on iteration {}", i));
             drop(loader);
         }
         // If threads were leaking, we'd see resource exhaustion

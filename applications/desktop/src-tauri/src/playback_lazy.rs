@@ -8,11 +8,13 @@
 //! Performance impact:
 //! - Removes 200-800ms from startup (macOS CoreAudio can take 300-1000ms)
 //! - Audio engine initializes on first play/pause/skip command
-//! - Settings are restored in background after initialization
+//! - Settings are restored in background AFTER initialization returns
+//!   (non-blocking to minimize first-play latency)
 
 use crate::app_state::AppState;
 use crate::playback::PlaybackManager;
 use crate::{audio_settings, dsp_commands, loudness};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::OnceCell;
@@ -24,6 +26,8 @@ use tokio::sync::OnceCell;
 pub struct LazyPlaybackManager {
     inner: Arc<OnceCell<PlaybackManager>>,
     app: AppHandle,
+    /// Flag to track if settings restoration has been spawned
+    settings_restoration_started: AtomicBool,
 }
 
 impl LazyPlaybackManager {
@@ -36,6 +40,7 @@ impl LazyPlaybackManager {
         Self {
             inner: Arc::new(OnceCell::new()),
             app,
+            settings_restoration_started: AtomicBool::new(false),
         }
     }
 
@@ -45,11 +50,13 @@ impl LazyPlaybackManager {
     /// Subsequent calls return the initialized instance instantly.
     ///
     /// Settings (audio device, DSP, volume leveling) are restored
-    /// immediately after initialization completes. This is still deferred
-    /// from app startup (happens on first playback), but adds ~50-100ms
-    /// to the first playback command.
+    /// asynchronously in a background task AFTER this method returns.
+    /// This minimizes first-play latency - playback starts immediately
+    /// with default settings, then custom settings are applied within
+    /// ~50-100ms (transparent to the user).
     pub async fn get(&self) -> Result<&PlaybackManager, String> {
-        self.inner
+        let pm = self
+            .inner
             .get_or_try_init(|| async {
                 tracing::info!("🎵 First playback request - initializing audio engine...");
                 let start = std::time::Instant::now();
@@ -69,14 +76,32 @@ impl LazyPlaybackManager {
                     tracing::warn!("Failed to emit audio:initialized event: {}", e);
                 }
 
-                // Restore audio settings (device, volume leveling, DSP chain)
-                // This happens synchronously but is still deferred from app startup
-                let state = self.app.state::<AppState>();
-                restore_audio_settings(&pm, &state).await;
-
-                Ok(pm)
+                Ok::<_, String>(pm)
             })
-            .await
+            .await?;
+
+        // Spawn settings restoration in background (only once)
+        // This runs AFTER we return the PlaybackManager, so first playback
+        // can start immediately without waiting for settings to load
+        if !self
+            .settings_restoration_started
+            .swap(true, Ordering::SeqCst)
+        {
+            let app = self.app.clone();
+            tauri::async_runtime::spawn(async move {
+                // Small yield to let the first playback command proceed
+                tokio::task::yield_now().await;
+
+                let state = app.state::<AppState>();
+                if let Some(pm) = app.try_state::<LazyPlaybackManager>() {
+                    if let Some(playback) = pm.inner.get() {
+                        restore_audio_settings(playback, &state).await;
+                    }
+                }
+            });
+        }
+
+        Ok(pm)
     }
 
     /// Check if the audio engine is initialized
@@ -91,8 +116,9 @@ impl LazyPlaybackManager {
 
 /// Restore audio settings after audio engine initialization
 ///
-/// This happens synchronously after the audio engine initializes on first playback.
-/// Settings restored: audio device, volume leveling mode, DSP effect chain.
+/// This runs asynchronously in a background task after the first playback
+/// command returns. This minimizes first-play latency while still restoring
+/// user preferences (audio device, volume leveling mode, DSP effect chain).
 async fn restore_audio_settings(playback: &PlaybackManager, state: &AppState) {
     let start = std::time::Instant::now();
     tracing::info!("[LazyPlayback] Restoring audio settings...");
