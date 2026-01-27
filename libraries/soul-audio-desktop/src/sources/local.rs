@@ -62,15 +62,24 @@ use tracing;
 const BUFFER_SIZE_SECONDS: usize = 5;
 
 /// Minimum buffer level (in samples) before source is considered ready for playback
-/// At stereo 48kHz, 96000 samples = 1000ms of audio (matches foobar2000 default)
+/// At stereo 48kHz, 24000 samples = 250ms of audio (fast start, 5s background buffer for safety)
 ///
 /// This MUST be filled BEFORE playback starts to prevent buffer underrun.
 /// The user reported jitter on first play but not on "previous track" because:
 /// - First play: file not cached → slow disk I/O → buffer underrun
 /// - Previous track: file cached → fast I/O → no underrun
 ///
-/// Industry standard: prebuffer 1000ms before playback starts
-const MIN_BUFFER_SAMPLES: usize = 96000;
+/// Prebuffer before playback starts.
+///
+/// Trade-off:
+/// - Higher = more safety margin for slow disks, but higher latency
+/// - Lower = faster start, but risk of underrun on slow systems
+///
+/// 24000 samples = ~250ms at 48kHz stereo, which provides:
+/// - Fast perceived response (< 300ms feels instant)
+/// - Enough buffer for most HDDs (seek time ~10ms + read)
+/// - The 5-second background buffer provides long-term safety
+const MIN_BUFFER_SAMPLES: usize = 24000;
 
 /// Encoder delay to skip at playback start (in frames, not samples)
 ///
@@ -373,13 +382,13 @@ impl LocalAudioSource {
         // ensuring smooth, glitch-free playback without blocking the play command.
         //
         // Old behavior (REMOVED):
-        // - Block for up to 1 second waiting for 1000ms of audio to buffer
+        // - Block for up to 1 second waiting for 250ms of audio to buffer
         // - Caused 50-200ms delay on every track load (especially with "Maximum" resampling quality)
         //
         // New behavior (CURRENT):
         // - Return immediately after spawning decoder thread
         // - Decoder fills buffer in background (decoding + resampling)
-        // - `is_ready()` returns true when MIN_BUFFER_SAMPLES (1000ms) is buffered
+        // - `is_ready()` returns true when MIN_BUFFER_SAMPLES (250ms) is buffered
         // - TrackLoader waits for `is_ready()` AFTER returning the source (non-blocking)
         // - PlaybackManager checks `is_ready()` before starting audio output
         //
@@ -1103,7 +1112,7 @@ impl AudioSource for LocalAudioSource {
     /// Check if source is ready for glitch-free playback
     ///
     /// Returns true when:
-    /// - Buffer contains at least `MIN_BUFFER_SAMPLES` (1000ms of audio at 48kHz stereo)
+    /// - Buffer contains at least `MIN_BUFFER_SAMPLES` (250ms of audio at 48kHz stereo)
     /// - OR we've reached EOF (short files)
     ///
     /// This prevents buffer underrun at playback start when disk I/O is slow.
