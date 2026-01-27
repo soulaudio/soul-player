@@ -242,15 +242,19 @@ impl SymphoniaDecoder {
 
     /// Convert multi-channel audio to interleaved stereo with proper downmixing
     ///
-    /// Uses ITU-R BS.775-1 downmix coefficients for surround sound:
-    /// - L_out = L + 0.707*C + 0.707*Ls
-    /// - R_out = R + 0.707*C + 0.707*Rs
+    /// Uses ITU-R BS.775-3 downmix coefficients for surround sound with normalization
+    /// to prevent clipping. The standard formula is:
+    /// - L_out = (L + 0.707*C + 0.707*Ls) * normalization_factor
+    /// - R_out = (R + 0.707*C + 0.707*Rs) * normalization_factor
     ///
     /// For 5.1 channel layout (FL, FR, C, LFE, SL, SR):
     /// - Channels 0,1: Front Left/Right -> direct to L/R
     /// - Channel 2: Center -> 0.707 to both L and R
-    /// - Channel 3: LFE -> 0.707 to both L and R (or can be omitted)
+    /// - Channel 3: LFE -> typically excluded from stereo downmix (per ITU-R BS.775-3)
     /// - Channels 4,5: Surround Left/Right -> 0.707 to L/R respectively
+    ///
+    /// For 7.1 channel layout (FL, FR, C, LFE, SL, SR, BL, BR):
+    /// - Back channels are mixed with surround at 0.707 coefficient
     fn convert_multichannel_to_stereo<T, F>(
         buf: &symphonia::core::audio::AudioBuffer<T>,
         channels: usize,
@@ -263,8 +267,21 @@ impl SymphoniaDecoder {
         let frames = buf.frames();
         let mut output = Vec::with_capacity(frames * 2);
 
-        // ITU-R BS.775-1 coefficient for center and surround channels
-        const CENTER_MIX: f32 = 0.707; // -3dB
+        // ITU-R BS.775-3 coefficients
+        const CENTER_MIX: f32 = 0.707; // -3dB for center and surround channels
+        const SURROUND_MIX: f32 = 0.707; // -3dB for surround channels
+
+        // Normalization factors to prevent clipping (worst case: all channels at max)
+        // 3ch: 1 + 0.707 = 1.707, norm = 1/1.707 = 0.586
+        // 4ch: 1 + 0.707 = 1.707, norm = 0.586
+        // 5ch: 1 + 0.707 + 0.707 = 2.414, norm = 0.414
+        // 6ch (5.1): 1 + 0.707 + 0.707 = 2.414, norm = 0.414 (LFE excluded)
+        // 8ch (7.1): 1 + 0.707 + 0.707 + 0.707 = 3.121, norm = 0.320
+        const NORM_3CH: f32 = 1.0 / (1.0 + CENTER_MIX);
+        const NORM_4CH: f32 = 1.0 / (1.0 + SURROUND_MIX);
+        const NORM_5CH: f32 = 1.0 / (1.0 + CENTER_MIX + SURROUND_MIX);
+        const NORM_6CH: f32 = 1.0 / (1.0 + CENTER_MIX + SURROUND_MIX); // LFE excluded
+        const NORM_8CH: f32 = 1.0 / (1.0 + CENTER_MIX + SURROUND_MIX + SURROUND_MIX);
 
         match channels {
             0 => {
@@ -290,7 +307,7 @@ impl SymphoniaDecoder {
                 }
             }
             3 => {
-                // 3 channels (L, R, C) - mix center into both
+                // 3 channels (L, R, C) - mix center into both with normalization
                 let left = buf.chan(0);
                 let right = buf.chan(1);
                 let center = buf.chan(2);
@@ -298,12 +315,12 @@ impl SymphoniaDecoder {
                     let l = normalize(left[i]);
                     let r = normalize(right[i]);
                     let c = normalize(center[i]) * CENTER_MIX;
-                    output.push((l + c).clamp(-1.0, 1.0));
-                    output.push((r + c).clamp(-1.0, 1.0));
+                    output.push((l + c) * NORM_3CH);
+                    output.push((r + c) * NORM_3CH);
                 }
             }
             4 => {
-                // 4 channels (L, R, SL, SR) - quad layout
+                // 4 channels (L, R, SL, SR) - quad layout with normalization
                 let left = buf.chan(0);
                 let right = buf.chan(1);
                 let surround_left = buf.chan(2);
@@ -311,14 +328,14 @@ impl SymphoniaDecoder {
                 for i in 0..frames {
                     let l = normalize(left[i]);
                     let r = normalize(right[i]);
-                    let sl = normalize(surround_left[i]) * CENTER_MIX;
-                    let sr = normalize(surround_right[i]) * CENTER_MIX;
-                    output.push((l + sl).clamp(-1.0, 1.0));
-                    output.push((r + sr).clamp(-1.0, 1.0));
+                    let sl = normalize(surround_left[i]) * SURROUND_MIX;
+                    let sr = normalize(surround_right[i]) * SURROUND_MIX;
+                    output.push((l + sl) * NORM_4CH);
+                    output.push((r + sr) * NORM_4CH);
                 }
             }
             5 => {
-                // 5 channels (L, R, C, SL, SR) - 5.0 layout
+                // 5 channels (L, R, C, SL, SR) - 5.0 layout with normalization
                 let left = buf.chan(0);
                 let right = buf.chan(1);
                 let center = buf.chan(2);
@@ -328,35 +345,80 @@ impl SymphoniaDecoder {
                     let l = normalize(left[i]);
                     let r = normalize(right[i]);
                     let c = normalize(center[i]) * CENTER_MIX;
-                    let sl = normalize(surround_left[i]) * CENTER_MIX;
-                    let sr = normalize(surround_right[i]) * CENTER_MIX;
-                    output.push((l + c + sl).clamp(-1.0, 1.0));
-                    output.push((r + c + sr).clamp(-1.0, 1.0));
+                    let sl = normalize(surround_left[i]) * SURROUND_MIX;
+                    let sr = normalize(surround_right[i]) * SURROUND_MIX;
+                    output.push((l + c + sl) * NORM_5CH);
+                    output.push((r + c + sr) * NORM_5CH);
                 }
             }
-            _ => {
-                // 6+ channels (L, R, C, LFE, SL, SR, ...) - 5.1 or higher
-                // Standard 5.1 layout: FL, FR, C, LFE, SL, SR
+            6 => {
+                // 6 channels (L, R, C, LFE, SL, SR) - 5.1 layout
+                // Per ITU-R BS.775-3, LFE is typically excluded from stereo downmix
+                // as it contains low-frequency content meant for subwoofer only
                 let left = buf.chan(0);
                 let right = buf.chan(1);
                 let center = buf.chan(2);
-                let lfe = buf.chan(3);
+                // Channel 3 is LFE - excluded from downmix per ITU-R BS.775-3
                 let surround_left = buf.chan(4);
-                let surround_right = if channels > 5 {
-                    buf.chan(5)
+                let surround_right = buf.chan(5);
+                for i in 0..frames {
+                    let l = normalize(left[i]);
+                    let r = normalize(right[i]);
+                    let c = normalize(center[i]) * CENTER_MIX;
+                    let sl = normalize(surround_left[i]) * SURROUND_MIX;
+                    let sr = normalize(surround_right[i]) * SURROUND_MIX;
+                    output.push((l + c + sl) * NORM_6CH);
+                    output.push((r + c + sr) * NORM_6CH);
+                }
+            }
+            7 => {
+                // 7 channels (L, R, C, LFE, SL, SR, BC) - 6.1 layout
+                // Back center is mixed into both channels
+                let left = buf.chan(0);
+                let right = buf.chan(1);
+                let center = buf.chan(2);
+                // Channel 3 is LFE - excluded
+                let surround_left = buf.chan(4);
+                let surround_right = buf.chan(5);
+                let back_center = buf.chan(6);
+                for i in 0..frames {
+                    let l = normalize(left[i]);
+                    let r = normalize(right[i]);
+                    let c = normalize(center[i]) * CENTER_MIX;
+                    let sl = normalize(surround_left[i]) * SURROUND_MIX;
+                    let sr = normalize(surround_right[i]) * SURROUND_MIX;
+                    let bc = normalize(back_center[i]) * SURROUND_MIX;
+                    // Back center mixes equally to both sides
+                    output.push((l + c + sl + bc * 0.5) * NORM_6CH);
+                    output.push((r + c + sr + bc * 0.5) * NORM_6CH);
+                }
+            }
+            _ => {
+                // 8+ channels (L, R, C, LFE, SL, SR, BL, BR, ...) - 7.1 or higher
+                // Standard 7.1 layout: FL, FR, C, LFE, SL, SR, BL, BR
+                let left = buf.chan(0);
+                let right = buf.chan(1);
+                let center = buf.chan(2);
+                // Channel 3 is LFE - excluded from downmix per ITU-R BS.775-3
+                let surround_left = buf.chan(4);
+                let surround_right = buf.chan(5);
+                let back_left = buf.chan(6);
+                let back_right = if channels > 7 {
+                    buf.chan(7)
                 } else {
-                    buf.chan(4) // Fallback if only 6 channels but index issue
+                    buf.chan(6)
                 };
                 for i in 0..frames {
                     let l = normalize(left[i]);
                     let r = normalize(right[i]);
                     let c = normalize(center[i]) * CENTER_MIX;
-                    let lfe_sample = normalize(lfe[i]) * CENTER_MIX;
-                    let sl = normalize(surround_left[i]) * CENTER_MIX;
-                    let sr = normalize(surround_right[i]) * CENTER_MIX;
-                    // Mix all channels to stereo
-                    output.push((l + c + lfe_sample + sl).clamp(-1.0, 1.0));
-                    output.push((r + c + lfe_sample + sr).clamp(-1.0, 1.0));
+                    let sl = normalize(surround_left[i]) * SURROUND_MIX;
+                    let sr = normalize(surround_right[i]) * SURROUND_MIX;
+                    let bl = normalize(back_left[i]) * SURROUND_MIX;
+                    let br = normalize(back_right[i]) * SURROUND_MIX;
+                    // Mix all channels to stereo with normalization
+                    output.push((l + c + sl + bl) * NORM_8CH);
+                    output.push((r + c + sr + br) * NORM_8CH);
                 }
             }
         }

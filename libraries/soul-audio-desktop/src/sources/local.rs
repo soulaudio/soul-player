@@ -189,17 +189,20 @@ fn handle_seek_command(
     target_sample_rate: u32,
     channels: u16,
 ) -> std::result::Result<(usize, usize), String> {
-    // Perform seek
-    let seek_ts = time_base.calc_timestamp(position.into());
-    if let Err(e) = format_reader.seek(
-        symphonia::core::formats::SeekMode::Accurate,
-        symphonia::core::formats::SeekTo::TimeStamp {
-            ts: seek_ts,
-            track_id,
-        },
-    ) {
-        return Err(format!("Seek failed: {}", e));
-    }
+    // Perform seek using Time mode for better accuracy with VBR files
+    let secs = position.as_secs();
+    let frac = (position.as_nanos() % 1_000_000_000) as f64 / 1_000_000_000.0;
+    let time = symphonia::core::units::Time::new(secs, frac);
+
+    let seeked_to = format_reader
+        .seek(
+            symphonia::core::formats::SeekMode::Accurate,
+            symphonia::core::formats::SeekTo::Time {
+                time,
+                track_id: Some(track_id),
+            },
+        )
+        .map_err(|e| format!("Seek failed: {}", e))?;
 
     // Reset decoder state
     decoder.reset();
@@ -208,18 +211,42 @@ fn handle_seek_command(
         r.reset();
     }
 
-    // Clear output buffer and update position
+    // Calculate actual position from seek result using time_base
+    // This is crucial for VBR files where the actual position may differ from requested
+    let actual_position = Duration::from_secs_f64(
+        seeked_to.actual_ts as f64 * time_base.numer as f64 / time_base.denom as f64,
+    );
+
+    // Log seek accuracy for debugging VBR issues
+    let seek_error_ms = actual_position
+        .saturating_sub(position)
+        .max(position.saturating_sub(actual_position))
+        .as_millis();
+
+    if seek_error_ms > 50 {
+        tracing::warn!(
+            requested_ms = position.as_millis(),
+            actual_ms = actual_position.as_millis(),
+            error_ms = seek_error_ms,
+            "[DecoderThread] Seek accuracy issue: landed {}ms from target",
+            seek_error_ms
+        );
+    }
+
+    // Clear output buffer and update position to ACTUAL position (not requested)
+    // This fixes position drift with VBR files where seek lands at a different position
     let mut state = shared.lock().unwrap();
     state.output_buffer.clear();
     state.samples_read =
-        (position.as_secs_f64() * target_sample_rate as f64 * channels as f64) as usize;
+        (actual_position.as_secs_f64() * target_sample_rate as f64 * channels as f64) as usize;
     state.is_eof = false;
     state.seek_pending = false;
     state.encoder_delay_skipped = 0; // Reset encoder delay skip counter
 
     tracing::debug!(
-        "[DecoderThread] Seek completed to {:?}, reset all skip counters",
-        position
+        "[DecoderThread] Seek completed: requested={:?}, actual={:?}, reset all skip counters",
+        position,
+        actual_position
     );
 
     // Return reset skip counters (resampler_skip, encoder_delay_skip)
@@ -1061,7 +1088,7 @@ impl AudioSource for LocalAudioSource {
     /// Check if source is ready for glitch-free playback
     ///
     /// Returns true when:
-    /// - Buffer contains at least `MIN_BUFFER_SAMPLES` (500ms of audio)
+    /// - Buffer contains at least `MIN_BUFFER_SAMPLES` (1000ms of audio at 48kHz stereo)
     /// - OR we've reached EOF (short files)
     ///
     /// This prevents buffer underrun at playback start when disk I/O is slow.
@@ -1083,6 +1110,18 @@ impl Drop for LocalAudioSource {
     fn drop(&mut self) {
         // Signal decoder thread to stop
         let _ = self.command_tx.send(DecoderCommand::Stop);
+
+        // Note: We intentionally don't join the thread here because:
+        // 1. The thread will exit when it receives the Stop command or when the channel disconnects
+        // 2. Joining could block the audio thread if the decoder is stuck on I/O
+        // 3. The JoinHandle being dropped will detach the thread, allowing it to clean up asynchronously
+        //
+        // The thread is designed to exit quickly when Stop is received (it checks for commands
+        // on each loop iteration), so detaching is safe here.
+        //
+        // If deterministic cleanup is needed in the future, consider:
+        // - Moving thread join to a background cleanup task
+        // - Using a timeout with thread::JoinHandle::join
     }
 }
 

@@ -977,6 +977,8 @@ impl DesktopPlayback {
                 // Error recovery tracking - count consecutive errors and fade samples remaining
                 let mut error_count: u32 = 0;
                 let mut error_fade_samples_remaining: usize = 0;
+                // LFSR state for proper noise generation during error recovery
+                let mut error_noise_state: u32 = 0xDEAD_BEEF;
                 tracing::debug!(
                     "[CPAL] Creating F32 stream callback (stream_id: {:?})",
                     stream_id
@@ -996,6 +998,7 @@ impl DesktopPlayback {
                             &mut load_requested,
                             &mut error_count,
                             &mut error_fade_samples_remaining,
+                            &mut error_noise_state,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process(data);
@@ -1021,6 +1024,8 @@ impl DesktopPlayback {
                 // Error recovery tracking - count consecutive errors and fade samples remaining
                 let mut error_count: u32 = 0;
                 let mut error_fade_samples_remaining: usize = 0;
+                // LFSR state for proper noise generation during error recovery
+                let mut error_noise_state: u32 = 0xDEAD_BEEF;
                 tracing::debug!(
                     "[CPAL] Creating I32 stream callback (stream_id: {:?})",
                     stream_id
@@ -1057,6 +1062,7 @@ impl DesktopPlayback {
                             &mut load_requested,
                             &mut error_count,
                             &mut error_fade_samples_remaining,
+                            &mut error_noise_state,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i32(data);
@@ -1087,6 +1093,8 @@ impl DesktopPlayback {
                 // Error recovery tracking - count consecutive errors and fade samples remaining
                 let mut error_count: u32 = 0;
                 let mut error_fade_samples_remaining: usize = 0;
+                // LFSR state for proper noise generation during error recovery
+                let mut error_noise_state: u32 = 0xDEAD_BEEF;
                 tracing::debug!(
                     "[CPAL] Creating I16 stream callback (stream_id: {:?})",
                     stream_id
@@ -1112,6 +1120,7 @@ impl DesktopPlayback {
                             &mut load_requested,
                             &mut error_count,
                             &mut error_fade_samples_remaining,
+                            &mut error_noise_state,
                         );
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i16(data);
@@ -1437,6 +1446,7 @@ impl DesktopPlayback {
         load_requested: &mut bool,
         error_count: &mut u32,
         error_fade_samples_remaining: &mut usize,
+        error_noise_state: &mut u32,
     ) {
         // Debug: log callback invocation with per-stream counter
         if callback_count == 1 {
@@ -1487,9 +1497,13 @@ impl DesktopPlayback {
         Self::prepare_next_track_if_needed(&mut mgr, track_loader);
 
         match mgr.process_audio(data) {
-            Ok(_) => {
+            Ok(samples_processed) => {
                 // Reset error count on successful processing
                 *error_count = 0;
+
+                // Emit periodic position updates (~250ms interval)
+                // This is called from the audio callback to ensure accurate timing
+                mgr.maybe_emit_position_update(samples_processed);
 
                 // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
                 Self::forward_manager_events(&mut mgr, event_tx);
@@ -1521,41 +1535,38 @@ impl DesktopPlayback {
                     *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
                 }
 
+                // Helper to generate LFSR noise - proper pseudo-random noise prevents DAC
+                // artifacts that can occur with simple alternating patterns
+                let generate_noise = |state: &mut u32| -> f32 {
+                    *state ^= *state << 13;
+                    *state ^= *state >> 17;
+                    *state ^= *state << 5;
+                    ((*state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE
+                };
+
                 if *error_fade_samples_remaining > 0 {
                     // Apply fade-out to prevent click
                     let samples_to_fade = (*error_fade_samples_remaining).min(data.len());
                     for (i, sample) in data[..samples_to_fade].iter_mut().enumerate() {
                         let progress =
                             (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
-                        // Fade from current value toward DAC keepalive noise
-                        let noise = if i % 2 == 0 {
-                            DAC_KEEPALIVE
-                        } else {
-                            -DAC_KEEPALIVE
-                        };
+                        // Fade from current value toward DAC keepalive noise using LFSR
+                        let noise = generate_noise(error_noise_state);
                         *sample = *sample * progress + noise * (1.0 - progress);
                     }
                     *error_fade_samples_remaining =
                         error_fade_samples_remaining.saturating_sub(data.len());
 
-                    // Fill remaining samples with DAC keepalive noise
+                    // Fill remaining samples with DAC keepalive noise using LFSR
                     if samples_to_fade < data.len() {
-                        for (i, sample) in data[samples_to_fade..].iter_mut().enumerate() {
-                            *sample = if i % 2 == 0 {
-                                DAC_KEEPALIVE
-                            } else {
-                                -DAC_KEEPALIVE
-                            };
+                        for sample in &mut data[samples_to_fade..] {
+                            *sample = generate_noise(error_noise_state);
                         }
                     }
                 } else {
-                    // Fade complete - fill with DAC keepalive noise
-                    for (i, sample) in data.iter_mut().enumerate() {
-                        *sample = if i % 2 == 0 {
-                            DAC_KEEPALIVE
-                        } else {
-                            -DAC_KEEPALIVE
-                        };
+                    // Fade complete - fill with DAC keepalive noise using LFSR
+                    for sample in &mut *data {
+                        *sample = generate_noise(error_noise_state);
                     }
                 }
 
@@ -1602,6 +1613,7 @@ impl DesktopPlayback {
         load_requested: &mut bool,
         error_count: &mut u32,
         error_fade_samples_remaining: &mut usize,
+        error_noise_state: &mut u32,
     ) {
         // Update global counter for diagnostics
         let global_count = GLOBAL_I32_CALLBACK_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -1679,9 +1691,13 @@ impl DesktopPlayback {
         Self::prepare_next_track_if_needed(&mut mgr, track_loader);
 
         match mgr.process_audio(f32_slice) {
-            Ok(_) => {
+            Ok(samples_processed) => {
                 // Reset error count on successful processing
                 *error_count = 0;
+
+                // Emit periodic position updates (~250ms interval)
+                // This is called from the audio callback to ensure accurate timing
+                mgr.maybe_emit_position_update(samples_processed);
 
                 // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
                 Self::forward_manager_events(&mut mgr, event_tx);
@@ -1707,7 +1723,7 @@ impl DesktopPlayback {
                 // Error fade-out: 10ms at 48kHz = 480 samples (stereo = 960 total)
                 // Use a quick fade to DAC noise to prevent audible clicks
                 const ERROR_FADE_SAMPLES: usize = 960;
-                const DAC_KEEPALIVE: i32 = (0.000016_f32 * 2147483647.0) as i32; // -96dB scaled to i32
+                const DAC_KEEPALIVE_F32: f32 = 0.000016; // -96dB - inaudible but keeps DAC active
 
                 // Increment error counter
                 *error_count += 1;
@@ -1716,6 +1732,16 @@ impl DesktopPlayback {
                     // First error - start fade-out from current audio level
                     *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
                 }
+
+                // Helper to generate LFSR noise for i32 format - proper pseudo-random
+                // noise prevents DAC artifacts from simple alternating patterns
+                let generate_noise_i32 = |state: &mut u32| -> i32 {
+                    *state ^= *state << 13;
+                    *state ^= *state >> 17;
+                    *state ^= *state << 5;
+                    let noise_f32 = ((*state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE_F32;
+                    (noise_f32 * 2147483647.0) as i32
+                };
 
                 if *error_fade_samples_remaining > 0 {
                     // Apply fade-out to prevent click
@@ -1728,11 +1754,8 @@ impl DesktopPlayback {
                     {
                         let progress =
                             (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
-                        let noise = if i % 2 == 0 {
-                            DAC_KEEPALIVE
-                        } else {
-                            -DAC_KEEPALIVE
-                        };
+                        // Generate LFSR noise for proper randomness
+                        let noise = generate_noise_i32(error_noise_state);
                         // Convert f32 to i32 with fade
                         let scaled = (*in_sample * 2147483647.0) as i32;
                         *out_sample = ((scaled as f64 * progress as f64)
@@ -1742,24 +1765,16 @@ impl DesktopPlayback {
                     *error_fade_samples_remaining =
                         error_fade_samples_remaining.saturating_sub(data.len());
 
-                    // Fill remaining samples with DAC keepalive noise
+                    // Fill remaining samples with DAC keepalive noise using LFSR
                     if samples_to_fade < data.len() {
-                        for (i, sample) in data[samples_to_fade..].iter_mut().enumerate() {
-                            *sample = if i % 2 == 0 {
-                                DAC_KEEPALIVE
-                            } else {
-                                -DAC_KEEPALIVE
-                            };
+                        for sample in &mut data[samples_to_fade..] {
+                            *sample = generate_noise_i32(error_noise_state);
                         }
                     }
                 } else {
-                    // Fade complete - fill with DAC keepalive noise
-                    for (i, sample) in data.iter_mut().enumerate() {
-                        *sample = if i % 2 == 0 {
-                            DAC_KEEPALIVE
-                        } else {
-                            -DAC_KEEPALIVE
-                        };
+                    // Fade complete - fill with DAC keepalive noise using LFSR
+                    for sample in &mut *data {
+                        *sample = generate_noise_i32(error_noise_state);
                     }
                 }
 
@@ -1806,6 +1821,7 @@ impl DesktopPlayback {
         load_requested: &mut bool,
         error_count: &mut u32,
         error_fade_samples_remaining: &mut usize,
+        error_noise_state: &mut u32,
     ) {
         // Debug: log callback invocation with per-stream counter
         if callback_count == 1 {
@@ -1891,7 +1907,7 @@ impl DesktopPlayback {
                 // Error fade-out: 10ms at 48kHz = 480 samples (stereo = 960 total)
                 // Use a quick fade to DAC noise to prevent audible clicks
                 const ERROR_FADE_SAMPLES: usize = 960;
-                const DAC_KEEPALIVE: i16 = (0.000016_f32 * 32767.0) as i16; // -96dB scaled to i16
+                const DAC_KEEPALIVE_F32: f32 = 0.000016; // -96dB - inaudible but keeps DAC active
 
                 // Increment error counter
                 *error_count += 1;
@@ -1900,6 +1916,16 @@ impl DesktopPlayback {
                     // First error - start fade-out from current audio level
                     *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
                 }
+
+                // Helper to generate LFSR noise for i16 format - proper pseudo-random
+                // noise prevents DAC artifacts from simple alternating patterns
+                let generate_noise_i16 = |state: &mut u32| -> i16 {
+                    *state ^= *state << 13;
+                    *state ^= *state >> 17;
+                    *state ^= *state << 5;
+                    let noise_f32 = ((*state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE_F32;
+                    (noise_f32 * 32767.0) as i16
+                };
 
                 if *error_fade_samples_remaining > 0 {
                     // Apply fade-out to prevent click
@@ -1912,11 +1938,8 @@ impl DesktopPlayback {
                     {
                         let progress =
                             (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
-                        let noise = if i % 2 == 0 {
-                            DAC_KEEPALIVE
-                        } else {
-                            -DAC_KEEPALIVE
-                        };
+                        // Generate LFSR noise for proper randomness
+                        let noise = generate_noise_i16(error_noise_state);
                         // Convert f32 to i16 with fade
                         let scaled = (*in_sample * 32767.0) as i16;
                         *out_sample =
@@ -1925,24 +1948,16 @@ impl DesktopPlayback {
                     *error_fade_samples_remaining =
                         error_fade_samples_remaining.saturating_sub(data.len());
 
-                    // Fill remaining samples with DAC keepalive noise
+                    // Fill remaining samples with DAC keepalive noise using LFSR
                     if samples_to_fade < data.len() {
-                        for (i, sample) in data[samples_to_fade..].iter_mut().enumerate() {
-                            *sample = if i % 2 == 0 {
-                                DAC_KEEPALIVE
-                            } else {
-                                -DAC_KEEPALIVE
-                            };
+                        for sample in &mut data[samples_to_fade..] {
+                            *sample = generate_noise_i16(error_noise_state);
                         }
                     }
                 } else {
-                    // Fade complete - fill with DAC keepalive noise
-                    for (i, sample) in data.iter_mut().enumerate() {
-                        *sample = if i % 2 == 0 {
-                            DAC_KEEPALIVE
-                        } else {
-                            -DAC_KEEPALIVE
-                        };
+                    // Fade complete - fill with DAC keepalive noise using LFSR
+                    for sample in &mut *data {
+                        *sample = generate_noise_i16(error_noise_state);
                     }
                 }
 

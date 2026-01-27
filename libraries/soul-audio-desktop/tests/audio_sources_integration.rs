@@ -480,6 +480,173 @@ fn test_local_source_consistent_sample_count() {
     );
 }
 
+// ===== Position Accuracy Tests =====
+
+#[test]
+fn test_local_source_position_no_drift_long_playback() {
+    // Test that position doesn't drift over extended playback
+    // This catches issues with floating-point accumulation or sample counting errors
+    let temp_dir = TempDir::new().unwrap();
+    let wav_path = temp_dir.path().join("test.wav");
+    generate_test_wav(&wav_path, 5.0, 440.0).unwrap(); // 5 second file
+
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
+    let mut buffer = vec![0.0f32; 8820]; // 0.1 seconds of stereo at 44.1kHz
+    let expected_position_per_read = 0.1; // seconds
+
+    // Read for ~2 seconds worth of data (20 reads)
+    let mut total_reads = 0;
+    let mut last_position = 0.0;
+
+    for i in 0..20 {
+        let samples_read = source.read_samples(&mut buffer).unwrap();
+        if samples_read == 0 {
+            break; // EOF
+        }
+        total_reads += 1;
+
+        let position = source.position().as_secs_f64();
+        let expected_position = (i + 1) as f64 * expected_position_per_read;
+
+        // Position should be within 10ms of expected
+        // Allow slightly more tolerance due to decoder startup artifacts
+        let tolerance = if i < 2 { 0.05 } else { 0.01 };
+        assert!(
+            (position - expected_position).abs() < tolerance,
+            "Position drift detected at read {}: expected ~{:.3}s, got {:.3}s",
+            i + 1,
+            expected_position,
+            position
+        );
+
+        // Position should always increase monotonically
+        assert!(
+            position >= last_position,
+            "Position went backwards: {} -> {}",
+            last_position,
+            position
+        );
+        last_position = position;
+    }
+
+    assert!(
+        total_reads >= 15,
+        "Should have completed at least 15 reads, got {}",
+        total_reads
+    );
+}
+
+#[test]
+fn test_local_source_seek_position_accuracy() {
+    // Test that position after seek matches the actual seek target
+    let temp_dir = TempDir::new().unwrap();
+    let wav_path = temp_dir.path().join("test.wav");
+    generate_test_wav(&wav_path, 3.0, 440.0).unwrap(); // 3 second file
+
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
+
+    // Test various seek positions
+    let seek_positions = [0.5, 1.0, 2.0, 0.0, 1.5];
+
+    for &target_secs in &seek_positions {
+        source.seek(Duration::from_secs_f64(target_secs)).unwrap();
+
+        // Wait for async seek to complete
+        assert!(
+            wait_for_seek_complete(&source, target_secs, 0.1),
+            "Seek to {}s failed: position is {}s",
+            target_secs,
+            source.position().as_secs_f64()
+        );
+
+        // Read some samples to verify playback continues correctly
+        let mut buffer = vec![0.0f32; 4410]; // 0.05 seconds
+        source.read_samples(&mut buffer).unwrap();
+
+        // Position should have advanced by ~0.05 seconds
+        let position_after_read = source.position().as_secs_f64();
+        let expected_after_read = target_secs + 0.05;
+        assert!(
+            (position_after_read - expected_after_read).abs() < 0.02,
+            "Position after seek+read should be ~{:.2}s, got {:.3}s",
+            expected_after_read,
+            position_after_read
+        );
+    }
+}
+
+#[test]
+fn test_local_source_position_stable_during_pause_simulation() {
+    // Simulate pause by not reading samples, verify position doesn't drift
+    let temp_dir = TempDir::new().unwrap();
+    let wav_path = temp_dir.path().join("test.wav");
+    generate_test_wav(&wav_path, 2.0, 440.0).unwrap();
+
+    let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
+    let mut buffer = vec![0.0f32; 8820]; // 0.1 seconds
+
+    // Read some samples to advance position
+    source.read_samples(&mut buffer).unwrap();
+    let position_before_pause = source.position();
+
+    // Simulate pause by waiting without reading
+    std::thread::sleep(Duration::from_millis(200));
+
+    // Position should not have changed
+    let position_after_pause = source.position();
+    assert_eq!(
+        position_before_pause, position_after_pause,
+        "Position should not drift during pause: before={:?}, after={:?}",
+        position_before_pause, position_after_pause
+    );
+
+    // Resume reading
+    source.read_samples(&mut buffer).unwrap();
+    let position_after_resume = source.position();
+
+    // Position should have advanced by approximately the read duration
+    assert!(
+        position_after_resume > position_after_pause,
+        "Position should advance after resume"
+    );
+}
+
+#[test]
+fn test_local_source_position_accuracy_with_resampling() {
+    // Test position accuracy when resampling is involved
+    let temp_dir = TempDir::new().unwrap();
+    let wav_path = temp_dir.path().join("test.wav");
+    generate_test_wav(&wav_path, 2.0, 440.0).unwrap(); // 44.1kHz source
+
+    // Load with 48kHz target (requires resampling)
+    let mut source = LocalAudioSource::new(&wav_path, 48000).unwrap();
+    let buffer_size = 9600; // 0.1 seconds of stereo at 48kHz
+    let mut buffer = vec![0.0f32; buffer_size];
+    let expected_position_per_read = 0.1; // seconds
+
+    // Read 10 buffers (1 second of audio)
+    for i in 0..10 {
+        let samples_read = source.read_samples(&mut buffer).unwrap();
+        if samples_read == 0 {
+            break;
+        }
+
+        let position = source.position().as_secs_f64();
+        let expected = (i + 1) as f64 * expected_position_per_read;
+
+        // Position should be accurate even with resampling
+        // Allow slightly more tolerance for resampling
+        let tolerance = if i < 2 { 0.05 } else { 0.02 };
+        assert!(
+            (position - expected).abs() < tolerance,
+            "Position inaccurate with resampling at read {}: expected ~{:.3}s, got {:.3}s",
+            i + 1,
+            expected,
+            position
+        );
+    }
+}
+
 #[test]
 fn test_local_source_nonexistent_file_fails() {
     let result = LocalAudioSource::new("/nonexistent/path/file.wav", 44100);

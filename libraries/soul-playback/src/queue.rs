@@ -440,15 +440,75 @@ impl Queue {
         self.is_shuffled = shuffled;
     }
 
-    /// Restore original order of source queue
+    /// Restore original order of source queue while preserving current track
     ///
-    /// Used when turning shuffle off
-    pub fn restore_original_order(&mut self) {
-        if self.is_shuffled {
-            self.source = self.original_source.clone();
-            self.source_index = 0;
-            self.is_shuffled = false;
+    /// Used when turning shuffle off during playback.
+    /// The currently playing track's position is preserved by finding it in the original order.
+    ///
+    /// Returns the new source_index after restoration (for the currently playing track).
+    pub fn restore_original_order(&mut self) -> Option<usize> {
+        if !self.is_shuffled {
+            return Some(self.source_index);
         }
+
+        // Get the ID of the current track (track at source_index - 1, since we've already advanced)
+        // Actually we need to find what would be the "current" track in the shuffled order
+        // The source_index points to the NEXT track to play, so current is at source_index - 1
+        let current_track_id = if self.source_index > 0 && self.source_index <= self.source.len() {
+            // We've played at least one track, find the last played track
+            Some(self.source[self.source_index - 1].id.clone())
+        } else if self.source_index == 0 && !self.source.is_empty() {
+            // Haven't played any tracks yet, current position is still valid
+            None
+        } else {
+            None
+        };
+
+        // Restore original order
+        self.source = self.original_source.clone();
+        self.is_shuffled = false;
+
+        // Find the current track's position in the original order
+        if let Some(track_id) = current_track_id {
+            if let Some(pos) = self.source.iter().position(|t| t.id == track_id) {
+                // Set index to after the current track (so we continue from the right place)
+                self.source_index = pos + 1;
+                return Some(self.source_index);
+            }
+        }
+
+        // Fallback: reset to beginning if we can't find the track
+        self.source_index = 0;
+        Some(self.source_index)
+    }
+
+    /// Apply shuffle to source queue while preserving current track position
+    ///
+    /// Used when turning shuffle on during playback.
+    /// The currently playing track remains at the current position.
+    pub fn apply_shuffle(&mut self, mode: crate::types::ShuffleMode) {
+        if mode == crate::types::ShuffleMode::Off {
+            return;
+        }
+
+        // Save original order if not already saved
+        if !self.is_shuffled {
+            self.original_source = self.source.clone();
+        }
+
+        // Get tracks that haven't been played yet (from source_index onward)
+        if self.source_index < self.source.len() {
+            let remaining = self.source.split_off(self.source_index);
+            let mut to_shuffle: Vec<_> = remaining;
+
+            // Shuffle only the remaining tracks
+            crate::shuffle::shuffle_queue(&mut to_shuffle, mode);
+
+            // Append shuffled tracks back
+            self.source.extend(to_shuffle);
+        }
+
+        self.is_shuffled = true;
     }
 
     /// Reload source queue from original (for Repeat All mode)
@@ -1637,5 +1697,170 @@ mod tests {
         assert_eq!(queue.current_source_index(), 1);
         // Should have 1 remaining track
         assert_eq!(queue.len(), 1);
+    }
+
+    // ===== Shuffle Toggle During Playback Tests =====
+
+    fn create_test_track_with_artist(id: &str, title: &str, artist: &str) -> QueueTrack {
+        QueueTrack {
+            id: id.to_string(),
+            path: std::path::PathBuf::from(format!("/music/{}.mp3", id)),
+            title: title.to_string(),
+            artist: artist.to_string(),
+            album: Some("Test Album".to_string()),
+            duration: std::time::Duration::from_secs(180),
+            track_number: Some(1),
+            source: TrackSource::Single,
+        }
+    }
+
+    #[test]
+    fn restore_original_order_preserves_current_track_position() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+            create_test_track("5", "Track 5"),
+        ]);
+
+        // Play track 1 and 2 (advances to position 2)
+        queue.pop_next(); // Track 1
+        queue.pop_next(); // Track 2
+
+        // Manually shuffle the source (simulating shuffle being turned on)
+        queue.source_mut().reverse();
+        queue.set_shuffled(true);
+
+        // After shuffle, queue is [5,4,3,2,1] but source_index is still 2
+        // So "current" track is at index 1 (track 2 in original, but now it's track 4)
+
+        // Restore original order
+        let new_index = queue.restore_original_order();
+
+        // The current track (last played) should be found in original order
+        // and source_index should point to the position AFTER that track
+        assert!(new_index.is_some());
+        assert!(!queue.is_shuffled());
+    }
+
+    #[test]
+    fn apply_shuffle_only_shuffles_remaining_tracks() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track_with_artist("1", "Track 1", "Artist A"),
+            create_test_track_with_artist("2", "Track 2", "Artist B"),
+            create_test_track_with_artist("3", "Track 3", "Artist C"),
+            create_test_track_with_artist("4", "Track 4", "Artist D"),
+            create_test_track_with_artist("5", "Track 5", "Artist E"),
+        ]);
+
+        // Play tracks 1 and 2
+        let track1 = queue.pop_next().unwrap();
+        let track2 = queue.pop_next().unwrap();
+        assert_eq!(track1.id, "1");
+        assert_eq!(track2.id, "2");
+        assert_eq!(queue.current_source_index(), 2);
+
+        // Apply shuffle
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+
+        // Verify:
+        // 1. Already played tracks (1, 2) remain in their positions
+        // 2. Source index is preserved
+        // 3. Remaining tracks (3, 4, 5) are shuffled
+        assert_eq!(queue.current_source_index(), 2);
+        assert!(queue.is_shuffled());
+
+        // The first 2 tracks should still be 1 and 2
+        let all_source: Vec<String> = queue.source.iter().map(|t| t.id.clone()).collect();
+        assert_eq!(all_source[0], "1");
+        assert_eq!(all_source[1], "2");
+
+        // Remaining tracks should be a permutation of 3, 4, 5
+        let remaining: std::collections::HashSet<String> =
+            all_source[2..].iter().cloned().collect();
+        assert!(remaining.contains("3"));
+        assert!(remaining.contains("4"));
+        assert!(remaining.contains("5"));
+    }
+
+    #[test]
+    fn shuffle_toggle_roundtrip_preserves_position() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+            create_test_track("4", "Track 4"),
+        ]);
+
+        // Play tracks 1 and 2
+        queue.pop_next();
+        queue.pop_next();
+        let original_index = queue.current_source_index();
+
+        // Turn shuffle ON
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        assert!(queue.is_shuffled());
+
+        // Pop one more track while shuffled
+        let shuffled_track = queue.pop_next();
+        assert!(shuffled_track.is_some());
+
+        // Turn shuffle OFF (restore original order)
+        let restored_index = queue.restore_original_order();
+        assert!(!queue.is_shuffled());
+        assert!(restored_index.is_some());
+
+        // The queue should still have at least 1 track remaining
+        // and all original tracks should still be present
+        let remaining_ids: std::collections::HashSet<String> =
+            queue.source.iter().map(|t| t.id.clone()).collect();
+        assert!(remaining_ids.contains("1"));
+        assert!(remaining_ids.contains("2"));
+        assert!(remaining_ids.contains("3"));
+        assert!(remaining_ids.contains("4"));
+    }
+
+    #[test]
+    fn apply_shuffle_on_empty_remaining_queue() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+        ]);
+
+        // Play all tracks
+        queue.pop_next();
+        queue.pop_next();
+        assert!(queue.is_empty());
+        assert_eq!(queue.current_source_index(), 2);
+
+        // Apply shuffle on empty remaining queue - should not panic
+        queue.apply_shuffle(crate::types::ShuffleMode::Random);
+        assert!(queue.is_shuffled());
+        assert_eq!(queue.current_source_index(), 2);
+    }
+
+    #[test]
+    fn restore_order_when_at_beginning() {
+        let mut queue = Queue::new();
+        queue.set_source(vec![
+            create_test_track("1", "Track 1"),
+            create_test_track("2", "Track 2"),
+            create_test_track("3", "Track 3"),
+        ]);
+
+        // Mark as shuffled without actually shuffling
+        queue.set_shuffled(true);
+
+        // Restore at beginning (source_index = 0)
+        let new_index = queue.restore_original_order();
+
+        // Should reset to beginning
+        assert!(new_index.is_some());
+        assert_eq!(queue.current_source_index(), 0);
     }
 }

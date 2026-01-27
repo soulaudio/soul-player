@@ -104,6 +104,14 @@ impl Default for CompressorSettings {
     }
 }
 
+/// Number of samples for bypass fade (prevents clicks when enabling/disabling)
+/// At 44.1kHz, 256 samples = ~5.8ms, which is imperceptible but prevents clicks
+const BYPASS_FADE_SAMPLES: usize = 256;
+
+/// Number of samples over which to smooth threshold and makeup gain changes
+/// At 44.1kHz, 64 samples = ~1.5ms, which is imperceptible but prevents clicks
+const SMOOTH_SAMPLES: u32 = 64;
+
 /// Dynamic Range Compressor
 ///
 /// Uses a two-stage design for proper timing and low THD:
@@ -116,6 +124,14 @@ impl Default for CompressorSettings {
 /// - Peak detection needs SLOW release to hold peaks across waveform cycles (reduces THD)
 /// - Gain smoothing uses the user-configured attack/release times
 /// - These are independent: peak detector affects level accuracy, gain smoother affects timing
+///
+/// # Bypass Fade
+/// When enabling/disabling the effect, a crossfade is applied over 256 samples
+/// (~5.8ms at 44.1kHz) to prevent audible clicks.
+///
+/// # Parameter Smoothing
+/// Threshold and makeup gain changes are smoothed over 64 samples (~1.5ms)
+/// to prevent audible clicks when adjusting parameters during playback.
 pub struct Compressor {
     settings: CompressorSettings,
     enabled: bool,
@@ -134,8 +150,22 @@ pub struct Compressor {
     gr_release_coeff: f32,   // User-configured release
     makeup_gain_linear: f32,
 
+    // Parameter smoothing for threshold
+    target_threshold_db: f32,
+    smoothed_threshold_db: f32,
+    threshold_smooth_samples: u32,
+
+    // Parameter smoothing for makeup gain
+    target_makeup_gain_linear: f32,
+    smoothed_makeup_gain_linear: f32,
+    makeup_smooth_samples: u32,
+
     sample_rate: u32,
     needs_update: bool,
+
+    // Bypass fade state
+    bypass_fade_samples: usize,
+    bypass_fade_direction: i8,
 }
 
 impl Compressor {
@@ -146,6 +176,7 @@ impl Compressor {
 
     /// Create compressor with specific settings
     pub fn with_settings(settings: CompressorSettings) -> Self {
+        let makeup_gain_linear = 10.0_f32.powf(settings.makeup_gain_db / 20.0);
         let mut comp = Self {
             settings,
             enabled: true,
@@ -154,9 +185,18 @@ impl Compressor {
             peak_release_coeff: 0.0,
             gr_attack_coeff: 0.0,
             gr_release_coeff: 0.0,
-            makeup_gain_linear: 1.0,
+            makeup_gain_linear,
+            // Initialize smoothed parameters to their target values
+            target_threshold_db: settings.threshold_db,
+            smoothed_threshold_db: settings.threshold_db,
+            threshold_smooth_samples: 0,
+            target_makeup_gain_linear: makeup_gain_linear,
+            smoothed_makeup_gain_linear: makeup_gain_linear,
+            makeup_smooth_samples: 0,
             sample_rate: 44100,
             needs_update: true,
+            bypass_fade_samples: 0,
+            bypass_fade_direction: 0,
         };
         comp.update_coefficients();
         comp
@@ -175,8 +215,17 @@ impl Compressor {
     }
 
     /// Set threshold (in dB)
+    ///
+    /// The threshold is smoothed over 64 samples to prevent clicks.
     pub fn set_threshold(&mut self, threshold_db: f32) {
-        self.settings.threshold_db = threshold_db.clamp(-60.0, 0.0);
+        let new_threshold = threshold_db.clamp(-60.0, 0.0);
+        self.settings.threshold_db = new_threshold;
+
+        // Only initiate smoothing if threshold actually changed
+        if (new_threshold - self.target_threshold_db).abs() > 0.01 {
+            self.target_threshold_db = new_threshold;
+            self.threshold_smooth_samples = SMOOTH_SAMPLES;
+        }
         self.needs_update = true;
     }
 
@@ -198,8 +247,18 @@ impl Compressor {
     }
 
     /// Set makeup gain (in dB)
+    ///
+    /// The makeup gain is smoothed over 64 samples to prevent clicks.
     pub fn set_makeup_gain(&mut self, gain_db: f32) {
-        self.settings.makeup_gain_db = gain_db.clamp(0.0, 24.0);
+        let new_gain_db = gain_db.clamp(0.0, 24.0);
+        self.settings.makeup_gain_db = new_gain_db;
+
+        let new_gain_linear = 10.0_f32.powf(new_gain_db / 20.0);
+        // Only initiate smoothing if gain actually changed
+        if (new_gain_linear - self.target_makeup_gain_linear).abs() > 0.001 {
+            self.target_makeup_gain_linear = new_gain_linear;
+            self.makeup_smooth_samples = SMOOTH_SAMPLES;
+        }
         self.needs_update = true;
     }
 
@@ -317,6 +376,80 @@ impl Compressor {
 
         self.gain_reduction_db = coeff * self.gain_reduction_db + (1.0 - coeff) * target_gr_db;
     }
+
+    /// Smooth threshold toward target value
+    #[inline]
+    fn smooth_threshold(&mut self) {
+        if self.threshold_smooth_samples == 0 {
+            return;
+        }
+
+        let alpha = 1.0 / self.threshold_smooth_samples as f32;
+        self.smoothed_threshold_db +=
+            alpha * (self.target_threshold_db - self.smoothed_threshold_db);
+        self.threshold_smooth_samples -= 1;
+
+        // Snap to target when done
+        if self.threshold_smooth_samples == 0 {
+            self.smoothed_threshold_db = self.target_threshold_db;
+        }
+    }
+
+    /// Smooth makeup gain toward target value
+    #[inline]
+    fn smooth_makeup_gain(&mut self) {
+        if self.makeup_smooth_samples == 0 {
+            return;
+        }
+
+        let alpha = 1.0 / self.makeup_smooth_samples as f32;
+        self.smoothed_makeup_gain_linear +=
+            alpha * (self.target_makeup_gain_linear - self.smoothed_makeup_gain_linear);
+        self.makeup_smooth_samples -= 1;
+
+        // Snap to target when done
+        if self.makeup_smooth_samples == 0 {
+            self.smoothed_makeup_gain_linear = self.target_makeup_gain_linear;
+        }
+    }
+
+    /// Compute the desired output level using the smoothed threshold
+    #[inline]
+    fn compute_output_level_smoothed(&self, input_db: f32) -> f32 {
+        let threshold = self.smoothed_threshold_db;
+        let ratio = self.settings.ratio;
+        let knee = self.settings.knee_db;
+
+        if knee <= 0.0 {
+            // Hard knee
+            if input_db <= threshold {
+                input_db
+            } else {
+                threshold + (input_db - threshold) / ratio
+            }
+        } else {
+            // Soft knee
+            let half_knee = knee / 2.0;
+            let knee_start = threshold - half_knee;
+            let knee_end = threshold + half_knee;
+
+            if input_db <= knee_start {
+                input_db
+            } else if input_db >= knee_end {
+                threshold + (input_db - threshold) / ratio
+            } else {
+                let x = input_db - knee_start;
+                let slope_change = (1.0 - 1.0 / ratio) / (2.0 * knee);
+                input_db - slope_change * x * x
+            }
+        }
+    }
+
+    /// Compute gain reduction using the smoothed threshold
+    #[inline]
+    fn compute_gain_reduction_smoothed(&self, input_db: f32) -> f32 {
+        self.compute_output_level_smoothed(input_db) - input_db
+    }
 }
 
 impl Default for Compressor {
@@ -327,8 +460,11 @@ impl Default for Compressor {
 
 impl AudioEffect for Compressor {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        // Bypass if disabled
-        if !self.enabled {
+        // Check if we're in a bypass fade transition or enabled
+        let is_fading = self.bypass_fade_samples > 0;
+
+        // Skip processing entirely if disabled and not fading
+        if !self.enabled && !is_fading {
             return;
         }
 
@@ -343,6 +479,14 @@ impl AudioEffect for Compressor {
 
         // Process interleaved stereo buffer with linked stereo detection
         for chunk in buffer.chunks_exact_mut(2) {
+            // Smooth parameter changes
+            self.smooth_threshold();
+            self.smooth_makeup_gain();
+
+            // Store dry signal for crossfade
+            let dry_left = chunk[0];
+            let dry_right = chunk[1];
+
             // For linked stereo, use the louder channel (peak of both)
             let max_sample = chunk[0].abs().max(chunk[1].abs());
 
@@ -357,8 +501,8 @@ impl AudioEffect for Compressor {
             // This holds peaks across waveform cycles for accurate level measurement
             self.update_peak_level(input_db);
 
-            // Compute target gain reduction based on peak level
-            let target_gr_db = self.compute_gain_reduction(self.peak_level_db);
+            // Compute target gain reduction based on peak level (using smoothed threshold)
+            let target_gr_db = self.compute_gain_reduction_smoothed(self.peak_level_db);
 
             // Stage 2: Smooth the gain reduction with attack/release
             // This is where the user-configurable timing happens
@@ -367,19 +511,60 @@ impl AudioEffect for Compressor {
             // Convert smoothed gain reduction to linear
             let gain = 10.0_f32.powf(self.gain_reduction_db / 20.0);
 
-            // Apply same gain to both channels (linked stereo)
-            // This preserves stereo image
-            chunk[0] = chunk[0] * gain * self.makeup_gain_linear;
-            chunk[1] = chunk[1] * gain * self.makeup_gain_linear;
+            // Apply same gain to both channels (linked stereo) with smoothed makeup gain
+            let wet_left = chunk[0] * gain * self.smoothed_makeup_gain_linear;
+            let wet_right = chunk[1] * gain * self.smoothed_makeup_gain_linear;
+
+            // Apply bypass fade if transitioning
+            if self.bypass_fade_samples > 0 {
+                // Calculate wet/dry mix based on fade progress
+                let fade_progress = self.bypass_fade_samples as f32 / BYPASS_FADE_SAMPLES as f32;
+
+                let wet_gain = if self.bypass_fade_direction == 1 {
+                    // Fading in (enabling): wet goes from 0 to 1
+                    1.0 - fade_progress
+                } else {
+                    // Fading out (disabling): wet goes from 1 to 0
+                    fade_progress
+                };
+                let dry_gain = 1.0 - wet_gain;
+
+                // Crossfade between dry and wet
+                chunk[0] = dry_left * dry_gain + wet_left * wet_gain;
+                chunk[1] = dry_right * dry_gain + wet_right * wet_gain;
+
+                self.bypass_fade_samples -= 1;
+
+                // Clear fade direction when done
+                if self.bypass_fade_samples == 0 {
+                    self.bypass_fade_direction = 0;
+                }
+            } else {
+                // No fade, use wet signal directly
+                chunk[0] = wet_left;
+                chunk[1] = wet_right;
+            }
         }
     }
 
     fn reset(&mut self) {
         self.peak_level_db = -120.0;
         self.gain_reduction_db = 0.0;
+        // Snap smoothed parameters to target when resetting
+        self.smoothed_threshold_db = self.target_threshold_db;
+        self.threshold_smooth_samples = 0;
+        self.smoothed_makeup_gain_linear = self.target_makeup_gain_linear;
+        self.makeup_smooth_samples = 0;
+        // Clear bypass fade state on reset
+        self.bypass_fade_samples = 0;
+        self.bypass_fade_direction = 0;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
+        if enabled != self.enabled {
+            self.bypass_fade_samples = BYPASS_FADE_SAMPLES;
+            self.bypass_fade_direction = if enabled { 1 } else { -1 };
+        }
         self.enabled = enabled;
     }
 
@@ -488,12 +673,17 @@ mod tests {
         let mut comp = Compressor::with_settings(CompressorSettings::aggressive());
         comp.set_enabled(false);
 
+        // Complete the bypass fade first
+        let mut fade_buffer = vec![0.8; BYPASS_FADE_SAMPLES * 2];
+        comp.process(&mut fade_buffer, 44100);
+
+        // Now test that subsequent processing is bypassed
         let mut buffer = vec![0.8; 100];
         let original = buffer.clone();
 
         comp.process(&mut buffer, 44100);
 
-        // Should be unchanged (compressor disabled)
+        // Should be unchanged (compressor disabled and fade complete)
         assert_eq!(buffer, original);
     }
 
@@ -608,6 +798,262 @@ mod tests {
             (output - (-17.5)).abs() < 0.01,
             "Expected -17.5dB output, got {}",
             output
+        );
+    }
+
+    // ==================== Bypass Fade Tests ====================
+
+    #[test]
+    fn bypass_fade_on_disable() {
+        let mut comp = Compressor::with_settings(CompressorSettings::aggressive());
+
+        // Process some signal to warm up
+        let mut warmup = vec![0.8; 500];
+        comp.process(&mut warmup, 44100);
+
+        // Disable the effect - should trigger fade
+        comp.set_enabled(false);
+
+        // Verify fade state is set
+        assert!(
+            comp.bypass_fade_samples > 0,
+            "Fade should be in progress after disable"
+        );
+        assert_eq!(
+            comp.bypass_fade_direction, -1,
+            "Fade direction should be -1 (fading out)"
+        );
+
+        // Process buffer during fade - should crossfade to dry
+        let mut fade_buffer = vec![0.8; BYPASS_FADE_SAMPLES * 2];
+        comp.process(&mut fade_buffer, 44100);
+
+        // After processing enough samples, fade should be complete
+        assert_eq!(
+            comp.bypass_fade_samples, 0,
+            "Fade should be complete after processing"
+        );
+    }
+
+    #[test]
+    fn bypass_fade_on_enable() {
+        let mut comp = Compressor::with_settings(CompressorSettings::aggressive());
+        comp.set_enabled(false);
+
+        // Process to complete disable fade
+        let mut fade_out = vec![0.5; BYPASS_FADE_SAMPLES * 2];
+        comp.process(&mut fade_out, 44100);
+
+        // Enable - should trigger fade in
+        comp.set_enabled(true);
+
+        assert_eq!(
+            comp.bypass_fade_direction, 1,
+            "Fade direction should be 1 (fading in)"
+        );
+        assert_eq!(comp.bypass_fade_samples, BYPASS_FADE_SAMPLES);
+    }
+
+    #[test]
+    fn no_fade_when_setting_same_enabled_state() {
+        let mut comp = Compressor::new();
+
+        // Set enabled to true (already true) - should not trigger fade
+        comp.set_enabled(true);
+        assert_eq!(comp.bypass_fade_samples, 0);
+
+        // Disable and complete fade
+        comp.set_enabled(false);
+        let mut buffer = vec![0.5; BYPASS_FADE_SAMPLES * 2];
+        comp.process(&mut buffer, 44100);
+
+        // Set disabled again (already disabled) - should not trigger fade
+        comp.set_enabled(false);
+        assert_eq!(comp.bypass_fade_samples, 0);
+    }
+
+    #[test]
+    fn bypass_fade_prevents_clicks() {
+        let mut comp = Compressor::with_settings(CompressorSettings::aggressive());
+
+        // Warm up with signal that will be compressed
+        let mut warmup = vec![0.8; 500];
+        comp.process(&mut warmup, 44100);
+
+        // Disable and process - should crossfade smoothly
+        comp.set_enabled(false);
+
+        let mut fade_buffer = vec![0.8; 500];
+        comp.process(&mut fade_buffer, 44100);
+
+        // Check for smooth transitions (no large jumps)
+        for window in fade_buffer.windows(2) {
+            let delta = (window[1] - window[0]).abs();
+            assert!(
+                delta < 0.2,
+                "Large jump detected during bypass fade: {} to {} (diff {})",
+                window[0],
+                window[1],
+                delta
+            );
+        }
+    }
+
+    #[test]
+    fn reset_clears_bypass_fade() {
+        let mut comp = Compressor::new();
+
+        // Trigger a fade
+        comp.set_enabled(false);
+        assert!(comp.bypass_fade_samples > 0);
+
+        // Reset should clear fade state
+        comp.reset();
+        assert_eq!(comp.bypass_fade_samples, 0);
+        assert_eq!(comp.bypass_fade_direction, 0);
+    }
+
+    #[test]
+    fn disabled_compressor_bypassed_after_fade() {
+        let mut comp = Compressor::with_settings(CompressorSettings::aggressive());
+        comp.set_enabled(false);
+
+        // Complete the fade
+        let mut fade_buffer = vec![0.8; BYPASS_FADE_SAMPLES * 2];
+        comp.process(&mut fade_buffer, 44100);
+
+        // Now the fade is complete, subsequent processing should bypass entirely
+        let original = vec![0.8, 0.8, 0.8, 0.8];
+        let mut buffer = original.clone();
+        comp.process(&mut buffer, 44100);
+
+        // Should be unchanged (compressor disabled and fade complete)
+        assert_eq!(buffer, original);
+    }
+
+    // ==================== Parameter Smoothing Tests ====================
+
+    #[test]
+    fn threshold_change_is_smoothed() {
+        let mut comp = Compressor::new();
+
+        // Set initial threshold
+        comp.set_threshold(-20.0);
+
+        // Process to apply initial threshold
+        let mut buffer = vec![0.8; 200];
+        comp.process(&mut buffer, 44100);
+
+        // Change threshold significantly
+        comp.set_threshold(-10.0);
+
+        // The threshold change should not be instant
+        assert!(
+            comp.threshold_smooth_samples > 0,
+            "Threshold smoothing should be active"
+        );
+    }
+
+    #[test]
+    fn threshold_change_no_clicks() {
+        let mut comp = Compressor::new();
+
+        let mut all_samples = Vec::new();
+
+        for i in 0..10 {
+            // Change threshold periodically
+            let threshold = -20.0 + (i as f32 * 2.0);
+            comp.set_threshold(threshold);
+
+            let mut buffer = vec![0.8; 50];
+            comp.process(&mut buffer, 44100);
+            all_samples.extend(buffer);
+        }
+
+        // Check for smooth transitions (no large jumps)
+        for i in 1..all_samples.len() {
+            let delta = (all_samples[i] - all_samples[i - 1]).abs();
+            assert!(
+                delta < 0.3,
+                "Large jump at {}: {} -> {}",
+                i,
+                all_samples[i - 1],
+                all_samples[i]
+            );
+        }
+    }
+
+    #[test]
+    fn makeup_gain_change_is_smoothed() {
+        let mut comp = Compressor::new();
+
+        // Set initial makeup gain
+        comp.set_makeup_gain(0.0);
+
+        // Process to apply initial gain
+        let mut buffer = vec![0.5; 200];
+        comp.process(&mut buffer, 44100);
+
+        // Change makeup gain significantly
+        comp.set_makeup_gain(12.0);
+
+        // The gain change should not be instant
+        assert!(
+            comp.makeup_smooth_samples > 0,
+            "Makeup gain smoothing should be active"
+        );
+    }
+
+    #[test]
+    fn makeup_gain_change_no_clicks() {
+        let mut comp = Compressor::new();
+        comp.set_threshold(-30.0); // Low threshold so compression is active
+
+        let mut all_samples = Vec::new();
+
+        for i in 0..5 {
+            // Change makeup gain periodically
+            let gain = (i as f32) * 4.0;
+            comp.set_makeup_gain(gain);
+
+            let mut buffer = vec![0.3; 100];
+            comp.process(&mut buffer, 44100);
+            all_samples.extend(buffer);
+        }
+
+        // Check for smooth transitions (no large jumps)
+        for i in 1..all_samples.len() {
+            let delta = (all_samples[i] - all_samples[i - 1]).abs();
+            assert!(
+                delta < 0.3,
+                "Large jump at {}: {} -> {}",
+                i,
+                all_samples[i - 1],
+                all_samples[i]
+            );
+        }
+    }
+
+    #[test]
+    fn reset_clears_parameter_smoothing() {
+        let mut comp = Compressor::new();
+
+        // Trigger smoothing
+        comp.set_threshold(-10.0);
+        comp.set_makeup_gain(12.0);
+
+        assert!(comp.threshold_smooth_samples > 0);
+        assert!(comp.makeup_smooth_samples > 0);
+
+        // Reset should clear smoothing state
+        comp.reset();
+
+        assert_eq!(comp.threshold_smooth_samples, 0);
+        assert_eq!(comp.makeup_smooth_samples, 0);
+        assert_eq!(comp.smoothed_threshold_db, comp.target_threshold_db);
+        assert_eq!(
+            comp.smoothed_makeup_gain_linear,
+            comp.target_makeup_gain_linear
         );
     }
 }

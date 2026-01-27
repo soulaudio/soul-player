@@ -55,6 +55,10 @@ impl LimiterSettings {
 /// At 44.1kHz, 64 samples = ~1.5ms, which is imperceptible but prevents clicks
 const SMOOTH_SAMPLES: u32 = 64;
 
+/// Number of samples for bypass fade (prevents clicks when enabling/disabling)
+/// At 44.1kHz, 256 samples = ~5.8ms, which is imperceptible but prevents clicks
+const BYPASS_FADE_SAMPLES: usize = 256;
+
 /// Brick-wall limiter effect
 ///
 /// # Real-Time Safety
@@ -65,6 +69,10 @@ const SMOOTH_SAMPLES: u32 = 64;
 /// # Parameter Smoothing
 /// Threshold changes are smoothed over 64 samples (~1.5ms) to prevent
 /// audible clicks when adjusting the threshold during playback.
+///
+/// # Bypass Fade
+/// When enabling/disabling the effect, a crossfade is applied over 256 samples
+/// (~5.8ms at 44.1kHz) to prevent audible clicks.
 pub struct Limiter {
     settings: LimiterSettings,
     /// Target threshold (set by user, smoothed toward)
@@ -76,6 +84,10 @@ pub struct Limiter {
     release_coeff: f32,
     envelope: f32,
     enabled: bool,
+    /// Remaining samples in bypass fade transition
+    bypass_fade_samples: usize,
+    /// Bypass fade direction: 1 = fading in (enabling), -1 = fading out (disabling), 0 = stable
+    bypass_fade_direction: i8,
 }
 
 impl Limiter {
@@ -98,6 +110,8 @@ impl Limiter {
             release_coeff: 0.0, // Will be updated in process()
             envelope: 0.0,      // Start with no signal detected
             enabled: true,
+            bypass_fade_samples: 0,
+            bypass_fade_direction: 0,
         }
     }
 
@@ -162,7 +176,11 @@ impl Default for Limiter {
 
 impl AudioEffect for Limiter {
     fn process(&mut self, buffer: &mut [f32], sample_rate: u32) {
-        if !self.enabled {
+        // Check if we're in a bypass fade transition or enabled
+        let is_fading = self.bypass_fade_samples > 0;
+
+        // Skip processing entirely if disabled and not fading
+        if !self.enabled && !is_fading {
             return;
         }
 
@@ -181,6 +199,10 @@ impl AudioEffect for Limiter {
         for chunk in buffer.chunks_exact_mut(2) {
             // Smooth threshold to prevent clicks during parameter changes
             self.smooth_threshold();
+
+            // Store dry signal for crossfade
+            let dry_left = chunk[0];
+            let dry_right = chunk[1];
 
             let left = chunk[0];
             let right = chunk[1];
@@ -204,9 +226,39 @@ impl AudioEffect for Limiter {
                 1.0
             };
 
-            // Apply limiting
-            chunk[0] = left * gain;
-            chunk[1] = right * gain;
+            // Apply limiting to get wet signal
+            let wet_left = left * gain;
+            let wet_right = right * gain;
+
+            // Apply bypass fade if transitioning
+            if self.bypass_fade_samples > 0 {
+                // Calculate wet/dry mix based on fade progress
+                let fade_progress = self.bypass_fade_samples as f32 / BYPASS_FADE_SAMPLES as f32;
+
+                let wet_gain = if self.bypass_fade_direction == 1 {
+                    // Fading in (enabling): wet goes from 0 to 1
+                    1.0 - fade_progress
+                } else {
+                    // Fading out (disabling): wet goes from 1 to 0
+                    fade_progress
+                };
+                let dry_gain = 1.0 - wet_gain;
+
+                // Crossfade between dry and wet
+                chunk[0] = dry_left * dry_gain + wet_left * wet_gain;
+                chunk[1] = dry_right * dry_gain + wet_right * wet_gain;
+
+                self.bypass_fade_samples -= 1;
+
+                // Clear fade direction when done
+                if self.bypass_fade_samples == 0 {
+                    self.bypass_fade_direction = 0;
+                }
+            } else {
+                // No fade, use wet signal directly
+                chunk[0] = wet_left;
+                chunk[1] = wet_right;
+            }
         }
     }
 
@@ -215,9 +267,16 @@ impl AudioEffect for Limiter {
                              // Snap threshold to target when resetting
         self.threshold_linear = self.target_threshold_linear;
         self.smooth_samples_remaining = 0;
+        // Clear bypass fade state on reset
+        self.bypass_fade_samples = 0;
+        self.bypass_fade_direction = 0;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
+        if enabled != self.enabled {
+            self.bypass_fade_samples = BYPASS_FADE_SAMPLES;
+            self.bypass_fade_direction = if enabled { 1 } else { -1 };
+        }
         self.enabled = enabled;
     }
 
@@ -327,12 +386,17 @@ mod tests {
         let mut limiter = Limiter::new();
         limiter.set_enabled(false);
 
+        // Complete the bypass fade first
+        let mut fade_buffer = vec![1.0; BYPASS_FADE_SAMPLES * 2];
+        limiter.process(&mut fade_buffer, 44100);
+
+        // Now test that subsequent processing is bypassed
         let original = vec![1.5, 1.5, 2.0, 2.0]; // Would be limited
         let mut buffer = original.clone();
 
         limiter.process(&mut buffer, 44100);
 
-        // Should be unchanged (effect disabled)
+        // Should be unchanged (effect disabled and fade complete)
         assert_eq!(buffer, original);
     }
 
@@ -936,5 +1000,165 @@ mod tests {
                 envelope_after_loud
             );
         }
+    }
+
+    // ==================== Bypass Fade Tests ====================
+
+    #[test]
+    fn bypass_fade_on_disable() {
+        let mut limiter = Limiter::with_settings(LimiterSettings {
+            threshold_db: -6.0,
+            release_ms: 50.0,
+        });
+
+        // Process some signal to warm up
+        let mut warmup = vec![1.5; 200];
+        limiter.process(&mut warmup, 44100);
+
+        // Disable the effect - should trigger fade
+        limiter.set_enabled(false);
+
+        // Verify fade state is set
+        assert!(
+            limiter.bypass_fade_samples > 0,
+            "Fade should be in progress after disable"
+        );
+        assert_eq!(
+            limiter.bypass_fade_direction, -1,
+            "Fade direction should be -1 (fading out)"
+        );
+
+        // Process buffer during fade - should crossfade to dry
+        let mut fade_buffer = vec![1.5; BYPASS_FADE_SAMPLES * 2];
+        limiter.process(&mut fade_buffer, 44100);
+
+        // After processing enough samples, fade should be complete
+        assert_eq!(
+            limiter.bypass_fade_samples, 0,
+            "Fade should be complete after processing"
+        );
+    }
+
+    #[test]
+    fn bypass_fade_on_enable() {
+        let mut limiter = Limiter::with_settings(LimiterSettings {
+            threshold_db: -6.0,
+            release_ms: 50.0,
+        });
+        limiter.set_enabled(false);
+
+        // Process to complete disable fade
+        let mut fade_out = vec![1.0; BYPASS_FADE_SAMPLES * 2];
+        limiter.process(&mut fade_out, 44100);
+
+        // Enable - should trigger fade in
+        limiter.set_enabled(true);
+
+        assert_eq!(
+            limiter.bypass_fade_direction, 1,
+            "Fade direction should be 1 (fading in)"
+        );
+        assert_eq!(limiter.bypass_fade_samples, BYPASS_FADE_SAMPLES);
+    }
+
+    #[test]
+    fn no_fade_when_setting_same_enabled_state() {
+        let mut limiter = Limiter::new();
+
+        // Set enabled to true (already true) - should not trigger fade
+        limiter.set_enabled(true);
+        assert_eq!(limiter.bypass_fade_samples, 0);
+
+        // Disable and complete fade
+        limiter.set_enabled(false);
+        let mut buffer = vec![0.5; BYPASS_FADE_SAMPLES * 2];
+        limiter.process(&mut buffer, 44100);
+
+        // Set disabled again (already disabled) - should not trigger fade
+        limiter.set_enabled(false);
+        assert_eq!(limiter.bypass_fade_samples, 0);
+    }
+
+    #[test]
+    fn bypass_fade_prevents_clicks() {
+        let mut limiter = Limiter::with_settings(LimiterSettings {
+            threshold_db: -6.0,
+            release_ms: 50.0,
+        });
+
+        // Warm up with signal that will be limited
+        let mut warmup = vec![1.5; 500];
+        limiter.process(&mut warmup, 44100);
+
+        // Disable and process - should crossfade smoothly
+        limiter.set_enabled(false);
+
+        let mut fade_buffer = vec![1.5; 500];
+        limiter.process(&mut fade_buffer, 44100);
+
+        // Check for smooth transitions (no large jumps)
+        for window in fade_buffer.windows(2) {
+            let delta = (window[1] - window[0]).abs();
+            assert!(
+                delta < 0.2,
+                "Large jump detected during bypass fade: {} to {} (diff {})",
+                window[0],
+                window[1],
+                delta
+            );
+        }
+    }
+
+    #[test]
+    fn reset_clears_bypass_fade() {
+        let mut limiter = Limiter::new();
+
+        // Trigger a fade
+        limiter.set_enabled(false);
+        assert!(limiter.bypass_fade_samples > 0);
+
+        // Reset should clear fade state
+        limiter.reset();
+        assert_eq!(limiter.bypass_fade_samples, 0);
+        assert_eq!(limiter.bypass_fade_direction, 0);
+    }
+
+    #[test]
+    fn bypass_fade_toggle_mid_fade_changes_direction() {
+        let mut limiter = Limiter::new();
+
+        // Disable to start fade out
+        limiter.set_enabled(false);
+        assert_eq!(limiter.bypass_fade_direction, -1);
+
+        // Process partway through fade
+        let mut buffer = vec![0.5; BYPASS_FADE_SAMPLES / 2];
+        limiter.process(&mut buffer, 44100);
+
+        // Re-enable mid-fade - should restart fade
+        limiter.set_enabled(true);
+        assert_eq!(limiter.bypass_fade_direction, 1);
+        assert_eq!(limiter.bypass_fade_samples, BYPASS_FADE_SAMPLES);
+    }
+
+    #[test]
+    fn disabled_limiter_bypassed_after_fade() {
+        let mut limiter = Limiter::with_settings(LimiterSettings {
+            threshold_db: -6.0,
+            release_ms: 50.0,
+        });
+        limiter.set_enabled(false);
+
+        // Complete the fade
+        let mut fade_buffer = vec![1.5; BYPASS_FADE_SAMPLES * 2];
+        limiter.process(&mut fade_buffer, 44100);
+
+        // Now the fade is complete, subsequent processing should bypass entirely
+        let original = vec![1.5, -1.5, 1.5, -1.5];
+        let mut buffer = original.clone();
+        limiter.process(&mut buffer, 44100);
+
+        // Should be unchanged (limiter disabled and fade complete)
+        assert_eq!(buffer, original);
     }
 }
