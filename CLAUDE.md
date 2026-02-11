@@ -114,46 +114,75 @@ tracing::error!("[SCAN] TIMEOUT on file: {}", file_path.display());
 
 ## Essential Commands
 
+Soul Player uses `cargo xtask` for all development automation. Use `cargo xt` as shorthand.
+
 ### First-Time Setup
 ```bash
 corepack enable && yarn
-./scripts/setup-sqlx.sh      # Unix/Linux/macOS
-# Windows: see docs/SQLX_SETUP.md
+cargo xtask setup all        # Complete setup (deps + sqlx + env)
+# Or step-by-step:
+cargo xtask setup deps       # Install system dependencies
+cargo xtask setup sqlx       # Setup SQLx database
+cargo xtask setup env        # Setup environment files
 ```
 
 ### Development
 ```bash
-cargo build --all && cargo test --all
-cargo clippy --all-targets --all-features -- -D warnings
-cargo fmt --all
-yarn dev:desktop             # Desktop app
-cargo run -p soul-server     # Server
+cargo xtask dev desktop      # Desktop app with hot reload
+cargo xtask dev marketing    # Marketing site dev server
+# Or use yarn directly:
+yarn dev:desktop
+yarn dev:marketing
+```
+
+### Quality Checks
+```bash
+cargo xtask check precommit  # Full pre-commit pipeline (MUST pass before commit)
+# Or individual checks:
+cargo xtask check fmt [--fix]        # Rust formatting
+cargo xtask check clippy [--fix]     # Clippy lints
+cargo xtask check test               # Rust tests
+cargo xtask check typescript         # TypeScript type checks
+cargo xtask check lint [--fix]       # ESLint
+```
+
+### Build
+```bash
+cargo xtask build desktop [--release]   # Build desktop app
+cargo xtask build wasm [--watch]        # Build WASM modules
+cargo xtask build all                   # Build everything
+```
+
+### Testing
+```bash
+cargo xtask test audio e2e    # Audio E2E tests
+cargo xtask test import e2e   # Import tests
+cargo xtask test cache e2e    # Cache tests
+```
+
+### Cleanup
+```bash
+cargo xtask clean dev         # Clean dev artifacts (fast)
+cargo xtask clean full        # Nuclear clean (removes node_modules)
 ```
 
 ### Database Migrations
 ```bash
 cd libraries/soul-storage
 sqlx migrate add your_migration_name
-sqlx migrate run --source libraries/soul-storage/migrations
+sqlx migrate run --source migrations
 cargo sqlx prepare -- --lib
 git add .sqlx/
 ```
 
-### WASM Development
-Auto-builds via npm hooks. Requires `cargo install wasm-pack`.
-```bash
-cd applications/marketing
-yarn dev              # Auto-builds WASM
-yarn build:wasm       # Manual build
-```
-
 ### Version Management (CRITICAL)
-ALWAYS use `./scripts/bump-version.sh` - NEVER manually edit versions.
+ALWAYS use `cargo xtask version bump` - NEVER manually edit versions.
 
 ```bash
-./scripts/bump-version.sh 0.1.5              # Standard release
-./scripts/bump-version.sh 0.1.5 --dry-run    # Preview changes
-./scripts/bump-version.sh 1.0.0-beta.1       # Pre-release
+cargo xtask version current                  # Show current version
+cargo xtask version bump 0.1.5               # Standard release
+cargo xtask version bump 0.1.5 --dry-run     # Preview changes
+cargo xtask version bump 1.0.0-beta.1        # Pre-release
 ```
 
 **Updates**: Workspace `Cargo.toml`, all lib/app `Cargo.toml`, all `package.json`, `tauri.conf.json`, `.github/release-config.json`
@@ -172,16 +201,15 @@ Remove-Item "$env:APPDATA\Soul Player" -Recurse -Force -ErrorAction SilentlyCont
 Husky runs these automatically. ALL must pass before commit.
 
 ```bash
-# Rust
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --all
+# Quick check (recommended)
+cargo xtask check precommit
 
-# TypeScript
-yarn workspace soul-player-desktop run tsc --noEmit
-yarn workspace @soul-player/shared run tsc --noEmit
-yarn workspace soul-player-desktop run lint
-yarn workspace @soul-player/shared run lint
+# Or manual checks
+cargo xtask check fmt
+cargo xtask check clippy
+cargo xtask check test
+cargo xtask check typescript
+cargo xtask check lint
 ```
 
 **Bypass** (WIP only): `git commit --no-verify`
@@ -320,12 +348,13 @@ const wasmQueue = queue.map(track => ({
 7. **Shortcuts**: App-level only, use `PlayerCommandsContext`
 8. **Shared pages**: Use `useBackend()`, never `invoke()`
 9. **Playback**: Data → BackendContext, Control → PlayerCommandsContext. NEVER mix.
-10. **Versions**: ALWAYS use `./scripts/bump-version.sh`
+10. **Versions**: ALWAYS use `cargo xtask version bump`
 11. **Styling**: CSS variables + data attributes + opacity hover (NOT color changes)
 12. **Logging**: `tracing` only, never `println!`
+13. **Automation**: Use `cargo xtask` for all dev tasks, never run scripts directly
 
 ---
 
-**Last Updated**: 2026-01-23
+**Last Updated**: 2026-02-11
 **Rust Edition**: 2021
 **Platforms**: Windows, macOS, Linux

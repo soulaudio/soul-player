@@ -39,34 +39,32 @@ yarn workspace @soul-player/shared run lint
 ```
 
 ### Quick Pre-Commit Script
-Run all checks at once using the provided scripts:
+Run all checks at once:
 
-**Unix/Linux/macOS:**
+**Recommended (all platforms):**
 ```bash
-./scripts/pre-commit-check.sh
+cargo xtask check precommit
 ```
 
-**Windows (PowerShell):**
-```powershell
+**Alternative - Individual checks:**
+```bash
+cargo xtask check fmt        # Rust formatting
+cargo xtask check clippy     # Clippy lints
+cargo xtask check test       # Rust tests
+cargo xtask check typescript # TypeScript type checks
+cargo xtask check lint       # ESLint
+```
+
+**Legacy scripts (deprecated but still work):**
+```bash
+# Unix/Linux/macOS:
+./scripts/pre-commit-check.sh
+
+# Windows PowerShell:
 .\scripts\pre-commit-check.ps1
 ```
 
-**Manual (all platforms):**
-```bash
-# Rust
-cargo fmt --all --check && \
-cargo clippy --workspace --lib --bins --release -- -D warnings && \
-cargo test --all
-
-# TypeScript + ESLint
-yarn workspace soul-player-desktop run tsc --noEmit && \
-yarn workspace @soul-player/shared run tsc --noEmit && \
-yarn workspace @soul-player/marketing run tsc --noEmit && \
-yarn workspace soul-player-desktop run lint && \
-yarn workspace @soul-player/shared run lint
-```
-
-**For AI Agents/Claude Code**: Always run these checks after making code changes and fix any errors before committing. Use the pre-commit scripts for convenience.
+**For AI Agents/Claude Code**: Always run `cargo xtask check precommit` after making code changes and fix any errors before committing.
 
 ## Testing Requirements
 

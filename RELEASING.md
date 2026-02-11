@@ -6,7 +6,7 @@ This document explains how to create a new release of Soul Player.
 
 ```bash
 # 1. Bump version (updates all version files)
-./scripts/bump-version.sh 0.2.0
+cargo xtask version bump 0.2.0
 
 # 2. Commit and push
 git add -A
@@ -23,7 +23,7 @@ git push origin main
 
 Soul Player uses **automated releases** triggered by version bumps:
 
-1. Developer runs `bump-version.sh` to update version numbers
+1. Developer runs `cargo xtask version bump` to update version numbers
 2. Commits and pushes to `main`
 3. GitHub workflow detects the version change
 4. Workflow creates a git tag (e.g., `v0.2.0`)
@@ -55,13 +55,13 @@ Soul Player uses **automated releases** triggered by version bumps:
 
 ### 2. Bump Version
 
-Run the version bump script:
+Run the version bump command:
 
 ```bash
-./scripts/bump-version.sh 0.2.0
+cargo xtask version bump 0.2.0
 ```
 
-**What this script does:**
+**What this does:**
 - Validates version format (semver)
 - Updates version in ALL project files:
   - `Cargo.toml` (workspace root)
@@ -202,17 +202,14 @@ Once published, verify the release:
 
 **Solution:**
 ```bash
-# Check file permissions
+# Ensure you have Rust and cargo installed
+rustc --version
+
+# Try running the command again
+cargo xtask version bump 0.2.0
+
+# If using the old script, make it executable
 chmod +x scripts/bump-version.sh
-
-# Ensure jq is installed (optional but recommended)
-# macOS:
-brew install jq
-
-# Ubuntu/Debian:
-sudo apt-get install jq
-
-# Run script again
 ./scripts/bump-version.sh 0.2.0
 ```
 
@@ -223,7 +220,7 @@ sudo apt-get install jq
 **Solution:**
 ```bash
 # Option 1: Bump to a newer version
-./scripts/bump-version.sh 0.2.1
+cargo xtask version bump 0.2.1
 
 # Option 2: Delete existing tag (if this was a mistake)
 git tag -d v0.2.0
@@ -258,7 +255,7 @@ For urgent bug fixes, you can manually trigger a release:
 
 ```bash
 # 1. Bump version
-./scripts/bump-version.sh 0.1.1
+cargo xtask version bump 0.1.1
 
 # 2. Commit and push
 git add -A && git commit -m "chore: hotfix release v0.1.1"
@@ -285,22 +282,22 @@ For testing versions before stable release:
 
 ```bash
 # Alpha release (early testing)
-./scripts/bump-version.sh 0.2.0-alpha.1
+cargo xtask version bump 0.2.0-alpha.1
 git add -A && git commit -m "chore: alpha release v0.2.0-alpha.1"
 git push origin main
 
 # Beta release (feature complete)
-./scripts/bump-version.sh 0.2.0-beta.1
+cargo xtask version bump 0.2.0-beta.1
 git add -A && git commit -m "chore: beta release v0.2.0-beta.1"
 git push origin main
 
 # Release candidate
-./scripts/bump-version.sh 0.2.0-rc.1
+cargo xtask version bump 0.2.0-rc.1
 git add -A && git commit -m "chore: release candidate v0.2.0-rc.1"
 git push origin main
 
 # Final stable release
-./scripts/bump-version.sh 0.2.0
+cargo xtask version bump 0.2.0
 git add -A && git commit -m "chore: stable release v0.2.0"
 git push origin main
 ```
@@ -352,7 +349,7 @@ git push origin main
 
 ```bash
 # Fix the issue, then release a patch version
-./scripts/bump-version.sh 0.2.1
+cargo xtask version bump 0.2.1
 git add -A && git commit -m "chore: hotfix release v0.2.1"
 git push origin main
 ```

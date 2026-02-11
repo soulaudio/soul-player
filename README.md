@@ -175,7 +175,12 @@ corepack enable
 # Install dependencies
 yarn install
 
+# Setup development environment (first time only)
+cargo xtask setup all
+
 # Run the desktop app
+cargo xtask dev desktop
+# Or use yarn directly:
 yarn dev:desktop
 ```
 
@@ -186,10 +191,13 @@ yarn dev:desktop
 #### Quick Install (Recommended)
 
 ```bash
-# Unix/Linux/macOS (bash)
-./scripts/install-deps.sh
+# All platforms
+cargo xtask setup deps
 
-# Windows (PowerShell as Administrator)
+# Or use scripts directly (deprecated but still works)
+# Unix/Linux/macOS:
+./scripts/install-deps.sh
+# Windows PowerShell:
 .\scripts\install-deps.ps1 -AutoInstall
 ```
 
@@ -247,10 +255,8 @@ cargo install wasm-pack --locked        # WASM builds (optional, for marketing d
 **First time only**:
 
 ```bash
-# Unix/Linux/macOS
-./scripts/setup-sqlx.sh
-
-# Windows - see docs/SQLX_SETUP.md for PowerShell commands
+# All platforms
+cargo xtask setup sqlx
 ```
 
 See [docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md) for details.
@@ -260,7 +266,12 @@ See [docs/SQLX_SETUP.md](./docs/SQLX_SETUP.md) for details.
 ## Build
 
 ```bash
-# From repository root
+# Using xtask (recommended)
+cargo xtask build desktop [--release]   # Desktop app
+cargo xtask build wasm                  # Marketing WASM
+cargo xtask build all                   # Build everything
+
+# Or using yarn directly
 yarn build:desktop     # Desktop app
 yarn build:web         # Web player (for server)
 yarn build:marketing   # Marketing site
