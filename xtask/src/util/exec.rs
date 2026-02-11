@@ -18,7 +18,19 @@ pub fn run_command(program: &str, args: &[&str], description: &str) -> Result<bo
 pub fn run_command_inherit(program: &str, args: &[&str], description: &str) -> Result<bool> {
     println!("  {} {}", "Running:".cyan(), description);
 
-    let status = Command::new(program)
+    // Try to find the full path to the program
+    let program_path = which::which(program)
+        .with_context(|| {
+            format!(
+                "{} not found in PATH.\n  \
+                 Try running the command directly: {} {}",
+                program,
+                program,
+                args.join(" ")
+            )
+        })?;
+
+    let status = Command::new(program_path)
         .args(args)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -52,7 +64,19 @@ pub fn run_command_in_dir(
 ) -> Result<bool> {
     println!("  {} {} (in {:?})", "Running:".cyan(), description, dir);
 
-    let status = Command::new(program)
+    // Try to find the full path to the program
+    let program_path = which::which(program)
+        .with_context(|| {
+            format!(
+                "{} not found in PATH.\n  \
+                 Try running the command directly: {} {}",
+                program,
+                program,
+                args.join(" ")
+            )
+        })?;
+
+    let status = Command::new(program_path)
         .args(args)
         .current_dir(dir)
         .stdout(Stdio::inherit())
