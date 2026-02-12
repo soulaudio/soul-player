@@ -245,7 +245,10 @@ pub enum PlaybackCommand {
     SkipToQueueIndex(usize),
 
     /// Load playlist/album as new source queue (replaces playback context)
-    LoadPlaylist(Vec<QueueTrack>),
+    LoadPlaylist {
+        tracks: Vec<QueueTrack>,
+        start_index: usize,
+    },
 
     /// Append tracks to source queue (for lazy loading)
     AppendToSource(Vec<QueueTrack>),
@@ -291,13 +294,19 @@ impl std::fmt::Debug for PlaybackCommand {
             Self::ClearPlayNext => write!(f, "ClearPlayNext"),
             Self::ClearAddToQueue => write!(f, "ClearAddToQueue"),
             Self::SkipToQueueIndex(idx) => write!(f, "SkipToQueueIndex({})", idx),
-            Self::LoadPlaylist(_) => write!(f, "LoadPlaylist(..)"),
+            Self::LoadPlaylist { start_index, .. } => {
+                write!(f, "LoadPlaylist(start_index: {})", start_index)
+            }
             Self::AppendToSource(_) => write!(f, "AppendToSource(..)"),
             Self::SetShuffle(mode) => write!(f, "SetShuffle({:?})", mode),
             Self::CycleShuffle => write!(f, "CycleShuffle"),
             Self::SetRepeat(mode) => write!(f, "SetRepeat({:?})", mode),
-            Self::SwitchDevice(backend, device) => write!(f, "SwitchDevice({:?}, {})", backend, device),
-            Self::ActivateSource { track, .. } => write!(f, "ActivateSource {{ track: {} }}", track.title),
+            Self::SwitchDevice(backend, device) => {
+                write!(f, "SwitchDevice({:?}, {})", backend, device)
+            }
+            Self::ActivateSource { track, .. } => {
+                write!(f, "ActivateSource {{ track: {} }}", track.title)
+            }
         }
     }
 }
@@ -323,7 +332,13 @@ impl Clone for PlaybackCommand {
             Self::ClearPlayNext => Self::ClearPlayNext,
             Self::ClearAddToQueue => Self::ClearAddToQueue,
             Self::SkipToQueueIndex(idx) => Self::SkipToQueueIndex(*idx),
-            Self::LoadPlaylist(tracks) => Self::LoadPlaylist(tracks.clone()),
+            Self::LoadPlaylist {
+                tracks,
+                start_index,
+            } => Self::LoadPlaylist {
+                tracks: tracks.clone(),
+                start_index: *start_index,
+            },
             Self::AppendToSource(tracks) => Self::AppendToSource(tracks.clone()),
             Self::SetShuffle(mode) => Self::SetShuffle(*mode),
             Self::CycleShuffle => Self::CycleShuffle,
@@ -798,10 +813,9 @@ fn load_source_blocking(
     );
 
     // Create source
-    let source =
-        crate::sources::LocalAudioSource::new(&track.path, sample_rate).map_err(|e| {
-            crate::error::AudioError::PlaybackError(format!("Failed to create source: {}", e))
-        })?;
+    let source = crate::sources::LocalAudioSource::new(&track.path, sample_rate).map_err(|e| {
+        crate::error::AudioError::PlaybackError(format!("Failed to create source: {}", e))
+    })?;
 
     // Wait for buffer to fill
     while !source.is_ready() && start.elapsed() < timeout {
@@ -958,6 +972,16 @@ impl DesktopPlayback {
             "[Playback] Final configuration"
         );
         tracing::info!("[Playback] ========================================");
+
+        // SILENT PRE-WARM: Start stream immediately to eliminate first-play delay
+        // The audio callback will output silence until playback is requested
+        tracing::info!("[Playback] Starting audio stream immediately (silent pre-warm mode)");
+        if let Some(cpal_stream) = stream.lock().unwrap().as_ref() {
+            cpal_stream.play()?; // From<cpal::PlayStreamError> converts automatically
+            tracing::info!(
+                "[Playback] Audio stream started successfully (playing silence until first track)"
+            );
+        }
 
         Ok(Self {
             command_tx,
@@ -1627,6 +1651,7 @@ impl DesktopPlayback {
         }
 
         // Process audio into a temporary f32 buffer
+        // Silent pre-warm: audio callback fills silence automatically when no source active
         // TODO(Phase 2 optimization): Pre-allocate buffer in context to avoid allocation
         // For now, this works for all formats but should be optimized for real-time safety
         let mut f32_buffer = vec![0.0f32; data.len()];
@@ -1674,7 +1699,7 @@ impl DesktopPlayback {
 
         // Forward pending events from manager to UI
         // Uses the conversion function to translate between event types
-        Self::forward_manager_events(&mut mgr, ctx.event_tx);
+        Self::forward_manager_events(&mut mgr, ctx.event_tx, ctx.command_tx);
     }
 
     /// Forward events from `PlaybackManager` to the desktop event channel
@@ -1686,7 +1711,11 @@ impl DesktopPlayback {
     /// Processes ONE event per callback to bound latency. Real-time audio callbacks
     /// must have predictable execution time. If multiple events are queued, they'll
     /// be forwarded in subsequent callbacks.
-    fn forward_manager_events(mgr: &mut PlaybackManager, event_tx: &Sender<PlaybackEvent>) {
+    fn forward_manager_events(
+        mgr: &mut PlaybackManager,
+        event_tx: &Sender<PlaybackEvent>,
+        command_tx: &Sender<PlaybackCommand>,
+    ) {
         // Process only ONE event per callback to bound latency
         let events = mgr.drain_events();
         if let Some(event) = events.into_iter().next() {
@@ -1775,10 +1804,42 @@ impl DesktopPlayback {
                     Some(PlaybackEvent::Error(message))
                 }
                 soul_playback::PlaybackEvent::LoadNext(track) => {
-                    // TODO: Handle background loading of next track in Phase 2
-                    // For now, just log it
-                    tracing::debug!("[forward_manager_events] LoadNext event for track: {}", track.title);
-                    None // Skip this event for now
+                    tracing::info!(
+                        "[forward_manager_events] LoadNext event for: {}",
+                        track.title
+                    );
+
+                    // Spawn background thread to load the track
+                    let command_tx_clone = command_tx.clone();
+                    let sample_rate = mgr.get_sample_rate();
+
+                    std::thread::spawn(move || {
+                        match load_source_blocking(&track, sample_rate, Duration::from_millis(500))
+                        {
+                            Ok(source) => {
+                                if let Err(e) =
+                                    command_tx_clone.send(PlaybackCommand::ActivateSource {
+                                        source,
+                                        track: track.clone(),
+                                    })
+                                {
+                                    tracing::error!(
+                                        "[LoadNext] Failed to send ActivateSource: {}",
+                                        e
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "[LoadNext] Failed to load source for {}: {:?}",
+                                    track.title,
+                                    e
+                                );
+                            }
+                        }
+                    });
+
+                    None // Don't forward this internal event to the app
                 }
             };
 
@@ -1894,54 +1955,11 @@ impl DesktopPlayback {
                         let _ = event_tx.try_send(PlaybackEvent::StateChanged(state));
                     }
                     soul_playback::PlaybackState::Stopped => {
-                        // Need to load next track
-                        if let Ok(next_track) = mgr.peek_next_track() {
-                            tracing::info!(
-                                "[PlaybackCommand::Play] Spawning background load for: {}",
-                                next_track.title
-                            );
-
-                            // Clone what we need for the background thread
-                            let command_tx_clone = command_tx.clone();
-                            let event_tx_clone = event_tx.clone();
-                            let sample_rate = mgr.get_sample_rate();
-
-                            // Spawn background thread to load source
-                            std::thread::spawn(move || {
-                                match load_source_blocking(
-                                    &next_track,
-                                    sample_rate,
-                                    Duration::from_millis(500),
-                                ) {
-                                    Ok(source) => {
-                                        // Send to command channel for activation in audio callback
-                                        if let Err(e) =
-                                            command_tx_clone.send(PlaybackCommand::ActivateSource {
-                                                source,
-                                                track: next_track,
-                                            })
-                                        {
-                                            tracing::error!(
-                                                "[load_source_blocking] Failed to send ActivateSource: {}",
-                                                e
-                                            );
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(
-                                            "[load_source_blocking] Load failed: {}",
-                                            e
-                                        );
-                                        let _ = event_tx_clone
-                                            .send(PlaybackEvent::Error(format!("{}", e)));
-                                    }
-                                }
-                            });
-                        } else {
-                            tracing::warn!(
-                                "[PlaybackCommand::Play] No track to load (queue empty)"
-                            );
-                        }
+                        // LoadNext event will be emitted by play() and handled in forward_manager_events
+                        tracing::debug!(
+                            "[PlaybackCommand::Play] LoadNext event will trigger track loading"
+                        );
+                        let _ = event_tx.try_send(PlaybackEvent::StateChanged(state));
                     }
                     soul_playback::PlaybackState::Playing => {
                         // Already playing
@@ -2051,9 +2069,12 @@ impl DesktopPlayback {
                 // TODO(Phase 2): Load track synchronously here
                 let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
-            PlaybackCommand::LoadPlaylist(tracks) => {
+            PlaybackCommand::LoadPlaylist {
+                tracks,
+                start_index,
+            } => {
                 // Load playlist/album as source queue (Spotify-style context)
-                mgr.add_playlist_to_queue(tracks);
+                mgr.load_playlist(tracks, start_index);
                 let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::AppendToSource(tracks) => {
@@ -2148,6 +2169,14 @@ impl DesktopPlayback {
     /// None if the timeout expires.
     pub fn recv_event_timeout(&self, timeout: std::time::Duration) -> Option<PlaybackEvent> {
         self.event_rx.recv_timeout(timeout).ok()
+    }
+
+    /// Clone the event receiver for use in event loops
+    ///
+    /// This allows event loops to wait for events without holding the playback mutex,
+    /// eliminating mutex contention that can cause command delays.
+    pub fn clone_event_receiver(&self) -> Receiver<PlaybackEvent> {
+        self.event_rx.clone()
     }
 
     /// Get current playback state

@@ -6,7 +6,7 @@
 use serde::Serialize;
 use soul_audio_desktop::{
     create_async_device_monitor, AudioError, DesktopPlayback, DeviceEvent, DeviceSwitchReason,
-    ExclusiveConfig, LatencyInfo, PlaybackCommand, PlaybackEvent,
+    ExclusiveConfig, LatencyInfo, PlaybackCommand, PlaybackEvent, Receiver,
 };
 use soul_playback::{
     lazy_queue::QueueContext, PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode,
@@ -322,15 +322,20 @@ impl PlaybackManager {
 
         // Create desktop playback system
         let playback = DesktopPlayback::new(config)?;
+
+        // Clone event receiver before wrapping in mutex to avoid mutex contention in event loop
+        let event_rx = playback.clone_event_receiver();
+
         let playback = Arc::new(Mutex::new(playback));
 
-        // Start event emission thread
+        // Start event emission thread with its own event receiver
+        // This eliminates 500ms mutex contention that was causing command delays
         {
             let playback_clone = Arc::clone(&playback);
             let app_handle_clone = app_handle.clone();
 
             thread::spawn(move || {
-                Self::event_emission_loop(playback_clone, app_handle_clone);
+                Self::event_emission_loop(playback_clone, event_rx, app_handle_clone);
             });
         }
 
@@ -384,7 +389,11 @@ impl PlaybackManager {
     ///
     /// NOTE: Mutex locks use expect() with clear messages instead of unwrap()
     /// to aid debugging if the mutex is poisoned (indicates a panic in another thread).
-    fn event_emission_loop(playback: Arc<Mutex<DesktopPlayback>>, app_handle: AppHandle) {
+    fn event_emission_loop(
+        playback: Arc<Mutex<DesktopPlayback>>,
+        event_rx: Receiver<PlaybackEvent>,
+        app_handle: AppHandle,
+    ) {
         let mut last_position_emit = std::time::Instant::now();
         let mut last_crossfade_progress_emit = std::time::Instant::now();
         let mut tracker = PlaybackTracker::new();
@@ -397,20 +406,9 @@ impl PlaybackManager {
             // Wait for event with timeout = next periodic task (or 1ms minimum)
             let timeout = time_until_position.max(Duration::from_millis(1));
 
-            // Block until event arrives or timeout expires (efficient channel-based waiting)
-            let event = {
-                match playback.lock() {
-                    Ok(pb) => pb.recv_event_timeout(timeout),
-                    Err(e) => {
-                        tracing::error!(
-                            error = %e,
-                            "[playback] Failed to lock playback mutex in event loop - thread poisoned?"
-                        );
-                        // Skip this iteration and try again
-                        continue;
-                    }
-                }
-            };
+            // Block until event arrives or timeout expires WITHOUT holding mutex
+            // This eliminates mutex contention that was causing 500ms command delays
+            let event = event_rx.recv_timeout(timeout).ok();
 
             if let Some(event) = event {
                 // Emit to frontend
@@ -1106,7 +1104,11 @@ impl PlaybackManager {
     ) {
         // Lazy loading was removed in Phase 4
         // This handler is deprecated
-        tracing::warn!("Batch load handler called but lazy loading was removed. offset={}, limit={}", offset, limit);
+        tracing::warn!(
+            "Batch load handler called but lazy loading was removed. offset={}, limit={}",
+            offset,
+            limit
+        );
     }
 
     /// Play a track from local file
@@ -1555,7 +1557,11 @@ impl PlaybackManager {
     }
 
     /// Load playlist/album as source queue (replaces playback context)
-    pub fn load_playlist(&self, tracks: Vec<QueueTrack>) -> Result<(), AudioError> {
+    pub fn load_playlist(
+        &self,
+        tracks: Vec<QueueTrack>,
+        start_index: usize,
+    ) -> Result<(), AudioError> {
         let playback = self
             .playback
             .lock()
@@ -1563,7 +1569,10 @@ impl PlaybackManager {
                 context: "load_playlist command".to_string(),
             })?;
         playback
-            .send_command(PlaybackCommand::LoadPlaylist(tracks))
+            .send_command(PlaybackCommand::LoadPlaylist {
+                tracks,
+                start_index,
+            })
             .map_err(|e| AudioError::CommandFailed {
                 command: "LoadPlaylist".to_string(),
                 reason: e.to_string(),

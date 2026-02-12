@@ -42,3 +42,19 @@ docs/
 
 # SQLx metadata (already compiled)
 ../../libraries/soul-storage/.sqlx/
+
+# Shared workspace (frontend only - doesn't affect Rust)
+../shared/src/**/*.tsx
+../shared/src/**/*.ts
+../shared/src/**/*.css
+
+# All TypeScript/frontend changes shouldn't trigger Rust rebuilds
+../**/*.tsx
+../**/*.ts
+../**/*.jsx
+../**/*.js
+../**/*.css
+../**/*.html
+
+# Tauri build artifacts
+target/

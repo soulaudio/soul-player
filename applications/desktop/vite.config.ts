@@ -6,7 +6,12 @@ import { resolve } from 'path';
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      // Fast Refresh is enabled by default in @vitejs/plugin-react
+      // No additional configuration needed!
+    }),
+  ],
 
   // Vite options tailored for Tauri
   clearScreen: false,
@@ -19,12 +24,20 @@ export default defineConfig({
         splash: resolve(__dirname, 'splash.html'),
       },
     },
+    // Optimize for Tauri's modern webview
+    target: 'esnext',
+    minify: 'esbuild',
+    // Source maps for production debugging (if needed)
+    sourcemap: process.env.TAURI_ENV_DEBUG === 'true',
+    // Increase chunk size warning limit
+    chunkSizeWarningLimit: 1000,
   },
 
   server: {
     port: 1420,
     strictPort: true,
     host: host || false,
+    open: false, // Don't auto-open browser (Tauri manages windows)
     hmr: host
       ? {
           protocol: 'ws',
@@ -33,8 +46,37 @@ export default defineConfig({
         }
       : undefined,
     watch: {
-      ignored: ['**/src-tauri/**'],
+      // Ignore Rust files to prevent unnecessary watchers
+      ignored: [
+        '**/src-tauri/**',
+        '**/target/**',
+        '**/.git/**',
+        '**/node_modules/**',
+        '**/.yarn/**',
+        '**/dist/**',
+      ],
+      // Use native file events (faster than polling)
+      usePolling: false,
     },
+    // Enable WebSocket compression for faster HMR
+    ws: true,
+  },
+
+  // Optimize dependencies for faster dev server startup
+  optimizeDeps: {
+    // Pre-bundle heavy dependencies
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'zustand',
+      'i18next',
+      'react-i18next',
+      'lucide-react',
+      '@tanstack/react-virtual', // Large virtualization library
+    ],
+    // Exclude Tauri API from pre-bundling (it's dynamic)
+    exclude: ['@tauri-apps/api', '@tauri-apps/plugin-shell'],
   },
 
   resolve: {

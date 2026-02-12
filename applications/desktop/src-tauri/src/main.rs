@@ -356,7 +356,7 @@ async fn play_queue(
     // Load playlist as source queue (Spotify-style context)
     // This replaces the source queue tier, keeping explicit queue separate
     let load_start = std::time::Instant::now();
-    pm.load_playlist(tracks)
+    pm.load_playlist(tracks, start_index)
         .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
     let load_duration = load_start.elapsed();
     tracing::info!(
@@ -428,7 +428,7 @@ async fn play_queue_with_context(
     playback.get().await?.stop()?;
 
     // Load initial batch as source queue
-    playback.get().await?.load_playlist(tracks)?;
+    playback.get().await?.load_playlist(tracks, start_index)?;
 
     // Set lazy context with backend-generated seed
     playback
@@ -2383,22 +2383,22 @@ fn main() {
                     "[Startup] LazyPlaybackManager created (audio engine will initialize on first playback)"
                 );
 
-                // OPTIMIZATION: Eagerly initialize audio engine in background for instant first playback
-                // This doesn't block startup, but ensures audio is ready when user clicks play
+                // SILENT PRE-WARM: Initialize audio engine immediately for zero first-play delay
+                // The audio stream will start playing silence until first playback command
+                // This eliminates the 1-2s device enumeration + stream creation delay
                 {
                     let app_clone = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
-                        // Small delay to let UI render first
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-                        tracing::info!("[Startup] Eagerly initializing audio engine in background");
+                        // NO DELAY - start immediately so stream is ready before user can click play
+                        // The audio callback will output silence until playback is requested
+                        tracing::info!("[Startup] Pre-warming audio engine (stream will play silence until first track)");
                         if let Some(playback) = app_clone.try_state::<LazyPlaybackManager>() {
                             match playback.get().await {
                                 Ok(_) => {
-                                    tracing::info!("[Startup] Audio engine pre-initialized successfully");
+                                    tracing::info!("[Startup] Audio engine pre-warmed successfully (stream playing silence)");
                                 }
                                 Err(e) => {
-                                    tracing::warn!("[Startup] Failed to pre-initialize audio engine: {}", e);
+                                    tracing::warn!("[Startup] Audio pre-warm failed (will initialize on first play): {}", e);
                                 }
                             }
                         }
