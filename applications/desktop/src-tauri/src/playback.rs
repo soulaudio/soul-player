@@ -9,7 +9,7 @@ use soul_audio_desktop::{
     ExclusiveConfig, LatencyInfo, PlaybackCommand, PlaybackEvent,
 };
 use soul_playback::{
-    lazy_queue::QueueContext, PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode, TrackSource,
+    lazy_queue::QueueContext, PlaybackConfig, QueueTrack, RepeatMode, ShuffleMode,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -1098,179 +1098,15 @@ impl PlaybackManager {
     ///
     /// Queries the database based on the lazy context and appends tracks to the queue.
     async fn handle_batch_request(
-        playback: Arc<Mutex<DesktopPlayback>>,
-        app_handle: AppHandle,
+        _playback: Arc<Mutex<DesktopPlayback>>,
+        _app_handle: AppHandle,
         offset: usize,
         limit: usize,
-        is_jump: bool,
+        _is_jump: bool,
     ) {
-        tracing::debug!(
-            offset = offset,
-            limit = limit,
-            is_jump = is_jump,
-            "Loading batch"
-        );
-
-        // Get lazy state from playback manager
-        // CRITICAL: Clone Arc first, release outer lock, then acquire inner lock to prevent deadlock
-        let lazy_state = {
-            let manager_ref = {
-                let Ok(pb) = playback.lock() else {
-                    tracing::error!(
-                        "Failed to acquire playback lock for batch request - mutex poisoned"
-                    );
-                    return;
-                };
-                pb.get_playback_manager().clone()
-            }; // pb lock released here
-
-            let Ok(pm) = manager_ref.lock() else {
-                tracing::error!(
-                    "Failed to acquire playback manager lock for batch request - mutex poisoned"
-                );
-                return;
-            };
-            pm.get_lazy_state().cloned()
-        };
-
-        let Some(state) = lazy_state else {
-            tracing::debug!("No lazy state found, skipping batch load");
-            return;
-        };
-
-        // Get app state
-        let app_state = app_handle.state::<AppState>();
-
-        // Query database based on context
-        let tracks_result = match &state.context {
-            QueueContext::AllTracks { .. } => {
-                soul_storage::tracks::get_all_paginated(
-                    &app_state.pool,
-                    offset as i64,
-                    limit as i64,
-                )
-                .await
-            }
-            QueueContext::Album { album_id, .. } => {
-                soul_storage::tracks::get_by_album_paginated(
-                    &app_state.pool,
-                    *album_id,
-                    offset as i64,
-                    limit as i64,
-                )
-                .await
-            }
-            QueueContext::Artist { artist_id, .. } => {
-                soul_storage::tracks::get_by_artist_paginated(
-                    &app_state.pool,
-                    *artist_id,
-                    offset as i64,
-                    limit as i64,
-                )
-                .await
-            }
-            QueueContext::Playlist { playlist_id, .. } => {
-                use soul_core::types::PlaylistId;
-                soul_storage::tracks::get_by_playlist_paginated(
-                    &app_state.pool,
-                    PlaylistId::new(playlist_id.to_string()),
-                    offset as i64,
-                    limit as i64,
-                )
-                .await
-            }
-            QueueContext::Search { .. } => {
-                tracing::debug!("Search pagination not supported yet");
-                return;
-            }
-        };
-
-        let tracks = match tracks_result {
-            Ok(tracks) => tracks,
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to load batch");
-                return;
-            }
-        };
-
-        tracing::debug!(track_count = tracks.len(), "Loaded tracks from database");
-
-        // Convert to QueueTrack (optimized - reduce allocations by moving strings)
-        let queue_tracks: Vec<QueueTrack> = tracks
-            .into_iter()
-            .filter_map(|mut track| {
-                // Get file path from availability (first available source)
-                let file_path = track.availability.first()?.local_file_path.as_ref()?;
-
-                let path = app_state.library_path.join(file_path);
-
-                // Move album_title once to avoid double clone
-                let album_title = track.album_title.take().unwrap_or_default();
-
-                let source = if let Some(album_id) = track.album_id {
-                    TrackSource::Album {
-                        id: album_id.to_string(),
-                        name: album_title.clone(), // Clone only for source name
-                    }
-                } else {
-                    TrackSource::Single
-                };
-
-                Some(QueueTrack {
-                    id: track.id.to_string(),
-                    title: std::mem::take(&mut track.title), // Move instead of clone
-                    artist: track.artist_name.take().unwrap_or_default(), // Move instead of clone
-                    album: Some(album_title),                // Use moved value
-                    duration: Duration::from_secs(track.duration_seconds.unwrap_or(0.0) as u64),
-                    path,
-                    source,
-                    track_number: track.track_number.map(|n| n as u32),
-                })
-            })
-            .collect();
-
-        // Send AppendToSource command (move queue_tracks since it's not used after)
-        {
-            let Ok(pb) = playback.lock() else {
-                tracing::error!(
-                    "Playback mutex poisoned during batch append - audio thread may have crashed"
-                );
-                return;
-            };
-            if let Err(e) = pb.send_command(PlaybackCommand::AppendToSource(queue_tracks)) {
-                tracing::error!(error = %e, "Failed to append tracks");
-                return;
-            }
-        } // pb lock released here
-
-        if is_jump {
-            // Jump load: retry the skip to the target index
-            tracing::debug!(
-                offset = offset,
-                "Retrying skip to index after jump batch load"
-            );
-            let Ok(pb) = playback.lock() else {
-                tracing::error!(
-                    "Playback mutex poisoned during skip retry - audio thread may have crashed"
-                );
-                return;
-            };
-            if let Err(e) = pb.send_command(PlaybackCommand::SkipToQueueIndex(offset)) {
-                tracing::error!(error = %e, "Failed to retry skip after jump load");
-            }
-        } else {
-            // Forward pagination: resume playback by playing next track
-            tracing::debug!("Resuming playback after forward pagination batch load");
-            let Ok(pb) = playback.lock() else {
-                tracing::error!(
-                    "Playback mutex poisoned during resume - audio thread may have crashed"
-                );
-                return;
-            };
-            if let Err(e) = pb.send_command(PlaybackCommand::Next) {
-                tracing::error!(error = %e, "Failed to resume playback after forward pagination");
-            }
-        }
+        // Lazy loading was removed in Phase 4
+        // This handler is deprecated
+        tracing::warn!("Batch load handler called but lazy loading was removed. offset={}, limit={}", offset, limit);
     }
 
     /// Play a track from local file
@@ -1738,16 +1574,10 @@ impl PlaybackManager {
     pub fn set_lazy_context(
         &self,
         context: QueueContext,
-        shuffle_seed: Option<u64>,
+        _shuffle_seed: Option<u64>,
     ) -> Result<(), AudioError> {
-        let playback = self
-            .playback
-            .lock()
-            .map_err(|_| AudioError::MutexPoisoned {
-                context: "set_lazy_context command".to_string(),
-            })?;
-        let mut mgr = playback.get_manager_mut();
-        mgr.set_lazy_context(context, shuffle_seed);
+        // Lazy loading removed in Phase 4 - all tracks loaded eagerly
+        tracing::debug!("[set_playback_context] Context set: {:?}", context);
         Ok(())
     }
 
