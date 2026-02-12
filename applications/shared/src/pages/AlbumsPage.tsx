@@ -109,16 +109,8 @@ export function AlbumsPage() {
             gridClass={gridClass}
             renderItem={(album, index) => (
               <AlbumCard
-                album={{
-                  id: album.id,
-                  title: album.title,
-                  artist_name: album.artist_name,
-                  artist_id: album.artist_id,
-                  year: album.year,
-                  cover_art_path: album.cover_art_path,
-                }}
+                album={album}
                 showArtist={true}
-                className="w-full"
                 priority={index < 24}
               />
             )}
@@ -128,16 +120,8 @@ export function AlbumsPage() {
             {filteredAlbums.map((album, index) => (
               <AlbumCard
                 key={album.id}
-                album={{
-                  id: album.id,
-                  title: album.title,
-                  artist_name: album.artist_name,
-                  artist_id: album.artist_id,
-                  year: album.year,
-                  cover_art_path: album.cover_art_path,
-                }}
+                album={album}
                 showArtist={true}
-                className="w-full"
                 priority={index < 24}
               />
             ))}
