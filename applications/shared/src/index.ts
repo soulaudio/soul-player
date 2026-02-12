@@ -117,7 +117,8 @@ export { TrackInfo } from './components/player/TrackInfo';
 export { ProgressBar } from './components/player/ProgressBar';
 // export { VolumeControl } from './components/player/VolumeControl'; // DELETED - dead code
 export { ShuffleRepeatControls } from './components/player/ShuffleRepeatControls';
-export { DeviceSelector } from './components/player/DeviceSelector';
+export { DeviceSelector } from './components/sidebar/DeviceSelector';
+export type { AudioDevice as DeviceSelectorAudioDevice, AudioBackend as DeviceSelectorAudioBackend, DeviceSelectorProps } from './components/sidebar/DeviceSelector';
 
 // Other components
 export { QueueSidebar } from './components/QueueSidebar';

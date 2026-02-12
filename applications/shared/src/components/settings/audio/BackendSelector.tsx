@@ -1,6 +1,6 @@
 // Audio backend selection component
 
-import { AudioBackend } from '../AudioSettingsPage';
+import { type AudioBackend } from '../../sidebar/DeviceSelector';
 import { Check, Info } from 'lucide-react';
 
 interface BackendSelectorProps {
@@ -54,7 +54,7 @@ export function BackendSelector({
           return (
             <button
               key={backend.backend}
-              onClick={() => isAvailable && onBackendChange(backend.backend)}
+              onClick={() => isAvailable && onBackendChange(backend.backend as 'default' | 'asio' | 'jack')}
               disabled={!isAvailable}
               className={`
                 w-full text-left p-4 rounded-lg border-2 transition-all

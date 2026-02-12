@@ -885,7 +885,10 @@ mod device_switching_tests {
                     Some("NonexistentDevice12345XYZ".to_string()),
                 );
 
-                assert!(switch_result.is_err(), "Should fail for invalid device when auto_fallback is disabled");
+                assert!(
+                    switch_result.is_err(),
+                    "Should fail for invalid device when auto_fallback is disabled"
+                );
             }
             Err(e) => {
                 eprintln!("Could not create playback: {}", e);

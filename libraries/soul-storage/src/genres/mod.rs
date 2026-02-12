@@ -1,97 +1,54 @@
-use crate::error::StorageError;
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Genre>> {
-    let rows: Vec<_> = sqlx::query!(
-        "SELECT id, name, canonical_name, created_at
+    Ok(sqlx::query_as!(
+        Genre,
+        "SELECT id as 'id!', name, canonical_name, created_at
          FROM genres
          ORDER BY name"
     )
     .fetch_all(pool)
-    .await?;
-
-    rows.into_iter()
-        .map(|row| {
-            Ok(Genre {
-                id: row
-                    .id
-                    .ok_or_else(|| StorageError::MissingField("genre.id".to_string()))?,
-                name: row.name,
-                canonical_name: row.canonical_name,
-                created_at: row.created_at,
-            })
-        })
-        .collect()
+    .await?)
 }
 
 pub async fn get_by_id(pool: &SqlitePool, id: GenreId) -> Result<Option<Genre>> {
-    let row: Option<_> = sqlx::query!(
-        "SELECT id, name, canonical_name, created_at
+    Ok(sqlx::query_as!(
+        Genre,
+        "SELECT id as 'id!', name, canonical_name, created_at
          FROM genres
          WHERE id = ?",
         id
     )
     .fetch_optional(pool)
-    .await?;
-
-    Ok(row.map(|row| Genre {
-        id: row.id,
-        name: row.name,
-        canonical_name: row.canonical_name,
-        created_at: row.created_at,
-    }))
+    .await?)
 }
 
 pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Genre>> {
-    let row: Option<_> = sqlx::query!(
-        "SELECT id, name, canonical_name, created_at
+    Ok(sqlx::query_as!(
+        Genre,
+        "SELECT id as 'id!', name, canonical_name, created_at
          FROM genres
          WHERE name = ?",
         name
     )
     .fetch_optional(pool)
-    .await?;
-
-    match row {
-        Some(row) => match row.id {
-            Some(id) => Ok(Some(Genre {
-                id,
-                name: row.name,
-                canonical_name: row.canonical_name,
-                created_at: row.created_at,
-            })),
-            None => Err(StorageError::MissingField("genre.id".to_string()).into()),
-        },
-        None => Ok(None),
-    }
+    .await?)
 }
 
 pub async fn find_by_canonical_name(
     pool: &SqlitePool,
     canonical_name: &str,
 ) -> Result<Option<Genre>> {
-    let row: Option<_> = sqlx::query!(
-        "SELECT id, name, canonical_name, created_at
+    Ok(sqlx::query_as!(
+        Genre,
+        "SELECT id as 'id!', name, canonical_name, created_at
          FROM genres
          WHERE canonical_name = ?",
         canonical_name
     )
     .fetch_optional(pool)
-    .await?;
-
-    match row {
-        Some(row) => match row.id {
-            Some(id) => Ok(Some(Genre {
-                id,
-                name: row.name,
-                canonical_name: row.canonical_name,
-                created_at: row.created_at,
-            })),
-            None => Err(StorageError::MissingField("genre.id".to_string()).into()),
-        },
-        None => Ok(None),
-    }
+    .await?)
 }
 
 pub async fn create(pool: &SqlitePool, genre: CreateGenre) -> Result<Genre> {
@@ -113,8 +70,9 @@ pub async fn create(pool: &SqlitePool, genre: CreateGenre) -> Result<Genre> {
 
 /// Get all genres for a specific track
 pub async fn get_by_track(pool: &SqlitePool, track_id: TrackId) -> Result<Vec<Genre>> {
-    let rows: Vec<_> = sqlx::query!(
-        "SELECT g.id, g.name, g.canonical_name, g.created_at
+    Ok(sqlx::query_as!(
+        Genre,
+        "SELECT g.id as 'id!', g.name, g.canonical_name, g.created_at
          FROM genres g
          INNER JOIN track_genres tg ON g.id = tg.genre_id
          WHERE tg.track_id = ?
@@ -122,20 +80,7 @@ pub async fn get_by_track(pool: &SqlitePool, track_id: TrackId) -> Result<Vec<Ge
         track_id
     )
     .fetch_all(pool)
-    .await?;
-
-    rows.into_iter()
-        .map(|row| {
-            Ok(Genre {
-                id: row
-                    .id
-                    .ok_or_else(|| StorageError::MissingField("genre.id".to_string()))?,
-                name: row.name,
-                canonical_name: row.canonical_name,
-                created_at: row.created_at,
-            })
-        })
-        .collect()
+    .await?)
 }
 
 /// Add a genre to a track

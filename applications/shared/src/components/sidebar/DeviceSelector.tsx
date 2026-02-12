@@ -18,7 +18,8 @@ export interface AudioDevice {
   isDefault: boolean;
   sampleRate?: number;
   channels?: number;
-  isRunning: boolean;
+  isRunning?: boolean;
+  sampleRateRange?: [number, number];
 }
 
 export interface AudioBackend {
@@ -26,8 +27,8 @@ export interface AudioBackend {
   name: string;
   description: string;
   available: boolean;
-  isDefault: boolean;
-  deviceCount: number;
+  is_default: boolean;
+  device_count: number;
 }
 
 export interface DeviceSelectorProps {
@@ -38,6 +39,8 @@ export interface DeviceSelectorProps {
   hasRealDevices: boolean;
   onLoadDevices: () => void;
   onSwitchDevice: (backend: string, deviceName: string) => void;
+  variant?: 'dropdown' | 'list';
+  showLabel?: boolean;
 }
 
 const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] = [
@@ -57,6 +60,20 @@ const MOCK_DEVICES: { backend: string; name: string; devices: AudioDevice[] }[] 
   },
 ];
 
+function DeviceSkeleton() {
+  return (
+    <div className="w-full p-3 rounded-lg border border-border animate-pulse">
+      <div className="flex items-center gap-3">
+        <div className="w-4 h-4 bg-muted rounded" />
+        <div className="flex-1 space-y-1.5">
+          <div className="h-4 bg-muted rounded w-40" />
+          <div className="h-3 bg-muted rounded w-32" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DeviceSelector({
   currentDevice,
   backends,
@@ -65,9 +82,96 @@ export function DeviceSelector({
   hasRealDevices,
   onLoadDevices,
   onSwitchDevice,
+  variant = 'dropdown',
+  showLabel = true,
 }: DeviceSelectorProps) {
   const { t } = useTranslation();
 
+  // List variant for settings page
+  if (variant === 'list') {
+    // Get all devices from the map
+    const allDevices: AudioDevice[] = [];
+    devices.forEach((deviceList) => {
+      allDevices.push(...deviceList);
+    });
+
+    // Use mock devices if no real devices
+    const displayDevices = !hasRealDevices || allDevices.length === 0
+      ? MOCK_DEVICES.flatMap(mock => mock.devices)
+      : allDevices;
+
+    // If no device selected, use default
+    const activeDevice = currentDevice?.name || displayDevices.find(d => d.isDefault)?.name;
+
+    if (isLoadingDevices) {
+      return (
+        <div className="space-y-3">
+          {showLabel && <label className="text-sm font-medium">{t('audio.outputDevice', 'Output Device')}</label>}
+          <div className="space-y-2">
+            <DeviceSkeleton />
+            <DeviceSkeleton />
+            <DeviceSkeleton />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {showLabel && <label className="text-sm font-medium">{t('audio.outputDevice', 'Output Device')}</label>}
+
+        {displayDevices.length === 0 ? (
+          <div className="p-4 border border-dashed rounded-lg text-center text-sm text-muted-foreground">
+            {t('audio.noDevicesFound', 'No audio devices found')}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {displayDevices.map((device) => {
+              const isSelected = device.name === activeDevice && device.backend === currentDevice?.backend;
+
+              return (
+                <button
+                  key={`${device.backend}-${device.name}`}
+                  onClick={() => onSwitchDevice(device.backend, device.name)}
+                  className={cn(
+                    'w-full text-left p-3 rounded-lg border transition-all',
+                    isSelected
+                      ? 'border-primary bg-primary/5 shadow-sm'
+                      : 'border-border hover:border-primary/50 hover:bg-foreground/[var(--hover-bg-opacity)]'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Speaker className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{device.name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {device.sampleRate?.toLocaleString()} Hz
+                          {device.channels && ` • ${device.channels} channels`}
+                          {device.isDefault && ` • ${t('audio.systemDefault', 'System Default')}`}
+                        </div>
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <div className="flex-shrink-0">
+                        <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                          <Check className="w-3 h-3 text-primary-foreground" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Dropdown variant for player panel
   return (
     <DropdownMenu onOpenChange={(open) => { if (open) onLoadDevices(); }}>
       <DropdownMenuTrigger asChild>

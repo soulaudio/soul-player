@@ -66,6 +66,7 @@
 pub mod backend;
 pub mod device;
 pub mod device_check_timeout;
+pub mod device_manager;
 pub mod device_monitor_async;
 mod device_monitor_cpal_fallback;
 #[cfg(all(target_os = "linux", feature = "native-device-monitor"))]

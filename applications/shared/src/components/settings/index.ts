@@ -10,7 +10,6 @@ export { ImportToServerDialog } from './ImportToServerDialog';
 export { PipelineVisualization } from './audio/PipelineVisualization';
 export { PipelineStage } from './audio/PipelineStage';
 export { BackendSelector } from './audio/BackendSelector';
-export { DeviceSelector } from './audio/DeviceSelector';
 export { DspConfig } from './audio/DspConfig';
 export { UpsamplingSettings } from './audio/UpsamplingSettings';
 export { VolumeLevelingSettings } from './audio/VolumeLevelingSettings';
@@ -26,7 +25,7 @@ export { ConvolutionEditor, defaultConvolutionSettings } from './audio/effects/C
 export { CompressorEditor } from './audio/effects/CompressorEditor';
 
 // Types
-export type { AudioBackend, AudioDevice, AudioSettings } from './AudioSettingsPage';
+export type { AudioSettings } from './AudioSettingsPage';
 export type { CrossfadeSettings, CrossfadeCurve } from './audio/BufferSettings';
 export type { BufferSizeOption } from './audio/LatencyMonitor';
 export type { EffectType, EffectSlot, CrossfeedSettings as DspCrossfeedSettings, StereoSettings, GraphicEqSettings } from './audio/DspConfig';

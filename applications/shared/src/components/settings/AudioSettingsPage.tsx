@@ -15,31 +15,13 @@ import { ConfirmDialog } from '../ui/Dialog';
 import { PipelineVisualization } from './audio/PipelineVisualization';
 import { PipelineStage } from './audio/PipelineStage';
 import { BackendSelector } from './audio/BackendSelector';
-import { DeviceSelector } from './audio/DeviceSelector';
+import { DeviceSelector, type AudioBackend, type AudioDevice } from '../sidebar/DeviceSelector';
 import { DspConfig } from './audio/DspConfig';
 import { UpsamplingSettings } from './audio/UpsamplingSettings';
 import { VolumeLevelingSettings } from './audio/VolumeLevelingSettings';
 import { HeadroomSettings } from './audio/HeadroomSettings';
 import { BufferSettings } from './audio/BufferSettings';
 import { debug } from '../../utils/debug';
-
-export interface AudioBackend {
-  backend: 'default' | 'asio' | 'jack';
-  name: string;
-  description: string;
-  available: boolean;
-  is_default: boolean;
-  device_count: number;
-}
-
-export interface AudioDevice {
-  name: string;
-  backend: string;
-  isDefault: boolean;
-  sampleRate: number;
-  channels: number;
-  sampleRateRange?: [number, number];
-}
 
 export interface AudioSettings {
   backend: 'default' | 'asio' | 'jack';
@@ -145,7 +127,7 @@ function AudioSettingsDesktop() {
   const backend = useBackend();
 
   const [backends, setBackends] = useState<AudioBackend[]>([]);
-  const [devices, setDevices] = useState<AudioDevice[]>([]);
+  const [devices, setDevices] = useState<Map<string, AudioDevice[]>>(new Map());
   const [settings, setSettings] = useState<AudioSettings>({
     backend: 'default',
     device_name: null,
@@ -196,7 +178,9 @@ function AudioSettingsDesktop() {
       // Load devices for current backend
       const currentBackend = settings.backend;
       const devicesData = await backend.getAudioDevices(currentBackend);
-      setDevices(devicesData);
+      const deviceMap = new Map<string, AudioDevice[]>();
+      deviceMap.set(currentBackend, devicesData);
+      setDevices(deviceMap);
 
       // Load settings from database
       const savedSettings = await backend.getUserSetting('audio.pipeline');
@@ -264,7 +248,9 @@ function AudioSettingsDesktop() {
     // Reload devices for new backend
     try {
       const devicesData = await backend.getAudioDevices(selectedBackend);
-      setDevices(devicesData);
+      const deviceMap = new Map<string, AudioDevice[]>();
+      deviceMap.set(selectedBackend, devicesData);
+      setDevices(deviceMap);
     } catch (error) {
       debug.error('Failed to load devices:', error);
     }
@@ -646,10 +632,25 @@ function AudioSettingsDesktop() {
               loading={loading}
             />
             <DeviceSelector
+              currentDevice={
+                settings.device_name
+                  ? {
+                      name: settings.device_name,
+                      backend: settings.backend,
+                      isDefault: false,
+                      isRunning: false,
+                    }
+                  : null
+              }
+              backends={backends}
               devices={devices}
-              currentDevice={settings.device_name}
-              onDeviceChange={handleDeviceChange}
-              loading={loading}
+              isLoadingDevices={loading}
+              hasRealDevices={true}
+              onLoadDevices={() => {
+                // Already loaded on mount, no-op
+              }}
+              onSwitchDevice={(_backend, deviceName) => handleDeviceChange(deviceName)}
+              variant="list"
             />
           </div>
         </PipelineStage>

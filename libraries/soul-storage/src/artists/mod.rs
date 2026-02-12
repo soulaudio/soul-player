@@ -1,76 +1,39 @@
-use crate::error::StorageError;
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Artist>> {
-    let rows: Vec<_> = sqlx::query!(
-        "SELECT id, name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
+    Ok(sqlx::query_as!(
+        Artist,
+        "SELECT id as 'id!', name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
          FROM artists
          ORDER BY sort_name, name"
     )
     .fetch_all(pool)
-    .await?;
-
-    rows.into_iter()
-        .map(|row| {
-            Ok(Artist {
-                id: row
-                    .id
-                    .ok_or_else(|| StorageError::MissingField("artist.id".to_string()))?,
-                name: row.name,
-                sort_name: row.sort_name,
-                musicbrainz_id: row.musicbrainz_id,
-                cover_art_path: row.cover_art_path,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            })
-        })
-        .collect()
+    .await?)
 }
 
 pub async fn get_by_id(pool: &SqlitePool, id: ArtistId) -> Result<Option<Artist>> {
-    let row: Option<_> = sqlx::query!(
-        "SELECT id, name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
+    Ok(sqlx::query_as!(
+        Artist,
+        "SELECT id as 'id!', name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
          FROM artists
          WHERE id = ?",
         id
     )
     .fetch_optional(pool)
-    .await?;
-
-    Ok(row.map(|row| Artist {
-        id: row.id,
-        name: row.name,
-        sort_name: row.sort_name,
-        musicbrainz_id: row.musicbrainz_id,
-        cover_art_path: row.cover_art_path,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-    }))
+    .await?)
 }
 
 pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Artist>> {
-    let row: Option<_> = sqlx::query!(
-        "SELECT id, name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
+    Ok(sqlx::query_as!(
+        Artist,
+        "SELECT id as 'id!', name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
          FROM artists
          WHERE name = ?",
         name
     )
     .fetch_optional(pool)
-    .await?;
-
-    Ok(row.and_then(|row| {
-        // Use filter_map pattern to handle missing id gracefully
-        row.id.map(|id| Artist {
-            id,
-            name: row.name,
-            sort_name: row.sort_name,
-            musicbrainz_id: row.musicbrainz_id,
-            cover_art_path: row.cover_art_path,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        })
-    }))
+    .await?)
 }
 
 pub async fn create(pool: &SqlitePool, artist: CreateArtist) -> Result<Artist> {

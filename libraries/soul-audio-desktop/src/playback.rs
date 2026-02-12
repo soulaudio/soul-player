@@ -641,15 +641,8 @@ pub struct DesktopPlayback {
     /// Playback manager (shared with audio thread)
     manager: Arc<Mutex<PlaybackManager>>,
 
-    /// Current audio backend
-    current_backend: Arc<Mutex<crate::AudioBackend>>,
-
-    /// Current device name
-    current_device: Arc<Mutex<String>>,
-
-    /// Current device ID (backend + device name as unique identifier)
-    /// Used to prevent false positive device switches when checking sample rates
-    current_device_id: Arc<Mutex<Option<String>>>,
+    /// Device manager (handles backend, device name, and device ID)
+    device_manager: Arc<crate::device_manager::DeviceManager>,
 
     /// Current stream sample rate (what we're actually outputting at)
     current_sample_rate: Arc<std::sync::atomic::AtomicU32>,
@@ -797,16 +790,10 @@ impl DesktopPlayback {
         }
 
         let stream = Arc::new(Mutex::new(stream_option));
-        let current_backend = Arc::new(Mutex::new(backend));
-        let current_device = Arc::new(Mutex::new(actual_device_name.clone()));
 
-        // Create device ID (backend + device name as unique identifier)
-        let device_id = if is_silent_mode {
-            None
-        } else {
-            Some(Self::make_device_id(backend, &actual_device_name))
-        };
-        let current_device_id = Arc::new(Mutex::new(device_id));
+        // Create device manager and update with initial device state
+        let device_manager = Arc::new(crate::device_manager::DeviceManager::new());
+        device_manager.update_device(backend, &actual_device_name, is_silent_mode);
 
         let current_sample_rate = Arc::new(std::sync::atomic::AtomicU32::new(sample_rate));
         let resampling_settings = Arc::new(Mutex::new(ResamplingSettings::default()));
@@ -837,9 +824,7 @@ impl DesktopPlayback {
             event_tx,
             stream,
             manager,
-            current_backend,
-            current_device,
-            current_device_id,
+            device_manager,
             current_sample_rate,
             resampling_settings,
             track_loader,
@@ -2423,16 +2408,8 @@ impl DesktopPlayback {
             Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
                 // Only acquire locks and gather debug info on error (rare case)
                 let stream_alive = self.stream.lock().map(|g| g.is_some()).unwrap_or(false);
-                let backend = self
-                    .current_backend
-                    .lock()
-                    .map(|g| *g)
-                    .unwrap_or(crate::AudioBackend::Default);
-                let device = self
-                    .current_device
-                    .lock()
-                    .map(|g| g.clone())
-                    .unwrap_or_else(|_| String::from("<unknown>"));
+                let backend = self.device_manager.get_current_backend();
+                let device = self.device_manager.get_current_device();
                 let global_count = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
 
                 tracing::error!(
@@ -2817,19 +2794,9 @@ impl DesktopPlayback {
             callbacks_before_backend
         );
 
-        // Update current backend, device, and device ID
-        {
-            *self.current_backend.lock().unwrap() = backend;
-            *self.current_device.lock().unwrap() = actual_device_name.clone();
-
-            // Update device ID for the new device
-            let new_device_id = if is_silent_mode {
-                None
-            } else {
-                Some(Self::make_device_id(backend, &actual_device_name))
-            };
-            *self.current_device_id.lock().unwrap() = new_device_id;
-        }
+        // Update device manager state
+        self.device_manager
+            .update_device(backend, &actual_device_name, is_silent_mode);
 
         // Check callbacks after updating backend
         let callbacks_after_backend = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
@@ -2983,12 +2950,12 @@ impl DesktopPlayback {
 
     /// Get current backend
     pub fn get_current_backend(&self) -> crate::AudioBackend {
-        *self.current_backend.lock().unwrap()
+        self.device_manager.get_current_backend()
     }
 
     /// Get current device name
     pub fn get_current_device(&self) -> String {
-        self.current_device.lock().unwrap().clone()
+        self.device_manager.get_current_device()
     }
 
     /// Get current device ID
@@ -3000,7 +2967,7 @@ impl DesktopPlayback {
     /// * `Some(device_id)` - The current device's unique identifier
     /// * `None` - No device active (silent mode)
     pub fn get_current_device_id(&self) -> Option<String> {
-        self.current_device_id.lock().unwrap().clone()
+        self.device_manager.get_current_device_id()
     }
 
     /// Get current stream sample rate
@@ -3037,24 +3004,6 @@ impl DesktopPlayback {
         self.device_switch_config = config;
     }
 
-    /// Create a unique device ID from backend and device name
-    ///
-    /// Device ID format: "{backend}::{device_name}"
-    /// This provides a unique identifier that can be used to track
-    /// which device is currently active and detect device removal events.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let device_id = DesktopPlayback::make_device_id(
-    ///     AudioBackend::WASAPI,
-    ///     "Speakers (Realtek Audio)"
-    /// );
-    /// // Returns: "WASAPI::Speakers (Realtek Audio)"
-    /// ```
-    pub fn make_device_id(backend: crate::AudioBackend, device_name: &str) -> String {
-        format!("{}::{}", backend.name(), device_name)
-    }
-
     /// Query the device's current sample rate from the driver
     ///
     /// This queries the device directly to get its current configuration,
@@ -3065,8 +3014,8 @@ impl DesktopPlayback {
     /// * `Ok(sample_rate)` - The device's current sample rate
     /// * `Err(_)` - Failed to query the device
     pub fn query_device_sample_rate(&self) -> Result<u32> {
-        let backend = *self.current_backend.lock().unwrap();
-        let device_name = self.current_device.lock().unwrap().clone();
+        let backend = self.device_manager.get_current_backend();
+        let device_name = self.device_manager.get_current_device();
 
         let device = crate::device::find_device_by_name(backend, &device_name)
             .map_err(|e| crate::error::AudioError::DeviceError(e.to_string()))?;
@@ -3094,7 +3043,7 @@ impl DesktopPlayback {
     /// ```rust,ignore
     /// // In DeviceRemoved handler:
     /// if let Some(current_id) = playback.get_current_device_id() {
-    ///     let removed_id = DesktopPlayback::make_device_id(backend, &removed_device_name);
+    ///     let removed_id = crate::device_manager::DeviceManager::make_device_id(backend, &removed_device_name);
     ///     if current_id == removed_id {
     ///         // Definitely our device - switch to default
     ///         playback.switch_device(AudioBackend::Default, None)?;
@@ -3138,8 +3087,8 @@ impl DesktopPlayback {
         );
 
         // Sample rate has changed - need to recreate the stream
-        let backend = *self.current_backend.lock().unwrap();
-        let device_name = self.current_device.lock().unwrap().clone();
+        let backend = self.device_manager.get_current_backend();
+        let device_name = self.device_manager.get_current_device();
 
         // switch_device will handle everything: stream recreation, source reload, position preservation
         self.switch_device_with_reason(
@@ -3165,8 +3114,8 @@ impl DesktopPlayback {
     /// * `Ok(())` - Successfully switched to default device
     /// * `Err(_)` - Failed to switch (will attempt fallback if configured)
     pub fn switch_to_system_default(&mut self) -> Result<()> {
-        let current_device = self.current_device.lock().unwrap().clone();
-        let backend = *self.current_backend.lock().unwrap();
+        let current_device = self.device_manager.get_current_device();
+        let backend = self.device_manager.get_current_backend();
 
         // Query what the system thinks is the default device now
         let new_default = match crate::device::get_default_device(backend) {
@@ -3216,33 +3165,7 @@ impl DesktopPlayback {
     /// * `true` if the device matches our current device
     /// * `false` otherwise
     pub fn is_current_device(&self, device_id_or_name: &str) -> bool {
-        let current_device = self.current_device.lock().unwrap();
-        let current_device_id = self.current_device_id.lock().unwrap();
-
-        // Check exact match with device name
-        if *current_device == device_id_or_name {
-            return true;
-        }
-
-        // Check if device_id contains our device name (handles WinRT full IDs)
-        if device_id_or_name.contains(current_device.as_str()) {
-            return true;
-        }
-
-        // Check against our stored device ID
-        if let Some(ref stored_id) = *current_device_id {
-            if stored_id == device_id_or_name {
-                return true;
-            }
-            // Also check if the provided ID contains our stored ID or vice versa
-            if device_id_or_name.contains(stored_id.as_str())
-                || stored_id.contains(device_id_or_name)
-            {
-                return true;
-            }
-        }
-
-        false
+        self.device_manager.is_current_device(device_id_or_name)
     }
 
     /// Refresh the audio stream
@@ -3254,8 +3177,8 @@ impl DesktopPlayback {
     /// * `Ok(())` - Stream refreshed successfully
     /// * `Err(_)` - Failed to refresh stream
     pub fn refresh_stream(&mut self) -> Result<()> {
-        let backend = *self.current_backend.lock().unwrap();
-        let device_name = self.current_device.lock().unwrap().clone();
+        let backend = self.device_manager.get_current_backend();
+        let device_name = self.device_manager.get_current_device();
         self.switch_device(backend, Some(device_name))
     }
 
@@ -3424,7 +3347,7 @@ impl DesktopPlayback {
     /// Check if currently in exclusive mode
     pub fn is_exclusive_mode(&self) -> bool {
         // ASIO is always exclusive mode
-        let backend = *self.current_backend.lock().unwrap();
+        let backend = self.device_manager.get_current_backend();
         match backend {
             #[cfg(all(target_os = "windows", feature = "asio"))]
             crate::AudioBackend::Asio => true,
@@ -3744,7 +3667,8 @@ mod tests {
 
                 // Device ID should be set and should match expected format
                 if let Some(id) = device_id {
-                    let expected_id = DesktopPlayback::make_device_id(backend, &device);
+                    let expected_id =
+                        crate::device_manager::DeviceManager::make_device_id(backend, &device);
                     assert_eq!(id, expected_id);
                     assert!(id.contains("::"));
                     eprintln!("Device ID format verified: {}", id);
@@ -3789,7 +3713,10 @@ mod tests {
 
                         // Verify device ID is updated correctly
                         if let Some(id) = new_device_id {
-                            let expected_id = DesktopPlayback::make_device_id(backend, &new_device);
+                            let expected_id = crate::device_manager::DeviceManager::make_device_id(
+                                backend,
+                                &new_device,
+                            );
                             assert_eq!(id, expected_id);
                             eprintln!("Device ID correctly updated after switch");
                         }
@@ -3860,7 +3787,7 @@ mod tests {
     #[test]
     fn test_make_device_id() {
         // Test device ID format with Default backend
-        let device_id = DesktopPlayback::make_device_id(
+        let device_id = crate::device_manager::DeviceManager::make_device_id(
             crate::AudioBackend::Default,
             "Speakers (Realtek Audio)",
         );
@@ -3883,8 +3810,10 @@ mod tests {
         // Test with ASIO backend if available
         #[cfg(all(target_os = "windows", feature = "asio"))]
         {
-            let device_id2 =
-                DesktopPlayback::make_device_id(crate::AudioBackend::Asio, "ASIO Device");
+            let device_id2 = crate::device_manager::DeviceManager::make_device_id(
+                crate::AudioBackend::Asio,
+                "ASIO Device",
+            );
             assert_eq!(device_id2, "ASIO::ASIO Device");
 
             // Test that device IDs are unique
@@ -3892,15 +3821,17 @@ mod tests {
         }
 
         // Test that same backend + device name produces same ID
-        let device_id3 = DesktopPlayback::make_device_id(
+        let device_id3 = crate::device_manager::DeviceManager::make_device_id(
             crate::AudioBackend::Default,
             "Speakers (Realtek Audio)",
         );
         assert_eq!(device_id, device_id3);
 
         // Test with different device names
-        let device_id4 =
-            DesktopPlayback::make_device_id(crate::AudioBackend::Default, "Different Device");
+        let device_id4 = crate::device_manager::DeviceManager::make_device_id(
+            crate::AudioBackend::Default,
+            "Different Device",
+        );
         assert_ne!(device_id, device_id4);
     }
 
