@@ -346,6 +346,25 @@ impl Queue {
         }
     }
 
+    /// Peek at next track without removing, skipping Play Next queue
+    ///
+    /// Used when starting playback to look at source queue first.
+    /// Play Next tracks should play AFTER the first track, not instead of it.
+    pub(crate) fn peek_next_skip_play_next(&self) -> Option<QueueTrack> {
+        // Tier 1: Source queue
+        if self.source_index < self.source.len() {
+            return self.source.get(self.source_index).cloned();
+        }
+
+        // Tier 2: Add to Queue
+        if !self.queued_later.is_empty() {
+            return self.queued_later.first().cloned();
+        }
+
+        // All queues exhausted
+        None
+    }
+
     /// Peek at the first track in the original source queue
     ///
     /// Used for RepeatAll mode pre-loading: when queue is exhausted but will loop,

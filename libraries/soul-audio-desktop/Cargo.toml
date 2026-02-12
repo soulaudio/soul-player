@@ -53,6 +53,8 @@ ebur128 = { workspace = true }
 crossbeam-channel = "0.5"  # Thread-safe channels for audio thread communication
 tokio = { workspace = true, features = ["sync"] }  # For async streaming
 async-trait = "0.1"  # Async trait support for device monitoring
+rtrb = "0.3"  # Lock-free ring buffer for audio thread
+audio_thread_priority = "0.34"  # Real-time thread priority for audio callbacks
 
 # Networking (for streaming from server)
 reqwest = { workspace = true, features = ["stream"] }

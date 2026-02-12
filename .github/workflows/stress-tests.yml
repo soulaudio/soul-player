@@ -1,0 +1,88 @@
+name: Weekly Stress Tests
+
+on:
+  # Run every Sunday at 3 AM UTC
+  schedule:
+    - cron: '0 3 * * 0'
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Endurance test duration (5 or 60 minutes)'
+        required: false
+        default: '5'
+        type: choice
+        options:
+          - '5'
+          - '60'
+
+jobs:
+  stress-tests:
+    name: Stress Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-stress-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Linux Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Run Lock Contention Tests
+        run: cargo xtask test stress contention --verbose
+
+      - name: Run Endurance Tests (5 min)
+        if: github.event_name == 'schedule' || github.event.inputs.duration == '5'
+        run: cargo xtask test stress endurance --duration 5 --verbose
+
+      - name: Run Endurance Tests (1 hour)
+        if: github.event.inputs.duration == '60'
+        run: cargo xtask test stress endurance --duration 60 --verbose
+        timeout-minutes: 75
+
+      - name: Run Corrupted File Tests
+        run: cargo xtask test stress corrupted --verbose
+
+      - name: Run Benchmarks
+        run: cargo xtask test stress bench --verbose
+
+      - name: Upload Benchmark Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ matrix.os }}
+          path: target/criterion/
+          retention-days: 30
+
+      - name: Stress Test Summary
+        if: always()
+        run: |
+          echo "## Stress Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- OS: ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Date: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check job logs for detailed results" >> $GITHUB_STEP_SUMMARY

@@ -643,7 +643,7 @@ fn workflow_5_rapid_repeat_mode_changes() {
     // Playback should still be in valid state
     let state = manager.get_state();
     assert!(
-        state == PlaybackState::Playing || state == PlaybackState::Loading,
+        state == PlaybackState::Playing,
         "Should be in valid playback state: {:?}",
         state
     );

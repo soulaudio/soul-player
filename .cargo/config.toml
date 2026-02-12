@@ -2,11 +2,21 @@
 # See: https://doc.rust-lang.org/cargo/reference/config.html
 
 [build]
-# Default target directory (can be overridden by CARGO_TARGET_DIR env var)
+# Use project-local target directory for better hot reload detection
+# This will be overridden by CARGO_TARGET_DIR env var if set
 target-dir = "target"
 
-# Incremental compilation (faster rebuilds)
-incremental = true
+[profile.dev]
+# DISABLE incremental compilation for guaranteed fresh builds in dev mode
+# This ensures all library changes are detected and rebuilt
+incremental = false
+opt-level = 0
+debug = true
+
+[profile.dev.build-override]
+# Also disable incremental for build scripts
+incremental = false
+opt-level = 0
 
 [term]
 # Colorize output

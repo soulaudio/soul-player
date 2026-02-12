@@ -1,0 +1,648 @@
+name: Audio E2E Tests
+
+# Run on PRs and main branch pushes
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  # ============================================================================
+  # Linux Audio E2E Tests (ALSA + snd-aloop)
+  # ============================================================================
+  audio-e2e-linux:
+    name: Audio E2E - Linux (ALSA)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          echo "=== Disk space after cleanup ==="
+          df -h
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "audio-e2e-linux"
+
+      # Install Linux audio dependencies
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            alsa-utils \
+            pulseaudio \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            pkg-config
+
+      # Configure virtual audio device (snd-aloop)
+      - name: Setup virtual audio device (ALSA loopback)
+        run: |
+          echo "=== Loading snd-aloop kernel module ==="
+          sudo modprobe snd-aloop || echo "Warning: snd-aloop not available, tests may run in headless mode"
+
+          echo "=== Listing ALSA devices ==="
+          aplay -l || echo "No playback devices found"
+          arecord -l || echo "No capture devices found"
+
+          echo "=== Creating ALSA configuration ==="
+          mkdir -p ~/.config/alsa
+          cat > ~/.config/alsa/asoundrc <<'EOF'
+# Virtual loopback device for testing
+pcm.!default {
+    type plug
+    slave.pcm "loopback"
+}
+
+pcm.loopback {
+    type asym
+    playback.pcm "hw:Loopback,0,0"
+    capture.pcm "hw:Loopback,1,0"
+}
+
+ctl.!default {
+    type hw
+    card Loopback
+}
+EOF
+
+          echo "=== Testing ALSA configuration ==="
+          aplay -L | grep -A 5 "default" || echo "Default device not configured"
+
+      # Create mock frontend dist for Tauri
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+          mkdir -p applications/desktop/src-tauri/dist
+          cp applications/desktop/dist/index.html applications/desktop/src-tauri/dist/
+
+      # Build E2E tests
+      - name: Build audio E2E tests
+        run: |
+          echo "=== Building audio E2E tests ==="
+          cargo test --no-run --release \
+            --package soul-audio-desktop \
+            --test device_hotplug_e2e \
+            --test playback_hotplug_integration_e2e \
+            --test device_handling_test
+
+      # Run E2E tests with retry logic
+      - name: Run audio E2E tests (with retry)
+        id: e2e-tests
+        run: |
+          echo "=== Running audio E2E tests ==="
+
+          # Function to run tests with retry
+          run_with_retry() {
+            local max_attempts=3
+            local attempt=1
+
+            while [ $attempt -le $max_attempts ]; do
+              echo "Attempt $attempt of $max_attempts"
+
+              if cargo test --release \
+                --package soul-audio-desktop \
+                --test device_hotplug_e2e \
+                --test playback_hotplug_integration_e2e \
+                --test device_handling_test \
+                -- --test-threads=1 --nocapture; then
+                echo "✅ Tests passed on attempt $attempt"
+                return 0
+              fi
+
+              echo "⚠️  Tests failed on attempt $attempt"
+              attempt=$((attempt + 1))
+
+              if [ $attempt -le $max_attempts ]; then
+                echo "Retrying in 5 seconds..."
+                sleep 5
+              fi
+            done
+
+            echo "❌ Tests failed after $max_attempts attempts"
+            return 1
+          }
+
+          run_with_retry
+        continue-on-error: false
+
+      # Collect test metrics
+      - name: Collect test metrics
+        if: always()
+        run: |
+          echo "=== Collecting test metrics ==="
+
+          mkdir -p test-results
+
+          # Run tests with JSON output for metrics
+          cargo test --release \
+            --package soul-audio-desktop \
+            --test device_hotplug_e2e \
+            -- --test-threads=1 -Z unstable-options --format json 2>&1 | tee test-results/linux-metrics-raw.json || true
+
+          # Parse JSON output into summary
+          cat > test-results/linux-summary.json <<EOF
+{
+  "platform": "linux",
+  "runner": "ubuntu-latest",
+  "virtual_device": "ALSA snd-aloop",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "test_result": "${{ steps.e2e-tests.outcome }}"
+}
+EOF
+
+          echo "=== Test metrics collected ==="
+          cat test-results/linux-summary.json
+
+      # Upload metrics as artifacts
+      - name: Upload test metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-e2e-metrics-linux
+          path: test-results/
+          retention-days: 30
+
+  # ============================================================================
+  # macOS Audio E2E Tests (CoreAudio + BlackHole)
+  # ============================================================================
+  audio-e2e-macos:
+    name: Audio E2E - macOS (CoreAudio)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "audio-e2e-macos"
+
+      # Install macOS dependencies
+      - name: Install system dependencies
+        run: |
+          brew install pkg-config
+
+      # Install BlackHole virtual audio driver
+      - name: Install BlackHole virtual audio device
+        run: |
+          echo "=== Installing BlackHole virtual audio driver ==="
+          brew install blackhole-2ch
+
+          echo "=== Waiting for BlackHole to initialize ==="
+          sleep 5
+
+          echo "=== Listing audio devices ==="
+          system_profiler SPAudioDataType || echo "Could not list audio devices"
+
+          # Verify BlackHole is available
+          if system_profiler SPAudioDataType | grep -i "blackhole"; then
+            echo "✅ BlackHole installed successfully"
+          else
+            echo "⚠️  BlackHole may not be fully initialized, tests will proceed"
+          fi
+
+      # Create mock frontend dist for Tauri
+      - name: Create mock frontend dist
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+          mkdir -p applications/desktop/src-tauri/dist
+          cp applications/desktop/dist/index.html applications/desktop/src-tauri/dist/
+
+      # Build E2E tests
+      - name: Build audio E2E tests
+        run: |
+          echo "=== Building audio E2E tests ==="
+          cargo test --no-run --release \
+            --package soul-audio-desktop \
+            --test device_hotplug_e2e \
+            --test playback_hotplug_integration_e2e \
+            --test device_handling_test \
+            --test platform_macos_test
+
+      # Run E2E tests with retry logic
+      - name: Run audio E2E tests (with retry)
+        id: e2e-tests
+        run: |
+          echo "=== Running audio E2E tests ==="
+
+          # Function to run tests with retry
+          run_with_retry() {
+            local max_attempts=3
+            local attempt=1
+
+            while [ $attempt -le $max_attempts ]; do
+              echo "Attempt $attempt of $max_attempts"
+
+              if cargo test --release \
+                --package soul-audio-desktop \
+                --test device_hotplug_e2e \
+                --test playback_hotplug_integration_e2e \
+                --test device_handling_test \
+                --test platform_macos_test \
+                -- --test-threads=1 --nocapture; then
+                echo "✅ Tests passed on attempt $attempt"
+                return 0
+              fi
+
+              echo "⚠️  Tests failed on attempt $attempt"
+              attempt=$((attempt + 1))
+
+              if [ $attempt -le $max_attempts ]; then
+                echo "Retrying in 5 seconds..."
+                sleep 5
+              fi
+            done
+
+            echo "❌ Tests failed after $max_attempts attempts"
+            return 1
+          }
+
+          run_with_retry
+        continue-on-error: false
+
+      # Collect test metrics
+      - name: Collect test metrics
+        if: always()
+        run: |
+          echo "=== Collecting test metrics ==="
+
+          mkdir -p test-results
+
+          # Run tests with JSON output for metrics
+          cargo test --release \
+            --package soul-audio-desktop \
+            --test device_hotplug_e2e \
+            -- --test-threads=1 -Z unstable-options --format json 2>&1 | tee test-results/macos-metrics-raw.json || true
+
+          # Parse JSON output into summary
+          cat > test-results/macos-summary.json <<EOF
+{
+  "platform": "macos",
+  "runner": "macos-latest",
+  "virtual_device": "BlackHole 2ch",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "test_result": "${{ steps.e2e-tests.outcome }}"
+}
+EOF
+
+          echo "=== Test metrics collected ==="
+          cat test-results/macos-summary.json
+
+      # Upload metrics as artifacts
+      - name: Upload test metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-e2e-metrics-macos
+          path: test-results/
+          retention-days: 30
+
+  # ============================================================================
+  # Windows Audio E2E Tests (WASAPI + VB-Cable)
+  # ============================================================================
+  audio-e2e-windows:
+    name: Audio E2E - Windows (WASAPI)
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "audio-e2e-windows"
+
+      # Install LLVM for ASIO support
+      - name: Install LLVM (for ASIO)
+        run: |
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      # Install VB-Cable virtual audio driver
+      - name: Install VB-Cable virtual audio device
+        run: |
+          Write-Host "=== Installing VB-Cable virtual audio driver ==="
+
+          # Download VB-Cable
+          $vbCableUrl = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+          $vbCableZip = "$env:TEMP\VBCABLE.zip"
+          $vbCableDir = "$env:TEMP\VBCABLE"
+
+          Invoke-WebRequest -Uri $vbCableUrl -OutFile $vbCableZip
+          Expand-Archive -Path $vbCableZip -DestinationPath $vbCableDir -Force
+
+          Write-Host "=== Installing driver (may require elevation) ==="
+          # Try to install the driver
+          $installExe = Get-ChildItem -Path $vbCableDir -Filter "VBCABLE_Setup_x64.exe" -Recurse | Select-Object -First 1
+
+          if ($installExe) {
+            # Install silently (best effort - may fail without admin)
+            Start-Process -FilePath $installExe.FullName -ArgumentList "-i", "-h" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+            Write-Host "VB-Cable installation attempted"
+          } else {
+            Write-Host "Warning: VB-Cable installer not found, tests will run in fallback mode"
+          }
+
+          Start-Sleep -Seconds 10
+
+          Write-Host "=== Listing audio devices ==="
+          Get-CimInstance Win32_SoundDevice | Format-Table -AutoSize
+
+      # Create mock frontend dist for Tauri
+      - name: Create mock frontend dist
+        shell: bash
+        run: |
+          mkdir -p applications/desktop/dist
+          echo '<!DOCTYPE html><html><head><title>Soul Player</title></head><body><div id="root">Loading...</div></body></html>' > applications/desktop/dist/index.html
+          mkdir -p applications/desktop/src-tauri/dist
+          cp applications/desktop/dist/index.html applications/desktop/src-tauri/dist/
+
+      # Build E2E tests
+      - name: Build audio E2E tests
+        run: |
+          Write-Host "=== Building audio E2E tests ==="
+          cargo test --no-run --release `
+            --package soul-audio-desktop `
+            --test device_hotplug_e2e `
+            --test playback_hotplug_integration_e2e `
+            --test device_handling_test `
+            --test platform_windows_test
+
+      # Run E2E tests with retry logic
+      - name: Run audio E2E tests (with retry)
+        id: e2e-tests
+        run: |
+          Write-Host "=== Running audio E2E tests ==="
+
+          # Function to run tests with retry
+          function Run-WithRetry {
+            $maxAttempts = 3
+            $attempt = 1
+
+            while ($attempt -le $maxAttempts) {
+              Write-Host "Attempt $attempt of $maxAttempts"
+
+              $result = cargo test --release `
+                --package soul-audio-desktop `
+                --test device_hotplug_e2e `
+                --test playback_hotplug_integration_e2e `
+                --test device_handling_test `
+                --test platform_windows_test `
+                -- --test-threads=1 --nocapture
+
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Tests passed on attempt $attempt"
+                return 0
+              }
+
+              Write-Host "⚠️  Tests failed on attempt $attempt"
+              $attempt++
+
+              if ($attempt -le $maxAttempts) {
+                Write-Host "Retrying in 5 seconds..."
+                Start-Sleep -Seconds 5
+              }
+            }
+
+            Write-Host "❌ Tests failed after $maxAttempts attempts"
+            exit 1
+          }
+
+          Run-WithRetry
+        continue-on-error: false
+
+      # Collect test metrics
+      - name: Collect test metrics
+        if: always()
+        shell: bash
+        run: |
+          echo "=== Collecting test metrics ==="
+
+          mkdir -p test-results
+
+          # Run tests with JSON output for metrics
+          cargo test --release \
+            --package soul-audio-desktop \
+            --test device_hotplug_e2e \
+            -- --test-threads=1 -Z unstable-options --format json 2>&1 | tee test-results/windows-metrics-raw.json || true
+
+          # Parse JSON output into summary
+          cat > test-results/windows-summary.json <<EOF
+{
+  "platform": "windows",
+  "runner": "windows-latest",
+  "virtual_device": "VB-Cable",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "test_result": "${{ steps.e2e-tests.outcome }}"
+}
+EOF
+
+          echo "=== Test metrics collected ==="
+          cat test-results/windows-summary.json
+
+      # Upload metrics as artifacts
+      - name: Upload test metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-e2e-metrics-windows
+          path: test-results/
+          retention-days: 30
+
+  # ============================================================================
+  # Aggregate Results and Post Summary
+  # ============================================================================
+  aggregate-results:
+    name: Aggregate E2E Results
+    needs: [audio-e2e-linux, audio-e2e-macos, audio-e2e-windows]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download all test metrics
+        uses: actions/download-artifact@v4
+        with:
+          path: all-metrics
+
+      - name: Generate test summary
+        run: |
+          echo "# 🎵 Audio E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status | Virtual Device | Runner |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|----------------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Process Linux results
+          if [ -f "all-metrics/audio-e2e-metrics-linux/linux-summary.json" ]; then
+            LINUX_STATUS=$(jq -r '.test_result' all-metrics/audio-e2e-metrics-linux/linux-summary.json)
+            LINUX_DEVICE=$(jq -r '.virtual_device' all-metrics/audio-e2e-metrics-linux/linux-summary.json)
+            LINUX_RUNNER=$(jq -r '.runner' all-metrics/audio-e2e-metrics-linux/linux-summary.json)
+
+            if [ "$LINUX_STATUS" = "success" ]; then
+              echo "| 🐧 Linux | ✅ Passed | $LINUX_DEVICE | $LINUX_RUNNER |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 🐧 Linux | ❌ Failed | $LINUX_DEVICE | $LINUX_RUNNER |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 🐧 Linux | ⚠️  No Data | N/A | N/A |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Process macOS results
+          if [ -f "all-metrics/audio-e2e-metrics-macos/macos-summary.json" ]; then
+            MACOS_STATUS=$(jq -r '.test_result' all-metrics/audio-e2e-metrics-macos/macos-summary.json)
+            MACOS_DEVICE=$(jq -r '.virtual_device' all-metrics/audio-e2e-metrics-macos/macos-summary.json)
+            MACOS_RUNNER=$(jq -r '.runner' all-metrics/audio-e2e-metrics-macos/macos-summary.json)
+
+            if [ "$MACOS_STATUS" = "success" ]; then
+              echo "| 🍎 macOS | ✅ Passed | $MACOS_DEVICE | $MACOS_RUNNER |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 🍎 macOS | ❌ Failed | $MACOS_DEVICE | $MACOS_RUNNER |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 🍎 macOS | ⚠️  No Data | N/A | N/A |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Process Windows results
+          if [ -f "all-metrics/audio-e2e-metrics-windows/windows-summary.json" ]; then
+            WINDOWS_STATUS=$(jq -r '.test_result' all-metrics/audio-e2e-metrics-windows/windows-summary.json)
+            WINDOWS_DEVICE=$(jq -r '.virtual_device' all-metrics/audio-e2e-metrics-windows/windows-summary.json)
+            WINDOWS_RUNNER=$(jq -r '.runner' all-metrics/audio-e2e-metrics-windows/windows-summary.json)
+
+            if [ "$WINDOWS_STATUS" = "success" ]; then
+              echo "| 🪟 Windows | ✅ Passed | $WINDOWS_DEVICE | $WINDOWS_RUNNER |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 🪟 Windows | ❌ Failed | $WINDOWS_DEVICE | $WINDOWS_RUNNER |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 🪟 Windows | ⚠️  No Data | N/A | N/A |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Timestamp:** $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Test Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "Test metrics and detailed logs are available as workflow artifacts." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload combined metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-e2e-metrics-combined
+          path: all-metrics/
+          retention-days: 30
+
+      - name: Check overall status
+        run: |
+          LINUX_STATUS="${{ needs.audio-e2e-linux.result }}"
+          MACOS_STATUS="${{ needs.audio-e2e-macos.result }}"
+          WINDOWS_STATUS="${{ needs.audio-e2e-windows.result }}"
+
+          if [[ "$LINUX_STATUS" != "success" || "$MACOS_STATUS" != "success" || "$WINDOWS_STATUS" != "success" ]]; then
+            echo "❌ One or more audio E2E test jobs failed"
+            exit 1
+          fi
+
+          echo "✅ All audio E2E tests passed successfully!"
+
+  # ============================================================================
+  # PR Comment with Results (only on PRs)
+  # ============================================================================
+  comment-pr:
+    name: Comment on PR
+    needs: [audio-e2e-linux, audio-e2e-macos, audio-e2e-windows]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Download all test metrics
+        uses: actions/download-artifact@v4
+        with:
+          path: all-metrics
+
+      - name: Post PR comment with results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Read test results
+            let linuxStatus = 'N/A';
+            let macosStatus = 'N/A';
+            let windowsStatus = 'N/A';
+
+            try {
+              const linuxData = JSON.parse(fs.readFileSync('all-metrics/audio-e2e-metrics-linux/linux-summary.json', 'utf8'));
+              linuxStatus = linuxData.test_result === 'success' ? '✅ Passed' : '❌ Failed';
+            } catch (e) {
+              linuxStatus = '⚠️ No Data';
+            }
+
+            try {
+              const macosData = JSON.parse(fs.readFileSync('all-metrics/audio-e2e-metrics-macos/macos-summary.json', 'utf8'));
+              macosStatus = macosData.test_result === 'success' ? '✅ Passed' : '❌ Failed';
+            } catch (e) {
+              macosStatus = '⚠️ No Data';
+            }
+
+            try {
+              const windowsData = JSON.parse(fs.readFileSync('all-metrics/audio-e2e-metrics-windows/windows-summary.json', 'utf8'));
+              windowsStatus = windowsData.test_result === 'success' ? '✅ Passed' : '❌ Failed';
+            } catch (e) {
+              windowsStatus = '⚠️ No Data';
+            }
+
+            const comment = `## 🎵 Audio E2E Test Results
+
+            | Platform | Status |
+            |----------|--------|
+            | 🐧 Linux (ALSA) | ${linuxStatus} |
+            | 🍎 macOS (CoreAudio) | ${macosStatus} |
+            | 🪟 Windows (WASAPI) | ${windowsStatus} |
+
+            **Workflow:** [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ---
+            *Audio E2E tests verify device hotplug, playback integration, and platform-specific audio handling with virtual devices.*
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

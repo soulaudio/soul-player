@@ -1,5 +1,15 @@
 /**
- * Progress bar with seek functionality
+ * Full-featured progress bar with drag-to-seek functionality.
+ *
+ * Features:
+ * - Advanced drag-and-drop seeking with AbortController cleanup
+ * - Seek position preview while dragging
+ * - Race condition prevention
+ * - Visual seek handle on hover
+ * - Self-contained: connects directly to player store via hooks
+ *
+ * Use cases: Desktop app PlayerPanel, standalone player layouts
+ * Status: Actively used in production (PlayerPanel sidebar)
  */
 
 import React from 'react';

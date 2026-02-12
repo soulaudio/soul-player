@@ -3,8 +3,7 @@ import { Play, Pause } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ArtworkImage, getDeduplicatedTracks, useIsPlaying, usePlayerCommands } from '@soul-player/shared';
-import { usePlaybackContext } from '../hooks/usePlaybackContext';
+import { ArtworkImage, getDeduplicatedTracks, useIsPlaying, usePlayerCommands, useBackend, usePlaybackSession } from '@soul-player/shared';
 
 export interface Album {
   id: number;
@@ -34,32 +33,22 @@ interface AlbumTrack {
 export function AlbumCard({ album, className = 'w-full', showArtist = true }: AlbumCardProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { recordContext, getCurrentContext } = usePlaybackContext();
+  const backend = useBackend();
+  const { isActiveContext } = usePlaybackSession();
   const isPlaying = useIsPlaying();
   const commands = usePlayerCommands();
   const [isThisAlbumPlaying, setIsThisAlbumPlaying] = useState(false);
 
   // Check if this album is the current playback context
   useEffect(() => {
-    const checkContext = async () => {
-      if (!isPlaying) {
-        setIsThisAlbumPlaying(false);
-        return;
-      }
+    if (!isPlaying) {
+      setIsThisAlbumPlaying(false);
+      return;
+    }
 
-      try {
-        const context = await getCurrentContext();
-        const isActiveAlbum =
-          context?.contextType === 'album' &&
-          context?.contextId === String(album.id);
-        setIsThisAlbumPlaying(isActiveAlbum);
-      } catch {
-        setIsThisAlbumPlaying(false);
-      }
-    };
-
-    checkContext();
-  }, [isPlaying, album.id, getCurrentContext]);
+    const isActiveAlbum = isActiveContext('album', album.id);
+    setIsThisAlbumPlaying(isActiveAlbum);
+  }, [isPlaying, album.id, isActiveContext]);
 
   const handleClick = () => {
     console.log('[AlbumCard] handleClick - navigating to album:', album.id);
@@ -108,11 +97,11 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
       }));
 
       // Record playback context
-      await recordContext({
+      await backend.recordContext({
         contextType: 'album',
         contextId: String(album.id),
         contextName: album.title,
-        contextArtworkPath: album.cover_art_path,
+        contextArtworkPath: album.cover_art_path || null,
       });
 
       await invoke('play_queue', { queue, startIndex: 0 });

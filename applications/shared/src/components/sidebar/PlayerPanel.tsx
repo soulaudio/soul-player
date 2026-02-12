@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { usePlayerStore } from '../../stores/player';
 import { usePlayerCommands } from '../../contexts/PlayerCommandsContext';
 import { NowPlayingPanel, type CurrentTrackInfo } from './NowPlayingPanel';
-import { ProgressBar } from './ProgressBar';
+import { ProgressBar } from '../player/ProgressBar';
 import { PlaybackControls, type ShuffleMode, type RepeatMode } from './PlaybackControls';
 import { VolumeControl } from './VolumeControl';
 import { DeviceSelector, type AudioDevice, type AudioBackend } from './DeviceSelector';
@@ -13,8 +13,6 @@ import { debug } from '../../utils/debug';
 export interface PlayerPanelProps {
   currentTrack: CurrentTrackInfo | null;
   isPlaying: boolean;
-  progress: number;
-  duration: number;
   volume: number;
   shuffleMode: ShuffleMode;
   repeatMode: RepeatMode;
@@ -29,8 +27,6 @@ export interface PlayerPanelProps {
 export function PlayerPanel({
   currentTrack,
   isPlaying,
-  progress,
-  duration,
   volume,
   shuffleMode,
   repeatMode,
@@ -180,21 +176,6 @@ export function PlayerPanel({
     }
   }, [commands]);
 
-  const handleSeek = useCallback(
-    async (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!duration) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const percentage = x / rect.width;
-      const newPosition = percentage * duration;
-      try {
-        await commands.seek(newPosition);
-      } catch (error) {
-        debug.error('[PlayerPanel] Failed to seek:', error);
-      }
-    },
-    [duration, commands]
-  );
 
   const handleShuffleToggle = async () => {
     debug.log('[PlayerPanel] Current shuffle mode:', shuffleMode);
@@ -292,12 +273,7 @@ export function PlayerPanel({
       />
 
       <div className="px-4 pt-2 pb-4 space-y-3">
-        <ProgressBar
-          progress={progress}
-          duration={duration}
-          hasCurrentTrack={!!currentTrack}
-          onSeek={handleSeek}
-        />
+        <ProgressBar />
 
         <PlaybackControls
           isPlaying={isPlaying}

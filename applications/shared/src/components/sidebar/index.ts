@@ -3,7 +3,6 @@ export { QueueSection, type QueueSectionProps } from './QueueSection';
 export { PlayerPanel, type PlayerPanelProps } from './PlayerPanel';
 export { NowPlayingPanel, type NowPlayingPanelProps, type CurrentTrackInfo } from './NowPlayingPanel';
 export { PlaybackControls, type PlaybackControlsProps, type ShuffleMode, type RepeatMode } from './PlaybackControls';
-export { ProgressBar, type ProgressBarProps } from './ProgressBar';
 export { VolumeControl, type VolumeControlProps } from './VolumeControl';
 export { DeviceSelector, type DeviceSelectorProps, type AudioDevice, type AudioBackend } from './DeviceSelector';
 export { SettingsFooter, type SettingsFooterProps } from './SettingsFooter';

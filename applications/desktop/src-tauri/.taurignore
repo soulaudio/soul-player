@@ -1,0 +1,44 @@
+# Tauri watch ignore file
+# Files and directories listed here won't trigger Rust rebuilds
+
+# Build artifacts
+target/
+dist/
+../dist/
+
+# Dependencies
+node_modules/
+.yarn/
+
+# Logs and temp files
+*.log
+.tmp/
+.cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Test files (unless you want tests to trigger rebuilds)
+**/*_test.rs
+**/tests/
+
+# Documentation
+*.md
+docs/
+
+# Assets that don't affect Rust
+../public/
+../src/**/*.css
+../src/**/*.svg
+../src/**/*.png
+../src/**/*.jpg
+
+# SQLx metadata (already compiled)
+../../libraries/soul-storage/.sqlx/

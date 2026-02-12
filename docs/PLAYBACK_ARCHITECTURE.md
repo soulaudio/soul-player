@@ -59,7 +59,7 @@ This separation ensures:
 **Key Files**:
 - `applications/shared/src/contexts/BackendContext.tsx` - Interface definition
 - `applications/desktop/src/providers/TauriBackendProvider.tsx` - Desktop implementation
-- `applications/marketing/src/providers/DemoBackendProvider.tsx` - Demo implementation
+- `applications/shared/src/providers/MockBackendProvider.tsx` - Mock implementation (for marketing demo)
 
 ### PlayerCommandsContext - Playback Control
 
@@ -93,7 +93,7 @@ This separation ensures:
 App Root
 ├── PlatformProvider (detects desktop/web)
 ├── BackendProvider (data fetching)
-│   └── TauriBackendProvider OR DemoBackendProvider
+│   └── TauriBackendProvider OR MockBackendProvider
 ├── PlayerCommandsProvider (playback control)
 │   └── TauriPlayerCommandsProvider OR DemoPlayerCommandsProvider
 └── Page Components
@@ -504,9 +504,9 @@ function ArtistPage() {
    }
    ```
 
-3. **Implement in DemoBackendProvider**:
+3. **Implement in MockBackendProvider**:
    ```typescript
-   // applications/marketing/src/providers/DemoBackendProvider.tsx
+   // applications/shared/src/providers/MockBackendProvider.tsx
    async getTracksByGenre(genreId: number) {
      return storage.getTracksByGenre(genreId)
        .map((t, i) => toBackendTrack(t, i))

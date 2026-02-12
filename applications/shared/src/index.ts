@@ -71,14 +71,10 @@ export type {
 
 export { ScrollVisibilityProvider, useScrollVisibility } from './contexts/ScrollVisibilityContext';
 
-export { PlaybackContextProvider, usePlaybackContext } from './contexts/PlaybackContextProvider';
-export type { PlaybackContextData } from './contexts/PlaybackContextProvider';
-
 export { PlaybackSessionProvider, usePlaybackSession } from './contexts/PlaybackSessionContext';
 export type { PlaybackSession, PlaybackSessionContextValue } from './contexts/PlaybackSessionContext';
 
 // Backend Providers
-export { AbstractBackendProvider, createBackendProvider } from './providers/AbstractBackendProvider';
 export { MockBackendProvider } from './providers/MockBackendProvider';
 export { ServerBackendProvider } from './providers/ServerBackendProvider';
 
@@ -114,6 +110,8 @@ export * from './theme/types';
 // export { PlayerFooter } from './components/player/PlayerFooter'; // DELETED - dead code
 export { PlayerControls } from './components/player/PlayerControls';
 export { TrackInfo } from './components/player/TrackInfo';
+// NOTE: player/ProgressBar - Full-featured drag-to-seek variant (actively used in PlayerPanel).
+// Self-contained with hooks, provides advanced seeking with AbortController cleanup.
 export { ProgressBar } from './components/player/ProgressBar';
 // export { VolumeControl } from './components/player/VolumeControl'; // DELETED - dead code
 export { ShuffleRepeatControls } from './components/player/ShuffleRepeatControls';

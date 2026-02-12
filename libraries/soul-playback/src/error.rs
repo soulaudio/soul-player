@@ -13,6 +13,10 @@ pub enum PlaybackError {
     #[error("Queue is empty")]
     QueueEmpty,
 
+    /// Source loading timed out
+    #[error("Source loading timed out")]
+    LoadTimeout,
+
     /// Invalid seek position
     #[error("Invalid seek position: {0:?}")]
     InvalidSeekPosition(std::time::Duration),

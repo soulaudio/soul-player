@@ -1,0 +1,111 @@
+--- a/libraries/soul-audio-desktop/src/playback.rs
++++ b/libraries/soul-audio-desktop/src/playback.rs
+@@ -370,52 +370,32 @@
+ /// - Microsoft WASAPI stream routing documentation
+ /// - Apple CoreAudio device management guidelines
+ /// - BigBlueButton audio device handling
++///
++/// SIMPLIFIED: Reduced from 5 states to 2 states for clarity and reliability.
++/// Fading is now handled automatically by the stream start envelope.
++/// Recovery is handled by async error handling without state machine complexity.
+ #[derive(Debug, Clone, PartialEq, Eq, Default)]
+ pub enum DeviceSwitchState {
+     /// Normal operation, no switch in progress
+     #[default]
+     Idle,
+
+-    /// Fadeout in progress before switch
+-    FadingOut {
+-        /// Target device for switch
+-        target_device: Option<String>,
+-        /// Target backend
+-        target_backend: crate::AudioBackend,
+-        /// Reason for switch
+-        reason: DeviceSwitchReason,
+-        /// Samples remaining in fadeout
+-        samples_remaining: usize,
+-    },
+-
+-    /// Switching to new device (stream recreation)
++    /// Switching to new device (stream recreation in progress)
++    /// All switch operations (fadeout, stream recreation, fadein, recovery) happen
++    /// within this single state, managed asynchronously.
+     Switching {
+         /// Target device for switch
+         target_device: Option<String>,
+         /// Target backend
+         target_backend: crate::AudioBackend,
+-        /// Reason for switch
+-        reason: DeviceSwitchReason,
+-        /// Playback position to restore
+-        saved_position: std::time::Duration,
+-        /// Whether playback was active before switch
+-        was_playing: bool,
+-    },
+-
+-    /// Fadein in progress after switch
+-    FadingIn {
+-        /// New device name
+-        device_name: String,
+-        /// Samples remaining in fadein
+-        samples_remaining: usize,
+-    },
+-
+-    /// Recovery mode after failed switch
+-    Recovering {
+-        /// Number of retry attempts
+-        retry_count: u32,
+-        /// Last error message
+-        last_error: String,
+-        /// Original position to restore
+-        saved_position: std::time::Duration,
++        /// When the switch started (for timeout detection)
++        started_at: std::time::Instant,
+     },
+ }
+
+@@ -425,17 +405,15 @@ impl DeviceSwitchState {
+         !matches!(self, Self::Idle)
+     }
+
+-    /// Check if we can start a new switch
++    /// Check if we can start a new switch (now only allowed when Idle)
+     pub fn can_start_switch(&self) -> bool {
+-        matches!(self, Self::Idle | Self::Recovering { .. })
++        matches!(self, Self::Idle)
+     }
+
+     /// Get the target device if currently switching
+     pub fn target_device(&self) -> Option<&str> {
+         match self {
+-            Self::FadingOut { target_device, .. } | Self::Switching { target_device, .. } => {
+-                target_device.as_deref()
+-            }
++            Self::Switching { target_device, .. } => target_device.as_deref(),
+             _ => None,
+         }
+     }
+@@ -624,6 +602,14 @@ pub struct DesktopPlayback {
+     /// Command sender
+     command_tx: Sender<PlaybackCommand>,
+
++    /// Buffered commands (queued during device switches)
++    /// Commands sent during device switching are buffered here and replayed
++    /// after the switch completes, ensuring no commands are lost.
++    buffered_commands: Arc<Mutex<Vec<PlaybackCommand>>>,
++
++    /// Maximum number of commands to buffer (prevent unbounded growth)
++    max_buffered_commands: usize,
++
+     /// Event receiver
+     event_rx: Receiver<PlaybackEvent>,
+
+@@ -804,6 +790,8 @@ impl DesktopPlayback {
+
+         Ok(DesktopPlayback {
+             command_tx: command_tx.clone(),
++            buffered_commands: Arc::new(Mutex::new(Vec::new())),
++            max_buffered_commands: 50,
+             event_rx,
+             event_tx: event_tx.clone(),
+             stream,

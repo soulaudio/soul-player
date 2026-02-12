@@ -18,7 +18,7 @@ export function usePlaybackEvents() {
       try {
         if (!isMounted) return;
 
-        // Listen for playback state changes (Playing, Paused, Stopped, Loading)
+        // Listen for playback state changes (Playing, Paused, Stopped)
         const unlistenStateChanged = await listen<string>('playback:state-changed', (event) => {
           if (!isMounted) return;
           const state = event.payload;

@@ -80,7 +80,142 @@ pub mod exclusive;
 mod output;
 pub mod playback;
 pub mod sources;
-pub mod track_loader;
+
+// ===== Sample Trait for Generic Audio Callback =====
+
+/// Trait for audio sample formats
+///
+/// Enables a single generic audio callback to work with multiple sample formats
+/// (f32, i32, i16) instead of duplicating callback code three times.
+pub trait Sample: Copy + Send + 'static {
+    /// Convert a single f32 sample to this format
+    fn from_f32(sample: f32) -> Self;
+
+    /// Convert a slice of f32 samples to this format
+    fn from_f32_slice(input: &[f32], output: &mut [Self]);
+
+    /// Fill a buffer with silence (zeros)
+    fn fill_silence(buffer: &mut [Self]);
+}
+
+impl Sample for f32 {
+    #[inline]
+    fn from_f32(sample: f32) -> Self {
+        sample
+    }
+
+    #[inline]
+    fn from_f32_slice(input: &[f32], output: &mut [Self]) {
+        output.copy_from_slice(input);
+    }
+
+    #[inline]
+    fn fill_silence(buffer: &mut [Self]) {
+        buffer.fill(0.0);
+    }
+}
+
+impl Sample for i32 {
+    #[inline]
+    fn from_f32(sample: f32) -> Self {
+        // Apply TPDF dithering for high-quality conversion
+        // TPDF (Triangular Probability Density Function) dithering
+        // eliminates quantization distortion and correlation artifacts
+        let dither = tpdf_dither_i32();
+        let scaled = sample * 2147483648.0; // Scale to i32 range
+        (scaled + dither).clamp(-2147483648.0, 2147483647.0) as i32
+    }
+
+    #[inline]
+    fn from_f32_slice(input: &[f32], output: &mut [Self]) {
+        for (i, &sample) in input.iter().enumerate() {
+            output[i] = Self::from_f32(sample);
+        }
+    }
+
+    #[inline]
+    fn fill_silence(buffer: &mut [Self]) {
+        buffer.fill(0);
+    }
+}
+
+impl Sample for i16 {
+    #[inline]
+    fn from_f32(sample: f32) -> Self {
+        // Apply TPDF dithering for high-quality conversion
+        let dither = tpdf_dither_i16();
+        let scaled = sample * 32768.0; // Scale to i16 range
+        (scaled + dither).clamp(-32768.0, 32767.0) as i16
+    }
+
+    #[inline]
+    fn from_f32_slice(input: &[f32], output: &mut [Self]) {
+        for (i, &sample) in input.iter().enumerate() {
+            output[i] = Self::from_f32(sample);
+        }
+    }
+
+    #[inline]
+    fn fill_silence(buffer: &mut [Self]) {
+        buffer.fill(0);
+    }
+}
+
+/// TPDF dithering for i32 conversion
+///
+/// Uses thread-local LFSR for fast pseudo-random generation
+#[inline]
+fn tpdf_dither_i32() -> f32 {
+    use std::cell::Cell;
+    thread_local! {
+        static STATE: Cell<u32> = Cell::new(0xDEADBEEF);
+    }
+    STATE.with(|state| {
+        let mut s = state.get();
+        // Simple LFSR for fast pseudo-random generation
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        state.set(s);
+        let r1 = (s & 0xFFFF) as f32 / 65536.0;
+
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        state.set(s);
+        let r2 = (s & 0xFFFF) as f32 / 65536.0;
+
+        (r1 + r2 - 1.0) * 0.5 // TPDF: sum of two uniform random variables
+    })
+}
+
+/// TPDF dithering for i16 conversion
+#[inline]
+fn tpdf_dither_i16() -> f32 {
+    use std::cell::Cell;
+    thread_local! {
+        static STATE: Cell<u32> = Cell::new(0xCAFEBABE);
+    }
+    STATE.with(|state| {
+        let mut s = state.get();
+        // Simple LFSR for fast pseudo-random generation
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        state.set(s);
+        let r1 = (s & 0xFFFF) as f32 / 65536.0;
+
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        state.set(s);
+        let r2 = (s & 0xFFFF) as f32 / 65536.0;
+
+        (r1 + r2 - 1.0) * 0.5
+    })
+}
+
+// ===== Public Exports =====
 
 pub use backend::{AudioBackend, BackendError, BackendInfo};
 // Device module exports
@@ -119,4 +254,3 @@ pub use playback::{
     PlaybackEvent, ResamplingSettings, SampleRateMode,
 };
 pub use sources::{LocalAudioSource, StreamingAudioSource};
-pub use track_loader::{LoadRequest, LoadResult, TrackLoader};

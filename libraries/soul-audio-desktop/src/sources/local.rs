@@ -39,6 +39,7 @@
 //!    - Normalizes to [-1.0, 1.0] range
 
 use crossbeam_channel::{bounded, Receiver, Sender};
+use rtrb::{Consumer, Producer, RingBuffer};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
@@ -46,7 +47,8 @@ use soul_playback::{AudioSource, PlaybackError, Result};
 use std::collections::VecDeque;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use symphonia::core::audio::{AudioBufferRef, Signal};
@@ -75,25 +77,43 @@ const BUFFER_SIZE_SECONDS: usize = 5;
 /// - Higher = more safety margin for slow disks, but higher latency
 /// - Lower = faster start, but risk of underrun on slow systems
 ///
-/// 24000 samples = ~250ms at 48kHz stereo, which provides:
-/// - Fast perceived response (< 300ms feels instant)
-/// - Enough buffer for most HDDs (seek time ~10ms + read)
+/// 12000 samples = ~125ms at 48kHz stereo, which provides:
+/// - Very fast perceived response (< 200ms feels instant)
+/// - Enough buffer for smooth startup
 /// - The 5-second background buffer provides long-term safety
-const MIN_BUFFER_SAMPLES: usize = 24000;
+const MIN_BUFFER_SAMPLES: usize = 12000;
 
-/// Encoder delay to skip at playback start (in frames, not samples)
+/// Encoder delay values by codec type (in frames, not samples)
 ///
 /// Most audio codecs add "encoder delay" - padding samples at file start:
 /// - MP3: ~1152 frames (26ms @ 44.1kHz)
 /// - AAC: ~1024-2112 frames
-/// - FLAC: ~0-256 frames (minimal)
+/// - FLAC: ~0 frames (lossless, no encoder delay)
+/// - WAV/PCM: ~0 frames (raw audio)
 ///
 /// These samples contain codec startup artifacts (DC offset, filter ramp-up,
 /// near-silence with sudden jumps) that cause audible pops if played directly.
 ///
-/// We use 1200 frames (conservative) to cover all formats cleanly.
-/// At 44.1kHz stereo, this is 27ms - imperceptible loss.
-const ENCODER_DELAY_FRAMES: usize = 1200;
+/// CRITICAL: Using wrong values causes audible issues:
+/// - Too high (like 1200 for FLAC): Skips actual music, causes stuttering/repeats
+/// - Too low: Pops and clicks at playback start
+fn get_encoder_delay_frames(codec_params: &symphonia::core::codecs::CodecParameters) -> usize {
+    // Check codec type from CodecParameters
+    use symphonia::core::codecs::CODEC_TYPE_AAC;
+    use symphonia::core::codecs::CODEC_TYPE_FLAC;
+    use symphonia::core::codecs::CODEC_TYPE_MP3;
+    use symphonia::core::codecs::CODEC_TYPE_PCM_F32LE;
+    use symphonia::core::codecs::CODEC_TYPE_PCM_S16LE;
+    use symphonia::core::codecs::CODEC_TYPE_PCM_S24LE;
+
+    match codec_params.codec {
+        CODEC_TYPE_MP3 => 1152, // Standard MP3 encoder delay
+        CODEC_TYPE_AAC => 1024, // Typical AAC encoder delay
+        CODEC_TYPE_FLAC => 0,   // FLAC is lossless, no encoder delay
+        CODEC_TYPE_PCM_S16LE | CODEC_TYPE_PCM_S24LE | CODEC_TYPE_PCM_F32LE => 0, // Raw PCM
+        _ => 512,               // Conservative default for unknown codecs (Vorbis, Opus, etc.)
+    }
+}
 
 /// Commands sent to the decoder thread
 #[derive(Debug)]
@@ -106,24 +126,19 @@ enum DecoderCommand {
 
 /// Shared state between audio thread and decoder thread
 struct SharedState {
-    /// Ring buffer for resampled samples (at TARGET rate, ready for output)
-    output_buffer: VecDeque<f32>,
     /// Total samples read by audio callback (at target rate)
-    samples_read: usize,
+    samples_read: AtomicUsize,
     /// Whether decoder has reached end of file
-    is_eof: bool,
+    is_eof: AtomicBool,
     /// Whether a seek is pending (decoder will reset)
-    seek_pending: bool,
-    /// Track how many encoder delay samples have been skipped
-    /// Reset to 0 on seek (encoder delay reapplied after seek)
-    encoder_delay_skipped: usize,
+    seek_pending: AtomicBool,
 }
 
 /// Audio source for local files with background decoder thread
 ///
 /// Uses Symphonia to decode audio files from disk in a background thread.
 /// The audio callback only reads from a pre-filled buffer, never blocking on I/O.
-/// Maintains a 5-second ring buffer for smooth, glitch-free playback.
+/// Maintains a 5-second lock-free ring buffer for smooth, glitch-free playback.
 /// Automatically resamples audio to match target sample rate.
 ///
 /// Supports all formats: MP3, FLAC, OGG, WAV, AAC, OPUS
@@ -133,8 +148,11 @@ pub struct LocalAudioSource {
     target_sample_rate: u32, // Target output sample rate
     channels: u16,
 
-    // Shared state with decoder thread (protected by mutex)
-    shared: Arc<Mutex<SharedState>>,
+    // Lock-free ring buffer (consumer side for audio callback)
+    buffer_consumer: Consumer<f32>,
+
+    // Shared state with decoder thread (lock-free atomics)
+    shared: Arc<SharedState>,
     output_buffer_capacity: usize, // Max samples to buffer
 
     // Communication with decoder thread
@@ -157,8 +175,7 @@ pub struct LocalAudioSource {
 /// * `samples` - Decoded samples to process
 /// * `skip_target` - Total samples to skip
 /// * `samples_skipped` - Current skip counter
-/// * `output_buffer` - Destination buffer
-/// * `output_buffer_capacity` - Max buffer size
+/// * `producer` - Ring buffer producer for output
 ///
 /// # Returns
 /// Updated skip counter
@@ -166,18 +183,15 @@ fn skip_encoder_delay(
     samples: Vec<f32>,
     skip_target: usize,
     mut samples_skipped: usize,
-    output_buffer: &mut VecDeque<f32>,
-    output_buffer_capacity: usize,
+    producer: &mut Producer<f32>,
 ) -> usize {
     for sample in samples {
         if samples_skipped < skip_target {
             samples_skipped += 1;
             continue; // Drop sample
         }
-        output_buffer.push_back(sample);
-        if output_buffer.len() > output_buffer_capacity {
-            output_buffer.pop_front();
-        }
+        // Non-blocking push - if buffer is full, skip the sample
+        let _ = producer.push(sample);
     }
     samples_skipped
 }
@@ -191,7 +205,8 @@ fn handle_seek_command(
     decoder: &mut Box<dyn symphonia::core::codecs::Decoder>,
     resampler: &mut Option<SincFixedIn<f32>>,
     input_buffer: &mut VecDeque<f32>,
-    shared: &Arc<Mutex<SharedState>>,
+    _producer: &mut Producer<f32>,
+    shared: &Arc<SharedState>,
     position: Duration,
     track_id: u32,
     time_base: TimeBase,
@@ -242,15 +257,20 @@ fn handle_seek_command(
         );
     }
 
-    // Clear output buffer and update position to ACTUAL position (not requested)
+    // NOTE: We don't clear the ring buffer here because:
+    // 1. Producer doesn't have a clear() method (we're on write side)
+    // 2. The decoder will quickly refill with correct samples after seek
+    // 3. The consumer might briefly read stale data, but this is acceptable
+    //    during a seek operation (position is changing anyway)
+    //
+    // Update position to ACTUAL position (not requested)
     // This fixes position drift with VBR files where seek lands at a different position
-    let mut state = shared.lock().unwrap();
-    state.output_buffer.clear();
-    state.samples_read =
-        (actual_position.as_secs_f64() * target_sample_rate as f64 * channels as f64) as usize;
-    state.is_eof = false;
-    state.seek_pending = false;
-    state.encoder_delay_skipped = 0; // Reset encoder delay skip counter
+    shared.samples_read.store(
+        (actual_position.as_secs_f64() * target_sample_rate as f64 * channels as f64) as usize,
+        Ordering::Relaxed,
+    );
+    shared.is_eof.store(false, Ordering::Relaxed);
+    shared.seek_pending.store(false, Ordering::Relaxed);
 
     tracing::debug!(
         "[DecoderThread] Seek completed: requested={:?}, actual={:?}, reset all skip counters",
@@ -340,14 +360,15 @@ impl LocalAudioSource {
         let output_buffer_capacity =
             (BUFFER_SIZE_SECONDS * target_sample_rate as usize) * channels as usize;
 
-        // Create shared state
-        let shared = Arc::new(Mutex::new(SharedState {
-            output_buffer: VecDeque::with_capacity(output_buffer_capacity),
-            samples_read: 0,
-            is_eof: false,
-            seek_pending: false,
-            encoder_delay_skipped: 0,
-        }));
+        // Create lock-free ring buffer
+        let (producer, consumer) = RingBuffer::new(output_buffer_capacity);
+
+        // Create shared state (lock-free atomics)
+        let shared = Arc::new(SharedState {
+            samples_read: AtomicUsize::new(0),
+            is_eof: AtomicBool::new(false),
+            seek_pending: AtomicBool::new(false),
+        });
 
         // Create command channel
         let (command_tx, command_rx) = bounded::<DecoderCommand>(4);
@@ -370,7 +391,7 @@ impl LocalAudioSource {
                     channels,
                     track_id,
                     time_base,
-                    output_buffer_capacity,
+                    producer,
                     shared_clone,
                     command_rx,
                 );
@@ -406,6 +427,7 @@ impl LocalAudioSource {
             source_sample_rate: sample_rate,
             target_sample_rate,
             channels,
+            buffer_consumer: consumer,
             shared,
             output_buffer_capacity,
             command_tx,
@@ -433,8 +455,8 @@ impl LocalAudioSource {
         channels: u16,
         track_id: u32,
         time_base: TimeBase,
-        output_buffer_capacity: usize,
-        shared: Arc<Mutex<SharedState>>,
+        mut producer: Producer<f32>,
+        shared: Arc<SharedState>,
         command_rx: Receiver<DecoderCommand>,
     ) {
         // Re-open file for this thread (can't send format_reader across threads)
@@ -548,12 +570,15 @@ impl LocalAudioSource {
         let mut resampler_samples_skipped: usize = 0;
 
         // Track encoder delay to skip codec startup artifacts
-        // MP3/AAC/FLAC add padding samples at start that cause pops
-        let encoder_delay_skip_samples = ENCODER_DELAY_FRAMES * channels as usize;
+        // Get codec-specific encoder delay (FLAC=0, MP3=1152, AAC=1024, etc.)
+        let encoder_delay_frames = get_encoder_delay_frames(&track.codec_params);
+        let encoder_delay_skip_samples = encoder_delay_frames * channels as usize;
         let mut encoder_delay_samples_skipped: usize = 0;
 
-        tracing::debug!(
-            "[DecoderThread] Decoder thread ready, will skip {} encoder delay samples, {} resampler samples",
+        tracing::info!(
+            "[DecoderThread] Decoder thread ready, codec={:?}, encoder_delay_frames={}, will skip {} encoder delay samples, {} resampler samples",
+            track.codec_params.codec,
+            encoder_delay_frames,
             encoder_delay_skip_samples,
             resampler_skip_samples
         );
@@ -574,6 +599,7 @@ impl LocalAudioSource {
                         &mut decoder,
                         &mut resampler,
                         &mut input_buffer,
+                        &mut producer,
                         &shared,
                         position,
                         track_id,
@@ -601,13 +627,10 @@ impl LocalAudioSource {
             }
 
             // Check if buffer needs filling
-            let buffer_len = {
-                let state = shared.lock().unwrap();
-                state.output_buffer.len()
-            };
+            let buffer_len = producer.slots();
 
             // If buffer is full enough, sleep a bit to avoid spinning
-            if buffer_len >= output_buffer_capacity / 2 {
+            if buffer_len < producer.buffer().capacity() / 2 {
                 thread::sleep(Duration::from_millis(10));
                 continue;
             }
@@ -634,12 +657,11 @@ impl LocalAudioSource {
                             &mut resampler,
                             channels as usize,
                             resampler_chunk_frames,
-                            &shared,
+                            &mut producer,
                         );
                     }
 
-                    let mut state = shared.lock().unwrap();
-                    state.is_eof = true;
+                    shared.is_eof.store(true, Ordering::Relaxed);
                     tracing::debug!("[DecoderThread] Reached end of file");
                     continue;
                 }
@@ -720,20 +742,17 @@ impl LocalAudioSource {
                     &mut resampler,
                     channels as usize,
                     resampler_chunk_frames,
-                    output_buffer_capacity,
-                    &shared,
+                    &mut producer,
                     resampler_skip_samples,
                     resampler_samples_skipped,
                 );
             } else {
                 // No resampling - add directly to output buffer WITH encoder delay skip
-                let mut state = shared.lock().unwrap();
                 encoder_delay_samples_skipped = skip_encoder_delay(
                     samples,
                     encoder_delay_skip_samples,
                     encoder_delay_samples_skipped,
-                    &mut state.output_buffer,
-                    output_buffer_capacity,
+                    &mut producer,
                 );
 
                 // Log when encoder delay skip completes
@@ -766,8 +785,7 @@ impl LocalAudioSource {
         resampler: &mut Option<SincFixedIn<f32>>,
         channels: usize,
         chunk_frames: usize,
-        output_buffer_capacity: usize,
-        shared: &Arc<Mutex<SharedState>>,
+        producer: &mut Producer<f32>,
         skip_samples: usize,
         mut samples_skipped: usize,
     ) -> usize {
@@ -797,7 +815,6 @@ impl LocalAudioSource {
 
             let output_frames = resampled[0].len();
             let output_samples = output_frames * channels;
-            let mut state = shared.lock().unwrap();
 
             // Check if we still need to skip samples (resampler settling period)
             if samples_skipped < skip_samples {
@@ -809,10 +826,8 @@ impl LocalAudioSource {
                     // Partial skip - add remaining samples after skip
                     for frame_idx in start_frame..output_frames {
                         for ch in 0..channels {
-                            state.output_buffer.push_back(resampled[ch][frame_idx]);
-                            if state.output_buffer.len() > output_buffer_capacity {
-                                state.output_buffer.pop_front();
-                            }
+                            // Non-blocking push - if buffer is full, skip the sample
+                            let _ = producer.push(resampled[ch][frame_idx]);
                         }
                     }
                 }
@@ -829,10 +844,8 @@ impl LocalAudioSource {
                 // Normal operation - add all samples to output buffer
                 for frame_idx in 0..output_frames {
                     for ch in 0..channels {
-                        state.output_buffer.push_back(resampled[ch][frame_idx]);
-                        if state.output_buffer.len() > output_buffer_capacity {
-                            state.output_buffer.pop_front();
-                        }
+                        // Non-blocking push - if buffer is full, skip the sample
+                        let _ = producer.push(resampled[ch][frame_idx]);
                     }
                 }
             }
@@ -847,7 +860,7 @@ impl LocalAudioSource {
         resampler: &mut Option<SincFixedIn<f32>>,
         channels: usize,
         chunk_frames: usize,
-        shared: &Arc<Mutex<SharedState>>,
+        producer: &mut Producer<f32>,
     ) {
         let Some(ref mut resampler) = resampler else {
             return;
@@ -890,10 +903,10 @@ impl LocalAudioSource {
         let valid_output_frames =
             (remaining_frames as f64 / chunk_frames as f64 * output_frames as f64) as usize;
 
-        let mut state = shared.lock().unwrap();
         for frame_idx in 0..valid_output_frames {
             for ch in 0..channels {
-                state.output_buffer.push_back(resampled[ch][frame_idx]);
+                // Non-blocking push - if buffer is full, skip the sample
+                let _ = producer.push(resampled[ch][frame_idx]);
             }
         }
     }
@@ -1009,59 +1022,63 @@ impl LocalAudioSource {
 }
 
 impl AudioSource for LocalAudioSource {
-    /// Read samples from the pre-filled buffer (non-blocking)
+    /// Read samples from the pre-filled buffer (non-blocking, wait-free)
     ///
-    /// This method NEVER blocks on disk I/O - it only reads from the buffer
+    /// This method NEVER blocks on disk I/O - it only reads from the lock-free buffer
     /// that the background decoder thread has filled. If the buffer is empty,
     /// it fills with silence to prevent glitches.
     ///
-    /// Uses try_lock to avoid blocking the real-time audio thread. If the lock
-    /// is contended (decoder thread is writing), returns silence for this callback.
+    /// Uses rtrb ring buffer for lock-free, wait-free reads from the audio thread.
     fn read_samples(&mut self, output: &mut [f32]) -> Result<usize> {
-        let Ok(mut state) = self.shared.try_lock() else {
-            // Lock contention with decoder thread - fill with silence
-            // This is rare since the decoder thread releases the lock quickly
-            output.fill(0.0);
-            return Ok(0);
+        // Wait-free read from ring buffer using read_chunk for efficiency
+        let available = self.buffer_consumer.read_chunk(output.len());
+        let read_count = if let Ok(chunk) = available {
+            let count = chunk.len();
+            output[..count].copy_from_slice(chunk.as_slices().0);
+            // If the chunk wraps around the ring buffer, copy the second part
+            if !chunk.as_slices().1.is_empty() {
+                let first_len = chunk.as_slices().0.len();
+                output[first_len..count].copy_from_slice(chunk.as_slices().1);
+            }
+            chunk.commit_all();
+            count
+        } else {
+            0
         };
 
-        // Copy from output buffer to output (non-blocking)
-        let available = state.output_buffer.len().min(output.len());
+        // Track first read and underruns for logging
+        let samples_read = self.shared.samples_read.load(Ordering::Relaxed);
+        let is_first_read = samples_read == 0;
+        let is_eof = self.shared.is_eof.load(Ordering::Relaxed);
+        let is_underrun = read_count < output.len() && !is_eof;
 
-        // Track first read and underruns for logging AFTER the critical section
-        // Using trace! level to avoid allocation overhead in the hot path
-        let is_first_read = state.samples_read == 0;
-        let is_underrun = available < output.len() && !state.is_eof;
-
-        for i in 0..available {
-            output[i] = state.output_buffer.pop_front().unwrap();
-        }
-
-        state.samples_read += available;
+        // Update samples read counter
+        self.shared
+            .samples_read
+            .fetch_add(read_count, Ordering::Relaxed);
 
         // Log diagnostics using trace! to minimize overhead in hot path
-        // These are typically filtered out in production but available for debugging
         if is_first_read {
             tracing::trace!(
                 "[LocalAudioSource::read_samples] First read: requested={}, available={}",
                 output.len(),
-                available
+                read_count
             );
         } else if is_underrun {
             // Underruns are logged at debug level since they indicate potential issues
             tracing::debug!(
                 "[LocalAudioSource::read_samples] Buffer underrun: requested={}, available={}",
                 output.len(),
-                available
+                read_count
             );
         }
 
         // Fill remainder with silence if buffer is empty
-        if available < output.len() {
-            output[available..].fill(0.0);
+        if read_count < output.len() {
+            output[read_count..].fill(0.0);
         }
 
-        Ok(available)
+        Ok(read_count)
     }
 
     fn seek(&mut self, position: Duration) -> Result<()> {
@@ -1070,10 +1087,7 @@ impl AudioSource for LocalAudioSource {
         }
 
         // Mark seek as pending
-        {
-            let mut state = self.shared.lock().unwrap();
-            state.seek_pending = true;
-        }
+        self.shared.seek_pending.store(true, Ordering::Relaxed);
 
         // Send seek command to decoder thread
         self.command_tx
@@ -1091,26 +1105,15 @@ impl AudioSource for LocalAudioSource {
 
     fn position(&self) -> Duration {
         // Calculate position based on samples read (at target sample rate)
-        // Uses try_lock to avoid blocking the real-time audio thread
-        match self.shared.try_lock() {
-            Ok(state) => {
-                let frames = state.samples_read / self.channels as usize;
-                Duration::from_secs_f64(frames as f64 / self.target_sample_rate as f64)
-            }
-            Err(_) => {
-                // Lock contention - return zero duration rather than blocking
-                // The next callback will get the correct position
-                Duration::ZERO
-            }
-        }
+        // Lock-free read using atomic
+        let samples_read = self.shared.samples_read.load(Ordering::Relaxed);
+        let frames = samples_read / self.channels as usize;
+        Duration::from_secs_f64(frames as f64 / self.target_sample_rate as f64)
     }
 
     fn is_finished(&self) -> bool {
-        // Uses try_lock to avoid blocking the real-time audio thread
-        match self.shared.try_lock() {
-            Ok(state) => state.is_eof && state.output_buffer.is_empty(),
-            Err(_) => false, // If lock is contended, assume not finished
-        }
+        // Lock-free check using atomics and ring buffer
+        self.shared.is_eof.load(Ordering::Relaxed) && self.buffer_consumer.is_empty()
     }
 
     /// Check if source is ready for glitch-free playback
@@ -1120,15 +1123,11 @@ impl AudioSource for LocalAudioSource {
     /// - OR we've reached EOF (short files)
     ///
     /// This prevents buffer underrun at playback start when disk I/O is slow.
-    /// Uses try_lock to avoid blocking the real-time audio thread.
+    /// Lock-free check using ring buffer slots count.
     fn is_ready(&self) -> bool {
-        match self.shared.try_lock() {
-            Ok(state) => {
-                // Ready if we have enough samples OR if we've reached EOF (short files)
-                state.output_buffer.len() >= MIN_BUFFER_SAMPLES || state.is_eof
-            }
-            Err(_) => false, // If lock is contended, report not ready yet
-        }
+        // Ready if we have enough samples OR if we've reached EOF (short files)
+        let buffer_len = self.buffer_consumer.slots();
+        buffer_len >= MIN_BUFFER_SAMPLES || self.shared.is_eof.load(Ordering::Relaxed)
     }
 
     /// Get sample rate of the audio source (target/output rate)

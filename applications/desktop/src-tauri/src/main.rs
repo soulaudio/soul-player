@@ -335,51 +335,44 @@ async fn play_queue(
         tracks.len()
     );
 
-    // Stop current playback
-    tracing::debug!("[play_queue] Calling stop()...");
-    let stop_result = playback
-        .get()
-        .await?
-        .stop()
-        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() });
-    tracing::debug!("[play_queue] stop() returned: {:?}", stop_result);
-    stop_result?;
+    // OPTIMIZATION: Get PlaybackManager once and reuse to avoid redundant async calls
+    let pm = playback.get().await?;
+
+    // Stop current playback (skip if already stopped to avoid blocking on device init)
+    let current_state = pm.get_state();
+    if current_state != soul_playback::PlaybackState::Stopped {
+        let stop_start = std::time::Instant::now();
+        pm.stop()
+            .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
+        let stop_duration = stop_start.elapsed();
+        tracing::info!(
+            stop_duration_ms = stop_duration.as_millis(),
+            "[play_queue] stop() completed"
+        );
+    } else {
+        tracing::debug!("[play_queue] Already stopped, skipping stop() call");
+    }
 
     // Load playlist as source queue (Spotify-style context)
     // This replaces the source queue tier, keeping explicit queue separate
-    tracing::debug!(
-        "[play_queue] Calling load_playlist() with {} tracks...",
-        tracks.len()
-    );
     let load_start = std::time::Instant::now();
-    let load_result = playback
-        .get()
-        .await?
-        .load_playlist(tracks)
-        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() });
+    pm.load_playlist(tracks)
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
     let load_duration = load_start.elapsed();
-    tracing::debug!(
+    tracing::info!(
         load_duration_ms = load_duration.as_millis(),
-        result = ?load_result,
         "[play_queue] load_playlist() completed"
     );
-    load_result?;
 
     // Start playback (will play first track in source queue)
-    tracing::debug!("[play_queue] Calling play()...");
     let play_start = std::time::Instant::now();
-    let play_result = playback
-        .get()
-        .await?
-        .play()
-        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() });
+    pm.play()
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
     let play_duration = play_start.elapsed();
-    tracing::debug!(
+    tracing::info!(
         play_duration_ms = play_duration.as_millis(),
-        result = ?play_result,
         "[play_queue] play() completed"
     );
-    play_result?;
 
     let total_duration = start.elapsed();
     tracing::info!(
@@ -698,7 +691,6 @@ async fn get_playback_state(playback: State<'_, LazyPlaybackManager>) -> Result<
         soul_playback::PlaybackState::Playing => "Playing",
         soul_playback::PlaybackState::Paused => "Paused",
         soul_playback::PlaybackState::Stopped => "Stopped",
-        soul_playback::PlaybackState::Loading => "Loading",
     };
     Ok(state_str.to_string())
 }
@@ -2390,6 +2382,28 @@ fn main() {
                     duration_us = lazy_playback_duration.as_micros(),
                     "[Startup] LazyPlaybackManager created (audio engine will initialize on first playback)"
                 );
+
+                // OPTIMIZATION: Eagerly initialize audio engine in background for instant first playback
+                // This doesn't block startup, but ensures audio is ready when user clicks play
+                {
+                    let app_clone = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        // Small delay to let UI render first
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                        tracing::info!("[Startup] Eagerly initializing audio engine in background");
+                        if let Some(playback) = app_clone.try_state::<LazyPlaybackManager>() {
+                            match playback.get().await {
+                                Ok(_) => {
+                                    tracing::info!("[Startup] Audio engine pre-initialized successfully");
+                                }
+                                Err(e) => {
+                                    tracing::warn!("[Startup] Failed to pre-initialize audio engine: {}", e);
+                                }
+                            }
+                        }
+                    });
+                }
 
                 // Phase 2A: Initialize lazy workers (defer initialization until first use)
                 // This removes 100-200ms from startup by deferring worker creation

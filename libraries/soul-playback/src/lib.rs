@@ -140,7 +140,9 @@ pub use events::{CrossfadeProgressTracker, PlaybackEvent, PlaybackStateEvent};
 pub use lazy_queue::{LazyQueueState, QueueContext, DEFAULT_WINDOW_SIZE, LOAD_THRESHOLD};
 pub use manager::PlaybackManager;
 pub use source::AudioSource;
-pub use types::{PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMode, TrackSource};
+pub use types::{
+    PlaybackConfig, PlaybackState, QueueTrack, RepeatMode, ShuffleMode, SourceState, TrackSource,
+};
 
 // Volume leveling exports (conditionally compiled)
 #[cfg(feature = "volume-leveling")]

@@ -1,0 +1,36 @@
+diff --git a/libraries/soul-audio-desktop/src/playback.rs b/libraries/soul-audio-desktop/src/playback.rs
+index original..optimized 100644
+--- a/libraries/soul-audio-desktop/src/playback.rs
++++ b/libraries/soul-audio-desktop/src/playback.rs
+@@ -417,7 +417,8 @@ mod single_writer {
+         /// Current playback state
+         pub state: ManagerState,
+-        /// Currently playing track
+-        pub current_track: Option<QueueTrack>,
++        /// Currently playing track (Arc to avoid cloning track data on snapshot publish)
++        /// OPTIMIZATION: Snapshot publishes happen every ~100ms. Using Arc<QueueTrack> means
++        /// we only clone the Arc pointer, not the entire track with its Strings and PathBuf.
++        pub current_track: Option<Arc<QueueTrack>>,
+         /// Playback position
+         pub position: Duration,
+@@ -529,7 +532,8 @@ mod single_writer {
+         pub fn publish_snapshot(&mut self) {
+             let snapshot = PlaybackStateSnapshot {
+                 state: self.manager.get_state(),
+-                current_track: self.manager.get_current_track().cloned(),
++                // OPTIMIZATION: Wrap in Arc to avoid cloning track data
++                current_track: self.manager.get_current_track().map(|t| Arc::new(t.clone())),
+                 position: self.manager.get_position(),
+                 volume: self.manager.get_volume(),
+                 is_muted: self.manager.is_muted(),
+@@ -3036,7 +3040,10 @@ impl DesktopPlayback {
+         #[cfg(feature = "single-writer-manager")]
+         {
+-            self.state_snapshot.load().current_track.clone()
++            // OPTIMIZATION: Return cloned QueueTrack from Arc (only clones Arc internally)
++            self.state_snapshot.load().current_track
++                .as_ref()
++                .map(|arc| (**arc).clone())
+         }
+     }
+

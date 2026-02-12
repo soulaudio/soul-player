@@ -514,7 +514,6 @@ Each platform provides its own implementation:
 | **TauriBackendProvider** | Desktop | Tauri `invoke()` commands | Desktop app |
 | **MockBackendProvider** | Demo | In-memory `DemoStorage` | Marketing demo, Web demo mode |
 | **ServerBackendProvider** | Web/Mobile | REST API to Soul Server | Web server mode, Mobile (future) |
-| **AbstractBackendProvider** | Base class | Throws "not implemented" | Documentation, testing |
 
 #### **Shared Components Structure**
 
@@ -541,7 +540,6 @@ Each platform provides its own implementation:
 │   └── LibraryDataContext.tsx
 │
 ├── providers/             # Reusable provider implementations
-│   ├── AbstractBackendProvider.tsx  # Base class with defaults
 │   ├── MockBackendProvider.tsx      # Demo/test data
 │   └── ServerBackendProvider.tsx    # REST API client
 │
@@ -733,17 +731,17 @@ Adding new platforms is trivial:
 
 **Mobile (React Native):**
 ```typescript
-class NativeBackendProvider extends AbstractBackendProvider {
+class NativeBackendProvider implements BackendInterface {
   async getAllTracks() {
     return NativeModules.SoulPlayer.getAllTracks()
   }
-  // ... implement methods using native modules
+  // ... implement all methods from BackendInterface using native modules
 }
 
 // Then use shared pages:
-<NativeBackendProvider>
+<BackendProvider value={new NativeBackendProvider()}>
   <AlbumsPage />  {/* Works immediately! */}
-</NativeBackendProvider>
+</BackendProvider>
 ```
 
 **CLI (Ink.js):**

@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   useCurrentTrack,
   useIsPlaying,
-  usePlayerProgress,
   useVolume,
   usePlayerModes,
 } from '../stores/player';
@@ -40,7 +39,6 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const [version, setVersion] = useState<string>('');
   const currentTrack = useCurrentTrack();
   const isPlaying = useIsPlaying();
-  const { progress, duration } = usePlayerProgress();
   const volume = useVolume();
   const { shuffleMode, repeatMode, setShuffleMode, setRepeatMode } = usePlayerModes();
   const commands = usePlayerCommands();
@@ -208,8 +206,6 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
             : null
         }
         isPlaying={isPlaying}
-        progress={progress}
-        duration={duration}
         volume={volume}
         shuffleMode={shuffleMode}
         repeatMode={repeatMode}

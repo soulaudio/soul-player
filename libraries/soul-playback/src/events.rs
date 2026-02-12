@@ -107,6 +107,12 @@ pub enum PlaybackEvent {
         limit: usize,
     },
 
+    /// Load next track requested
+    ///
+    /// Emitted when playback manager needs the next track loaded.
+    /// Desktop layer should load the track and call activate_source().
+    LoadNext(crate::types::QueueTrack),
+
     /// Error occurred during playback
     Error {
         /// Error message
@@ -119,8 +125,6 @@ pub enum PlaybackEvent {
 pub enum PlaybackStateEvent {
     /// No track loaded
     Stopped,
-    /// Currently loading a track
-    Loading,
     /// Playing audio
     Playing,
     /// Paused mid-track
@@ -133,7 +137,6 @@ impl From<crate::types::PlaybackState> for PlaybackStateEvent {
     fn from(state: crate::types::PlaybackState) -> Self {
         match state {
             crate::types::PlaybackState::Stopped => PlaybackStateEvent::Stopped,
-            crate::types::PlaybackState::Loading => PlaybackStateEvent::Loading,
             crate::types::PlaybackState::Playing => PlaybackStateEvent::Playing,
             crate::types::PlaybackState::Paused => PlaybackStateEvent::Paused,
         }

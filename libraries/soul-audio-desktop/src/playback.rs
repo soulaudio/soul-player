@@ -9,8 +9,12 @@ use cpal::{
 use crossbeam_channel::{bounded, Receiver, Sender};
 use soul_playback::{AudioSource, PlaybackConfig, PlaybackManager, QueueTrack};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::error::Result;
+use audio_thread_priority::{
+    demote_current_thread_from_real_time, promote_current_thread_to_real_time, RtPriorityHandle,
+};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Global counter for I32 (ASIO) callbacks - used for diagnostics
@@ -158,10 +162,23 @@ impl StreamStartEnvelope {
 struct CallbackDropGuard {
     stream_id: std::time::Instant,
     sample_format: &'static str,
+    rt_priority_handle: Option<RtPriorityHandle>,
 }
 
 impl Drop for CallbackDropGuard {
     fn drop(&mut self) {
+        // Demote thread priority before cleanup
+        if let Some(handle) = self.rt_priority_handle.take() {
+            if let Err(e) = demote_current_thread_from_real_time(handle) {
+                tracing::warn!(
+                    error = ?e,
+                    "[CallbackDropGuard] Failed to demote thread priority during cleanup"
+                );
+            } else {
+                tracing::info!("[CallbackDropGuard] Audio thread demoted from real-time priority");
+            }
+        }
+
         tracing::error!(
             "[CallbackDropGuard] !!! {} stream {:?} callback closure is being DROPPED !!!",
             self.sample_format,
@@ -175,7 +192,6 @@ impl Drop for CallbackDropGuard {
 }
 
 /// Commands sent to playback thread
-#[derive(Debug, Clone)]
 pub enum PlaybackCommand {
     /// Start or resume playback
     Play,
@@ -246,6 +262,78 @@ pub enum PlaybackCommand {
     /// Switch audio output device
     /// Arguments: (backend, `device_name`)
     SwitchDevice(crate::AudioBackend, String),
+
+    /// Activate a loaded source (called after background loading completes)
+    ActivateSource {
+        source: Box<dyn soul_playback::AudioSource>,
+        track: QueueTrack,
+    },
+}
+
+// Manual Debug implementation since AudioSource doesn't implement Debug
+impl std::fmt::Debug for PlaybackCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Play => write!(f, "Play"),
+            Self::Pause => write!(f, "Pause"),
+            Self::Stop => write!(f, "Stop"),
+            Self::Next => write!(f, "Next"),
+            Self::Previous => write!(f, "Previous"),
+            Self::Seek(pos) => write!(f, "Seek({:.2})", pos),
+            Self::SetVolume(vol) => write!(f, "SetVolume({})", vol),
+            Self::Mute => write!(f, "Mute"),
+            Self::Unmute => write!(f, "Unmute"),
+            Self::AddToQueue(_) => write!(f, "AddToQueue(..)"),
+            Self::AddPlayNext(_) => write!(f, "AddPlayNext(..)"),
+            Self::AddToQueueEnd(_) => write!(f, "AddToQueueEnd(..)"),
+            Self::RemoveFromQueue(idx) => write!(f, "RemoveFromQueue({})", idx),
+            Self::ClearQueue => write!(f, "ClearQueue"),
+            Self::ClearPlayNext => write!(f, "ClearPlayNext"),
+            Self::ClearAddToQueue => write!(f, "ClearAddToQueue"),
+            Self::SkipToQueueIndex(idx) => write!(f, "SkipToQueueIndex({})", idx),
+            Self::LoadPlaylist(_) => write!(f, "LoadPlaylist(..)"),
+            Self::AppendToSource(_) => write!(f, "AppendToSource(..)"),
+            Self::SetShuffle(mode) => write!(f, "SetShuffle({:?})", mode),
+            Self::CycleShuffle => write!(f, "CycleShuffle"),
+            Self::SetRepeat(mode) => write!(f, "SetRepeat({:?})", mode),
+            Self::SwitchDevice(backend, device) => write!(f, "SwitchDevice({:?}, {})", backend, device),
+            Self::ActivateSource { track, .. } => write!(f, "ActivateSource {{ track: {} }}", track.title),
+        }
+    }
+}
+
+// Manual Clone implementation since AudioSource is not Clone
+impl Clone for PlaybackCommand {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Play => Self::Play,
+            Self::Pause => Self::Pause,
+            Self::Stop => Self::Stop,
+            Self::Next => Self::Next,
+            Self::Previous => Self::Previous,
+            Self::Seek(pos) => Self::Seek(*pos),
+            Self::SetVolume(vol) => Self::SetVolume(*vol),
+            Self::Mute => Self::Mute,
+            Self::Unmute => Self::Unmute,
+            Self::AddToQueue(track) => Self::AddToQueue(track.clone()),
+            Self::AddPlayNext(track) => Self::AddPlayNext(track.clone()),
+            Self::AddToQueueEnd(track) => Self::AddToQueueEnd(track.clone()),
+            Self::RemoveFromQueue(idx) => Self::RemoveFromQueue(*idx),
+            Self::ClearQueue => Self::ClearQueue,
+            Self::ClearPlayNext => Self::ClearPlayNext,
+            Self::ClearAddToQueue => Self::ClearAddToQueue,
+            Self::SkipToQueueIndex(idx) => Self::SkipToQueueIndex(*idx),
+            Self::LoadPlaylist(tracks) => Self::LoadPlaylist(tracks.clone()),
+            Self::AppendToSource(tracks) => Self::AppendToSource(tracks.clone()),
+            Self::SetShuffle(mode) => Self::SetShuffle(*mode),
+            Self::CycleShuffle => Self::CycleShuffle,
+            Self::SetRepeat(mode) => Self::SetRepeat(*mode),
+            Self::SwitchDevice(backend, name) => Self::SwitchDevice(*backend, name.clone()),
+            Self::ActivateSource { .. } => {
+                panic!("ActivateSource cannot be cloned (contains Box<dyn AudioSource>)")
+            }
+        }
+    }
 }
 
 /// Playback events emitted by playback thread
@@ -650,9 +738,6 @@ pub struct DesktopPlayback {
     /// Resampling settings (applied when loading tracks)
     resampling_settings: Arc<Mutex<ResamplingSettings>>,
 
-    /// Background track loader (keeps disk I/O off audio thread)
-    track_loader: Arc<crate::track_loader::TrackLoader>,
-
     /// Device switch state machine
     /// Tracks current state of device switching to prevent race conditions
     device_switch_state: Arc<Mutex<DeviceSwitchState>>,
@@ -671,6 +756,76 @@ unsafe impl Send for DesktopPlayback {}
 
 #[allow(unsafe_code)]
 unsafe impl Sync for DesktopPlayback {}
+
+// ===== Phase 2: Generic Audio Callback Support =====
+
+/// Context for generic audio callback
+///
+/// Consolidates all callback parameters into a single struct,
+/// reducing function signature complexity from 11 parameters to 1.
+struct AudioCallbackContext<'a> {
+    manager: Arc<Mutex<PlaybackManager>>,
+    command_rx: &'a Receiver<PlaybackCommand>,
+    command_tx: &'a Sender<PlaybackCommand>,
+    event_tx: &'a Sender<PlaybackEvent>,
+    stream_id: std::time::Instant,
+
+    // Mutable state
+    callback_count: &'a mut u32,
+    load_requested: &'a mut bool,
+    error_count: &'a mut u32,
+    error_fade_samples_remaining: &'a mut usize,
+    error_noise_state: &'a mut u32,
+    source_set_this_callback: &'a mut bool,
+}
+
+/// Load audio source synchronously with timeout
+///
+/// This runs in a background thread (NOT audio callback or UI thread).
+/// Blocks until source is ready or timeout occurs.
+fn load_source_blocking(
+    track: &QueueTrack,
+    sample_rate: u32,
+    timeout: Duration,
+) -> Result<Box<dyn soul_playback::AudioSource>> {
+    let start = std::time::Instant::now();
+
+    tracing::info!(
+        "[load_source_blocking] Starting load: {} at {}Hz, timeout={:?}",
+        track.title,
+        sample_rate,
+        timeout
+    );
+
+    // Create source
+    let source =
+        crate::sources::LocalAudioSource::new(&track.path, sample_rate).map_err(|e| {
+            crate::error::AudioError::PlaybackError(format!("Failed to create source: {}", e))
+        })?;
+
+    // Wait for buffer to fill
+    while !source.is_ready() && start.elapsed() < timeout {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    let elapsed = start.elapsed();
+    if source.is_ready() {
+        tracing::info!(
+            "[load_source_blocking] ✅ Source ready in {:?}: {}",
+            elapsed,
+            track.title
+        );
+        Ok(Box::new(source))
+    } else {
+        let err_msg = format!(
+            "Source load timeout ({:?}) for: {}",
+            timeout,
+            track.path.display()
+        );
+        tracing::error!("[load_source_blocking] {}", err_msg);
+        Err(crate::error::AudioError::PlaybackError(err_msg))
+    }
+}
 
 impl DesktopPlayback {
     /// Create new desktop playback system
@@ -746,29 +901,16 @@ impl DesktopPlayback {
         let (command_tx, command_rx) = bounded(32);
         let (event_tx, event_rx) = bounded(32);
 
-        // Create background track loader FIRST - keeps disk I/O off audio thread
-        tracing::debug!("[Playback] Creating background track loader");
-        let loader_start = std::time::Instant::now();
-        let track_loader = Arc::new(crate::track_loader::TrackLoader::new().map_err(|e| {
-            tracing::error!(error = %e, "[Playback] Failed to create track loader");
-            crate::error::AudioError::DeviceError(e)
-        })?);
-        let loader_duration = loader_start.elapsed();
-        tracing::debug!(
-            duration_us = loader_duration.as_micros(),
-            "[Playback] Track loader created"
-        );
-
-        // Create CPAL stream with specified device (passes track_loader to callbacks)
+        // Create CPAL stream with specified device
         tracing::debug!("[Playback] Creating audio stream");
         let stream_start = std::time::Instant::now();
         let (stream_option, actual_device_name, sample_rate) = Self::create_audio_stream(
             manager.clone(),
             command_rx.clone(),
+            command_tx.clone(),
             event_tx.clone(),
             backend,
             device_name.clone(),
-            track_loader.clone(),
         )?;
         let stream_duration = stream_start.elapsed();
 
@@ -804,7 +946,6 @@ impl DesktopPlayback {
         tracing::info!(
             total_duration_ms = total_duration.as_millis(),
             manager_us = manager_duration.as_micros(),
-            loader_us = loader_duration.as_micros(),
             stream_ms = stream_duration.as_millis(),
             "[Playback] Initialization timings"
         );
@@ -827,7 +968,6 @@ impl DesktopPlayback {
             device_manager,
             current_sample_rate,
             resampling_settings,
-            track_loader,
             device_switch_state: Arc::new(Mutex::new(DeviceSwitchState::Idle)),
             device_switch_config: DeviceSwitchConfig::default(),
         })
@@ -840,10 +980,10 @@ impl DesktopPlayback {
     fn create_audio_stream(
         manager: Arc<Mutex<PlaybackManager>>,
         command_rx: Receiver<PlaybackCommand>,
+        command_tx: Sender<PlaybackCommand>,
         event_tx: Sender<PlaybackEvent>,
         backend: crate::AudioBackend,
         device_name: Option<String>,
-        track_loader: Arc<crate::track_loader::TrackLoader>,
     ) -> Result<(Option<Stream>, String, u32)> {
         tracing::info!(
             backend = ?backend,
@@ -950,7 +1090,6 @@ impl DesktopPlayback {
         let stream = match sample_format {
             cpal::SampleFormat::F32 => {
                 let manager_clone = manager.clone();
-                let track_loader_clone = track_loader.clone();
                 // Per-stream callback counter for logging
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
@@ -964,27 +1103,69 @@ impl DesktopPlayback {
                 let mut error_fade_samples_remaining: usize = 0;
                 // LFSR state for proper noise generation during error recovery
                 let mut error_noise_state: u32 = 0xDEAD_BEEF;
+                // Track if we set a source this callback to prevent double-loading
+                let mut source_set_this_callback = false;
                 tracing::debug!(
                     "[CPAL] Creating F32 stream callback (stream_id: {:?})",
                     stream_id
                 );
+
+                // Create drop guard to handle cleanup and thread priority demotion
+                let mut drop_guard = CallbackDropGuard {
+                    stream_id,
+                    sample_format: "F32",
+                    rt_priority_handle: None,
+                };
+
                 device.build_output_stream(
                     &config,
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                         callback_count += 1;
-                        Self::audio_callback_f32(
-                            data,
-                            manager_clone.clone(),
-                            &command_rx,
-                            &event_tx,
-                            &track_loader_clone,
-                            callback_count,
+
+                        // Promote thread to real-time priority on first callback
+                        if callback_count == 1 {
+                            // Extract buffer size - use actual buffer length if size is Default
+                            let buffer_frames = match config.buffer_size {
+                                cpal::BufferSize::Fixed(frames) => frames,
+                                cpal::BufferSize::Default => (data.len() / config.channels as usize) as u32,
+                            };
+                            match promote_current_thread_to_real_time(buffer_frames, sample_rate) {
+                                Ok(handle) => {
+                                    tracing::info!(
+                                        buffer_frames = buffer_frames,
+                                        sample_rate = sample_rate,
+                                        "[ThreadPriority] Audio thread promoted to real-time priority (F32 callback)"
+                                    );
+                                    drop_guard.rt_priority_handle = Some(handle);
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        error = ?e,
+                                        "[ThreadPriority] Failed to promote audio thread priority - continuing with normal priority"
+                                    );
+                                }
+                            }
+                        }
+
+                        // Keep drop guard alive
+                        let _ = &drop_guard;
+
+                        // Use generic callback with context
+                        let ctx = AudioCallbackContext {
+                            manager: manager_clone.clone(),
+                            command_rx: &command_rx,
+                            command_tx: &command_tx,
+                            event_tx: &event_tx,
                             stream_id,
-                            &mut load_requested,
-                            &mut error_count,
-                            &mut error_fade_samples_remaining,
-                            &mut error_noise_state,
-                        );
+                            callback_count: &mut callback_count,
+                            load_requested: &mut load_requested,
+                            error_count: &mut error_count,
+                            error_fade_samples_remaining: &mut error_fade_samples_remaining,
+                            error_noise_state: &mut error_noise_state,
+                            source_set_this_callback: &mut source_set_this_callback,
+                        };
+                        Self::audio_callback::<f32>(ctx, data);
+
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process(data);
                     },
@@ -994,10 +1175,6 @@ impl DesktopPlayback {
             }
             cpal::SampleFormat::I32 => {
                 let manager_clone = manager.clone();
-                let track_loader_clone = track_loader.clone();
-                // Pre-allocate conversion buffer to avoid allocation in audio callback
-                // Use a reasonable default size that will be resized if needed
-                let mut f32_buffer: Vec<f32> = Vec::with_capacity(4096);
                 // Per-stream callback counter for logging
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
@@ -1011,6 +1188,8 @@ impl DesktopPlayback {
                 let mut error_fade_samples_remaining: usize = 0;
                 // LFSR state for proper noise generation during error recovery
                 let mut error_noise_state: u32 = 0xDEAD_BEEF;
+                // Track if we set a source this callback to prevent double-loading
+                let mut source_set_this_callback = false;
                 tracing::debug!(
                     "[CPAL] Creating I32 stream callback (stream_id: {:?})",
                     stream_id
@@ -1019,36 +1198,60 @@ impl DesktopPlayback {
                 // Clone event_tx for the error callback
                 let error_event_tx = event_tx.clone();
 
-                // Create drop guard to detect when callback is dropped
-                let drop_guard = CallbackDropGuard {
+                // Create drop guard to handle cleanup and thread priority demotion
+                let mut drop_guard = CallbackDropGuard {
                     stream_id,
                     sample_format: "I32",
+                    rt_priority_handle: None,
                 };
-
-                // Create TPDF dither for high-quality F32→I32 conversion
-                let mut dither = soul_audio::dither::StereoDither::new();
 
                 device.build_output_stream(
                     &config,
                     move |data: &mut [i32], _: &cpal::OutputCallbackInfo| {
+                        callback_count += 1;
+
+                        // Promote thread to real-time priority on first callback
+                        if callback_count == 1 {
+                            // Extract buffer size - use actual buffer length if size is Default
+                            let buffer_frames = match config.buffer_size {
+                                cpal::BufferSize::Fixed(frames) => frames,
+                                cpal::BufferSize::Default => (data.len() / config.channels as usize) as u32,
+                            };
+                            match promote_current_thread_to_real_time(buffer_frames, sample_rate) {
+                                Ok(handle) => {
+                                    tracing::info!(
+                                        buffer_frames = buffer_frames,
+                                        sample_rate = sample_rate,
+                                        "[ThreadPriority] Audio thread promoted to real-time priority (I32 callback)"
+                                    );
+                                    drop_guard.rt_priority_handle = Some(handle);
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        error = ?e,
+                                        "[ThreadPriority] Failed to promote audio thread priority - continuing with normal priority"
+                                    );
+                                }
+                            }
+                        }
+
                         // Keep drop guard alive - when this closure is dropped, drop_guard is dropped
                         let _ = &drop_guard;
-                        callback_count += 1;
-                        Self::audio_callback_i32(
-                            data,
-                            manager_clone.clone(),
-                            &command_rx,
-                            &event_tx,
-                            &track_loader_clone,
-                            &mut f32_buffer,
-                            &mut dither,
-                            callback_count,
+
+                        let ctx = AudioCallbackContext {
+                            manager: manager_clone.clone(),
+                            command_rx: &command_rx,
+                            command_tx: &command_tx,
+                            event_tx: &event_tx,
                             stream_id,
-                            &mut load_requested,
-                            &mut error_count,
-                            &mut error_fade_samples_remaining,
-                            &mut error_noise_state,
-                        );
+                            callback_count: &mut callback_count,
+                            load_requested: &mut load_requested,
+                            error_count: &mut error_count,
+                            error_fade_samples_remaining: &mut error_fade_samples_remaining,
+                            error_noise_state: &mut error_noise_state,
+                            source_set_this_callback: &mut source_set_this_callback,
+                        };
+                        Self::audio_callback::<i32>(ctx, data);
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i32(data);
                     },
@@ -1064,9 +1267,6 @@ impl DesktopPlayback {
             }
             cpal::SampleFormat::I16 => {
                 let manager_clone = manager.clone();
-                let track_loader_clone = track_loader.clone();
-                // Pre-allocate conversion buffer to avoid allocation in audio callback
-                let mut f32_buffer: Vec<f32> = Vec::with_capacity(4096);
                 // Per-stream callback counter for logging
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
@@ -1080,33 +1280,67 @@ impl DesktopPlayback {
                 let mut error_fade_samples_remaining: usize = 0;
                 // LFSR state for proper noise generation during error recovery
                 let mut error_noise_state: u32 = 0xDEAD_BEEF;
+                // Track if we set a source this callback to prevent double-loading
+                let mut source_set_this_callback = false;
                 tracing::debug!(
                     "[CPAL] Creating I16 stream callback (stream_id: {:?})",
                     stream_id
                 );
-                // Create TPDF dither for high-quality F32→I16 conversion
-                // This is especially important for 16-bit output where quantization is audible
-                let mut dither = soul_audio::dither::StereoDither::new();
+
+                // Create drop guard to handle cleanup and thread priority demotion
+                let mut drop_guard = CallbackDropGuard {
+                    stream_id,
+                    sample_format: "I16",
+                    rt_priority_handle: None,
+                };
 
                 device.build_output_stream(
                     &config,
                     move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
                         callback_count += 1;
-                        Self::audio_callback_i16(
-                            data,
-                            manager_clone.clone(),
-                            &command_rx,
-                            &event_tx,
-                            &track_loader_clone,
-                            &mut f32_buffer,
-                            &mut dither,
-                            callback_count,
+
+                        // Promote thread to real-time priority on first callback
+                        if callback_count == 1 {
+                            // Extract buffer size - use actual buffer length if size is Default
+                            let buffer_frames = match config.buffer_size {
+                                cpal::BufferSize::Fixed(frames) => frames,
+                                cpal::BufferSize::Default => (data.len() / config.channels as usize) as u32,
+                            };
+                            match promote_current_thread_to_real_time(buffer_frames, sample_rate) {
+                                Ok(handle) => {
+                                    tracing::info!(
+                                        buffer_frames = buffer_frames,
+                                        sample_rate = sample_rate,
+                                        "[ThreadPriority] Audio thread promoted to real-time priority (I16 callback)"
+                                    );
+                                    drop_guard.rt_priority_handle = Some(handle);
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        error = ?e,
+                                        "[ThreadPriority] Failed to promote audio thread priority - continuing with normal priority"
+                                    );
+                                }
+                            }
+                        }
+
+                        // Keep drop guard alive
+                        let _ = &drop_guard;
+
+                        let ctx = AudioCallbackContext {
+                            manager: manager_clone.clone(),
+                            command_rx: &command_rx,
+                            command_tx: &command_tx,
+                            event_tx: &event_tx,
                             stream_id,
-                            &mut load_requested,
-                            &mut error_count,
-                            &mut error_fade_samples_remaining,
-                            &mut error_noise_state,
-                        );
+                            callback_count: &mut callback_count,
+                            load_requested: &mut load_requested,
+                            error_count: &mut error_count,
+                            error_fade_samples_remaining: &mut error_fade_samples_remaining,
+                            error_noise_state: &mut error_noise_state,
+                            source_set_this_callback: &mut source_set_this_callback,
+                        };
+                        Self::audio_callback::<i16>(ctx, data);
                         // Apply stream start envelope to prevent DAC pop
                         stream_envelope.process_i16(data);
                     },
@@ -1332,673 +1566,136 @@ impl DesktopPlayback {
         Ok((stream_config, sample_format))
     }
 
-    /// Pre-load the next track for crossfade/gapless playback
+    /// Generic audio callback for all sample formats
     ///
-    /// This function is called from audio callbacks to check if we should
-    /// prepare the next track for crossfade. If we're approaching the
-    /// crossfade region and don't have a next source loaded yet, we request
-    /// loading via the background track loader.
-    ///
-    /// This is the key fix for crossfade not working - without pre-loading
-    /// the next track's audio source, the crossfade engine has nothing to
-    /// mix with the current track.
-    fn prepare_next_track_if_needed(
-        mgr: &mut PlaybackManager,
-        track_loader: &Arc<crate::track_loader::TrackLoader>,
-    ) {
-        // Check if we should prepare (approaching crossfade region and no next source)
-        if !mgr.should_prepare_next_track() {
-            return;
-        }
+    /// Uses the Sample trait to support f32, i32, and i16 formats
+    /// with a single implementation, eliminating code duplication.
+    fn audio_callback<T: crate::Sample>(ctx: AudioCallbackContext, data: &mut [T]) {
+        // Reset flag to prevent double-loading
+        *ctx.source_set_this_callback = false;
 
-        // Get the next track from the queue without advancing
-        let next_track = match mgr.peek_next_queue_track() {
-            Some(track) => track.clone(),
-            None => return, // No next track available
-        };
-
-        // Request loading the audio source for the next track (non-blocking)
-        let target_sample_rate = mgr.get_sample_rate();
-        let request = crate::track_loader::LoadRequest {
-            path: std::path::PathBuf::from(&next_track.path),
-            track: next_track.clone(),
-            target_sample_rate,
-            is_preload: true, // This is a preload for crossfade/gapless
-        };
-
-        if track_loader.request_load(request) {
-            tracing::debug!(
-                "[prepare_next_track] Requested preload for crossfade: {}",
-                next_track.title
-            );
-            // Mark that we've requested a preload to avoid duplicate requests
-            // The result will be handled by poll_track_loader
-        }
-        // If queue is full, we'll try again next callback
-    }
-
-    /// Load next track when track finishes (called from audio callbacks)
-    ///
-    /// This handles the case where `process_audio` detects track end and calls
-    /// `handle_track_finished()` → `next()`, which sets state to Loading.
-    /// We request loading via the background track loader (non-blocking).
-    fn load_next_track(
-        mgr: &mut PlaybackManager,
-        track_loader: &Arc<crate::track_loader::TrackLoader>,
-        event_tx: &Sender<PlaybackEvent>,
-    ) {
-        if let Some(track) = mgr.get_current_track().cloned() {
-            let target_sample_rate = mgr.get_sample_rate();
-            let request = crate::track_loader::LoadRequest {
-                path: track.path.clone(),
-                track: track.clone(),
-                target_sample_rate,
-                is_preload: false, // This is a current track load, not preload
-            };
-
-            if track_loader.request_load(request) {
-                tracing::debug!(
-                    "[load_next_track] Requested load for next track: {}",
-                    track.title
-                );
-                // Result will be handled by poll_track_loader in next callback
-            } else {
-                tracing::debug!("[load_next_track] Load request queue full");
-                // Queue full - emit error and stop
-                let _ =
-                    event_tx.try_send(PlaybackEvent::Error("Track load queue full".to_string()));
-                mgr.stop();
-                let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-            }
-        } else {
-            // No more tracks - queue is empty, stop playback
-            mgr.stop();
-            let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-            let _ = event_tx.try_send(PlaybackEvent::TrackChanged(None));
-        }
-    }
-
-    /// Audio callback for f32 sample format (WASAPI, `CoreAudio`, etc.)
-    #[allow(clippy::too_many_arguments)]
-    fn audio_callback_f32(
-        data: &mut [f32],
-        manager: Arc<Mutex<PlaybackManager>>,
-        command_rx: &Receiver<PlaybackCommand>,
-        event_tx: &Sender<PlaybackEvent>,
-        track_loader: &Arc<crate::track_loader::TrackLoader>,
-        callback_count: u32,
-        stream_id: std::time::Instant,
-        load_requested: &mut bool,
-        error_count: &mut u32,
-        error_fade_samples_remaining: &mut usize,
-        error_noise_state: &mut u32,
-    ) {
         // Debug: log callback invocation with per-stream counter
-        if callback_count == 1 {
+        if *ctx.callback_count == 1 {
             tracing::trace!(
-                "[audio_callback_f32] *** FIRST CALLBACK FOR STREAM {:?} ***",
-                stream_id
+                "[audio_callback<{}>] *** FIRST CALLBACK FOR STREAM {:?} ***",
+                std::any::type_name::<T>(),
+                ctx.stream_id
             );
             tracing::trace!(
-                "[audio_callback_f32]   Buffer size: {} samples ({} frames stereo)",
+                "[audio_callback<{}>]   Buffer size: {} samples ({} frames stereo)",
+                std::any::type_name::<T>(),
                 data.len(),
                 data.len() / 2
             );
-        } else if callback_count <= 5 {
+        } else if *ctx.callback_count <= 5 {
             tracing::trace!(
-                "[audio_callback_f32] Stream {:?} call #{}, buffer: {} samples",
-                stream_id,
-                callback_count,
+                "[audio_callback<{}>] Stream {:?} call #{}, buffer: {} samples",
+                std::any::type_name::<T>(),
+                ctx.stream_id,
+                *ctx.callback_count,
                 data.len()
             );
-        } else if callback_count == 6 {
+        } else if *ctx.callback_count == 6 {
             tracing::trace!(
-                "[audio_callback_f32] Stream {:?}: further callback logs suppressed",
-                stream_id
+                "[audio_callback<{}>] Stream {:?}: further callback logs suppressed",
+                std::any::type_name::<T>(),
+                ctx.stream_id
             );
         }
 
         // Acquire manager lock using try_lock to avoid blocking the real-time audio thread
-        // If the lock is contended (another thread holds it), output DAC keepalive noise
-        // instead of blocking. This prevents audio glitches from mutex contention.
-        let Ok(mut mgr) = manager.try_lock() else {
+        // If the lock is contended, output DAC keepalive noise instead of blocking
+        let Ok(mut mgr) = ctx.manager.try_lock() else {
             // Lock contention - output DAC keepalive noise to prevent glitches
-            // This is better than blocking which could cause a much longer glitch
-            const DAC_KEEPALIVE: f32 = 0.000016; // -96dB - inaudible but keeps DAC active
-            for sample in &mut *data {
+            T::fill_silence(data);
+            for sample in data.iter_mut() {
                 // Simple LFSR noise to keep DAC active
-                *error_noise_state ^= *error_noise_state << 13;
-                *error_noise_state ^= *error_noise_state >> 17;
-                *error_noise_state ^= *error_noise_state << 5;
-                *sample = ((*error_noise_state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE;
+                *ctx.error_noise_state ^= *ctx.error_noise_state << 13;
+                *ctx.error_noise_state ^= *ctx.error_noise_state >> 17;
+                *ctx.error_noise_state ^= *ctx.error_noise_state << 5;
+                let noise = ((*ctx.error_noise_state & 0xFFFF) as f32 / 32768.0 - 1.0) * 0.000016; // -96dB
+                *sample = T::from_f32(noise);
             }
             return;
         };
 
-        // Process any pending commands while holding the lock
-        while let Ok(command) = command_rx.try_recv() {
-            if let Err(e) =
-                Self::process_command_with_lock(command, &mut mgr, event_tx, track_loader)
-            {
-                tracing::error!(error = ?e, "[PLAYBACK] Command error in f32 audio callback");
-                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
-            }
+        // Process ONE pending command per callback to bound latency
+        if let Ok(command) = ctx.command_rx.try_recv() {
+            // Ignore command errors in audio callback to avoid allocations
+            let _ =
+                Self::process_command_with_lock(command, &mut mgr, ctx.event_tx, ctx.command_tx);
         }
 
-        // Poll for any ready track loads from the background loader (non-blocking)
-        // This moves disk I/O results back to the audio thread without blocking
-        Self::poll_track_loader(&mut mgr, track_loader, event_tx);
-
-        // Check if we need to pre-load the next track for crossfade/gapless
-        // This must happen BEFORE process_audio so the crossfade engine has
-        // the next source ready when entering the crossfade region
-        Self::prepare_next_track_if_needed(&mut mgr, track_loader);
-
-        match mgr.process_audio(data) {
+        // Process audio into a temporary f32 buffer
+        // TODO(Phase 2 optimization): Pre-allocate buffer in context to avoid allocation
+        // For now, this works for all formats but should be optimized for real-time safety
+        let mut f32_buffer = vec![0.0f32; data.len()];
+        match mgr.process_audio(&mut f32_buffer) {
             Ok(samples_processed) => {
                 // Reset error count on successful processing
-                *error_count = 0;
+                *ctx.error_count = 0;
+
+                // Convert f32 to target format T
+                T::from_f32_slice(
+                    &f32_buffer[..samples_processed],
+                    &mut data[..samples_processed],
+                );
+
+                // Fill remainder with silence if needed
+                if samples_processed < data.len() {
+                    for sample in &mut data[samples_processed..] {
+                        *sample = T::from_f32(0.0);
+                    }
+                }
 
                 // Emit periodic position updates (~250ms interval)
-                // This is called from the audio callback to ensure accurate timing
                 mgr.maybe_emit_position_update(samples_processed);
-
-                // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
-                Self::forward_manager_events(&mut mgr, event_tx);
-
-                // Check if track finished and next track is ready to load
-                // Only request load ONCE per Loading state to prevent duplicate requests
-                let state = mgr.get_state();
-                if state == soul_playback::PlaybackState::Loading {
-                    if !*load_requested {
-                        Self::load_next_track(&mut mgr, track_loader, event_tx);
-                        *load_requested = true;
-                    }
-                } else {
-                    // Reset flag when not in Loading state
-                    *load_requested = false;
-                }
             }
             Err(e) => {
-                // Error fade-out: 10ms at 48kHz = 480 samples (stereo = 960 total)
-                // Use a quick fade to DAC noise to prevent audible clicks
-                const ERROR_FADE_SAMPLES: usize = 960;
-                const DAC_KEEPALIVE: f32 = 0.000016; // -96dB - inaudible but keeps DAC active
+                // Error in process_audio - output silence to prevent noise/clicks
+                tracing::error!("[audio_callback] process_audio error: {}", e);
+                T::fill_silence(data);
+                *ctx.error_count += 1;
 
-                // Increment error counter
-                *error_count += 1;
-
-                if *error_fade_samples_remaining == 0 && *error_count == 1 {
-                    // First error - start fade-out from current audio level
-                    *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
-                }
-
-                // Helper to generate LFSR noise - proper pseudo-random noise prevents DAC
-                // artifacts that can occur with simple alternating patterns
-                let generate_noise = |state: &mut u32| -> f32 {
-                    *state ^= *state << 13;
-                    *state ^= *state >> 17;
-                    *state ^= *state << 5;
-                    ((*state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE
-                };
-
-                if *error_fade_samples_remaining > 0 {
-                    // Apply fade-out to prevent click
-                    let samples_to_fade = (*error_fade_samples_remaining).min(data.len());
-                    for (i, sample) in data[..samples_to_fade].iter_mut().enumerate() {
-                        let progress =
-                            (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
-                        // Fade from current value toward DAC keepalive noise using LFSR
-                        let noise = generate_noise(error_noise_state);
-                        *sample = *sample * progress + noise * (1.0 - progress);
-                    }
-                    *error_fade_samples_remaining =
-                        error_fade_samples_remaining.saturating_sub(data.len());
-
-                    // Fill remaining samples with DAC keepalive noise using LFSR
-                    if samples_to_fade < data.len() {
-                        for sample in &mut data[samples_to_fade..] {
-                            *sample = generate_noise(error_noise_state);
-                        }
-                    }
-                } else {
-                    // Fade complete - fill with DAC keepalive noise using LFSR
-                    for sample in &mut *data {
-                        *sample = generate_noise(error_noise_state);
-                    }
-                }
-
-                if *error_count >= 3 {
-                    // Persistent error - emit error event and stop
-                    tracing::error!(
-                        error = ?e,
-                        error_count = *error_count,
-                        "[PLAYBACK] Persistent audio error - stopping playback"
-                    );
-                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                        "Persistent audio error: {}",
+                // After 3 consecutive errors, emit error event and stop
+                if *ctx.error_count >= 3 {
+                    let _ = ctx.event_tx.try_send(PlaybackEvent::Error(format!(
+                        "Audio processing error: {}",
                         e
                     )));
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(
-                        soul_playback::PlaybackState::Stopped,
-                    ));
-                } else {
-                    tracing::error!(
-                        error = ?e,
-                        error_count = *error_count,
-                        "[PLAYBACK] Audio processing error in f32 callback"
-                    );
+                    mgr.stop();
+                    let _ = ctx
+                        .event_tx
+                        .try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                    *ctx.error_count = 0; // Reset counter
                 }
             }
         }
-    }
 
-    /// Audio callback for i32 sample format (ASIO)
-    ///
-    /// Uses a pre-allocated f32 buffer to avoid allocation in the real-time audio thread.
-    /// Uses TPDF dithering for high-quality F32→I32 conversion.
-    #[allow(clippy::too_many_arguments)]
-    fn audio_callback_i32(
-        data: &mut [i32],
-        manager: Arc<Mutex<PlaybackManager>>,
-        command_rx: &Receiver<PlaybackCommand>,
-        event_tx: &Sender<PlaybackEvent>,
-        track_loader: &Arc<crate::track_loader::TrackLoader>,
-        f32_buffer: &mut Vec<f32>,
-        dither: &mut soul_audio::dither::StereoDither,
-        callback_count: u32,
-        stream_id: std::time::Instant,
-        load_requested: &mut bool,
-        error_count: &mut u32,
-        error_fade_samples_remaining: &mut usize,
-        error_noise_state: &mut u32,
-    ) {
-        // Update global counter for diagnostics
-        let global_count = GLOBAL_I32_CALLBACK_COUNTER.fetch_add(1, Ordering::Relaxed);
-
-        // Debug: log callback invocation with per-stream counter
-        // Log first 10 callbacks for each new stream
-        if callback_count == 1 {
-            tracing::trace!(
-                "[audio_callback_i32] *** FIRST CALLBACK FOR STREAM {:?} (global #{}) ***",
-                stream_id,
-                global_count + 1
-            );
-            tracing::trace!(
-                "[audio_callback_i32]   Thread ID: {:?}",
-                std::thread::current().id()
-            );
-            tracing::trace!(
-                "[audio_callback_i32]   Buffer size: {} samples ({} frames stereo)",
-                data.len(),
-                data.len() / 2
-            );
-        } else if callback_count <= 10 {
-            tracing::trace!(
-                "[audio_callback_i32] Stream {:?} call #{} (global #{}), buffer: {} samples",
-                stream_id,
-                callback_count,
-                global_count + 1,
-                data.len()
-            );
-        } else if callback_count == 11 {
-            tracing::trace!(
-                "[audio_callback_i32] Stream {:?}: further callback logs suppressed (global #{})",
-                stream_id,
-                global_count + 1
-            );
-        } else if callback_count.is_multiple_of(1000) {
-            // Log every 1000 callbacks to show the stream is still alive
-            tracing::trace!(
-                "[audio_callback_i32] Stream {:?} still alive: {} callbacks (global #{})",
-                stream_id,
-                callback_count,
-                global_count + 1
-            );
-        }
-
-        // Ensure f32 buffer is large enough (only reallocates if needed, and rarely)
-        if f32_buffer.len() < data.len() {
-            f32_buffer.resize(data.len(), 0.0);
-        }
-        let f32_slice = &mut f32_buffer[..data.len()];
-        f32_slice.fill(0.0);
-
-        // Acquire manager lock ONCE for the entire callback
-        // This reduces latency by avoiding multiple lock/unlock cycles
-        let mut mgr = manager.lock().unwrap();
-
-        // Process any pending commands while holding the lock
-        while let Ok(command) = command_rx.try_recv() {
-            tracing::trace!("[audio_callback_i32] Received command: {:?}", command);
-            if let Err(e) =
-                Self::process_command_with_lock(command, &mut mgr, event_tx, track_loader)
-            {
-                tracing::error!(error = ?e, "[PLAYBACK] Command error in i32 audio callback");
-                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
-            }
-        }
-
-        // Poll for any ready track loads from the background loader (non-blocking)
-        // This moves disk I/O results back to the audio thread without blocking
-        Self::poll_track_loader(&mut mgr, track_loader, event_tx);
-
-        // Check if we need to pre-load the next track for crossfade/gapless
-        // This must happen BEFORE process_audio so the crossfade engine has
-        // the next source ready when entering the crossfade region
-        Self::prepare_next_track_if_needed(&mut mgr, track_loader);
-
-        match mgr.process_audio(f32_slice) {
-            Ok(samples_processed) => {
-                // Reset error count on successful processing
-                *error_count = 0;
-
-                // Emit periodic position updates (~250ms interval)
-                // This is called from the audio callback to ensure accurate timing
-                mgr.maybe_emit_position_update(samples_processed);
-
-                // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
-                Self::forward_manager_events(&mut mgr, event_tx);
-
-                // Check if track finished and next track is ready to load
-                // Only request load ONCE per Loading state to prevent duplicate requests
-                let state = mgr.get_state();
-                if state == soul_playback::PlaybackState::Loading {
-                    if !*load_requested {
-                        Self::load_next_track(&mut mgr, track_loader, event_tx);
-                        *load_requested = true;
-                    }
-                } else {
-                    // Reset flag when not in Loading state
-                    *load_requested = false;
-                }
-
-                // Convert f32 [-1.0, 1.0] to i32 with TPDF dithering
-                // Dithering reduces quantization noise for higher quality audio
-                dither.process_stereo_to_i32(f32_slice, data);
-            }
-            Err(e) => {
-                // Error fade-out: 10ms at 48kHz = 480 samples (stereo = 960 total)
-                // Use a quick fade to DAC noise to prevent audible clicks
-                const ERROR_FADE_SAMPLES: usize = 960;
-                const DAC_KEEPALIVE_F32: f32 = 0.000016; // -96dB - inaudible but keeps DAC active
-
-                // Increment error counter
-                *error_count += 1;
-
-                if *error_fade_samples_remaining == 0 && *error_count == 1 {
-                    // First error - start fade-out from current audio level
-                    *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
-                }
-
-                // Helper to generate LFSR noise for i32 format - proper pseudo-random
-                // noise prevents DAC artifacts from simple alternating patterns
-                let generate_noise_i32 = |state: &mut u32| -> i32 {
-                    *state ^= *state << 13;
-                    *state ^= *state >> 17;
-                    *state ^= *state << 5;
-                    let noise_f32 = ((*state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE_F32;
-                    (noise_f32 * 2147483647.0) as i32
-                };
-
-                if *error_fade_samples_remaining > 0 {
-                    // Apply fade-out to prevent click
-                    // First convert f32 buffer to i32 with fade applied
-                    let samples_to_fade = (*error_fade_samples_remaining).min(data.len());
-                    for (i, (out_sample, in_sample)) in data[..samples_to_fade]
-                        .iter_mut()
-                        .zip(f32_slice[..samples_to_fade].iter())
-                        .enumerate()
-                    {
-                        let progress =
-                            (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
-                        // Generate LFSR noise for proper randomness
-                        let noise = generate_noise_i32(error_noise_state);
-                        // Convert f32 to i32 with fade
-                        let scaled = (*in_sample * 2147483647.0) as i32;
-                        *out_sample = ((scaled as f64 * progress as f64)
-                            + (noise as f64 * (1.0 - progress as f64)))
-                            as i32;
-                    }
-                    *error_fade_samples_remaining =
-                        error_fade_samples_remaining.saturating_sub(data.len());
-
-                    // Fill remaining samples with DAC keepalive noise using LFSR
-                    if samples_to_fade < data.len() {
-                        for sample in &mut data[samples_to_fade..] {
-                            *sample = generate_noise_i32(error_noise_state);
-                        }
-                    }
-                } else {
-                    // Fade complete - fill with DAC keepalive noise using LFSR
-                    for sample in &mut *data {
-                        *sample = generate_noise_i32(error_noise_state);
-                    }
-                }
-
-                if *error_count >= 3 {
-                    // Persistent error - emit error event and stop
-                    tracing::error!(
-                        error = ?e,
-                        error_count = *error_count,
-                        "[PLAYBACK] Persistent audio error - stopping playback"
-                    );
-                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                        "Persistent audio error: {}",
-                        e
-                    )));
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(
-                        soul_playback::PlaybackState::Stopped,
-                    ));
-                } else {
-                    tracing::error!(
-                        error = ?e,
-                        error_count = *error_count,
-                        "[PLAYBACK] Audio processing error in i32 callback"
-                    );
-                }
-            }
-        }
-    }
-
-    /// Audio callback for i16 sample format
-    ///
-    /// Uses a pre-allocated f32 buffer to avoid allocation in the real-time audio thread.
-    /// Uses TPDF dithering for high-quality F32→I16 conversion.
-    #[allow(clippy::too_many_arguments)]
-    fn audio_callback_i16(
-        data: &mut [i16],
-        manager: Arc<Mutex<PlaybackManager>>,
-        command_rx: &Receiver<PlaybackCommand>,
-        event_tx: &Sender<PlaybackEvent>,
-        track_loader: &Arc<crate::track_loader::TrackLoader>,
-        f32_buffer: &mut Vec<f32>,
-        dither: &mut soul_audio::dither::StereoDither,
-        callback_count: u32,
-        stream_id: std::time::Instant,
-        load_requested: &mut bool,
-        error_count: &mut u32,
-        error_fade_samples_remaining: &mut usize,
-        error_noise_state: &mut u32,
-    ) {
-        // Debug: log callback invocation with per-stream counter
-        if callback_count == 1 {
-            tracing::trace!(
-                "[audio_callback_i16] *** FIRST CALLBACK FOR STREAM {:?} ***",
-                stream_id
-            );
-            tracing::trace!(
-                "[audio_callback_i16]   Buffer size: {} samples ({} frames stereo)",
-                data.len(),
-                data.len() / 2
-            );
-        } else if callback_count <= 5 {
-            tracing::trace!(
-                "[audio_callback_i16] Stream {:?} call #{}, buffer: {} samples",
-                stream_id,
-                callback_count,
-                data.len()
-            );
-        } else if callback_count == 6 {
-            tracing::trace!(
-                "[audio_callback_i16] Stream {:?}: further callback logs suppressed",
-                stream_id
-            );
-        }
-
-        // Ensure f32 buffer is large enough (only reallocates if needed, and rarely)
-        if f32_buffer.len() < data.len() {
-            f32_buffer.resize(data.len(), 0.0);
-        }
-        let f32_slice = &mut f32_buffer[..data.len()];
-        f32_slice.fill(0.0);
-
-        // Acquire manager lock ONCE for the entire callback
-        // This reduces latency by avoiding multiple lock/unlock cycles
-        let mut mgr = manager.lock().unwrap();
-
-        // Process any pending commands while holding the lock
-        while let Ok(command) = command_rx.try_recv() {
-            if let Err(e) =
-                Self::process_command_with_lock(command, &mut mgr, event_tx, track_loader)
-            {
-                tracing::error!(error = ?e, "[PLAYBACK] Command error in i16 audio callback");
-                let _ = event_tx.try_send(PlaybackEvent::Error("COMMAND_ERROR".to_string()));
-            }
-        }
-
-        // Poll for any ready track loads from the background loader (non-blocking)
-        // This moves disk I/O results back to the audio thread without blocking
-        Self::poll_track_loader(&mut mgr, track_loader, event_tx);
-
-        // Check if we need to pre-load the next track for crossfade/gapless
-        // This must happen BEFORE process_audio so the crossfade engine has
-        // the next source ready when entering the crossfade region
-        Self::prepare_next_track_if_needed(&mut mgr, track_loader);
-
-        match mgr.process_audio(f32_slice) {
-            Ok(_) => {
-                // Reset error count on successful processing
-                *error_count = 0;
-
-                // Forward any events from PlaybackManager (crossfade progress, track changes, etc.)
-                Self::forward_manager_events(&mut mgr, event_tx);
-
-                // Check if track finished and next track is ready to load
-                // Only request load ONCE per Loading state to prevent duplicate requests
-                let state = mgr.get_state();
-                if state == soul_playback::PlaybackState::Loading {
-                    if !*load_requested {
-                        Self::load_next_track(&mut mgr, track_loader, event_tx);
-                        *load_requested = true;
-                    }
-                } else {
-                    // Reset flag when not in Loading state
-                    *load_requested = false;
-                }
-
-                // Convert f32 [-1.0, 1.0] to i16 with TPDF dithering
-                // Dithering is essential for 16-bit audio quality
-                dither.process_stereo_to_i16(f32_slice, data);
-            }
-            Err(e) => {
-                // Error fade-out: 10ms at 48kHz = 480 samples (stereo = 960 total)
-                // Use a quick fade to DAC noise to prevent audible clicks
-                const ERROR_FADE_SAMPLES: usize = 960;
-                const DAC_KEEPALIVE_F32: f32 = 0.000016; // -96dB - inaudible but keeps DAC active
-
-                // Increment error counter
-                *error_count += 1;
-
-                if *error_fade_samples_remaining == 0 && *error_count == 1 {
-                    // First error - start fade-out from current audio level
-                    *error_fade_samples_remaining = ERROR_FADE_SAMPLES;
-                }
-
-                // Helper to generate LFSR noise for i16 format - proper pseudo-random
-                // noise prevents DAC artifacts from simple alternating patterns
-                let generate_noise_i16 = |state: &mut u32| -> i16 {
-                    *state ^= *state << 13;
-                    *state ^= *state >> 17;
-                    *state ^= *state << 5;
-                    let noise_f32 = ((*state & 0xFFFF) as f32 / 32768.0 - 1.0) * DAC_KEEPALIVE_F32;
-                    (noise_f32 * 32767.0) as i16
-                };
-
-                if *error_fade_samples_remaining > 0 {
-                    // Apply fade-out to prevent click
-                    // First convert f32 buffer to i16 with fade applied
-                    let samples_to_fade = (*error_fade_samples_remaining).min(data.len());
-                    for (i, (out_sample, in_sample)) in data[..samples_to_fade]
-                        .iter_mut()
-                        .zip(f32_slice[..samples_to_fade].iter())
-                        .enumerate()
-                    {
-                        let progress =
-                            (*error_fade_samples_remaining - i) as f32 / ERROR_FADE_SAMPLES as f32;
-                        // Generate LFSR noise for proper randomness
-                        let noise = generate_noise_i16(error_noise_state);
-                        // Convert f32 to i16 with fade
-                        let scaled = (*in_sample * 32767.0) as i16;
-                        *out_sample =
-                            ((scaled as f32 * progress) + (noise as f32 * (1.0 - progress))) as i16;
-                    }
-                    *error_fade_samples_remaining =
-                        error_fade_samples_remaining.saturating_sub(data.len());
-
-                    // Fill remaining samples with DAC keepalive noise using LFSR
-                    if samples_to_fade < data.len() {
-                        for sample in &mut data[samples_to_fade..] {
-                            *sample = generate_noise_i16(error_noise_state);
-                        }
-                    }
-                } else {
-                    // Fade complete - fill with DAC keepalive noise using LFSR
-                    for sample in &mut *data {
-                        *sample = generate_noise_i16(error_noise_state);
-                    }
-                }
-
-                if *error_count >= 3 {
-                    // Persistent error - emit error event and stop
-                    tracing::error!(
-                        error = ?e,
-                        error_count = *error_count,
-                        "[PLAYBACK] Persistent audio error - stopping playback"
-                    );
-                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                        "Persistent audio error: {}",
-                        e
-                    )));
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(
-                        soul_playback::PlaybackState::Stopped,
-                    ));
-                } else {
-                    tracing::error!(
-                        error = ?e,
-                        error_count = *error_count,
-                        "[PLAYBACK] Audio processing error in i16 callback"
-                    );
-                }
-            }
-        }
+        // Forward pending events from manager to UI
+        // Uses the conversion function to translate between event types
+        Self::forward_manager_events(&mut mgr, ctx.event_tx);
     }
 
     /// Forward events from `PlaybackManager` to the desktop event channel
     ///
     /// This drains events from the manager (e.g., crossfade progress, track changes at 50%)
     /// and converts them to desktop `PlaybackEvent` format.
+    /// Forward events from `PlaybackManager` to the desktop event channel
+    ///
+    /// Processes ONE event per callback to bound latency. Real-time audio callbacks
+    /// must have predictable execution time. If multiple events are queued, they'll
+    /// be forwarded in subsequent callbacks.
     fn forward_manager_events(mgr: &mut PlaybackManager, event_tx: &Sender<PlaybackEvent>) {
-        for event in mgr.drain_events() {
+        // Process only ONE event per callback to bound latency
+        let events = mgr.drain_events();
+        if let Some(event) = events.into_iter().next() {
             let desktop_event = match event {
                 soul_playback::PlaybackEvent::StateChanged { state } => {
                     // Convert PlaybackStateEvent to PlaybackState
                     let state = match state {
                         soul_playback::PlaybackStateEvent::Stopped => {
                             soul_playback::PlaybackState::Stopped
-                        }
-                        soul_playback::PlaybackStateEvent::Loading => {
-                            soul_playback::PlaybackState::Loading
                         }
                         soul_playback::PlaybackStateEvent::Playing => {
                             soul_playback::PlaybackState::Playing
@@ -2077,66 +1774,18 @@ impl DesktopPlayback {
                 soul_playback::PlaybackEvent::Error { message } => {
                     Some(PlaybackEvent::Error(message))
                 }
+                soul_playback::PlaybackEvent::LoadNext(track) => {
+                    // TODO: Handle background loading of next track in Phase 2
+                    // For now, just log it
+                    tracing::debug!("[forward_manager_events] LoadNext event for track: {}", track.title);
+                    None // Skip this event for now
+                }
             };
 
             if let Some(event) = desktop_event {
-                if let Err(e) = event_tx.try_send(event) {
-                    tracing::warn!(
-                        error = %e,
-                        "[forward_manager_events] Event channel full - event dropped"
-                    );
-                }
-            }
-        }
-    }
-
-    /// Poll for ready track loads from the background loader (non-blocking)
-    ///
-    /// This is called from the audio callback to check if any track loads have completed.
-    /// When a load completes, we set the source on the manager and emit events.
-    fn poll_track_loader(
-        mgr: &mut PlaybackManager,
-        track_loader: &Arc<crate::track_loader::TrackLoader>,
-        event_tx: &Sender<PlaybackEvent>,
-    ) {
-        while let Some(result) = track_loader.poll_ready() {
-            if let Some(source) = result.source {
-                if result.is_preload {
-                    // Pre-loaded next track for crossfade/gapless
-                    tracing::debug!(
-                        "[poll_track_loader] Next track ready for crossfade: {}",
-                        result.track.title
-                    );
-                    mgr.set_next_source(source, result.track);
-                } else {
-                    // Current track loaded (initial load or track change)
-                    tracing::debug!("[poll_track_loader] Track loaded: {}", result.track.title);
-                    tracing::debug!(
-                        "[poll_track_loader] State BEFORE set_audio_source: {:?}",
-                        mgr.get_state()
-                    );
-                    mgr.set_audio_source(source);
-                    tracing::debug!(
-                        "[poll_track_loader] State AFTER set_audio_source: {:?}",
-                        mgr.get_state()
-                    );
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-                    let _ = event_tx.try_send(PlaybackEvent::TrackChanged(Some(result.track)));
-                    let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
-                }
-            } else if let Some(error) = result.error {
-                tracing::error!(
-                    "[poll_track_loader] Failed to load '{}': {}",
-                    result.track.title,
-                    error
-                );
-                if !result.is_preload {
-                    // Only emit error for current track loads, not preloads
-                    tracing::error!(error = ?error, track_id = result.track.id, "[PLAYBACK] Failed to load track");
-                    let _ = event_tx.try_send(PlaybackEvent::Error("TRACK_LOAD_ERROR".to_string()));
-                    mgr.stop();
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-                }
+                // NOTE: Ignore send errors - no logging in audio callback (causes I/O blocking)
+                // If channel is full, event will be dropped (best-effort delivery)
+                let _ = event_tx.try_send(event);
             }
         }
     }
@@ -2150,10 +1799,73 @@ impl DesktopPlayback {
         command: PlaybackCommand,
         manager: Arc<Mutex<PlaybackManager>>,
         event_tx: &Sender<PlaybackEvent>,
-        track_loader: &Arc<crate::track_loader::TrackLoader>,
+        command_tx: &Sender<PlaybackCommand>,
     ) -> Result<()> {
         let mut mgr = manager.lock().unwrap();
-        Self::process_command_with_lock(command, &mut mgr, event_tx, track_loader)
+        Self::process_command_with_lock(command, &mut mgr, event_tx, command_tx)
+    }
+
+    /// Load audio source synchronously with timeout
+    ///
+    /// Creates a LocalAudioSource and polls until ready or timeout expires.
+    /// This replaces the async TrackLoader pattern with direct synchronous loading.
+    ///
+    /// # Arguments
+    /// * `track` - Track to load
+    /// * `target_sample_rate` - Target sample rate for resampling
+    /// * `timeout` - Maximum time to wait for source to become ready
+    ///
+    /// # Returns
+    /// * `Ok(source)` - Ready audio source
+    /// * `Err(_)` - Timeout or load error
+    fn load_source_with_timeout(
+        track: &soul_playback::QueueTrack,
+        target_sample_rate: u32,
+        timeout: Duration,
+    ) -> Result<Box<dyn soul_playback::AudioSource>> {
+        let start = std::time::Instant::now();
+
+        tracing::debug!(
+            "[load_source_with_timeout] Loading: {} (timeout: {:?})",
+            track.title,
+            timeout
+        );
+
+        // Create audio source
+        let source = crate::sources::LocalAudioSource::new(&track.path, target_sample_rate)
+            .map_err(|e| {
+                tracing::error!("[load_source_with_timeout] Failed to create source: {}", e);
+                crate::error::AudioError::PlaybackError(format!(
+                    "Failed to create audio source: {}",
+                    e
+                ))
+            })?;
+
+        // Poll until ready or timeout
+        let poll_interval = Duration::from_millis(10);
+        while !source.is_ready() {
+            if start.elapsed() >= timeout {
+                tracing::error!(
+                    "[load_source_with_timeout] Timeout after {:?} for: {}",
+                    timeout,
+                    track.title
+                );
+                return Err(crate::error::AudioError::PlaybackError(format!(
+                    "Source load timeout ({:?}) for: {}",
+                    timeout, track.title
+                )));
+            }
+            std::thread::sleep(poll_interval);
+        }
+
+        let elapsed = start.elapsed();
+        tracing::info!(
+            "[load_source_with_timeout] Source ready in {:?} for: {}",
+            elapsed,
+            track.title
+        );
+
+        Ok(Box::new(source))
     }
 
     /// Process playback command with an already-acquired manager lock
@@ -2165,7 +1877,7 @@ impl DesktopPlayback {
         command: PlaybackCommand,
         mgr: &mut PlaybackManager,
         event_tx: &Sender<PlaybackEvent>,
-        track_loader: &Arc<crate::track_loader::TrackLoader>,
+        command_tx: &Sender<PlaybackCommand>,
     ) -> Result<()> {
         match command {
             PlaybackCommand::Play => {
@@ -2175,40 +1887,78 @@ impl DesktopPlayback {
                 let state = mgr.get_state();
                 tracing::debug!("[PlaybackCommand::Play] State after play(): {:?}", state);
 
-                // If state is Loading, request track load via background loader
-                if state == soul_playback::PlaybackState::Loading {
-                    if let Some(track) = mgr.get_current_track().cloned() {
-                        tracing::debug!(
-                            "[PlaybackCommand::Play] Requesting track load: {} from {}",
-                            track.title,
-                            track.path.display()
-                        );
-                        let target_sample_rate = mgr.get_sample_rate();
-                        tracing::debug!(
-                            "[PlaybackCommand::Play] Target sample rate: {}",
-                            target_sample_rate
-                        );
-                        // Request load via background loader (non-blocking)
-                        let request = crate::track_loader::LoadRequest {
-                            path: track.path.clone(),
-                            track: track.clone(),
-                            target_sample_rate,
-                            is_preload: false,
-                        };
-                        if !track_loader.request_load(request) {
-                            tracing::debug!("[PlaybackCommand::Play] Load request queue full");
-                        }
-                        // Result will be handled by poll_track_loader in next callback
-                    } else {
-                        tracing::debug!("[PlaybackCommand::Play] No current track to load");
+                match state {
+                    soul_playback::PlaybackState::Paused => {
+                        // Resume from pause - just emit state change
+                        tracing::debug!("[PlaybackCommand::Play] Resumed from pause");
+                        let _ = event_tx.try_send(PlaybackEvent::StateChanged(state));
                     }
-                } else {
-                    tracing::debug!(
-                        "[PlaybackCommand::Play] State is {:?}, not loading audio",
-                        state
-                    );
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                    soul_playback::PlaybackState::Stopped => {
+                        // Need to load next track
+                        if let Ok(next_track) = mgr.peek_next_track() {
+                            tracing::info!(
+                                "[PlaybackCommand::Play] Spawning background load for: {}",
+                                next_track.title
+                            );
+
+                            // Clone what we need for the background thread
+                            let command_tx_clone = command_tx.clone();
+                            let event_tx_clone = event_tx.clone();
+                            let sample_rate = mgr.get_sample_rate();
+
+                            // Spawn background thread to load source
+                            std::thread::spawn(move || {
+                                match load_source_blocking(
+                                    &next_track,
+                                    sample_rate,
+                                    Duration::from_millis(500),
+                                ) {
+                                    Ok(source) => {
+                                        // Send to command channel for activation in audio callback
+                                        if let Err(e) =
+                                            command_tx_clone.send(PlaybackCommand::ActivateSource {
+                                                source,
+                                                track: next_track,
+                                            })
+                                        {
+                                            tracing::error!(
+                                                "[load_source_blocking] Failed to send ActivateSource: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "[load_source_blocking] Load failed: {}",
+                                            e
+                                        );
+                                        let _ = event_tx_clone
+                                            .send(PlaybackEvent::Error(format!("{}", e)));
+                                    }
+                                }
+                            });
+                        } else {
+                            tracing::warn!(
+                                "[PlaybackCommand::Play] No track to load (queue empty)"
+                            );
+                        }
+                    }
+                    soul_playback::PlaybackState::Playing => {
+                        // Already playing
+                        tracing::debug!("[PlaybackCommand::Play] Already playing");
+                    }
                 }
+            }
+            PlaybackCommand::ActivateSource { source, track } => {
+                tracing::info!(
+                    "[PlaybackCommand::ActivateSource] Activating: {}",
+                    track.title
+                );
+                mgr.activate_source(source, track);
+                let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
+                    mgr.get_current_track().cloned(),
+                ));
             }
             PlaybackCommand::Pause => {
                 tracing::debug!(
@@ -2229,22 +1979,8 @@ impl DesktopPlayback {
             PlaybackCommand::Next => {
                 mgr.next()?;
 
-                // If state is Loading, request track load via background loader
-                if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    if let Some(track) = mgr.get_current_track().cloned() {
-                        let target_sample_rate = mgr.get_sample_rate();
-                        let request = crate::track_loader::LoadRequest {
-                            path: track.path.clone(),
-                            track: track.clone(),
-                            target_sample_rate,
-                            is_preload: false,
-                        };
-                        if !track_loader.request_load(request) {
-                            tracing::debug!("[PlaybackCommand::Next] Load request queue full");
-                        }
-                        // Result will be handled by poll_track_loader in next callback
-                    }
-                } else {
+                // TODO(Phase 2): Load track synchronously here
+                if mgr.get_state() != soul_playback::PlaybackState::Stopped {
                     let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
                         mgr.get_current_track().cloned(),
                     ));
@@ -2255,22 +1991,8 @@ impl DesktopPlayback {
             PlaybackCommand::Previous => {
                 mgr.previous()?;
 
-                // If state is Loading, request track load via background loader
-                if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    if let Some(track) = mgr.get_current_track().cloned() {
-                        let target_sample_rate = mgr.get_sample_rate();
-                        let request = crate::track_loader::LoadRequest {
-                            path: track.path.clone(),
-                            track: track.clone(),
-                            target_sample_rate,
-                            is_preload: false,
-                        };
-                        if !track_loader.request_load(request) {
-                            tracing::debug!("[PlaybackCommand::Previous] Load request queue full");
-                        }
-                        // Result will be handled by poll_track_loader in next callback
-                    }
-                } else {
+                // TODO(Phase 2): Load track synchronously here
+                if mgr.get_state() != soul_playback::PlaybackState::Stopped {
                     let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
                         mgr.get_current_track().cloned(),
                     ));
@@ -2326,24 +2048,7 @@ impl DesktopPlayback {
             PlaybackCommand::SkipToQueueIndex(index) => {
                 mgr.skip_to_queue_index(index)?;
 
-                // If state is Loading, request track load via background loader
-                if mgr.get_state() == soul_playback::PlaybackState::Loading {
-                    if let Some(track) = mgr.get_current_track().cloned() {
-                        let target_sample_rate = mgr.get_sample_rate();
-                        let request = crate::track_loader::LoadRequest {
-                            path: track.path.clone(),
-                            track: track.clone(),
-                            target_sample_rate,
-                            is_preload: false,
-                        };
-                        if !track_loader.request_load(request) {
-                            tracing::debug!(
-                                "[PlaybackCommand::SkipToQueueIndex] Load request queue full"
-                            );
-                        }
-                        // Result will be handled by poll_track_loader in next callback
-                    }
-                }
+                // TODO(Phase 2): Load track synchronously here
                 let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
             }
             PlaybackCommand::LoadPlaylist(tracks) => {
@@ -2649,10 +2354,10 @@ impl DesktopPlayback {
         let stream_result = Self::create_audio_stream(
             self.manager.clone(),
             new_command_rx,
+            new_command_tx.clone(),
             self.event_tx.clone(),
             backend,
             device_name.clone(),
-            self.track_loader.clone(),
         );
 
         // Handle stream creation failure with recovery logic
@@ -2843,10 +2548,10 @@ impl DesktopPlayback {
                             }
                         }
 
-                        // Now set the pre-seeked source - this is the FIRST time we re-acquire manager lock
+                        // Now activate the pre-seeked source - this is the FIRST time we re-acquire manager lock
                         {
                             let mut mgr = self.manager.lock().unwrap();
-                            mgr.set_audio_source(Box::new(source));
+                            mgr.activate_source(Box::new(source), track.clone());
                         } // Lock released
 
                         tracing::info!(

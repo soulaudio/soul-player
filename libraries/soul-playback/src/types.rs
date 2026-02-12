@@ -1,6 +1,7 @@
 //! Core types for playback management
 
 use crate::crossfade::CrossfadeSettings;
+use crate::source::AudioSource;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -68,9 +69,160 @@ pub enum PlaybackState {
 
     /// Paused mid-track
     Paused,
+}
 
-    /// Loading/buffering next track
-    Loading,
+/// Source state machine - replaces triple-source pattern
+///
+/// This enum consolidates audio_source, next_source, and pending_source
+/// into a single type-safe state machine. Makes illegal states unrepresentable
+/// (e.g., can't have pending_source without audio_source).
+pub enum SourceState {
+    /// No audio loaded
+    Empty,
+
+    /// Single track playing
+    Playing {
+        source: Box<dyn AudioSource>,
+        track: QueueTrack,
+    },
+
+    /// Two sources ready for crossfade transition
+    Transitioning {
+        outgoing: Box<dyn AudioSource>,
+        outgoing_track: QueueTrack,
+        incoming: Box<dyn AudioSource>,
+        incoming_track: QueueTrack,
+        /// Crossfade progress (0.0 = start, 1.0 = complete)
+        /// None = not in crossfade (gapless mode)
+        crossfade_progress: Option<f32>,
+    },
+}
+
+impl SourceState {
+    /// Get immutable reference to current playing source
+    pub fn current_source(&self) -> Option<&dyn AudioSource> {
+        match self {
+            Self::Empty => None,
+            Self::Playing { source, .. } => Some(source.as_ref()),
+            Self::Transitioning { outgoing, .. } => Some(outgoing.as_ref()),
+        }
+    }
+
+    /// Get mutable reference to current playing source
+    pub fn current_source_mut(&mut self) -> Option<&mut dyn AudioSource> {
+        match self {
+            Self::Empty => None,
+            Self::Playing { source, .. } => Some(source.as_mut()),
+            Self::Transitioning { outgoing, .. } => Some(outgoing.as_mut()),
+        }
+    }
+
+    /// Get immutable reference to incoming source (if transitioning)
+    pub fn incoming_source(&self) -> Option<&dyn AudioSource> {
+        match self {
+            Self::Transitioning { incoming, .. } => Some(incoming.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// Get mutable reference to incoming source (if transitioning)
+    pub fn incoming_source_mut(&mut self) -> Option<&mut dyn AudioSource> {
+        match self {
+            Self::Transitioning { incoming, .. } => Some(incoming.as_mut()),
+            _ => None,
+        }
+    }
+
+    /// Get current track metadata
+    pub fn current_track(&self) -> Option<&QueueTrack> {
+        match self {
+            Self::Empty => None,
+            Self::Playing { track, .. } => Some(track),
+            Self::Transitioning { outgoing_track, .. } => Some(outgoing_track),
+        }
+    }
+
+    /// Get incoming track metadata (if transitioning)
+    pub fn incoming_track(&self) -> Option<&QueueTrack> {
+        match self {
+            Self::Transitioning { incoming_track, .. } => Some(incoming_track),
+            _ => None,
+        }
+    }
+
+    /// Check if source is ready for playback
+    pub fn is_ready(&self) -> bool {
+        match self {
+            Self::Empty => false,
+            Self::Playing { source, .. } => source.is_ready(),
+            Self::Transitioning { outgoing, .. } => outgoing.is_ready(),
+        }
+    }
+
+    /// Check if currently transitioning
+    pub fn is_transitioning(&self) -> bool {
+        matches!(self, Self::Transitioning { .. })
+    }
+
+    /// Complete transition by dropping outgoing source and promoting incoming
+    ///
+    /// Panics if not in Transitioning state.
+    pub fn complete_transition(self) -> Self {
+        match self {
+            Self::Transitioning {
+                incoming,
+                incoming_track,
+                ..
+            } => Self::Playing {
+                source: incoming,
+                track: incoming_track,
+            },
+            _ => panic!("complete_transition called on non-transitioning state"),
+        }
+    }
+
+    /// Start a transition from current playing state to a new source
+    ///
+    /// Panics if not in Playing state.
+    pub fn start_transition(
+        self,
+        incoming: Box<dyn AudioSource>,
+        incoming_track: QueueTrack,
+        crossfade_progress: Option<f32>,
+    ) -> Self {
+        match self {
+            Self::Playing { source, track } => Self::Transitioning {
+                outgoing: source,
+                outgoing_track: track,
+                incoming,
+                incoming_track,
+                crossfade_progress,
+            },
+            _ => panic!("start_transition called on non-playing state"),
+        }
+    }
+
+    /// Take the current source out of the state, leaving Empty
+    pub fn take(self) -> (Option<Box<dyn AudioSource>>, Option<QueueTrack>) {
+        match self {
+            Self::Empty => (None, None),
+            Self::Playing { source, track } => (Some(source), Some(track)),
+            Self::Transitioning {
+                outgoing,
+                outgoing_track,
+                ..
+            } => (Some(outgoing), Some(outgoing_track)),
+        }
+    }
+
+    /// Take the current track out, consuming and replacing the state with Empty
+    ///
+    /// This is useful when saving the current track to history before loading a new one.
+    pub fn take_current_track(&mut self) -> Option<QueueTrack> {
+        let old_state = std::mem::replace(self, Self::Empty);
+        let (_, track) = old_state.take();
+        track
+    }
 }
 
 /// Repeat mode

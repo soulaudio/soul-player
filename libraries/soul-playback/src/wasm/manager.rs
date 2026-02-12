@@ -52,9 +52,9 @@ impl WasmPlaybackManager {
 
         self.emit_state_change();
 
-        // Only emit track change if we transitioned to Loading state
+        // Only emit track change if we started playing from stopped
         // (meaning a new track is being loaded, not just resuming from pause)
-        if new_state == PlaybackState::Loading && old_state != PlaybackState::Paused {
+        if new_state == PlaybackState::Playing && old_state == PlaybackState::Stopped {
             self.emit_track_change();
         }
 
@@ -152,7 +152,6 @@ impl WasmPlaybackManager {
             PlaybackState::Stopped => "stopped".to_string(),
             PlaybackState::Playing => "playing".to_string(),
             PlaybackState::Paused => "paused".to_string(),
-            PlaybackState::Loading => "loading".to_string(),
         }
     }
 

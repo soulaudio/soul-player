@@ -2,9 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog } from '@soul-player/shared';
+import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog, useBackend } from '@soul-player/shared';
 import { ArrowLeft, Play, Guitar, Clock } from 'lucide-react';
-import { usePlaybackContext } from '../hooks/usePlaybackContext';
 
 interface Genre {
   id: number;
@@ -21,7 +20,7 @@ export function GenrePage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { recordContext } = usePlaybackContext();
+  const backend = useBackend();
 
   const [genre, setGenre] = useState<Genre | null>(null);
   const [tracks, setTracks] = useState<DesktopTrack[]>([]);
@@ -79,7 +78,7 @@ export function GenrePage() {
 
     // Record playback context when playing from genre
     if (genre) {
-      recordContext({
+      backend.recordContext({
         contextType: 'genre',
         contextId: String(genre.id),
         contextName: genre.name,
@@ -102,7 +101,7 @@ export function GenrePage() {
         trackNumber: desktopTrack.track_number || null,
       };
     });
-  }, [tracks, genre, recordContext]);
+  }, [tracks, genre, backend]);
 
   const handlePlayAll = async () => {
     // Deduplicate tracks (selects best quality version for each unique track)
@@ -122,7 +121,7 @@ export function GenrePage() {
     try {
       // Record playback context
       if (genre) {
-        await recordContext({
+        await backend.recordContext({
           contextType: 'genre',
           contextId: String(genre.id),
           contextName: genre.name,

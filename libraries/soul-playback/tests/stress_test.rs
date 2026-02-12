@@ -158,9 +158,7 @@ mod rapid_play_pause {
             // State can be Playing, Paused, or Loading (during transitions)
             let state = manager.get_state();
             assert!(
-                state == PlaybackState::Playing
-                    || state == PlaybackState::Paused
-                    || state == PlaybackState::Loading,
+                state == PlaybackState::Playing || state == PlaybackState::Paused,
                 "State should be Playing, Paused, or Loading after cycle {}, got {:?}",
                 i,
                 state
@@ -302,7 +300,6 @@ mod rapid_play_pause {
         assert!(
             state == PlaybackState::Stopped
                 || state == PlaybackState::Paused
-                || state == PlaybackState::Loading
                 || state == PlaybackState::Playing,
             "Should be in a valid state, got {:?}",
             state
@@ -610,11 +607,7 @@ mod rapid_skip {
 
         // Manager should still be functional
         let state = manager.get_state();
-        assert!(
-            state == PlaybackState::Playing
-                || state == PlaybackState::Loading
-                || state == PlaybackState::Stopped
-        );
+        assert!(state == PlaybackState::Playing || state == PlaybackState::Stopped);
     }
 
     #[test]
@@ -669,11 +662,7 @@ mod rapid_skip {
         // With repeat all, should still be playing (queue loops)
         let state = manager.get_state();
         // State may vary but should not be crashed
-        assert!(
-            state == PlaybackState::Playing
-                || state == PlaybackState::Loading
-                || state == PlaybackState::Stopped
-        );
+        assert!(state == PlaybackState::Playing || state == PlaybackState::Stopped);
     }
 
     #[test]
@@ -874,11 +863,7 @@ mod queue_stress {
 
         // Manager should still be functional
         let state = manager.get_state();
-        assert!(
-            state == PlaybackState::Playing
-                || state == PlaybackState::Loading
-                || state == PlaybackState::Stopped
-        );
+        assert!(state == PlaybackState::Playing || state == PlaybackState::Stopped);
     }
 
     #[test]
@@ -1155,7 +1140,6 @@ mod combined_stress {
             state == PlaybackState::Playing
                 || state == PlaybackState::Paused
                 || state == PlaybackState::Stopped
-                || state == PlaybackState::Loading
         );
     }
 
@@ -1194,11 +1178,7 @@ mod combined_stress {
 
         // Should complete without crash
         let state = manager.get_state();
-        assert!(
-            state == PlaybackState::Playing
-                || state == PlaybackState::Loading
-                || state == PlaybackState::Stopped
-        );
+        assert!(state == PlaybackState::Playing || state == PlaybackState::Stopped);
     }
 
     #[test]
@@ -1237,11 +1217,7 @@ mod combined_stress {
 
         // Should still be functional
         let state = manager.get_state();
-        assert!(
-            state == PlaybackState::Playing
-                || state == PlaybackState::Loading
-                || state == PlaybackState::Stopped
-        );
+        assert!(state == PlaybackState::Playing || state == PlaybackState::Stopped);
     }
 
     #[test]
@@ -1356,11 +1332,7 @@ mod edge_case_stress {
 
         // Should not crash
         let state = manager.get_state();
-        assert!(
-            state == PlaybackState::Stopped
-                || state == PlaybackState::Paused
-                || state == PlaybackState::Loading
-        );
+        assert!(state == PlaybackState::Stopped || state == PlaybackState::Paused);
     }
 
     #[test]
@@ -1422,9 +1394,7 @@ mod edge_case_stress {
         // The main goal of this stress test is stability, not position tracking
         let state = manager.get_state();
         assert!(
-            state == PlaybackState::Playing
-                || state == PlaybackState::Paused
-                || state == PlaybackState::Loading,
+            state == PlaybackState::Playing || state == PlaybackState::Paused,
             "Should be in valid state after processing, got {:?}",
             state
         );
@@ -1451,7 +1421,6 @@ mod edge_case_stress {
         assert!(
             state == PlaybackState::Playing
                 || state == PlaybackState::Paused
-                || state == PlaybackState::Loading
                 || state == PlaybackState::Stopped,
             "Should be in valid state after processing, got {:?}",
             state

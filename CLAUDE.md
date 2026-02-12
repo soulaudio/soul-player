@@ -250,7 +250,7 @@ Ensures desktop/marketing parity - same UI components on both platforms.
 **Files**:
 - `applications/shared/src/contexts/BackendContext.tsx` - Interface
 - `applications/desktop/src/providers/TauriBackendProvider.tsx` - Desktop impl
-- `applications/marketing/src/providers/DemoBackendProvider.tsx` - Demo impl
+- `applications/shared/src/providers/MockBackendProvider.tsx` - Mock impl (for marketing demo)
 
 **Rules**:
 1. NEVER `invoke()` directly in shared pages - use `useBackend()` hook

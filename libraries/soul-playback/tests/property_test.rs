@@ -464,7 +464,7 @@ proptest! {
             // State must always be one of the valid states
             let state = manager.get_state();
             prop_assert!(
-                matches!(state, PlaybackState::Stopped | PlaybackState::Playing | PlaybackState::Paused | PlaybackState::Loading),
+                matches!(state, PlaybackState::Stopped | PlaybackState::Playing | PlaybackState::Paused),
                 "Invalid state after operation: {:?}",
                 state
             );

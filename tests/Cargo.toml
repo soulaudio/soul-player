@@ -1,0 +1,38 @@
+[package]
+name = "soul-player-e2e-tests"
+version = "0.1.10"
+edition = "2021"
+publish = false
+
+[dependencies]
+# WebDriver dependencies
+# Note: tauri-driver is installed as binary (cargo install tauri-driver), not as dependency
+fantoccini = "0.21"  # WebDriver client
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+# Audio testing infrastructure
+cpal = "0.17"
+hound = "3.5"  # WAV file creation for test audio
+tokio = { version = "1.35", features = ["full", "test-util"] }
+tempfile = "3.24"
+
+# Test utilities
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+chrono = "0.4"
+
+# Development dependencies for tests
+[dev-dependencies]
+serial_test = "3.0"  # Run tests serially to avoid device conflicts
+
+[[test]]
+name = "audio_initialization_latency"
+path = "e2e/audio_initialization_latency.rs"
+harness = true
+
+[[test]]
+name = "audio_stutter_detection"
+path = "e2e/audio_stutter_detection.rs"
+harness = true

@@ -198,10 +198,7 @@ fn verify_state_consistency(manager: &PlaybackManager) -> bool {
     // All states are valid - we just check that the manager is in a defined state
     matches!(
         state,
-        PlaybackState::Playing
-            | PlaybackState::Paused
-            | PlaybackState::Stopped
-            | PlaybackState::Loading
+        PlaybackState::Playing | PlaybackState::Paused | PlaybackState::Stopped
     )
 }
 
@@ -680,7 +677,7 @@ fn test_crossfade_interrupted_by_pause() {
     assert!(
         final_state == PlaybackState::Paused
             || final_state == PlaybackState::Playing
-            || final_state == PlaybackState::Loading,
+            || final_state == PlaybackState::Stopped,
         "State should be Paused, Playing (during fade), or Loading, got {:?}",
         final_state
     );
@@ -779,11 +776,11 @@ fn test_crossfade_interrupted_by_skip() {
     let result = manager.next();
     assert!(result.is_ok(), "Skip should succeed");
 
-    // State should be Loading (waiting for new track)
+    // State should be Stopped (waiting for new track) or Playing
     let state = manager.get_state();
     assert!(
-        state == PlaybackState::Loading || state == PlaybackState::Playing,
-        "State should be Loading or Playing after skip"
+        state == PlaybackState::Stopped || state == PlaybackState::Playing,
+        "State should be Stopped or Playing after skip"
     );
 
     // Crossfade should be reset
@@ -996,7 +993,7 @@ fn test_multiple_rapid_crossfades() {
 
     let state = manager.get_state();
     assert!(
-        state == PlaybackState::Playing || state == PlaybackState::Loading,
+        state == PlaybackState::Playing,
         "Should be Playing or Loading after rapid skips"
     );
 }
@@ -1256,7 +1253,7 @@ fn test_crossfade_state_transition_validity() {
     // Play
     manager.play().ok();
     assert!(
-        manager.get_state() == PlaybackState::Loading
+        manager.get_state() == PlaybackState::Stopped
             || manager.get_state() == PlaybackState::Playing,
         "State after play should be Loading or Playing"
     );
@@ -1276,7 +1273,6 @@ fn test_crossfade_state_transition_validity() {
     let mut playing_count = 0usize;
     let mut paused_count = 0usize;
     let mut stopped_count = 0usize;
-    let mut loading_count = 0usize;
 
     for _ in 0..200 {
         let _ = manager.process_audio(&mut buffer);
@@ -1285,17 +1281,15 @@ fn test_crossfade_state_transition_validity() {
             PlaybackState::Playing => playing_count += 1,
             PlaybackState::Paused => paused_count += 1,
             PlaybackState::Stopped => stopped_count += 1,
-            PlaybackState::Loading => loading_count += 1,
         }
     }
 
     // Verify we see expected states during normal playback
     tracing::info!(
-        "[TEST] State counts: Playing={}, Paused={}, Stopped={}, Loading={}",
+        "[TEST] State counts: Playing={}, Paused={}, Stopped={}",
         playing_count,
         paused_count,
-        stopped_count,
-        loading_count
+        stopped_count
     );
 
     // Playing should be most common during normal playback

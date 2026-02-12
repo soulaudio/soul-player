@@ -666,9 +666,7 @@ fn test_crossfade_completes_when_incoming_becomes_ready() {
     // Manager should still be functional
     let state = manager.get_state();
     assert!(
-        state == PlaybackState::Playing
-            || state == PlaybackState::Stopped
-            || state == PlaybackState::Loading,
+        state == PlaybackState::Playing || state == PlaybackState::Stopped,
         "Manager should be in valid state after processing"
     );
 }
@@ -791,11 +789,11 @@ fn test_rapid_skip_clears_user_paused_flag() {
         manager.next().ok();
     }
 
-    // Should still be in Loading state waiting for track
+    // Should still be in Stopped state waiting for track or Playing
     let state = manager.get_state();
     assert!(
-        state == PlaybackState::Loading || state == PlaybackState::Playing,
-        "State should be Loading or Playing after rapid skip, got {:?}",
+        state == PlaybackState::Stopped || state == PlaybackState::Playing,
+        "State should be Stopped or Playing after rapid skip, got {:?}",
         state
     );
 
@@ -878,7 +876,7 @@ fn test_next_cancels_pending_state() {
     // State depends on whether track loaded yet
     let state = manager.get_state();
     assert!(
-        state == PlaybackState::Loading
+        state == PlaybackState::Stopped
             || state == PlaybackState::Playing
             || state == PlaybackState::Paused, // Might still be paused if fade completed
         "State should be Loading, Playing, or Paused, got {:?}",
