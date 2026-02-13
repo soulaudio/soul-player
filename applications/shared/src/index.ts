@@ -182,6 +182,7 @@ export { LibraryPageLayout } from './components/LibraryPageLayout';
 export { SkeletonCard } from './components/SkeletonCard';
 export { ProgressiveImage } from './components/ProgressiveImage';
 export { VirtualizedGrid } from './components/VirtualizedGrid';
+export { ScanProgressToast } from './components/ScanProgressToast';
 
 // Hooks
 export { useSeekBar, setIgnorePositionUpdates, shouldIgnorePositionUpdates } from './hooks/useSeekBar';

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useBackend, clearArtworkCache } from '@soul-player/shared';
+import { useBackend, clearArtworkCache, ScanProgressToast } from '@soul-player/shared';
 import { MainLayout } from './layouts/MainLayout';
 // Use shared pages for cross-platform parity
 import {
@@ -191,6 +191,8 @@ function App() {
           <Route path="/settings/*" element={<SettingsRouter />} />
         </Routes>
       </MainLayout>
+      {/* Scan progress toast with automatic cache invalidation */}
+      <ScanProgressToast />
     </FileDropHandler>
   );
 }

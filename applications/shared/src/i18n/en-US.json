@@ -90,6 +90,9 @@
     "loadFailed": "Failed to load library",
     "deleteTrack": "Delete Track",
     "deleteTrackConfirm": "Are you sure you want to delete this track? This will remove the track from your library.",
+    "scanning": "Scanning Library",
+    "scanningLibrary": "Scanning your music files",
+    "scanComplete": "Scan Complete",
     "tab": {
       "albums": "Albums",
       "playlists": "Playlists",

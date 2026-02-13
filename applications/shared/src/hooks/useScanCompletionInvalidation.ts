@@ -100,6 +100,9 @@ export function useScanCompletionInvalidation(): void {
 /**
  * Hook for listening to scan progress updates (optional, for progress UI).
  *
+ * Includes debounced cache invalidation during scanning to show new items
+ * without overwhelming React Query with constant refetches.
+ *
  * Usage:
  * ```typescript
  * const { progress, isScanning } = useScanProgress()
@@ -112,6 +115,20 @@ export function useScanProgress() {
   const queryClient = useQueryClient()
   const [progress, setProgress] = useState(0)
   const [isScanning, setIsScanning] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
+
+  // Debounced invalidation during scanning (every 2 seconds max)
+  useEffect(() => {
+    if (!isDirty || !isScanning) return
+
+    const timeoutId = setTimeout(() => {
+      debug.log('[useScanProgress] Debounced invalidation - refreshing library data')
+      invalidateAfterFileScan(queryClient)
+      setIsDirty(false)
+    }, 2000) // 2 second debounce
+
+    return () => clearTimeout(timeoutId)
+  }, [isDirty, isScanning, queryClient])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.__TAURI__) {
@@ -131,6 +148,7 @@ export function useScanProgress() {
         unlistenStart = await listen('scan-started', () => {
           setIsScanning(true)
           setProgress(0)
+          setIsDirty(false)
           debug.log('[useScanProgress] Scan started')
         })
 
@@ -141,6 +159,11 @@ export function useScanProgress() {
             const { processed, total } = event.payload
             const progressPercent = total > 0 ? (processed / total) * 100 : 0
             setProgress(progressPercent)
+
+            // Mark as dirty on every progress update
+            // The debounced effect above will handle actual invalidation
+            setIsDirty(true)
+
             debug.log(`[useScanProgress] Progress: ${processed}/${total} (${progressPercent.toFixed(1)}%)`)
           }
         )
@@ -151,9 +174,13 @@ export function useScanProgress() {
           setProgress(100)
           debug.log('[useScanProgress] Scan complete')
 
+          // Final invalidation on completion (immediate, not debounced)
+          invalidateAfterFileScan(queryClient)
+
           // Reset after a delay
           setTimeout(() => {
             setProgress(0)
+            setIsDirty(false)
           }, 2000)
         })
       } catch (error) {
@@ -170,7 +197,7 @@ export function useScanProgress() {
     }
   }, [queryClient])
 
-  return { progress, isScanning }
+  return { progress, isScanning, isDirty }
 }
 
 /**
