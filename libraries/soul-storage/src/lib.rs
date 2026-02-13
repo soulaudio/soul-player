@@ -36,6 +36,7 @@
 
 mod context;
 mod error;
+pub mod utils;
 
 // Vertical slices
 pub mod albums;

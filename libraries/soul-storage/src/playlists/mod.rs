@@ -1,6 +1,8 @@
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
+use crate::utils::unix_to_iso8601;
+
 /// Get user's playlists (owned + shared with them)
 pub async fn get_user_playlists(pool: &SqlitePool, user_id: UserId) -> Result<Vec<Playlist>> {
     let rows: Vec<_> = sqlx::query!(
@@ -23,12 +25,8 @@ pub async fn get_user_playlists(pool: &SqlitePool, user_id: UserId) -> Result<Ve
         .into_iter()
         .map(|row| {
             // Convert Unix timestamp to ISO 8601 string
-            let created_at = chrono::DateTime::from_timestamp(row.created_at, 0)
-                .map(|dt| dt.to_rfc3339())
-                .unwrap_or_default();
-            let updated_at = chrono::DateTime::from_timestamp(row.updated_at, 0)
-                .map(|dt| dt.to_rfc3339())
-                .unwrap_or_default();
+            let created_at = unix_to_iso8601(row.created_at);
+            let updated_at = unix_to_iso8601(row.updated_at);
 
             Playlist {
                 id: PlaylistId::new(row.id),
