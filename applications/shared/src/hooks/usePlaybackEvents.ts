@@ -82,7 +82,9 @@ export function usePlaybackEvents() {
         // Listen for queue updates
         const unlistenQueueUpdated = await listen('playback:queue-updated', () => {
           if (!isMounted) return;
-          // TODO: Fetch updated queue from backend when queue management is implemented
+          // TODO: Implement queue synchronization - fetch updated queue from backend
+          // when queue management (add to queue, play next, reorder) is implemented.
+          // For now, queue updates are handled via React Query invalidation.
         });
         unlistenFunctions.push(unlistenQueueUpdated);
 
@@ -90,7 +92,8 @@ export function usePlaybackEvents() {
         const unlistenError = await listen<string>('playback:error', (event) => {
           if (!isMounted) return;
           debug.error('[Playback Error]', event.payload);
-          // TODO: Show error notification to user
+          // TODO: Show user-facing error notification (toast/snackbar)
+          // Currently errors are only logged to console for debugging.
         });
         unlistenFunctions.push(unlistenError);
       } catch (error) {

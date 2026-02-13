@@ -6,46 +6,45 @@
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useBackend } from '../../contexts/BackendContext'
 import { artistKeys } from './queryKeys'
+import {
+  createDetailQueryOptions,
+  createFetcherQueryOptions,
+  CACHE_TIMES,
+  type BackendType,
+} from './queryFactories'
 
 /**
  * Query options for fetching a single artist by ID
  */
-export function artistDetailOptions(backend: ReturnType<typeof useBackend>, id: number) {
-  return queryOptions({
+export function artistDetailOptions(backend: BackendType, id: number) {
+  return createDetailQueryOptions({
     queryKey: artistKeys.detail(id),
-    queryFn: async () => {
-      const artist = await backend.getArtistById(id)
-      if (!artist) {
-        throw new Error(`Artist ${id} not found`)
-      }
-      return artist
-    },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 30, // 30 minutes
+    fetcher: () => backend.getArtistById(id),
+    entityName: 'Artist',
+    id,
+    cacheTime: CACHE_TIMES.METADATA,
   })
 }
 
 /**
  * Query options for fetching artist tracks
  */
-export function artistTracksOptions(backend: ReturnType<typeof useBackend>, id: number) {
-  return queryOptions({
+export function artistTracksOptions(backend: BackendType, id: number) {
+  return createFetcherQueryOptions({
     queryKey: artistKeys.tracks(id),
-    queryFn: () => backend.getArtistTracks(id),
-    staleTime: 1000 * 60 * 5,
-    gcTime: 1000 * 60 * 30,
+    fetcher: () => backend.getArtistTracks(id),
+    cacheTime: CACHE_TIMES.METADATA,
   })
 }
 
 /**
  * Query options for fetching artist albums
  */
-export function artistAlbumsOptions(backend: ReturnType<typeof useBackend>, id: number) {
-  return queryOptions({
+export function artistAlbumsOptions(backend: BackendType, id: number) {
+  return createFetcherQueryOptions({
     queryKey: artistKeys.albums(id),
-    queryFn: () => backend.getArtistAlbums(id),
-    staleTime: 1000 * 60 * 5,
-    gcTime: 1000 * 60 * 30,
+    fetcher: () => backend.getArtistAlbums(id),
+    cacheTime: CACHE_TIMES.METADATA,
   })
 }
 
@@ -53,7 +52,7 @@ export function artistAlbumsOptions(backend: ReturnType<typeof useBackend>, id: 
  * Query options for fetching artist top tracks
  */
 export function artistTopTracksOptions(
-  backend: ReturnType<typeof useBackend>,
+  backend: BackendType,
   id: number,
   limit: number = 10
 ) {
@@ -68,7 +67,7 @@ export function artistTopTracksOptions(
 /**
  * Query options for fetching artist artwork (desktop only)
  */
-export function artistArtworkOptions(backend: ReturnType<typeof useBackend>, id: number) {
+export function artistArtworkOptions(backend: BackendType, id: number) {
   return queryOptions({
     queryKey: artistKeys.artwork(id),
     queryFn: () => backend.getArtistArtwork(id),
@@ -80,7 +79,7 @@ export function artistArtworkOptions(backend: ReturnType<typeof useBackend>, id:
 /**
  * Query options for all artists list
  */
-export function artistsListOptions(backend: ReturnType<typeof useBackend>) {
+export function artistsListOptions(backend: BackendType) {
   return queryOptions({
     queryKey: artistKeys.list(),
     queryFn: () => backend.getAllArtists(),

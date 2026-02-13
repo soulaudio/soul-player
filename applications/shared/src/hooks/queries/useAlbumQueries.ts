@@ -8,59 +8,57 @@
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useBackend } from '../../contexts/BackendContext'
 import { albumKeys } from './queryKeys'
+import {
+  createDetailQueryOptions,
+  createFetcherQueryOptions,
+  CACHE_TIMES,
+  type BackendType,
+} from './queryFactories'
 
 /**
  * Query options for fetching a single album by ID
  * Can be used with useQuery, useSuspenseQuery, or queryClient.prefetchQuery
  */
-export function albumDetailOptions(backend: ReturnType<typeof useBackend>, id: number) {
-  return queryOptions({
+export function albumDetailOptions(backend: BackendType, id: number) {
+  return createDetailQueryOptions({
     queryKey: albumKeys.detail(id),
-    queryFn: async () => {
-      const album = await backend.getAlbumById(id)
-      if (!album) {
-        throw new Error(`Album ${id} not found`)
-      }
-      return album
-    },
-    staleTime: 1000 * 60 * 5, // 5 minutes - album metadata rarely changes
-    gcTime: 1000 * 60 * 30, // 30 minutes in cache
+    fetcher: () => backend.getAlbumById(id),
+    entityName: 'Album',
+    id,
+    cacheTime: CACHE_TIMES.METADATA,
   })
 }
 
 /**
  * Query options for fetching album tracks
  */
-export function albumTracksOptions(backend: ReturnType<typeof useBackend>, id: number) {
-  return queryOptions({
+export function albumTracksOptions(backend: BackendType, id: number) {
+  return createFetcherQueryOptions({
     queryKey: albumKeys.tracks(id),
-    queryFn: () => backend.getAlbumTracks(id),
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 30, // 30 minutes
+    fetcher: () => backend.getAlbumTracks(id),
+    cacheTime: CACHE_TIMES.METADATA,
   })
 }
 
 /**
  * Query options for all albums list
  */
-export function albumsListOptions(backend: ReturnType<typeof useBackend>) {
-  return queryOptions({
+export function albumsListOptions(backend: BackendType) {
+  return createFetcherQueryOptions({
     queryKey: albumKeys.list(),
-    queryFn: () => backend.getAllAlbums(),
-    staleTime: 1000 * 60 * 2, // 2 minutes - list can change more frequently
-    gcTime: 1000 * 60 * 10, // 10 minutes
+    fetcher: () => backend.getAllAlbums(),
+    cacheTime: CACHE_TIMES.LIST,
   })
 }
 
 /**
  * Query options for random albums
  */
-export function randomAlbumsOptions(backend: ReturnType<typeof useBackend>, limit: number) {
-  return queryOptions({
+export function randomAlbumsOptions(backend: BackendType, limit: number) {
+  return createFetcherQueryOptions({
     queryKey: albumKeys.random(limit),
-    queryFn: () => backend.getRandomAlbums(limit),
-    staleTime: 1000 * 60 * 1, // 1 minute - randomness should refresh more often
-    gcTime: 1000 * 60 * 5,
+    fetcher: () => backend.getRandomAlbums(limit),
+    cacheTime: CACHE_TIMES.DYNAMIC,
   })
 }
 
@@ -68,7 +66,7 @@ export function randomAlbumsOptions(backend: ReturnType<typeof useBackend>, limi
  * Query options for recently added albums
  */
 export function recentlyAddedAlbumsOptions(
-  backend: ReturnType<typeof useBackend>,
+  backend: BackendType,
   limit: number
 ) {
   return queryOptions({
@@ -83,7 +81,7 @@ export function recentlyAddedAlbumsOptions(
  * Query options for recently added albums within days
  */
 export function recentlyAddedAlbumsWithinDaysOptions(
-  backend: ReturnType<typeof useBackend>,
+  backend: BackendType,
   days: number,
   limit: number
 ) {
@@ -99,7 +97,7 @@ export function recentlyAddedAlbumsWithinDaysOptions(
  * Query options for least played albums
  */
 export function leastPlayedAlbumsOptions(
-  backend: ReturnType<typeof useBackend>,
+  backend: BackendType,
   limit: number
 ) {
   return queryOptions({
@@ -114,7 +112,7 @@ export function leastPlayedAlbumsOptions(
  * Query options for time capsule albums
  */
 export function timeCapsuleAlbumsOptions(
-  backend: ReturnType<typeof useBackend>,
+  backend: BackendType,
   limit: number
 ) {
   return queryOptions({

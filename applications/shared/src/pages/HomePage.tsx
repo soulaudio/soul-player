@@ -100,6 +100,13 @@ export function HomePage() {
     }
   }, [allAlbums, contexts, albumMap])
 
+  // TODO: Implement album navigation - should either navigate to album detail page
+  // or start playing the album immediately. Consolidates 5 identical TODOs below.
+  const handleAlbumClick = (albumId: number) => {
+    debug.log('Clicked album:', albumId)
+    // Future: navigate to /album/:id or trigger playback
+  }
+
   useEffect(() => {
     const calculateGrid = () => {
       if (!containerRef.current) return
@@ -951,10 +958,7 @@ export function HomePage() {
                             gridColumn: `${startCol} / ${startCol + section.albumSize}`,
                             gridRow: `${startRow} / ${startRow + section.albumSize}`,
                           }}
-                          onClick={() => {
-                            // TODO: Navigate to album page or play
-                            debug.log('Clicked album:', album.id)
-                          }}
+                          onClick={() => handleAlbumClick(album.id)}
                         >
                           <AlbumCard
                             album={{
@@ -984,10 +988,7 @@ export function HomePage() {
                             gridColumn: `${startCol} / ${startCol + section.albumSize}`,
                             gridRow: `${startRow} / ${startRow + section.albumSize}`,
                           }}
-                          onClick={() => {
-                            // TODO: Navigate to album page or play
-                            debug.log('Clicked album:', album.id)
-                          }}
+                          onClick={() => handleAlbumClick(album.id)}
                         >
                           <AlbumCard
                             album={{
@@ -1017,10 +1018,7 @@ export function HomePage() {
                             gridColumn: `${startCol} / ${startCol + section.albumSize}`,
                             gridRow: `${startRow} / ${startRow + section.albumSize}`,
                           }}
-                          onClick={() => {
-                            // TODO: Navigate to album page or play
-                            debug.log('Clicked album:', album.id)
-                          }}
+                          onClick={() => handleAlbumClick(album.id)}
                         >
                           <AlbumCard
                             album={{
@@ -1050,10 +1048,7 @@ export function HomePage() {
                             gridColumn: `${startCol} / ${startCol + section.albumSize}`,
                             gridRow: `${startRow} / ${startRow + section.albumSize}`,
                           }}
-                          onClick={() => {
-                            // TODO: Navigate to album page or play
-                            debug.log('Clicked album:', album.id)
-                          }}
+                          onClick={() => handleAlbumClick(album.id)}
                         >
                           <AlbumCard
                             album={{
@@ -1083,10 +1078,7 @@ export function HomePage() {
                             gridColumn: `${startCol} / ${startCol + section.albumSize}`,
                             gridRow: `${startRow} / ${startRow + section.albumSize}`,
                           }}
-                          onClick={() => {
-                            // TODO: Navigate to album page or play
-                            debug.log('Clicked album:', album.id)
-                          }}
+                          onClick={() => handleAlbumClick(album.id)}
                         >
                           <AlbumCard
                             album={{

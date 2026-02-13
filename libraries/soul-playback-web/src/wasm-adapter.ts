@@ -1293,15 +1293,15 @@ export class WasmPlaybackAdapter {
 
   clearPlayNext(): void {
     this.ensureInitialized()
-    // Note: WASM manager may not have this method yet, stub for now
-    // TODO: Implement in WASM if needed
+    // TODO: Implement in WASM PlaybackManager if queue management features are needed
+    // Currently stubbed as these methods are optional for basic playback functionality.
     console.warn('[WasmPlaybackAdapter] clearPlayNext() not implemented in WASM')
   }
 
   clearAddToQueue(): void {
     this.ensureInitialized()
-    // Note: WASM manager may not have this method yet, stub for now
-    // TODO: Implement in WASM if needed
+    // TODO: Implement in WASM PlaybackManager if queue management features are needed
+    // Currently stubbed as these methods are optional for basic playback functionality.
     console.warn('[WasmPlaybackAdapter] clearAddToQueue() not implemented in WASM')
   }
 }

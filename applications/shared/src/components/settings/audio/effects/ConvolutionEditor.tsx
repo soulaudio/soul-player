@@ -208,11 +208,12 @@ export function ConvolutionEditor({
 
   /**
    * Generate mock waveform data for visualization
-   * In production, this would parse the actual IR file
+   *
+   * TODO: Parse actual IR file for real waveform visualization
+   * Current implementation generates a synthetic decay envelope for preview.
+   * Production version should read the WAV/IR file and extract actual peak data.
    */
   const generateMockWaveform = (_filePath: string) => {
-    // Generate a decay envelope for visualization
-    // TODO: In production, parse the actual file to get real waveform data
     const numPeaks = 100;
     const peaks: number[] = [];
 
