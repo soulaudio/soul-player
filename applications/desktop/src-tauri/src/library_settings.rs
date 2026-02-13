@@ -5,7 +5,7 @@
 
 use crate::app_state::AppState;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 /// Frontend representation of a library source
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,6 +162,7 @@ pub async fn toggle_library_source(
 pub async fn rescan_library_source(
     source_id: i64,
     force_refresh: Option<bool>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let device_id = get_device_id();
@@ -172,18 +173,35 @@ pub async fn rescan_library_source(
         .map_err(|e| format!("Failed to get library source: {}", e))?
         .ok_or_else(|| "Library source not found".to_string())?;
 
-    // Create scanner and scan
+    // Emit scan started event
+    let _ = app.emit("scan-started", ());
+
+    // Create scanner with progress callback
+    let app_clone = app.clone();
     let scanner = soul_importer::library_scanner::LibraryScanner::new(
         (*state.pool).clone(),
         state.user_id.clone(),
         device_id,
     )
-    .force_metadata_refresh(force_refresh.unwrap_or(false));
+    .force_metadata_refresh(force_refresh.unwrap_or(false))
+    .on_progress(Box::new(move |stats| {
+        // Emit progress event
+        let _ = app_clone.emit(
+            "scan-progress",
+            serde_json::json!({
+                "processed": stats.processed,
+                "total": stats.total_files
+            }),
+        );
+    }));
 
     scanner
         .scan_source(&source)
         .await
         .map_err(|e| format!("Failed to scan source: {}", e))?;
+
+    // Emit scan complete event
+    let _ = app.emit("scan-complete", ());
 
     Ok(())
 }
@@ -193,21 +211,40 @@ pub async fn rescan_library_source(
 #[tauri::command]
 pub async fn rescan_all_sources(
     force_refresh: Option<bool>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let device_id = get_device_id();
 
+    // Emit scan started event
+    let _ = app.emit("scan-started", ());
+
+    // Create scanner with progress callback
+    let app_clone = app.clone();
     let scanner = soul_importer::library_scanner::LibraryScanner::new(
         (*state.pool).clone(),
         state.user_id.clone(),
         device_id,
     )
-    .force_metadata_refresh(force_refresh.unwrap_or(false));
+    .force_metadata_refresh(force_refresh.unwrap_or(false))
+    .on_progress(Box::new(move |stats| {
+        // Emit progress event
+        let _ = app_clone.emit(
+            "scan-progress",
+            serde_json::json!({
+                "processed": stats.processed,
+                "total": stats.total_files
+            }),
+        );
+    }));
 
     scanner
         .scan_all()
         .await
         .map_err(|e| format!("Failed to scan sources: {}", e))?;
+
+    // Emit scan complete event
+    let _ = app.emit("scan-complete", ());
 
     Ok(())
 }
