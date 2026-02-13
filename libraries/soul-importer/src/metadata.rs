@@ -501,63 +501,6 @@ pub fn calculate_file_hash(path: &Path) -> Result<String> {
     Ok(hash_string)
 }
 
-/// Extract metadata from an audio file using Symphonia
-///
-/// This provides an alternative to the lofty-based extraction.
-/// Symphonia is the same decoder used for audio playback, so it may
-/// provide more accurate audio property information for some formats.
-///
-/// # Arguments
-/// * `path` - Path to the audio file
-///
-/// # Returns
-/// * `ExtractedMetadata` with all available metadata
-pub fn extract_metadata_symphonia(path: &Path) -> Result<ExtractedMetadata> {
-    let audio_metadata =
-        soul_audio::extract_metadata(path).map_err(|e| ImportError::Metadata(e.to_string()))?;
-
-    // Convert genre from single string to vec
-    let genres = audio_metadata
-        .genre
-        .map(|g| {
-            g.split(&[',', ';', '/'][..])
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<String>>()
-        })
-        .unwrap_or_default();
-
-    // Get file format from extension
-    let file_format = path
-        .extension()
-        .map(|ext| ext.to_string_lossy().to_lowercase())
-        .unwrap_or_else(|| "unknown".to_string());
-
-    // Convert album art
-    let album_art = audio_metadata
-        .album_art
-        .map(|art| (art.data, art.mime_type));
-
-    Ok(ExtractedMetadata {
-        title: audio_metadata.title,
-        artist: audio_metadata.artist,
-        album: audio_metadata.album,
-        album_artist: audio_metadata.album_artist,
-        track_number: audio_metadata.track_number,
-        disc_number: audio_metadata.disc_number,
-        year: audio_metadata.year,
-        genres,
-        duration_seconds: audio_metadata.duration_seconds,
-        bitrate: audio_metadata.bitrate,
-        sample_rate: audio_metadata.sample_rate,
-        channels: audio_metadata.channels,
-        file_format,
-        musicbrainz_recording_id: audio_metadata.musicbrainz_recording_id,
-        composer: audio_metadata.composer,
-        album_art,
-    })
-}
-
 /// Convert soul-audio AudioMetadata to ExtractedMetadata
 impl From<soul_audio::AudioMetadata> for ExtractedMetadata {
     fn from(meta: soul_audio::AudioMetadata) -> Self {

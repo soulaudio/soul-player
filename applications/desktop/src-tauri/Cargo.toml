@@ -38,8 +38,8 @@ url.workspace = true
 chrono.workspace = true
 dotenvy = "0.15"
 rfd = "0.14"
-base64 = "0.22"
-lru = "0.12"
+base64.workspace = true
+lru.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"

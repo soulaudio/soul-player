@@ -73,7 +73,6 @@ rusty-chromaprint = "0.2" # Audio fingerprinting (AcoustID compatible)
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
-redb = "2.1"
 
 # Metadata
 lofty = "0.18" # Audio tag reading/writing

@@ -10,10 +10,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::Result;
 
-/// Global counter for I32 (ASIO) callbacks - used for diagnostics
-/// This is updated by audio callbacks and can be read for debugging
-pub static GLOBAL_I32_CALLBACK_COUNTER: AtomicU64 = AtomicU64::new(0);
-
 /// Stream-level fade envelope to prevent clicks/pops at audio stream start
 ///
 /// When a CPAL audio stream first starts, the DAC may be in an undefined state.
@@ -308,18 +304,3 @@ pub fn get_stream_config(device: &Device) -> Result<(StreamConfig, cpal::SampleF
     Ok((stream_config, sample_format))
 }
 
-/// Increment the global I32 callback counter
-///
-/// Used for diagnostics to track ASIO callback invocations
-#[inline]
-pub fn increment_i32_callback_counter() -> u64 {
-    GLOBAL_I32_CALLBACK_COUNTER.fetch_add(1, Ordering::Relaxed)
-}
-
-/// Get the current I32 callback counter value
-///
-/// Used for diagnostics
-#[inline]
-pub fn get_i32_callback_counter() -> u64 {
-    GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed)
-}

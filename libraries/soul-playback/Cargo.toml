@@ -33,6 +33,7 @@ default = ["effects", "volume-leveling"]
 effects = ["soul-audio"]
 volume-leveling = ["soul-loudness"]
 wasm = ["wasm-bindgen", "serde-wasm-bindgen", "js-sys", "web-sys", "getrandom", "uuid", "console_error_panic_hook"]
+old_architecture_tests = []  # Tests for old architecture (disabled by default)
 
 [dev-dependencies]
 proptest = "1.4"

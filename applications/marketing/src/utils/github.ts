@@ -133,20 +133,3 @@ export function getDownloadUrl(filename: string): string {
 export function getReleasesPageUrl(): string {
   return `https://github.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/releases/latest`
 }
-
-/**
- * Get the repository URL
- */
-export function getRepositoryUrl(): string {
-  return `https://github.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}`
-}
-
-/**
- * Clear the cached release info (useful for testing)
- */
-export function clearReleaseCache(): void {
-  if (typeof window !== 'undefined') {
-    sessionStorage.removeItem(CACHE_KEY)
-    console.log('[GitHub] Cache cleared')
-  }
-}

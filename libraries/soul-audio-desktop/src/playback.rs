@@ -1938,7 +1938,7 @@ impl DesktopPlayback {
         command: PlaybackCommand,
         mgr: &mut PlaybackManager,
         event_tx: &Sender<PlaybackEvent>,
-        command_tx: &Sender<PlaybackCommand>,
+        _command_tx: &Sender<PlaybackCommand>,
     ) -> Result<()> {
         match command {
             PlaybackCommand::Play => {

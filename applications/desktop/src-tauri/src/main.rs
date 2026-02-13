@@ -340,7 +340,9 @@ async fn play_queue(
 
     // Stop current playback (skip if already stopped to avoid blocking on device init)
     let current_state = pm.get_state();
-    if current_state != soul_playback::PlaybackState::Stopped {
+    if current_state == soul_playback::PlaybackState::Stopped {
+        tracing::debug!("[play_queue] Already stopped, skipping stop() call");
+    } else {
         let stop_start = std::time::Instant::now();
         pm.stop()
             .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
@@ -349,8 +351,6 @@ async fn play_queue(
             stop_duration_ms = stop_duration.as_millis(),
             "[play_queue] stop() completed"
         );
-    } else {
-        tracing::debug!("[play_queue] Already stopped, skipping stop() call");
     }
 
     // Load playlist as source queue (Spotify-style context)

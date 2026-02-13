@@ -34,28 +34,3 @@ export function removeConsecutiveDuplicates<T extends { [key: string]: any }>(
 
   return result;
 }
-
-/**
- * Remove all duplicate tracks from a queue (keeps first occurrence)
- *
- * @param queue Array of tracks with trackId/id property
- * @param idKey The key to use for identifying duplicates (default: 'trackId')
- * @returns Deduplicated queue with all duplicates removed
- */
-export function removeAllDuplicates<T extends { [key: string]: any }>(
-  queue: T[],
-  idKey: string = 'trackId'
-): T[] {
-  const seen = new Set<any>();
-  const result: T[] = [];
-
-  for (const track of queue) {
-    const id = track[idKey];
-    if (!seen.has(id)) {
-      seen.add(id);
-      result.push(track);
-    }
-  }
-
-  return result;
-}

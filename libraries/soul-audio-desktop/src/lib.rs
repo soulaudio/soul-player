@@ -168,7 +168,7 @@ impl Sample for i16 {
 fn tpdf_dither_i32() -> f32 {
     use std::cell::Cell;
     thread_local! {
-        static STATE: Cell<u32> = Cell::new(0xDEADBEEF);
+        static STATE: Cell<u32> = const { Cell::new(0xDEADBEEF) };
     }
     STATE.with(|state| {
         let mut s = state.get();
@@ -194,7 +194,7 @@ fn tpdf_dither_i32() -> f32 {
 fn tpdf_dither_i16() -> f32 {
     use std::cell::Cell;
     thread_local! {
-        static STATE: Cell<u32> = Cell::new(0xCAFEBABE);
+        static STATE: Cell<u32> = const { Cell::new(0xCAFEBABE) };
     }
     STATE.with(|state| {
         let mut s = state.get();

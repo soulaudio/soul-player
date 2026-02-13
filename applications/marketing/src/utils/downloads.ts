@@ -118,37 +118,6 @@ export function fillVersionPattern(pattern: string, version: string): string {
 }
 
 /**
- * Get the recommended download config for a platform
- */
-export function getDownloadConfigForPlatform(
-  platform: Platform
-): DownloadConfig | null {
-  if (platform === 'unknown') {
-    return null
-  }
-  return DOWNLOAD_CONFIGS[platform]
-}
-
-/**
- * Get alternate downloads for a specific platform
- */
-export function getAlternateDownloadsForPlatform(
-  platform: Platform
-): AlternateDownload[] {
-  if (platform === 'unknown') {
-    return ALTERNATE_DOWNLOADS
-  }
-  return ALTERNATE_DOWNLOADS.filter((alt) => alt.platform !== platform)
-}
-
-/**
- * Get the recommended Linux download option
- */
-export function getRecommendedLinuxDownload(): LinuxDownload {
-  return LINUX_DOWNLOADS[0] // AppImage is always first and recommended
-}
-
-/**
  * Detect the current platform from user agent
  */
 export function detectPlatform(): Platform {

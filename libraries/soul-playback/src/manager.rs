@@ -1014,7 +1014,7 @@ impl PlaybackManager {
     /// - Crossfade initiation (when approaching end of track)
     /// - Crossfade mixing (when active)
     /// - Gapless transition (0ms crossfade)
-
+    ///
     /// Process audio during active crossfade
     ///
     /// IMPORTANT: Buffers MUST be allocated before calling this function.
@@ -1381,16 +1381,11 @@ impl PlaybackManager {
         self.headroom_manager.clear_track_gains();
     }
 
-    /// Set audio source (called by platform after loading track)
-    ///
-    /// Uses pending source pattern for smooth transitions:
-    /// - If currently playing: fades out current audio, then fades in new source
-    /// - If not playing: directly sets the source with fade-in
-
     // ===== Crossfade Settings =====
 
-    /// Ensure crossfade buffers are allocated (called before first use)
-    /// This is safe to call outside audio callback as allocation happens on settings change
+    /// Ensure crossfade buffers are allocated (called before first use).
+    ///
+    /// This is safe to call outside audio callback as allocation happens on settings change.
     fn ensure_crossfade_buffers_allocated(&mut self) {
         if self.outgoing_buffer.is_none() {
             tracing::debug!("[crossfade] Allocating buffers (~14.6MB) for crossfade processing");
@@ -1443,7 +1438,6 @@ impl PlaybackManager {
     /// * `Err(_)` - Loading failed or timed out
     #[allow(dead_code)] // Will be used when direct loading is fully integrated
     fn load_source_with_timeout(
-        &self,
         _track: &QueueTrack,
         timeout: Duration,
     ) -> Result<Box<dyn AudioSource>> {
@@ -1852,6 +1846,7 @@ impl Default for PlaybackManager {
 
 // TODO: Phase 5 - Re-enable tests after updating for new architecture
 // Most tests use set_audio_source() which has been removed
+#[allow(unexpected_cfgs)]
 #[cfg(all(test, feature = "old_architecture_tests"))]
 #[allow(deprecated)]
 mod tests {

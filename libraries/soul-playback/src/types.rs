@@ -76,6 +76,7 @@ pub enum PlaybackState {
 /// This enum consolidates audio_source, next_source, and pending_source
 /// into a single type-safe state machine. Makes illegal states unrepresentable
 /// (e.g., can't have pending_source without audio_source).
+#[allow(clippy::large_enum_variant)]
 pub enum SourceState {
     /// No audio loaded
     Empty,
@@ -167,6 +168,7 @@ impl SourceState {
     /// Complete transition by dropping outgoing source and promoting incoming
     ///
     /// Panics if not in Transitioning state.
+    #[must_use]
     pub fn complete_transition(self) -> Self {
         match self {
             Self::Transitioning {
@@ -184,6 +186,7 @@ impl SourceState {
     /// Start a transition from current playing state to a new source
     ///
     /// Panics if not in Playing state.
+    #[must_use]
     pub fn start_transition(
         self,
         incoming: Box<dyn AudioSource>,
