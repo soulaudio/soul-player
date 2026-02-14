@@ -7,6 +7,7 @@
 import { ReactNode, useMemo, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import debounce from 'lodash.debounce';
 import {
   PlayerCommandsProvider,
   usePlayerStore,
@@ -66,6 +67,19 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       console.error('[PERSISTENCE] Failed to save session:', error);
     }
   }, [session.contextType, session.contextId]);
+
+  // Create debounced save function (5 seconds) for progress updates
+  const debouncedSave = useMemo(
+    () => debounce(savePlaybackSession, 5000),
+    [savePlaybackSession]
+  );
+
+  // Cleanup debounced function on unmount
+  useEffect(() => {
+    return () => {
+      debouncedSave.cancel();
+    };
+  }, [debouncedSave]);
 
   // Set up event listeners to update store (similar to old usePlaybackEvents hook)
   useEffect(() => {
@@ -413,6 +427,20 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
     return unsubscribe;
   }, [savePlaybackSession]);
+
+  // Subscribe to progress changes - save debounced (5s)
+  useEffect(() => {
+    let lastProgress = usePlayerStore.getState().progress;
+
+    const unsubscribe = usePlayerStore.subscribe((state) => {
+      if (state.progress !== lastProgress) {
+        lastProgress = state.progress;
+        debouncedSave();
+      }
+    });
+
+    return unsubscribe;
+  }, [debouncedSave]);
 
   const value = useMemo<PlayerContextValue>(() => {
     // Commands implementation using Tauri
