@@ -94,6 +94,11 @@ struct FrontendTrack {
     channels: Option<i32>,
     // Whether the track is in the managed library (vs watched folder)
     is_in_managed_library: bool,
+    // Album artwork fields
+    #[serde(rename = "coverArtPath")]
+    pub cover_art_path: Option<String>,
+    #[serde(rename = "artworkSource")]
+    pub artwork_source: Option<String>,
 }
 
 impl From<soul_core::types::Track> for FrontendTrack {
@@ -128,6 +133,8 @@ impl From<soul_core::types::Track> for FrontendTrack {
             channels: track.channels,
             // Default to false - will be set correctly when library path is available
             is_in_managed_library: false,
+            cover_art_path: track.cover_art_path.clone(),
+            artwork_source: track.artwork_source.clone(),
         }
     }
 }
