@@ -380,8 +380,15 @@ impl PlaybackManager {
 
     /// Internal: Play next track from queue
     fn play_next_in_queue(&mut self) -> Result<()> {
+        tracing::info!(
+            "[AUTO-ADVANCE] play_next_in_queue called, repeat={:?}, queue_len={}",
+            self.repeat,
+            self.queue.len()
+        );
+
         // Handle repeat one
         if self.repeat == RepeatMode::One && self.sources.current_track().is_some() {
+            tracing::info!("[AUTO-ADVANCE] Repeat One mode, resetting current track");
             if let Some(source) = self.sources.current_source_mut() {
                 source.reset()?;
                 self.start_fade.start();
@@ -391,7 +398,9 @@ impl PlaybackManager {
         }
 
         // Get next track from queue
+        tracing::info!("[AUTO-ADVANCE] Getting next track from queue");
         let next_track = self.get_next_track_from_queue()?;
+        tracing::info!("[AUTO-ADVANCE] Next track: id={}", next_track.id);
 
         // Save current track to history
         if let Some(track) = self.sources.current_track() {
@@ -399,6 +408,10 @@ impl PlaybackManager {
         }
 
         // Emit event to load track (handled by desktop layer in Phase 2)
+        tracing::info!(
+            "[AUTO-ADVANCE] Emitting LoadNext event for track: {}",
+            next_track.id
+        );
         self.pending_events
             .push(PlaybackEvent::LoadNext(next_track));
         self.state = PlaybackState::Stopped;
@@ -424,28 +437,46 @@ impl PlaybackManager {
 
     /// Get next track considering repeat mode
     fn get_next_track_from_queue(&mut self) -> Result<QueueTrack> {
+        tracing::info!(
+            "[AUTO-ADVANCE] get_next_track_from_queue: history_len={}, repeat={:?}, queue_len={}",
+            self.history.len(),
+            self.repeat,
+            self.queue.len()
+        );
+
         // If starting playback (no history), skip play_next queue
         // Play Next tracks should play AFTER the first track, not instead of it
         let track = if self.history.is_empty() {
+            tracing::debug!("[AUTO-ADVANCE] No history, skipping play_next queue");
             self.queue.pop_next_skip_play_next()
         } else {
+            tracing::debug!("[AUTO-ADVANCE] Has history, using normal pop_next");
             self.queue.pop_next()
         };
 
         if let Some(track) = track {
+            tracing::info!("[AUTO-ADVANCE] Found next track in queue: id={}", track.id);
             return Ok(track);
         }
 
         // Queue reached end - check repeat mode
+        tracing::info!(
+            "[AUTO-ADVANCE] Queue exhausted, checking repeat mode: {:?}",
+            self.repeat
+        );
         match self.repeat {
             RepeatMode::All => {
+                tracing::info!("[AUTO-ADVANCE] Repeat All enabled, reloading queue");
                 // Reload source queue from original and try again
                 self.queue.reload_source(self.shuffle);
 
                 // Try to get the first track from reloaded queue
                 self.queue.pop_next().ok_or(PlaybackError::QueueEmpty)
             }
-            RepeatMode::Off | RepeatMode::One => Err(PlaybackError::QueueEmpty),
+            RepeatMode::Off | RepeatMode::One => {
+                tracing::info!("[AUTO-ADVANCE] Repeat Off/One, returning QueueEmpty");
+                Err(PlaybackError::QueueEmpty)
+            }
         }
     }
 
@@ -981,11 +1012,18 @@ impl PlaybackManager {
             // Check if track really finished or just buffering
             let position = source.position();
             let duration = source.duration();
+            tracing::debug!(
+                "[AUTO-ADVANCE] samples_read=0, position={:?}, duration={:?}",
+                position,
+                duration
+            );
             if position >= duration {
+                tracing::info!("[AUTO-ADVANCE] Track reached end (position >= duration), triggering auto-advance");
                 self.handle_track_finished()?;
                 return Ok(0);
             }
             // Still buffering - output keepalive
+            tracing::debug!("[AUTO-ADVANCE] Still buffering (position < duration)");
             self.fill_underrun_buffer(output);
             return Ok(output.len());
         }
@@ -1155,12 +1193,16 @@ impl PlaybackManager {
 
     /// Handle track finished
     fn handle_track_finished(&mut self) -> Result<()> {
+        tracing::info!("[AUTO-ADVANCE] Track finished, initiating auto-advance");
+
         // Emit track finished event
         if let Some(track) = self.sources.current_track() {
+            tracing::info!("[AUTO-ADVANCE] Finished track: id={}", track.id);
             self.emit_track_finished(track.id.clone());
         }
 
         // Auto-advance to next track
+        tracing::info!("[AUTO-ADVANCE] Calling next() to advance");
         self.next()
     }
 

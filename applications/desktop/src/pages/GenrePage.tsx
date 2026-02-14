@@ -62,7 +62,7 @@ export function GenrePage() {
     loadGenre(parseInt(id, 10));
   }, [id, loadGenre]);
 
-  const buildQueue = useCallback((allTracks: Track[], clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
+  const buildQueue = useCallback((allTracks: Track[], _clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
     // allTracks is already deduplicated by TrackList's internal grouping
     // We need to map back to DesktopTrack to get file_path
     const trackMap = new Map(tracks.map(t => [String(t.id), t]));
@@ -72,9 +72,6 @@ export function GenrePage() {
       const desktopTrack = trackMap.get(String(t.id));
       return desktopTrack?.file_path;
     });
-
-    const validClickedIndex = validTracks.findIndex(t => String(t.id) === String(clickedTrack.id));
-    if (validClickedIndex === -1) return [];
 
     // Record playback context when playing from genre
     if (genre) {
@@ -86,10 +83,9 @@ export function GenrePage() {
       });
     }
 
-    return [
-      ...validTracks.slice(validClickedIndex),
-      ...validTracks.slice(0, validClickedIndex),
-    ].map((t) => {
+    // Return the full queue in original order
+    // The startIndex passed to playQueue() will determine which track plays first
+    return validTracks.map((t) => {
       const desktopTrack = trackMap.get(String(t.id))!;
       return {
         trackId: String(t.id),

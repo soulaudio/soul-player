@@ -54,31 +54,14 @@ export function TracksPage() {
   // Build queue from tracks (optimized: only first 50 tracks for immediate playback)
   const buildQueueFromTracks = useCallback((
     libraryTracks: BackendTrack[],
-    clickedTrack: Track,
-    clickedIndex: number
+    _clickedTrack: Track,
+    _clickedIndex: number
   ): QueueTrack[] => {
-    const validClickedIndex = libraryTracks.findIndex(t => t.id === clickedTrack.id)
-    const actualIndex = validClickedIndex !== -1 ? validClickedIndex : clickedIndex
-
-    // For large libraries, only build queue for first 50 tracks to avoid lag
-    // Backend will lazy-load more tracks as needed
-    const INITIAL_QUEUE_SIZE = 50
-    const totalTracks = libraryTracks.length
-    const shouldLimitQueue = totalTracks > INITIAL_QUEUE_SIZE
-
-    let tracksToQueue: BackendTrack[]
-    if (shouldLimitQueue) {
-      // Only take first 50 tracks starting from clicked position
-      tracksToQueue = libraryTracks.slice(actualIndex, actualIndex + INITIAL_QUEUE_SIZE)
-    } else {
-      // Small library - build full queue
-      tracksToQueue = [
-        ...libraryTracks.slice(actualIndex),
-        ...libraryTracks.slice(0, actualIndex),
-      ]
-    }
-
-    const queue = tracksToQueue.map((t): QueueTrack => ({
+    // Return the full queue in original order
+    // The startIndex passed to playQueue() will determine which track plays first
+    // Note: For large libraries, we build the full queue here. Performance optimization
+    // via lazy loading should be handled at the queue/playback layer, not by reordering.
+    const queue = libraryTracks.map((t): QueueTrack => ({
       trackId: String(t.id),
       title: t.title || 'Unknown',
       artist: t.artist_name || 'Unknown Artist',
