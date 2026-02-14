@@ -813,6 +813,18 @@ impl PlaybackManager {
         self.sources.current_track()
     }
 
+    /// Get current queue index
+    ///
+    /// Returns 0 if a track is currently playing (current track is always at index 0),
+    /// or -1 if no track is playing.
+    pub fn get_queue_index(&self) -> i32 {
+        if self.get_current_track().is_some() {
+            0
+        } else {
+            -1
+        }
+    }
+
     /// Get current playback position
     ///
     /// During crossfade, returns the incoming track's position to avoid

@@ -1445,6 +1445,48 @@ impl PlaybackManager {
         playback.get_state()
     }
 
+    /// Get current track information
+    pub fn get_current_track(&self) -> Option<QueueTrack> {
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned while getting current track - audio thread may have crashed");
+            return None;
+        };
+        playback.get_current_track()
+    }
+
+    /// Get current queue index (0 if playing, -1 if stopped)
+    pub fn get_queue_index(&self) -> i32 {
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while getting queue index - audio thread may have crashed"
+            );
+            return -1;
+        };
+        playback.get_queue_index()
+    }
+
+    /// Get current playback position in seconds
+    pub fn get_position(&self) -> f64 {
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while getting position - audio thread may have crashed"
+            );
+            return 0.0;
+        };
+        playback.get_position().as_secs_f64()
+    }
+
+    /// Get current volume (0.0 to 1.0)
+    pub fn get_volume(&self) -> f64 {
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while getting volume - audio thread may have crashed"
+            );
+            return 0.0;
+        };
+        playback.get_volume() as f64 / 100.0
+    }
+
     /// Add track to queue (legacy - maps to add_to_queue_end)
     pub fn add_to_queue(&self, track: QueueTrack) -> Result<(), AudioError> {
         let playback = self

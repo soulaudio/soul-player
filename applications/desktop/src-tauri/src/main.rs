@@ -707,6 +707,32 @@ async fn get_playback_timing_config() -> Result<playback_constants::PlaybackTimi
     Ok(playback_constants::PlaybackTimingConfig::default())
 }
 
+/// Get current track information
+#[tauri::command]
+async fn get_current_track(
+    playback: State<'_, LazyPlaybackManager>,
+) -> Result<Option<soul_playback::QueueTrack>, String> {
+    Ok(playback.get().await?.get_current_track())
+}
+
+/// Get current queue index (0 if playing, -1 if stopped)
+#[tauri::command]
+async fn get_queue_index(playback: State<'_, LazyPlaybackManager>) -> Result<i32, String> {
+    Ok(playback.get().await?.get_queue_index())
+}
+
+/// Get current playback position in seconds
+#[tauri::command]
+async fn get_position(playback: State<'_, LazyPlaybackManager>) -> Result<f64, String> {
+    Ok(playback.get().await?.get_position())
+}
+
+/// Get current volume (0.0 to 1.0)
+#[tauri::command]
+async fn get_volume(playback: State<'_, LazyPlaybackManager>) -> Result<f64, String> {
+    Ok(playback.get().await?.get_volume())
+}
+
 #[tauri::command]
 async fn get_all_tracks(state: State<'_, AppState>) -> Result<Vec<FrontendTrack>, String> {
     let start = std::time::Instant::now();
@@ -2673,6 +2699,10 @@ fn main() {
             get_playback_capabilities,
             get_playback_state,
             get_playback_timing_config,
+            get_current_track,
+            get_queue_index,
+            get_position,
+            get_volume,
             // Audio settings
             audio_settings::get_audio_backends,
             audio_settings::get_audio_devices,

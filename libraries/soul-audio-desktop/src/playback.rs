@@ -2189,6 +2189,11 @@ impl DesktopPlayback {
         self.manager.lock().unwrap().get_current_track().cloned()
     }
 
+    /// Get current queue index (0 if playing, -1 if stopped)
+    pub fn get_queue_index(&self) -> i32 {
+        self.manager.lock().unwrap().get_queue_index()
+    }
+
     /// Get current position
     pub fn get_position(&self) -> std::time::Duration {
         self.manager.lock().unwrap().get_position()
