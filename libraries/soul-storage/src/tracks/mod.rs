@@ -153,6 +153,8 @@ pub async fn get_all(
             ),
             created_at: row.created_at.clone(),
             updated_at: row.updated_at.clone(),
+            cover_art_path: None,
+            artwork_source: None,
             availability: Vec::new(),
         });
 
@@ -297,6 +299,8 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
                     .unwrap_or(MetadataSource::File),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -387,6 +391,8 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
             ),
             created_at: row.created_at,
             updated_at: row.updated_at,
+            cover_art_path: None,
+            artwork_source: None,
             availability,
         }))
     } else {
@@ -487,6 +493,8 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -595,6 +603,8 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -722,6 +732,8 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -1234,6 +1246,8 @@ pub async fn get_top_tracks_by_artist(
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -1335,6 +1349,8 @@ pub async fn get_recently_played(
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -1442,6 +1458,8 @@ pub async fn find_by_hash(pool: &SqlitePool, file_hash: &str) -> Result<Option<T
             ),
             created_at: row.created_at,
             updated_at: row.updated_at,
+            cover_art_path: None,
+            artwork_source: None,
             availability,
         }))
     } else {
@@ -1566,6 +1584,8 @@ pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Re
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -1667,6 +1687,8 @@ pub async fn get_by_artist_paginated(
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -1768,6 +1790,8 @@ pub async fn get_by_album_paginated(
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -1870,6 +1894,8 @@ pub async fn get_by_playlist_paginated(
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -2239,6 +2265,8 @@ pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Ve
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -2345,6 +2373,8 @@ pub async fn get_with_fingerprints(
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -2441,6 +2471,8 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })
@@ -2535,6 +2567,8 @@ pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Resu
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
+                cover_art_path: None,
+                artwork_source: None,
                 availability,
             }
         })

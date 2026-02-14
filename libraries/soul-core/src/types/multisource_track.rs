@@ -16,6 +16,10 @@ pub struct Track {
     pub album_id: Option<AlbumId>,
     pub album_title: Option<String>, // Denormalized
     pub album_artist_id: Option<ArtistId>,
+    /// Path to album cover art (can be file path, data URL, or artwork:// URL)
+    pub cover_art_path: Option<String>,
+    /// Source of the artwork ('soul_storage', 'folder', 'embedded', etc.)
+    pub artwork_source: Option<String>,
     pub track_number: Option<i32>,
     pub disc_number: Option<i32>,
     pub year: Option<i32>,
