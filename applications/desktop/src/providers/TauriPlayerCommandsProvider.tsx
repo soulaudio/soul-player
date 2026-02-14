@@ -4,7 +4,7 @@
  * Also handles event-to-store updates and keyboard shortcuts
  */
 
-import { ReactNode, useMemo, useEffect, useRef } from 'react';
+import { ReactNode, useMemo, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -31,10 +31,41 @@ function KeyboardShortcutsInitializer() {
 }
 
 export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
-  const { updateSession } = usePlaybackSession();
+  const { updateSession, session } = usePlaybackSession();
   const backend = useBackend();
   const ignoringPositionUpdatesRef = useRef(false);
   const ignoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Save current session to database
+  const savePlaybackSession = useCallback(async () => {
+    try {
+      const state = usePlayerStore.getState();
+
+      // Don't save if no track loaded
+      if (!state.currentTrack) {
+        return;
+      }
+
+      await invoke('save_playback_session', {
+        session: {
+          current_track_id: state.currentTrack.id,
+          queue_track_ids: state.queue.map(t => t.id),
+          queue_index: state.queueIndex,
+          position_seconds: state.duration ? (state.progress / 100) * state.duration : 0,
+          volume: state.volume * 100, // Convert 0-1 to 0-100
+          repeat_mode: state.repeatMode,
+          shuffle_mode: state.shuffleMode,
+          context_type: session.contextType,
+          context_id: session.contextId,
+          was_playing: state.isPlaying,
+        },
+      });
+
+      console.log('[PERSISTENCE] Session saved');
+    } catch (error) {
+      console.error('[PERSISTENCE] Failed to save session:', error);
+    }
+  }, [session.contextType, session.contextId]);
 
   // Set up event listeners to update store (similar to old usePlaybackEvents hook)
   useEffect(() => {
@@ -324,6 +355,64 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       unlistenFunctions.forEach(fn => fn());
     };
   }, [updateSession]);
+
+  // Subscribe to track changes - save immediately
+  useEffect(() => {
+    let lastTrackId = usePlayerStore.getState().currentTrack?.id;
+
+    const unsubscribe = usePlayerStore.subscribe((state) => {
+      const currentTrackId = state.currentTrack?.id;
+      if (currentTrackId !== lastTrackId) {
+        lastTrackId = currentTrackId;
+        savePlaybackSession();
+      }
+    });
+
+    return unsubscribe;
+  }, [savePlaybackSession]);
+
+  // Subscribe to queue changes - save immediately
+  useEffect(() => {
+    let lastQueueLength = usePlayerStore.getState().queue.length;
+
+    const unsubscribe = usePlayerStore.subscribe((state) => {
+      if (state.queue.length !== lastQueueLength) {
+        lastQueueLength = state.queue.length;
+        savePlaybackSession();
+      }
+    });
+
+    return unsubscribe;
+  }, [savePlaybackSession]);
+
+  // Subscribe to volume changes - save if changed by >5%
+  useEffect(() => {
+    let lastSavedVolume = usePlayerStore.getState().volume;
+
+    const unsubscribe = usePlayerStore.subscribe((state) => {
+      if (Math.abs(state.volume - lastSavedVolume) > 0.05) {
+        lastSavedVolume = state.volume;
+        savePlaybackSession();
+      }
+    });
+
+    return unsubscribe;
+  }, [savePlaybackSession]);
+
+  // Subscribe to repeat/shuffle mode changes - save immediately
+  useEffect(() => {
+    let lastModes = `${usePlayerStore.getState().repeatMode}-${usePlayerStore.getState().shuffleMode}`;
+
+    const unsubscribe = usePlayerStore.subscribe((state) => {
+      const currentModes = `${state.repeatMode}-${state.shuffleMode}`;
+      if (currentModes !== lastModes) {
+        lastModes = currentModes;
+        savePlaybackSession();
+      }
+    });
+
+    return unsubscribe;
+  }, [savePlaybackSession]);
 
   const value = useMemo<PlayerContextValue>(() => {
     // Commands implementation using Tauri
