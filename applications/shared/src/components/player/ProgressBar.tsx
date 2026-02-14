@@ -167,7 +167,7 @@ export function ProgressBar() {
           <div
             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-opacity"
             style={{
-              left: `${Math.max(0, Math.min(100, displayProgress))}%`,
+              left: `${Math.max(0, Math.min(100, progress))}%`,
               transform: 'translate(-50%, -50%)',
               pointerEvents: 'none'
             }}

@@ -91,8 +91,8 @@ pub struct PlaybackManager {
 /// This ensures crossfade works correctly at all sample rates up to 192kHz
 const CROSSFADE_BUFFER_SIZE: usize = 10 * 192000 * 2;
 
-/// Number of samples between position update events (~250ms at 48kHz stereo)
-const POSITION_UPDATE_SAMPLE_THRESHOLD: usize = 48000 / 4 * 2;
+/// Number of samples between position update events (~100ms at 48kHz stereo)
+const POSITION_UPDATE_SAMPLE_THRESHOLD: usize = 48000 / 10 * 2;
 
 /// Maximum stereo buffer size for channel conversion (8192 frames * 2 channels)
 /// This covers typical audio callback buffer sizes (256-4096 frames)
@@ -1873,7 +1873,7 @@ impl PlaybackManager {
     /// Maybe emit a position update event (throttled based on samples processed)
     ///
     /// Position updates are throttled to avoid flooding the event queue.
-    /// Updates are emitted approximately every 250ms based on sample count.
+    /// Updates are emitted approximately every 100ms based on sample count.
     ///
     /// # Arguments
     /// * `samples_processed` - Number of samples processed in this callback
@@ -1881,11 +1881,18 @@ impl PlaybackManager {
         // Accumulate samples
         self.position_update_samples += samples_processed;
 
-        // Calculate threshold: emit approximately every 250ms
-        // At 48kHz stereo, 250ms = 48000 * 0.25 * 2 = 24000 samples
-        let threshold = (self.sample_rate as usize * 2) / 4; // 250ms
+        // Calculate threshold: emit approximately every 100ms
+        // At 48kHz stereo, 100ms = 48000 * 0.1 * 2 = 9600 samples
+        // Formula: (sample_rate * 2 channels) / 10 = samples per 100ms
+        let threshold = (self.sample_rate as usize * 2) / 10; // 100ms
 
         if self.position_update_samples >= threshold {
+            tracing::trace!(
+                "[POSITION] Emitting update after {} samples (threshold: {}, interval: ~100ms @ {}Hz)",
+                self.position_update_samples,
+                threshold,
+                self.sample_rate
+            );
             self.emit_position_update();
             self.position_update_samples = 0;
         }
@@ -3001,7 +3008,7 @@ mod tests {
 
     #[test]
     fn maybe_emit_position_update_throttles_correctly() {
-        // Test that position updates are throttled to ~250ms intervals
+        // Test that position updates are throttled to ~100ms intervals
         let mut manager = PlaybackManager::default();
 
         // Setup: Load a track and set source
@@ -3016,9 +3023,9 @@ mod tests {
         // Drain any events from setup (play/load emit events)
         let _ = manager.drain_events();
 
-        // Process less than 250ms worth of samples - should NOT emit position update
-        // 250ms at 48kHz stereo = 48000 * 0.25 * 2 = 24000 samples
-        manager.maybe_emit_position_update(10000);
+        // Process less than 100ms worth of samples - should NOT emit position update
+        // 100ms at 48kHz stereo = 48000 * 0.1 * 2 = 9600 samples
+        manager.maybe_emit_position_update(5000);
         let events_mid = manager.drain_events();
         let position_updates_mid = events_mid
             .iter()
@@ -3030,7 +3037,7 @@ mod tests {
         );
 
         // Process enough to cross threshold
-        manager.maybe_emit_position_update(20000); // Total: 30000 > 24000
+        manager.maybe_emit_position_update(8000); // Total: 13000 > 9600
         let events_after = manager.drain_events();
 
         // Should have emitted at least one position update
