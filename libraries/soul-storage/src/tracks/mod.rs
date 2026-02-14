@@ -90,6 +90,8 @@ pub async fn get_all(
             t.metadata_source, t.created_at, t.updated_at,
             ar.name as artist_name,
             al.title as album_title,
+            al.cover_art_path as album_cover_art_path,
+            al.artwork_source as album_artwork_source,
             ts.source_id as "source_id?",
             ts.status as "status?",
             ts.local_file_path as "local_file_path?",
@@ -153,8 +155,8 @@ pub async fn get_all(
             ),
             created_at: row.created_at.clone(),
             updated_at: row.updated_at.clone(),
-            cover_art_path: None,
-            artwork_source: None,
+            cover_art_path: row.album_cover_art_path.clone(),
+            artwork_source: row.album_artwork_source.clone(),
             availability: Vec::new(),
         });
 
@@ -203,7 +205,9 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
             t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
             t.metadata_source, t.created_at, t.updated_at,
             ar.name as artist_name,
-            al.title as album_title
+            al.title as album_title,
+            al.cover_art_path as album_cover_art_path,
+            al.artwork_source as album_artwork_source
         FROM tracks t
         LEFT JOIN artists ar ON t.artist_id = ar.id
         LEFT JOIN albums al ON t.album_id = al.id
@@ -299,8 +303,8 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
                     .unwrap_or(MetadataSource::File),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
-                cover_art_path: None,
-                artwork_source: None,
+                cover_art_path: row.album_cover_art_path,
+                artwork_source: row.album_artwork_source,
                 availability,
             }
         })
@@ -332,7 +336,9 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
             t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
             t.metadata_source, t.created_at, t.updated_at,
             ar.name as artist_name,
-            al.title as album_title
+            al.title as album_title,
+            al.cover_art_path as album_cover_art_path,
+            al.artwork_source as album_artwork_source
         FROM tracks t
         LEFT JOIN artists ar ON t.artist_id = ar.id
         LEFT JOIN albums al ON t.album_id = al.id
@@ -391,8 +397,8 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
             ),
             created_at: row.created_at,
             updated_at: row.updated_at,
-            cover_art_path: None,
-            artwork_source: None,
+            cover_art_path: row.album_cover_art_path,
+            artwork_source: row.album_artwork_source,
             availability,
         }))
     } else {
@@ -418,7 +424,9 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
             t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
             t.metadata_source, t.created_at, t.updated_at,
             ar.name as artist_name,
-            al.title as album_title
+            al.title as album_title,
+            al.cover_art_path as album_cover_art_path,
+            al.artwork_source as album_artwork_source
         FROM tracks t
         LEFT JOIN artists ar ON t.artist_id = ar.id
         LEFT JOIN albums al ON t.album_id = al.id
@@ -493,8 +501,8 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
                 ),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
-                cover_art_path: None,
-                artwork_source: None,
+                cover_art_path: row.album_cover_art_path,
+                artwork_source: row.album_artwork_source,
                 availability,
             }
         })

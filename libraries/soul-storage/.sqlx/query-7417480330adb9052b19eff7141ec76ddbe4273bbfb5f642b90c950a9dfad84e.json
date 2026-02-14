@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n        SELECT DISTINCT\n            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,\n            t.track_number, t.disc_number, t.year, t.duration_seconds,\n            t.bitrate, t.sample_rate, t.channels, t.file_format,\n            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,\n            t.metadata_source, t.created_at, t.updated_at,\n            ar.name as artist_name,\n            al.title as album_title\n        FROM tracks t\n        LEFT JOIN artists ar ON t.artist_id = ar.id\n        LEFT JOIN albums al ON t.album_id = al.id\n        INNER JOIN track_sources ts ON t.id = ts.track_id\n        WHERE ts.source_id = ?\n        ORDER BY t.title\n        ",
+  "query": "\n        SELECT DISTINCT\n            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,\n            t.track_number, t.disc_number, t.year, t.duration_seconds,\n            t.bitrate, t.sample_rate, t.channels, t.file_format,\n            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,\n            t.metadata_source, t.created_at, t.updated_at,\n            ar.name as artist_name,\n            al.title as album_title,\n            al.cover_art_path as album_cover_art_path,\n            al.artwork_source as album_artwork_source\n        FROM tracks t\n        LEFT JOIN artists ar ON t.artist_id = ar.id\n        LEFT JOIN albums al ON t.album_id = al.id\n        WHERE t.title LIKE ?\n           OR ar.name LIKE ?\n           OR al.title LIKE ?\n        ORDER BY t.title\n        ",
   "describe": {
     "columns": [
       {
@@ -107,10 +107,20 @@
         "name": "album_title",
         "ordinal": 20,
         "type_info": "Text"
+      },
+      {
+        "name": "album_cover_art_path",
+        "ordinal": 21,
+        "type_info": "Text"
+      },
+      {
+        "name": "album_artwork_source",
+        "ordinal": 22,
+        "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 3
     },
     "nullable": [
       false,
@@ -132,9 +142,11 @@
       true,
       false,
       false,
-      false,
-      false
+      true,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "8acbc768fc1771aabeb05e80cb9c579e6fe8049cf8ed20a4d5cecdf268790d42"
+  "hash": "7417480330adb9052b19eff7141ec76ddbe4273bbfb5f642b90c950a9dfad84e"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n        SELECT\n            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,\n            t.track_number, t.disc_number, t.year, t.duration_seconds,\n            t.bitrate, t.sample_rate, t.channels, t.file_format,\n            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,\n            t.metadata_source, t.created_at, t.updated_at,\n            ar.name as artist_name,\n            al.title as album_title\n        FROM tracks t\n        LEFT JOIN artists ar ON t.artist_id = ar.id\n        LEFT JOIN albums al ON t.album_id = al.id\n        WHERE t.id = ?\n        ",
+  "query": "\n        SELECT\n            t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,\n            t.track_number, t.disc_number, t.year, t.duration_seconds,\n            t.bitrate, t.sample_rate, t.channels, t.file_format,\n            t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,\n            t.metadata_source, t.created_at, t.updated_at,\n            ar.name as artist_name,\n            al.title as album_title,\n            al.cover_art_path as album_cover_art_path,\n            al.artwork_source as album_artwork_source,\n            ts.source_id as \"source_id?\",\n            ts.status as \"status?\",\n            ts.local_file_path as \"local_file_path?\",\n            ts.server_path as \"server_path?\",\n            ts.local_file_size as \"local_file_size?\"\n        FROM tracks t\n        LEFT JOIN artists ar ON t.artist_id = ar.id\n        LEFT JOIN albums al ON t.album_id = al.id\n        LEFT JOIN track_sources ts ON t.id = ts.track_id\n        WHERE (? IS NULL OR t.id > ?)\n        ORDER BY t.id, ts.source_id\n        LIMIT ?\n        ",
   "describe": {
     "columns": [
       {
@@ -107,10 +107,45 @@
         "name": "album_title",
         "ordinal": 20,
         "type_info": "Text"
+      },
+      {
+        "name": "album_cover_art_path",
+        "ordinal": 21,
+        "type_info": "Text"
+      },
+      {
+        "name": "album_artwork_source",
+        "ordinal": 22,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_id?",
+        "ordinal": 23,
+        "type_info": "Integer"
+      },
+      {
+        "name": "status?",
+        "ordinal": 24,
+        "type_info": "Text"
+      },
+      {
+        "name": "local_file_path?",
+        "ordinal": 25,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_path?",
+        "ordinal": 26,
+        "type_info": "Text"
+      },
+      {
+        "name": "local_file_size?",
+        "ordinal": 27,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 3
     },
     "nullable": [
       false,
@@ -133,8 +168,15 @@
       false,
       false,
       true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "80340f2db4746ce5d0b03a62458ea78b086ecdc47841f306a23faf3a94ef2033"
+  "hash": "1a6cf30e8cae2956fd40d1933935ef82274340b7675b208ddb064568b6b4f038"
 }
