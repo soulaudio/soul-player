@@ -65,7 +65,10 @@ fn test_mediacard_double_click_pause_bug() {
     // This sends: LoadPlaylist + Play commands (same as real app)
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks.clone()))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks.clone(),
+            start_index: 0,
+        })
         .expect("Failed to send LoadPlaylist");
     playback
         .send_command(PlaybackCommand::Play)
@@ -170,7 +173,10 @@ fn test_triple_rapid_commands() {
     // Load playlist
     let tracks = vec![create_test_track("1")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .expect("Failed to send LoadPlaylist");
 
     // Rapid fire: Play → Pause → Play
@@ -209,10 +215,7 @@ fn test_triple_rapid_commands() {
         println!("[TEST] ⚠️  Files don't exist, skipping state check");
     } else {
         assert!(
-            matches!(
-                final_state,
-                Some(PlaybackState::Playing | PlaybackState::Loading)
-            ),
+            matches!(final_state, Some(PlaybackState::Playing)),
             "Expected Playing or Loading after final Play command, got {:?}",
             final_state
         );
@@ -232,7 +235,10 @@ fn test_pause_then_resume_during_loading() {
     // Start playback
     let tracks = vec![create_test_track("1")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -288,10 +294,7 @@ fn test_pause_then_resume_during_loading() {
         println!("[TEST] ⚠️  Files don't exist, skipping state check");
     } else {
         assert!(
-            matches!(
-                resumed_state,
-                Some(PlaybackState::Playing | PlaybackState::Loading)
-            ),
+            matches!(resumed_state, Some(PlaybackState::Playing)),
             "Should be Playing or Loading after resume, got {:?}",
             resumed_state
         );
@@ -368,7 +371,10 @@ fn test_pause_immediately_after_load_playlist() {
 
     // Step 1: LoadPlaylist (queues tracks)
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
 
     // Step 2: Play (starts playback from first track)
@@ -441,7 +447,10 @@ fn test_multiple_pause_resume_cycles() {
 
     let tracks = vec![create_test_track("1")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
 
     for cycle in 0..3 {
@@ -507,7 +516,10 @@ fn test_pause_during_background_loading() {
     // Step 1: User clicks Play button
     println!("[TEST] Step 1: User clicks Play (LoadPlaylist + Play)");
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks.clone()))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks.clone(),
+            start_index: 0,
+        })
         .expect("Failed to send LoadPlaylist");
     playback
         .send_command(PlaybackCommand::Play)

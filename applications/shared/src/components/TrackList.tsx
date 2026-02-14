@@ -65,6 +65,8 @@ interface TrackListProps {
   virtualized?: boolean;
   /** Height of each row in pixels when virtualized (default: 56) */
   virtualItemSize?: number;
+  /** Whether to show track number column (default: false) */
+  showTrackNumber?: boolean;
 }
 
 function formatDuration(seconds?: number): string {
@@ -300,6 +302,7 @@ interface TrackRowProps {
   onMouseEnter: () => void;
   onMouseLeave: () => void;
   renderMenu?: (track: Track) => React.ReactNode;
+  showTrackNumber: boolean;
 }
 
 /** Single track row component - memoized for performance */
@@ -315,50 +318,81 @@ const TrackRowComponent = ({
   onMouseEnter,
   onMouseLeave,
   renderMenu,
+  showTrackNumber,
 }: TrackRowProps) => {
   const activeVersion = getActiveVersion(group);
   const showPauseButton = isCurrentTrack && isPlaying;
   const isUnavailable = activeVersion.isAvailable === false;
 
+  const gridCols = showTrackNumber
+    ? 'grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
+    : 'grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
+
   return (
     <div
-      className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px] gap-4 px-4 py-3 hover:bg-foreground/[var(--hover-bg-opacity)] border-b last:border-b-0 transition-colors group ${
+      className={`grid ${gridCols} gap-4 px-4 py-3 hover:bg-foreground/[var(--hover-bg-opacity)] border-b last:border-b-0 transition-colors group ${
         isCurrentTrack ? 'bg-accent/20' : ''
       } ${isUnavailable ? 'opacity-60' : ''}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onDoubleClick={() => !isUnavailable && onPlay(group)}
     >
-      {/* Track number / Play button */}
-      <div className="flex items-center justify-center">
-        {isUnavailable ? (
-          <Tooltip content="File not found" position="right">
-            <div className="w-8 h-8 flex items-center justify-center text-amber-500">
-              <AlertTriangle className="w-4 h-4" />
+      {/* Track number / Play button (only if showTrackNumber) */}
+      {showTrackNumber && (
+        <div className="flex items-center">
+          {isUnavailable ? (
+            <Tooltip content="File not found" position="right">
+              <div className="w-8 h-8 flex items-center justify-center text-amber-500">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+            </Tooltip>
+          ) : isHovered || isCurrentTrack ? (
+            <button
+              onClick={() => (showPauseButton ? onPause() : onPlay(group))}
+              onMouseDown={(e) => e.preventDefault()}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
+              aria-label={showPauseButton ? 'Pause' : 'Play'}
+            >
+              {showPauseButton ? (
+                <Pause className="w-4 h-4" fill="currentColor" />
+              ) : (
+                <Play className="w-4 h-4" fill="currentColor" />
+              )}
+            </button>
+          ) : (
+            <div className="flex items-center text-muted-foreground text-sm">
+              {activeVersion.trackNumber || group.displayIndex + 1}
             </div>
-          </Tooltip>
-        ) : isHovered || isCurrentTrack ? (
-          <button
-            onClick={() => (showPauseButton ? onPause() : onPlay(group))}
-            onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
-            aria-label={showPauseButton ? 'Pause' : 'Play'}
-          >
-            {showPauseButton ? (
-              <Pause className="w-4 h-4" fill="currentColor" />
-            ) : (
-              <Play className="w-4 h-4" fill="currentColor" />
-            )}
-          </button>
-        ) : (
-          <div className="w-8 h-8 flex items-center justify-center text-muted-foreground text-sm">
-            {activeVersion.trackNumber || group.displayIndex + 1}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
-      {/* Title */}
-      <div className="flex items-center min-w-0">
+      {/* Title (with or without Play button depending on showTrackNumber) */}
+      <div className={`flex items-center min-w-0 ${!showTrackNumber && (isHovered || isCurrentTrack || isUnavailable) ? 'gap-3' : ''}`}>
+        {!showTrackNumber && (isHovered || isCurrentTrack || isUnavailable) && (
+          <>
+            {isUnavailable ? (
+              <Tooltip content="File not found" position="right">
+                <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-amber-500">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+              </Tooltip>
+            ) : (
+              <button
+                onClick={() => (showPauseButton ? onPause() : onPlay(group))}
+                onMouseDown={(e) => e.preventDefault()}
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
+                aria-label={showPauseButton ? 'Pause' : 'Play'}
+              >
+                {showPauseButton ? (
+                  <Pause className="w-4 h-4" fill="currentColor" />
+                ) : (
+                  <Play className="w-4 h-4" fill="currentColor" />
+                )}
+              </button>
+            )}
+          </>
+        )}
         <span
           className={`truncate ${isCurrentTrack ? 'text-primary font-medium' : ''} ${isUnavailable ? 'line-through' : ''}`}
         >
@@ -412,7 +446,7 @@ const TrackRowComponent = ({
       </div>
 
       {/* Duration */}
-      <div className="flex items-center justify-end text-sm text-muted-foreground font-mono">
+      <div className="flex items-center text-sm text-muted-foreground font-mono">
         {formatDuration(activeVersion.duration)}
       </div>
 
@@ -433,6 +467,7 @@ export function TrackList({
   groupByContent = true,
   virtualized = false,
   virtualItemSize = 56,
+  showTrackNumber = false,
 }: TrackListProps) {
   const [hoveredGroupKey, setHoveredGroupKey] = useState<string | null>(null);
   const [selectedVersions, setSelectedVersions] = useState<Map<string, Track>>(new Map());
@@ -510,16 +545,22 @@ export function TrackList({
     );
   }
 
+  const gridCols = showTrackNumber
+    ? 'grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
+    : 'grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
+
   // Virtualized rendering
   if (virtualized) {
     return (
       <div className="border rounded-lg overflow-hidden h-full flex flex-col">
         {/* Header */}
         <div className="bg-muted/50 flex-shrink-0">
-          <div className="grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground">
-            <Tooltip content="Track number" position="top" delay={700}>
-              <div>#</div>
-            </Tooltip>
+          <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium text-muted-foreground`}>
+            {showTrackNumber && (
+              <Tooltip content="Track number" position="top" delay={700}>
+                <div>#</div>
+              </Tooltip>
+            )}
             <Tooltip content="Track title" position="top" delay={700}>
               <div>Title</div>
             </Tooltip>
@@ -533,7 +574,7 @@ export function TrackList({
               <div>Format</div>
             </Tooltip>
             <Tooltip content="Track duration" position="top" delay={700}>
-              <div className="text-right">Duration</div>
+              <div>Duration</div>
             </Tooltip>
             <div></div>
           </div>
@@ -581,6 +622,7 @@ export function TrackList({
                     onMouseEnter={() => setHoveredGroupKey(group.groupKey)}
                     onMouseLeave={() => setHoveredGroupKey(null)}
                     renderMenu={renderMenu}
+                    showTrackNumber={showTrackNumber}
                   />
                 </div>
               );
@@ -596,10 +638,12 @@ export function TrackList({
     <div className="border rounded-lg overflow-hidden">
       {/* Header */}
       <div className="bg-muted/50">
-        <div className="grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground">
-          <Tooltip content="Track number" position="top" delay={700}>
-            <div>#</div>
-          </Tooltip>
+        <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium text-muted-foreground`}>
+          {showTrackNumber && (
+            <Tooltip content="Track number" position="top" delay={700}>
+              <div>#</div>
+            </Tooltip>
+          )}
           <Tooltip content="Track title" position="top" delay={700}>
             <div>Title</div>
           </Tooltip>
@@ -640,6 +684,7 @@ export function TrackList({
               onMouseEnter={() => setHoveredGroupKey(group.groupKey)}
               onMouseLeave={() => setHoveredGroupKey(null)}
               renderMenu={renderMenu}
+              showTrackNumber={showTrackNumber}
             />
           );
         })}

@@ -215,8 +215,36 @@ impl AsyncDeviceMonitor for CpalFallbackMonitor {
         let running_clone = running.clone();
         let previous_devices = Arc::new(Mutex::new(Vec::<(String, cpal::Device)>::new()));
 
+        // Create bounded channel for device events (capacity 8 for backpressure)
+        // This prevents unbounded memory growth if callback processing is slow
+        let (device_event_tx, mut device_event_rx) = tokio::sync::mpsc::channel::<DeviceEvent>(8);
+
         // Wrap callback in Arc for cloning across spawn_blocking calls
         let callback = Arc::new(callback);
+
+        // Spawn event processing task with proper error handling
+        let callback_clone = callback.clone();
+        tokio::spawn(async move {
+            while let Some(event) = device_event_rx.recv().await {
+                let callback_inner = callback_clone.clone();
+                match tokio::task::spawn_blocking(move || {
+                    callback_inner(event);
+                })
+                .await
+                {
+                    Ok(()) => {
+                        tracing::debug!("[DEVICE_MONITOR] Device event processed successfully");
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            "[DEVICE_MONITOR] Device event callback failed to execute"
+                        );
+                    }
+                }
+            }
+            tracing::debug!("[DEVICE_MONITOR] Device event processing task stopped");
+        });
 
         // Spawn a background task that polls for device changes
         tokio::spawn(async move {
@@ -247,14 +275,17 @@ impl AsyncDeviceMonitor for CpalFallbackMonitor {
                 for (name, _device) in &current_devices {
                     if !prev.iter().any(|(n, _)| n == name) {
                         tracing::info!(device_name = %name, "[DEVICE_MONITOR] Device added");
-                        let callback_clone = callback.clone();
-                        let name_clone = name.clone();
-                        tokio::task::spawn_blocking(move || {
-                            callback_clone(DeviceEvent::DeviceAdded {
-                                id: name_clone.clone(),
-                                name: name_clone,
-                            });
-                        });
+                        let event = DeviceEvent::DeviceAdded {
+                            id: name.clone(),
+                            name: name.clone(),
+                        };
+                        if let Err(e) = device_event_tx.try_send(event) {
+                            tracing::warn!(
+                                error = %e,
+                                device_name = %name,
+                                "[DEVICE_MONITOR] Device event channel full, dropping DeviceAdded event"
+                            );
+                        }
                     }
                 }
 
@@ -262,16 +293,20 @@ impl AsyncDeviceMonitor for CpalFallbackMonitor {
                 for (name, _device) in prev.iter() {
                     if !current_devices.iter().any(|(n, _)| n == name) {
                         tracing::info!(device_name = %name, "[DEVICE_MONITOR] Device removed");
-                        let callback_clone = callback.clone();
-                        let name_clone = name.clone();
-                        tokio::task::spawn_blocking(move || {
-                            callback_clone(DeviceEvent::DeviceRemoved { id: name_clone });
-                        });
+                        let event = DeviceEvent::DeviceRemoved { id: name.clone() };
+                        if let Err(e) = device_event_tx.try_send(event) {
+                            tracing::warn!(
+                                error = %e,
+                                device_name = %name,
+                                "[DEVICE_MONITOR] Device event channel full, dropping DeviceRemoved event"
+                            );
+                        }
                     }
                 }
 
                 *prev = current_devices;
             }
+            tracing::debug!("[DEVICE_MONITOR] Device polling task stopped");
         });
 
         tracing::debug!("[DEVICE_MONITOR] Device change watcher started");

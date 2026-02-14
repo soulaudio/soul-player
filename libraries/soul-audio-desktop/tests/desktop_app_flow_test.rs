@@ -43,7 +43,10 @@ fn test_desktop_app_playback_flow() {
 
     println!("[1] LoadPlaylist command");
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks,
+            start_index: 0,
+        })
         .expect("Failed to load playlist");
 
     // Small delay to let command process
@@ -179,7 +182,10 @@ fn test_play_queue_command() {
     println!("[1] LoadPlaylist + Play (rapid fire)");
     let start = Instant::now();
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks,
+            start_index: 0,
+        })
         .expect("Failed to load");
     playback
         .send_command(PlaybackCommand::Play)

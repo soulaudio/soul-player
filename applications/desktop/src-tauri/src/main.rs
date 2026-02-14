@@ -25,6 +25,7 @@ mod lazy_workers;
 mod library_settings;
 mod loudness;
 mod playback;
+mod playback_constants;
 mod playback_context;
 mod playback_lazy;
 mod shortcuts;
@@ -693,6 +694,17 @@ async fn get_playback_state(playback: State<'_, LazyPlaybackManager>) -> Result<
         soul_playback::PlaybackState::Stopped => "Stopped",
     };
     Ok(state_str.to_string())
+}
+
+/// Get playback timing configuration
+///
+/// Returns timing constants used by the backend for position updates and event handling.
+/// Frontend should use these values to synchronize behavior (e.g., ignore window after seek).
+#[tauri::command]
+async fn get_playback_timing_config() -> Result<playback_constants::PlaybackTimingConfig, String> {
+    // For now, return default config
+    // In the future, this could be loaded from user settings
+    Ok(playback_constants::PlaybackTimingConfig::default())
 }
 
 #[tauri::command]
@@ -2660,6 +2672,7 @@ fn main() {
             skip_to_queue_index,
             get_playback_capabilities,
             get_playback_state,
+            get_playback_timing_config,
             // Audio settings
             audio_settings::get_audio_backends,
             audio_settings::get_audio_devices,

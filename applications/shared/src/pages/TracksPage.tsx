@@ -182,7 +182,6 @@ export function TracksPage() {
             album: t.album_title,
             albumId: t.album_id,
             duration: t.duration_seconds,
-            trackNumber: t.track_number,
             isAvailable: !!t.file_path,
             format: t.file_format,
             bitrate: t.bit_rate,

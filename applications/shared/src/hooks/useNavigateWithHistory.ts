@@ -32,7 +32,7 @@ interface NavigateWithHistoryReturn {
  * navigate('/albums/123')  // Automatically saves current location
  *
  * // When navigating back
- * goBack('/library?tab=albums')  // Goes to previous location or fallback
+ * goBack('/albums')  // Goes to previous location or fallback
  * ```
  */
 export function useNavigateWithHistory(): NavigateWithHistoryReturn {
@@ -56,7 +56,7 @@ export function useNavigateWithHistory(): NavigateWithHistoryReturn {
     })
   }, [location.pathname, location.search, reactRouterNavigate])
 
-  const goBack = useCallback((defaultPath: string = '/library') => {
+  const goBack = useCallback((defaultPath: string = '/albums') => {
     // Check if we have navigation history in location state
     const from = (location.state as any)?.from
 

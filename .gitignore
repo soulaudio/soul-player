@@ -45,6 +45,7 @@ coverage/
 
 # Logs
 *.log
+*.pdb
 
 # Env
 .env*
@@ -83,6 +84,14 @@ libraries/soul-storage/.tmp/
 **/NEXTJS_*_FIX.md
 clippy-errors.txt
 docs/archive/
+
+# Development artifacts
+*.py
+*.patch
+*test_*.rs
+test_*.txt
+test-*.ps1
+test-*.mjs
 
 # Flatpak vendored dependencies
 # cargo-sources.json and cargo-config.toml are committed (Flatpak standard)

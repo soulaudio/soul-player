@@ -3,6 +3,30 @@
 //! This module handles audio device enumeration, switching, and state management.
 //! It provides a centralized interface for managing audio output devices and their
 //! configurations.
+//!
+//! # Device ID Tracking
+//!
+//! The device manager tracks two types of device identifiers:
+//!
+//! 1. **Synthetic Device ID**: Created from backend + device name (e.g., "WASAPI::Speakers")
+//!    - Always available
+//!    - Used for CPAL-based device identification
+//!
+//! 2. **Native Device ID**: Platform-specific identifier from native APIs
+//!    - WinRT device ID on Windows (e.g., "{0.0.0.00000000}.{guid...}")
+//!    - CoreAudio device ID on macOS (e.g., numeric ID)
+//!    - Optional, only set when available from device monitor
+//!    - Provides most reliable device removal detection
+//!
+//! # Device Removal Detection
+//!
+//! The `is_current_device()` method uses a multi-tier matching strategy:
+//! 1. Exact match with native device ID (most reliable, no false positives)
+//! 2. Exact match with device name
+//! 3. Substring match (fallback for WinRT IDs containing device name)
+//! 4. Match with synthetic device ID
+//!
+//! This ensures reliable device removal detection while maintaining backward compatibility.
 
 use std::sync::{Arc, Mutex};
 
@@ -21,10 +45,13 @@ pub struct DeviceManager {
 struct DeviceState {
     /// Current audio backend
     backend: AudioBackend,
-    /// Current device name
+    /// Current device name (from CPAL)
     device_name: String,
-    /// Current device ID (backend::device_name)
+    /// Synthetic device ID (backend::device_name)
     device_id: Option<String>,
+    /// Native platform device ID (from WinRT/CoreAudio/etc if available)
+    /// This is used for precise device removal detection
+    native_device_id: Option<String>,
 }
 
 impl DeviceManager {
@@ -38,6 +65,7 @@ impl DeviceManager {
                 backend: AudioBackend::Default,
                 device_name: "(None)".to_string(),
                 device_id: None,
+                native_device_id: None,
             })),
         }
     }
@@ -52,7 +80,7 @@ impl DeviceManager {
         self.state.lock().unwrap().device_name.clone()
     }
 
-    /// Get current device ID
+    /// Get current synthetic device ID (backend::device_name)
     ///
     /// Returns a unique identifier for the current audio device (backend + device name).
     /// This is used to prevent false positive device switches when checking sample rates.
@@ -62,6 +90,18 @@ impl DeviceManager {
     /// * `None` - No device active (silent mode)
     pub fn get_current_device_id(&self) -> Option<String> {
         self.state.lock().unwrap().device_id.clone()
+    }
+
+    /// Get current native platform device ID (if available)
+    ///
+    /// Returns the native device ID from the platform API (WinRT, CoreAudio, etc.).
+    /// This is the most reliable identifier for device removal detection.
+    ///
+    /// # Returns
+    /// * `Some(native_id)` - The platform-specific device identifier
+    /// * `None` - Native ID not available or device inactive
+    pub fn get_native_device_id(&self) -> Option<String> {
+        self.state.lock().unwrap().native_device_id.clone()
     }
 
     /// Update the current device after stream creation
@@ -81,6 +121,20 @@ impl DeviceManager {
         } else {
             Some(Self::make_device_id(backend, device_name))
         };
+        // Native device ID is cleared here - should be set separately via set_native_device_id
+        state.native_device_id = None;
+    }
+
+    /// Set the native platform device ID
+    ///
+    /// This should be called after successfully switching to a device when the
+    /// native device ID is known (from WinRT, CoreAudio, etc.).
+    ///
+    /// # Arguments
+    /// * `native_id` - The platform-specific device identifier
+    pub fn set_native_device_id(&self, native_id: Option<String>) {
+        let mut state = self.state.lock().unwrap();
+        state.native_device_id = native_id;
     }
 
     /// Create a unique device ID from backend and device name
@@ -109,6 +163,12 @@ impl DeviceManager {
     /// from the device names we store. This method handles the comparison
     /// by checking both the full device ID and the device name.
     ///
+    /// Priority order:
+    /// 1. Exact match with native device ID (most reliable)
+    /// 2. Exact match with device name
+    /// 3. Substring match with device name (fallback for compatibility)
+    /// 4. Match with synthetic device ID
+    ///
     /// # Arguments
     /// * `device_id_or_name` - The device identifier to check (from platform API)
     ///
@@ -118,23 +178,53 @@ impl DeviceManager {
     pub fn is_current_device(&self, device_id_or_name: &str) -> bool {
         let state = self.state.lock().unwrap();
 
-        // Check exact match with device name
+        // 1. BEST: Exact match with native device ID (most reliable, no false positives)
+        if let Some(ref native_id) = state.native_device_id {
+            if native_id == device_id_or_name {
+                tracing::debug!(
+                    device_id = %device_id_or_name,
+                    "[DeviceManager] Matched via native device ID (exact)"
+                );
+                return true;
+            }
+        }
+
+        // 2. GOOD: Exact match with device name
         if state.device_name == device_id_or_name {
+            tracing::debug!(
+                device_id = %device_id_or_name,
+                "[DeviceManager] Matched via device name (exact)"
+            );
             return true;
         }
 
-        // Check if device_id contains our device name (handles WinRT full IDs)
+        // 3. FALLBACK: Substring match (handles WinRT full IDs containing device name)
+        // This can have false positives if two devices have similar names
         if device_id_or_name.contains(&state.device_name) {
+            tracing::debug!(
+                device_id = %device_id_or_name,
+                device_name = %state.device_name,
+                "[DeviceManager] Matched via substring (device_id contains name)"
+            );
             return true;
         }
 
-        // Check against our stored device ID
+        // 4. Check against synthetic device ID
         if let Some(ref stored_id) = state.device_id {
             if stored_id == device_id_or_name {
+                tracing::debug!(
+                    device_id = %device_id_or_name,
+                    "[DeviceManager] Matched via synthetic ID (exact)"
+                );
                 return true;
             }
             // Also check if the provided ID contains our stored ID or vice versa
             if device_id_or_name.contains(stored_id) || stored_id.contains(device_id_or_name) {
+                tracing::debug!(
+                    device_id = %device_id_or_name,
+                    stored_id = %stored_id,
+                    "[DeviceManager] Matched via synthetic ID (substring)"
+                );
                 return true;
             }
         }
@@ -171,6 +261,7 @@ mod tests {
         assert_eq!(manager.get_current_device(), "(None)");
         assert_eq!(manager.get_current_backend(), AudioBackend::Default);
         assert_eq!(manager.get_current_device_id(), None);
+        assert_eq!(manager.get_native_device_id(), None);
     }
 
     #[test]
@@ -187,11 +278,13 @@ mod tests {
             manager.get_current_device_id(),
             Some(format!("{}::Test Speaker", backend_name))
         );
+        assert_eq!(manager.get_native_device_id(), None); // Not set by update_device
 
         // Update to silent mode
         manager.update_device(AudioBackend::Default, "(Silent)", true);
         assert_eq!(manager.get_current_device(), "(Silent)");
         assert_eq!(manager.get_current_device_id(), None);
+        assert_eq!(manager.get_native_device_id(), None);
     }
 
     #[test]
@@ -212,5 +305,48 @@ mod tests {
 
         // No match
         assert!(!manager.is_current_device("Different Device"));
+    }
+
+    #[test]
+    fn test_native_device_id() {
+        let manager = DeviceManager::new();
+        let backend = AudioBackend::Default;
+
+        // Update device (clears native ID)
+        manager.update_device(backend, "Test Device", false);
+        assert_eq!(manager.get_native_device_id(), None);
+
+        // Set native device ID
+        let native_id = "{0.0.0.00000000}.{a1b2c3d4-1234-5678-90ab-cdef12345678}";
+        manager.set_native_device_id(Some(native_id.to_string()));
+        assert_eq!(manager.get_native_device_id(), Some(native_id.to_string()));
+
+        // Native ID takes priority in is_current_device
+        assert!(manager.is_current_device(native_id));
+
+        // Clear native ID
+        manager.set_native_device_id(None);
+        assert_eq!(manager.get_native_device_id(), None);
+        assert!(!manager.is_current_device(native_id));
+    }
+
+    #[test]
+    fn test_is_current_device_with_native_id() {
+        let manager = DeviceManager::new();
+        let backend = AudioBackend::Default;
+
+        // Setup device with native ID
+        manager.update_device(backend, "My Speakers", false);
+        let native_id = "{0.0.0.00000000}.{a1b2c3d4}";
+        manager.set_native_device_id(Some(native_id.to_string()));
+
+        // Native ID match should work (exact match, no substring)
+        assert!(manager.is_current_device(native_id));
+
+        // Device name match should still work
+        assert!(manager.is_current_device("My Speakers"));
+
+        // Different native ID should not match
+        assert!(!manager.is_current_device("{0.0.0.00000000}.{different}"));
     }
 }

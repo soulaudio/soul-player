@@ -91,7 +91,10 @@ fn test_cold_start_immediate_play() {
     ];
 
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .expect("Failed to load playlist");
 
     let load_duration = load_start.elapsed();
@@ -231,7 +234,10 @@ fn test_warm_start_immediate_play() {
     ];
 
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .expect("Failed to load playlist");
 
     let load_duration = load_start.elapsed();
@@ -358,7 +364,10 @@ fn test_user_immediate_play_simulation() {
     let tracks = vec![create_test_track("1", track1_path.to_str().unwrap())];
 
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .expect("Failed to load playlist");
 
     playback

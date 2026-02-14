@@ -83,7 +83,10 @@ fn test_previous_within_3_seconds_goes_to_previous_track() {
         create_test_track("3"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -127,7 +130,10 @@ fn test_previous_after_3_seconds_restarts_current_track() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -148,10 +154,7 @@ fn test_previous_after_3_seconds_restarts_current_track() {
     // Note: TrackChanged event may not fire for restart, so check state
     let state = get_latest_state(&events);
     assert!(
-        matches!(
-            state,
-            Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-        ),
+        matches!(state, Some(PlaybackState::Playing)),
         "Should be playing/loading after restart"
     );
 }
@@ -169,7 +172,10 @@ fn test_previous_at_beginning_of_queue() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -187,10 +193,7 @@ fn test_previous_at_beginning_of_queue() {
 
     // Should be playing (restarted first track)
     assert!(
-        matches!(
-            state,
-            Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-        ),
+        matches!(state, Some(PlaybackState::Playing)),
         "Should restart first track when pressing previous at queue start"
     );
 }
@@ -213,7 +216,10 @@ fn test_rapid_previous_presses() {
         create_test_track("4"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -267,7 +273,10 @@ fn test_next_advances_through_queue() {
         create_test_track("3"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -305,7 +314,10 @@ fn test_next_at_end_of_queue_stops() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -352,7 +364,10 @@ fn test_rapid_next_presses() {
         create_test_track("5"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -375,9 +390,7 @@ fn test_rapid_next_presses() {
     assert!(
         matches!(
             state,
-            Some(PlaybackState::Stopped)
-                | Some(PlaybackState::Playing)
-                | Some(PlaybackState::Loading)
+            Some(PlaybackState::Stopped) | Some(PlaybackState::Playing)
         ),
         "Should handle rapid next presses gracefully"
     );
@@ -399,7 +412,10 @@ fn test_loop_off_stops_at_end() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -439,7 +455,10 @@ fn test_loop_all_wraps_to_beginning() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -467,10 +486,7 @@ fn test_loop_all_wraps_to_beginning() {
         "Should wrap to first track with loop all"
     );
     assert!(
-        matches!(
-            state,
-            Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-        ),
+        matches!(state, Some(PlaybackState::Playing)),
         "Should be playing after wrapping"
     );
 }
@@ -489,7 +505,10 @@ fn test_loop_all_multiple_cycles() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -531,7 +550,10 @@ fn test_loop_one_repeats_current_track() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -550,10 +572,7 @@ fn test_loop_one_repeats_current_track() {
 
         // Should still be playing (restarting track 1)
         assert!(
-            matches!(
-                state,
-                Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-            ),
+            matches!(state, Some(PlaybackState::Playing)),
             "Should keep playing with loop one at iteration {}",
             i
         );
@@ -574,7 +593,10 @@ fn test_loop_one_with_previous() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -593,10 +615,7 @@ fn test_loop_one_with_previous() {
 
     // Should be playing (restarted)
     assert!(
-        matches!(
-            state,
-            Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-        ),
+        matches!(state, Some(PlaybackState::Playing)),
         "Should restart track with loop one + previous"
     );
 }
@@ -621,7 +640,10 @@ fn test_shuffle_off_maintains_order() {
         create_test_track("3"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -666,7 +688,10 @@ fn test_shuffle_random_does_not_crash() {
         create_test_track("5"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -685,10 +710,7 @@ fn test_shuffle_random_does_not_crash() {
 
     // Should be playing (order doesn't matter, just shouldn't crash)
     assert!(
-        matches!(
-            state,
-            Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-        ),
+        matches!(state, Some(PlaybackState::Playing)),
         "Should play with shuffle random without crashing"
     );
 }
@@ -712,7 +734,10 @@ fn test_shuffle_random_with_loop_all() {
         create_test_track("3"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -730,10 +755,7 @@ fn test_shuffle_random_with_loop_all() {
 
         // Should keep playing
         assert!(
-            matches!(
-                state,
-                Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-            ),
+            matches!(state, Some(PlaybackState::Playing)),
             "Should keep playing with shuffle + loop all"
         );
     }
@@ -758,7 +780,10 @@ fn test_previous_then_next_restores_position() {
         create_test_track("3"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -810,7 +835,10 @@ fn test_mixed_next_previous_navigation() {
         create_test_track("4"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -864,7 +892,10 @@ fn test_loop_one_does_not_affect_manual_navigation() {
         create_test_track("3"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -882,10 +913,7 @@ fn test_loop_one_does_not_affect_manual_navigation() {
 
     // Should be playing (loop one behavior)
     assert!(
-        matches!(
-            state,
-            Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-        ),
+        matches!(state, Some(PlaybackState::Playing)),
         "Loop one should restart current track on next"
     );
 }
@@ -933,7 +961,10 @@ fn test_single_track_queue_with_loop_off() {
 
     let tracks = vec![create_test_track("1")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -971,7 +1002,10 @@ fn test_single_track_queue_with_loop_all() {
 
     let tracks = vec![create_test_track("1")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -998,10 +1032,7 @@ fn test_single_track_queue_with_loop_all() {
         "Should restart track 1 with loop all"
     );
     assert!(
-        matches!(
-            state,
-            Some(PlaybackState::Playing) | Some(PlaybackState::Loading)
-        ),
+        matches!(state, Some(PlaybackState::Playing)),
         "Should be playing after restart"
     );
 }
@@ -1023,7 +1054,10 @@ fn test_pause_resume_preserves_navigation_state() {
         create_test_track("3"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 
@@ -1079,7 +1113,10 @@ fn test_rewind_bug_reproduction() {
         create_test_track("4"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .unwrap();
     playback.send_command(PlaybackCommand::Play).unwrap();
 

@@ -195,14 +195,14 @@ export function DeviceSelector({
         {isLoadingDevices ? (
           <div className="p-4 text-center text-sm text-muted-foreground">{t('common.loading', 'Loading...')}</div>
         ) : !hasRealDevices ? (
-          MOCK_DEVICES.map((mockBackend) => (
-            <div key={mockBackend.backend}>
+          MOCK_DEVICES.map((mockBackend, mockIndex) => (
+            <div key={`mock-${mockBackend.backend}-${mockIndex}`}>
               <DropdownMenuLabel className="text-xs uppercase text-muted-foreground">
                 {mockBackend.name}
               </DropdownMenuLabel>
-              {mockBackend.devices.map((device) => (
+              {mockBackend.devices.map((device, deviceIndex) => (
                 <DropdownMenuItem
-                  key={`${device.backend}-${device.name}`}
+                  key={`${mockBackend.backend}-${device.name}-${deviceIndex}`}
                   onClick={() => onSwitchDevice(device.backend, device.name)}
                   className="flex items-center justify-between cursor-pointer"
                 >
@@ -225,15 +225,15 @@ export function DeviceSelector({
             const backendDevices = devices.get(backend.backend) || [];
             if (backendDevices.length === 0) return null;
             return (
-              <div key={backend.backend}>
+              <div key={`${backend.backend}-${index}`}>
                 {backends.length > 1 && (
                   <DropdownMenuLabel className="text-xs uppercase text-muted-foreground">
                     {backend.name}
                   </DropdownMenuLabel>
                 )}
-                {backendDevices.map((device) => (
+                {backendDevices.map((device, deviceIndex) => (
                   <DropdownMenuItem
-                    key={`${device.backend}-${device.name}`}
+                    key={`${backend.backend}-${device.name}-${deviceIndex}`}
                     onClick={() => onSwitchDevice(device.backend, device.name)}
                     className="flex items-center justify-between cursor-pointer"
                   >

@@ -7,7 +7,6 @@ import {
   initI18n,
   PlatformProvider,
   HomePage,
-  LibraryPage,
   AlbumsPage,
   ArtistsPage,
   PlaylistsPage,
@@ -161,7 +160,6 @@ export function DemoApp() {
                         <MainLayout onAddToPlaylist={handleAddToPlaylist}>
                         <Routes>
                           <Route path="/" element={<HomePage />} />
-                          <Route path="/library" element={<LibraryPage />} />
                           <Route path="/albums" element={<AlbumsPage />} />
                           <Route path="/albums/:id" element={<AlbumPage />} />
                           <Route path="/artists" element={<ArtistsPage />} />

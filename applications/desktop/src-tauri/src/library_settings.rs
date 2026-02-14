@@ -174,7 +174,13 @@ pub async fn rescan_library_source(
         .ok_or_else(|| "Library source not found".to_string())?;
 
     // Emit scan started event
-    let _ = app.emit("scan-started", ());
+    if let Err(e) = app.emit("scan-started", ()) {
+        tracing::warn!(
+            event = "scan-started",
+            error = %e,
+            "[SCAN] Failed to emit scan event to frontend"
+        );
+    }
 
     // Create scanner with progress callback
     let app_clone = app.clone();
@@ -186,13 +192,21 @@ pub async fn rescan_library_source(
     .force_metadata_refresh(force_refresh.unwrap_or(false))
     .on_progress(Box::new(move |stats| {
         // Emit progress event
-        let _ = app_clone.emit(
+        if let Err(e) = app_clone.emit(
             "scan-progress",
             serde_json::json!({
                 "processed": stats.processed,
                 "total": stats.total_files
             }),
-        );
+        ) {
+            tracing::warn!(
+                event = "scan-progress",
+                error = %e,
+                processed = stats.processed,
+                total = stats.total_files,
+                "[SCAN] Failed to emit scan progress event to frontend"
+            );
+        }
     }));
 
     scanner
@@ -201,7 +215,13 @@ pub async fn rescan_library_source(
         .map_err(|e| format!("Failed to scan source: {}", e))?;
 
     // Emit scan complete event
-    let _ = app.emit("scan-complete", ());
+    if let Err(e) = app.emit("scan-complete", ()) {
+        tracing::warn!(
+            event = "scan-complete",
+            error = %e,
+            "[SCAN] Failed to emit scan event to frontend"
+        );
+    }
 
     Ok(())
 }
@@ -217,7 +237,13 @@ pub async fn rescan_all_sources(
     let device_id = get_device_id();
 
     // Emit scan started event
-    let _ = app.emit("scan-started", ());
+    if let Err(e) = app.emit("scan-started", ()) {
+        tracing::warn!(
+            event = "scan-started",
+            error = %e,
+            "[SCAN] Failed to emit scan event to frontend"
+        );
+    }
 
     // Create scanner with progress callback
     let app_clone = app.clone();
@@ -229,13 +255,21 @@ pub async fn rescan_all_sources(
     .force_metadata_refresh(force_refresh.unwrap_or(false))
     .on_progress(Box::new(move |stats| {
         // Emit progress event
-        let _ = app_clone.emit(
+        if let Err(e) = app_clone.emit(
             "scan-progress",
             serde_json::json!({
                 "processed": stats.processed,
                 "total": stats.total_files
             }),
-        );
+        ) {
+            tracing::warn!(
+                event = "scan-progress",
+                error = %e,
+                processed = stats.processed,
+                total = stats.total_files,
+                "[SCAN] Failed to emit scan progress event to frontend"
+            );
+        }
     }));
 
     scanner
@@ -244,7 +278,13 @@ pub async fn rescan_all_sources(
         .map_err(|e| format!("Failed to scan sources: {}", e))?;
 
     // Emit scan complete event
-    let _ = app.emit("scan-complete", ());
+    if let Err(e) = app.emit("scan-complete", ()) {
+        tracing::warn!(
+            event = "scan-complete",
+            error = %e,
+            "[SCAN] Failed to emit scan event to frontend"
+        );
+    }
 
     Ok(())
 }

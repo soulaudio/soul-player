@@ -363,7 +363,7 @@ export function NowPlayingPage() {
           {t('nowPlaying.selectTrack', 'Select a track from your library to start listening')}
         </p>
         <button
-          onClick={() => navigate('/library')}
+          onClick={() => navigate('/albums')}
           className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity transition-colors"
         >
           {t('common.browse', 'Browse Library')}

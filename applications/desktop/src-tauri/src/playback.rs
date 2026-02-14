@@ -16,8 +16,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
+use tokio_util::sync::CancellationToken;
 
 use crate::app_state::AppState;
+use crate::playback_constants::PlaybackTimingConfig;
 
 /// Device event type for deduplication tracking
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,7 +36,7 @@ enum DeviceEventType {
 /// - Device removed twice
 /// - Default device changed to same device multiple times
 ///
-/// This tracker prevents redundant operations by filtering duplicates within 500ms window.
+/// This tracker prevents redundant operations by filtering duplicates within the configured window.
 struct LastDeviceEvent {
     event_type: DeviceEventType,
     device_id: String,
@@ -47,7 +49,7 @@ impl LastDeviceEvent {
     /// Returns true if:
     /// - Same event type
     /// - Same device ID
-    /// - Within 500ms window
+    /// - Within the deduplication window
     fn is_duplicate(&self, event_type: &DeviceEventType, device_id: &str) -> bool {
         if self.event_type != *event_type {
             return false;
@@ -55,8 +57,9 @@ impl LastDeviceEvent {
         if self.device_id != device_id {
             return false;
         }
-        // Check if within 500ms window
-        self.timestamp.elapsed() < Duration::from_millis(500)
+        // Check if within deduplication window (using default timing config)
+        let config = PlaybackTimingConfig::default();
+        self.timestamp.elapsed() < config.device_dedup_duration()
     }
 }
 
@@ -308,8 +311,8 @@ pub struct PlaybackManager {
     app_handle: AppHandle,
     #[cfg(feature = "effects")]
     effect_slots: Arc<Mutex<[Option<crate::dsp_commands::EffectSlotState>; 4]>>,
-    /// Device monitor cancellation sender (for graceful shutdown)
-    device_monitor_cancel_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
+    /// Device monitor cancellation token (for graceful shutdown)
+    device_monitor_cancel_token: CancellationToken,
     /// Device metrics for monitoring
     device_metrics: Arc<DeviceMetrics>,
 }
@@ -329,7 +332,7 @@ impl PlaybackManager {
         let playback = Arc::new(Mutex::new(playback));
 
         // Start event emission thread with its own event receiver
-        // This eliminates 500ms mutex contention that was causing command delays
+        // This eliminates mutex contention that was causing command delays
         {
             let playback_clone = Arc::clone(&playback);
             let app_handle_clone = app_handle.clone();
@@ -342,23 +345,24 @@ impl PlaybackManager {
         // Create device metrics tracker
         let device_metrics = Arc::new(DeviceMetrics::new());
 
+        // Create cancellation token for device monitoring
+        let cancel_token = CancellationToken::new();
+
         // Start async device monitoring task
         // This provides real-time hotplug notifications on platforms that support it
         // (macOS CoreAudio property listeners, Linux PipeWire registry events, Windows WinRT DeviceWatcher)
-        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
-        let cancel_tx_storage = Arc::new(Mutex::new(Some(cancel_tx)));
-
         {
             let playback_clone = Arc::clone(&playback);
             let app_handle_clone = app_handle.clone();
             let metrics_clone = Arc::clone(&device_metrics);
+            let cancel_token_clone = cancel_token.clone();
 
             let monitor_handle = tauri::async_runtime::spawn(async move {
                 Self::device_monitoring_task(
                     playback_clone,
                     app_handle_clone,
                     metrics_clone,
-                    cancel_rx,
+                    cancel_token_clone,
                 )
                 .await;
             });
@@ -376,7 +380,7 @@ impl PlaybackManager {
             app_handle,
             #[cfg(feature = "effects")]
             effect_slots: Arc::new(Mutex::new([None, None, None, None])),
-            device_monitor_cancel_tx: cancel_tx_storage,
+            device_monitor_cancel_token: cancel_token,
             device_metrics,
         })
     }
@@ -384,7 +388,7 @@ impl PlaybackManager {
     /// Event emission loop that runs in background thread
     ///
     /// Uses channel-based blocking with timeout instead of busy-waiting.
-    /// Wakes up immediately when events arrive, or when periodic task is due (500ms position).
+    /// Wakes up immediately when events arrive, or when periodic task is due (position update interval).
     /// This significantly reduces CPU usage and power consumption compared to fixed 50ms polling.
     ///
     /// NOTE: Mutex locks use expect() with clear messages instead of unwrap()
@@ -394,6 +398,9 @@ impl PlaybackManager {
         event_rx: Receiver<PlaybackEvent>,
         app_handle: AppHandle,
     ) {
+        let timing_config = PlaybackTimingConfig::default();
+        let position_update_interval = timing_config.position_update_duration();
+
         let mut last_position_emit = std::time::Instant::now();
         let mut last_crossfade_progress_emit = std::time::Instant::now();
         let mut tracker = PlaybackTracker::new();
@@ -401,13 +408,13 @@ impl PlaybackManager {
         loop {
             // Calculate time until next periodic task
             let time_until_position =
-                Duration::from_millis(500).saturating_sub(last_position_emit.elapsed());
+                position_update_interval.saturating_sub(last_position_emit.elapsed());
 
             // Wait for event with timeout = next periodic task (or 1ms minimum)
             let timeout = time_until_position.max(Duration::from_millis(1));
 
             // Block until event arrives or timeout expires WITHOUT holding mutex
-            // This eliminates mutex contention that was causing 500ms command delays
+            // This eliminates mutex contention that was causing command delays
             let event = event_rx.recv_timeout(timeout).ok();
 
             if let Some(event) = event {
@@ -669,8 +676,8 @@ impl PlaybackManager {
                 };
             }
 
-            // Emit position updates every 500ms during playback
-            if last_position_emit.elapsed() >= Duration::from_millis(500) {
+            // Emit position updates at configured interval during playback
+            if last_position_emit.elapsed() >= position_update_interval {
                 match playback.lock() {
                     Ok(pb) => {
                         let position = pb.get_position();
@@ -733,7 +740,7 @@ impl PlaybackManager {
                     event_type = ?event_type,
                     device_id = %device_id,
                     elapsed_ms = prev.timestamp.elapsed().as_millis(),
-                    "[DEVICE_MONITOR] Skipping duplicate event (within 500ms window)"
+                    "[DEVICE_MONITOR] Skipping duplicate event (within deduplication window)"
                 );
                 return;
             }
@@ -890,7 +897,17 @@ impl PlaybackManager {
                         } else {
                             tracing::info!(
                                 device_name = %name,
+                                native_device_id = %id,
                                 "[DEVICE_MONITOR] Successfully switched to new default device"
+                            );
+
+                            // Store the native device ID for reliable device removal detection
+                            // This allows us to precisely identify device removal events instead of
+                            // relying on substring matching which can produce false positives
+                            pb.set_native_device_id(Some(id.clone()));
+                            tracing::debug!(
+                                native_device_id = %id,
+                                "[DEVICE_MONITOR] Stored native device ID for removal tracking"
                             );
                         }
                     }
@@ -955,12 +972,12 @@ impl PlaybackManager {
     /// Events are processed sequentially by a dedicated task to prevent race conditions.
     ///
     /// # Cancellation
-    /// The task can be gracefully cancelled via the `cancel_rx` channel.
+    /// The task can be gracefully cancelled via the `cancel_token`.
     async fn device_monitoring_task(
         playback: Arc<Mutex<DesktopPlayback>>,
         app_handle: AppHandle,
         metrics: Arc<DeviceMetrics>,
-        mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+        cancel_token: CancellationToken,
     ) {
         let monitor = create_async_device_monitor();
 
@@ -1018,7 +1035,7 @@ impl PlaybackManager {
                 // The handle will be dropped when this task exits, triggering cleanup
                 loop {
                     tokio::select! {
-                        _ = &mut cancel_rx => {
+                        _ = cancel_token.cancelled() => {
                             tracing::info!(
                                 "[DEVICE_MONITOR] Cancellation signal received - stopping device monitoring"
                             );
@@ -2357,15 +2374,8 @@ impl PlaybackManager {
     /// This sends a cancellation signal to the device monitoring task,
     /// allowing it to clean up resources and exit gracefully.
     pub fn stop_device_monitoring(&self) {
-        if let Ok(mut cancel_tx) = self.device_monitor_cancel_tx.lock() {
-            if let Some(tx) = cancel_tx.take() {
-                // Send cancellation signal (ignore errors - task may already be stopped)
-                let _ = tx.send(());
-                tracing::debug!(
-                    "[DEVICE_MONITOR] Sent cancellation signal to device monitoring task"
-                );
-            }
-        }
+        tracing::debug!("[DEVICE_MONITOR] Sending cancellation signal to device monitoring task");
+        self.device_monitor_cancel_token.cancel();
     }
 }
 

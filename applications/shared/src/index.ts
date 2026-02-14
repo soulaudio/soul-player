@@ -89,10 +89,10 @@ export type { DemoTrack, DemoAlbum, DemoPlaylist, DemoData } from './lib/demo-st
 export type { PlaybackDataStorage } from './types/storage';
 
 // Utils
-export { cn, formatDuration, formatBytes, formatRelativeTime, debounce, throttle } from './lib/utils';
+export { cn, formatDuration } from './lib/utils';
 export { getPlatform, isMac, getModifierKey, getModifierKeyName, formatShortcut } from './lib/platform';
 export type { Platform } from './lib/platform';
-export { removeConsecutiveDuplicates, removeAllDuplicates } from './utils/queue';
+export { removeConsecutiveDuplicates } from './utils/queue';
 export { groupTracks, getDeduplicatedTracks, getFormatQualityScore } from './utils/trackGrouping';
 export type { TrackForGrouping, GroupedTrack } from './utils/trackGrouping';
 export { debug } from './utils/debug';
@@ -158,7 +158,6 @@ export { MainLayout } from './layouts/MainLayout';
 
 // Pages (shared between platforms)
 export { HomePage } from './pages/HomePage';
-export { LibraryPage } from './pages/LibraryPage';
 export { AlbumsPage } from './pages/AlbumsPage';
 export { ArtistsPage } from './pages/ArtistsPage';
 export { PlaylistsPage } from './pages/PlaylistsPage';
@@ -185,11 +184,13 @@ export { VirtualizedGrid } from './components/VirtualizedGrid';
 export { ScanProgressToast } from './components/ScanProgressToast';
 
 // Hooks
-export { useSeekBar, setIgnorePositionUpdates, shouldIgnorePositionUpdates } from './hooks/useSeekBar';
+export { useSeekBar, shouldIgnorePositionUpdates } from './hooks/useSeekBar';
+export { useInterpolatedProgress } from './hooks/useInterpolatedProgress';
 export { useGridScale } from './hooks/useGridScale';
 export { useResponsiveColumns } from './hooks/useResponsiveColumns';
 export { useInfiniteLibrary } from './hooks/useInfiniteLibrary';
 export { useNavigateWithHistory } from './hooks/useNavigateWithHistory';
+export { usePlaybackTiming } from './hooks/usePlaybackTiming';
 
 // TanStack Query exports
 export { QueryClient, QueryClientProvider } from '@tanstack/react-query';

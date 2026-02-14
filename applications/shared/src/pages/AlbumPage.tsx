@@ -179,7 +179,7 @@ export function AlbumPage() {
             {error instanceof Error ? error.message : t('album.notFound')}
           </p>
           <button
-            onClick={() => goBack('/library?tab=albums')}
+            onClick={() => goBack('/albums')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
           >
             {t('common.back')}
@@ -200,7 +200,7 @@ export function AlbumPage() {
         {/* Header */}
         <div className="mb-6">
         <button
-          onClick={() => goBack('/library?tab=albums')}
+          onClick={() => goBack('/albums')}
           className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -292,6 +292,7 @@ export function AlbumPage() {
           buildQueue={buildQueue}
           virtualized={tracks.length > 50}
           virtualItemSize={56}
+          showTrackNumber={true}
           renderMenu={(track) => {
             const backendTrack = tracks.find(t => t.id === track.id)
             if (!backendTrack) return null

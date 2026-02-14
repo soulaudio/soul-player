@@ -1,7 +1,7 @@
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
-use crate::utils::unix_to_iso8601;
+use crate::utils::time::timestamp_to_iso8601;
 
 /// Get user's playlists (owned + shared with them)
 pub async fn get_user_playlists(pool: &SqlitePool, user_id: UserId) -> Result<Vec<Playlist>> {
@@ -25,8 +25,8 @@ pub async fn get_user_playlists(pool: &SqlitePool, user_id: UserId) -> Result<Ve
         .into_iter()
         .map(|row| {
             // Convert Unix timestamp to ISO 8601 string
-            let created_at = unix_to_iso8601(row.created_at);
-            let updated_at = unix_to_iso8601(row.updated_at);
+            let created_at = timestamp_to_iso8601(row.created_at);
+            let updated_at = timestamp_to_iso8601(row.updated_at);
 
             Playlist {
                 id: PlaylistId::new(row.id),

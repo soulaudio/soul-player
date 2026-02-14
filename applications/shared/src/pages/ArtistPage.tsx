@@ -227,7 +227,7 @@ export function ArtistPage() {
             {error instanceof Error ? error.message : t('artist.notFound')}
           </p>
           <button
-            onClick={() => goBack('/library?tab=artists')}
+            onClick={() => goBack('/artists')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
           >
             {t('common.back')}
@@ -244,7 +244,7 @@ export function ArtistPage() {
         {/* Header */}
         <div className="mb-6">
           <button
-            onClick={() => goBack('/library?tab=artists')}
+            onClick={() => goBack('/artists')}
             className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -311,7 +311,6 @@ export function ArtistPage() {
                 album: t.album_title,
                 albumId: t.album_id,
                 duration: t.duration_seconds,
-                trackNumber: t.track_number,
                 isAvailable: !!t.file_path,
                 format: t.file_format,
                 bitrate: t.bit_rate,

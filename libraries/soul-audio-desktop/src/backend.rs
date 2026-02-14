@@ -5,6 +5,7 @@
 
 use cpal::traits::HostTrait;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use thiserror::Error;
 
 /// Audio backend / driver selection
@@ -207,6 +208,62 @@ pub fn get_backend_info() -> Vec<BackendInfo> {
         .collect()
 }
 
+// ==============================================================================
+// Async Timeout Wrappers
+// ==============================================================================
+
+/// Default timeout for backend enumeration (5 seconds)
+pub const BACKEND_ENUM_TIMEOUT_SECS: u64 = 5;
+
+/// Get backend info with timeout protection
+///
+/// This is the async version of `get_backend_info()` that wraps the call in a
+/// timeout to prevent indefinite hangs during backend enumeration.
+///
+/// # Errors
+/// - `BackendError::EnumerationTimeout` if enumeration takes longer than 5 seconds
+/// - `BackendError::TaskJoinError` if the background task panics
+pub async fn get_backend_info_async() -> Result<Vec<BackendInfo>, BackendError> {
+    get_backend_info_with_timeout(BACKEND_ENUM_TIMEOUT_SECS).await
+}
+
+/// Get backend info with custom timeout
+///
+/// Same as `get_backend_info_async()` but allows specifying a custom timeout duration.
+pub async fn get_backend_info_with_timeout(
+    timeout_secs: u64,
+) -> Result<Vec<BackendInfo>, BackendError> {
+    tracing::debug!(
+        timeout_secs,
+        "[Backend] Starting async backend enumeration with timeout"
+    );
+
+    let timeout_duration = Duration::from_secs(timeout_secs);
+
+    match tokio::time::timeout(
+        timeout_duration,
+        tokio::task::spawn_blocking(get_backend_info),
+    )
+    .await
+    {
+        Ok(Ok(result)) => Ok(result),
+        Ok(Err(join_err)) => {
+            tracing::error!(
+                error = %join_err,
+                "[Backend] Backend enumeration task panicked or failed to join"
+            );
+            Err(BackendError::TaskJoinError(join_err.to_string()))
+        }
+        Err(_timeout_err) => {
+            tracing::error!(
+                timeout_secs,
+                "[Backend] Backend enumeration timed out - audio service may be hung"
+            );
+            Err(BackendError::EnumerationTimeout(timeout_secs))
+        }
+    }
+}
+
 /// Backend-related errors
 #[derive(Debug, Error)]
 pub enum BackendError {
@@ -221,6 +278,14 @@ pub enum BackendError {
     /// CPAL error
     #[error("CPAL error: {0}")]
     CpalError(String),
+
+    /// Backend enumeration timed out
+    #[error("Backend enumeration timed out after {0} seconds. The audio service may be hung. Try restarting the audio service or rebooting your system.")]
+    EnumerationTimeout(u64),
+
+    /// Task join error during async enumeration
+    #[error("Failed to join backend enumeration task: {0}")]
+    TaskJoinError(String),
 }
 
 impl From<cpal::HostUnavailable> for BackendError {

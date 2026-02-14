@@ -372,7 +372,10 @@ fn test_flac_stutter_detection_full_playback() {
 
     // Load and play
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(vec![track]))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: vec![track],
+            start_index: 0,
+        })
         .expect("Failed to load playlist");
 
     playback

@@ -126,7 +126,7 @@ export function PlaylistPage() {
 
     try {
       await backend.deletePlaylist(playlist.id)
-      goBack('/library?tab=playlists')
+      goBack('/playlists')
     } catch (err) {
       debug.error('Failed to delete playlist:', err)
     }
@@ -158,7 +158,7 @@ export function PlaylistPage() {
             {error instanceof Error ? error.message : t('playlist.notFound', 'Playlist not found')}
           </p>
           <button
-            onClick={() => goBack('/library?tab=playlists')}
+            onClick={() => goBack('/playlists')}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
           >
             {t('common.back', 'Back')}
@@ -175,7 +175,7 @@ export function PlaylistPage() {
         {/* Header */}
         <div className="mb-6">
         <button
-          onClick={() => goBack('/library?tab=playlists')}
+          onClick={() => goBack('/playlists')}
           className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -269,6 +269,7 @@ export function PlaylistPage() {
               sampleRate: t.sample_rate,
               channels: t.channels,
             }))}
+            showTrackNumber={true}
             buildQueue={(_allTracks, clickedTrack, _clickedIndex) => {
               // Build queue from all tracks, starting at clicked position
               const queue = tracks

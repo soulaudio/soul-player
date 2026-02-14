@@ -217,7 +217,10 @@ fn tpdf_dither_i16() -> f32 {
 
 // ===== Public Exports =====
 
-pub use backend::{AudioBackend, BackendError, BackendInfo};
+pub use backend::{
+    get_backend_info_async, get_backend_info_with_timeout, AudioBackend, BackendError, BackendInfo,
+    BACKEND_ENUM_TIMEOUT_SECS,
+};
 // Device module exports
 // NOTE: Some functions are deprecated in favor of AsyncDeviceMonitor
 #[allow(deprecated)]
@@ -225,16 +228,29 @@ pub use device::{
     // Still useful: Capability detection, device lookup, and types
     detect_device_capabilities,
     find_device_by_name,
+    find_device_by_name_async,
+    find_device_by_name_with_timeout,
     // DEPRECATED: Use AsyncDeviceMonitor instead
     get_default_device,
+    get_default_device_async,
     get_default_device_with_capabilities,
+    get_default_device_with_capabilities_async,
+    get_default_device_with_capabilities_with_timeout,
+    get_default_device_with_timeout,
     get_device_capabilities,
+    get_device_capabilities_async,
+    get_device_capabilities_with_timeout,
     list_devices,
+    list_devices_async,
     list_devices_with_capabilities,
+    list_devices_with_capabilities_async,
+    list_devices_with_capabilities_with_timeout,
+    list_devices_with_timeout,
     AudioDeviceInfo,
     DeviceCapabilities,
     DeviceError,
     SupportedBitDepth,
+    DEVICE_ENUM_TIMEOUT_SECS,
     DSD_RATES,
     STANDARD_SAMPLE_RATES,
 };

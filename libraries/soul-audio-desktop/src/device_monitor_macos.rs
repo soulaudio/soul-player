@@ -934,11 +934,23 @@ impl AsyncDeviceMonitor for MacOSDeviceMonitor {
                 tokio::select! {
                     Some(event) = event_receiver.recv() => {
                         tracing::trace!(event = ?event, "[DEVICE_MONITOR] Forwarding event to user callback");
-                        // Use spawn_blocking to handle async/sync boundary properly
+                        // Use spawn_blocking to handle async/sync boundary properly with error handling
                         let callback_clone = callback.clone();
-                        tokio::task::spawn_blocking(move || {
+                        match tokio::task::spawn_blocking(move || {
                             callback_clone(event);
-                        });
+                        })
+                        .await
+                        {
+                            Ok(()) => {
+                                tracing::trace!("[DEVICE_MONITOR] Device event callback executed successfully");
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    error = %e,
+                                    "[DEVICE_MONITOR] Device event callback failed to execute"
+                                );
+                            }
+                        }
                     }
                     _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
                         // Check if still running

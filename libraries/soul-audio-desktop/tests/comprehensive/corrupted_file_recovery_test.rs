@@ -88,7 +88,7 @@ fn test_truncated_wav_file() {
 
     let track = create_test_track_with_path("1", truncated_path);
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(vec![track]))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: vec![track], start_index: 0 })
         .expect("Failed to load playlist");
 
     playback
@@ -148,7 +148,7 @@ fn test_zero_byte_file() {
 
     let track = create_test_track_with_path("1", zero_path);
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(vec![track]))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: vec![track], start_index: 0 })
         .expect("Failed to load playlist");
 
     playback
@@ -188,7 +188,7 @@ fn test_invalid_header() {
 
     let track = create_test_track_with_path("1", invalid_path);
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(vec![track]))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: vec![track], start_index: 0 })
         .expect("Failed to load playlist");
 
     playback
@@ -234,7 +234,7 @@ fn test_missing_file_during_playback() {
 
     let track = create_test_track_with_path("1", missing_path);
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(vec![track]))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: vec![track], start_index: 0 })
         .expect("Failed to load playlist");
 
     playback
@@ -286,7 +286,7 @@ fn test_recovery_after_corrupted_file() {
     ];
 
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: tracks, start_index: 0 })
         .expect("Failed to load playlist");
 
     playback
@@ -341,7 +341,7 @@ fn test_playlist_of_corrupted_files() {
     let playback = DesktopPlayback::new(config).expect("Failed to create playback");
 
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: tracks, start_index: 0 })
         .expect("Failed to load playlist");
 
     playback

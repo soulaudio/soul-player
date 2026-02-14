@@ -33,7 +33,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   // Re-enable during development for debugging: wrap in <React.StrictMode>
   <>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <ThemeProvider>
           <PlatformProvider
           platform="desktop"

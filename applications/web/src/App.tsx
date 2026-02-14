@@ -6,7 +6,6 @@ import {
   ServerBackendProvider,
   DemoStorage,
   HomePage,
-  LibraryPage,
   AlbumsPage,
   ArtistsPage,
   PlaylistsPage,
@@ -119,7 +118,6 @@ function DemoModeApp() {
         <MainLayout>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
-            <Route path="/library" element={<LibraryPage />} />
             <Route path="/albums" element={<AlbumsPage />} />
             <Route path="/albums/:id" element={<AlbumPage />} />
             <Route path="/artists" element={<ArtistsPage />} />
@@ -156,7 +154,6 @@ function ServerModeApp() {
         <MainLayout>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
-            <Route path="/library" element={<LibraryPage />} />
             <Route path="/albums" element={<AlbumsPage />} />
             <Route path="/albums/:id" element={<AlbumPage />} />
             <Route path="/artists" element={<ArtistsPage />} />

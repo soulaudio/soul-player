@@ -48,7 +48,7 @@ fn test_extreme_command_flood() {
         create_test_track("2"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks.clone()))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: tracks.clone(), start_index: 0 }))
         .expect("Failed to load playlist");
 
     std::thread::sleep(Duration::from_millis(50));
@@ -275,7 +275,7 @@ fn test_rapid_playlist_changes() {
                         create_test_track(&format!("{}_2", i)),
                     ];
 
-                    let _ = pb.send_command(PlaybackCommand::LoadPlaylist(tracks));
+                    let _ = pb.send_command(PlaybackCommand::LoadPlaylist { tracks: tracks, start_index: 0 });
                     cycle += 1;
 
                     std::thread::sleep(Duration::from_millis(10));
@@ -296,7 +296,7 @@ fn test_rapid_playlist_changes() {
     // Verify system is still functional
     std::thread::sleep(Duration::from_millis(100));
     let final_tracks = vec![create_test_track("final")];
-    let result = playback.send_command(PlaybackCommand::LoadPlaylist(final_tracks));
+    let result = playback.send_command(PlaybackCommand::LoadPlaylist { tracks: final_tracks, start_index: 0 });
 
     assert!(
         result.is_ok(),

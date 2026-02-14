@@ -1,159 +1,142 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import { usePlayerStore } from '../stores/player';
 import { debug } from '../utils/debug';
+import { usePlaybackTiming } from './usePlaybackTiming';
 
 interface UseSeekBarReturn {
-  isDragging: boolean;
-  seekPosition: number | null;
-  handleSeekStart: (position: number) => void;
-  handleSeekChange: (position: number) => void;
-  handleSeekEnd: (finalPosition?: number) => void;
+  handleSeek: (position: number) => void;
 }
 
 /**
- * Hook to manage seek bar interactions with debouncing.
- * Prevents excessive backend calls while dragging the seek bar.
+ * Hook to manage click-to-seek interactions.
+ * Supports only immediate seeking on click (no drag/scrubbing).
  *
- * @param debounceMs - Debounce delay in milliseconds (default: 300ms)
- * @returns Seek bar state and handlers
+ * Features:
+ * - Immediate seek on click
+ * - Configurable ignore window to prevent race conditions (synced with backend)
+ * - Seek verification after ignore window expires
+ * - React ref-based state management (no global variables)
  */
-export function useSeekBar(debounceMs: number = 300): UseSeekBarReturn {
+export function useSeekBar(): UseSeekBarReturn {
   const commands = usePlayerCommands();
-  const [isDragging, setIsDragging] = useState(false);
-  const [seekPosition, setSeekPosition] = useState<number | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timingConfig = usePlaybackTiming();
   const ignoreUpdatesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const targetPositionRef = useRef<number | null>(null);
+  const isIgnoringUpdatesRef = useRef<boolean>(false);
 
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
       if (ignoreUpdatesTimerRef.current) {
         clearTimeout(ignoreUpdatesTimerRef.current);
+        ignoreUpdatesTimerRef.current = null;
       }
     };
   }, []);
 
   /**
-   * Called when user starts dragging the seek bar
+   * Handle immediate seek on click
+   * @param position - Target position in seconds
    */
-  const handleSeekStart = useCallback((position: number) => {
-    debug.log('[useSeekBar] handleSeekStart:', position);
-    setIsDragging(true);
-    setSeekPosition(position);
-  }, []);
+  const handleSeek = useCallback((position: number) => {
+    const { duration } = usePlayerStore.getState();
 
-  /**
-   * Called continuously while dragging
-   * Updates UI immediately but debounces backend calls
-   */
-  const handleSeekChange = useCallback((position: number) => {
-    setSeekPosition(position);
+    debug.log('[useSeekBar] Seeking to position:', position, 'ignore window:', timingConfig.ignoreWindowMs);
 
-    // Clear existing timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
+    // Store target position for verification
+    targetPositionRef.current = position;
+
+    // Set flag to ignore position updates from backend for configured ignore window
+    // This prevents the seek bar from jumping back due to race conditions
+    // Window duration is calculated by backend as: position_update_interval * 1.2
+    isIgnoringUpdatesRef.current = true;
+    updateIgnoreFlag(true);
+
+    // Immediately update the store with the target position
+    const progressPercentage = duration > 0
+      ? Math.min(100, (position / duration) * 100)
+      : 0;
+    usePlayerStore.getState().setProgress(progressPercentage);
+
+    // Send seek command to backend
+    commands.seek(position)
+      .then(() => {
+        debug.log('[useSeekBar] Seek command succeeded');
+      })
+      .catch((error) => {
+        debug.error('[useSeekBar] Seek failed:', error);
+        // On error, clear the ignore flag immediately
+        isIgnoringUpdatesRef.current = false;
+        updateIgnoreFlag(false);
+        targetPositionRef.current = null;
+      });
+
+    // Re-enable position updates after configured ignore window and verify seek completed
+    // Clear any existing timer first
+    if (ignoreUpdatesTimerRef.current) {
+      clearTimeout(ignoreUpdatesTimerRef.current);
     }
+    ignoreUpdatesTimerRef.current = setTimeout(() => {
+      isIgnoringUpdatesRef.current = false;
+      updateIgnoreFlag(false);
 
-    // Set new debounced timer
-    debounceTimerRef.current = setTimeout(() => {
-      // This will only execute if user pauses dragging for debounceMs
-      // Currently not sending intermediate updates - only final position on drag end
-    }, debounceMs);
-  }, [debounceMs]);
+      // Verify seek completed by checking current position
+      const { progress, duration: currentDuration } = usePlayerStore.getState();
+      const currentPosition = (progress / 100) * currentDuration;
+      const expectedPosition = targetPositionRef.current;
 
-  /**
-   * Called when user releases the seek bar
-   * Sends final position to backend
-   * @param finalPosition - Optional position to seek to (if not provided, uses seekPosition state)
-   */
-  const handleSeekEnd = useCallback((finalPosition?: number) => {
-    // Clear any pending debounce timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
-
-    // Use provided position or fall back to state
-    const targetPosition = finalPosition ?? seekPosition;
-
-    debug.log('[useSeekBar] handleSeekEnd called with:', { finalPosition, seekPosition, targetPosition });
-
-    // Send final position to backend
-    if (targetPosition !== null) {
-      const { duration } = usePlayerStore.getState();
-
-      debug.log('[useSeekBar] Seeking to position:', targetPosition);
-
-      // Set flag to ignore position updates from backend for 500ms
-      // This prevents the seek bar from jumping back due to race conditions
-      setIgnorePositionUpdates(true);
-
-      // Immediately update the store with the target position
-      const progressPercentage = duration > 0
-        ? Math.min(100, (targetPosition / duration) * 100)
-        : 0;
-      usePlayerStore.getState().setProgress(progressPercentage);
-
-      // Send seek command to backend
-      commands.seek(targetPosition)
-        .then(() => {
-          debug.log('[useSeekBar] Seek command succeeded');
-        })
-        .catch((error) => {
-          debug.error('[useSeekBar] Seek failed:', error);
-        });
-
-      // Re-enable position updates after 500ms
-      // This gives the backend time to process the seek
-      // Clear any existing timer first
-      if (ignoreUpdatesTimerRef.current) {
-        clearTimeout(ignoreUpdatesTimerRef.current);
+      if (expectedPosition !== null) {
+        const positionDiff = Math.abs(currentPosition - expectedPosition);
+        // Allow 0.5s tolerance for seek verification
+        if (positionDiff > 0.5) {
+          debug.warn('[useSeekBar] Seek verification failed:', {
+            expected: expectedPosition,
+            actual: currentPosition,
+            diff: positionDiff
+          });
+        } else {
+          debug.log('[useSeekBar] Seek verified:', {
+            expected: expectedPosition,
+            actual: currentPosition
+          });
+        }
       }
-      ignoreUpdatesTimerRef.current = setTimeout(() => {
-        setIgnorePositionUpdates(false);
-        debug.log('[useSeekBar] Re-enabled position updates');
-        ignoreUpdatesTimerRef.current = null;
-      }, 500);
-    } else {
-      debug.warn('[useSeekBar] handleSeekEnd called but no position available');
-    }
 
-    // Reset dragging state
-    setIsDragging(false);
-    setSeekPosition(null);
-  }, [seekPosition, commands]);
+      targetPositionRef.current = null;
+      ignoreUpdatesTimerRef.current = null;
+      debug.log('[useSeekBar] Re-enabled position updates');
+    }, timingConfig.ignoreWindowMs);
+  }, [commands, timingConfig]);
 
   return {
-    isDragging,
-    seekPosition,
-    handleSeekStart,
-    handleSeekChange,
-    handleSeekEnd,
+    handleSeek,
   };
 }
 
 /**
- * Global ref to track if position updates should be ignored
- * Used to prevent seek bar jumping during seek operations
+ * Check if position updates should be ignored
+ * Used by event handlers to prevent race conditions during seek
+ *
+ * IMPORTANT: This uses a shared ref that's accessed via the hook instance.
+ * Each component instance has its own ref, but only one ProgressBar should be active.
  */
-let globalIgnorePositionUpdates = false;
-
-/**
- * Set whether position updates from backend should be ignored
- * @internal Used by useSeekBar
- */
-export function setIgnorePositionUpdates(ignore: boolean): void {
-  globalIgnorePositionUpdates = ignore;
+export function shouldIgnorePositionUpdates(): boolean {
+  // Access the ref from the latest hook instance
+  // This works because there's only one ProgressBar component active at a time
+  return shouldIgnorePositionUpdatesRef.current;
 }
 
 /**
- * Check if position updates should be ignored
- * Used by usePlaybackEvents to prevent race conditions during seek
+ * Shared ref for ignore flag - accessed by shouldIgnorePositionUpdates
+ * @internal
  */
-export function shouldIgnorePositionUpdates(): boolean {
-  return globalIgnorePositionUpdates;
+const shouldIgnorePositionUpdatesRef = { current: false };
+
+/**
+ * Update the shared ignore flag
+ * @internal Used by useSeekBar
+ */
+export function updateIgnoreFlag(value: boolean): void {
+  shouldIgnorePositionUpdatesRef.current = value;
 }

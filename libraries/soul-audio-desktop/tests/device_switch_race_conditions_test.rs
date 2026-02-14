@@ -50,7 +50,10 @@ async fn test_concurrent_device_switch_and_removal() {
         Ok(mut playback) => {
             // Load a test track to have active playback
             let track = create_test_track("concurrent-test");
-            let _ = playback.send_command(PlaybackCommand::LoadPlaylist(vec![track]));
+            let _ = playback.send_command(PlaybackCommand::LoadPlaylist {
+                tracks: vec![track],
+                start_index: 0,
+            });
             let _ = playback.send_command(PlaybackCommand::Play);
 
             // Give playback time to start
@@ -133,7 +136,10 @@ async fn test_device_switch_during_playback() {
         Ok(mut playback) => {
             // Load track and start playback
             let track = create_test_track("playback-test");
-            let _ = playback.send_command(PlaybackCommand::LoadPlaylist(vec![track]));
+            let _ = playback.send_command(PlaybackCommand::LoadPlaylist {
+                tracks: vec![track],
+                start_index: 0,
+            });
             let _ = playback.send_command(PlaybackCommand::Play);
 
             // Let playback run for a bit to ensure audio callback is active
@@ -281,7 +287,10 @@ async fn test_rapid_device_switches() {
         Ok(mut playback) => {
             // Load track for active playback
             let track = create_test_track("rapid-test");
-            let _ = playback.send_command(PlaybackCommand::LoadPlaylist(vec![track]));
+            let _ = playback.send_command(PlaybackCommand::LoadPlaylist {
+                tracks: vec![track],
+                start_index: 0,
+            });
             let _ = playback.send_command(PlaybackCommand::Play);
 
             // Give playback time to start
@@ -465,7 +474,10 @@ async fn test_device_switch_during_track_transition() {
                 create_test_track("transition-2"),
                 create_test_track("transition-3"),
             ];
-            let _ = playback.send_command(PlaybackCommand::LoadPlaylist(tracks));
+            let _ = playback.send_command(PlaybackCommand::LoadPlaylist {
+                tracks,
+                start_index: 0,
+            });
             let _ = playback.send_command(PlaybackCommand::Play);
 
             // Let first track play briefly
@@ -536,7 +548,10 @@ async fn test_device_switch_with_queue_modifications() {
         Ok(mut playback) => {
             // Load initial tracks
             let initial_tracks = vec![create_test_track("queue-1"), create_test_track("queue-2")];
-            let _ = playback.send_command(PlaybackCommand::LoadPlaylist(initial_tracks));
+            let _ = playback.send_command(PlaybackCommand::LoadPlaylist {
+                tracks: initial_tracks,
+                start_index: 0,
+            });
             let _ = playback.send_command(PlaybackCommand::Play);
 
             sleep(Duration::from_millis(100)).await;

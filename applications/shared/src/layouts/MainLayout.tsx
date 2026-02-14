@@ -32,15 +32,15 @@ export function MainLayout({ children, onAddToPlaylist }: MainLayoutProps) {
         e.preventDefault();
         navigate('/');
       }
-      // Cmd/Ctrl + 2 for library
+      // Cmd/Ctrl + 2 for albums
       if ((e.metaKey || e.ctrlKey) && e.key === '2') {
         e.preventDefault();
-        navigate('/library');
+        navigate('/albums');
       }
-      // Cmd/Ctrl + L for library
+      // Cmd/Ctrl + L for albums (L for library)
       if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
         e.preventDefault();
-        navigate('/library');
+        navigate('/albums');
       }
       // Cmd/Ctrl + H for home
       if ((e.metaKey || e.ctrlKey) && e.key === 'h') {

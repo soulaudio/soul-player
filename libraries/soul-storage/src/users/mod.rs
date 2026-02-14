@@ -1,6 +1,6 @@
 //! User management and authentication queries
 
-use crate::utils::unix_to_iso8601;
+use crate::utils::time::timestamp_to_iso8601;
 use crate::StorageError;
 use soul_core::types::User;
 use sqlx::SqlitePool;
@@ -85,7 +85,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<User>> {
         .into_iter()
         .filter_map(|row| {
             let id = row.id.parse::<i64>().ok()?;
-            let created_at = unix_to_iso8601(row.created_at);
+            let created_at = timestamp_to_iso8601(row.created_at);
 
             Some(User {
                 id,

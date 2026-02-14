@@ -5,6 +5,7 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::SampleFormat;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use thiserror::Error;
 
 use crate::backend::{AudioBackend, BackendError};
@@ -537,6 +538,352 @@ pub fn find_device_by_name(
     Err(DeviceError::DeviceNotFound(device_name.to_string()))
 }
 
+// ==============================================================================
+// Async Timeout Wrappers
+// ==============================================================================
+//
+// These functions wrap the synchronous device enumeration functions with
+// tokio timeouts to prevent indefinite hangs caused by OS audio service issues.
+//
+// CPAL device enumeration can hang indefinitely if:
+// - Windows Audio Service is unresponsive
+// - CoreAudio daemon is hung on macOS
+// - PulseAudio/JACK is not responding on Linux
+//
+// By wrapping in spawn_blocking + timeout, we ensure the app remains responsive
+// and users get a clear error message instead of an infinite hang.
+
+/// Default timeout for device enumeration (5 seconds)
+pub const DEVICE_ENUM_TIMEOUT_SECS: u64 = 5;
+
+/// List devices with timeout protection
+///
+/// This is the async version of `list_devices()` that wraps the call in a
+/// timeout to prevent indefinite hangs during device enumeration.
+///
+/// # Errors
+/// - `DeviceError::EnumerationTimeout` if enumeration takes longer than 5 seconds
+/// - `DeviceError::TaskJoinError` if the background task panics
+/// - Other `DeviceError` variants from the underlying `list_devices()` call
+pub async fn list_devices_async(
+    backend: AudioBackend,
+) -> Result<Vec<AudioDeviceInfo>, DeviceError> {
+    list_devices_with_timeout(backend, DEVICE_ENUM_TIMEOUT_SECS).await
+}
+
+/// List devices with custom timeout
+///
+/// Same as `list_devices_async()` but allows specifying a custom timeout duration.
+pub async fn list_devices_with_timeout(
+    backend: AudioBackend,
+    timeout_secs: u64,
+) -> Result<Vec<AudioDeviceInfo>, DeviceError> {
+    tracing::debug!(
+        backend = ?backend,
+        timeout_secs,
+        "[Device] Starting async device enumeration with timeout"
+    );
+
+    let timeout_duration = Duration::from_secs(timeout_secs);
+
+    match tokio::time::timeout(
+        timeout_duration,
+        tokio::task::spawn_blocking(move || list_devices(backend)),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(join_err)) => {
+            tracing::error!(
+                backend = ?backend,
+                error = %join_err,
+                "[Device] Enumeration task panicked or failed to join"
+            );
+            Err(DeviceError::TaskJoinError(join_err.to_string()))
+        }
+        Err(_timeout_err) => {
+            tracing::error!(
+                backend = ?backend,
+                timeout_secs,
+                "[Device] Device enumeration timed out - audio service may be hung"
+            );
+            Err(DeviceError::EnumerationTimeout(timeout_secs))
+        }
+    }
+}
+
+/// List devices with capabilities and timeout protection
+///
+/// Async version of `list_devices_with_capabilities()` with timeout protection.
+pub async fn list_devices_with_capabilities_async(
+    backend: AudioBackend,
+    include_capabilities: bool,
+) -> Result<Vec<AudioDeviceInfo>, DeviceError> {
+    list_devices_with_capabilities_with_timeout(
+        backend,
+        include_capabilities,
+        DEVICE_ENUM_TIMEOUT_SECS,
+    )
+    .await
+}
+
+/// List devices with capabilities and custom timeout
+pub async fn list_devices_with_capabilities_with_timeout(
+    backend: AudioBackend,
+    include_capabilities: bool,
+    timeout_secs: u64,
+) -> Result<Vec<AudioDeviceInfo>, DeviceError> {
+    tracing::debug!(
+        backend = ?backend,
+        include_capabilities,
+        timeout_secs,
+        "[Device] Starting async device enumeration with capabilities and timeout"
+    );
+
+    let timeout_duration = Duration::from_secs(timeout_secs);
+
+    match tokio::time::timeout(
+        timeout_duration,
+        tokio::task::spawn_blocking(move || {
+            list_devices_with_capabilities(backend, include_capabilities)
+        }),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(join_err)) => {
+            tracing::error!(
+                backend = ?backend,
+                error = %join_err,
+                "[Device] Enumeration task panicked or failed to join"
+            );
+            Err(DeviceError::TaskJoinError(join_err.to_string()))
+        }
+        Err(_timeout_err) => {
+            tracing::error!(
+                backend = ?backend,
+                timeout_secs,
+                "[Device] Device enumeration with capabilities timed out - audio service may be hung"
+            );
+            Err(DeviceError::EnumerationTimeout(timeout_secs))
+        }
+    }
+}
+
+/// Get default device with timeout protection
+///
+/// Async version of `get_default_device()` with timeout protection.
+pub async fn get_default_device_async(
+    backend: AudioBackend,
+) -> Result<AudioDeviceInfo, DeviceError> {
+    get_default_device_with_timeout(backend, DEVICE_ENUM_TIMEOUT_SECS).await
+}
+
+/// Get default device with custom timeout
+pub async fn get_default_device_with_timeout(
+    backend: AudioBackend,
+    timeout_secs: u64,
+) -> Result<AudioDeviceInfo, DeviceError> {
+    tracing::debug!(
+        backend = ?backend,
+        timeout_secs,
+        "[Device] Getting default device with timeout"
+    );
+
+    let timeout_duration = Duration::from_secs(timeout_secs);
+
+    match tokio::time::timeout(
+        timeout_duration,
+        tokio::task::spawn_blocking(move || get_default_device(backend)),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(join_err)) => {
+            tracing::error!(
+                backend = ?backend,
+                error = %join_err,
+                "[Device] Default device task panicked or failed to join"
+            );
+            Err(DeviceError::TaskJoinError(join_err.to_string()))
+        }
+        Err(_timeout_err) => {
+            tracing::error!(
+                backend = ?backend,
+                timeout_secs,
+                "[Device] Get default device timed out - audio service may be hung"
+            );
+            Err(DeviceError::EnumerationTimeout(timeout_secs))
+        }
+    }
+}
+
+/// Get default device with capabilities and timeout protection
+///
+/// Async version of `get_default_device_with_capabilities()` with timeout protection.
+pub async fn get_default_device_with_capabilities_async(
+    backend: AudioBackend,
+    include_capabilities: bool,
+) -> Result<AudioDeviceInfo, DeviceError> {
+    get_default_device_with_capabilities_with_timeout(
+        backend,
+        include_capabilities,
+        DEVICE_ENUM_TIMEOUT_SECS,
+    )
+    .await
+}
+
+/// Get default device with capabilities and custom timeout
+pub async fn get_default_device_with_capabilities_with_timeout(
+    backend: AudioBackend,
+    include_capabilities: bool,
+    timeout_secs: u64,
+) -> Result<AudioDeviceInfo, DeviceError> {
+    tracing::debug!(
+        backend = ?backend,
+        include_capabilities,
+        timeout_secs,
+        "[Device] Getting default device with capabilities and timeout"
+    );
+
+    let timeout_duration = Duration::from_secs(timeout_secs);
+
+    match tokio::time::timeout(
+        timeout_duration,
+        tokio::task::spawn_blocking(move || {
+            get_default_device_with_capabilities(backend, include_capabilities)
+        }),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(join_err)) => {
+            tracing::error!(
+                backend = ?backend,
+                error = %join_err,
+                "[Device] Default device with capabilities task panicked or failed to join"
+            );
+            Err(DeviceError::TaskJoinError(join_err.to_string()))
+        }
+        Err(_timeout_err) => {
+            tracing::error!(
+                backend = ?backend,
+                timeout_secs,
+                "[Device] Get default device with capabilities timed out - audio service may be hung"
+            );
+            Err(DeviceError::EnumerationTimeout(timeout_secs))
+        }
+    }
+}
+
+/// Find device by name with timeout protection
+///
+/// Async version of `find_device_by_name()` with timeout protection.
+pub async fn find_device_by_name_async(
+    backend: AudioBackend,
+    device_name: String,
+) -> Result<cpal::Device, DeviceError> {
+    find_device_by_name_with_timeout(backend, device_name, DEVICE_ENUM_TIMEOUT_SECS).await
+}
+
+/// Find device by name with custom timeout
+pub async fn find_device_by_name_with_timeout(
+    backend: AudioBackend,
+    device_name: String,
+    timeout_secs: u64,
+) -> Result<cpal::Device, DeviceError> {
+    let device_name_for_log = device_name.clone();
+    tracing::debug!(
+        backend = ?backend,
+        device_name = %device_name_for_log,
+        timeout_secs,
+        "[Device] Finding device by name with timeout"
+    );
+
+    let timeout_duration = Duration::from_secs(timeout_secs);
+
+    match tokio::time::timeout(
+        timeout_duration,
+        tokio::task::spawn_blocking(move || find_device_by_name(backend, &device_name)),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(join_err)) => {
+            tracing::error!(
+                backend = ?backend,
+                device_name = %device_name_for_log,
+                error = %join_err,
+                "[Device] Find device task panicked or failed to join"
+            );
+            Err(DeviceError::TaskJoinError(join_err.to_string()))
+        }
+        Err(_timeout_err) => {
+            tracing::error!(
+                backend = ?backend,
+                device_name = %device_name_for_log,
+                timeout_secs,
+                "[Device] Find device by name timed out - audio service may be hung"
+            );
+            Err(DeviceError::EnumerationTimeout(timeout_secs))
+        }
+    }
+}
+
+/// Get device capabilities with timeout protection
+///
+/// Async version of `get_device_capabilities()` with timeout protection.
+pub async fn get_device_capabilities_async(
+    backend: AudioBackend,
+    device_name: String,
+) -> Result<DeviceCapabilities, DeviceError> {
+    get_device_capabilities_with_timeout(backend, device_name, DEVICE_ENUM_TIMEOUT_SECS).await
+}
+
+/// Get device capabilities with custom timeout
+pub async fn get_device_capabilities_with_timeout(
+    backend: AudioBackend,
+    device_name: String,
+    timeout_secs: u64,
+) -> Result<DeviceCapabilities, DeviceError> {
+    let device_name_for_log = device_name.clone();
+    tracing::debug!(
+        backend = ?backend,
+        device_name = %device_name_for_log,
+        timeout_secs,
+        "[Device] Getting device capabilities with timeout"
+    );
+
+    let timeout_duration = Duration::from_secs(timeout_secs);
+
+    match tokio::time::timeout(
+        timeout_duration,
+        tokio::task::spawn_blocking(move || get_device_capabilities(backend, &device_name)),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(join_err)) => {
+            tracing::error!(
+                backend = ?backend,
+                device_name = %device_name_for_log,
+                error = %join_err,
+                "[Device] Device capabilities task panicked or failed to join"
+            );
+            Err(DeviceError::TaskJoinError(join_err.to_string()))
+        }
+        Err(_timeout_err) => {
+            tracing::error!(
+                backend = ?backend,
+                device_name = %device_name_for_log,
+                timeout_secs,
+                "[Device] Get device capabilities timed out - audio service may be hung"
+            );
+            Err(DeviceError::EnumerationTimeout(timeout_secs))
+        }
+    }
+}
+
 /// Device-related errors
 #[derive(Debug, Error)]
 pub enum DeviceError {
@@ -559,6 +906,14 @@ pub enum DeviceError {
     /// Failed to get device information
     #[error("Failed to get device information: {0}")]
     DeviceInfoFailed(String),
+
+    /// Device enumeration timed out
+    #[error("Device enumeration timed out after {0} seconds. The audio service may be hung. Try restarting the audio service or rebooting your system.")]
+    EnumerationTimeout(u64),
+
+    /// Task join error during async enumeration
+    #[error("Failed to join enumeration task: {0}")]
+    TaskJoinError(String),
 }
 
 impl From<BackendError> for DeviceError {
@@ -871,5 +1226,76 @@ mod tests {
         assert!(DSD_RATES
             .iter()
             .any(|(r, n)| *r == 22579200 && *n == "DSD512"));
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
+    async fn test_list_devices_async_success() {
+        let backend = AudioBackend::Default;
+        let devices = list_devices_async(backend).await;
+
+        assert!(
+            devices.is_ok(),
+            "Should successfully enumerate devices with timeout"
+        );
+
+        let devices = devices.unwrap();
+        assert!(!devices.is_empty(), "Should find at least one audio device");
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
+    async fn test_get_default_device_async_success() {
+        let backend = AudioBackend::Default;
+        let device = get_default_device_async(backend).await;
+
+        assert!(
+            device.is_ok(),
+            "Should successfully get default device with timeout"
+        );
+
+        let device = device.unwrap();
+        assert!(device.is_default, "Device should be marked as default");
+        assert!(!device.name.is_empty(), "Device should have a name");
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires real audio hardware - not available in CI environments"]
+    async fn test_find_device_by_name_async_success() {
+        let backend = AudioBackend::Default;
+        let devices = list_devices_async(backend)
+            .await
+            .expect("Failed to list devices for test_find_device_by_name_async_success");
+
+        if let Some(first_device) = devices.first() {
+            let found = find_device_by_name_async(backend, first_device.name.clone()).await;
+            assert!(
+                found.is_ok(),
+                "Should successfully find device by name with timeout"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timeout_error_type() {
+        // Test that timeout errors have the correct type
+        // This is a compile-time check more than a runtime test
+        let backend = AudioBackend::Default;
+
+        // Create an extremely short timeout to force a timeout error in most cases
+        // Note: This test might succeed on very fast systems, so we check both outcomes
+        match list_devices_with_timeout(backend, 0).await {
+            Ok(_devices) => {
+                // System was extremely fast - enumeration completed in < 1ms
+                // This is fine, the timeout mechanism still worked
+            }
+            Err(DeviceError::EnumerationTimeout(secs)) => {
+                // Expected outcome - timeout occurred
+                assert_eq!(secs, 0, "Timeout should report correct duration");
+            }
+            Err(e) => {
+                panic!("Expected EnumerationTimeout or Ok, got: {:?}", e);
+            }
+        }
     }
 }

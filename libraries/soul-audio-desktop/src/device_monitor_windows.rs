@@ -375,11 +375,25 @@ impl AsyncDeviceMonitor for WindowsDeviceMonitor {
             tracing::debug!("[DEVICE_MONITOR] Event forwarding task started");
             while let Some(event) = event_rx.recv().await {
                 tracing::trace!(event = ?event, "[DEVICE_MONITOR] Forwarding event to user callback");
-                // Use spawn_blocking to handle async/sync boundary properly
+                // Use spawn_blocking to handle async/sync boundary properly with error handling
                 let callback_clone = callback.clone();
-                tokio::task::spawn_blocking(move || {
+                match tokio::task::spawn_blocking(move || {
                     callback_clone(event);
-                });
+                })
+                .await
+                {
+                    Ok(()) => {
+                        tracing::trace!(
+                            "[DEVICE_MONITOR] Device event callback executed successfully"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            "[DEVICE_MONITOR] Device event callback failed to execute"
+                        );
+                    }
+                }
             }
             tracing::debug!("[DEVICE_MONITOR] Event forwarding task stopped");
         });

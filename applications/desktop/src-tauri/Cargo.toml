@@ -34,6 +34,7 @@ tauri-plugin-single-instance = "2"
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
+tokio-util = "0.7"
 url.workspace = true
 chrono.workspace = true
 dotenvy = "0.15"

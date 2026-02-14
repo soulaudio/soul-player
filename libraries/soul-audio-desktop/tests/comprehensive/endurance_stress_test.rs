@@ -119,7 +119,7 @@ fn test_continuous_playback_1_hour() {
     // Load playlist with 2 tracks
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks.clone()))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: tracks.clone(), start_index: 0 }))
         .expect("Failed to load playlist");
 
     std::thread::sleep(Duration::from_millis(100));
@@ -240,7 +240,7 @@ fn test_continuous_playback_5_min() {
 
     let tracks = vec![create_test_track("1"), create_test_track("2")];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks.clone()))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: tracks.clone(), start_index: 0 }))
         .expect("Failed to load playlist");
 
     std::thread::sleep(Duration::from_millis(100));
@@ -316,7 +316,7 @@ fn test_rapid_track_cycling() {
         create_test_track("2"),
     ];
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks.clone()))
+        .send_command(PlaybackCommand::LoadPlaylist { tracks: tracks.clone(), start_index: 0 }))
         .expect("Failed to load playlist");
 
     std::thread::sleep(Duration::from_millis(100));

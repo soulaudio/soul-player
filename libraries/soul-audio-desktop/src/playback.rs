@@ -2361,9 +2361,32 @@ impl DesktopPlayback {
             }
         }
 
-        // Longer delay for ASIO - drivers often need time to release resources
-        tracing::debug!("[DesktopPlayback] Waiting for driver to release resources...");
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        // Calculate platform-specific cleanup delay based on audio backend characteristics
+        let cleanup_delay = match backend {
+            #[cfg(all(target_os = "windows", feature = "asio"))]
+            crate::AudioBackend::Asio => {
+                // ASIO drivers need substantial time to release exclusive hardware resources
+                // and reset driver state. Insufficient delay causes "device in use" errors.
+                std::time::Duration::from_millis(200)
+            }
+            #[cfg(feature = "jack")]
+            crate::AudioBackend::Jack => {
+                // JACK requires time for port disconnection and graph reconfiguration
+                std::time::Duration::from_millis(100)
+            }
+            crate::AudioBackend::Default => {
+                // Default backends (WASAPI/CoreAudio/ALSA) use modern APIs with faster
+                // resource cleanup in shared mode, but still need time for driver callbacks
+                std::time::Duration::from_millis(50)
+            }
+        };
+
+        tracing::debug!(
+            backend = ?backend,
+            delay_ms = cleanup_delay.as_millis(),
+            "[DesktopPlayback] Waiting for driver to release resources..."
+        );
+        std::thread::sleep(cleanup_delay);
         tracing::debug!("[DesktopPlayback] Resource release wait complete");
 
         // Create new command channel for the new stream
@@ -2702,6 +2725,23 @@ impl DesktopPlayback {
     /// * `None` - No device active (silent mode)
     pub fn get_current_device_id(&self) -> Option<String> {
         self.device_manager.get_current_device_id()
+    }
+
+    /// Set the native platform device ID for the current device
+    ///
+    /// This is used to track the native device ID (from WinRT, CoreAudio, etc.)
+    /// for more reliable device removal detection.
+    ///
+    /// # Arguments
+    /// * `native_id` - The platform-specific device identifier (e.g., from WinRT)
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // After switching devices in response to a DefaultDeviceChanged event:
+    /// playback.set_native_device_id(Some(winrt_device_id));
+    /// ```
+    pub fn set_native_device_id(&self, native_id: Option<String>) {
+        self.device_manager.set_native_device_id(native_id);
     }
 
     /// Get current stream sample rate

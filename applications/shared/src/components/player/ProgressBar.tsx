@@ -1,11 +1,13 @@
 /**
- * Full-featured progress bar with drag-to-seek functionality.
+ * Progress bar with click-to-seek functionality and smooth 60fps interpolation.
  *
  * Features:
- * - Advanced drag-and-drop seeking with AbortController cleanup
- * - Seek position preview while dragging
- * - Race condition prevention
+ * - Smooth progress interpolation (no more 500ms jumps from backend)
+ * - Immediate click-to-seek (no drag/scrubbing)
+ * - Race condition prevention with 100ms ignore window
+ * - Seek verification after ignore window
  * - Visual seek handle on hover
+ * - Automatic pause detection and track change handling
  * - Self-contained: connects directly to player store via hooks
  *
  * Use cases: Desktop app PlayerPanel, standalone player layouts
@@ -13,43 +15,22 @@
  */
 
 import React from 'react';
-import { usePlayerProgress } from '../../stores/player';
 import { formatDuration } from '../../lib/utils';
 import { useSeekBar } from '../../hooks/useSeekBar';
+import { useInterpolatedProgress } from '../../hooks/useInterpolatedProgress';
 
 export function ProgressBar() {
-  const { progress, duration } = usePlayerProgress();
-  const { isDragging, seekPosition, handleSeekStart, handleSeekChange, handleSeekEnd } = useSeekBar();
-  const cleanupRef = React.useRef<(() => void) | null>(null);
+  // Use interpolated progress for smooth animation
+  const interpolatedProgress = useInterpolatedProgress();
 
-  // Use seek position while dragging, otherwise use store progress
-  // Safety check: prevent division by zero and ensure valid percentage
-  const displayProgress = isDragging && seekPosition !== null
-    ? (duration > 0 ? Math.min(100, (seekPosition / duration) * 100) : 0)
-    : progress;
+  // Use interpolated values by default
+  const { progress, duration } = interpolatedProgress;
+  const { handleSeek } = useSeekBar();
 
   // Calculate current time in seconds
-  const currentTimeSeconds = isDragging && seekPosition !== null
-    ? seekPosition
-    : (duration > 0 ? (progress / 100) * duration : 0);
+  const currentTimeSeconds = duration > 0 ? (progress / 100) * duration : 0;
 
-
-  // Cleanup any pending listeners on unmount
-  React.useEffect(() => {
-    return () => {
-      if (cleanupRef.current) {
-        cleanupRef.current();
-      }
-    };
-  }, []);
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Clean up any previous listeners first
-    if (cleanupRef.current) {
-      cleanupRef.current();
-      cleanupRef.current = null;
-    }
-
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
 
     const rect = e.currentTarget.getBoundingClientRect();
@@ -59,34 +40,7 @@ export function ProgressBar() {
     // Clamp to prevent seeking beyond track duration (leave 0.1s buffer to avoid EOF)
     const newPosition = Math.min((percentage / 100) * duration, Math.max(0, duration - 0.1));
 
-    handleSeekStart(newPosition);
-
-    let currentSeekPosition = newPosition;
-
-    // Use AbortController for reliable cleanup even if component unmounts during drag
-    const abortController = new AbortController();
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const moveX = moveEvent.clientX - rect.left;
-      const movePercentage = Math.max(0, Math.min(100, (moveX / width) * 100));
-      // Clamp to prevent seeking beyond track duration (leave 0.1s buffer to avoid EOF)
-      const movePosition = Math.min((movePercentage / 100) * duration, Math.max(0, duration - 0.1));
-      currentSeekPosition = movePosition;
-      handleSeekChange(movePosition);
-    };
-
-    const handleMouseUp = () => {
-      handleSeekEnd(currentSeekPosition);
-      abortController.abort();
-      cleanupRef.current = null;
-    };
-
-    cleanupRef.current = () => {
-      abortController.abort();
-    };
-
-    document.addEventListener('mousemove', handleMouseMove, { signal: abortController.signal });
-    document.addEventListener('mouseup', handleMouseUp, { signal: abortController.signal });
+    handleSeek(newPosition);
   };
 
   return (
@@ -99,23 +53,21 @@ export function ProgressBar() {
       {/* Progress bar */}
       <div
         className="relative flex-1 h-2 bg-muted rounded-full cursor-pointer group overflow-hidden"
-        onMouseDown={handleMouseDown}
+        onClick={handleClick}
       >
         {/* Filled progress */}
         <div
           className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-100"
           style={{
-            width: `${Math.max(0, Math.min(100, displayProgress))}%`,
+            width: `${Math.max(0, Math.min(100, progress))}%`,
             maxWidth: '100%'
           }}
         />
 
         {/* Seek handle */}
         <div
-          className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-opacity ${
-            isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
-          style={{ left: `${Math.max(0, Math.min(100, displayProgress))}%`, transform: 'translate(-50%, -50%)' }}
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-opacity opacity-0 group-hover:opacity-100"
+          style={{ left: `${Math.max(0, Math.min(100, progress))}%`, transform: 'translate(-50%, -50%)' }}
         />
       </div>
 

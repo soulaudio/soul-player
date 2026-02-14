@@ -12,6 +12,7 @@ use tauri::State;
 
 use crate::app_state::AppState;
 use crate::playback::PlaybackManager;
+use crate::playback_lazy::LazyPlaybackManager;
 
 /// Frontend-compatible backend info
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,11 +199,10 @@ fn parse_backend(backend_str: &str) -> Result<AudioBackend, String> {
 pub async fn get_audio_backends() -> Result<Vec<FrontendBackendInfo>, String> {
     tracing::debug!("[audio_settings] Getting available backends");
 
-    // Wrap blocking device enumeration in spawn_blocking to avoid blocking Tokio runtime
-    // This is critical on macOS where CoreAudio enumeration can take 100-500ms
-    let backends = tokio::task::spawn_blocking(|| backend::get_backend_info())
+    // Use async timeout wrapper to prevent hangs during backend enumeration
+    let backends = backend::get_backend_info_async()
         .await
-        .map_err(|e| format!("Task join error: {}", e))?;
+        .map_err(|e| e.to_string())?;
 
     let frontend_backends: Vec<FrontendBackendInfo> = backends
         .into_iter()
@@ -236,11 +236,9 @@ pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDevice
 
     let backend = parse_backend(&backend_str)?;
 
-    // Wrap blocking device enumeration in spawn_blocking to avoid blocking Tokio runtime
-    // This is critical on macOS where CoreAudio enumeration can take 100-500ms
-    let devices = tokio::task::spawn_blocking(move || device::list_devices(backend))
+    // Use async timeout wrapper to prevent indefinite hangs if audio service is unresponsive
+    let devices = device::list_devices_async(backend)
         .await
-        .map_err(|e| format!("Task join error: {}", e))?
         .map_err(|e| e.to_string())?;
 
     let frontend_devices: Vec<FrontendDeviceInfo> =
@@ -272,7 +270,7 @@ pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDevice
 pub async fn set_audio_device(
     backend_str: String,
     device_name: String,
-    playback_manager: State<'_, PlaybackManager>,
+    playback_manager: State<'_, LazyPlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
     let start = std::time::Instant::now();
@@ -282,16 +280,15 @@ pub async fn set_audio_device(
         "[audio_settings] Setting audio device"
     );
 
+    // Get the initialized playback manager
+    let playback_manager = playback_manager.get().await?;
+
     let backend = parse_backend(&backend_str)?;
 
-    // Verify device exists (wrap in spawn_blocking to avoid blocking Tokio runtime)
-    let device_name_clone = device_name.clone();
-    let _device = tokio::task::spawn_blocking(move || {
-        device::find_device_by_name(backend, &device_name_clone)
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
-    .map_err(|e| e.to_string())?;
+    // Verify device exists (use async timeout wrapper to prevent hangs)
+    let _device = device::find_device_by_name_async(backend, device_name.clone())
+        .await
+        .map_err(|e| e.to_string())?;
     tracing::debug!(device_name = %device_name, "[audio_settings] Device found");
 
     // Switch the playback device
@@ -480,14 +477,9 @@ pub async fn initialize_audio_device(
             "[audio_settings] Restoring saved device"
         );
 
-        // Verify device exists before switching (with spawn_blocking for I/O-heavy enumeration)
+        // Verify device exists before switching (use async timeout wrapper)
         if let Some(ref name) = device_name_opt {
-            let name_clone = name.clone();
-            let device_check = tokio::task::spawn_blocking(move || {
-                device::find_device_by_name(backend, &name_clone)
-            })
-            .await
-            .map_err(|e| format!("Task join error: {}", e))?;
+            let device_check = device::find_device_by_name_async(backend, name.clone()).await;
 
             if let Err(e) = device_check {
                 tracing::warn!(
@@ -577,9 +569,12 @@ pub async fn initialize_audio_device(
 /// Get current audio device
 #[tauri::command]
 pub async fn get_current_audio_device(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<FrontendDeviceInfo, String> {
     tracing::debug!("[audio_settings] Getting current audio device from playback manager");
+
+    // Get the initialized playback manager
+    let playback = playback.get().await?;
 
     let backend = playback.get_current_backend();
     let device_name = playback.get_current_device();
@@ -598,19 +593,15 @@ pub async fn get_current_audio_device(
     };
 
     // Try to get device info by listing all devices and finding the matching one
-    // Wrap in spawn_blocking to avoid blocking Tokio runtime (CoreAudio enumeration can take 100-500ms on macOS)
-    let (channels, is_default) =
-        match tokio::task::spawn_blocking(move || device::list_devices(backend))
-            .await
-            .map_err(|e| format!("Task join error: {}", e))
-        {
-            Ok(Ok(devices)) => devices
-                .into_iter()
-                .find(|d| d.name == device_name)
-                .map(|d| (Some(d.channels), d.is_default))
-                .unwrap_or((None, false)),
-            _ => (None, false),
-        };
+    // Use async timeout wrapper to prevent hangs
+    let (channels, is_default) = match device::list_devices_async(backend).await {
+        Ok(devices) => devices
+            .into_iter()
+            .find(|d| d.name == device_name)
+            .map(|d| (Some(d.channels), d.is_default))
+            .unwrap_or((None, false)),
+        Err(_) => (None, false),
+    };
 
     tracing::debug!(
         device_name = %device_name,
@@ -637,10 +628,18 @@ pub async fn get_current_audio_device(
 /// (e.g., via ASIO control panel) and wants to immediately update.
 #[tauri::command]
 pub async fn refresh_sample_rate(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<bool, soul_audio_desktop::AudioError> {
     let start = std::time::Instant::now();
     tracing::debug!("[audio_settings] Refreshing sample rate");
+
+    // Get the initialized playback manager
+    let playback = playback.get().await.map_err(|e| {
+        soul_audio_desktop::AudioError::DeviceError(format!(
+            "Playback manager not initialized: {}",
+            e
+        ))
+    })?;
 
     let result = playback.refresh_sample_rate()?;
     let duration = start.elapsed();
@@ -691,15 +690,10 @@ pub async fn get_device_capabilities(
 
     let backend = parse_backend(&backend_str)?;
 
-    // Wrap in spawn_blocking to avoid blocking Tokio runtime
-    // Device capability detection can query 50+ configs on macOS (100-500ms)
-    let device_name_clone = device_name.clone();
-    let caps = tokio::task::spawn_blocking(move || {
-        device::get_device_capabilities(backend, &device_name_clone)
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
-    .map_err(|e| e.to_string())?;
+    // Use async timeout wrapper to prevent hangs during capability detection
+    let caps = device::get_device_capabilities_async(backend, device_name.clone())
+        .await
+        .map_err(|e| e.to_string())?;
 
     let frontend_caps = FrontendDeviceCapabilities::from(caps);
 
@@ -729,13 +723,10 @@ pub async fn get_audio_devices_with_capabilities(
 
     let backend = parse_backend(&backend_str)?;
 
-    // Wrap in spawn_blocking to avoid blocking Tokio runtime
-    // Capability detection iterates 50+ configs per device on macOS (can take 1-5 seconds for multiple devices)
-    let devices =
-        tokio::task::spawn_blocking(move || device::list_devices_with_capabilities(backend, true))
-            .await
-            .map_err(|e| format!("Task join error: {}", e))?
-            .map_err(|e| e.to_string())?;
+    // Use async timeout wrapper to prevent hangs during full capability enumeration
+    let devices = device::list_devices_with_capabilities_async(backend, true)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let frontend_devices: Vec<FrontendDeviceInfo> =
         devices.into_iter().map(FrontendDeviceInfo::from).collect();
@@ -900,9 +891,12 @@ impl TryFrom<FrontendExclusiveConfig> for ExclusiveConfig {
 /// Get current latency information from the playback system
 #[tauri::command]
 pub async fn get_latency_info(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<FrontendLatencyInfo, String> {
     tracing::debug!("[audio_settings] Getting latency info");
+
+    // Get the initialized playback manager
+    let playback = playback.get().await?;
 
     let latency = playback.get_latency_info();
 
@@ -924,7 +918,7 @@ pub async fn get_latency_info(
 #[tauri::command]
 pub async fn set_exclusive_mode(
     config: FrontendExclusiveConfig,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<FrontendLatencyInfo, String> {
     let start = std::time::Instant::now();
@@ -933,6 +927,9 @@ pub async fn set_exclusive_mode(
         bit_depth = %config.bit_depth,
         "[audio_settings] Setting exclusive mode"
     );
+
+    // Get the initialized playback manager
+    let playback = playback.get().await?;
 
     let exclusive_config: ExclusiveConfig = config.clone().try_into()?;
 
@@ -988,11 +985,14 @@ pub async fn set_exclusive_mode(
 /// Disable exclusive mode (return to shared mode)
 #[tauri::command]
 pub async fn disable_exclusive_mode(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
     let start = std::time::Instant::now();
     tracing::info!("[audio_settings] Disabling exclusive mode");
+
+    // Get the initialized playback manager
+    let playback = playback.get().await?;
 
     playback
         .disable_exclusive_mode()
@@ -1031,7 +1031,8 @@ pub async fn disable_exclusive_mode(
 
 /// Check if currently in exclusive mode
 #[tauri::command]
-pub async fn is_exclusive_mode(playback: State<'_, PlaybackManager>) -> Result<bool, String> {
+pub async fn is_exclusive_mode(playback: State<'_, LazyPlaybackManager>) -> Result<bool, String> {
+    let playback = playback.get().await?;
     Ok(playback.is_exclusive_mode())
 }
 
@@ -1051,14 +1052,10 @@ pub async fn get_available_buffer_sizes(
 
     let backend = parse_backend(&backend_str)?;
 
-    // Wrap in spawn_blocking to avoid blocking Tokio runtime
-    let device_name_clone = device_name.clone();
-    let caps = tokio::task::spawn_blocking(move || {
-        device::get_device_capabilities(backend, &device_name_clone)
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
-    .map_err(|e| e.to_string())?;
+    // Use async timeout wrapper to prevent hangs during capability query
+    let caps = device::get_device_capabilities_async(backend, device_name.clone())
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Standard buffer sizes in frames
     let standard_sizes = [32, 64, 128, 256, 512, 1024, 2048, 4096];
@@ -1183,19 +1180,23 @@ pub async fn get_exclusive_preset(
 #[tauri::command]
 pub async fn set_crossfade_enabled(
     enabled: bool,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     tracing::info!(
         enabled = enabled,
         "[audio_settings] Setting crossfade enabled"
     );
+    let playback = playback.get().await?;
     playback.set_crossfade_enabled(enabled);
     Ok(())
 }
 
 /// Get current crossfade enabled state
 #[tauri::command]
-pub async fn is_crossfade_enabled(playback: State<'_, PlaybackManager>) -> Result<bool, String> {
+pub async fn is_crossfade_enabled(
+    playback: State<'_, LazyPlaybackManager>,
+) -> Result<bool, String> {
+    let playback = playback.get().await?;
     Ok(playback.is_crossfade_enabled())
 }
 
@@ -1207,19 +1208,23 @@ pub async fn is_crossfade_enabled(playback: State<'_, PlaybackManager>) -> Resul
 #[tauri::command]
 pub async fn set_crossfade_duration(
     duration_ms: u32,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     tracing::info!(
         duration_ms = duration_ms,
         "[audio_settings] Setting crossfade duration"
     );
+    let playback = playback.get().await?;
     playback.set_crossfade_duration(duration_ms);
     Ok(())
 }
 
 /// Get crossfade duration in milliseconds
 #[tauri::command]
-pub async fn get_crossfade_duration(playback: State<'_, PlaybackManager>) -> Result<u32, String> {
+pub async fn get_crossfade_duration(
+    playback: State<'_, LazyPlaybackManager>,
+) -> Result<u32, String> {
+    let playback = playback.get().await?;
     Ok(playback.get_crossfade_duration())
 }
 
@@ -1234,7 +1239,7 @@ pub async fn get_crossfade_duration(playback: State<'_, PlaybackManager>) -> Res
 #[tauri::command]
 pub async fn set_crossfade_curve(
     curve: String,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     tracing::info!(
         curve = %curve,
@@ -1249,13 +1254,17 @@ pub async fn set_crossfade_curve(
         other => return Err(format!("Unknown crossfade curve: {}", other)),
     };
 
+    let playback = playback.get().await?;
     playback.set_crossfade_curve(fade_curve);
     Ok(())
 }
 
 /// Get crossfade curve type as string
 #[tauri::command]
-pub async fn get_crossfade_curve(playback: State<'_, PlaybackManager>) -> Result<String, String> {
+pub async fn get_crossfade_curve(
+    playback: State<'_, LazyPlaybackManager>,
+) -> Result<String, String> {
+    let playback = playback.get().await?;
     let curve = playback.get_crossfade_curve();
     let curve_str = match curve {
         soul_playback::FadeCurve::Linear => "linear",
@@ -1278,7 +1287,7 @@ pub async fn set_crossfade_settings(
     enabled: bool,
     duration_ms: u32,
     curve: String,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     tracing::info!(
         enabled = enabled,
@@ -1297,6 +1306,9 @@ pub async fn set_crossfade_settings(
         other => return Err(format!("Unknown crossfade curve: {}", other)),
     };
 
+    // Get the initialized playback manager
+    let playback = playback.get().await?;
+
     playback.set_crossfade_curve(fade_curve);
     playback.set_crossfade_duration(duration_ms);
     playback.set_crossfade_enabled(enabled);
@@ -1308,8 +1320,9 @@ pub async fn set_crossfade_settings(
 /// Get all crossfade settings at once
 #[tauri::command]
 pub async fn get_crossfade_settings(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<CrossfadeSettingsInfo, String> {
+    let playback = playback.get().await?;
     let enabled = playback.is_crossfade_enabled();
     let duration_ms = playback.get_crossfade_duration();
     let curve = playback.get_crossfade_curve();
@@ -1372,7 +1385,7 @@ pub struct ResamplingSettingsInfo {
 #[tauri::command]
 pub async fn set_resampling_quality(
     quality: String,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), soul_audio_desktop::AudioError> {
     tracing::info!(
@@ -1389,6 +1402,14 @@ pub async fn set_resampling_quality(
             valid_qualities.join(", ")
         )));
     }
+
+    // Get the initialized playback manager
+    let playback = playback.get().await.map_err(|e| {
+        soul_audio_desktop::AudioError::DeviceError(format!(
+            "Playback manager not initialized: {}",
+            e
+        ))
+    })?;
 
     // Apply to playback manager
     playback.set_resampling_quality(&quality)?;
@@ -1471,8 +1492,9 @@ pub async fn set_resampling_quality(
 /// Get current resampling quality preset
 #[tauri::command]
 pub async fn get_resampling_quality(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<String, String> {
+    let playback = playback.get().await?;
     Ok(playback.get_resampling_quality())
 }
 
@@ -1486,7 +1508,7 @@ pub async fn get_resampling_quality(
 #[tauri::command]
 pub async fn set_resampling_target_rate(
     rate: u32,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), soul_audio_desktop::AudioError> {
     tracing::info!(
@@ -1502,6 +1524,14 @@ pub async fn set_resampling_target_rate(
             rate
         )));
     }
+
+    // Get the initialized playback manager
+    let playback = playback.get().await.map_err(|e| {
+        soul_audio_desktop::AudioError::DeviceError(format!(
+            "Playback manager not initialized: {}",
+            e
+        ))
+    })?;
 
     // Apply to playback manager
     playback.set_resampling_target_rate(rate)?;
@@ -1586,8 +1616,9 @@ pub async fn set_resampling_target_rate(
 /// Returns 0 for "auto" mode, otherwise the specific target rate in Hz
 #[tauri::command]
 pub async fn get_resampling_target_rate(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<u32, String> {
+    let playback = playback.get().await?;
     Ok(playback.get_resampling_target_rate())
 }
 
@@ -1602,7 +1633,7 @@ pub async fn get_resampling_target_rate(
 #[tauri::command]
 pub async fn set_resampling_backend(
     backend: String,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), soul_audio_desktop::AudioError> {
     tracing::info!(
@@ -1630,6 +1661,14 @@ pub async fn set_resampling_backend(
             ));
         }
     }
+
+    // Get the initialized playback manager
+    let playback = playback.get().await.map_err(|e| {
+        soul_audio_desktop::AudioError::DeviceError(format!(
+            "Playback manager not initialized: {}",
+            e
+        ))
+    })?;
 
     // Apply to playback manager
     playback.set_resampling_backend(&backend)?;
@@ -1714,8 +1753,9 @@ pub async fn set_resampling_backend(
 /// Get current resampling backend
 #[tauri::command]
 pub async fn get_resampling_backend(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<String, String> {
+    let playback = playback.get().await?;
     Ok(playback.get_resampling_backend())
 }
 
@@ -1728,7 +1768,7 @@ pub async fn set_resampling_settings(
     quality: String,
     target_rate: u32,
     backend: String,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     app_state: State<'_, AppState>,
 ) -> Result<(), soul_audio_desktop::AudioError> {
     tracing::info!(
@@ -1763,6 +1803,14 @@ pub async fn set_resampling_settings(
             valid_backends.join(", ")
         )));
     }
+
+    // Get the initialized playback manager
+    let playback = playback.get().await.map_err(|e| {
+        soul_audio_desktop::AudioError::DeviceError(format!(
+            "Playback manager not initialized: {}",
+            e
+        ))
+    })?;
 
     // Apply to playback manager
     playback.set_resampling_quality(&quality)?;
@@ -1819,8 +1867,9 @@ pub async fn set_resampling_settings(
 /// Get all resampling settings at once
 #[tauri::command]
 pub async fn get_resampling_settings(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<ResamplingSettingsInfo, String> {
+    let playback = playback.get().await?;
     Ok(ResamplingSettingsInfo {
         quality: playback.get_resampling_quality(),
         target_rate: playback.get_resampling_target_rate(),
@@ -1853,10 +1902,11 @@ pub struct HeadroomSettingsInfo {
 /// Get headroom settings
 #[tauri::command]
 pub async fn get_headroom_settings(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<HeadroomSettingsInfo, String> {
     use soul_playback::HeadroomMode;
 
+    let playback = playback.get().await?;
     let mode = playback.get_headroom_mode();
     let frontend_mode = match mode {
         HeadroomMode::Auto => FrontendHeadroomMode {
@@ -1884,7 +1934,7 @@ pub async fn get_headroom_settings(
 /// Set headroom mode
 #[tauri::command]
 pub async fn set_headroom_mode(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     mode: String,
     manual_db: Option<f64>,
 ) -> Result<(), String> {
@@ -1900,6 +1950,7 @@ pub async fn set_headroom_mode(
         _ => return Err(format!("Invalid headroom mode: {}", mode)),
     };
 
+    let playback = playback.get().await?;
     playback.set_headroom_mode(headroom_mode);
     tracing::info!(
         mode = %mode,
@@ -1911,9 +1962,10 @@ pub async fn set_headroom_mode(
 /// Enable or disable headroom management
 #[tauri::command]
 pub async fn set_headroom_enabled(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     enabled: bool,
 ) -> Result<(), String> {
+    let playback = playback.get().await?;
     playback.set_headroom_enabled(enabled);
     tracing::info!(
         enabled = enabled,
@@ -1925,9 +1977,10 @@ pub async fn set_headroom_enabled(
 /// Set headroom EQ boost (called when EQ settings change)
 #[tauri::command]
 pub async fn set_headroom_eq_boost(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     boost_db: f64,
 ) -> Result<(), String> {
+    let playback = playback.get().await?;
     playback.set_headroom_eq_boost_db(boost_db);
     Ok(())
 }
@@ -1935,9 +1988,10 @@ pub async fn set_headroom_eq_boost(
 /// Set headroom preamp gain
 #[tauri::command]
 pub async fn set_headroom_preamp(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     preamp_db: f64,
 ) -> Result<(), String> {
+    let playback = playback.get().await?;
     playback.set_headroom_preamp_db(preamp_db);
     Ok(())
 }
@@ -1952,7 +2006,8 @@ pub async fn set_headroom_preamp(
 /// Thread-safe and non-blocking.
 #[tauri::command]
 pub async fn get_device_metrics(
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
 ) -> Result<crate::playback::DeviceMetricsSnapshot, String> {
+    let playback = playback.get().await?;
     Ok(playback.get_device_metrics())
 }

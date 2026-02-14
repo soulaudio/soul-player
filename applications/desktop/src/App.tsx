@@ -5,7 +5,6 @@ import { MainLayout } from './layouts/MainLayout';
 // Use shared pages for cross-platform parity
 import {
   HomePage,
-  LibraryPage,
   AlbumsPage,
   ArtistsPage,
   PlaylistsPage,
@@ -178,7 +177,6 @@ function App() {
       <MainLayout>
         <Routes>
           <Route path="/" element={<HomeRoute />} />
-          <Route path="/library" element={<LibraryPage />} />
           <Route path="/albums" element={<AlbumsPage />} />
           <Route path="/albums/:id" element={<AlbumPage />} />
           <Route path="/artists" element={<ArtistsPage />} />

@@ -40,7 +40,10 @@ fn diagnostic_event_sequence() {
 
     println!("┌─ COMMAND: LoadPlaylist");
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks,
+            start_index: 0,
+        })
         .expect("Failed to load");
     std::thread::sleep(Duration::from_millis(10));
 
@@ -75,7 +78,6 @@ fn diagnostic_event_sequence() {
             PlaybackEvent::StateChanged(PlaybackState::Playing) => "🔴 ",
             PlaybackEvent::StateChanged(PlaybackState::Paused) => "⏸️  ",
             PlaybackEvent::StateChanged(PlaybackState::Stopped) => "⏹️  ",
-            PlaybackEvent::StateChanged(PlaybackState::Loading) => "⏳ ",
             PlaybackEvent::TrackChanged(_) => "🎵 ",
             _ => "   ",
         };

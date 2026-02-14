@@ -419,11 +419,25 @@ impl AsyncDeviceMonitor for LinuxDeviceMonitor {
             tracing::debug!("[DEVICE-MONITOR] Event forwarding task started");
             while let Some(event) = event_rx.recv().await {
                 tracing::debug!("[DEVICE-MONITOR] Forwarding event: {:?}", event);
-                // Use spawn_blocking to handle async/sync boundary properly
+                // Use spawn_blocking to handle async/sync boundary properly with error handling
                 let callback_clone = callback.clone();
-                tokio::task::spawn_blocking(move || {
+                match tokio::task::spawn_blocking(move || {
                     callback_clone(event);
-                });
+                })
+                .await
+                {
+                    Ok(()) => {
+                        tracing::trace!(
+                            "[DEVICE-MONITOR] Device event callback executed successfully"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            "[DEVICE-MONITOR] Device event callback failed to execute"
+                        );
+                    }
+                }
             }
             tracing::debug!("[DEVICE-MONITOR] Event forwarding task stopped");
         });

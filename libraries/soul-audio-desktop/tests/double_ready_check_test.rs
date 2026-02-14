@@ -42,7 +42,10 @@ fn test_no_double_ready_check() {
 
     println!("[1] Loading playlist...");
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .expect("Failed to load playlist");
 
     println!("[2] Starting playback...");
@@ -160,7 +163,10 @@ fn test_ready_check_timing() {
     let tracks = vec![create_test_track("1", track_path.to_str().unwrap())];
 
     playback
-        .send_command(PlaybackCommand::LoadPlaylist(tracks))
+        .send_command(PlaybackCommand::LoadPlaylist {
+            tracks: tracks,
+            start_index: 0,
+        })
         .expect("Failed to load playlist");
 
     let play_start = Instant::now();
