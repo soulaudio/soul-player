@@ -59,6 +59,20 @@ struct PlaybackSessionState {
     was_playing: bool,
 }
 
+#[derive(Debug, serde::Serialize)]
+struct RestoredPlaybackSession {
+    current_track_id: Option<i64>,
+    queue_track_ids: Vec<i64>,
+    queue_index: i32,
+    position_seconds: f64,
+    volume: f64,
+    repeat_mode: String,
+    shuffle_mode: String,
+    context_type: Option<String>,
+    context_id: Option<String>,
+    was_playing: bool,
+}
+
 // Re-export types from soul-core for frontend
 // Note: We add file_path for convenience in the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -859,6 +873,133 @@ async fn save_playback_session(
     .map_err(|e| format!("Failed to save was_playing: {}", e))?;
 
     tracing::info!("[PERSISTENCE] Playback session saved successfully");
+    Ok(())
+}
+
+#[tauri::command]
+async fn restore_playback_session(
+    state: State<'_, AppState>,
+) -> Result<Option<RestoredPlaybackSession>, String> {
+    use soul_storage::settings;
+
+    let pool = &state.pool;
+    let user_id = &state.user_id;
+
+    tracing::debug!(
+        "[PERSISTENCE] Restoring playback session for user {}",
+        user_id
+    );
+
+    // Try to load current_track_id - if missing, no session exists
+    let current_track_id = settings::get_setting(pool, user_id, "playback.current_track_id")
+        .await
+        .map_err(|e| format!("Failed to load current_track_id: {}", e))?
+        .and_then(|v| v.as_i64());
+
+    // If no current track, assume no session
+    if current_track_id.is_none() {
+        tracing::debug!("[PERSISTENCE] No saved session found");
+        return Ok(None);
+    }
+
+    // Load all other settings
+    let queue_track_ids = settings::get_setting(pool, user_id, "playback.queue_track_ids")
+        .await
+        .map_err(|e| format!("Failed to load queue_track_ids: {}", e))?
+        .and_then(|v| serde_json::from_value::<Vec<i64>>(v).ok())
+        .unwrap_or_default();
+
+    let queue_index = settings::get_setting(pool, user_id, "playback.queue_index")
+        .await
+        .map_err(|e| format!("Failed to load queue_index: {}", e))?
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as i32;
+
+    let position_seconds = settings::get_setting(pool, user_id, "playback.position_seconds")
+        .await
+        .map_err(|e| format!("Failed to load position_seconds: {}", e))?
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+
+    let volume = settings::get_setting(pool, user_id, "playback.volume")
+        .await
+        .map_err(|e| format!("Failed to load volume: {}", e))?
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.8);
+
+    let repeat_mode = settings::get_setting(pool, user_id, "playback.repeat_mode")
+        .await
+        .map_err(|e| format!("Failed to load repeat_mode: {}", e))?
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "off".to_string());
+
+    let shuffle_mode = settings::get_setting(pool, user_id, "playback.shuffle_mode")
+        .await
+        .map_err(|e| format!("Failed to load shuffle_mode: {}", e))?
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "off".to_string());
+
+    let context_type = settings::get_setting(pool, user_id, "playback.context_type")
+        .await
+        .map_err(|e| format!("Failed to load context_type: {}", e))?
+        .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+    let context_id = settings::get_setting(pool, user_id, "playback.context_id")
+        .await
+        .map_err(|e| format!("Failed to load context_id: {}", e))?
+        .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+    let was_playing = settings::get_setting(pool, user_id, "playback.was_playing")
+        .await
+        .map_err(|e| format!("Failed to load was_playing: {}", e))?
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    tracing::info!("[PERSISTENCE] Playback session restored successfully");
+
+    Ok(Some(RestoredPlaybackSession {
+        current_track_id,
+        queue_track_ids,
+        queue_index,
+        position_seconds,
+        volume,
+        repeat_mode,
+        shuffle_mode,
+        context_type,
+        context_id,
+        was_playing,
+    }))
+}
+
+#[tauri::command]
+async fn clear_playback_session(state: State<'_, AppState>) -> Result<(), String> {
+    use soul_storage::settings;
+
+    let pool = &state.pool;
+    let user_id = &state.user_id;
+
+    tracing::info!(
+        "[PERSISTENCE] Clearing playback session for user {}",
+        user_id
+    );
+
+    let keys = vec![
+        "playback.current_track_id",
+        "playback.queue_track_ids",
+        "playback.queue_index",
+        "playback.position_seconds",
+        "playback.volume",
+        "playback.repeat_mode",
+        "playback.shuffle_mode",
+        "playback.context_type",
+        "playback.context_id",
+        "playback.was_playing",
+    ];
+
+    for key in keys {
+        let _ = settings::delete_setting(pool, user_id, key).await;
+    }
+
     Ok(())
 }
 
@@ -2833,6 +2974,8 @@ fn main() {
             get_position,
             get_volume,
             save_playback_session,
+            restore_playback_session,
+            clear_playback_session,
             // Audio settings
             audio_settings::get_audio_backends,
             audio_settings::get_audio_devices,
