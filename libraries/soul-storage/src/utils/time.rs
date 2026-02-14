@@ -73,6 +73,7 @@ pub fn timestamp_to_datetime(timestamp: i64) -> Option<DateTime<Utc>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Datelike;
 
     #[test]
     fn test_now_timestamp() {

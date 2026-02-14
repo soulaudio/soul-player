@@ -15,6 +15,7 @@ import {
   type PlayerCommandsInterface,
   type PlaybackEventsInterface,
   type PlaybackCapabilities,
+  type QueueTrack,
 } from '@soul-player/shared';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
@@ -38,6 +39,70 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     const unlistenFunctions: (() => void)[] = [];
     let isMounted = true;
 
+    // Restore state from database (cold start scenario - no backend state)
+    const restoreFromDatabase = async () => {
+      console.log('[PERSISTENCE] Database restore not yet implemented');
+    };
+
+    // Convert QueueTrack to Track (store expects Track type)
+    const convertQueueTrackToTrack = (queueTrack: QueueTrack): import('@soul-player/shared/types').Track => ({
+      id: parseInt(queueTrack.trackId, 10),
+      title: queueTrack.title,
+      artist: queueTrack.artist,
+      album: queueTrack.album || '',
+      albumId: queueTrack.albumId,
+      filePath: queueTrack.filePath,
+      duration: queueTrack.durationSeconds ?? 0,
+      trackNumber: queueTrack.trackNumber ?? undefined,
+      coverArtPath: queueTrack.coverArtPath,
+      addedAt: new Date().toISOString(), // Not available in QueueTrack, use current time
+    });
+
+    // Sync state from backend (hot reload scenario - backend is still running)
+    const syncFromBackend = async () => {
+      console.log('[PERSISTENCE] Hot reload detected - syncing from backend');
+
+      try {
+        const [track, queue, queueIndex, position, volume, repeat, shuffle] = await Promise.all([
+          invoke<QueueTrack | null>('get_current_track'),
+          invoke<QueueTrack[]>('get_queue'),
+          invoke<number>('get_queue_index'),
+          invoke<number>('get_position'),
+          invoke<number>('get_volume'),
+          invoke<string>('get_repeat'),
+          invoke<string>('get_shuffle'),
+        ]);
+
+        if (!isMounted) return;
+
+        // Convert QueueTrack to Track format
+        const currentTrack = track ? convertQueueTrackToTrack(track) : null;
+        const queueTracks = queue.map(convertQueueTrackToTrack);
+
+        // Update store with backend state
+        usePlayerStore.setState({
+          currentTrack,
+          queue: queueTracks,
+          queueIndex,
+          volume: volume / 100, // Convert 0-100 to 0-1
+          progress: track && position ? (position / track.durationSeconds!) * 100 : 0,
+          duration: track?.durationSeconds ?? 0,
+          repeatMode: repeat as 'off' | 'all' | 'one',
+          shuffleMode: shuffle as 'off' | 'random' | 'smart',
+        });
+
+        console.log('[PERSISTENCE] State synced from backend:', {
+          hasTrack: !!track,
+          queueLength: queue.length,
+          volume: volume / 100,
+        });
+      } catch (error) {
+        console.error('[PERSISTENCE] Failed to sync from backend:', error);
+        // Fall back to database restore
+        await restoreFromDatabase();
+      }
+    };
+
     // Sync initial state from backend on mount (non-blocking)
     // Deferred to allow React tree to render first, then update state
     const syncInitialState = async () => {
@@ -45,23 +110,18 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       await new Promise(resolve => setTimeout(resolve, 0));
 
       try {
-        const [state, shuffleMode, repeatMode] = await Promise.all([
-          invoke<string>('get_playback_state'),
-          invoke<string>('get_shuffle'),
-          invoke<string>('get_repeat')
-        ]);
+        // Check if backend has active state (hot reload scenario)
+        const backendTrack = await invoke<QueueTrack | null>('get_current_track');
 
-        // Only update if component is still mounted
-        if (!isMounted) return;
-
-        const isPlaying = state === 'Playing';
-        usePlayerStore.setState({
-          isPlaying,
-          shuffleMode: shuffleMode as 'off' | 'random' | 'smart',
-          repeatMode: repeatMode as 'off' | 'all' | 'one'
-        });
+        if (backendTrack) {
+          // Hot reload - backend is alive
+          await syncFromBackend();
+        } else {
+          // Cold start - restore from database
+          await restoreFromDatabase();
+        }
       } catch (error) {
-        console.error('[TauriPlayerCommandsProvider] Failed to sync initial state:', error);
+        console.error('[PERSISTENCE] Failed to sync initial state:', error);
       }
     };
 
