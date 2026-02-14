@@ -38,11 +38,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
   const ignoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Save current session to database
-  const savePlaybackSession = useCallback(async () => {
+  const savePlaybackSession = useCallback(async (retryCount = 0) => {
     try {
       const state = usePlayerStore.getState();
 
-      // Don't save if no track loaded
       if (!state.currentTrack) {
         return;
       }
@@ -65,6 +64,12 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       console.log('[PERSISTENCE] Session saved');
     } catch (error) {
       console.error('[PERSISTENCE] Failed to save session:', error);
+
+      // Retry once after 1 second
+      if (retryCount === 0) {
+        console.log('[PERSISTENCE] Retrying save in 1 second...');
+        setTimeout(() => savePlaybackSession(1), 1000);
+      }
     }
   }, [session.contextType, session.contextId]);
 
@@ -111,11 +116,35 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           return;
         }
 
+        // Validate session data
+        if (session.queue_track_ids.length === 0) {
+          console.warn('[PERSISTENCE] Invalid session: empty queue');
+          await invoke('clear_playback_session');
+          return;
+        }
+
+        if (session.queue_index < 0 || session.queue_index >= session.queue_track_ids.length) {
+          console.warn('[PERSISTENCE] Invalid session: queue index out of bounds');
+          session.queue_index = 0;
+        }
+
+        if (session.volume < 0 || session.volume > 100) {
+          console.warn('[PERSISTENCE] Invalid session: volume out of range');
+          session.volume = 80;
+        }
+
         // Fetch full track objects by IDs
         const tracks = await backend.getTracksByIds(session.queue_track_ids);
 
         // Filter out missing tracks and convert to Track format
         const validTracks = tracks.filter((t): t is BackendTrack => t !== null).map(convertBackendTrackToTrack);
+
+        const missingCount = tracks.length - validTracks.length;
+        if (missingCount > 0) {
+          console.warn(`[PERSISTENCE] ${missingCount} track(s) were unavailable and skipped`);
+          // TODO: Show toast notification when toast system is available
+          // toast.info(`${missingCount} track(s) were unavailable and skipped`);
+        }
 
         if (validTracks.length === 0) {
           console.warn('[PERSISTENCE] All tracks missing - clearing session');
