@@ -44,6 +44,21 @@ use soul_playback::{lazy_queue::QueueContext, RepeatMode, ShuffleMode};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+// Playback session state for persistence
+#[derive(Debug, serde::Deserialize)]
+struct PlaybackSessionState {
+    current_track_id: Option<i64>,
+    queue_track_ids: Vec<i64>,
+    queue_index: i32,
+    position_seconds: f64,
+    volume: f64,
+    repeat_mode: String,
+    shuffle_mode: String,
+    context_type: Option<String>,
+    context_id: Option<String>,
+    was_playing: bool,
+}
+
 // Re-export types from soul-core for frontend
 // Note: We add file_path for convenience in the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -731,6 +746,120 @@ async fn get_position(playback: State<'_, LazyPlaybackManager>) -> Result<f64, S
 #[tauri::command]
 async fn get_volume(playback: State<'_, LazyPlaybackManager>) -> Result<f64, String> {
     Ok(playback.get().await?.get_volume())
+}
+
+/// Save playback session state to database for persistence across app restarts
+#[tauri::command]
+async fn save_playback_session(
+    state: State<'_, AppState>,
+    session: PlaybackSessionState,
+) -> Result<(), String> {
+    use soul_storage::settings;
+
+    let pool = &state.pool;
+    let user_id = &state.user_id;
+
+    tracing::debug!("[PERSISTENCE] Saving playback session for user {}", user_id);
+
+    // Save all session keys to database
+    if let Some(track_id) = session.current_track_id {
+        settings::set_setting(
+            pool,
+            user_id,
+            "playback.current_track_id",
+            &serde_json::json!(track_id),
+        )
+        .await
+        .map_err(|e| format!("Failed to save current_track_id: {}", e))?;
+    }
+
+    settings::set_setting(
+        pool,
+        user_id,
+        "playback.queue_track_ids",
+        &serde_json::json!(session.queue_track_ids),
+    )
+    .await
+    .map_err(|e| format!("Failed to save queue_track_ids: {}", e))?;
+
+    settings::set_setting(
+        pool,
+        user_id,
+        "playback.queue_index",
+        &serde_json::json!(session.queue_index),
+    )
+    .await
+    .map_err(|e| format!("Failed to save queue_index: {}", e))?;
+
+    settings::set_setting(
+        pool,
+        user_id,
+        "playback.position_seconds",
+        &serde_json::json!(session.position_seconds),
+    )
+    .await
+    .map_err(|e| format!("Failed to save position_seconds: {}", e))?;
+
+    settings::set_setting(
+        pool,
+        user_id,
+        "playback.volume",
+        &serde_json::json!(session.volume),
+    )
+    .await
+    .map_err(|e| format!("Failed to save volume: {}", e))?;
+
+    settings::set_setting(
+        pool,
+        user_id,
+        "playback.repeat_mode",
+        &serde_json::json!(session.repeat_mode),
+    )
+    .await
+    .map_err(|e| format!("Failed to save repeat_mode: {}", e))?;
+
+    settings::set_setting(
+        pool,
+        user_id,
+        "playback.shuffle_mode",
+        &serde_json::json!(session.shuffle_mode),
+    )
+    .await
+    .map_err(|e| format!("Failed to save shuffle_mode: {}", e))?;
+
+    if let Some(context_type) = session.context_type {
+        settings::set_setting(
+            pool,
+            user_id,
+            "playback.context_type",
+            &serde_json::json!(context_type),
+        )
+        .await
+        .map_err(|e| format!("Failed to save context_type: {}", e))?;
+    }
+
+    if let Some(context_id) = session.context_id {
+        settings::set_setting(
+            pool,
+            user_id,
+            "playback.context_id",
+            &serde_json::json!(context_id),
+        )
+        .await
+        .map_err(|e| format!("Failed to save context_id: {}", e))?;
+    }
+
+    settings::set_setting(
+        pool,
+        user_id,
+        "playback.was_playing",
+        &serde_json::json!(session.was_playing),
+    )
+    .await
+    .map_err(|e| format!("Failed to save was_playing: {}", e))?;
+
+    tracing::info!("[PERSISTENCE] Playback session saved successfully");
+    Ok(())
 }
 
 #[tauri::command]
@@ -2703,6 +2832,7 @@ fn main() {
             get_queue_index,
             get_position,
             get_volume,
+            save_playback_session,
             // Audio settings
             audio_settings::get_audio_backends,
             audio_settings::get_audio_devices,
