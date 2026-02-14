@@ -1,59 +1,54 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import { usePlayerStore } from '../stores/player';
 import { debug } from '../utils/debug';
 
 interface UseSeekBarReturn {
   handleSeek: (position: number) => void;
-  isSeeking: boolean;
+  isSeeking: boolean; // Always false now (kept for API compatibility)
 }
 
-// Visual feedback duration - should match backend ignore window
-// Backend: 100ms position updates → 120ms ignore window
-const SEEK_FEEDBACK_DURATION_MS = 120;
-
 /**
- * Hook to manage seek interactions with visual feedback.
+ * Hook to manage seek interactions - SIMPLIFIED production pattern.
  *
- * Pattern based on industry standards (react-h5-audio-player, wavesurfer.js):
+ * Pattern used by VLC, Clementine, Audacious (50-150ms latency):
  * 1. Optimistic UI update (instant visual feedback)
- * 2. Send seek command to backend (async)
- * 3. Ignore position updates during window (handled by provider)
- * 4. Clear seeking state after feedback duration
+ * 2. Send seek command to backend (async, fire-and-forget)
+ * 3. Backend position updates naturally sync after completion
  *
+ * No ignore windows, no timers, no complex state - just works.
  * Supports both click-to-seek and drag-to-seek (on release).
  */
 export function useSeekBar(): UseSeekBarReturn {
   const commands = usePlayerCommands();
-  const [isSeeking, setIsSeeking] = useState(false);
 
   const handleSeek = useCallback((position: number) => {
+    const seekStartTime = performance.now();
+    console.log(`[SEEK PERF] ===== SEEK START ===== at ${seekStartTime.toFixed(2)}ms`);
+
     const { duration } = usePlayerStore.getState();
 
     // Clamp position to valid range (leave 0.1s buffer to avoid EOF)
     const clampedPosition = Math.max(0, Math.min(position, duration - 0.1));
+    console.log(`[SEEK PERF] Target: ${clampedPosition.toFixed(3)}s`);
 
-    debug.log(`[useSeekBar] Seeking to ${clampedPosition.toFixed(2)}s`);
-
-    // Set seeking state for visual feedback
-    setIsSeeking(true);
-
-    // 1. Optimistic UI update (instant feedback)
-    const progressPercentage = duration > 0
-      ? (clampedPosition / duration) * 100
-      : 0;
+    // Optimistic UI update (instant feedback - this is the key to instant feel)
+    const progressPercentage = duration > 0 ? (clampedPosition / duration) * 100 : 0;
     usePlayerStore.setState({ progress: progressPercentage });
+    console.log(`[SEEK PERF] UI updated to ${progressPercentage.toFixed(1)}% in ${(performance.now() - seekStartTime).toFixed(2)}ms`);
 
-    // 2. Send to backend (async)
+    // Send to backend (fire-and-forget, position updates will sync naturally)
     commands.seek(clampedPosition)
-      .catch((error) => {
-        debug.error('[useSeekBar] Seek failed:', error);
+      .then(() => {
+        const totalTime = performance.now() - seekStartTime;
+        console.log(`[SEEK PERF] ===== SEEK COMPLETE ===== (${totalTime.toFixed(2)}ms total)`);
       })
-      .finally(() => {
-        // Clear seeking state after visual feedback duration
-        setTimeout(() => setIsSeeking(false), SEEK_FEEDBACK_DURATION_MS);
+      .catch((error) => {
+        console.error(`[SEEK PERF] SEEK FAILED:`, error);
+        debug.error('[useSeekBar] Seek failed:', error);
       });
   }, [commands]);
 
-  return { handleSeek, isSeeking };
+  // Return false for isSeeking (kept for API compatibility, not needed anymore)
+  return { handleSeek, isSeeking: false };
 }

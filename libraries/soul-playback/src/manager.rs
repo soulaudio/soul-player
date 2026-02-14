@@ -484,15 +484,21 @@ impl PlaybackManager {
 
     /// Seek to position in current track (by duration)
     pub fn seek_to(&mut self, position: Duration) -> Result<()> {
+        // STEP 4: Decoder seek timestamp (manager entry)
+        let entry_time = std::time::Instant::now();
+        tracing::info!("[SEEK PERF] === Manager.seek_to() ENTRY === position={:?}", position);
+
         // Guard: Cannot seek while Loading (source may not be fully initialized)
         // Allow seeking only in Playing or Paused states
         if self.state == PlaybackState::Stopped {
+            tracing::error!("[SEEK PERF] === Manager.seek_to() ERROR === NoTrackLoaded (state=Stopped) after {:.2}ms", entry_time.elapsed().as_millis());
             return Err(PlaybackError::NoTrackLoaded);
         }
 
         // CRITICAL: If crossfade is active, cancel it before seeking
         // Seeking during crossfade would cause stale mixing state and audio glitches
         if self.crossfade.is_active() {
+            tracing::info!("[SEEK PERF] Cancelling active crossfade due to seek (took {:.2}ms so far)", entry_time.elapsed().as_millis());
             tracing::info!("[PLAYBACK] Cancelling active crossfade due to seek operation");
             self.crossfade.reset();
             self.crossfade_progress.reset();
@@ -502,6 +508,7 @@ impl PlaybackManager {
         // Cancel any active stop fade to prevent race conditions
         // (e.g., seeking during fade-out should cancel the fade)
         if self.stop_fade.is_active() {
+            tracing::debug!("[SEEK PERF] Cancelling active stop fade (took {:.2}ms so far)", entry_time.elapsed().as_millis());
             tracing::debug!("[seek_to] Cancelling active stop fade due to seek");
             self.stop_fade.reset();
         }
@@ -516,20 +523,26 @@ impl PlaybackManager {
             // Log if we clamped the position (only for near-end seeks)
             if clamped_position != position && position > Duration::ZERO {
                 tracing::debug!(
-                    "[seek_to] Clamped seek near end: {:?} -> {:?} (duration: {:?})",
+                    "[SEEK PERF] Clamped seek near end: {:?} -> {:?} (duration: {:?})",
                     position,
                     clamped_position,
                     duration
                 );
             }
 
+            // STEP 4: Actual decoder seek call
+            let seek_start = std::time::Instant::now();
             source.seek(clamped_position)?;
+            let seek_duration = seek_start.elapsed();
+            tracing::info!("[SEEK PERF] Decoder.seek() completed in {:.2}ms (total manager time: {:.2}ms)", seek_duration.as_millis(), entry_time.elapsed().as_millis());
 
             // Start fade-in after seek for smooth resume
             self.start_fade.start();
+            tracing::info!("[SEEK PERF] === Manager.seek_to() EXIT === completed in {:.2}ms", entry_time.elapsed().as_millis());
 
             Ok(())
         } else {
+            tracing::error!("[SEEK PERF] === Manager.seek_to() ERROR === NoTrackLoaded (no current source) after {:.2}ms", entry_time.elapsed().as_millis());
             Err(PlaybackError::NoTrackLoaded)
         }
     }
@@ -1878,6 +1891,7 @@ impl PlaybackManager {
     /// # Arguments
     /// * `samples_processed` - Number of samples processed in this callback
     pub fn maybe_emit_position_update(&mut self, samples_processed: usize) {
+        // STEP 6: Position update emission logging
         // Accumulate samples
         self.position_update_samples += samples_processed;
 
@@ -1888,7 +1902,7 @@ impl PlaybackManager {
 
         if self.position_update_samples >= threshold {
             tracing::trace!(
-                "[POSITION] Emitting update after {} samples (threshold: {}, interval: ~100ms @ {}Hz)",
+                "[SEEK PERF] === Position Update EMIT === after {} samples (threshold: {}, ~100ms @ {}Hz)",
                 self.position_update_samples,
                 threshold,
                 self.sample_rate

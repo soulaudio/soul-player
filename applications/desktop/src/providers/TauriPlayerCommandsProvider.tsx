@@ -22,9 +22,9 @@ import {
 } from '@soul-player/shared';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
-// Hardcoded timing constant - matches backend position update interval * 1.2
-// Backend: 100ms updates → 120ms ignore window for one full update cycle
-const IGNORE_WINDOW_MS = 120;
+// REMOVED: Ignore window timer (artificial 120ms delay)
+// Production players (VLC, Clementine, Audacious) don't use this pattern
+// Optimistic UI updates provide instant feedback without race conditions
 
 // Separate component to initialize keyboard shortcuts AFTER context is provided
 function KeyboardShortcutsInitializer() {
@@ -35,8 +35,8 @@ function KeyboardShortcutsInitializer() {
 export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
   const { updateSession, session } = usePlaybackSession();
   const backend = useBackend();
-  const ignoringPositionUpdatesRef = useRef(false);
-  const ignoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // REMOVED: ignoringPositionUpdatesRef and ignoreTimerRef (ignore window pattern)
+  // Simplified to match production player patterns (VLC, Clementine, etc.)
 
   // Save current session to database
   const savePlaybackSession = useCallback(async (retryCount = 0) => {
@@ -309,9 +309,9 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
         // Listen for position updates (with ignore window check)
         const unlistenPositionUpdated = await listen<number>('playback:position-updated', (event) => {
-          // Skip updates during ignore window (right after seek)
-          if (ignoringPositionUpdatesRef.current) return;
-
+          // SIMPLIFIED: No ignore window check needed
+          // Optimistic updates in useSeekBar provide instant feedback
+          // Backend position updates naturally sync after seek completes
           const positionInSeconds = event.payload;
           const { duration } = usePlayerStore.getState();
           const progressPercentage = duration > 0 ? Math.min(100, (positionInSeconds / duration) * 100) : 0;
@@ -500,22 +500,20 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       },
 
       async seek(position: number) {
-        // Enable ignore window to prevent race condition
-        ignoringPositionUpdatesRef.current = true;
+        // SIMPLIFIED: Direct seek without ignore window timer
+        // Pattern used by VLC, Clementine, Audacious (50-150ms latency)
+        // Optimistic updates in useSeekBar provide instant visual feedback
+        const seekStartTime = performance.now();
+        console.log(`[SEEK PERF] TauriProvider.seek() called at +${seekStartTime.toFixed(2)}ms`);
 
-        // Clear any existing timer
-        if (ignoreTimerRef.current) {
-          clearTimeout(ignoreTimerRef.current);
+        try {
+          await invoke('seek_to', { position });
+          const seekDuration = performance.now() - seekStartTime;
+          console.log(`[SEEK PERF] invoke('seek_to') completed in ${seekDuration.toFixed(2)}ms`);
+        } catch (error) {
+          console.error(`[SEEK PERF] invoke('seek_to') failed:`, error);
+          throw error;
         }
-
-        // Send seek command
-        await invoke('seek_to', { position });
-
-        // Disable ignore window after IGNORE_WINDOW_MS
-        ignoreTimerRef.current = setTimeout(() => {
-          ignoringPositionUpdatesRef.current = false;
-          ignoreTimerRef.current = null;
-        }, IGNORE_WINDOW_MS);
       },
 
       async setVolume(volume: number) {

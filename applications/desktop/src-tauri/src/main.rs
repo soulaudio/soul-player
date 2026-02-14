@@ -590,7 +590,23 @@ async fn unmute(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> 
 
 #[tauri::command]
 async fn seek_to(position: f64, playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
-    Ok(playback.get().await?.seek(position)?)
+    // STEP 3: Rust seek_to entry timestamp
+    let entry_time = std::time::Instant::now();
+    tracing::info!("[SEEK PERF] === Rust seek_to() ENTRY === position={:.3}s", position);
+
+    let result = playback.get().await?.seek(position);
+
+    let exit_time = entry_time.elapsed();
+    match &result {
+        Ok(_) => {
+            tracing::info!("[SEEK PERF] === Rust seek_to() EXIT === completed in {:.2}ms", exit_time.as_millis());
+        }
+        Err(e) => {
+            tracing::error!("[SEEK PERF] === Rust seek_to() ERROR === after {:.2}ms: {}", exit_time.as_millis(), e);
+        }
+    }
+
+    result.map_err(|e| format!("{}", e))
 }
 
 #[tauri::command]
