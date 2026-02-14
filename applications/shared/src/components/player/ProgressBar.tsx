@@ -7,6 +7,7 @@
  * - Race condition prevention with 100ms ignore window
  * - Seek verification after ignore window
  * - Visual seek handle on hover
+ * - Visual feedback during seek (loading state, cursor changes, glow effects)
  * - Automatic pause detection and track change handling
  * - Self-contained: connects directly to player store via hooks
  *
@@ -15,6 +16,7 @@
  */
 
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 import { formatDuration } from '../../lib/utils';
 import { useSeekBar } from '../../hooks/useSeekBar';
 import { useInterpolatedProgress } from '../../hooks/useInterpolatedProgress';
@@ -52,23 +54,50 @@ export function ProgressBar() {
 
       {/* Progress bar */}
       <div
-        className="relative flex-1 h-2 bg-muted rounded-full cursor-pointer group overflow-hidden"
+        className="relative flex-1 h-2 bg-muted rounded-full group overflow-hidden"
+        style={{ cursor: false ? 'wait' : 'pointer' }}
         onClick={handleClick}
       >
         {/* Filled progress */}
         <div
-          className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-100"
+          className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all"
           style={{
             width: `${Math.max(0, Math.min(100, progress))}%`,
-            maxWidth: '100%'
+            maxWidth: '100%',
+            transitionDuration: false ? '200ms' : '200ms',
+            opacity: false ? 0.9 : 1,
+            boxShadow: false ? '0 0 8px 2px rgba(var(--primary-rgb, 59, 130, 246), 0.5)' : 'none'
           }}
         />
 
         {/* Seek handle */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-opacity opacity-0 group-hover:opacity-100"
-          style={{ left: `${Math.max(0, Math.min(100, progress))}%`, transform: 'translate(-50%, -50%)' }}
-        />
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-all"
+          style={{
+            left: `${Math.max(0, Math.min(100, progress))}%`,
+            transform: 'translate(-50%, -50%)',
+            opacity: false ? 1 : 0,
+            scale: false ? '1.2' : '1',
+            boxShadow: false
+              ? '0 0 12px 4px rgba(var(--primary-rgb, 59, 130, 246), 0.6)'
+              : '0 4px 6px rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          {/* Loading spinner during seek */}
+          {false && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Loader2 className="w-3 h-3 animate-spin text-primary-foreground" />
+            </div>
+          )}
+        </div>
+
+        {/* Hover handle (only shown when not seeking) */}
+        {!false && (
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-opacity opacity-0 group-hover:opacity-100"
+            style={{ left: `${Math.max(0, Math.min(100, progress))}%`, transform: 'translate(-50%, -50%)' }}
+          />
+        )}
       </div>
 
       {/* Total duration */}

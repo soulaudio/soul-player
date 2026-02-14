@@ -1,8 +1,6 @@
 // Core types for Soul Player
 // These should match the Rust types in soul-core
 
-export * from './playback-timing';
-
 export interface Track {
   id: number;
   title: string;

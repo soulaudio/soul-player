@@ -4,7 +4,7 @@
  * Also handles event-to-store updates and keyboard shortcuts
  */
 
-import { ReactNode, useMemo, useEffect } from 'react';
+import { ReactNode, useMemo, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -16,8 +16,10 @@ import {
   type PlaybackEventsInterface,
   type PlaybackCapabilities,
 } from '@soul-player/shared';
-import { shouldIgnorePositionUpdates } from '@soul-player/shared';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+
+// Hardcoded timing constant (minimal for instant feel)
+const IGNORE_WINDOW_MS = 50; // Reduced from 120ms - faster response
 
 // Separate component to initialize keyboard shortcuts AFTER context is provided
 function KeyboardShortcutsInitializer() {
@@ -27,6 +29,8 @@ function KeyboardShortcutsInitializer() {
 
 export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
   const { updateSession } = usePlaybackSession();
+  const ignoringPositionUpdatesRef = useRef(false);
+  const ignoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Set up event listeners to update store (similar to old usePlaybackEvents hook)
   useEffect(() => {
@@ -72,9 +76,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         });
         unlistenFunctions.push(unlistenStateChanged);
 
-        // Listen for position updates
+        // Listen for position updates (with ignore window check)
         const unlistenPositionUpdated = await listen<number>('playback:position-updated', (event) => {
-          if (shouldIgnorePositionUpdates()) return;
+          // Skip updates during ignore window (right after seek)
+          if (ignoringPositionUpdatesRef.current) return;
 
           const positionInSeconds = event.payload;
           const { duration } = usePlayerStore.getState();
@@ -192,7 +197,22 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       },
 
       async seek(position: number) {
+        // Enable ignore window to prevent race condition
+        ignoringPositionUpdatesRef.current = true;
+
+        // Clear any existing timer
+        if (ignoreTimerRef.current) {
+          clearTimeout(ignoreTimerRef.current);
+        }
+
+        // Send seek command
         await invoke('seek_to', { position });
+
+        // Disable ignore window after IGNORE_WINDOW_MS
+        ignoreTimerRef.current = setTimeout(() => {
+          ignoringPositionUpdatesRef.current = false;
+          ignoreTimerRef.current = null;
+        }, IGNORE_WINDOW_MS);
       },
 
       async setVolume(volume: number) {

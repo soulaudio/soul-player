@@ -4,24 +4,25 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { ProgressBar } from '../ProgressBar';
 import { usePlayerStore } from '../../../stores/player';
 
 // Mock useSeekBar hook
-const mockHandleSeekStart = vi.fn();
-const mockHandleSeekChange = vi.fn();
-const mockHandleSeekEnd = vi.fn();
+const mockHandleSeek = vi.fn();
 
 vi.mock('../../../hooks/useSeekBar', () => ({
   useSeekBar: () => ({
-    isDragging: false,
-    seekPosition: null,
-    handleSeekStart: mockHandleSeekStart,
-    handleSeekChange: mockHandleSeekChange,
-    handleSeekEnd: mockHandleSeekEnd,
+    handleSeek: mockHandleSeek,
   }),
+}));
+
+// Mock useInterpolatedProgress hook
+vi.mock('../../../hooks/useInterpolatedProgress', () => ({
+  useInterpolatedProgress: () => {
+    const { progress, duration } = usePlayerStore.getState();
+    return { progress, duration };
+  },
 }));
 
 describe('ProgressBar', () => {
@@ -45,10 +46,10 @@ describe('ProgressBar', () => {
 
   describe('rendering', () => {
     it('should render progress bar with all elements', () => {
-      render(<ProgressBar />);
+      const { container } = render(<ProgressBar />);
 
-      // Check structure exists (use role-based queries where possible)
-      const progressBar = screen.getByRole('presentation', { hidden: true });
+      // Check progress bar container exists
+      const progressBar = container.querySelector('.cursor-pointer');
       expect(progressBar).toBeInTheDocument();
     });
 
@@ -69,7 +70,10 @@ describe('ProgressBar', () => {
 
       render(<ProgressBar />);
 
-      expect(screen.getByText('0:00')).toBeInTheDocument();
+      // Both times show 0:00 when at beginning with 0 duration in query
+      const times = screen.getAllByText('0:00');
+      expect(times.length).toBeGreaterThanOrEqual(1);
+
       expect(screen.getByText('5:00')).toBeInTheDocument();
     });
 
@@ -85,7 +89,7 @@ describe('ProgressBar', () => {
       expect(screen.getByText('1:00:00')).toBeInTheDocument();
     });
 
-    it('should show seek handle only on hover or drag', () => {
+    it('should show seek handle on hover', () => {
       const { container } = render(<ProgressBar />);
 
       // Find the seek handle (the circular dot)
@@ -98,9 +102,9 @@ describe('ProgressBar', () => {
     });
 
     it('should display progress bar fill based on store progress', () => {
-      const { container } = render(<ProgressBar />);
-
       usePlayerStore.setState({ progress: 30 });
+
+      const { container } = render(<ProgressBar />);
 
       // Find the filled progress element
       const progressFill = container.querySelector('.bg-primary');
@@ -109,23 +113,26 @@ describe('ProgressBar', () => {
     });
 
     it('should update progress display when store changes', () => {
-      const { container } = render(<ProgressBar />);
+      const { container, rerender } = render(<ProgressBar />);
 
       // Initial progress
       usePlayerStore.setState({ progress: 25 });
+      rerender(<ProgressBar />);
+
       let progressFill = container.querySelector('.bg-primary');
       expect(progressFill).toHaveStyle({ width: '25%' });
 
       // Update progress
       usePlayerStore.setState({ progress: 75 });
+      rerender(<ProgressBar />);
+
       progressFill = container.querySelector('.bg-primary');
       expect(progressFill).toHaveStyle({ width: '75%' });
     });
   });
 
   describe('click to seek interaction', () => {
-    it('should call handleSeekStart and handleSeekEnd on single click', async () => {
-      const user = userEvent.setup();
+    it('should call handleSeek on click', () => {
       const { container } = render(<ProgressBar />);
 
       const progressBar = container.querySelector('.cursor-pointer');
@@ -145,18 +152,11 @@ describe('ProgressBar', () => {
       });
 
       // Click at 50% position (200px out of 400px)
-      fireEvent.mouseDown(progressBar!, { clientX: 200, clientY: 4 });
+      fireEvent.click(progressBar!, { clientX: 200, clientY: 4 });
 
-      // Should call handleSeekStart with position (50% of 300s = 150s)
-      expect(mockHandleSeekStart).toHaveBeenCalledWith(150);
-      expect(mockHandleSeekStart).toHaveBeenCalledTimes(1);
-
-      // Simulate mouse up (user releases click immediately - no drag)
-      fireEvent.mouseUp(document);
-
-      await waitFor(() => {
-        expect(mockHandleSeekEnd).toHaveBeenCalledWith(150);
-      });
+      // Should call handleSeek with position (50% of 300s = 150s)
+      expect(mockHandleSeek).toHaveBeenCalledWith(150);
+      expect(mockHandleSeek).toHaveBeenCalledTimes(1);
     });
 
     it('should calculate correct position for click at 25%', () => {
@@ -176,10 +176,10 @@ describe('ProgressBar', () => {
       });
 
       // Click at 25% position (100px out of 400px)
-      fireEvent.mouseDown(progressBar!, { clientX: 100, clientY: 4 });
+      fireEvent.click(progressBar!, { clientX: 100, clientY: 4 });
 
       // Should calculate 25% of 300s = 75s
-      expect(mockHandleSeekStart).toHaveBeenCalledWith(75);
+      expect(mockHandleSeek).toHaveBeenCalledWith(75);
     });
 
     it('should calculate correct position for click at 75%', () => {
@@ -199,10 +199,10 @@ describe('ProgressBar', () => {
       });
 
       // Click at 75% position (300px out of 400px)
-      fireEvent.mouseDown(progressBar!, { clientX: 300, clientY: 4 });
+      fireEvent.click(progressBar!, { clientX: 300, clientY: 4 });
 
       // Should calculate 75% of 300s = 225s
-      expect(mockHandleSeekStart).toHaveBeenCalledWith(225);
+      expect(mockHandleSeek).toHaveBeenCalledWith(225);
     });
 
     it('should clamp position to prevent seeking beyond track end', () => {
@@ -222,11 +222,11 @@ describe('ProgressBar', () => {
       });
 
       // Click at very end (100%)
-      fireEvent.mouseDown(progressBar!, { clientX: 400, clientY: 4 });
+      fireEvent.click(progressBar!, { clientX: 400, clientY: 4 });
 
       // Should clamp to duration - 0.1s to avoid EOF
       const expectedPosition = 300 - 0.1;
-      expect(mockHandleSeekStart).toHaveBeenCalledWith(expectedPosition);
+      expect(mockHandleSeek).toHaveBeenCalledWith(expectedPosition);
     });
 
     it('should handle clicks at position 0 (beginning)', () => {
@@ -246,17 +246,17 @@ describe('ProgressBar', () => {
       });
 
       // Click at beginning (0%)
-      fireEvent.mouseDown(progressBar!, { clientX: 0, clientY: 4 });
+      fireEvent.click(progressBar!, { clientX: 0, clientY: 4 });
 
-      expect(mockHandleSeekStart).toHaveBeenCalledWith(0);
+      expect(mockHandleSeek).toHaveBeenCalledWith(0);
     });
 
-    it('should stop event propagation on mouse down', () => {
+    it('should stop event propagation on click', () => {
       const { container } = render(<ProgressBar />);
       const progressBar = container.querySelector('.cursor-pointer');
 
       const mockStopPropagation = vi.fn();
-      const event = new MouseEvent('mousedown', { clientX: 200, clientY: 4 });
+      const event = new MouseEvent('click', { clientX: 200, clientY: 4, bubbles: true });
       event.stopPropagation = mockStopPropagation;
 
       fireEvent(progressBar!, event);
@@ -265,103 +265,8 @@ describe('ProgressBar', () => {
     });
   });
 
-  describe('no drag behavior', () => {
-    it('should attach mousemove listener but only for tracking', () => {
-      const { container } = render(<ProgressBar />);
-      const progressBar = container.querySelector('.cursor-pointer');
-
-      vi.spyOn(progressBar!, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        right: 400,
-        bottom: 8,
-        width: 400,
-        height: 8,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      });
-
-      // Mouse down at 25%
-      fireEvent.mouseDown(progressBar!, { clientX: 100, clientY: 4 });
-
-      // Clear the call from mouseDown
-      mockHandleSeekChange.mockClear();
-
-      // Simulate mouse move (but component uses click-only, so this shouldn't seek)
-      fireEvent.mouseMove(document, { clientX: 200, clientY: 4 });
-
-      // handleSeekChange might be called for UI updates, but not for seeking
-      // The actual implementation may call this, so we test that it's called correctly
-      if (mockHandleSeekChange.mock.calls.length > 0) {
-        // If called, should be with the new position
-        expect(mockHandleSeekChange).toHaveBeenCalledWith(150);
-      }
-    });
-
-    it('should clean up event listeners on mouse up', () => {
-      const { container } = render(<ProgressBar />);
-      const progressBar = container.querySelector('.cursor-pointer');
-
-      vi.spyOn(progressBar!, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        right: 400,
-        bottom: 8,
-        width: 400,
-        height: 8,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      });
-
-      // Mouse down
-      fireEvent.mouseDown(progressBar!, { clientX: 100, clientY: 4 });
-
-      // Mouse up
-      fireEvent.mouseUp(document);
-
-      mockHandleSeekChange.mockClear();
-
-      // Try mouse move after mouse up (should not do anything)
-      fireEvent.mouseMove(document, { clientX: 200, clientY: 4 });
-
-      // Should not call handleSeekChange after mouse up
-      expect(mockHandleSeekChange).not.toHaveBeenCalled();
-    });
-
-    it('should use AbortController for reliable cleanup', () => {
-      const { container, unmount } = render(<ProgressBar />);
-      const progressBar = container.querySelector('.cursor-pointer');
-
-      vi.spyOn(progressBar!, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        right: 400,
-        bottom: 8,
-        width: 400,
-        height: 8,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      });
-
-      // Mouse down
-      fireEvent.mouseDown(progressBar!, { clientX: 100, clientY: 4 });
-
-      // Unmount while "dragging" (simulates component cleanup)
-      unmount();
-
-      // Should not crash when trying to access cleaned-up listeners
-      expect(() => {
-        fireEvent.mouseMove(document, { clientX: 200, clientY: 4 });
-        fireEvent.mouseUp(document);
-      }).not.toThrow();
-    });
-  });
-
   describe('interpolation and smooth updates', () => {
-    it('should smoothly interpolate progress with transition classes', () => {
+    it('should have transition classes for smooth animation', () => {
       const { container } = render(<ProgressBar />);
 
       const progressFill = container.querySelector('.bg-primary');
@@ -372,23 +277,28 @@ describe('ProgressBar', () => {
       expect(progressFill?.className).toContain('duration-100');
     });
 
-    it('should update displayed time smoothly as progress changes', () => {
-      render(<ProgressBar />);
+    it('should update displayed time as progress changes', () => {
+      const { rerender } = render(<ProgressBar />);
 
       // Start at 0%
       usePlayerStore.setState({ progress: 0 });
-      expect(screen.getByText('0:00')).toBeInTheDocument();
+      rerender(<ProgressBar />);
+      const zeroTimes = screen.queryAllByText('0:00');
+      expect(zeroTimes.length).toBeGreaterThanOrEqual(1);
 
       // Update to 25%
       usePlayerStore.setState({ progress: 25 });
+      rerender(<ProgressBar />);
       expect(screen.getByText('1:15')).toBeInTheDocument(); // 25% of 300s = 75s
 
       // Update to 50%
       usePlayerStore.setState({ progress: 50 });
+      rerender(<ProgressBar />);
       expect(screen.getByText('2:30')).toBeInTheDocument(); // 50% of 300s = 150s
 
       // Update to 75%
       usePlayerStore.setState({ progress: 75 });
+      rerender(<ProgressBar />);
       expect(screen.getByText('3:45')).toBeInTheDocument(); // 75% of 300s = 225s
     });
   });
@@ -399,7 +309,8 @@ describe('ProgressBar', () => {
 
       render(<ProgressBar />);
 
-      expect(screen.getByText('0:00')).toBeInTheDocument();
+      const zeroTimes = screen.getAllByText('0:00');
+      expect(zeroTimes.length).toBeGreaterThanOrEqual(2);
     });
 
     it('should handle very short tracks (< 1 minute)', () => {
@@ -421,9 +332,9 @@ describe('ProgressBar', () => {
     });
 
     it('should prevent division by zero when duration is 0', () => {
-      const { container } = render(<ProgressBar />);
-
       usePlayerStore.setState({ duration: 0 });
+
+      const { container } = render(<ProgressBar />);
 
       const progressFill = container.querySelector('.bg-primary');
 
@@ -431,30 +342,38 @@ describe('ProgressBar', () => {
       expect(progressFill).toHaveStyle({ width: '0%' });
     });
 
-    it('should clamp progress display between 0% and 100%', () => {
-      const { container } = render(<ProgressBar />);
+    it('should clamp progress display to between 0% and 100%', () => {
+      const { container, rerender } = render(<ProgressBar />);
 
-      // Test lower bound
+      // Test lower bound - progress clamped in style
       usePlayerStore.setState({ progress: -10 });
-      let progressFill = container.querySelector('.bg-primary');
-      expect(progressFill).toHaveStyle({ width: '0%' });
+      rerender(<ProgressBar />);
 
-      // Test upper bound
+      let progressFill = container.querySelector('.bg-primary');
+      // The component clamps with Math.max(0, Math.min(100, progress))
+      expect(progressFill?.getAttribute('style')).toContain('width: 0%');
+
+      // Test upper bound - progress clamped in style
       usePlayerStore.setState({ progress: 150 });
+      rerender(<ProgressBar />);
+
       progressFill = container.querySelector('.bg-primary');
-      expect(progressFill).toHaveStyle({ width: '100%' });
+      // The component clamps with Math.max(0, Math.min(100, progress))
+      expect(progressFill?.getAttribute('style')).toContain('width: 100%');
     });
 
     it('should handle rapid progress updates without performance issues', () => {
-      render(<ProgressBar />);
+      const { rerender } = render(<ProgressBar />);
 
       // Simulate 100 rapid updates
       for (let i = 0; i <= 100; i++) {
         usePlayerStore.setState({ progress: i });
+        rerender(<ProgressBar />);
       }
 
-      // Should end at 100%
-      expect(screen.getByText('5:00')).toBeInTheDocument();
+      // Should end at 100% - both times show 5:00 (current time and duration)
+      const times = screen.getAllByText('5:00');
+      expect(times.length).toBeGreaterThanOrEqual(2);
     });
 
     it('should handle click when progress bar has offset position', () => {
@@ -475,10 +394,10 @@ describe('ProgressBar', () => {
       });
 
       // Click at viewport position 300px (200px into progress bar = 50%)
-      fireEvent.mouseDown(progressBar!, { clientX: 300, clientY: 4 });
+      fireEvent.click(progressBar!, { clientX: 300, clientY: 4 });
 
       // Should calculate relative to progress bar position
-      expect(mockHandleSeekStart).toHaveBeenCalledWith(150); // 50% of 300s
+      expect(mockHandleSeek).toHaveBeenCalledWith(150); // 50% of 300s
     });
   });
 
@@ -515,13 +434,13 @@ describe('ProgressBar', () => {
       const { container } = render(<ProgressBar />);
 
       // Time displays should have min-width
-      const currentTime = container.querySelector('.min-w-\\[40px\\]');
-      expect(currentTime).toBeInTheDocument();
+      const minWidthElements = container.querySelectorAll('.min-w-\\[40px\\]');
+      expect(minWidthElements.length).toBeGreaterThanOrEqual(1);
     });
   });
 
   describe('integration with useSeekBar hook', () => {
-    it('should pass seek position to hook handlers', () => {
+    it('should pass correct seek position to hook handler', () => {
       const { container } = render(<ProgressBar />);
       const progressBar = container.querySelector('.cursor-pointer');
 
@@ -538,14 +457,14 @@ describe('ProgressBar', () => {
       });
 
       // Click at specific position
-      fireEvent.mouseDown(progressBar!, { clientX: 123, clientY: 4 });
+      fireEvent.click(progressBar!, { clientX: 123, clientY: 4 });
 
-      // Should call handleSeekStart with calculated position
-      expect(mockHandleSeekStart).toHaveBeenCalled();
+      // Should call handleSeek with calculated position
+      expect(mockHandleSeek).toHaveBeenCalled();
 
       // Calculate expected position: (123 / 400) * 300 = 92.25
       const expectedPosition = (123 / 400) * 300;
-      const actualPosition = mockHandleSeekStart.mock.calls[0][0];
+      const actualPosition = mockHandleSeek.mock.calls[0][0];
 
       expect(actualPosition).toBeCloseTo(expectedPosition, 1);
     });
@@ -555,6 +474,33 @@ describe('ProgressBar', () => {
 
       // Should not throw on unmount
       expect(() => unmount()).not.toThrow();
+    });
+  });
+
+  describe('integration with useInterpolatedProgress', () => {
+    it('should use interpolated progress from hook', () => {
+      usePlayerStore.setState({ progress: 50, duration: 300 });
+
+      const { container } = render(<ProgressBar />);
+
+      const progressFill = container.querySelector('.bg-primary');
+      expect(progressFill).toHaveStyle({ width: '50%' });
+    });
+
+    it('should update when interpolated values change', () => {
+      usePlayerStore.setState({ progress: 25, duration: 300 });
+
+      const { container, rerender } = render(<ProgressBar />);
+
+      let progressFill = container.querySelector('.bg-primary');
+      expect(progressFill).toHaveStyle({ width: '25%' });
+
+      // Change progress
+      usePlayerStore.setState({ progress: 75 });
+      rerender(<ProgressBar />);
+
+      progressFill = container.querySelector('.bg-primary');
+      expect(progressFill).toHaveStyle({ width: '75%' });
     });
   });
 });
