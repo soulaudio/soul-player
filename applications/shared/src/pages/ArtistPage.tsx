@@ -132,14 +132,10 @@ export function ArtistPage() {
 
   // Build queue callback for TrackList
   const buildQueue = useCallback(
-    (_allTracks: Track[], clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
-      const queue = buildQueueFromTracks(tracks)
-      // Reorder so clicked track is first
-      const clickedTrackIdx = queue.findIndex((t) => t.trackId === String(clickedTrack.id))
-      if (clickedTrackIdx > 0) {
-        return [...queue.slice(clickedTrackIdx), ...queue.slice(0, clickedTrackIdx)]
-      }
-      return queue
+    (_allTracks: Track[], _clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
+      // Return the full queue in original order
+      // The startIndex passed to playQueue() will determine which track plays first
+      return buildQueueFromTracks(tracks)
     },
     [buildQueueFromTracks, tracks]
   )
