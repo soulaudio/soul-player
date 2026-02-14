@@ -8,8 +8,9 @@ interface UseSeekBarReturn {
   isSeeking: boolean;
 }
 
-// Ignore window duration - matches TauriPlayerCommandsProvider
-const SEEK_FEEDBACK_DURATION_MS = 100;
+// Visual feedback duration - should match backend ignore window
+// Backend: 100ms position updates → 120ms ignore window
+const SEEK_FEEDBACK_DURATION_MS = 120;
 
 /**
  * Hook to manage seek interactions with visual feedback.

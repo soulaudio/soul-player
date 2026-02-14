@@ -22,8 +22,9 @@ import {
 } from '@soul-player/shared';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
-// Hardcoded timing constant (minimal for instant feel)
-const IGNORE_WINDOW_MS = 50; // Reduced from 120ms - faster response
+// Hardcoded timing constant - matches backend position update interval * 1.2
+// Backend: 100ms updates → 120ms ignore window for one full update cycle
+const IGNORE_WINDOW_MS = 120;
 
 // Separate component to initialize keyboard shortcuts AFTER context is provided
 function KeyboardShortcutsInitializer() {

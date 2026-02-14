@@ -9,16 +9,21 @@ use std::time::Duration;
 /// Default position update interval in milliseconds
 ///
 /// This determines how frequently the backend emits position updates during playback.
-/// 500ms provides a good balance between:
-/// - UI responsiveness (smooth progress bar updates)
-/// - CPU usage (fewer event emissions)
-/// - Event system overhead
+/// 100ms provides the best balance for responsive seeking and smooth progress:
+/// - UI responsiveness: 10 updates/second for smooth progress bar
+/// - Seek latency: ~220ms total (100ms update + 120ms ignore window)
+/// - CPU usage: Negligible overhead (modern systems handle 100ms intervals easily)
+/// - Event system: Well within acceptable limits
 ///
-/// **Why 500ms?**
-/// - Updates position twice per second (smooth enough for most UIs)
-/// - Reduces event traffic compared to faster intervals (100ms = 5x more events)
-/// - Aligns with human perception (changes below 100ms are barely noticeable for progress bars)
-pub const DEFAULT_POSITION_UPDATE_INTERVAL_MS: u64 = 500;
+/// **Why 100ms?**
+/// - Seeks feel instant (<250ms is perceived as immediate by users)
+/// - Progress bar updates are smooth (10fps is sufficient for linear progress)
+/// - Ignore window is minimal (120ms = 100ms * 1.2)
+/// - Recommended by audio player best practices (react-h5-audio-player, wavesurfer.js)
+///
+/// Previous value of 500ms caused 1100ms seek latency (500ms + 600ms ignore),
+/// making seeks feel sluggish and unresponsive.
+pub const DEFAULT_POSITION_UPDATE_INTERVAL_MS: u64 = 100;
 
 /// Minimum allowed position update interval in milliseconds
 ///
@@ -123,8 +128,8 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = PlaybackTimingConfig::default();
-        assert_eq!(config.position_update_interval_ms, 500);
-        assert_eq!(config.ignore_window_ms, 600); // 500 * 1.2
+        assert_eq!(config.position_update_interval_ms, 100);
+        assert_eq!(config.ignore_window_ms, 120); // 100 * 1.2
         assert_eq!(config.device_event_dedup_window_ms, 500);
         assert!(config.validate());
     }
@@ -158,8 +163,8 @@ mod tests {
         let config = PlaybackTimingConfig::default();
         assert_eq!(
             config.position_update_duration(),
-            Duration::from_millis(500)
+            Duration::from_millis(100)
         );
-        assert_eq!(config.ignore_window_duration(), Duration::from_millis(600));
+        assert_eq!(config.ignore_window_duration(), Duration::from_millis(120));
     }
 }
