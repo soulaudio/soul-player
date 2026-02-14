@@ -15,7 +15,7 @@
  * Status: Actively used in production (PlayerPanel sidebar)
  */
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { formatDuration } from '../../lib/utils';
 import { useSeekBar } from '../../hooks/useSeekBar';
@@ -27,7 +27,10 @@ export function ProgressBar() {
 
   // Use interpolated values by default
   const { progress, duration } = interpolatedProgress;
-  const { handleSeek } = useSeekBar();
+  const { handleSeek, isSeeking } = useSeekBar();
+
+  // Hover state for visual feedback
+  const [isHovering, setIsHovering] = useState(false);
 
   // Calculate current time in seconds
   const currentTimeSeconds = duration > 0 ? (progress / 100) * duration : 0;
@@ -55,8 +58,10 @@ export function ProgressBar() {
       {/* Progress bar */}
       <div
         className="relative flex-1 h-2 bg-muted rounded-full group overflow-hidden"
-        style={{ cursor: false ? 'wait' : 'pointer' }}
+        style={{ cursor: isSeeking ? 'wait' : 'pointer' }}
         onClick={handleClick}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
       >
         {/* Filled progress */}
         <div
@@ -64,27 +69,27 @@ export function ProgressBar() {
           style={{
             width: `${Math.max(0, Math.min(100, progress))}%`,
             maxWidth: '100%',
-            transitionDuration: false ? '200ms' : '200ms',
-            opacity: false ? 0.9 : 1,
-            boxShadow: false ? '0 0 8px 2px rgba(var(--primary-rgb, 59, 130, 246), 0.5)' : 'none'
+            transitionDuration: '200ms',
+            opacity: isSeeking ? 0.9 : 1,
+            boxShadow: isSeeking ? '0 0 8px 2px rgba(var(--primary-rgb, 59, 130, 246), 0.5)' : 'none'
           }}
         />
 
-        {/* Seek handle */}
+        {/* Seek handle (shown when seeking) */}
         <div
           className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-all"
           style={{
             left: `${Math.max(0, Math.min(100, progress))}%`,
             transform: 'translate(-50%, -50%)',
-            opacity: false ? 1 : 0,
-            scale: false ? '1.2' : '1',
-            boxShadow: false
+            opacity: isSeeking ? 1 : 0,
+            scale: isSeeking ? '1.2' : '1',
+            boxShadow: isSeeking
               ? '0 0 12px 4px rgba(var(--primary-rgb, 59, 130, 246), 0.6)'
               : '0 4px 6px rgba(0, 0, 0, 0.1)'
           }}
         >
           {/* Loading spinner during seek */}
-          {false && (
+          {isSeeking && (
             <div className="absolute inset-0 flex items-center justify-center">
               <Loader2 className="w-3 h-3 animate-spin text-primary-foreground" />
             </div>
@@ -92,7 +97,7 @@ export function ProgressBar() {
         </div>
 
         {/* Hover handle (only shown when not seeking) */}
-        {!false && (
+        {!isSeeking && (
           <div
             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-opacity opacity-0 group-hover:opacity-100"
             style={{ left: `${Math.max(0, Math.min(100, progress))}%`, transform: 'translate(-50%, -50%)' }}
