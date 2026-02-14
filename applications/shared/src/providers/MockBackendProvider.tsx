@@ -410,6 +410,14 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
       return []
     },
 
+    async getTracksByIds(trackIds: number[]): Promise<(BackendTrack | null)[]> {
+      const allTracks = storage.getAllTracks()
+      return trackIds.map(id => {
+        const track = allTracks.find(t => parseInt(t.id, 10) === id)
+        return track ? toBackendTrack(track, id) : null
+      })
+    },
+
     // Health check
     async checkDatabaseHealth(): Promise<DatabaseHealth> {
       const tracks = storage.getAllTracks()

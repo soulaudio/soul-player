@@ -262,6 +262,12 @@ export interface BackendInterface {
   getPlaylistTracks: (playlistId: string) => Promise<BackendTrack[]>
   getGenreTracks: (genreId: number) => Promise<BackendTrack[]>
 
+  /**
+   * Get multiple tracks by their IDs
+   * Returns null for missing tracks
+   */
+  getTracksByIds: (trackIds: number[]) => Promise<(BackendTrack | null)[]>
+
   // Health check
   checkDatabaseHealth: () => Promise<DatabaseHealth>
 

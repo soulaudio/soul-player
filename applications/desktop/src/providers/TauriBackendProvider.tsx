@@ -119,6 +119,10 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
       return invoke<BackendTrack[]>('get_genre_tracks', { genreId })
     },
 
+    async getTracksByIds(trackIds: number[]) {
+      return invoke<(BackendTrack | null)[]>('get_tracks_by_ids', { trackIds })
+    },
+
     // Health check
     async checkDatabaseHealth() {
       return invoke<DatabaseHealth>('check_database_health')

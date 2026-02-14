@@ -11,11 +11,13 @@ import {
   PlayerCommandsProvider,
   usePlayerStore,
   usePlaybackSession,
+  useBackend,
   type PlayerContextValue,
   type PlayerCommandsInterface,
   type PlaybackEventsInterface,
   type PlaybackCapabilities,
   type QueueTrack,
+  type BackendTrack,
 } from '@soul-player/shared';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
@@ -30,6 +32,7 @@ function KeyboardShortcutsInitializer() {
 
 export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
   const { updateSession } = usePlaybackSession();
+  const backend = useBackend();
   const ignoringPositionUpdatesRef = useRef(false);
   const ignoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -41,7 +44,85 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
     // Restore state from database (cold start scenario - no backend state)
     const restoreFromDatabase = async () => {
-      console.log('[PERSISTENCE] Database restore not yet implemented');
+      console.log('[PERSISTENCE] Cold start detected - restoring from database');
+
+      try {
+        // Load persisted session
+        const session = await invoke<{
+          current_track_id: number | null;
+          queue_track_ids: number[];
+          queue_index: number;
+          position_seconds: number;
+          volume: number;
+          repeat_mode: string;
+          shuffle_mode: string;
+          context_type: string | null;
+          context_id: string | null;
+          was_playing: boolean;
+        } | null>('restore_playback_session');
+
+        if (!session || !session.current_track_id) {
+          console.log('[PERSISTENCE] No saved session found');
+          return;
+        }
+
+        // Fetch full track objects by IDs
+        const tracks = await backend.getTracksByIds(session.queue_track_ids);
+
+        // Filter out missing tracks and convert to Track format
+        const validTracks = tracks.filter((t): t is BackendTrack => t !== null).map(convertBackendTrackToTrack);
+
+        if (validTracks.length === 0) {
+          console.warn('[PERSISTENCE] All tracks missing - clearing session');
+          await invoke('clear_playback_session');
+          return;
+        }
+
+        // Adjust queue index if current track is missing
+        let queueIndex = session.queue_index;
+        if (!validTracks[queueIndex]) {
+          queueIndex = 0;
+          console.warn('[PERSISTENCE] Current track missing - starting from first valid track');
+        }
+
+        if (!isMounted) return;
+
+        // Update Zustand store
+        usePlayerStore.setState({
+          queue: validTracks,
+          queueIndex,
+          currentTrack: validTracks[queueIndex],
+          volume: session.volume / 100, // Convert 0-100 to 0-1
+          isPlaying: false, // Always paused on cold start
+          repeatMode: session.repeat_mode as 'off' | 'all' | 'one',
+          shuffleMode: session.shuffle_mode as 'off' | 'random' | 'smart',
+          progress: 0,
+          duration: validTracks[queueIndex]?.duration ?? 0,
+        });
+
+        // Set backend state
+        await invoke('set_volume', { volume: session.volume });
+        await invoke('set_repeat', { mode: session.repeat_mode });
+        await invoke('set_shuffle', { mode: session.shuffle_mode });
+
+        // Restore playback context
+        if (session.context_type && session.context_id) {
+          await backend.recordContext({
+            contextType: session.context_type as 'album' | 'artist' | 'playlist' | 'genre' | 'tracks',
+            contextId: session.context_id,
+            contextName: null,
+            contextArtworkPath: null,
+          });
+        }
+
+        console.log('[PERSISTENCE] State restored from database:', {
+          queueLength: validTracks.length,
+          currentTrack: validTracks[queueIndex]?.title,
+          volume: session.volume / 100,
+        });
+      } catch (error) {
+        console.error('[PERSISTENCE] Failed to restore from database:', error);
+      }
     };
 
     // Convert QueueTrack to Track (store expects Track type)
@@ -56,6 +137,21 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       trackNumber: queueTrack.trackNumber ?? undefined,
       coverArtPath: queueTrack.coverArtPath,
       addedAt: new Date().toISOString(), // Not available in QueueTrack, use current time
+    });
+
+    // Convert BackendTrack to Track (store expects Track type)
+    const convertBackendTrackToTrack = (backendTrack: BackendTrack): import('@soul-player/shared/types').Track => ({
+      id: backendTrack.id,
+      title: backendTrack.title,
+      artist: backendTrack.artist_name || 'Unknown Artist',
+      album: backendTrack.album_title || '',
+      albumId: backendTrack.album_id,
+      filePath: backendTrack.file_path || '',
+      duration: backendTrack.duration_seconds ?? 0,
+      trackNumber: backendTrack.track_number,
+      year: backendTrack.year,
+      coverArtPath: backendTrack.cover_art_path,
+      addedAt: new Date().toISOString(), // Not available in BackendTrack, use current time
     });
 
     // Sync state from backend (hot reload scenario - backend is still running)

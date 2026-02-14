@@ -148,6 +148,17 @@ export function ServerBackendProvider({ apiBase, authToken, children }: ServerBa
       return apiFetch<BackendTrack[]>(`${apiBase}/genres/${genreId}/tracks`, {}, authToken)
     },
 
+    async getTracksByIds(trackIds: number[]) {
+      return apiFetch<(BackendTrack | null)[]>(
+        `${apiBase}/tracks/by-ids`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ ids: trackIds }),
+        },
+        authToken
+      )
+    },
+
     // Health check
     async checkDatabaseHealth() {
       return apiFetch<DatabaseHealth>(`${apiBase}/health/database`, {}, authToken)

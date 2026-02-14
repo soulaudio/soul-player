@@ -1066,6 +1066,23 @@ async fn get_track_by_id(
 }
 
 #[tauri::command]
+async fn get_tracks_by_ids(
+    track_ids: Vec<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<Option<FrontendTrack>>, String> {
+    let mut results = Vec::new();
+    for track_id in track_ids {
+        let id = soul_core::types::TrackId::new(track_id.to_string());
+        match soul_storage::tracks::get_by_id(&state.pool, id).await {
+            Ok(Some(track)) => results.push(Some(FrontendTrack::from(track))),
+            Ok(None) => results.push(None),
+            Err(_) => results.push(None),
+        }
+    }
+    Ok(results)
+}
+
+#[tauri::command]
 async fn delete_track(id: i64, state: State<'_, AppState>) -> Result<(), String> {
     tracing::info!("[delete_track] Starting deletion for track ID: {}", id);
 
@@ -3039,6 +3056,7 @@ fn main() {
             // Library management
             get_all_tracks,
             get_track_by_id,
+            get_tracks_by_ids,
             delete_track,
             show_in_file_explorer,
             check_database_health,
