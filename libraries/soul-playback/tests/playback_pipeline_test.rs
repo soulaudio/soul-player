@@ -375,10 +375,10 @@ fn test_crossfade_with_different_sample_rates() {
 
     // Set up at 44.1kHz
     manager.set_sample_rate(44100);
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Verify sample rate is set
     assert_eq!(manager.get_sample_rate(), 44100);
@@ -397,10 +397,10 @@ fn test_crossfade_with_different_sample_rates() {
 fn test_volume_linear_scaling() {
     let mut manager = PlaybackManager::default();
     manager.play().ok(); // Start playback BEFORE setting audio source (transitions to Playing)
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Process warmup audio to get past start fade (20ms = ~1764 samples at 44100Hz stereo)
     let mut warmup = vec![0.0f32; 4096];
@@ -415,10 +415,10 @@ fn test_volume_linear_scaling() {
 
     // Reset source and test at 50%
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
     // Process warmup for new source
     let mut warmup = vec![0.0f32; 4096];
     manager.process_audio(&mut warmup).ok();
@@ -441,10 +441,10 @@ fn test_volume_linear_scaling() {
 fn test_mute_produces_silence() {
     let mut manager = PlaybackManager::default();
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     manager.mute();
 
@@ -465,10 +465,10 @@ fn test_mute_produces_silence() {
 fn test_unmute_restores_audio() {
     let mut manager = PlaybackManager::default();
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Process warmup to get past start fade (20ms = ~1764 samples at 44100Hz stereo)
     let mut warmup = vec![0.0f32; 4096];
@@ -531,10 +531,10 @@ fn test_volume_toggle_mute() {
 fn test_volume_boundary_values() {
     let mut manager = PlaybackManager::default();
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Test 0% (should be near-silent, DAC keepalive noise is acceptable)
     manager.set_volume(0);
@@ -553,10 +553,10 @@ fn test_volume_boundary_values() {
 
     // Test 100%
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
     manager.set_volume(100);
     assert_eq!(manager.get_volume(), 100);
 
@@ -581,7 +581,7 @@ fn test_clipping_prevention() {
 
     // Use loud source
     let loud_source = MockAudioSource::new(Duration::from_secs(5), 44100).with_amplitude(0.9);
-    manager.set_audio_source(Box::new(loud_source));
+    manager.activate_source(Box::new(loud_source), next_track.clone());
     manager.set_volume(100);
 
     let mut buffer = vec![0.0f32; 1024];
@@ -610,10 +610,10 @@ fn test_effect_state_preserved_during_playback() {
         ));
     }
 
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     // Volume should persist across process calls
     manager.set_volume(75);
@@ -631,10 +631,10 @@ fn test_queue_modification_during_playback() {
 
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 180));
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     assert_eq!(manager.get_state(), PlaybackState::Playing);
 
@@ -665,10 +665,10 @@ fn test_shuffle_preserves_current_track() {
 
     // Should still be able to add source and play
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     assert_eq!(manager.get_state(), PlaybackState::Playing);
 }
@@ -679,10 +679,10 @@ fn test_queue_clear_stops_playback() {
 
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 180));
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     // Playing
     assert_eq!(manager.get_state(), PlaybackState::Playing);
@@ -728,10 +728,10 @@ fn test_track_end_advances_queue() {
 
     // Play first track
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(1),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(1), 44100)),
+        next_track.clone(),
+    );
 
     // Process until track ends
     let mut buffer = vec![0.0f32; 4096];
@@ -754,10 +754,10 @@ fn test_repeat_one_restarts_track() {
     manager.set_repeat(RepeatMode::One);
 
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 180));
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     // Process some audio
     let mut buffer = vec![0.0f32; 1024];
@@ -791,10 +791,10 @@ fn test_stop_clears_transition_state() {
 
     // Set up tracks and sources
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 10));
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(10), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 10);
@@ -822,10 +822,10 @@ fn test_seek_updates_position() {
     // Add track to queue and start playback (required for seek)
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 180));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     // Initial position is 0
     assert_eq!(manager.get_position(), Duration::ZERO);
@@ -849,10 +849,10 @@ fn test_seek_percent() {
     // Add track to queue and start playback (required for seek)
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist A", 100));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(100),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(100), 44100)),
+        next_track.clone(),
+    );
 
     // Seek to 50% (now valid since we're in Playing state)
     manager.seek_to_percent(0.5).unwrap();
@@ -868,10 +868,10 @@ fn test_seek_percent() {
 #[test]
 fn test_seek_beyond_duration_fails() {
     let mut manager = PlaybackManager::default();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(100),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(100), 44100)),
+        next_track.clone(),
+    );
 
     let result = manager.seek_to(Duration::from_secs(200));
     assert!(result.is_err(), "Should fail when seeking beyond duration");
@@ -880,10 +880,10 @@ fn test_seek_beyond_duration_fails() {
 #[test]
 fn test_seek_to_start() {
     let mut manager = PlaybackManager::default();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(100),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(100), 44100)),
+        next_track.clone(),
+    );
 
     // Seek forward then back to start
     manager.seek_to(Duration::from_secs(50)).ok();
@@ -900,10 +900,10 @@ fn test_duration_reporting() {
     assert!(manager.get_duration().is_none());
 
     // With track
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     let duration = manager.get_duration();
     assert_eq!(duration, Some(Duration::from_secs(180)));
@@ -917,10 +917,10 @@ fn test_duration_reporting() {
 fn test_mono_output() {
     let mut manager = PlaybackManager::default();
     manager.set_output_channels(1);
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Process audio in mono
     let mut buffer = vec![0.0f32; 512]; // Mono buffer
@@ -939,10 +939,10 @@ fn test_mono_output() {
 fn test_stereo_output() {
     let mut manager = PlaybackManager::default();
     manager.set_output_channels(2);
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Process audio in stereo
     let mut buffer = vec![0.0f32; 1024]; // Stereo buffer
@@ -956,10 +956,10 @@ fn test_stereo_output() {
 fn test_multichannel_output() {
     let mut manager = PlaybackManager::default();
     manager.set_output_channels(6); // 5.1 surround
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Process audio
     let mut buffer = vec![0.0f32; 6 * 256]; // 6 channels * 256 frames
@@ -1014,10 +1014,10 @@ fn test_previous_within_3_seconds() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 180));
 
     // Play first track
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     // Move to second track (first goes to history)
     manager.next().ok();
@@ -1047,7 +1047,7 @@ fn test_previous_after_3_seconds_restarts() {
     // Set source and seek past 3 seconds
     let mut source = MockAudioSource::new(Duration::from_secs(180), 44100);
     source.seek(Duration::from_secs(60)).ok(); // 60 seconds in
-    manager.set_audio_source(Box::new(source));
+    manager.activate_source(Box::new(source), next_track.clone());
 
     // Previous should restart (position > 3 seconds)
     manager.previous().ok();
@@ -1224,10 +1224,10 @@ fn test_rapid_play_pause() {
     let mut manager = PlaybackManager::default();
 
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 180));
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        next_track.clone(),
+    );
 
     // Rapid play/pause cycles
     for _ in 0..100 {
@@ -1246,10 +1246,10 @@ fn test_rapid_play_pause() {
 #[test]
 fn test_rapid_volume_changes() {
     let mut manager = PlaybackManager::default();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     let mut buffer = vec![0.0f32; 512];
 
@@ -1303,10 +1303,10 @@ fn test_large_queue_operations() {
 #[test]
 fn test_continuous_playback_processing() {
     let mut manager = PlaybackManager::default();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(30),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(30), 44100)),
+        next_track.clone(),
+    );
 
     // Simulate 30 seconds of continuous playback processing
     let mut total_samples = 0;
@@ -1348,10 +1348,10 @@ fn test_time_until_crossfade() {
     assert!(manager.time_until_crossfade().is_none());
 
     // With source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     // At start (10s track, 3s crossfade): 10 - 0 - 3 = 7 seconds until crossfade
     let time_until = manager.time_until_crossfade().unwrap();
@@ -1374,10 +1374,10 @@ fn test_should_prepare_next_track() {
 
     // Short track: 5s - 3s crossfade = crossfade at 2s
     // Should prepare 5s before crossfade start, so immediately
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // With a 5 second track and 3 second crossfade, crossfade starts at 2s
     // We're at 0s, so 2s until crossfade < 5s, should prepare
@@ -1448,7 +1448,7 @@ fn test_crossfade_both_tracks_audible_during_transition() {
     // Set up current source (440Hz)
     manager.play().ok(); // Start playback BEFORE setting audio source
     let current_source = MockAudioSource::new(Duration::from_secs(1), 44100).with_frequency(440.0);
-    manager.set_audio_source(Box::new(current_source));
+    manager.activate_source(Box::new(current_source), next_track.clone());
 
     // Set up next source (880Hz) - THIS IS CRITICAL for crossfade to work
     let next_source = MockAudioSource::new(Duration::from_secs(1), 44100).with_frequency(880.0);
@@ -1804,10 +1804,10 @@ fn test_crossfade_triggers_at_correct_time() {
 
     // Set up 5-second source
     manager.play().ok(); // Start playback BEFORE setting audio source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Pre-load next track
     let next_source = MockAudioSource::new(Duration::from_secs(5), 44100);
@@ -1860,10 +1860,10 @@ fn test_crossfade_fails_without_next_source() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 1));
 
     // Only set current source, NOT next source
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(1),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(1), 44100)),
+        next_track.clone(),
+    );
 
     // Verify next source is NOT set
     assert!(

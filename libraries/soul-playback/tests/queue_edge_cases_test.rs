@@ -697,7 +697,8 @@ fn set_audio_source_with_empty_queue() {
 
     // Set audio source without queue - should work but state matters
     let source = Box::new(MockAudioSource::new(Duration::from_secs(10), 44100));
-    manager.set_audio_source(source);
+    let track = create_test_track("1");
+    manager.activate_source(source, track);
 
     // State should remain Stopped since we never called play()
     assert_eq!(manager.get_state(), PlaybackState::Stopped);
@@ -707,11 +708,12 @@ fn set_audio_source_with_empty_queue() {
 fn set_audio_source_after_play_changes_state() {
     let mut manager = PlaybackManager::new(PlaybackConfig::default());
 
-    manager.add_playlist_to_queue(create_tracks(1));
+    let track = create_test_track("1");
+    manager.add_playlist_to_queue(vec![track.clone()]);
     let _ = manager.play(); // State becomes Loading
 
     let source = Box::new(MockAudioSource::new(Duration::from_secs(10), 44100));
-    manager.set_audio_source(source);
+    manager.activate_source(source, track);
 
     // State should be Playing after source is set from Loading
     assert_eq!(manager.get_state(), PlaybackState::Playing);
@@ -721,12 +723,13 @@ fn set_audio_source_after_play_changes_state() {
 fn set_audio_source_respects_pause() {
     let mut manager = PlaybackManager::new(PlaybackConfig::default());
 
-    manager.add_playlist_to_queue(create_tracks(1));
+    let track = create_test_track("1");
+    manager.add_playlist_to_queue(vec![track.clone()]);
     let _ = manager.play(); // Loading
     manager.pause(); // Paused during loading
 
     let source = Box::new(MockAudioSource::new(Duration::from_secs(10), 44100));
-    manager.set_audio_source(source);
+    manager.activate_source(source, track);
 
     // Should remain Paused because user explicitly paused
     assert_eq!(manager.get_state(), PlaybackState::Paused);

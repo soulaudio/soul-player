@@ -217,10 +217,10 @@ fn test_crossfade_cancelled_by_seek() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 10));
 
     // Set up sources
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(10), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 10);
@@ -287,10 +287,10 @@ fn test_crossfade_cancelled_by_seek_to_beginning() {
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 5));
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(5), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 5);
@@ -335,10 +335,10 @@ fn test_crossfade_pause_behavior() {
 
     // Start playback
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(5), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 5);
@@ -379,10 +379,10 @@ fn test_crossfade_rapid_pause_play() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(5), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 5);
@@ -422,10 +422,10 @@ fn test_crossfade_cancelled_by_repeat_one() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(5), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 5);
@@ -475,10 +475,10 @@ fn test_crossfade_not_cancelled_by_repeat_all() {
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 5));
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(5), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 5);
@@ -516,10 +516,10 @@ fn test_track_shorter_than_crossfade_duration() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 10));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(2),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(2), 44100)),
+        next_track.clone(),
+    );
 
     // DON'T set next_source yet - check if should_prepare_next_track works correctly
     // The method returns false if next_source is already set
@@ -569,10 +569,10 @@ fn test_very_short_track_plays_completely() {
     manager.add_to_queue_end(create_test_track("2", "Long Track", "Artist", 10));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(1),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(1), 44100)),
+        next_track.clone(),
+    );
 
     // Process all audio from the short track
     let mut buffer = vec![0.0f32; 4096];
@@ -612,10 +612,10 @@ fn test_crossfade_incoming_not_ready() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        next_track.clone(),
+    );
 
     // Create next source that starts as NOT ready
     let next_source = MockAudioSource::new(Duration::from_secs(5), 44100).with_ready(false);
@@ -647,10 +647,10 @@ fn test_crossfade_completes_when_incoming_becomes_ready() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 3));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(3),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(3), 44100)),
+        next_track.clone(),
+    );
 
     // Set ready source
     let next_source = MockAudioSource::new(Duration::from_secs(3), 44100).with_ready(true);
@@ -695,10 +695,10 @@ fn test_queue_clear_during_playback() {
     }
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(10), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 10);
@@ -733,10 +733,10 @@ fn test_stop_clears_crossfade_state() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 10));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(10), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 10);
@@ -779,10 +779,10 @@ fn test_rapid_skip_clears_user_paused_flag() {
     }
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     // Rapid skip
     for _ in 0..5 {
@@ -828,10 +828,10 @@ fn test_multiple_rapid_skips() {
     // Simulate rapid skipping
     for i in 0..10 {
         // Set audio source for each skip
-        manager.set_audio_source(Box::new(MockAudioSource::new(
-            Duration::from_secs(5),
-            44100,
-        )));
+        manager.activate_source(
+            Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+            next_track.clone(),
+        );
 
         // Skip
         if i < 9 {
@@ -861,10 +861,10 @@ fn test_next_cancels_pending_state() {
     manager.add_to_queue_end(create_test_track("3", "Track 3", "Artist", 10));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     // Start pause (which creates pending state via stop_fade)
     manager.pause();
@@ -901,10 +901,10 @@ fn test_gapless_transition_zero_crossfade() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 2));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(2),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(2), 44100)),
+        next_track.clone(),
+    );
 
     let next_source = MockAudioSource::new(Duration::from_secs(2), 44100);
     let next_track = create_test_track("2", "Track 2", "Artist", 2);
@@ -932,10 +932,10 @@ fn test_disable_crossfade_mid_playback() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 10));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     // Disable crossfade
     manager.set_crossfade_enabled(false);
@@ -993,10 +993,10 @@ fn test_crossfade_manual_skip_on_skip_false() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 10));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     // Manual skip should NOT trigger crossfade when on_skip is false
     assert!(!manager.get_crossfade_settings().on_skip);
@@ -1014,10 +1014,10 @@ fn test_crossfade_manual_skip_on_skip_true() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 10));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )));
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        next_track.clone(),
+    );
 
     // Manual skip SHOULD trigger crossfade when on_skip is true
     assert!(manager.get_crossfade_settings().on_skip);
