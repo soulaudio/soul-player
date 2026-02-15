@@ -162,6 +162,11 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
         if (!isMounted) return;
 
+        const currentTrackDuration = validTracks[queueIndex]?.duration ?? 0;
+        const restoredProgress = session.position_seconds && currentTrackDuration > 0
+          ? Math.min(100, (session.position_seconds / currentTrackDuration) * 100)
+          : 0;
+
         // Update Zustand store
         usePlayerStore.setState({
           queue: validTracks,
@@ -171,11 +176,38 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           isPlaying: false, // Always paused on cold start
           repeatMode: session.repeat_mode as 'off' | 'all' | 'one',
           shuffleMode: session.shuffle_mode as 'off' | 'random' | 'smart',
-          progress: 0,
-          duration: validTracks[queueIndex]?.duration ?? 0,
+          progress: restoredProgress,
+          duration: currentTrackDuration,
         });
 
-        // Set backend state
+        // Convert Track[] to QueueTrack[] for backend
+        const queueForBackend = validTracks.map(track => ({
+          trackId: String(track.id),
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          albumId: track.albumId,
+          filePath: track.filePath,
+          durationSeconds: track.duration,
+          trackNumber: track.trackNumber,
+          coverArtPath: track.coverArtPath,
+        }));
+
+        // Load queue into backend playback manager (without starting playback)
+        await invoke('play_queue', {
+          queue: queueForBackend,
+          startIndex: queueIndex
+        });
+
+        // Immediately pause (since we always restore paused)
+        await invoke('pause_playback');
+
+        // Seek to saved position if we have one
+        if (session.position_seconds > 0) {
+          await invoke('seek_to', { position: session.position_seconds });
+        }
+
+        // Set backend state (volume, repeat, shuffle)
         await invoke('set_volume', { volume: session.volume });
         await invoke('set_repeat', { mode: session.repeat_mode });
         await invoke('set_shuffle', { mode: session.shuffle_mode });
@@ -194,6 +226,8 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           queueLength: validTracks.length,
           currentTrack: validTracks[queueIndex]?.title,
           volume: session.volume / 100,
+          position: session.position_seconds,
+          progress: restoredProgress.toFixed(1) + '%',
         });
       } catch (error) {
         console.error('[PERSISTENCE] Failed to restore from database:', error);
