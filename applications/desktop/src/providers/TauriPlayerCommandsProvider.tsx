@@ -167,8 +167,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           ? Math.min(100, (session.position_seconds / currentTrackDuration) * 100)
           : 0;
 
-        // Update Zustand store (this restores the visual state only - no backend loading yet)
-        // Queue will be loaded into backend when user clicks play for the first time
+        // Update Zustand store
         usePlayerStore.setState({
           queue: validTracks,
           queueIndex,
@@ -181,8 +180,32 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           duration: currentTrackDuration,
         });
 
-        // Set backend preferences only (don't load queue yet - wait for user interaction)
-        // This prevents auto-play on restore while keeping settings intact
+        // Convert Track[] to QueueTrack[] for backend
+        const queueForBackend = validTracks.map(track => ({
+          trackId: String(track.id),
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          albumId: track.albumId,
+          filePath: track.filePath,
+          durationSeconds: track.duration,
+          trackNumber: track.trackNumber,
+          coverArtPath: track.coverArtPath,
+        }));
+
+        // Load queue into backend WITHOUT starting playback
+        // This ensures skip next/prev work, but doesn't auto-play
+        await invoke('load_queue_paused', {
+          queue: queueForBackend,
+          startIndex: queueIndex
+        });
+
+        // Seek to saved position if we have one
+        if (session.position_seconds > 0) {
+          await invoke('seek_to', { position: session.position_seconds });
+        }
+
+        // Set backend preferences (volume, repeat, shuffle)
         await invoke('set_volume', { volume: session.volume });
         await invoke('set_repeat', { mode: session.repeat_mode });
         await invoke('set_shuffle', { mode: session.shuffle_mode });

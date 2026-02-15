@@ -422,6 +422,65 @@ async fn play_queue(
     Ok(())
 }
 
+/// Load queue into backend without starting playback
+/// Used for cold start restoration to populate queue state while staying paused
+#[tauri::command(rename_all = "camelCase")]
+async fn load_queue_paused(
+    queue: Vec<TrackData>,
+    start_index: usize,
+    playback: State<'_, LazyPlaybackManager>,
+) -> Result<(), String> {
+    tracing::info!(
+        queue_size = queue.len(),
+        start_index = start_index,
+        "[load_queue_paused] Loading queue without starting playback"
+    );
+
+    if queue.is_empty() {
+        tracing::error!("[load_queue_paused] Queue is empty");
+        return Err("Queue is empty".to_string());
+    }
+
+    if start_index >= queue.len() {
+        tracing::error!(
+            start_index = start_index,
+            queue_size = queue.len(),
+            "[load_queue_paused] Start index out of bounds"
+        );
+        return Err("Start index out of bounds".to_string());
+    }
+
+    // Convert to QueueTrack format
+    let tracks: Vec<soul_playback::QueueTrack> = queue
+        .iter()
+        .map(|track_data| track_data.to_queue_track())
+        .collect();
+
+    tracing::debug!(
+        "[load_queue_paused] Loading {} tracks without auto-play",
+        tracks.len()
+    );
+
+    let pm = playback.get().await?;
+
+    // Stop current playback if needed
+    let current_state = pm.get_state();
+    if current_state != soul_playback::PlaybackState::Stopped {
+        pm.stop()
+            .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
+    }
+
+    // Load playlist WITHOUT calling play()
+    pm.load_playlist(tracks, start_index)
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
+
+    tracing::info!(
+        "[load_queue_paused] Queue loaded successfully (paused state)"
+    );
+
+    Ok(())
+}
+
 #[tauri::command(rename_all = "camelCase")]
 async fn play_queue_with_context(
     context: QueueContext,
@@ -589,7 +648,11 @@ async fn unmute(playback: State<'_, LazyPlaybackManager>) -> Result<(), String> 
 }
 
 #[tauri::command]
-async fn seek_to(position: f64, playback: State<'_, LazyPlaybackManager>) -> Result<(), String> {
+async fn seek_to(
+    position: f64,
+    app: AppHandle,
+    playback: State<'_, LazyPlaybackManager>,
+) -> Result<(), String> {
     // STEP 3: Rust seek_to entry timestamp
     let entry_time = std::time::Instant::now();
     tracing::info!("[SEEK PERF] === Rust seek_to() ENTRY === position={:.3}s", position);
@@ -600,6 +663,11 @@ async fn seek_to(position: f64, playback: State<'_, LazyPlaybackManager>) -> Res
     match &result {
         Ok(_) => {
             tracing::info!("[SEEK PERF] === Rust seek_to() EXIT === completed in {:.2}ms", exit_time.as_millis());
+
+            // CRITICAL FIX: Emit position update immediately after seek completes
+            // This ensures frontend gets confirmation even when playback is paused
+            let _ = app.emit("playback:position-updated", position);
+            tracing::info!("[SEEK PERF] Position update emitted: {:.3}s", position);
         }
         Err(e) => {
             tracing::error!("[SEEK PERF] === Rust seek_to() ERROR === after {:.2}ms: {}", exit_time.as_millis(), e);
@@ -2982,6 +3050,7 @@ fn main() {
             // Playback control
             play_track,
             play_queue,
+            load_queue_paused,
             play_queue_with_context,
             play,
             pause_playback,
