@@ -96,17 +96,17 @@ export const BackendGenreSchema = z.object({
 // =============================================================================
 
 export const PlaybackSessionSchema = z.object({
-  current_track_id: z.number().nullable(),
-  queue_track_ids: z.array(z.number()),
-  queue_index: z.number(),
-  position_seconds: z.number(),
-  volume: z.number(),
-  repeat_mode: z.string(),
-  shuffle_mode: z.string(),
-  context_type: z.string().nullable(),
-  context_id: z.string().nullable(),
-  was_playing: z.boolean(),
-});
+  current_track_id: z.number().nullable().optional(),
+  queue_track_ids: z.array(z.number()).optional().default([]),
+  queue_index: z.number().optional().default(0),
+  position_seconds: z.number().optional().default(0),
+  volume: z.number().optional().default(80),
+  repeat_mode: z.string().optional().default('off'),
+  shuffle_mode: z.string().optional().default('off'),
+  context_type: z.string().nullable().optional(),
+  context_id: z.string().nullable().optional(),
+  was_playing: z.boolean().optional().default(false),
+}).passthrough();
 
 export const QueueTrackSchema = z.object({
   trackId: z.string().optional(),
@@ -121,13 +121,13 @@ export const QueueTrackSchema = z.object({
 }).passthrough(); // Allow additional fields we might not know about
 
 export const PlaybackContextSchema = z.object({
-  id: z.number(),
-  context_type: z.string(),
-  context_id: z.string().nullable(),
-  context_name: z.string().nullable(),
-  context_artwork_path: z.string().nullable(),
-  last_played_at: z.number(),
-});
+  id: z.number().optional(),
+  context_type: z.string().optional(),
+  context_id: z.string().nullable().optional(),
+  context_name: z.string().nullable().optional(),
+  context_artwork_path: z.string().nullable().optional(),
+  last_played_at: z.number().optional(),
+}).passthrough();
 
 // =============================================================================
 // Audio Settings Types

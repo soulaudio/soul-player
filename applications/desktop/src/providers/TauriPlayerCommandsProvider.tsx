@@ -54,25 +54,25 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       }
 
       const sessionData = {
-        current_track_id: state.currentTrack.id,
-        queue_track_ids: state.queue.map(t => t.id),
-        queue_index: state.queueIndex,
-        position_seconds: state.duration ? (state.progress / 100) * state.duration : 0,
+        currentTrackId: state.currentTrack.id,
+        queueTrackIds: state.queue.map(t => t.id),
+        queueIndex: state.queueIndex,
+        positionSeconds: state.duration ? (state.progress / 100) * state.duration : 0,
         volume: state.volume * 100, // Convert 0-1 to 0-100
-        repeat_mode: state.repeatMode,
-        shuffle_mode: state.shuffleMode,
-        context_type: session.contextType,
-        context_id: session.contextId,
-        was_playing: state.isPlaying,
+        repeatMode: state.repeatMode,
+        shuffleMode: state.shuffleMode,
+        contextType: session.contextType,
+        contextId: session.contextId,
+        wasPlaying: state.isPlaying,
       };
 
       await invoke('save_playback_session', { session: sessionData });
 
       console.log('[PERSISTENCE] Session saved:', {
-        currentTrackId: sessionData.current_track_id,
+        currentTrackId: sessionData.currentTrackId,
         currentTrackTitle: state.currentTrack.title,
-        queueLength: sessionData.queue_track_ids.length,
-        position: sessionData.position_seconds.toFixed(1) + 's',
+        queueLength: sessionData.queueTrackIds.length,
+        position: sessionData.positionSeconds.toFixed(1) + 's',
       });
     } catch (error) {
       console.error('[PERSISTENCE] Failed to save session:', error);
