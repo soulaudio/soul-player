@@ -220,7 +220,8 @@ fn test_detect_click_at_playback_start_with_dc() {
 
     // Use DC offset source (constant 0.8) - worst case for click
     let source = Box::new(DcOffsetSource::new(0.8, 48000, 5.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("dc-test");
+    manager.activate_source(source, track);
 
     // Process first buffer
     let mut buffer = vec![0.0f32; 1024];
@@ -254,7 +255,8 @@ fn test_detect_click_at_playback_start_with_sine() {
 
     // Use sine wave at 0.8 amplitude
     let source = Box::new(ConstantLevelSource::new(0.8, 1000.0, 48000, 5.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("sine-test");
+    manager.activate_source(source, track);
 
     // Process first buffer
     let mut buffer = vec![0.0f32; 1024];
@@ -300,7 +302,8 @@ fn test_fade_in_duration_is_appropriate() {
     // Use constant level source at full amplitude
     let target_amplitude = 1.0f32;
     let source = Box::new(DcOffsetSource::new(target_amplitude, 48000, 5.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("fade-duration-test");
+    manager.activate_source(source, track);
 
     // Process enough samples to cover fade-in (at least 20ms worth)
     let mut all_samples = Vec::new();
@@ -392,7 +395,8 @@ fn test_no_click_on_resume_from_pause() {
 
     // Start playback
     let source = Box::new(DcOffsetSource::new(0.8, 48000, 5.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("resume-test");
+    manager.activate_source(source, track);
 
     // Play for a bit
     let mut buffer = vec![0.0f32; 2048];
@@ -528,7 +532,8 @@ fn test_very_short_buffer_with_fade() {
     manager.set_output_channels(2);
 
     let source = Box::new(DcOffsetSource::new(0.8, 48000, 5.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("small-buffer-test");
+    manager.activate_source(source, track);
 
     // Process with very small buffers (64 samples = 32 stereo frames)
     let mut all_samples = Vec::new();
@@ -557,7 +562,8 @@ fn test_fade_in_with_varying_buffer_sizes() {
     manager.set_output_channels(2);
 
     let source = Box::new(DcOffsetSource::new(0.8, 48000, 5.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("varying-buffer-test");
+    manager.activate_source(source, track);
 
     let buffer_sizes = [128, 256, 64, 512, 128, 256];
     let mut all_samples = Vec::new();
@@ -589,7 +595,8 @@ fn test_multiple_start_stop_cycles() {
         manager.set_output_channels(2);
 
         let source = Box::new(DcOffsetSource::new(0.8, sample_rate, 5.0));
-        manager.set_audio_source(source);
+        let track = create_test_track(&format!("cycle-{}", cycle));
+        manager.activate_source(source, track);
 
         let mut buffer = vec![0.0f32; 1024];
         let _ = manager.process_audio(&mut buffer);
@@ -624,13 +631,14 @@ fn test_fade_envelope_performance() {
 
     let start = Instant::now();
 
-    for _ in 0..iterations {
+    for i in 0..iterations {
         let mut manager = PlaybackManager::new(PlaybackConfig::default());
         manager.set_sample_rate(sample_rate);
         manager.set_output_channels(2);
 
         let source = Box::new(DcOffsetSource::new(0.8, sample_rate, 5.0));
-        manager.set_audio_source(source);
+        let track = create_test_track(&format!("perf-{}", i));
+        manager.activate_source(source, track);
 
         let mut buffer = vec![0.0f32; buffer_size];
         let _ = manager.process_audio(&mut buffer);
@@ -670,7 +678,8 @@ fn test_waveform_not_distorted_by_fade() {
 
     // Use a loud sine wave that will definitely trigger the fade
     let source = Box::new(ConstantLevelSource::new(0.8, frequency, sample_rate, 1.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("waveform-test");
+    manager.activate_source(source, track);
 
     // Process enough audio to get past the fade period (100ms worth)
     let mut all_samples = Vec::new();
@@ -731,7 +740,8 @@ fn test_no_jitter_during_fade() {
     manager.set_output_channels(2);
 
     let source = Box::new(ConstantLevelSource::new(0.9, frequency, sample_rate, 1.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("jitter-test");
+    manager.activate_source(source, track);
 
     // Process audio through the fade (100ms warmup to complete fade)
     let mut warmup = vec![0.0f32; 9600];
@@ -789,7 +799,8 @@ fn test_fade_does_not_add_harmonics() {
     manager.set_output_channels(2);
 
     let source = Box::new(ConstantLevelSource::new(0.8, frequency, sample_rate, 1.0));
-    manager.set_audio_source(source);
+    let track = create_test_track("harmonics-test");
+    manager.activate_source(source, track);
 
     // Get audio after fade completes
     let mut warmup = vec![0.0f32; 9600]; // 100ms warmup
@@ -880,7 +891,8 @@ fn test_no_click_on_seek() {
 
     // Use a sine wave source
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 5.0));
-    manager.set_audio_source(source);
+    let seek_track = create_test_track("seek-audio-test");
+    manager.activate_source(source, seek_track);
 
     // Process some audio first to get past initial fade
     let mut warmup = vec![0.0f32; 9600]; // 100ms
@@ -921,7 +933,8 @@ fn test_no_click_on_multiple_seeks() {
     manager.play().expect("Should start playback");
 
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 10.0));
-    manager.set_audio_source(source);
+    let multiple_seek_track = create_test_track("multiple-seek-test");
+    manager.activate_source(source, multiple_seek_track);
 
     // Process initial fade
     let mut warmup = vec![0.0f32; 4800];
@@ -965,7 +978,8 @@ fn test_no_click_on_pause_resume_cycle() {
     manager.set_output_channels(2);
 
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 5.0));
-    manager.set_audio_source(source);
+    let pause_cycle_track = create_test_track("pause-cycle-test");
+    manager.activate_source(source, pause_cycle_track);
 
     // Process initial audio
     let mut warmup = vec![0.0f32; 4800];
@@ -1025,7 +1039,8 @@ fn test_no_click_on_seek_while_paused() {
     manager.set_output_channels(2);
 
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 10.0));
-    manager.set_audio_source(source);
+    let seek_paused_track = create_test_track("seek-paused-test");
+    manager.activate_source(source, seek_paused_track);
 
     // Process initial audio
     let mut warmup = vec![0.0f32; 4800];
@@ -1069,7 +1084,8 @@ fn test_no_click_on_rapid_seeks() {
     manager.play().expect("Should start playback");
 
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 10.0));
-    manager.set_audio_source(source);
+    let rapid_seek_track = create_test_track("rapid-seek-audio-test");
+    manager.activate_source(source, rapid_seek_track);
 
     // Rapid seeks without processing in between
     for i in 0..5 {
@@ -1201,7 +1217,8 @@ fn test_no_silence_gaps_on_buffer_underrun() {
         10.0,
         512, // Only 512 samples per read
     ));
-    manager.set_audio_source(source);
+    let underrun_track = create_test_track("underrun-test");
+    manager.activate_source(source, underrun_track);
 
     // Process audio with a larger buffer than source can provide
     let mut buffer = vec![0.0f32; 2048];
@@ -1273,7 +1290,8 @@ fn test_full_buffer_utilization_on_underrun() {
         10.0,
         128, // Severe underrun
     ));
-    manager.set_audio_source(source);
+    let severe_underrun_track = create_test_track("severe-underrun-test");
+    manager.activate_source(source, severe_underrun_track);
 
     // Request much more than source can provide
     let mut buffer = vec![0.0f32; 4096];
