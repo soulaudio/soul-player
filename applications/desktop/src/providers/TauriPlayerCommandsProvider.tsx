@@ -50,8 +50,11 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       const state = usePlayerStore.getState();
 
       if (!state.currentTrack) {
+        console.log('[PERSISTENCE] Skipping save - no current track');
         return;
       }
+
+      console.log('[PERSISTENCE] Saving session with track:', state.currentTrack.title);
 
       const sessionData = {
         currentTrackId: state.currentTrack.id,
@@ -115,8 +118,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           PlaybackSessionSchema.nullable()
         );
 
+        console.log('[PERSISTENCE] Session data from database:', session);
+
         if (!session || !session.current_track_id) {
-          console.log('[PERSISTENCE] No saved session found');
+          console.log('[PERSISTENCE] No saved session found or no current track ID');
           return;
         }
 
