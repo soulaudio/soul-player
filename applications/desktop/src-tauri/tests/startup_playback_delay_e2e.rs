@@ -235,7 +235,7 @@ async fn test_startup_to_first_playback_delay() {
     let queue_load_start = Instant::now();
 
     playback
-        .load_playlist(vec![test_track], 0)
+        .load_playlist(vec![test_track])
         .expect("Failed to load playlist");
     let queue_load_duration = queue_load_start.elapsed();
 
@@ -377,7 +377,7 @@ async fn test_cold_start_vs_warm_playback() {
     println!("Cold init took: {:?}", cold_init_duration);
 
     pm_cold
-        .load_playlist(vec![test_track.clone()], 0)
+        .load_playlist(vec![test_track.clone()])
         .expect("Failed to load");
 
     let cold_play_start = Instant::now();
@@ -421,7 +421,7 @@ async fn test_cold_start_vs_warm_playback() {
 
     // Now actual playback
     pm_warm
-        .load_playlist(vec![test_track.clone()], 0)
+        .load_playlist(vec![test_track.clone()])
         .expect("Failed to load");
 
     let warm_play_start = Instant::now();
