@@ -238,6 +238,7 @@ fn test_gapless_transition() {
     // Set up current and next sources for gapless
     let track = create_test_track("test", 180);
 
+    let track = create_test_track("test", "Test Track", "Artist", 180);
     manager.activate_source(Box::new(MockAudioSource::new(
 
         Duration::from_secs(2),
@@ -251,7 +252,7 @@ fn test_gapless_transition() {
     let next_track = create_test_track("2", "Track 2", "Artist B", 2);
     manager.set_next_source(Box::new(next_source), next_track);
 
-    assert!(manager.has_next_source());
+    assert!(manager.has_next_source(), track);
 
     // Process audio through near-end of track
     let mut buffer = vec![0.0f32; 4096];
