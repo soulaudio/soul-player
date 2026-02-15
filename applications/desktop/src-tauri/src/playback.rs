@@ -1250,7 +1250,10 @@ impl PlaybackManager {
     pub fn seek(&self, position: f64) -> Result<(), AudioError> {
         // STEP 3b: PlaybackManager wrapper entry
         let entry_time = std::time::Instant::now();
-        tracing::trace!("[SEEK PERF] PlaybackManager.seek() ENTRY position={:.3}s", position);
+        tracing::trace!(
+            "[SEEK PERF] PlaybackManager.seek() ENTRY position={:.3}s",
+            position
+        );
 
         let playback = self
             .playback
@@ -1260,7 +1263,10 @@ impl PlaybackManager {
             })?;
 
         let lock_time = entry_time.elapsed();
-        tracing::trace!("[SEEK PERF] Lock acquired in {:.2}ms", lock_time.as_millis());
+        tracing::trace!(
+            "[SEEK PERF] Lock acquired in {:.2}ms",
+            lock_time.as_millis()
+        );
 
         let send_start = std::time::Instant::now();
         let result = playback
@@ -1276,7 +1282,11 @@ impl PlaybackManager {
                 tracing::trace!("[SEEK PERF] PlaybackManager.seek() EXIT - command sent in {:.2}ms (total: {:.2}ms)", send_time.as_millis(), entry_time.elapsed().as_millis());
             }
             Err(e) => {
-                tracing::error!("[SEEK PERF] PlaybackManager.seek() ERROR after {:.2}ms: {}", entry_time.elapsed().as_millis(), e);
+                tracing::error!(
+                    "[SEEK PERF] PlaybackManager.seek() ERROR after {:.2}ms: {}",
+                    entry_time.elapsed().as_millis(),
+                    e
+                );
             }
         }
 

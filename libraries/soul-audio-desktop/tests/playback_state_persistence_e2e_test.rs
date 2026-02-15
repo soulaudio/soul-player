@@ -33,7 +33,7 @@ async fn setup_test_database() -> SqlitePool {
     // Create test album SECOND (tracks reference albums)
     sqlx::query(
         "INSERT INTO albums (id, title, artist_id, artwork_source, cover_art_path, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)"
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(1)
     .bind("Test Album")
@@ -176,7 +176,10 @@ async fn load_session(pool: &SqlitePool, user_id: &str) -> PlaybackSession {
         queue_track_ids: settings::get_setting(pool, user_id, "playback.queue_track_ids")
             .await
             .unwrap()
-            .and_then(|v| v.as_array().map(|arr| arr.iter().filter_map(|v| v.as_i64()).collect()))
+            .and_then(|v| {
+                v.as_array()
+                    .map(|arr| arr.iter().filter_map(|v| v.as_i64()).collect())
+            })
             .unwrap(),
         queue_index: settings::get_setting(pool, user_id, "playback.queue_index")
             .await

@@ -14,15 +14,8 @@ const mockHandleSeek = vi.fn();
 vi.mock('../../../hooks/useSeekBar', () => ({
   useSeekBar: () => ({
     handleSeek: mockHandleSeek,
+    isSeeking: false,
   }),
-}));
-
-// Mock useInterpolatedProgress hook
-vi.mock('../../../hooks/useInterpolatedProgress', () => ({
-  useInterpolatedProgress: () => {
-    const { progress, duration } = usePlayerStore.getState();
-    return { progress, duration };
-  },
 }));
 
 describe('ProgressBar', () => {
@@ -477,8 +470,8 @@ describe('ProgressBar', () => {
     });
   });
 
-  describe('integration with useInterpolatedProgress', () => {
-    it('should use interpolated progress from hook', () => {
+  describe('integration with player store', () => {
+    it('should use progress from player store', () => {
       usePlayerStore.setState({ progress: 50, duration: 300 });
 
       const { container } = render(<ProgressBar />);
@@ -487,7 +480,7 @@ describe('ProgressBar', () => {
       expect(progressFill).toHaveStyle({ width: '50%' });
     });
 
-    it('should update when interpolated values change', () => {
+    it('should update when store values change', () => {
       usePlayerStore.setState({ progress: 25, duration: 300 });
 
       const { container, rerender } = render(<ProgressBar />);

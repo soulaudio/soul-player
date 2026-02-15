@@ -464,7 +464,7 @@ async fn restore_playback_state(
         .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
 
     // 2. Set volume
-    pm.set_volume(state.volume)
+    pm.set_volume(state.volume as u8)
         .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
 
     // 3. Set repeat mode
@@ -473,7 +473,8 @@ async fn restore_playback_state(
         "one" => soul_playback::RepeatMode::One,
         _ => soul_playback::RepeatMode::Off,
     };
-    pm.set_repeat(repeat_mode);
+    pm.set_repeat(repeat_mode)
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
 
     // 4. Set shuffle mode
     let shuffle_mode = match state.shuffle_mode.as_str() {
@@ -481,7 +482,8 @@ async fn restore_playback_state(
         "smart" => soul_playback::ShuffleMode::Smart,
         _ => soul_playback::ShuffleMode::Off,
     };
-    pm.set_shuffle(shuffle_mode);
+    pm.set_shuffle(shuffle_mode)
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
 
     // 5. Seek to saved position (if > 0)
     if state.position_seconds > 0.0 {

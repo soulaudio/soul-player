@@ -185,7 +185,6 @@ export { ScanProgressToast } from './components/ScanProgressToast';
 
 // Hooks
 export { useSeekBar } from './hooks/useSeekBar';
-export { useInterpolatedProgress } from './hooks/useInterpolatedProgress';
 export { useGridScale } from './hooks/useGridScale';
 export { useResponsiveColumns } from './hooks/useResponsiveColumns';
 export { useInfiniteLibrary } from './hooks/useInfiniteLibrary';
