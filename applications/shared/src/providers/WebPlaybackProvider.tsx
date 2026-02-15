@@ -55,8 +55,8 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
       .then(() => {
         console.log(`[WebPlaybackProvider:${instanceId.current}] WASM manager initialized`);
 
-        // Setup event bridge to shared store and session context
-        setupEventBridge(manager, storage, updateSession);
+        // Setup event bridge to shared store
+        setupEventBridge(manager, storage);
 
         // CRITICAL FIX: Clear any stale UI state if queue is empty
         if (manager.queueLength() === 0) {
@@ -324,7 +324,6 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
                 contextType,
                 contextId,
                 contextName: queue[0]?.album || queue[0]?.artist || 'Unknown',
-                contextArtworkPath: null, // Will be set by event bridge when track changes
                 startedAt: new Date(),
               });
               console.log('[WebPlaybackProvider] Session context updated:', { contextType, contextId });
@@ -514,7 +513,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
     };
 
     return { commands, events };
-  }, [storage, isInitialized]);
+  }, [storage, isInitialized, updateSession, clearSession]);
 
   // Don't render children until WASM is initialized
   if (!isInitialized) {
@@ -529,17 +528,16 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
 /**
  * Setup event bridge between WASM manager and shared Zustand store
  * This keeps the store in sync with playback events
+ * PlaybackSession context derives from store, so no dual updates needed
  */
-function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataStorage, updateSession: (updates: any) => void) {
+function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataStorage) {
   console.log('[WebPlaybackProvider] Setting up event bridge');
 
-  // Bridge WASM events to shared store AND session context
+  // Bridge WASM events to shared store (session context derives from store)
   manager.on('stateChange', (state: PlaybackState) => {
     console.log('[WebPlaybackProvider] State change:', state);
     const isPlaying = state === PlaybackState.Playing;
     usePlayerStore.setState({ isPlaying });
-    // Sync to session context
-    updateSession({ isPlaying });
   });
 
   manager.on('trackChange', (track) => {
@@ -570,16 +568,9 @@ function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataSto
       };
 
       usePlayerStore.setState({ currentTrack: sharedTrack, duration: track.duration_secs || 0 });
-      // Sync to session context
-      updateSession({
-        currentTrack: sharedTrack,
-        contextArtworkPath: coverUrl || null
-      });
     } else {
       console.log('[WebPlaybackProvider] Track cleared');
       usePlayerStore.setState({ currentTrack: null, duration: 0 });
-      // Sync to session context
-      updateSession({ currentTrack: null });
     }
   });
 
@@ -630,7 +621,5 @@ function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataSto
     });
     console.log('[WebPlaybackProvider] Queue change, syncing', tracks.length, 'tracks to store');
     usePlayerStore.setState({ queue: tracks });
-    // Sync to session context
-    updateSession({ queue: tracks });
   });
 }
