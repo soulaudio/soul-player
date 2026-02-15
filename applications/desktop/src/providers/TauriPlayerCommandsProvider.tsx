@@ -200,7 +200,8 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         console.log('[PERSISTENCE] State restored from database:', {
           queueLength: validTracks.length,
           currentTrack: validTracks[queueIndex]?.title,
-          volume: session.volume / 100,
+          volumeFromDB: session.volume,
+          volumeConverted: session.volume / 100,
           position: session.position_seconds,
           progress: restoredProgress.toFixed(1) + '%',
         });
@@ -274,7 +275,8 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         console.log('[PERSISTENCE] State synced from backend:', {
           hasTrack: !!track,
           queueLength: queue.length,
-          volume: volume / 100,
+          volumeFromBackend: volume,
+          volumeConverted: volume / 100,
         });
       } catch (error) {
         console.error('[PERSISTENCE] Failed to sync from backend:', error);
