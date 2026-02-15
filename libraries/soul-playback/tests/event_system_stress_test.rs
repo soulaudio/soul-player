@@ -117,7 +117,8 @@ fn test_event_overflow_handling() {
     }
 
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))));
+    let track = create_test_track("1", 180);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))), track);
 
     // Process audio rapidly to generate many position update events
     let mut buffer = vec![0.0f32; 512];
@@ -139,9 +140,10 @@ fn test_event_overflow_handling() {
 fn test_position_update_throttling() {
     let mut manager = PlaybackManager::default();
 
-    manager.add_to_queue_end(create_test_track("1", 180));
+    let track = create_test_track("1", 180);
+    manager.add_to_queue_end(track.clone());
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))));
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))), track);
 
     // Process a lot of audio
     let mut buffer = vec![0.0f32; 256]; // Small buffer for rapid callbacks
@@ -183,7 +185,8 @@ fn stress_event_generation_10k_operations() {
     }
 
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))));
+    let track_temp = create_test_track("temp", 10);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))), track_temp);
 
     let mut buffer = vec![0.0f32; 1024];
 
@@ -201,7 +204,8 @@ fn stress_event_generation_10k_operations() {
             }
             3 => {
                 manager.next().ok();
-                manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))));
+                let track_temp = create_test_track("temp", 10);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))), track_temp);
             }
             4 => {
                 manager.seek_to(Duration::from_secs((i % 8) as u64)).ok();
@@ -242,7 +246,8 @@ fn test_slow_event_consumer() {
 
     manager.add_to_queue_end(create_test_track("1", 180));
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))));
+    let track_temp = create_test_track("temp", 180);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))), track_temp);
 
     let producer = thread::spawn(move || {
         let mut buffer = vec![0.0f32; 512];
@@ -294,7 +299,8 @@ fn test_event_backpressure() {
 
     manager.add_to_queue_end(create_test_track("1", 180));
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))));
+    let track_temp = create_test_track("temp", 180);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))), track_temp);
 
     let mut buffer = vec![0.0f32; 512];
     let mut process_operations = 0;
@@ -334,7 +340,8 @@ fn test_event_ordering_guarantees() {
 
     // Perform sequence of operations
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))));
+    let track_temp = create_test_track("temp", 180);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))), track_temp);
 
     let mut buffer = vec![0.0f32; 1024];
     manager.process_audio(&mut buffer).ok();
@@ -342,7 +349,8 @@ fn test_event_ordering_guarantees() {
     manager.pause();
     manager.play().ok();
     manager.next().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))));
+    let track_temp = create_test_track("temp", 180);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))), track_temp);
 
     // Collect events
     let events = manager.drain_events();
@@ -378,7 +386,8 @@ fn test_no_duplicate_state_events() {
 
     manager.add_to_queue_end(create_test_track("1", 180));
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))));
+    let track_temp = create_test_track("temp", 180);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))), track_temp);
 
     // Call play multiple times (should not emit duplicate events)
     manager.play().ok();
@@ -429,7 +438,8 @@ fn test_concurrent_event_polling() {
             mgr.add_to_queue_end(create_test_track(&i.to_string(), 180));
         }
         mgr.play().ok();
-        mgr.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))));
+        let t = create_test_track("thread", 180);
+        mgr.activate_source(Box::new(EventMockSource::new(Duration::from_secs(180))), t);
     }
 
     let event_count = Arc::new(AtomicUsize::new(0));
@@ -487,7 +497,8 @@ fn test_event_memory_no_leak() {
     }
 
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))));
+    let track_temp = create_test_track("temp", 10);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))), track_temp);
 
     let mut buffer = vec![0.0f32; 1024];
 
@@ -529,7 +540,8 @@ fn test_all_event_types_emitted() {
 
     // Trigger various events
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))));
+    let track_temp = create_test_track("temp", 10);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))), track_temp);
 
     let mut buffer = vec![0.0f32; 4096];
     manager.process_audio(&mut buffer).ok();
@@ -537,7 +549,8 @@ fn test_all_event_types_emitted() {
     manager.pause();
     manager.set_volume(50);
     manager.next().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))));
+    let track_temp = create_test_track("temp", 10);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))), track_temp);
 
     // Collect all events
     let events = manager.drain_events();
@@ -572,7 +585,8 @@ fn stress_mixed_operations_with_event_verification() {
     }
 
     manager.play().ok();
-    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))));
+    let track_temp = create_test_track("temp", 10);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))), track_temp);
 
     let mut buffer = vec![0.0f32; 512];
     let mut operation_count = 0;
@@ -594,7 +608,8 @@ fn stress_mixed_operations_with_event_verification() {
             }
             3 => {
                 manager.next().ok();
-                manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))));
+                let track_temp = create_test_track("temp", 10);
+    manager.activate_source(Box::new(EventMockSource::new(Duration::from_secs(10))), track_temp);
                 operation_count += 1;
             }
             _ => {
