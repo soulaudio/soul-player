@@ -4,7 +4,7 @@
  * Also handles event-to-store updates and keyboard shortcuts
  */
 
-import { ReactNode, useMemo, useEffect, useRef, useCallback } from 'react';
+import { ReactNode, useMemo, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import debounce from 'lodash.debounce';
@@ -21,6 +21,12 @@ import {
   type BackendTrack,
 } from '@soul-player/shared';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import {
+  invokeValidated,
+  PlaybackSessionSchema,
+  QueueTrackSchema,
+  PlaybackContextSchema,
+} from '../types/validation';
 
 // REMOVED: Ignore window timer (artificial 120ms delay)
 // Production players (VLC, Clementine, Audacious) don't use this pattern
@@ -98,19 +104,11 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       console.log('[PERSISTENCE] Cold start detected - restoring from database');
 
       try {
-        // Load persisted session
-        const session = await invoke<{
-          current_track_id: number | null;
-          queue_track_ids: number[];
-          queue_index: number;
-          position_seconds: number;
-          volume: number;
-          repeat_mode: string;
-          shuffle_mode: string;
-          context_type: string | null;
-          context_id: string | null;
-          was_playing: boolean;
-        } | null>('restore_playback_session');
+        // Load persisted session (with runtime validation)
+        const session = await invokeValidated(
+          'restore_playback_session',
+          PlaybackSessionSchema.nullable()
+        );
 
         if (!session || !session.current_track_id) {
           console.log('[PERSISTENCE] No saved session found');
@@ -309,7 +307,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
       try {
         // Check if backend has active state (hot reload scenario)
-        const backendTrack = await invoke<QueueTrack | null>('get_current_track');
+        const backendTrack = await invokeValidated('get_current_track', QueueTrackSchema.nullable());
 
         if (backendTrack) {
           // Hot reload - backend is alive
@@ -329,8 +327,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         const unlistenStateChanged = await listen<string>('playback:state-changed', (event) => {
           const isPlaying = event.payload === 'Playing';
           usePlayerStore.setState({ isPlaying });
-          // Update session state
-          updateSession({ isPlaying });
+          // Session's isPlaying is derived from Zustand store - no need to update
         });
         unlistenFunctions.push(unlistenStateChanged);
 
@@ -363,23 +360,19 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
               progress: 0
             });
 
-            // Update session with current track and fetch latest context from backend
+            // Update session with latest context from backend
+            // Note: currentTrack is derived from Zustand store, don't pass to updateSession
             try {
-              const context = await invoke<{ contextType: string; contextId: string; contextName: string; contextArtworkPath: string | null } | null>('get_current_playback_context');
+              const context = await invokeValidated('get_current_playback_context', PlaybackContextSchema.nullable());
               if (context) {
                 updateSession({
-                  currentTrack: track,
-                  contextType: context.contextType as 'album' | 'artist' | 'playlist',
-                  contextId: context.contextId,
-                  contextName: context.contextName,
-                  contextArtworkPath: context.contextArtworkPath,
+                  contextType: context.context_type as 'album' | 'artist' | 'playlist',
+                  contextId: context.context_id,
+                  contextName: context.context_name,
                 });
-              } else {
-                updateSession({ currentTrack: track });
               }
             } catch (error) {
               console.error('[TauriPlayerCommandsProvider] Failed to get context:', error);
-              updateSession({ currentTrack: track });
             }
           }
         });
@@ -427,77 +420,32 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     };
   }, [updateSession]);
 
-  // Subscribe to track changes - save immediately
+  // Consolidated subscription for all state changes
   useEffect(() => {
-    let lastTrackId = usePlayerStore.getState().currentTrack?.id;
+    let lastState = usePlayerStore.getState();
 
     const unsubscribe = usePlayerStore.subscribe((state) => {
-      const currentTrackId = state.currentTrack?.id;
-      if (currentTrackId !== lastTrackId) {
-        lastTrackId = currentTrackId;
+      // Check what changed
+      const trackChanged = state.currentTrack?.id !== lastState.currentTrack?.id;
+      const queueChanged = state.queue.length !== lastState.queue.length;
+      const volumeChanged = Math.abs(state.volume - lastState.volume) > 0.05;
+      const modesChanged =
+        state.repeatMode !== lastState.repeatMode ||
+        state.shuffleMode !== lastState.shuffleMode;
+      const progressChanged = state.progress !== lastState.progress;
+
+      // Save based on what changed
+      if (trackChanged || queueChanged || volumeChanged || modesChanged) {
         savePlaybackSession();
-      }
-    });
-
-    return unsubscribe;
-  }, [savePlaybackSession]);
-
-  // Subscribe to queue changes - save immediately
-  useEffect(() => {
-    let lastQueueLength = usePlayerStore.getState().queue.length;
-
-    const unsubscribe = usePlayerStore.subscribe((state) => {
-      if (state.queue.length !== lastQueueLength) {
-        lastQueueLength = state.queue.length;
-        savePlaybackSession();
-      }
-    });
-
-    return unsubscribe;
-  }, [savePlaybackSession]);
-
-  // Subscribe to volume changes - save if changed by >5%
-  useEffect(() => {
-    let lastSavedVolume = usePlayerStore.getState().volume;
-
-    const unsubscribe = usePlayerStore.subscribe((state) => {
-      if (Math.abs(state.volume - lastSavedVolume) > 0.05) {
-        lastSavedVolume = state.volume;
-        savePlaybackSession();
-      }
-    });
-
-    return unsubscribe;
-  }, [savePlaybackSession]);
-
-  // Subscribe to repeat/shuffle mode changes - save immediately
-  useEffect(() => {
-    let lastModes = `${usePlayerStore.getState().repeatMode}-${usePlayerStore.getState().shuffleMode}`;
-
-    const unsubscribe = usePlayerStore.subscribe((state) => {
-      const currentModes = `${state.repeatMode}-${state.shuffleMode}`;
-      if (currentModes !== lastModes) {
-        lastModes = currentModes;
-        savePlaybackSession();
-      }
-    });
-
-    return unsubscribe;
-  }, [savePlaybackSession]);
-
-  // Subscribe to progress changes - save debounced (5s)
-  useEffect(() => {
-    let lastProgress = usePlayerStore.getState().progress;
-
-    const unsubscribe = usePlayerStore.subscribe((state) => {
-      if (state.progress !== lastProgress) {
-        lastProgress = state.progress;
+      } else if (progressChanged) {
         debouncedSave();
       }
+
+      lastState = state;
     });
 
     return unsubscribe;
-  }, [debouncedSave]);
+  }, [savePlaybackSession, debouncedSave]);
 
   const value = useMemo<PlayerContextValue>(() => {
     // Commands implementation using Tauri

@@ -25,6 +25,10 @@ import {
   type AnalysisQueueStats,
   type AnalysisWorkerStatus,
 } from '@soul-player/shared'
+import {
+  invokeValidatedArray,
+  BackendTrackSchema,
+} from '../types/validation'
 
 interface TauriBackendProviderProps {
   children: ReactNode
@@ -120,7 +124,7 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
     },
 
     async getTracksByIds(trackIds: number[]) {
-      return invoke<(BackendTrack | null)[]>('get_tracks_by_ids', { trackIds })
+      return invokeValidatedArray('get_tracks_by_ids', BackendTrackSchema.nullable(), { trackIds })
     },
 
     // Health check
