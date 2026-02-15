@@ -422,44 +422,46 @@ async fn play_queue(
     Ok(())
 }
 
-/// Load queue into backend without starting playback
-/// Used for cold start restoration to populate queue state while staying paused
-#[tauri::command(rename_all = "camelCase")]
-async fn load_queue_paused(
+/// Restore complete playback state in a single atomic operation
+/// Used for cold start restoration - loads queue, volume, modes, and position without auto-play
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RestorePlaybackStateParams {
     queue: Vec<TrackData>,
     start_index: usize,
+    position_seconds: f64,
+    volume: f64,        // 0-100
+    repeat_mode: String,
+    shuffle_mode: String,
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn restore_playback_state(
+    state: RestorePlaybackStateParams,
     playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
     tracing::info!(
-        queue_size = queue.len(),
-        start_index = start_index,
-        "[load_queue_paused] Loading queue without starting playback"
+        queue_size = state.queue.len(),
+        start_index = state.start_index,
+        position = state.position_seconds,
+        volume = state.volume,
+        "[restore_playback_state] Restoring complete playback state"
     );
 
-    if queue.is_empty() {
-        tracing::error!("[load_queue_paused] Queue is empty");
+    if state.queue.is_empty() {
         return Err("Queue is empty".to_string());
     }
 
-    if start_index >= queue.len() {
-        tracing::error!(
-            start_index = start_index,
-            queue_size = queue.len(),
-            "[load_queue_paused] Start index out of bounds"
-        );
+    if state.start_index >= state.queue.len() {
         return Err("Start index out of bounds".to_string());
     }
 
     // Convert to QueueTrack format
-    let tracks: Vec<soul_playback::QueueTrack> = queue
+    let tracks: Vec<soul_playback::QueueTrack> = state
+        .queue
         .iter()
         .map(|track_data| track_data.to_queue_track())
         .collect();
-
-    tracing::debug!(
-        "[load_queue_paused] Loading {} tracks without auto-play",
-        tracks.len()
-    );
 
     let pm = playback.get().await?;
 
@@ -470,12 +472,38 @@ async fn load_queue_paused(
             .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
     }
 
-    // Load playlist WITHOUT calling play()
-    pm.load_playlist(tracks, start_index)
+    // 1. Load queue (WITHOUT calling play())
+    pm.load_playlist(tracks, state.start_index)
         .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
 
+    // 2. Set volume
+    pm.set_volume(state.volume)
+        .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
+
+    // 3. Set repeat mode
+    let repeat_mode = match state.repeat_mode.as_str() {
+        "all" => soul_playback::RepeatMode::All,
+        "one" => soul_playback::RepeatMode::One,
+        _ => soul_playback::RepeatMode::Off,
+    };
+    pm.set_repeat(repeat_mode);
+
+    // 4. Set shuffle mode
+    let shuffle_mode = match state.shuffle_mode.as_str() {
+        "random" => soul_playback::ShuffleMode::Random,
+        "smart" => soul_playback::ShuffleMode::Smart,
+        _ => soul_playback::ShuffleMode::Off,
+    };
+    pm.set_shuffle(shuffle_mode);
+
+    // 5. Seek to saved position (if > 0)
+    if state.position_seconds > 0.0 {
+        pm.seek(state.position_seconds)
+            .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
+    }
+
     tracing::info!(
-        "[load_queue_paused] Queue loaded successfully (paused state)"
+        "[restore_playback_state] Restoration complete (paused state)"
     );
 
     Ok(())
@@ -3050,7 +3078,7 @@ fn main() {
             // Playback control
             play_track,
             play_queue,
-            load_queue_paused,
+            restore_playback_state,
             play_queue_with_context,
             play,
             pause_playback,

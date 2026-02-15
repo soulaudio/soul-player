@@ -167,19 +167,6 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           ? Math.min(100, (session.position_seconds / currentTrackDuration) * 100)
           : 0;
 
-        // Update Zustand store
-        usePlayerStore.setState({
-          queue: validTracks,
-          queueIndex,
-          currentTrack: validTracks[queueIndex],
-          volume: session.volume / 100, // Convert 0-100 to 0-1
-          isPlaying: false, // Always paused on cold start
-          repeatMode: session.repeat_mode as 'off' | 'all' | 'one',
-          shuffleMode: session.shuffle_mode as 'off' | 'random' | 'smart',
-          progress: restoredProgress,
-          duration: currentTrackDuration,
-        });
-
         // Convert Track[] to QueueTrack[] for backend
         const queueForBackend = validTracks.map(track => ({
           trackId: String(track.id),
@@ -193,22 +180,28 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           coverArtPath: track.coverArtPath,
         }));
 
-        // Load queue into backend WITHOUT starting playback
-        // This ensures skip next/prev work, but doesn't auto-play
-        await invoke('load_queue_paused', {
+        // Restore complete playback state in backend (single atomic operation)
+        await invoke('restore_playback_state', {
           queue: queueForBackend,
-          startIndex: queueIndex
+          startIndex: queueIndex,
+          positionSeconds: session.position_seconds,
+          volume: session.volume, // 0-100
+          repeatMode: session.repeat_mode,
+          shuffleMode: session.shuffle_mode,
         });
 
-        // Seek to saved position if we have one
-        if (session.position_seconds > 0) {
-          await invoke('seek_to', { position: session.position_seconds });
-        }
-
-        // Set backend preferences (volume, repeat, shuffle)
-        await invoke('set_volume', { volume: session.volume });
-        await invoke('set_repeat', { mode: session.repeat_mode });
-        await invoke('set_shuffle', { mode: session.shuffle_mode });
+        // Update Zustand store to match restored backend state
+        usePlayerStore.setState({
+          queue: validTracks,
+          queueIndex,
+          currentTrack: validTracks[queueIndex],
+          volume: session.volume / 100, // Convert 0-100 to 0-1
+          isPlaying: false, // Always paused on cold start
+          repeatMode: session.repeat_mode as 'off' | 'all' | 'one',
+          shuffleMode: session.shuffle_mode as 'off' | 'random' | 'smart',
+          progress: restoredProgress,
+          duration: currentTrackDuration,
+        });
 
         // Restore playback context
         if (session.context_type && session.context_id) {
