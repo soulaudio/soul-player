@@ -57,6 +57,7 @@ mod error;
 pub mod metadata;
 pub mod pipeline;
 pub mod resampling;
+pub mod sample_convert;
 
 // Audio fingerprinting (optional feature)
 #[cfg(feature = "fingerprint")]

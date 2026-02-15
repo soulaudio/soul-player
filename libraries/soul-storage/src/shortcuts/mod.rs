@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
 use crate::error::StorageError;
+use crate::utils::time::now_timestamp;
 
 pub type Result<T> = std::result::Result<T, StorageError>;
 
@@ -203,7 +204,7 @@ pub async fn set_shortcut(
     action: ShortcutAction,
     accelerator: String,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let action_str = action.as_str();
 
     sqlx::query!(

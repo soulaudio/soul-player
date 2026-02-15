@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
 use crate::error::StorageError;
+use crate::utils::time::now_timestamp;
 
 pub type Result<T> = std::result::Result<T, StorageError>;
 
@@ -103,7 +104,7 @@ pub async fn save_window_state(
     user_id: &str,
     state: &WindowState,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let maximized: i64 = i64::from(state.maximized);
     let x = state.x.map(|v| v as i64);
     let y = state.y.map(|v| v as i64);

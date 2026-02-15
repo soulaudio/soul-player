@@ -141,7 +141,7 @@ impl DopEncoder {
         // will recognize DoP from the pattern
         i32_output
             .iter()
-            .map(|&sample| sample as f32 / i32::MAX as f32)
+            .map(|&sample| crate::i32_to_f32!(sample))
             .collect()
     }
 

@@ -322,10 +322,7 @@ impl Fingerprinter {
         // Convert f32 samples to i16 for Chromaprint
         let samples_i16: Vec<i16> = samples
             .iter()
-            .map(|&s| {
-                let clamped = s.clamp(-1.0, 1.0);
-                (clamped * 32767.0) as i16
-            })
+            .map(|&s| crate::f32_to_i16!(s, clip))
             .collect();
 
         // Create Chromaprint fingerprinter with default configuration

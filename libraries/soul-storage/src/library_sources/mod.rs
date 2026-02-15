@@ -22,6 +22,7 @@
 //! # }
 //! ```
 
+use crate::utils::time::now_timestamp;
 use crate::StorageError;
 use soul_core::types::{CreateLibrarySource, LibrarySource, ScanStatus, UpdateLibrarySource};
 use sqlx::SqlitePool;
@@ -161,7 +162,7 @@ pub async fn create(
     device_id: &str,
     source: &CreateLibrarySource,
 ) -> Result<LibrarySource> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let sync_deletes = i32::from(source.sync_deletes);
 
     let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
@@ -200,7 +201,7 @@ pub async fn create(
 
 /// Update a library source
 pub async fn update(pool: &SqlitePool, id: i64, update: &UpdateLibrarySource) -> Result<bool> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     // Get current source
     let current = get_by_id(pool, id).await?;
@@ -249,7 +250,7 @@ pub async fn set_scan_status(
     status: ScanStatus,
     error_message: Option<&str>,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let status_str = status.as_str();
 
     sqlx::query!(
@@ -271,7 +272,7 @@ pub async fn set_scan_status(
 
 /// Update the last scan timestamp
 pub async fn set_last_scan_at(pool: &SqlitePool, id: i64, timestamp: i64) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"
@@ -359,7 +360,7 @@ pub async fn count(pool: &SqlitePool, user_id: &str, device_id: &str) -> Result<
 
 /// Set the enabled status of a library source
 pub async fn set_enabled(pool: &SqlitePool, id: i64, enabled: bool) -> Result<bool> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let enabled_int = i32::from(enabled);
 
     let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(

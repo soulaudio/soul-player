@@ -65,8 +65,6 @@ export type {
   ExclusiveConfig,
   AnalysisQueueStats,
   AnalysisWorkerStatus,
-  AudioBackend,
-  AudioDevice,
 } from './contexts/BackendContext';
 
 export { ScrollVisibilityProvider, useScrollVisibility } from './contexts/ScrollVisibilityContext';
@@ -116,7 +114,7 @@ export { ProgressBar } from './components/player/ProgressBar';
 // export { VolumeControl } from './components/player/VolumeControl'; // DELETED - dead code
 export { ShuffleRepeatControls } from './components/player/ShuffleRepeatControls';
 export { DeviceSelector } from './components/sidebar/DeviceSelector';
-export type { AudioDevice as DeviceSelectorAudioDevice, AudioBackend as DeviceSelectorAudioBackend, DeviceSelectorProps } from './components/sidebar/DeviceSelector';
+export type { AudioDevice, AudioBackend, DeviceSelectorProps } from './components/sidebar/DeviceSelector';
 
 // Other components
 export { QueueSidebar } from './components/QueueSidebar';

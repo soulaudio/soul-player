@@ -1,7 +1,6 @@
+use crate::utils::time::{now_timestamp, timestamp_to_iso8601};
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
-
-use crate::utils::time::timestamp_to_iso8601;
 
 /// Get user's playlists (owned + shared with them)
 pub async fn get_user_playlists(pool: &SqlitePool, user_id: UserId) -> Result<Vec<Playlist>> {
@@ -68,12 +67,8 @@ pub async fn get_by_id(
 
     Ok(row.map(|row| {
         // Convert Unix timestamp to ISO 8601 string
-        let created_at = chrono::DateTime::from_timestamp(row.created_at, 0)
-            .map(|dt| dt.to_rfc3339())
-            .unwrap_or_default();
-        let updated_at = chrono::DateTime::from_timestamp(row.updated_at, 0)
-            .map(|dt| dt.to_rfc3339())
-            .unwrap_or_default();
+        let created_at = timestamp_to_iso8601(row.created_at);
+        let updated_at = timestamp_to_iso8601(row.updated_at);
 
         Playlist {
             id: PlaylistId::new(row.id),
@@ -400,7 +395,7 @@ pub async fn share_playlist(
     }
 
     // Insert share
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     sqlx::query!(
         r#"
         INSERT INTO playlist_shares (playlist_id, shared_with_user_id, permission, shared_at)

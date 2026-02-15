@@ -1,5 +1,6 @@
 //! Playback state management for multi-device sync
 
+use crate::utils::time::now_timestamp;
 use crate::StorageError;
 use soul_core::types::{PlaybackState, RepeatMode, UpdatePlaybackState};
 use sqlx::SqlitePool;
@@ -43,7 +44,7 @@ pub async fn upsert(pool: &SqlitePool, state: &PlaybackState) -> Result<()> {
     let is_playing = i32::from(state.is_playing);
     let shuffle_enabled = i32::from(state.shuffle_enabled);
     let repeat_mode = state.repeat_mode.as_str();
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         "INSERT INTO user_playback_state
@@ -121,7 +122,7 @@ pub async fn set_active_device(
     user_id: &str,
     device_id: Option<&str>,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     // First ensure a state row exists
     sqlx::query!(

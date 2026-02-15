@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
 use crate::error::StorageError;
+use crate::utils::time::now_timestamp;
 
 pub type Result<T> = std::result::Result<T, StorageError>;
 
@@ -131,7 +132,7 @@ pub async fn set_setting(
 ) -> Result<()> {
     let value_str = serde_json::to_string(value)
         .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         "INSERT INTO user_settings (user_id, key, value, updated_at)

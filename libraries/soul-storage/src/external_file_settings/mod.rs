@@ -25,6 +25,7 @@
 //! # }
 //! ```
 
+use crate::utils::time::now_timestamp;
 use crate::StorageError;
 use soul_core::types::{
     ExternalFileAction, ExternalFileSettings, ImportDestination, UpdateExternalFileSettings,
@@ -105,7 +106,7 @@ pub async fn upsert(
     device_id: &str,
     settings: &UpdateExternalFileSettings,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let default_action = settings.default_action.as_str();
     let import_destination = settings.import_destination.as_str();
     let show_notification = i32::from(settings.show_import_notification);
@@ -145,7 +146,7 @@ pub async fn set_default_action(
     device_id: &str,
     action: ExternalFileAction,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let action_str = action.as_str();
 
     // First ensure settings exist
@@ -176,7 +177,7 @@ pub async fn set_import_destination(
     destination: ImportDestination,
     source_id: Option<i64>,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let destination_str = destination.as_str();
 
     // First ensure settings exist
@@ -207,7 +208,7 @@ pub async fn set_show_import_notification(
     device_id: &str,
     show: bool,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let show_int = i32::from(show);
 
     // First ensure settings exist

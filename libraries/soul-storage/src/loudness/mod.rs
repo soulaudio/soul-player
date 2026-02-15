@@ -3,6 +3,7 @@
 //! Database operations for storing and retrieving loudness analysis results
 //! including ReplayGain values and EBU R128 measurements.
 
+use crate::utils::time::now_timestamp;
 use soul_core::error::Result;
 use sqlx::SqlitePool;
 
@@ -152,7 +153,7 @@ pub async fn update_track_loudness(
     loudness: &TrackLoudness,
     version: &str,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"
@@ -245,7 +246,7 @@ pub async fn queue_track_for_analysis(
     track_id: i64,
     priority: i32,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"
@@ -293,7 +294,7 @@ pub async fn get_next_queue_item(pool: &SqlitePool) -> Result<Option<AnalysisQue
 
 /// Mark queue item as processing
 pub async fn mark_queue_processing(pool: &SqlitePool, queue_id: i64) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"
@@ -312,7 +313,7 @@ pub async fn mark_queue_processing(pool: &SqlitePool, queue_id: i64) -> Result<(
 
 /// Mark queue item as completed
 pub async fn mark_queue_completed(pool: &SqlitePool, queue_id: i64) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"
@@ -331,7 +332,7 @@ pub async fn mark_queue_completed(pool: &SqlitePool, queue_id: i64) -> Result<()
 
 /// Mark queue item as failed
 pub async fn mark_queue_failed(pool: &SqlitePool, queue_id: i64, error: &str) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"
@@ -400,7 +401,7 @@ pub async fn clear_completed_queue_items(pool: &SqlitePool) -> Result<i64> {
 
 /// Queue all unanalyzed tracks for analysis
 pub async fn queue_all_unanalyzed(pool: &SqlitePool) -> Result<i64> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"

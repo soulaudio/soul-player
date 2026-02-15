@@ -22,6 +22,7 @@
 //! # }
 //! ```
 
+use crate::utils::time::now_timestamp;
 use crate::StorageError;
 use soul_core::types::{ImportAction, ManagedLibrarySettings, UpdateManagedLibrarySettings};
 use sqlx::SqlitePool;
@@ -106,7 +107,7 @@ pub async fn upsert(
     device_id: &str,
     settings: &UpdateManagedLibrarySettings,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let import_action = settings.import_action.as_str();
 
     sqlx::query!(
@@ -141,7 +142,7 @@ pub async fn set_library_path(
     device_id: &str,
     path: &str,
 ) -> Result<bool> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
@@ -167,7 +168,7 @@ pub async fn set_path_template(
     device_id: &str,
     template: &str,
 ) -> Result<bool> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
@@ -193,7 +194,7 @@ pub async fn set_import_action(
     device_id: &str,
     action: ImportAction,
 ) -> Result<bool> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let action_str = action.as_str();
 
     let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(

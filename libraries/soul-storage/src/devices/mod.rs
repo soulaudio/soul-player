@@ -1,5 +1,6 @@
 //! Device management for multi-device sync
 
+use crate::utils::time::now_timestamp;
 use crate::StorageError;
 use soul_core::types::{Device, DeviceType};
 use sqlx::SqlitePool;
@@ -22,7 +23,7 @@ pub async fn register(
     name: &str,
     device_type: DeviceType,
 ) -> Result<Device> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let device_type_str = device_type.as_str();
 
     sqlx::query!(
@@ -95,7 +96,7 @@ pub async fn get_by_user(pool: &SqlitePool, user_id: &str) -> Result<Vec<Device>
 
 /// Update device's last seen timestamp
 pub async fn update_last_seen(pool: &SqlitePool, id: &str) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!("UPDATE devices SET last_seen_at = ? WHERE id = ?", now, id)
         .execute(pool)
@@ -121,7 +122,7 @@ pub async fn unregister(pool: &SqlitePool, id: &str) -> Result<bool> {
 /// * `pool` - Database connection pool
 /// * `threshold_seconds` - Devices not seen within this many seconds will be deleted
 pub async fn cleanup_inactive(pool: &SqlitePool, threshold_seconds: i64) -> Result<u64> {
-    let cutoff = chrono::Utc::now().timestamp() - threshold_seconds;
+    let cutoff = now_timestamp() - threshold_seconds;
 
     let result: sqlx::sqlite::SqliteQueryResult =
         sqlx::query!("DELETE FROM devices WHERE last_seen_at < ?", cutoff)

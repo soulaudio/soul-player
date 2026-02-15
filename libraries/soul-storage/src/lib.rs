@@ -36,6 +36,8 @@
 
 mod context;
 mod error;
+
+// Utilities
 pub mod utils;
 
 // Vertical slices

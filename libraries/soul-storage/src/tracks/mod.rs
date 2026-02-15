@@ -1,3 +1,4 @@
+use crate::utils::time::now_timestamp;
 use soul_core::{error::Result, types::*};
 use sqlx::{Row, SqlitePool};
 
@@ -2310,7 +2311,7 @@ pub async fn set_library_source(
 
 /// Mark a track as unavailable (soft delete)
 pub async fn mark_unavailable(pool: &SqlitePool, track_id: i64) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"
@@ -2375,7 +2376,7 @@ pub async fn get_unavailable_by_source(
 // Helper Functions
 /// Set the audio fingerprint for a track
 pub async fn set_fingerprint(pool: &SqlitePool, track_id: &str, fingerprint: &str) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"

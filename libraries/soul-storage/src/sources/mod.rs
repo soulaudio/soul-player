@@ -1,4 +1,5 @@
 use crate::error::StorageError;
+use crate::utils::time::now_timestamp;
 use soul_core::{error::Result, types::*};
 use sqlx::SqlitePool;
 
@@ -232,7 +233,7 @@ pub async fn get_server_sources_for_user(
 ) -> Result<Vec<Source>> {
     let user_id_str = user_id.as_str();
     let rows: Vec<_> = sqlx::query!(
-        "SELECT id, name, source_type, server_url, server_username, server_token,
+        "SELECT id as 'id!', name, source_type, server_url, server_username, server_token,
                 is_active, is_online, last_sync_at
          FROM sources
          WHERE source_type = 'server' AND (user_id = ? OR user_id IS NULL)
@@ -242,25 +243,22 @@ pub async fn get_server_sources_for_user(
     .fetch_all(pool)
     .await?;
 
-    rows.into_iter()
-        .map(|row| {
-            Ok(Source {
-                id: row
-                    .id
-                    .ok_or_else(|| StorageError::MissingField("source.id".to_string()))?,
-                name: row.name,
-                source_type: SourceType::Server,
-                config: SourceConfig::Server {
-                    url: row.server_url.unwrap_or_default(),
-                    username: row.server_username.unwrap_or_default(),
-                    token: row.server_token,
-                },
-                is_active: row.is_active,
-                is_online: row.is_online,
-                last_sync_at: row.last_sync_at,
-            })
+    Ok(rows
+        .into_iter()
+        .map(|row| Source {
+            id: row.id,
+            name: row.name,
+            source_type: SourceType::Server,
+            config: SourceConfig::Server {
+                url: row.server_url.unwrap_or_default(),
+                username: row.server_username.unwrap_or_default(),
+                token: row.server_token,
+            },
+            is_active: row.is_active,
+            is_online: row.is_online,
+            last_sync_at: row.last_sync_at,
         })
-        .collect()
+        .collect())
 }
 
 /// Add a new server source for a user
@@ -392,7 +390,7 @@ pub async fn clear_auth_token(pool: &SqlitePool, source_id: i64) -> Result<()> {
 pub fn is_token_expired(token: &AuthToken) -> bool {
     match token.expires_at {
         Some(expires_at) => {
-            let now = chrono::Utc::now().timestamp();
+            let now = now_timestamp();
             // Consider token expired if it expires within 60 seconds
             now >= expires_at - 60
         }
@@ -545,7 +543,7 @@ pub async fn complete_sync(
     tracks_deleted: i32,
     server_sync_token: Option<&str>,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
     let user_id_str = user_id.as_str();
 
     sqlx::query!(

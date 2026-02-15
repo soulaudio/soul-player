@@ -21,6 +21,7 @@
 //! # }
 //! ```
 
+use crate::utils::time::now_timestamp;
 use crate::StorageError;
 use soul_core::types::{ScanProgress, ScanProgressStatus};
 use sqlx::SqlitePool;
@@ -151,7 +152,7 @@ pub async fn start(
     library_source_id: i64,
     total_files: Option<i64>,
 ) -> Result<ScanProgress> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
         r#"
@@ -263,7 +264,7 @@ pub async fn increment_errors(pool: &SqlitePool, id: i64, count: i64) -> Result<
 
 /// Mark a scan as completed
 pub async fn complete(pool: &SqlitePool, id: i64) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         "UPDATE scan_progress SET status = 'completed', completed_at = ? WHERE id = ?",
@@ -278,7 +279,7 @@ pub async fn complete(pool: &SqlitePool, id: i64) -> Result<()> {
 
 /// Mark a scan as failed
 pub async fn fail(pool: &SqlitePool, id: i64, error_message: &str) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         "UPDATE scan_progress SET status = 'failed', completed_at = ?, error_message = ? WHERE id = ?",
@@ -294,7 +295,7 @@ pub async fn fail(pool: &SqlitePool, id: i64, error_message: &str) -> Result<()>
 
 /// Mark a scan as cancelled
 pub async fn cancel(pool: &SqlitePool, id: i64) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         "UPDATE scan_progress SET status = 'cancelled', completed_at = ? WHERE id = ?",

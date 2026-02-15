@@ -639,6 +639,8 @@ function AudioSettingsDesktop() {
                       backend: settings.backend,
                       isDefault: false,
                       isRunning: false,
+                      sampleRate: undefined,
+                      channels: undefined,
                     }
                   : null
               }

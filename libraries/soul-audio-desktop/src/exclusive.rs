@@ -182,21 +182,23 @@ impl AudioData {
             SupportedBitDepth::Int16 => {
                 let converted: Vec<i16> = samples
                     .iter()
-                    .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
+                    .map(|&s| soul_audio::f32_to_i16!(s, clip))
                     .collect();
                 Self::Int16(converted)
             }
             SupportedBitDepth::Int24 | SupportedBitDepth::Int32 => {
                 // Pack 24-bit into 32-bit container
-                let scale = if target == SupportedBitDepth::Int24 {
-                    8388607.0 // 2^23 - 1
+                let converted: Vec<i32> = if target == SupportedBitDepth::Int24 {
+                    samples
+                        .iter()
+                        .map(|&s| (s.clamp(-1.0, 1.0) * 8388607.0) as i32) // 2^23 - 1
+                        .collect()
                 } else {
-                    i32::MAX as f32
+                    samples
+                        .iter()
+                        .map(|&s| soul_audio::f32_to_i32!(s, clip))
+                        .collect()
                 };
-                let converted: Vec<i32> = samples
-                    .iter()
-                    .map(|&s| (s.clamp(-1.0, 1.0) * scale) as i32)
-                    .collect();
                 Self::Int32(converted)
             }
             SupportedBitDepth::Float32 | SupportedBitDepth::Float64 => {
@@ -741,7 +743,7 @@ impl ExclusiveOutput {
                             continue;
                         }
                     }
-                    *out = (samples[pos].clamp(-1.0, 1.0) * volume * i16::MAX as f32) as i16;
+                    *out = soul_audio::f32_to_i16!(samples[pos] * volume, clip);
                     pos += 1;
                 }
             }
@@ -793,7 +795,7 @@ impl ExclusiveOutput {
                             continue;
                         }
                     }
-                    *out = (samples[pos].clamp(-1.0, 1.0) * volume * i32::MAX as f32) as i32;
+                    *out = soul_audio::f32_to_i32!(samples[pos] * volume, clip);
                     pos += 1;
                 }
             }
@@ -845,7 +847,7 @@ impl ExclusiveOutput {
                             continue;
                         }
                     }
-                    *out = (samples[pos] as f32 / i16::MAX as f32) * volume;
+                    *out = soul_audio::i16_to_f32!(samples[pos]) * volume;
                     pos += 1;
                 }
             }
@@ -859,7 +861,7 @@ impl ExclusiveOutput {
                             continue;
                         }
                     }
-                    *out = (samples[pos] as f32 / i32::MAX as f32) * volume;
+                    *out = soul_audio::i32_to_f32!(samples[pos]) * volume;
                     pos += 1;
                 }
             }

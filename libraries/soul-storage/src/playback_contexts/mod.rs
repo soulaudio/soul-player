@@ -2,6 +2,7 @@
 //!
 //! Tracks what context (album, playlist, artist, etc.) a user is playing from.
 
+use crate::utils::time::now_timestamp;
 use crate::StorageError;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -72,7 +73,7 @@ pub struct RecordContext {
 pub async fn record(pool: &SqlitePool, user_id: &str, context: &RecordContext) -> Result<()> {
     let context_type = context.context_type.as_str();
     let context_id = context.context_id.clone().unwrap_or_default();
-    let now = chrono::Utc::now().timestamp();
+    let now = now_timestamp();
 
     sqlx::query!(
         r#"
