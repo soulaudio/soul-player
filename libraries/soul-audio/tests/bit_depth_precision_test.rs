@@ -32,7 +32,7 @@ fn test_i16_symmetric_scaling() {
 }
 
 #[test]
-#[ignore] // Currently fails - demonstrates asymmetric i32 bug
+#[ignore = "Currently fails - demonstrates asymmetric i32 bug"]
 fn test_i32_asymmetric_scaling_bug() {
     let mut dither = TpdfDither::new();
 
@@ -122,7 +122,7 @@ fn test_i32_decode_encode_roundtrip() {
 }
 
 #[test]
-#[ignore] // No NaN protection currently implemented
+#[ignore = "No NaN protection currently implemented"]
 fn test_nan_protection() {
     let mut dither = TpdfDither::new();
 
@@ -134,7 +134,7 @@ fn test_nan_protection() {
 }
 
 #[test]
-#[ignore] // No infinity protection currently implemented
+#[ignore = "No infinity protection currently implemented"]
 fn test_infinity_protection() {
     let mut dither = TpdfDither::new();
 
@@ -212,8 +212,8 @@ fn test_small_signal_quantization() {
     }
 
     // Should get mix of 0 and 1 (probabilistic)
-    let has_zero = outputs.iter().any(|&x| x == 0);
-    let has_one = outputs.iter().any(|&x| x == 1);
+    let has_zero = outputs.contains(&0);
+    let has_one = outputs.contains(&1);
 
     assert!(has_zero, "Small signal should sometimes quantize to 0");
     assert!(has_one, "Small signal should sometimes quantize to 1");
@@ -221,7 +221,7 @@ fn test_small_signal_quantization() {
     // Mean should be close to 0.5 (the input signal in LSB units)
     let mean: f64 = outputs.iter().map(|&x| x as f64).sum::<f64>() / 1000.0;
     assert!(
-        mean >= 0.0 && mean <= 1.0,
+        (0.0..=1.0).contains(&mean),
         "Small signal (0.5 LSB) should average to ~0.5, got {}",
         mean
     );

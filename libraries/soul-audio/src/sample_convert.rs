@@ -43,6 +43,7 @@
 /// Note: This intentionally avoids i16::MIN (-32768) to maintain
 /// symmetry around zero, which is standard in audio processing.
 #[macro_export]
+#[allow(clippy::neg_multiply)]
 macro_rules! f32_to_i16 {
     ($sample:expr) => {
         ($sample * 32767.0) as i16
@@ -66,6 +67,7 @@ macro_rules! f32_to_i16 {
 /// Uses `2147483647.0` (i32::MAX) for proper symmetric scaling.
 /// Note: Like i16, this avoids i32::MIN for audio symmetry.
 #[macro_export]
+#[allow(clippy::neg_multiply)]
 macro_rules! f32_to_i32 {
     ($sample:expr) => {
         ($sample * 2147483647.0) as i32

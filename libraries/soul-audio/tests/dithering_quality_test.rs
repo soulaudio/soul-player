@@ -355,10 +355,7 @@ fn test_full_scale_dither() {
         "Full-scale signals should reach near i16::MAX, got {}",
         max_value
     );
-    assert!(
-        max_value <= i16::MAX,
-        "Full-scale signals should not exceed i16::MAX"
-    );
+    // Note: max_value is i16, so it cannot exceed i16::MAX by definition
 }
 
 /// Test dithering zero signal
@@ -610,8 +607,8 @@ fn calculate_autocorrelation(signal: &[f32], lag: usize) -> f32 {
     let mut sum = 0.0;
     let mut sum_sq = 0.0;
 
-    for i in 0..signal.len() {
-        sum_sq += signal[i] * signal[i];
+    for &sample in signal {
+        sum_sq += sample * sample;
     }
 
     for i in 0..(signal.len() - lag) {

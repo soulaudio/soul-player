@@ -80,7 +80,10 @@ impl PlaybackManager {
 
     fn load_playlist(&self, tracks: Vec<QueueTrack>) -> Result<(), String> {
         self.playback
-            .send_command(PlaybackCommand::LoadPlaylist(tracks))
+            .send_command(PlaybackCommand::LoadPlaylist {
+                tracks,
+                start_index: 0,
+            })
             .map_err(|e| e.to_string())
     }
 
