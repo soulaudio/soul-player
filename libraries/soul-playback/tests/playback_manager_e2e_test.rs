@@ -191,7 +191,7 @@ mod queue_management {
         // Start playing
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist A", 180));
         manager.play().ok(); // Start playback
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -221,7 +221,7 @@ mod queue_management {
         manager.add_to_queue_end(create_track("3", "Track 3", "Artist C", 180));
 
         manager.play().ok(); // Start playback (pops track "1" from queue, now current_track)
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -450,7 +450,7 @@ mod playback_state {
         let mut manager = PlaybackManager::default();
 
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 180));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -474,7 +474,7 @@ mod playback_state {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 180));
         manager.play().ok(); // Start playback to set current track
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -496,7 +496,7 @@ mod playback_state {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 180));
         manager.add_to_queue_end(create_track("2", "Track 2", "Artist", 180));
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -518,7 +518,7 @@ mod playback_state {
         manager.add_to_queue_end(track);
         let _ = manager.play();
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(100),
             44100,
         )));
@@ -547,7 +547,7 @@ mod playback_state {
         manager.add_to_queue_end(track);
         let _ = manager.play();
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(200),
             44100,
         )));
@@ -580,7 +580,7 @@ mod playback_state {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 100));
         manager.play().ok();
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(100),
             44100,
         )));
@@ -600,7 +600,7 @@ mod playback_state {
     #[test]
     fn paused_state_does_not_advance_position() {
         let mut manager = PlaybackManager::default();
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(100),
             44100,
         )));
@@ -734,7 +734,7 @@ mod crossfade {
 
         // Add track and source
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -777,7 +777,7 @@ mod crossfade {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 10));
         manager.add_to_queue_end(create_track("2", "Track 2", "Artist", 10));
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -808,7 +808,7 @@ mod repeat_modes {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 10));
         manager.add_to_queue_end(create_track("2", "Track 2", "Artist", 10));
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -902,7 +902,7 @@ mod volume_control {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 10));
         manager.play().ok();
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -986,7 +986,7 @@ mod volume_control {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 10));
         manager.play().ok();
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -1021,7 +1021,7 @@ mod volume_control {
     #[test]
     fn volume_ramping_no_clicks() {
         let mut manager = PlaybackManager::default();
-        manager.set_audio_source(Box::new(
+        manager.activate_source(Box::new(
             MockAudioSource::new(Duration::from_secs(10), 44100).with_amplitude(1.0),
         ));
 
@@ -1068,7 +1068,7 @@ mod track_transitions {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 180));
         manager.add_to_queue_end(create_track("2", "Track 2", "Artist", 180));
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1091,7 +1091,7 @@ mod track_transitions {
         // Set source at position > 3 seconds
         let source = MockAudioSource::new(Duration::from_secs(180), 44100)
             .with_position(Duration::from_secs(10));
-        manager.set_audio_source(Box::new(source));
+        manager.activate_source(Box::new(source));
 
         // Previous should restart (position > 3s)
         let result = manager.previous();
@@ -1119,7 +1119,7 @@ mod track_transitions {
         // Set source at position < 3 seconds for track 2
         let source = MockAudioSource::new(Duration::from_secs(180), 44100)
             .with_position(Duration::from_secs(1));
-        manager.set_audio_source(Box::new(source));
+        manager.activate_source(Box::new(source));
 
         let history_before = manager.get_history().len();
 
@@ -1145,7 +1145,7 @@ mod track_transitions {
         manager.add_to_queue_end(create_track("2", "Track 2", "Artist", 10));
         manager.add_to_queue_end(create_track("3", "Track 3", "Artist", 10));
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -1169,7 +1169,7 @@ mod track_transitions {
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 1));
         manager.add_to_queue_end(create_track("2", "Track 2", "Artist", 180));
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(1),
             44100,
         )));
@@ -1225,7 +1225,7 @@ mod error_handling {
         let mut manager = PlaybackManager::default();
 
         // Set up failing source
-        manager.set_audio_source(Box::new(
+        manager.activate_source(Box::new(
             MockAudioSource::new(Duration::from_secs(10), 44100).failing_reads(),
         ));
 
@@ -1240,7 +1240,7 @@ mod error_handling {
     fn seek_error_handled() {
         let mut manager = PlaybackManager::default();
 
-        manager.set_audio_source(Box::new(
+        manager.activate_source(Box::new(
             MockAudioSource::new(Duration::from_secs(10), 44100).failing_seeks(),
         ));
 
@@ -1261,7 +1261,7 @@ mod error_handling {
 
         // Should be able to start playback with a new source
         manager.play().ok(); // Request playback (transitions Stopped -> Loading)
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1287,7 +1287,7 @@ mod error_handling {
     #[test]
     fn seek_beyond_duration_error() {
         let mut manager = PlaybackManager::default();
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(100),
             44100,
         )));
@@ -1318,7 +1318,7 @@ mod concurrent_operations {
         let mut manager = PlaybackManager::default();
 
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 180));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1360,7 +1360,7 @@ mod concurrent_operations {
     #[test]
     fn volume_changes_during_processing() {
         let mut manager = PlaybackManager::default();
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -1385,7 +1385,7 @@ mod concurrent_operations {
             manager.add_to_queue_end(create_track(&i.to_string(), "Track", "Artist", 180));
         }
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1406,7 +1406,7 @@ mod concurrent_operations {
         let mut manager = PlaybackManager::default();
 
         manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 180));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1432,7 +1432,7 @@ mod concurrent_operations {
             manager.add_to_queue_end(create_track(&i.to_string(), "Track", "Artist", 10));
         }
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -1465,7 +1465,7 @@ mod edge_cases {
     #[test]
     fn empty_buffer_handling() {
         let mut manager = PlaybackManager::default();
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -1511,7 +1511,7 @@ mod edge_cases {
         manager.add_to_queue_end(create_track("2", "Normal", "Artist", 180));
 
         // 100ms track
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_millis(100),
             44100,
         )));
@@ -1531,7 +1531,7 @@ mod edge_cases {
         // 10 hour track
         manager.add_to_queue_end(create_track("1", "Long", "Artist", 36000));
         manager.play().ok(); // Must start playback before seeking
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(36000),
             44100,
         )));
@@ -1550,7 +1550,7 @@ mod edge_cases {
         manager.set_sample_rate(192000);
 
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             192000,
         )));
@@ -1566,7 +1566,7 @@ mod edge_cases {
         manager.set_output_channels(1);
 
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -1582,7 +1582,7 @@ mod edge_cases {
         manager.set_output_channels(6); // 5.1 surround
 
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -1638,7 +1638,7 @@ mod edge_cases {
     #[test]
     fn position_beyond_track() {
         let mut manager = PlaybackManager::default();
-        manager.set_audio_source(Box::new(
+        manager.activate_source(Box::new(
             MockAudioSource::new(Duration::from_secs(100), 44100)
                 .with_position(Duration::from_secs(99)),
         ));
@@ -1710,7 +1710,7 @@ mod edge_cases {
         manager.set_output_channels(2);
 
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             11025,
         )));
@@ -1727,7 +1727,7 @@ mod edge_cases {
         manager.set_output_channels(2);
 
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             22050,
         )));
@@ -1744,7 +1744,7 @@ mod edge_cases {
         manager.set_output_channels(2);
 
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             88200,
         )));
@@ -1761,7 +1761,7 @@ mod edge_cases {
         manager.set_output_channels(2);
 
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             176400,
         )));
@@ -1778,7 +1778,7 @@ mod edge_cases {
         manager.set_output_channels(2);
 
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             8000,
         )));
@@ -1801,7 +1801,7 @@ mod edge_cases {
         // 24 hour track (86400 seconds)
         let duration_secs = 86400;
         manager.add_to_queue_end(create_track("1", "Long", "Artist", duration_secs));
-        manager.set_audio_source(Box::new(
+        manager.activate_source(Box::new(
             MockAudioSource::new(Duration::from_secs(duration_secs), 44100)
                 .with_position(Duration::from_secs(43200)), // Halfway through (12 hours)
         ));
@@ -1824,7 +1824,7 @@ mod edge_cases {
         let duration_secs = 14400;
         manager.add_to_queue_end(create_track("1", "Long", "Artist", duration_secs));
         manager.play().ok(); // Must start playback before seeking
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(duration_secs),
             44100,
         )));
@@ -1854,7 +1854,7 @@ mod edge_cases {
         manager.add_to_queue_end(create_track("2", "Long2", "Artist", duration_secs));
 
         manager.play().ok(); // Must start playback before seeking
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(duration_secs),
             44100,
         )));
@@ -1894,7 +1894,7 @@ mod edge_cases {
             source: TrackSource::Single,
         });
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_millis(50),
             44100,
         )));
@@ -1922,7 +1922,7 @@ mod edge_cases {
             source: TrackSource::Single,
         });
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_millis(10),
             44100,
         )));
@@ -1951,7 +1951,7 @@ mod edge_cases {
             source: TrackSource::Single,
         });
 
-        manager.set_audio_source(Box::new(MockAudioSource::new(duration, 44100)));
+        manager.activate_source(Box::new(MockAudioSource::new(duration, 44100)));
 
         // Request more samples than the track contains
         let mut buffer = vec![0.0f32; 4096];
@@ -1986,7 +1986,7 @@ mod edge_cases {
         // Process through multiple tracks
         let mut total_processed = 0;
         for _ in 0..20 {
-            manager.set_audio_source(Box::new(MockAudioSource::new(
+            manager.activate_source(Box::new(MockAudioSource::new(
                 Duration::from_millis(100),
                 44100,
             )));
@@ -2018,7 +2018,7 @@ mod edge_cases {
         manager.add_to_queue_end(create_track("1", "Track", "Artist", 10));
 
         // Source at 44.1kHz (different from manager's 48kHz)
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(10),
             44100,
         )));

@@ -217,7 +217,7 @@ fn workflow_1_playlist_shuffle_skip_pause_resume_stop() {
     manager.play().expect("Should start playback");
 
     // Simulate track loading
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(180),
         44100,
     )));
@@ -235,7 +235,7 @@ fn workflow_1_playlist_shuffle_skip_pause_resume_stop() {
             .next()
             .unwrap_or_else(|e| panic!("Skip {} should succeed: {:?}", i + 1, e));
         // Simulate loading each track
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -319,7 +319,7 @@ fn workflow_2_seek_crossfade_next_track() {
 
     // Start playback
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(60),
         44100,
     )));
@@ -364,7 +364,7 @@ fn workflow_2_seek_crossfade_next_track() {
     manager.next().expect("Skip should succeed");
 
     // Simulate loading the new current track
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(60),
         44100,
     )));
@@ -388,7 +388,7 @@ fn workflow_3_volume_mute_unmute_restore() {
     // Add track and start playback
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist A", 60));
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(60),
         44100,
     )));
@@ -496,7 +496,7 @@ fn workflow_4_smooth_volume_transitions() {
 
     // Start playback
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(
+    manager.activate_source(Box::new(
         MockAudioSource::new(Duration::from_secs(60), 44100).with_amplitude(1.0),
     ));
 
@@ -537,7 +537,7 @@ fn workflow_4_smooth_volume_transitions() {
 
     // Skip to next track
     manager.next().expect("Skip should succeed");
-    manager.set_audio_source(Box::new(
+    manager.activate_source(Box::new(
         MockAudioSource::new(Duration::from_secs(60), 44100).with_amplitude(0.5),
     ));
 
@@ -581,7 +581,7 @@ fn workflow_5_rapid_repeat_mode_changes() {
 
     // Start playback
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(10),
         44100,
     )));
@@ -694,7 +694,7 @@ fn workflow_6_empty_queue_add_tracks_play() {
     manager.play().expect("Should start playback with tracks");
 
     // Simulate track loading
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(60),
         44100,
     )));
@@ -741,7 +741,7 @@ fn workflow_7_repeat_all_loop() {
 
     // Start playback
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(1),
         44100,
     )));
@@ -761,7 +761,7 @@ fn workflow_7_repeat_all_loop() {
             .unwrap_or_else(|e| panic!("next() failed at iteration {}: {:?}", i, e));
 
         // Simulate loading
-        manager.set_audio_source(Box::new(MockAudioSource::new(
+        manager.activate_source(Box::new(MockAudioSource::new(
             Duration::from_secs(1),
             44100,
         )));
@@ -813,7 +813,7 @@ fn workflow_8_repeat_one_loop() {
 
     // Start playback
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(5),
         44100,
     )));
@@ -884,7 +884,7 @@ fn workflow_edge_case_pause_during_shuffle_enable() {
     // Load playlist and start playing
     manager.add_playlist_to_queue(create_playlist(10, 60));
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(60),
         44100,
     )));
@@ -932,7 +932,7 @@ fn workflow_edge_case_volume_changes_while_stopped() {
     // Start playing - volume should be at 50%
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 60));
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(60),
         44100,
     )));
@@ -947,7 +947,7 @@ fn workflow_edge_case_seek_after_pause_before_resume() {
     // Start playing
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 120));
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(120),
         44100,
     )));
@@ -993,7 +993,7 @@ fn workflow_stress_rapid_operations() {
 
     // Start playing
     manager.play().expect("Should start playback");
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(30),
         44100,
     )));
@@ -1079,7 +1079,7 @@ fn workflow_crossfade_settings_persistence() {
     // Start/stop/start cycle shouldn't reset crossfade settings
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 30));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(30),
         44100,
     )));

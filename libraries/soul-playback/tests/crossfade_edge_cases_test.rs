@@ -159,7 +159,7 @@ fn test_crossfade_with_different_sample_rates_processes_normally() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 2));
 
     // Set current source (44.1kHz)
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(2),
         44100,
     )));

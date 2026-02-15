@@ -144,7 +144,7 @@ mod rapid_play_pause {
         manager.add_to_queue_end(create_stress_track("1", 180));
         // Must start playback first to get to Playing state
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -182,7 +182,7 @@ mod rapid_play_pause {
         let mut manager = PlaybackManager::default();
 
         manager.add_to_queue_end(create_stress_track("1", 180));
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -211,7 +211,7 @@ mod rapid_play_pause {
 
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
-        manager.set_audio_source(Box::new(
+        manager.activate_source(Box::new(
             StressMockSource::new(Duration::from_secs(180), 44100)
                 .with_counters(read_count.clone(), seek_count.clone()),
         ));
@@ -241,7 +241,7 @@ mod rapid_play_pause {
 
         manager.add_to_queue_end(create_stress_track("1", 180));
         manager.play().ok(); // Start playback first
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -287,7 +287,7 @@ mod rapid_play_pause {
             let play_result = manager.play();
             if play_result.is_ok() {
                 // Need to set source for playback to work
-                manager.set_audio_source(Box::new(StressMockSource::new(
+                manager.activate_source(Box::new(StressMockSource::new(
                     Duration::from_secs(180),
                     44100,
                 )));
@@ -322,7 +322,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 100));
         manager.play().ok(); // Must start playback for seek to work
-        manager.set_audio_source(Box::new(
+        manager.activate_source(Box::new(
             StressMockSource::new(Duration::from_secs(100), 44100)
                 .with_counters(read_count.clone(), seek_count.clone()),
         ));
@@ -356,7 +356,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 100));
         manager.play().ok(); // Must start playback for seek to work
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(100),
             44100,
         )));
@@ -383,7 +383,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 200));
         manager.play().ok(); // Must start playback for seek to work
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(200),
             44100,
         )));
@@ -410,7 +410,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 100));
         manager.play().ok(); // Must start playback for seek to work
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(100),
             44100,
         )));
@@ -443,7 +443,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 100));
         manager.play().ok(); // Must start playback for seek to work
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(100),
             44100,
         )));
@@ -470,7 +470,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 100));
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(100),
             44100,
         )));
@@ -509,7 +509,7 @@ mod rapid_skip {
         }
 
         // Set initial source
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -521,7 +521,7 @@ mod rapid_skip {
             if result.is_ok() {
                 successful_skips += 1;
                 // Set source for each new track
-                manager.set_audio_source(Box::new(StressMockSource::new(
+                manager.activate_source(Box::new(StressMockSource::new(
                     Duration::from_secs(180),
                     44100,
                 )));
@@ -551,7 +551,7 @@ mod rapid_skip {
         // Play through to build history
         for _ in 0..15 {
             manager.next().ok();
-            manager.set_audio_source(Box::new(StressMockSource::new(
+            manager.activate_source(Box::new(StressMockSource::new(
                 Duration::from_secs(180),
                 44100,
             )));
@@ -563,7 +563,7 @@ mod rapid_skip {
         for _ in 0..50 {
             manager.previous().ok();
             // Set source with position < 3s to trigger actual previous navigation
-            manager.set_audio_source(Box::new(
+            manager.activate_source(Box::new(
                 StressMockSource::new(Duration::from_secs(180), 44100)
                     .with_position(Duration::from_secs(1)),
             ));
@@ -587,7 +587,7 @@ mod rapid_skip {
             manager.add_to_queue_end(create_stress_track(&i.to_string(), 180));
         }
 
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -599,7 +599,7 @@ mod rapid_skip {
             } else {
                 manager.previous().ok();
             }
-            manager.set_audio_source(Box::new(
+            manager.activate_source(Box::new(
                 StressMockSource::new(Duration::from_secs(180), 44100)
                     .with_position(Duration::from_secs(1)), // Short position for previous to work
             ));
@@ -616,7 +616,7 @@ mod rapid_skip {
         manager.set_repeat(RepeatMode::One);
 
         manager.add_to_queue_end(create_stress_track("1", 180));
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -625,7 +625,7 @@ mod rapid_skip {
         for _ in 0..50 {
             manager.next().ok();
             // Set fresh source each time (simulating track restart)
-            manager.set_audio_source(Box::new(StressMockSource::new(
+            manager.activate_source(Box::new(StressMockSource::new(
                 Duration::from_secs(180),
                 44100,
             )));
@@ -645,7 +645,7 @@ mod rapid_skip {
             manager.add_to_queue_end(create_stress_track(&i.to_string(), 180));
         }
 
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -653,7 +653,7 @@ mod rapid_skip {
         // Skip more than queue length to test repeat all
         for _ in 0..20 {
             manager.next().ok();
-            manager.set_audio_source(Box::new(StressMockSource::new(
+            manager.activate_source(Box::new(StressMockSource::new(
                 Duration::from_secs(180),
                 44100,
             )));
@@ -697,7 +697,7 @@ mod queue_stress {
 
         manager.add_to_queue_end(create_stress_track("initial", 180));
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -734,7 +734,7 @@ mod queue_stress {
         }
 
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -766,7 +766,7 @@ mod queue_stress {
         }
 
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -796,7 +796,7 @@ mod queue_stress {
         }
 
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -823,7 +823,7 @@ mod queue_stress {
 
         manager.add_to_queue_end(create_stress_track("first", 180));
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -854,7 +854,7 @@ mod queue_stress {
             if queue_len > 5 {
                 let target = queue_len / 2;
                 manager.skip_to_queue_index(target).ok();
-                manager.set_audio_source(Box::new(StressMockSource::new(
+                manager.activate_source(Box::new(StressMockSource::new(
                     Duration::from_secs(180),
                     44100,
                 )));
@@ -888,7 +888,7 @@ mod queue_stress {
 
         // Now start playback
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -919,7 +919,7 @@ mod volume_stress {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -951,7 +951,7 @@ mod volume_stress {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -973,7 +973,7 @@ mod volume_stress {
     fn mute_unmute_rapid_cycling() {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -996,7 +996,7 @@ mod volume_stress {
     fn toggle_mute_rapid() {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1017,7 +1017,7 @@ mod volume_stress {
     fn volume_and_mute_combined_stress() {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1080,7 +1080,7 @@ mod combined_stress {
             manager.add_to_queue_end(create_stress_track(&i.to_string(), 180));
         }
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1127,7 +1127,7 @@ mod combined_stress {
             // Skip (occasionally)
             if i % 23 == 0 {
                 manager.next().ok();
-                manager.set_audio_source(Box::new(StressMockSource::new(
+                manager.activate_source(Box::new(StressMockSource::new(
                     Duration::from_secs(180),
                     44100,
                 )));
@@ -1157,7 +1157,7 @@ mod combined_stress {
         }
 
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -1170,7 +1170,7 @@ mod combined_stress {
 
             // Skip to trigger crossfade
             manager.next().ok();
-            manager.set_audio_source(Box::new(StressMockSource::new(
+            manager.activate_source(Box::new(StressMockSource::new(
                 Duration::from_secs(10),
                 44100,
             )));
@@ -1196,7 +1196,7 @@ mod combined_stress {
         // Play through many tracks to overflow history
         for _ in 0..25 {
             manager.next().ok();
-            manager.set_audio_source(Box::new(StressMockSource::new(
+            manager.activate_source(Box::new(StressMockSource::new(
                 Duration::from_secs(180),
                 44100,
             )));
@@ -1209,7 +1209,7 @@ mod combined_stress {
         // Go back through history
         for _ in 0..5 {
             manager.previous().ok();
-            manager.set_audio_source(Box::new(
+            manager.activate_source(Box::new(
                 StressMockSource::new(Duration::from_secs(180), 44100)
                     .with_position(Duration::from_secs(1)),
             ));
@@ -1229,7 +1229,7 @@ mod combined_stress {
             manager.add_to_queue_end(create_stress_track(&i.to_string(), 180));
         }
 
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1248,7 +1248,7 @@ mod combined_stress {
             // Skip
             if i % 5 == 0 {
                 manager.next().ok();
-                manager.set_audio_source(Box::new(StressMockSource::new(
+                manager.activate_source(Box::new(StressMockSource::new(
                     Duration::from_secs(180),
                     44100,
                 )));
@@ -1280,7 +1280,7 @@ mod combined_stress {
 
             // Start playback
             manager.play().ok();
-            manager.set_audio_source(Box::new(StressMockSource::new(
+            manager.activate_source(Box::new(StressMockSource::new(
                 Duration::from_secs(180),
                 44100,
             )));
@@ -1299,7 +1299,7 @@ mod combined_stress {
         // Final start should work
         manager.add_to_queue_end(create_stress_track("final", 180));
         manager.play().ok();
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1342,7 +1342,7 @@ mod edge_case_stress {
 
         // Rapidly replace audio source
         for _ in 0..100 {
-            manager.set_audio_source(Box::new(StressMockSource::new(
+            manager.activate_source(Box::new(StressMockSource::new(
                 Duration::from_secs(180),
                 44100,
             )));
@@ -1359,7 +1359,7 @@ mod edge_case_stress {
     fn empty_buffer_processing() {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1378,7 +1378,7 @@ mod edge_case_stress {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
         manager.play().ok(); // Start playback
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1405,7 +1405,7 @@ mod edge_case_stress {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
         manager.play().ok(); // Start playback
-        manager.set_audio_source(Box::new(StressMockSource::new(
+        manager.activate_source(Box::new(StressMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -1446,7 +1446,7 @@ mod edge_case_stress {
         // Normal track
         manager.add_to_queue_end(create_stress_track("normal", 180));
 
-        manager.set_audio_source(Box::new(StressMockSource::new(Duration::ZERO, 44100)));
+        manager.activate_source(Box::new(StressMockSource::new(Duration::ZERO, 44100)));
 
         let mut buffer = vec![0.0f32; 1024];
 

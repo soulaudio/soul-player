@@ -236,7 +236,7 @@ fn test_gapless_transition() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist B", 2));
 
     // Set up current and next sources for gapless
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         Duration::from_secs(2),
         44100,
     )));

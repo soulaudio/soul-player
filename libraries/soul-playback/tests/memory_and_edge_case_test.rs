@@ -141,7 +141,7 @@ fn test_large_queue_memory_usage() {
 
     // Operations should still work
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
 
     let mut buffer = vec![0.0f32; 1024];
     manager.process_audio(&mut buffer).ok();
@@ -194,7 +194,7 @@ fn test_memory_leak_detection_1000_tracks() {
     for i in 0..1000 {
         manager.add_to_queue_end(create_test_track(&i.to_string(), 1));
         manager.play().ok();
-        manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(1))));
+        manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(1))));
 
         // Process until track finishes
         let mut buffer = vec![0.0f32; 44100 * 2]; // 1 second
@@ -237,7 +237,7 @@ fn test_no_buffer_leak_on_repeated_playback() {
     // Start and stop playback many times
     for i in 0..100 {
         manager.play().ok();
-        manager.set_audio_source(Box::new(
+        manager.activate_source(Box::new(
             MemoryMockSource::new(Duration::from_secs(10)).with_counter(Arc::clone(&read_count)),
         ));
 
@@ -280,7 +280,7 @@ fn test_crossfade_buffer_cleanup() {
     }
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(5))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(5))));
 
     let mut buffer = vec![0.0f32; 4096];
 
@@ -292,7 +292,7 @@ fn test_crossfade_buffer_cleanup() {
         }
 
         manager.next().ok();
-        manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(5))));
+        manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(5))));
     }
 
     // Stop should free crossfade buffers
@@ -314,7 +314,7 @@ fn test_empty_buffer_processing() {
 
     manager.add_to_queue_end(create_test_track("1", 180));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
 
     // Try processing with empty buffer
     let mut empty_buffer: Vec<f32> = vec![];
@@ -334,7 +334,7 @@ fn test_single_sample_buffer() {
 
     manager.add_to_queue_end(create_test_track("1", 180));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
 
     // Process with 1-sample buffer (stereo = 2 values)
     let mut tiny_buffer = vec![0.0f32; 2];
@@ -354,7 +354,7 @@ fn test_huge_buffer_allocation() {
 
     manager.add_to_queue_end(create_test_track("1", 180));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
 
     // Try processing with huge buffer (100MB of f32 = 25M samples)
     // This might fail or succeed depending on available memory
@@ -382,7 +382,7 @@ fn test_odd_buffer_size() {
 
     manager.add_to_queue_end(create_test_track("1", 180));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(180))));
 
     // Odd buffer size (not multiple of channels)
     let mut odd_buffer = vec![0.0f32; 1001]; // Odd number
@@ -415,7 +415,7 @@ fn test_zero_duration_track() {
     manager.add_to_queue_end(create_test_track("normal", 180));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::ZERO)));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::ZERO)));
 
     let mut buffer = vec![0.0f32; 1024];
 
@@ -450,7 +450,7 @@ fn test_extremely_long_track() {
 
     manager.add_to_queue_end(long_track);
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(
         u32::MAX as u64,
     ))));
 
@@ -475,7 +475,7 @@ fn test_seek_beyond_duration() {
 
     manager.add_to_queue_end(create_test_track("1", 100));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(100))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(100))));
 
     // Seek way beyond duration
     let result = manager.seek_to(Duration::from_secs(10000));
@@ -503,7 +503,7 @@ fn test_negative_seek_via_zero() {
 
     manager.add_to_queue_end(create_test_track("1", 100));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(100))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(100))));
 
     // Seek to exactly zero
     let result = manager.seek_to(Duration::ZERO);
@@ -518,7 +518,7 @@ fn test_rapid_seeks_to_same_position() {
 
     manager.add_to_queue_end(create_test_track("1", 100));
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(100))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(100))));
 
     let target = Duration::from_secs(50);
 
@@ -605,7 +605,7 @@ fn test_repeat_one_with_zero_duration() {
 
     manager.add_to_queue_end(zero_track);
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::ZERO)));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::ZERO)));
 
     let mut buffer = vec![0.0f32; 1024];
 
@@ -630,7 +630,7 @@ fn test_repeat_all_large_queue() {
     manager.add_playlist_to_queue(tracks);
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(1))));
+    manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(1))));
 
     let mut buffer = vec![0.0f32; 44100 * 2];
 
@@ -638,7 +638,7 @@ fn test_repeat_all_large_queue() {
     for _ in 0..1050 {
         manager.process_audio(&mut buffer).ok();
         manager.next().ok();
-        manager.set_audio_source(Box::new(MemoryMockSource::new(Duration::from_secs(1))));
+        manager.activate_source(Box::new(MemoryMockSource::new(Duration::from_secs(1))));
     }
 
     // Should have wrapped around

@@ -217,7 +217,7 @@ fn test_crossfade_track_shorter_than_duration_basic() {
     manager.add_to_queue_end(create_test_track("2", "Next Track", "Artist", 10));
 
     manager.play().ok();
-    manager.set_audio_source(Box::new(MockAudioSource::new(
+    manager.activate_source(Box::new(MockAudioSource::new(
         "1",
         Duration::from_secs(2),
         44100,

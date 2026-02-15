@@ -140,7 +140,7 @@ fn stress_concurrent_play_pause_100_cycles() {
             mgr.add_to_queue_end(create_test_track(&i.to_string(), 180));
         }
         mgr.play().ok();
-        mgr.set_audio_source(Box::new(ConcurrencyMockSource::new(
+        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -268,7 +268,7 @@ fn stress_shuffle_during_playback() {
             mgr.add_to_queue_end(create_test_track(&i.to_string(), 180));
         }
         mgr.play().ok();
-        mgr.set_audio_source(Box::new(ConcurrencyMockSource::new(
+        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -317,7 +317,7 @@ fn stress_volume_changes_during_playback() {
         let mut mgr = manager.lock().unwrap();
         mgr.add_to_queue_end(create_test_track("1", 180));
         mgr.play().ok();
-        mgr.set_audio_source(Box::new(ConcurrencyMockSource::new(
+        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -374,7 +374,7 @@ fn stress_seek_from_multiple_threads() {
         let mut mgr = manager.lock().unwrap();
         mgr.add_to_queue_end(create_test_track("1", 180));
         mgr.play().ok();
-        mgr.set_audio_source(Box::new(ConcurrencyMockSource::new(
+        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -440,7 +440,7 @@ fn race_pause_during_track_load() {
         // Now set source
         {
             let mut mgr = manager.lock().unwrap();
-            mgr.set_audio_source(Box::new(ConcurrencyMockSource::new(
+            mgr.activate_source(Box::new(ConcurrencyMockSource::new(
                 Duration::from_secs(180),
                 44100,
             )));
@@ -471,7 +471,7 @@ fn race_skip_during_crossfade() {
             mgr.add_to_queue_end(create_test_track(&i.to_string(), 10));
         }
         mgr.play().ok();
-        mgr.set_audio_source(Box::new(ConcurrencyMockSource::new(
+        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
             Duration::from_secs(10),
             44100,
         )));
@@ -521,7 +521,7 @@ fn race_queue_clear_during_playback() {
             mgr.add_to_queue_end(create_test_track(&i.to_string(), 180));
         }
         mgr.play().ok();
-        mgr.set_audio_source(Box::new(ConcurrencyMockSource::new(
+        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
@@ -689,7 +689,7 @@ fn stress_all_operations_combined_chaos() {
             mgr.add_to_queue_end(create_test_track(&i.to_string(), 180));
         }
         mgr.play().ok();
-        mgr.set_audio_source(Box::new(ConcurrencyMockSource::new(
+        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
             Duration::from_secs(180),
             44100,
         )));
