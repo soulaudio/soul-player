@@ -413,6 +413,211 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
     }
 }
 
+/// Get multiple tracks by IDs in a single query (batch operation)
+///
+/// This is optimized to avoid N+1 query problems when fetching multiple tracks.
+/// Uses dynamic SQL with IN clause to fetch all tracks, artist/album data, and
+/// availability in a single query.
+///
+/// # Arguments
+///
+/// * `pool` - Database connection pool
+/// * `ids` - Vector of track IDs to fetch
+///
+/// # Returns
+///
+/// Vector of tracks in the same order as the input IDs (missing tracks are filtered out)
+pub async fn get_by_ids(pool: &SqlitePool, ids: &[TrackId]) -> Result<Vec<Track>> {
+    let start = std::time::Instant::now();
+
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    tracing::debug!(
+        track_count = ids.len(),
+        "[Storage:get_by_ids] Fetching tracks in batch"
+    );
+
+    // Convert TrackIds to i64s
+    let id_ints: Vec<i64> = ids
+        .iter()
+        .filter_map(|id| id.as_str().parse::<i64>().ok())
+        .collect();
+
+    if id_ints.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // SQLite has a limit on the number of parameters (default 999).
+    // To avoid exceeding this, we chunk the IDs if needed.
+    const CHUNK_SIZE: usize = 500;
+
+    let mut all_tracks = Vec::new();
+
+    for chunk in id_ints.chunks(CHUNK_SIZE) {
+        // Build comma-separated ID list for IN clause
+        // This is safe because we've validated these are i64s (no SQL injection risk)
+        let ids_str = chunk
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let query_str = format!(
+            r#"
+            SELECT
+                t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
+                t.track_number, t.disc_number, t.year, t.duration_seconds,
+                t.bitrate, t.sample_rate, t.channels, t.file_format,
+                t.origin_source_id, t.musicbrainz_recording_id, t.fingerprint,
+                t.metadata_source, t.created_at, t.updated_at,
+                ar.name as artist_name,
+                al.title as album_title,
+                al.cover_art_path as album_cover_art_path,
+                al.artwork_source as album_artwork_source,
+                ts.source_id as source_id,
+                ts.status as status,
+                ts.local_file_path as local_file_path,
+                ts.server_path as server_path,
+                ts.local_file_size as local_file_size
+            FROM tracks t
+            LEFT JOIN artists ar ON t.artist_id = ar.id
+            LEFT JOIN albums al ON t.album_id = al.id
+            LEFT JOIN track_sources ts ON t.id = ts.track_id
+            WHERE t.id IN ({})
+            ORDER BY t.id, ts.source_id
+            "#,
+            ids_str
+        );
+
+        let query_start = std::time::Instant::now();
+        let rows = sqlx::query(&query_str).fetch_all(pool).await?;
+        let query_duration = query_start.elapsed();
+
+        tracing::debug!(
+            chunk_size = chunk.len(),
+            row_count = rows.len(),
+            query_ms = query_duration.as_millis(),
+            "[Storage:get_by_ids] Query chunk completed"
+        );
+
+        // Group rows by track_id and build Track objects
+        let mut tracks_map: std::collections::HashMap<i64, Track> =
+            std::collections::HashMap::new();
+
+        for row in rows {
+            let track_id_i64: i64 = row.try_get("id")?;
+            let track = tracks_map.entry(track_id_i64).or_insert_with(|| Track {
+                id: TrackId::new(track_id_i64.to_string()),
+                title: row.try_get("title").unwrap_or_default(),
+                artist_id: row.try_get("artist_id").ok(),
+                artist_name: row.try_get("artist_name").ok(),
+                album_id: row.try_get("album_id").ok(),
+                album_title: row.try_get("album_title").ok(),
+                album_artist_id: row.try_get("album_artist_id").ok(),
+                track_number: row
+                    .try_get::<Option<i64>, _>("track_number")
+                    .ok()
+                    .flatten()
+                    .map(|x| x as i32),
+                disc_number: row
+                    .try_get::<Option<i64>, _>("disc_number")
+                    .ok()
+                    .flatten()
+                    .map(|x| x as i32),
+                year: row
+                    .try_get::<Option<i64>, _>("year")
+                    .ok()
+                    .flatten()
+                    .map(|x| x as i32),
+                duration_seconds: row.try_get("duration_seconds").ok(),
+                bitrate: row
+                    .try_get::<Option<i64>, _>("bitrate")
+                    .ok()
+                    .flatten()
+                    .map(|x| x as i32),
+                sample_rate: row
+                    .try_get::<Option<i64>, _>("sample_rate")
+                    .ok()
+                    .flatten()
+                    .map(|x| x as i32),
+                channels: row
+                    .try_get::<Option<i64>, _>("channels")
+                    .ok()
+                    .flatten()
+                    .map(|x| x as i32),
+                file_format: row
+                    .try_get::<Option<String>, _>("file_format")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "unknown".to_string()),
+                origin_source_id: row.try_get("origin_source_id").unwrap_or(1),
+                musicbrainz_recording_id: row.try_get("musicbrainz_recording_id").ok(),
+                fingerprint: row.try_get("fingerprint").ok(),
+                metadata_source: parse_metadata_source(
+                    row.try_get::<Option<String>, _>("metadata_source")
+                        .ok()
+                        .flatten()
+                        .as_deref()
+                        .unwrap_or("file"),
+                ),
+                created_at: row.try_get("created_at").unwrap_or_default(),
+                updated_at: row.try_get("updated_at").unwrap_or_default(),
+                cover_art_path: row.try_get("album_cover_art_path").ok(),
+                artwork_source: row.try_get("album_artwork_source").ok(),
+                availability: Vec::new(),
+            });
+
+            // Add availability data if present in this row
+            if let (Ok(Some(source_id)), Ok(Some(status))) = (
+                row.try_get::<Option<i64>, _>("source_id"),
+                row.try_get::<Option<String>, _>("status"),
+            ) {
+                track.availability.push(TrackAvailability {
+                    source_id,
+                    status: parse_availability_status(&status),
+                    local_file_path: row.try_get("local_file_path").ok(),
+                    server_path: row.try_get("server_path").ok(),
+                    local_file_size: row.try_get("local_file_size").ok(),
+                });
+            }
+        }
+
+        // Convert to Vec and preserve the original order
+        all_tracks.extend(tracks_map.into_values());
+    }
+
+    // Sort by the original input order (based on position in ids vec)
+    let id_to_pos: std::collections::HashMap<String, usize> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| (id.as_str().to_string(), i))
+        .collect();
+
+    all_tracks.sort_by_key(|t| id_to_pos.get(t.id.as_str()).copied().unwrap_or(usize::MAX));
+
+    let total_duration = start.elapsed();
+
+    if total_duration.as_millis() > 100 {
+        tracing::warn!(
+            requested_count = ids.len(),
+            found_count = all_tracks.len(),
+            total_ms = total_duration.as_millis(),
+            "[Storage:get_by_ids] Slow batch query detected"
+        );
+    } else {
+        tracing::debug!(
+            requested_count = ids.len(),
+            found_count = all_tracks.len(),
+            total_ms = total_duration.as_millis(),
+            "[Storage:get_by_ids] Batch query completed"
+        );
+    }
+
+    Ok(all_tracks)
+}
+
 /// Get tracks by source
 pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec<Track>> {
     let rows: Vec<_> = sqlx::query!(

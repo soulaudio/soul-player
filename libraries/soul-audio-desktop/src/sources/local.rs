@@ -132,6 +132,9 @@ struct SharedState {
     is_eof: AtomicBool,
     /// Whether a seek is pending (decoder will reset)
     seek_pending: AtomicBool,
+    /// Generation counter - incremented on each seek to invalidate stale ring buffer samples
+    /// This solves the 3-5 second audio delay by skipping old samples after seek
+    generation: AtomicUsize,
 }
 
 /// Audio source for local files with background decoder thread
@@ -162,6 +165,9 @@ pub struct LocalAudioSource {
     // Position tracking
     total_duration: Duration,
     needs_resampling: bool,
+
+    // Track last seen generation to detect seeks and drain stale buffer
+    last_generation: usize,
 }
 
 // ===== Helper Functions for Decoder Thread =====
@@ -272,10 +278,16 @@ fn handle_seek_command(
     shared.is_eof.store(false, Ordering::Relaxed);
     shared.seek_pending.store(false, Ordering::Relaxed);
 
-    tracing::debug!(
-        "[DecoderThread] Seek completed: requested={:?}, actual={:?}, reset all skip counters",
+    // CRITICAL FIX: Increment generation to invalidate stale ring buffer samples
+    // This prevents the 3-5 second audio delay by causing the audio callback
+    // to skip old samples that were buffered before the seek
+    shared.generation.fetch_add(1, Ordering::Release);
+
+    tracing::info!(
+        "[DecoderThread] Seek completed: requested={:?}, actual={:?}, generation={}, reset all skip counters",
         position,
-        actual_position
+        actual_position,
+        shared.generation.load(Ordering::Acquire) - 1
     );
 
     // Return reset skip counters (resampler_skip, encoder_delay_skip)
@@ -368,6 +380,7 @@ impl LocalAudioSource {
             samples_read: AtomicUsize::new(0),
             is_eof: AtomicBool::new(false),
             seek_pending: AtomicBool::new(false),
+            generation: AtomicUsize::new(0),
         });
 
         // Create command channel
@@ -434,6 +447,7 @@ impl LocalAudioSource {
             _decoder_thread: decoder_thread,
             total_duration,
             needs_resampling,
+            last_generation: 0,
         })
     }
 
@@ -1030,6 +1044,28 @@ impl AudioSource for LocalAudioSource {
     ///
     /// Uses rtrb ring buffer for lock-free, wait-free reads from the audio thread.
     fn read_samples(&mut self, output: &mut [f32]) -> Result<usize> {
+        // CRITICAL FIX: Check if generation changed (seek occurred)
+        // If so, drain all stale samples from ring buffer to prevent 3-5s audio delay
+        let current_generation = self.shared.generation.load(Ordering::Acquire);
+        if current_generation != self.last_generation {
+            // Seek detected! Drain ring buffer of stale samples
+            let mut drained = 0usize;
+            while let Ok(chunk) = self.buffer_consumer.read_chunk(self.output_buffer_capacity) {
+                if chunk.is_empty() {
+                    break;
+                }
+                drained += chunk.len();
+                chunk.commit_all();
+            }
+            self.last_generation = current_generation;
+            tracing::info!(
+                "[SEEK PERF] Drained {} stale samples from ring buffer (generation {} -> {})",
+                drained,
+                current_generation - 1,
+                current_generation
+            );
+        }
+
         // Wait-free read from ring buffer using read_chunk for efficiency
         let available = self.buffer_consumer.read_chunk(output.len());
         let read_count = if let Ok(chunk) = available {

@@ -910,3 +910,64 @@ async fn test_complete_music_library_workflow() {
     let queen_tracks = soul_storage::tracks::search(pool, "Queen").await.unwrap();
     assert_eq!(queen_tracks.len(), 2);
 }
+
+// ============================================================================
+// BATCH QUERY TESTS (N+1 Query Prevention)
+// ============================================================================
+
+#[tokio::test]
+async fn test_batch_get_tracks_by_ids() {
+    let test_db = TestDb::new().await;
+    let pool = test_db.pool();
+
+    // Create test tracks
+    let track1 =
+        create_test_track(pool, "Bohemian Rhapsody", None, None, 1, Some("/m/br.mp3")).await;
+    let track2 =
+        create_test_track(pool, "We Will Rock You", None, None, 1, Some("/m/wwry.mp3")).await;
+    let track3 = create_test_track(
+        pool,
+        "Don't Stop Me Now",
+        None,
+        None,
+        1,
+        Some("/m/dsmn.mp3"),
+    )
+    .await;
+
+    // Test: Get multiple tracks in single query
+    let track_ids = vec![track1.clone(), track2.clone(), track3.clone()];
+    let tracks = soul_storage::tracks::get_by_ids(pool, &track_ids)
+        .await
+        .unwrap();
+
+    assert_eq!(tracks.len(), 3, "Should return all 3 tracks");
+    assert_eq!(tracks[0].title, "Bohemian Rhapsody");
+    assert_eq!(tracks[1].title, "We Will Rock You");
+    assert_eq!(tracks[2].title, "Don't Stop Me Now");
+
+    // Test: Empty input
+    let empty_tracks = soul_storage::tracks::get_by_ids(pool, &[]).await.unwrap();
+    assert_eq!(empty_tracks.len(), 0, "Empty input should return empty vec");
+
+    // Test: Non-existent IDs (should be filtered out)
+    let fake_id = TrackId::new("999999".to_string());
+    let mixed_ids = vec![track1.clone(), fake_id, track2.clone()];
+    let mixed_tracks = soul_storage::tracks::get_by_ids(pool, &mixed_ids)
+        .await
+        .unwrap();
+    assert_eq!(
+        mixed_tracks.len(),
+        2,
+        "Should filter out non-existent track"
+    );
+
+    // Test: Order preservation
+    let reversed_ids = vec![track3.clone(), track1.clone(), track2.clone()];
+    let reversed_tracks = soul_storage::tracks::get_by_ids(pool, &reversed_ids)
+        .await
+        .unwrap();
+    assert_eq!(reversed_tracks[0].id, track3, "Order should match input");
+    assert_eq!(reversed_tracks[1].id, track1, "Order should match input");
+    assert_eq!(reversed_tracks[2].id, track2, "Order should match input");
+}
