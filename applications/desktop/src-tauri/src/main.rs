@@ -45,22 +45,9 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 // Playback session state for persistence
-#[derive(Debug, serde::Deserialize)]
-struct PlaybackSessionState {
-    current_track_id: Option<i64>,
-    queue_track_ids: Vec<i64>,
-    queue_index: i32,
-    position_seconds: f64,
-    volume: f64,
-    repeat_mode: String,
-    shuffle_mode: String,
-    context_type: Option<String>,
-    context_id: Option<String>,
-    was_playing: bool,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct RestoredPlaybackSession {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaybackSession {
     current_track_id: Option<i64>,
     queue_track_ids: Vec<i64>,
     queue_index: i32,
@@ -430,7 +417,7 @@ struct RestorePlaybackStateParams {
     queue: Vec<TrackData>,
     start_index: usize,
     position_seconds: f64,
-    volume: f64,        // 0-100
+    volume: f64, // 0-100
     repeat_mode: String,
     shuffle_mode: String,
 }
@@ -502,9 +489,7 @@ async fn restore_playback_state(
             .map_err(|e: soul_audio_desktop::AudioError| -> String { e.into() })?;
     }
 
-    tracing::info!(
-        "[restore_playback_state] Restoration complete (paused state)"
-    );
+    tracing::info!("[restore_playback_state] Restoration complete (paused state)");
 
     Ok(())
 }
@@ -683,14 +668,20 @@ async fn seek_to(
 ) -> Result<(), String> {
     // STEP 3: Rust seek_to entry timestamp
     let entry_time = std::time::Instant::now();
-    tracing::info!("[SEEK PERF] === Rust seek_to() ENTRY === position={:.3}s", position);
+    tracing::info!(
+        "[SEEK PERF] === Rust seek_to() ENTRY === position={:.3}s",
+        position
+    );
 
     let result = playback.get().await?.seek(position);
 
     let exit_time = entry_time.elapsed();
     match &result {
         Ok(_) => {
-            tracing::info!("[SEEK PERF] === Rust seek_to() EXIT === completed in {:.2}ms", exit_time.as_millis());
+            tracing::info!(
+                "[SEEK PERF] === Rust seek_to() EXIT === completed in {:.2}ms",
+                exit_time.as_millis()
+            );
 
             // CRITICAL FIX: Emit position update immediately after seek completes
             // This ensures frontend gets confirmation even when playback is paused
@@ -698,7 +689,11 @@ async fn seek_to(
             tracing::info!("[SEEK PERF] Position update emitted: {:.3}s", position);
         }
         Err(e) => {
-            tracing::error!("[SEEK PERF] === Rust seek_to() ERROR === after {:.2}ms: {}", exit_time.as_millis(), e);
+            tracing::error!(
+                "[SEEK PERF] === Rust seek_to() ERROR === after {:.2}ms: {}",
+                exit_time.as_millis(),
+                e
+            );
         }
     }
 
@@ -885,7 +880,7 @@ async fn get_volume(playback: State<'_, LazyPlaybackManager>) -> Result<f64, Str
 #[tauri::command]
 async fn save_playback_session(
     state: State<'_, AppState>,
-    session: PlaybackSessionState,
+    session: PlaybackSession,
 ) -> Result<(), String> {
     use soul_storage::settings;
 
@@ -998,7 +993,7 @@ async fn save_playback_session(
 #[tauri::command]
 async fn restore_playback_session(
     state: State<'_, AppState>,
-) -> Result<Option<RestoredPlaybackSession>, String> {
+) -> Result<Option<PlaybackSession>, String> {
     use soul_storage::settings;
 
     let pool = &state.pool;
@@ -1076,7 +1071,7 @@ async fn restore_playback_session(
 
     tracing::info!("[PERSISTENCE] Playback session restored successfully");
 
-    Ok(Some(RestoredPlaybackSession {
+    Ok(Some(PlaybackSession {
         current_track_id,
         queue_track_ids,
         queue_index,
@@ -1189,15 +1184,29 @@ async fn get_tracks_by_ids(
     track_ids: Vec<i64>,
     state: State<'_, AppState>,
 ) -> Result<Vec<Option<FrontendTrack>>, String> {
-    let mut results = Vec::new();
-    for track_id in track_ids {
-        let id = soul_core::types::TrackId::new(track_id.to_string());
-        match soul_storage::tracks::get_by_id(&state.pool, id).await {
-            Ok(Some(track)) => results.push(Some(FrontendTrack::from(track))),
-            Ok(None) => results.push(None),
-            Err(_) => results.push(None),
-        }
-    }
+    // Convert track_ids to TrackId objects
+    let track_id_objs: Vec<soul_core::types::TrackId> = track_ids
+        .iter()
+        .map(|id| soul_core::types::TrackId::new(id.to_string()))
+        .collect();
+
+    // Use batch query to fetch all tracks at once (fixes N+1 query problem)
+    let tracks = soul_storage::tracks::get_by_ids(&state.pool, &track_id_objs)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Build lookup map for O(1) access
+    let track_map: std::collections::HashMap<String, FrontendTrack> = tracks
+        .into_iter()
+        .map(|t| (t.id.as_str().to_string(), FrontendTrack::from(t)))
+        .collect();
+
+    // Return results in the same order as input, with None for missing tracks
+    let results: Vec<Option<FrontendTrack>> = track_ids
+        .iter()
+        .map(|id| track_map.get(&id.to_string()).cloned())
+        .collect();
+
     Ok(results)
 }
 
