@@ -154,12 +154,12 @@ fn test_pause_immediately_after_play_stops_audio() {
         track_number: None,
         source: TrackSource::Single,
     };
-    manager.load_playlist(vec![track], 0);
+    manager.load_playlist(vec![track.clone()], 0);
     manager.play().unwrap(); // State: Loading
 
     // Simulate track finishing loading
     let source = Box::new(LoudToneSource::new(48000, 5.0));
-    manager.activate_source(source);
+    manager.activate_source(source, track);
     assert_eq!(manager.get_state(), PlaybackState::Playing);
 
     // Simulate immediately clicking "Pause" (within milliseconds)
@@ -200,7 +200,8 @@ fn test_pause_during_source_ready_wait() {
 
     // Create source with 100ms delay before ready
     let source = Box::new(LoudToneSource::new_with_delay(48000, 5.0, 100));
-    manager.activate_source(source);
+    let track = create_queue_track("test1", 5);
+    manager.activate_source(source, track);
 
     // Process a few buffers (source not ready yet)
     for _ in 0..2 {
@@ -243,7 +244,8 @@ fn test_resume_after_pause_during_startup() {
 
     // Simulate track finishing loading
     let source = Box::new(LoudToneSource::new(48000, 5.0));
-    manager.activate_source(source);
+    let track = create_queue_track("test1", 5);
+    manager.activate_source(source, track);
 
     // Immediate pause
     manager.pause();
@@ -294,7 +296,8 @@ fn test_multiple_rapid_pause_resume_cycles() {
 
         // Simulate track finishing loading
         let source = Box::new(LoudToneSource::new(sample_rate, 5.0));
-        manager.activate_source(source);
+        let track = create_queue_track(&format!("test{}", cycle), 5);
+        manager.activate_source(source, track);
 
         // Rapid pause/resume
         manager.pause();
@@ -330,7 +333,8 @@ fn test_pause_just_after_source_becomes_ready() {
 
     // Source with very short delay (50ms)
     let source = Box::new(LoudToneSource::new_with_delay(48000, 5.0, 50));
-    manager.activate_source(source);
+    let track = create_queue_track("test1", 5);
+    manager.activate_source(source, track);
 
     // Process until source becomes ready (50ms = 4800 stereo samples)
     let mut total_processed = 0;
@@ -372,7 +376,8 @@ fn test_pause_changes_state_immediately() {
 
     // Simulate track finishing loading
     let source = Box::new(LoudToneSource::new(48000, 5.0));
-    manager.activate_source(source);
+    let track = create_queue_track("test1", 5);
+    manager.activate_source(source, track);
     assert_eq!(manager.get_state(), PlaybackState::Playing);
 
     manager.pause();
@@ -393,7 +398,8 @@ fn test_pause_respects_state_in_audio_callback() {
     manager.set_output_channels(2);
 
     let source = Box::new(LoudToneSource::new(48000, 5.0));
-    manager.activate_source(source);
+    let track = create_queue_track("test1", 5);
+    manager.activate_source(source, track);
 
     manager.pause();
 
@@ -423,7 +429,8 @@ fn test_pause_before_first_audio_callback() {
     manager.set_output_channels(2);
 
     let source = Box::new(LoudToneSource::new(48000, 5.0));
-    manager.activate_source(source);
+    let track = create_queue_track("test1", 5);
+    manager.activate_source(source, track);
 
     // Pause BEFORE any process_audio() call
     manager.pause();
@@ -452,7 +459,8 @@ fn test_pause_then_different_track() {
     manager.play().unwrap();
 
     let source1 = Box::new(LoudToneSource::new(48000, 5.0));
-    manager.activate_source(source1);
+    let track1 = create_queue_track("test1", 5);
+    manager.activate_source(source1, track1);
     manager.pause();
 
     // Verify paused
@@ -465,7 +473,8 @@ fn test_pause_then_different_track() {
     manager.play().unwrap(); // New track, start playing
 
     let source2 = Box::new(LoudToneSource::new(48000, 5.0));
-    manager.activate_source(source2);
+    let track2 = create_queue_track("test2", 5);
+    manager.activate_source(source2, track2);
 
     // Should be playing new track
     let mut warmup = vec![0.0f32; 9600];
