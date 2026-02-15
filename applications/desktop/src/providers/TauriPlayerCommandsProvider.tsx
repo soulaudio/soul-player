@@ -322,9 +322,12 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         // Check if backend has active state (hot reload scenario)
         const backendTrack = await invokeValidated('get_current_track', QueueTrackSchema.nullable());
 
-        console.log('[PERSISTENCE] Initial state sync - backend track:', backendTrack ? 'exists (hot reload)' : 'null (cold start)');
+        // Validate that we have a real track (not just an empty object)
+        const hasValidTrack = backendTrack && backendTrack.trackId && backendTrack.filePath;
 
-        if (backendTrack) {
+        console.log('[PERSISTENCE] Initial state sync - backend track:', hasValidTrack ? 'exists (hot reload)' : 'null (cold start)');
+
+        if (hasValidTrack) {
           // Hot reload - backend is alive
           console.log('[PERSISTENCE] Hot reload path - syncing from backend');
           await syncFromBackend();
@@ -335,6 +338,13 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         }
       } catch (error) {
         console.error('[PERSISTENCE] Failed to sync initial state:', error);
+        // On error, try database restore as fallback
+        console.log('[PERSISTENCE] Error in sync - falling back to database restore');
+        try {
+          await restoreFromDatabase();
+        } catch (fallbackError) {
+          console.error('[PERSISTENCE] Fallback restore also failed:', fallbackError);
+        }
       }
     };
 

@@ -109,14 +109,16 @@ export const PlaybackSessionSchema = z.object({
 });
 
 export const QueueTrackSchema = z.object({
-  trackId: z.string(),
-  title: z.string(),
-  artist: z.string(),
-  album: z.string().nullable(),
-  filePath: z.string(),
-  durationSeconds: z.number().nullable(),
-  trackNumber: z.number().nullable(),
-});
+  trackId: z.string().optional(),
+  title: z.string().optional(),
+  artist: z.string().optional(),
+  album: z.string().nullable().optional(),
+  filePath: z.string().optional(),
+  durationSeconds: z.number().nullable().optional(),
+  trackNumber: z.number().nullable().optional(),
+  coverArtPath: z.string().nullable().optional(),
+  albumId: z.number().nullable().optional(),
+}).passthrough(); // Allow additional fields we might not know about
 
 export const PlaybackContextSchema = z.object({
   id: z.number(),
