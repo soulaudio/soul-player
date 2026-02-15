@@ -53,22 +53,27 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         return;
       }
 
-      await invoke('save_playback_session', {
-        session: {
-          current_track_id: state.currentTrack.id,
-          queue_track_ids: state.queue.map(t => t.id),
-          queue_index: state.queueIndex,
-          position_seconds: state.duration ? (state.progress / 100) * state.duration : 0,
-          volume: state.volume * 100, // Convert 0-1 to 0-100
-          repeat_mode: state.repeatMode,
-          shuffle_mode: state.shuffleMode,
-          context_type: session.contextType,
-          context_id: session.contextId,
-          was_playing: state.isPlaying,
-        },
-      });
+      const sessionData = {
+        current_track_id: state.currentTrack.id,
+        queue_track_ids: state.queue.map(t => t.id),
+        queue_index: state.queueIndex,
+        position_seconds: state.duration ? (state.progress / 100) * state.duration : 0,
+        volume: state.volume * 100, // Convert 0-1 to 0-100
+        repeat_mode: state.repeatMode,
+        shuffle_mode: state.shuffleMode,
+        context_type: session.contextType,
+        context_id: session.contextId,
+        was_playing: state.isPlaying,
+      };
 
-      console.log('[PERSISTENCE] Session saved');
+      await invoke('save_playback_session', { session: sessionData });
+
+      console.log('[PERSISTENCE] Session saved:', {
+        currentTrackId: sessionData.current_track_id,
+        currentTrackTitle: state.currentTrack.title,
+        queueLength: sessionData.queue_track_ids.length,
+        position: sessionData.position_seconds.toFixed(1) + 's',
+      });
     } catch (error) {
       console.error('[PERSISTENCE] Failed to save session:', error);
 
@@ -213,11 +218,19 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
         console.log('[PERSISTENCE] State restored from database:', {
           queueLength: validTracks.length,
+          queueIndex,
           currentTrack: validTracks[queueIndex]?.title,
+          currentTrackId: validTracks[queueIndex]?.id,
           volumeFromDB: session.volume,
           volumeConverted: session.volume / 100,
           position: session.position_seconds,
           progress: restoredProgress.toFixed(1) + '%',
+        });
+
+        console.log('[PERSISTENCE] Zustand store updated with:', {
+          currentTrack: usePlayerStore.getState().currentTrack?.title,
+          currentTrackId: usePlayerStore.getState().currentTrack?.id,
+          queueLength: usePlayerStore.getState().queue.length,
         });
       } catch (error) {
         console.error('[PERSISTENCE] Failed to restore from database:', error);
@@ -309,11 +322,15 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         // Check if backend has active state (hot reload scenario)
         const backendTrack = await invokeValidated('get_current_track', QueueTrackSchema.nullable());
 
+        console.log('[PERSISTENCE] Initial state sync - backend track:', backendTrack ? 'exists (hot reload)' : 'null (cold start)');
+
         if (backendTrack) {
           // Hot reload - backend is alive
+          console.log('[PERSISTENCE] Hot reload path - syncing from backend');
           await syncFromBackend();
         } else {
           // Cold start - restore from database
+          console.log('[PERSISTENCE] Cold start path - restoring from database');
           await restoreFromDatabase();
         }
       } catch (error) {
