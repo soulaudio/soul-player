@@ -113,6 +113,7 @@ macro_rules! i32_to_f32 {
 }
 
 #[cfg(test)]
+#[allow(clippy::neg_multiply)]
 mod tests {
     #[test]
     fn test_f32_to_i16() {
@@ -158,8 +159,9 @@ mod tests {
         let neg_clip = f32_to_i32!(-2.0, clip);
         assert!(neg_clip == -2147483647 || neg_clip == -2147483648);
 
-        // Normal range
-        assert_eq!(f32_to_i32!(0.5, clip), 1073741823);
+        // Normal range - f32 precision may round up by 1
+        let half_clip = f32_to_i32!(0.5, clip);
+        assert!(half_clip == 1073741823 || half_clip == 1073741824);
     }
 
     #[test]

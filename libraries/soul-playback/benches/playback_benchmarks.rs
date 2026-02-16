@@ -126,6 +126,10 @@ fn create_test_track(id: &str, title: &str, duration_secs: u64) -> QueueTrack {
     }
 }
 
+fn create_bench_track(duration_secs: u64) -> QueueTrack {
+    create_test_track("bench", "Benchmark Track", duration_secs)
+}
+
 fn setup_manager_with_queue(track_count: usize) -> PlaybackManager {
     let mut manager = PlaybackManager::new(PlaybackConfig {
         volume: 80,
@@ -157,10 +161,11 @@ fn bench_audio_callback(c: &mut Criterion) {
             &buffer_size,
             |b, &size| {
                 let mut manager = setup_manager_with_queue(10);
-                manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-                    Duration::from_secs(180),
-                    48000,
-                )));
+                let track = create_bench_track(180);
+                manager.activate_source(
+                    Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+                    track,
+                );
                 let _ = manager.play();
 
                 let mut buffer = vec![0.0f32; size];
@@ -231,10 +236,11 @@ fn bench_state_transitions(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut manager = setup_manager_with_queue(10);
-                manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-                    Duration::from_secs(180),
-                    48000,
-                )));
+                let track = create_bench_track(180);
+                manager.activate_source(
+                    Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+                    track,
+                );
                 manager
             },
             |mut manager| {
@@ -249,10 +255,11 @@ fn bench_state_transitions(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut manager = setup_manager_with_queue(10);
-                manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-                    Duration::from_secs(180),
-                    48000,
-                )));
+                let track = create_bench_track(180);
+                manager.activate_source(
+                    Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+                    track,
+                );
                 let _ = manager.play();
                 manager
             },
@@ -268,10 +275,11 @@ fn bench_state_transitions(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut manager = setup_manager_with_queue(10);
-                manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-                    Duration::from_secs(180),
-                    48000,
-                )));
+                let track = create_bench_track(180);
+                manager.activate_source(
+                    Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+                    track,
+                );
                 let _ = manager.play();
                 manager
             },
@@ -287,10 +295,11 @@ fn bench_state_transitions(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut manager = setup_manager_with_queue(10);
-                manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-                    Duration::from_secs(180),
-                    48000,
-                )));
+                let track = create_bench_track(180);
+                manager.activate_source(
+                    Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+                    track,
+                );
                 let _ = manager.play();
                 // Move forward to have history
                 let _ = manager.next();
@@ -412,10 +421,11 @@ fn bench_volume_operations(c: &mut Criterion) {
             &buffer_size,
             |b, &size| {
                 let mut manager = setup_manager_with_queue(10);
-                manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-                    Duration::from_secs(180),
-                    48000,
-                )));
+                let track = create_bench_track(180);
+                manager.activate_source(
+                    Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+                    track,
+                );
                 let _ = manager.play();
 
                 // Trigger a volume change to enable ramping (most expensive case)
@@ -486,10 +496,11 @@ fn bench_allocation_frequency(c: &mut Criterion) {
     // Audio callback should have minimal allocations (critical!)
     group.bench_function("audio_callback_allocations", |b| {
         let mut manager = setup_manager_with_queue(10);
-        manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-            Duration::from_secs(180),
-            48000,
-        )));
+        let track = create_bench_track(180);
+        manager.activate_source(
+            Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+            track,
+        );
         let _ = manager.play();
 
         let mut buffer = vec![0.0f32; 1024];
@@ -524,10 +535,11 @@ fn bench_seek_operations(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut manager = setup_manager_with_queue(10);
-                manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-                    Duration::from_secs(180),
-                    48000,
-                )));
+                let track = create_bench_track(180);
+                manager.activate_source(
+                    Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+                    track,
+                );
                 let _ = manager.play();
                 manager
             },
@@ -543,10 +555,11 @@ fn bench_seek_operations(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut manager = setup_manager_with_queue(10);
-                manager.set_audio_source(Box::new(BenchmarkAudioSource::new(
-                    Duration::from_secs(180),
-                    48000,
-                )));
+                let track = create_bench_track(180);
+                manager.activate_source(
+                    Box::new(BenchmarkAudioSource::new(Duration::from_secs(180), 48000)),
+                    track,
+                );
                 let _ = manager.play();
                 manager
             },
