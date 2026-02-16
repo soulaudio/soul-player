@@ -761,34 +761,6 @@ fn test_gapless_config() {
 }
 
 #[test]
-fn test_crossfade_with_next_source() {
-    let mut manager = PlaybackManager::default();
-    manager.set_crossfade_enabled(true);
-    manager.set_crossfade_duration(1000);
-
-    // Add tracks
-    let track1 = create_test_track("1", "Track 1", "Artist A", 10);
-    manager.add_to_queue_end(track1.clone());
-    manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist B", 10));
-
-    // Set current source
-    manager.activate_source(
-        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
-        track1,
-    );
-
-    assert!(!manager.has_next_source());
-
-    // Pre-decode next track
-    let next_source = Box::new(MockAudioSource::new(Duration::from_secs(10), 44100));
-    let next_track = create_test_track("2", "Track 2", "Artist B", 10);
-    manager.set_next_source(next_source, next_track);
-
-    assert!(manager.has_next_source());
-    assert_eq!(manager.get_next_track().unwrap().id, "2");
-}
-
-#[test]
 fn test_should_prepare_next_track_timing() {
     let mut manager = PlaybackManager::default();
     manager.set_crossfade_enabled(true);
@@ -840,30 +812,6 @@ fn test_crossfade_not_active_initially() {
         manager.get_crossfade_state(),
         soul_playback::CrossfadeState::Inactive
     );
-}
-
-#[test]
-fn test_stop_resets_crossfade() {
-    let mut manager = PlaybackManager::default();
-    manager.set_crossfade_enabled(true);
-
-    // Set up some state
-    let track1 = create_test_track("1", "Track 1", "Artist A", 10);
-    manager.add_to_queue_end(track1.clone());
-    manager.activate_source(
-        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
-        track1,
-    );
-
-    let next_source = Box::new(MockAudioSource::new(Duration::from_secs(10), 44100));
-    let next_track = create_test_track("2", "Track 2", "Artist B", 10);
-    manager.set_next_source(next_source, next_track);
-
-    // Stop should clear next source
-    manager.stop();
-
-    assert!(!manager.has_next_source());
-    assert!(manager.get_next_track().is_none());
 }
 
 #[test]

@@ -354,23 +354,6 @@ pub trait AudioProcessing: Send {
     /// Take audio source (removes it)
     fn take_audio_source(&mut self) -> Option<Box<dyn AudioSource>>;
 
-    // ===== Next Source (for Gapless/Crossfade) =====
-
-    /// Get reference to next audio source
-    fn next_source(&self) -> Option<&dyn AudioSource>;
-
-    /// Check if there is a next source
-    fn has_next_source(&self) -> bool;
-
-    /// Set next audio source for gapless/crossfade
-    fn set_next_source(&mut self, source: Box<dyn AudioSource>);
-
-    /// Take next source (removes it)
-    fn take_next_source(&mut self) -> Option<Box<dyn AudioSource>>;
-
-    /// Clear next source
-    fn clear_next_source(&mut self);
-
     // ===== Source Operations =====
 
     /// Read from current source into internal stereo conversion buffer

@@ -1650,18 +1650,6 @@ impl PlaybackManager {
     /// IMPORTANT: The source MUST be resampled to match the manager's sample rate.
     /// If sample rates don't match, a warning is logged but the source is still set
     /// (the platform layer is responsible for proper resampling).
-    /// Set next source for gapless playback (DEPRECATED - Phase 5)
-    ///
-    /// TODO: Phase 5 - Replace with SourceState::set_incoming()
-    /// This method is deprecated and should not be used in new code.
-    #[deprecated(note = "Use SourceState for source management in Phase 5")]
-    pub fn set_next_source(&mut self, _source: Box<dyn AudioSource>, track: QueueTrack) {
-        tracing::warn!("[set_next_source] DEPRECATED: Called old API - needs Phase 5 migration");
-
-        // Emit event to maintain compatibility
-        let track_id = track.id.clone();
-        self.emit_next_track_prepared(track_id);
-    }
 
     /// Validate that a source is compatible with gapless/crossfade playback
     ///
@@ -1675,15 +1663,6 @@ impl PlaybackManager {
             Some(rate) => rate == self.sample_rate,
             None => true, // Assume compatible if sample rate unknown
         }
-    }
-
-    /// Check if next source is ready (DEPRECATED - Phase 5)
-    ///
-    /// TODO: Phase 5 - Replace with SourceState::is_transitioning()
-    #[deprecated(note = "Use SourceState::is_transitioning() in Phase 5")]
-    pub fn has_next_source(&self) -> bool {
-        // Stub - return false for now
-        false
     }
 
     /// Get metadata for the next pre-decoded track

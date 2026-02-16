@@ -669,7 +669,6 @@ impl FadeManagement for MockFade {
 #[cfg(test)]
 pub struct MockAudio {
     current_source: Option<Box<dyn AudioSource>>,
-    next_source: Option<Box<dyn AudioSource>>,
     crossfade_active: bool,
     crossfade_progress: f32,
     sample_rate: u32,
@@ -685,7 +684,6 @@ impl MockAudio {
     pub fn new() -> Self {
         Self {
             current_source: None,
-            next_source: None,
             crossfade_active: false,
             crossfade_progress: 0.0,
             sample_rate: 44100,
@@ -717,26 +715,6 @@ impl AudioProcessing for MockAudio {
 
     fn take_audio_source(&mut self) -> Option<Box<dyn AudioSource>> {
         self.current_source.take()
-    }
-
-    fn next_source(&self) -> Option<&dyn AudioSource> {
-        self.next_source.as_deref()
-    }
-
-    fn has_next_source(&self) -> bool {
-        self.next_source.is_some()
-    }
-
-    fn set_next_source(&mut self, source: Box<dyn AudioSource>) {
-        self.next_source = Some(source);
-    }
-
-    fn take_next_source(&mut self) -> Option<Box<dyn AudioSource>> {
-        self.next_source.take()
-    }
-
-    fn clear_next_source(&mut self) {
-        self.next_source = None;
     }
 
     fn read_source_into_stereo_buffer(
