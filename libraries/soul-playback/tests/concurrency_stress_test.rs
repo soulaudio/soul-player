@@ -141,10 +141,10 @@ fn stress_concurrent_play_pause_100_cycles() {
         }
         mgr.play().ok();
         let track = create_test_track("test", 180);
-        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
-            Duration::from_secs(180),
-            44100,
-        )), track);
+        mgr.activate_source(
+            Box::new(ConcurrencyMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
     }
 
     let handles: Vec<_> = (0..4)
@@ -270,10 +270,10 @@ fn stress_shuffle_during_playback() {
         }
         mgr.play().ok();
         let track = create_test_track("test", 180);
-        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
-            Duration::from_secs(180),
-            44100,
-        )), track);
+        mgr.activate_source(
+            Box::new(ConcurrencyMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
     }
 
     let shuffle_thread = {
@@ -320,10 +320,10 @@ fn stress_volume_changes_during_playback() {
         mgr.add_to_queue_end(create_test_track("1", 180));
         mgr.play().ok();
         let track = create_test_track("test", 180);
-        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
-            Duration::from_secs(180),
-            44100,
-        )), track);
+        mgr.activate_source(
+            Box::new(ConcurrencyMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
     }
 
     let volume_thread = {
@@ -378,10 +378,10 @@ fn stress_seek_from_multiple_threads() {
         mgr.add_to_queue_end(create_test_track("1", 180));
         mgr.play().ok();
         let track = create_test_track("test", 180);
-        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
-            Duration::from_secs(180),
-            44100,
-        )), track);
+        mgr.activate_source(
+            Box::new(ConcurrencyMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
     }
 
     let handles: Vec<_> = (0..3)
@@ -445,10 +445,10 @@ fn race_pause_during_track_load() {
         {
             let mut mgr = manager.lock().unwrap();
             let track = create_test_track("test", 180);
-            mgr.activate_source(Box::new(ConcurrencyMockSource::new(
-                Duration::from_secs(180),
-                44100,
-            )), track);
+            mgr.activate_source(
+                Box::new(ConcurrencyMockSource::new(Duration::from_secs(180), 44100)),
+                track,
+            );
         }
 
         // Verify state is paused (not auto-playing)
@@ -477,10 +477,10 @@ fn race_skip_during_crossfade() {
         }
         mgr.play().ok();
         let track = create_test_track("test", 180);
-        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
-            Duration::from_secs(10),
-            44100,
-        )), track);
+        mgr.activate_source(
+            Box::new(ConcurrencyMockSource::new(Duration::from_secs(10), 44100)),
+            track,
+        );
     }
 
     // Process audio to trigger crossfade
@@ -528,10 +528,10 @@ fn race_queue_clear_during_playback() {
         }
         mgr.play().ok();
         let track = create_test_track("test", 180);
-        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
-            Duration::from_secs(180),
-            44100,
-        )), track);
+        mgr.activate_source(
+            Box::new(ConcurrencyMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
     }
 
     let clear_thread = {
@@ -697,10 +697,10 @@ fn stress_all_operations_combined_chaos() {
         }
         mgr.play().ok();
         let track = create_test_track("test", 180);
-        mgr.activate_source(Box::new(ConcurrencyMockSource::new(
-            Duration::from_secs(180),
-            44100,
-        )), track);
+        mgr.activate_source(
+            Box::new(ConcurrencyMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
     }
 
     let playback_thread = {

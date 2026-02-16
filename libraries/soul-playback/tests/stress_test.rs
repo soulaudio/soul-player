@@ -146,13 +146,10 @@ mod rapid_play_pause {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Rapid play/pause toggling 100 times
         for i in 0..100 {
@@ -189,13 +186,10 @@ mod rapid_play_pause {
         manager.add_to_queue_end(create_stress_track("1", 180));
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Rapid play/pause toggling 200 times
         for _ in 0..200 {
@@ -222,10 +216,13 @@ mod rapid_play_pause {
         let mut manager = PlaybackManager::default();
         let track = create_stress_track("1", 180);
         manager.add_to_queue_end(track.clone());
-        manager.activate_source(Box::new(
-            StressMockSource::new(Duration::from_secs(180), 44100)
-                .with_counters(read_count.clone(), seek_count.clone()),
-        ), track);
+        manager.activate_source(
+            Box::new(
+                StressMockSource::new(Duration::from_secs(180), 44100)
+                    .with_counters(read_count.clone(), seek_count.clone()),
+            ),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -254,13 +251,10 @@ mod rapid_play_pause {
         manager.play().ok(); // Start playback first
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Process some audio to advance position
         let mut buffer = vec![0.0f32; 44100 * 2]; // 1 second
@@ -305,13 +299,10 @@ mod rapid_play_pause {
                 // Need to set source for playback to work
                 let track = create_stress_track("stress", 180);
 
-                manager.activate_source(Box::new(StressMockSource::new(
-
-                    Duration::from_secs(180),
-
-                    44100,
-
-                )), track);
+                manager.activate_source(
+                    Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                    track,
+                );
             }
             manager.pause();
         }
@@ -344,10 +335,13 @@ mod rapid_seek {
         let track = create_stress_track("1", 100);
         manager.add_to_queue_end(track.clone());
         manager.play().ok(); // Must start playback for seek to work
-        manager.activate_source(Box::new(
-            StressMockSource::new(Duration::from_secs(100), 44100)
-                .with_counters(read_count.clone(), seek_count.clone()),
-        ), track);
+        manager.activate_source(
+            Box::new(
+                StressMockSource::new(Duration::from_secs(100), 44100)
+                    .with_counters(read_count.clone(), seek_count.clone()),
+            ),
+            track,
+        );
 
         // Verify we're in Playing state
         assert_eq!(manager.get_state(), PlaybackState::Playing);
@@ -380,13 +374,10 @@ mod rapid_seek {
         manager.play().ok(); // Must start playback for seek to work
         let track = create_stress_track("stress", 100);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(100),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(100), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 512]; // Small buffer for rapid processing
 
@@ -412,13 +403,10 @@ mod rapid_seek {
         manager.play().ok(); // Must start playback for seek to work
         let track = create_stress_track("stress", 200);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(200),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(200), 44100)),
+            track,
+        );
 
         // Rapid seek by percentage
         for i in 0..100 {
@@ -444,13 +432,10 @@ mod rapid_seek {
         manager.play().ok(); // Must start playback for seek to work
         let track = create_stress_track("stress", 100);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(100),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(100), 44100)),
+            track,
+        );
 
         // Seek back and forth rapidly
         for i in 0..50 {
@@ -482,13 +467,10 @@ mod rapid_seek {
         manager.play().ok(); // Must start playback for seek to work
         let track = create_stress_track("stress", 100);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(100),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(100), 44100)),
+            track,
+        );
 
         // Rapidly seek to boundaries
         for _ in 0..50 {
@@ -514,13 +496,10 @@ mod rapid_seek {
         manager.play().ok();
         let track = create_stress_track("stress", 100);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(100),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(100), 44100)),
+            track,
+        );
 
         // Try seeking beyond duration multiple times
         // Note: The manager clamps seek positions to valid range, so this won't fail
@@ -558,13 +537,10 @@ mod rapid_skip {
         // Set initial source
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Rapid next 50 times
         let mut successful_skips = 0;
@@ -575,13 +551,10 @@ mod rapid_skip {
                 // Set source for each new track
                 let track = create_stress_track("stress", 180);
 
-                manager.activate_source(Box::new(StressMockSource::new(
-
-                    Duration::from_secs(180),
-
-                    44100,
-
-                )), track);
+                manager.activate_source(
+                    Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                    track,
+                );
             }
         }
 
@@ -610,13 +583,10 @@ mod rapid_skip {
             manager.next().ok();
             let track = create_stress_track("stress", 180);
 
-            manager.activate_source(Box::new(StressMockSource::new(
-
-                Duration::from_secs(180),
-
-                44100,
-
-            )), track);
+            manager.activate_source(
+                Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                track,
+            );
         }
 
         let history_before = manager.get_history().len();
@@ -626,10 +596,13 @@ mod rapid_skip {
             manager.previous().ok();
             // Set source with position < 3s to trigger actual previous navigation
             let track = create_stress_track("prev", 180);
-            manager.activate_source(Box::new(
-                StressMockSource::new(Duration::from_secs(180), 44100)
-                    .with_position(Duration::from_secs(1)),
-            ), track);
+            manager.activate_source(
+                Box::new(
+                    StressMockSource::new(Duration::from_secs(180), 44100)
+                        .with_position(Duration::from_secs(1)),
+                ),
+                track,
+            );
         }
 
         // History should have been consumed (or at least partially)
@@ -652,17 +625,10 @@ mod rapid_skip {
 
         let track = create_stress_track("stress", 180);
 
-
-        manager.activate_source(Box::new(StressMockSource::new(
-
-
-            Duration::from_secs(180),
-
-
-            44100,
-
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Alternate between next and previous rapidly
         for i in 0..50 {
@@ -672,10 +638,13 @@ mod rapid_skip {
                 manager.previous().ok();
             }
             let track = create_stress_track("nav", 180);
-            manager.activate_source(Box::new(
-                StressMockSource::new(Duration::from_secs(180), 44100)
-                    .with_position(Duration::from_secs(1)), // Short position for previous to work
-            ), track);
+            manager.activate_source(
+                Box::new(
+                    StressMockSource::new(Duration::from_secs(180), 44100)
+                        .with_position(Duration::from_secs(1)), // Short position for previous to work
+                ),
+                track,
+            );
         }
 
         // Manager should still be functional
@@ -691,13 +660,10 @@ mod rapid_skip {
         manager.add_to_queue_end(create_stress_track("1", 180));
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Rapid next with repeat one (should restart same track)
         for _ in 0..50 {
@@ -705,13 +671,10 @@ mod rapid_skip {
             // Set fresh source each time (simulating track restart)
             let track = create_stress_track("stress", 180);
 
-            manager.activate_source(Box::new(StressMockSource::new(
-
-                Duration::from_secs(180),
-
-                44100,
-
-            )), track);
+            manager.activate_source(
+                Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                track,
+            );
         }
 
         // Should still have repeat mode
@@ -730,30 +693,20 @@ mod rapid_skip {
 
         let track = create_stress_track("stress", 180);
 
-
-        manager.activate_source(Box::new(StressMockSource::new(
-
-
-            Duration::from_secs(180),
-
-
-            44100,
-
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Skip more than queue length to test repeat all
         for _ in 0..20 {
             manager.next().ok();
             let track = create_stress_track("stress", 180);
 
-            manager.activate_source(Box::new(StressMockSource::new(
-
-                Duration::from_secs(180),
-
-                44100,
-
-            )), track);
+            manager.activate_source(
+                Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                track,
+            );
         }
 
         // With repeat all, should still be playing (queue loops)
@@ -796,13 +749,10 @@ mod queue_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -838,13 +788,10 @@ mod queue_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -875,13 +822,10 @@ mod queue_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -910,13 +854,10 @@ mod queue_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -942,13 +883,10 @@ mod queue_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -978,13 +916,10 @@ mod queue_stress {
                 manager.skip_to_queue_index(target).ok();
                 let track = create_stress_track("stress", 180);
 
-                manager.activate_source(Box::new(StressMockSource::new(
-
-                    Duration::from_secs(180),
-
-                    44100,
-
-                )), track);
+                manager.activate_source(
+                    Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                    track,
+                );
             }
         }
 
@@ -1017,13 +952,10 @@ mod queue_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Process some audio while queue is large
         let mut buffer = vec![0.0f32; 1024];
@@ -1053,13 +985,10 @@ mod volume_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -1090,13 +1019,10 @@ mod volume_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -1117,13 +1043,10 @@ mod volume_stress {
         manager.add_to_queue_end(create_stress_track("1", 180));
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -1145,13 +1068,10 @@ mod volume_stress {
         manager.add_to_queue_end(create_stress_track("1", 180));
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -1171,13 +1091,10 @@ mod volume_stress {
         manager.add_to_queue_end(create_stress_track("1", 180));
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -1239,13 +1156,10 @@ mod combined_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 512];
 
@@ -1291,13 +1205,10 @@ mod combined_stress {
                 manager.next().ok();
                 let track = create_stress_track("stress", 180);
 
-                manager.activate_source(Box::new(StressMockSource::new(
-
-                    Duration::from_secs(180),
-
-                    44100,
-
-                )), track);
+                manager.activate_source(
+                    Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                    track,
+                );
             }
         }
 
@@ -1326,13 +1237,10 @@ mod combined_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 10);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(10),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(10), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 4096];
 
@@ -1344,13 +1252,10 @@ mod combined_stress {
             manager.next().ok();
             let track = create_stress_track("stress", 10);
 
-            manager.activate_source(Box::new(StressMockSource::new(
-
-                Duration::from_secs(10),
-
-                44100,
-
-            )), track);
+            manager.activate_source(
+                Box::new(StressMockSource::new(Duration::from_secs(10), 44100)),
+                track,
+            );
         }
 
         // Should complete without crash
@@ -1375,13 +1280,10 @@ mod combined_stress {
             manager.next().ok();
             let track = create_stress_track("stress", 180);
 
-            manager.activate_source(Box::new(StressMockSource::new(
-
-                Duration::from_secs(180),
-
-                44100,
-
-            )), track);
+            manager.activate_source(
+                Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                track,
+            );
         }
 
         // History should be limited to 3
@@ -1392,10 +1294,13 @@ mod combined_stress {
         for _ in 0..5 {
             manager.previous().ok();
             let track = create_stress_track("hist", 180);
-            manager.activate_source(Box::new(
-                StressMockSource::new(Duration::from_secs(180), 44100)
-                    .with_position(Duration::from_secs(1)),
-            ), track);
+            manager.activate_source(
+                Box::new(
+                    StressMockSource::new(Duration::from_secs(180), 44100)
+                        .with_position(Duration::from_secs(1)),
+                ),
+                track,
+            );
         }
 
         // Should still be functional
@@ -1414,17 +1319,10 @@ mod combined_stress {
 
         let track = create_stress_track("stress", 180);
 
-
-        manager.activate_source(Box::new(StressMockSource::new(
-
-
-            Duration::from_secs(180),
-
-
-            44100,
-
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 
@@ -1442,13 +1340,10 @@ mod combined_stress {
                 manager.next().ok();
                 let track = create_stress_track("stress", 180);
 
-                manager.activate_source(Box::new(StressMockSource::new(
-
-                    Duration::from_secs(180),
-
-                    44100,
-
-                )), track);
+                manager.activate_source(
+                    Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                    track,
+                );
             }
 
             // Queue modification
@@ -1479,13 +1374,10 @@ mod combined_stress {
             manager.play().ok();
             let track = create_stress_track("stress", 180);
 
-            manager.activate_source(Box::new(StressMockSource::new(
-
-                Duration::from_secs(180),
-
-                44100,
-
-            )), track);
+            manager.activate_source(
+                Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                track,
+            );
 
             // Process some audio
             let mut buffer = vec![0.0f32; 4096];
@@ -1503,13 +1395,10 @@ mod combined_stress {
         manager.play().ok();
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
         assert_eq!(manager.get_state(), PlaybackState::Playing);
     }
 }
@@ -1551,13 +1440,10 @@ mod edge_case_stress {
         for _ in 0..100 {
             let track = create_stress_track("stress", 180);
 
-            manager.activate_source(Box::new(StressMockSource::new(
-
-                Duration::from_secs(180),
-
-                44100,
-
-            )), track);
+            manager.activate_source(
+                Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+                track,
+            );
 
             let mut buffer = vec![0.0f32; 512];
             manager.process_audio(&mut buffer).ok();
@@ -1573,13 +1459,10 @@ mod edge_case_stress {
         manager.add_to_queue_end(create_stress_track("1", 180));
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Try processing with empty buffer
         let mut empty_buffer: Vec<f32> = vec![];
@@ -1597,13 +1480,10 @@ mod edge_case_stress {
         manager.play().ok(); // Start playback
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Process with very small buffers
         for _ in 0..1000 {
@@ -1629,13 +1509,10 @@ mod edge_case_stress {
         manager.play().ok(); // Start playback
         let track = create_stress_track("stress", 180);
 
-        manager.activate_source(Box::new(StressMockSource::new(
-
-            Duration::from_secs(180),
-
-            44100,
-
-        )), track);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
 
         // Process with large buffer
         let mut large_buffer = vec![0.0f32; 44100 * 2 * 10]; // 10 seconds
@@ -1674,7 +1551,10 @@ mod edge_case_stress {
         let track_normal = create_stress_track("normal", 180);
         manager.add_to_queue_end(track_normal.clone());
 
-        manager.activate_source(Box::new(StressMockSource::new(Duration::ZERO, 44100)), track_normal);
+        manager.activate_source(
+            Box::new(StressMockSource::new(Duration::ZERO, 44100)),
+            track_normal,
+        );
 
         let mut buffer = vec![0.0f32; 1024];
 

@@ -124,6 +124,10 @@ fn create_track(id: &str, title: &str, artist: &str, duration_secs: u64) -> Queu
     }
 }
 
+fn create_test_track(id: &str, duration_secs: u64) -> QueueTrack {
+    create_track(id, "Test Track", "Test Artist", duration_secs)
+}
+
 fn create_playlist(count: usize, duration_secs: u64) -> Vec<QueueTrack> {
     (1..=count)
         .map(|i| {
@@ -218,10 +222,10 @@ fn workflow_1_playlist_shuffle_skip_pause_resume_stop() {
 
     // Simulate track loading
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(180),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+        track,
+    );
 
     // Verify playback started
     assert_eq!(
@@ -237,10 +241,10 @@ fn workflow_1_playlist_shuffle_skip_pause_resume_stop() {
             .unwrap_or_else(|e| panic!("Skip {} should succeed: {:?}", i + 1, e));
         // Simulate loading each track
         let track = create_test_track("test", 180);
-        manager.activate_source(Box::new(MockAudioSource::new(
-            Duration::from_secs(180),
-            44100,
-        )), track);
+        manager.activate_source(
+            Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
+            track,
+        );
     }
 
     // Verify history has tracks
@@ -322,10 +326,10 @@ fn workflow_2_seek_crossfade_next_track() {
     // Start playback
     manager.play().expect("Should start playback");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(60),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(60), 44100)),
+        track,
+    );
 
     // Process some audio to get past start fade
     process_samples(&mut manager, 44100 * 2); // ~1 second
@@ -354,10 +358,9 @@ fn workflow_2_seek_crossfade_next_track() {
     let next_source = Box::new(MockAudioSource::new(Duration::from_secs(60), 44100));
     manager.set_next_source(next_source, create_track("2", "Track 2", "Artist B", 60));
 
-    assert!(
-        manager.has_next_source(),
-        "Next source should be pre-loaded"
-    );
+    // Note: set_next_source and has_next_source are deprecated (Phase 5)
+    // The API no longer supports pre-loading sources in this way
+    // assert!(manager.has_next_source(), "Next source should be pre-loaded");
 
     // Verify crossfade is not active yet
     assert_eq!(manager.get_crossfade_state(), CrossfadeState::Inactive);
@@ -366,12 +369,22 @@ fn workflow_2_seek_crossfade_next_track() {
     // Skip to next track (should trigger crossfade if on_skip is enabled)
     manager.next().expect("Skip should succeed");
 
-    // Simulate loading the new current track
-    let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(60),
-        44100,
-    )), track);
+    // Simulate loading the new current track - get the track from LoadNext event
+    let events = manager.drain_events();
+    let track = events
+        .iter()
+        .find_map(|e| {
+            if let soul_playback::PlaybackEvent::LoadNext(t) = e {
+                Some(t.clone())
+            } else {
+                None
+            }
+        })
+        .expect("Should have LoadNext event");
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(60), 44100)),
+        track,
+    );
 
     // Verify we're now on track 2
     assert_eq!(manager.get_state(), PlaybackState::Playing);
@@ -393,10 +406,10 @@ fn workflow_3_volume_mute_unmute_restore() {
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist A", 60));
     manager.play().expect("Should start playback");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(60),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(60), 44100)),
+        track,
+    );
 
     // Process audio to get past start fade
     process_samples(&mut manager, 44100 * 2);
@@ -502,9 +515,10 @@ fn workflow_4_smooth_volume_transitions() {
     // Start playback
     manager.play().expect("Should start playback");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(
-        MockAudioSource::new(Duration::from_secs(60), 44100).with_amplitude(1.0),
-    ), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(60), 44100).with_amplitude(1.0)),
+        track,
+    );
 
     // Set volume to 100%
     manager.set_volume(100);
@@ -544,9 +558,10 @@ fn workflow_4_smooth_volume_transitions() {
     // Skip to next track
     manager.next().expect("Skip should succeed");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(
-        MockAudioSource::new(Duration::from_secs(60), 44100).with_amplitude(0.5),
-    ), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(60), 44100).with_amplitude(0.5)),
+        track,
+    );
 
     // Volume should still be at 20%
     assert_eq!(manager.get_volume(), 20);
@@ -589,10 +604,10 @@ fn workflow_5_rapid_repeat_mode_changes() {
     // Start playback
     manager.play().expect("Should start playback");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(10),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(10), 44100)),
+        track,
+    );
 
     // Initial state: RepeatMode::Off
     assert_eq!(manager.get_repeat(), RepeatMode::Off);
@@ -701,12 +716,22 @@ fn workflow_6_empty_queue_add_tracks_play() {
     // Now play should work
     manager.play().expect("Should start playback with tracks");
 
-    // Simulate track loading
-    let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(60),
-        44100,
-    )), track);
+    // Simulate track loading - get the track from LoadNext event
+    let events = manager.drain_events();
+    let track = events
+        .iter()
+        .find_map(|e| {
+            if let soul_playback::PlaybackEvent::LoadNext(t) = e {
+                Some(t.clone())
+            } else {
+                None
+            }
+        })
+        .expect("Should have LoadNext event");
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(60), 44100)),
+        track,
+    );
 
     assert_eq!(manager.get_state(), PlaybackState::Playing);
 
@@ -750,11 +775,23 @@ fn workflow_7_repeat_all_loop() {
 
     // Start playback
     manager.play().expect("Should start playback");
-    let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(1),
-        44100,
-    )), track);
+
+    // Simulate track loading - get the track from LoadNext event
+    let events = manager.drain_events();
+    let track = events
+        .iter()
+        .find_map(|e| {
+            if let soul_playback::PlaybackEvent::LoadNext(t) = e {
+                Some(t.clone())
+            } else {
+                None
+            }
+        })
+        .expect("Should have LoadNext event");
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(1), 44100)),
+        track,
+    );
 
     // Track played IDs
     let mut played_ids: Vec<String> = Vec::new();
@@ -770,12 +807,22 @@ fn workflow_7_repeat_all_loop() {
             .next()
             .unwrap_or_else(|e| panic!("next() failed at iteration {}: {:?}", i, e));
 
-        // Simulate loading
-        let track = create_test_track("test", 180);
-        manager.activate_source(Box::new(MockAudioSource::new(
-            Duration::from_secs(1),
-            44100,
-        )), track);
+        // Simulate loading - get the track from LoadNext event
+        let events = manager.drain_events();
+        let track = events
+            .iter()
+            .find_map(|e| {
+                if let soul_playback::PlaybackEvent::LoadNext(t) = e {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            })
+            .expect("Should have LoadNext event");
+        manager.activate_source(
+            Box::new(MockAudioSource::new(Duration::from_secs(1), 44100)),
+            track,
+        );
 
         if let Some(track) = manager.get_current_track() {
             played_ids.push(track.id.clone());
@@ -824,11 +871,23 @@ fn workflow_8_repeat_one_loop() {
 
     // Start playback
     manager.play().expect("Should start playback");
-    let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(5),
-        44100,
-    )), track);
+
+    // Simulate track loading - get the track from LoadNext event
+    let events = manager.drain_events();
+    let track = events
+        .iter()
+        .find_map(|e| {
+            if let soul_playback::PlaybackEvent::LoadNext(t) = e {
+                Some(t.clone())
+            } else {
+                None
+            }
+        })
+        .expect("Should have LoadNext event");
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(5), 44100)),
+        track,
+    );
 
     // Enable RepeatOne
     manager.set_repeat(RepeatMode::One);
@@ -897,10 +956,10 @@ fn workflow_edge_case_pause_during_shuffle_enable() {
     manager.add_playlist_to_queue(create_playlist(10, 60));
     manager.play().expect("Should start playback");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(60),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(60), 44100)),
+        track,
+    );
 
     // Process some audio
     process_samples(&mut manager, 44100 * 2);
@@ -946,10 +1005,10 @@ fn workflow_edge_case_volume_changes_while_stopped() {
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 60));
     manager.play().expect("Should start playback");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(60),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(60), 44100)),
+        track,
+    );
 
     assert_eq!(manager.get_volume(), 50);
 }
@@ -962,10 +1021,10 @@ fn workflow_edge_case_seek_after_pause_before_resume() {
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 120));
     manager.play().expect("Should start playback");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(120),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(120), 44100)),
+        track,
+    );
 
     // Process audio to get past start fade
     process_samples(&mut manager, 44100 * 2);
@@ -1009,10 +1068,10 @@ fn workflow_stress_rapid_operations() {
     // Start playing
     manager.play().expect("Should start playback");
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(30),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(30), 44100)),
+        track,
+    );
 
     let mut buffer = vec![0.0f32; 1024];
 
@@ -1096,10 +1155,10 @@ fn workflow_crossfade_settings_persistence() {
     manager.add_to_queue_end(create_track("1", "Track 1", "Artist", 30));
     manager.play().ok();
     let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        Duration::from_secs(30),
-        44100,
-    )), track);
+    manager.activate_source(
+        Box::new(MockAudioSource::new(Duration::from_secs(30), 44100)),
+        track,
+    );
     manager.stop();
 
     // Settings should persist

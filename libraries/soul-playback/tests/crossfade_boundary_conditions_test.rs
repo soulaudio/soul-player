@@ -217,12 +217,11 @@ fn test_crossfade_track_shorter_than_duration_basic() {
     manager.add_to_queue_end(create_test_track("2", "Next Track", "Artist", 10));
 
     manager.play().ok();
-    let track = create_test_track("test", 180);
-    manager.activate_source(Box::new(MockAudioSource::new(
-        "1",
-        Duration::from_secs(2),
-        44100,
-    )), track);
+    let current_track = create_test_track("1", "Short Track", "Artist", 2);
+    manager.activate_source(
+        Box::new(MockAudioSource::new("1", Duration::from_secs(2), 44100)),
+        current_track,
+    );
 
     // Set next source for potential crossfade
     let next_source = MockAudioSource::new("2", Duration::from_secs(10), 44100);
@@ -267,9 +266,10 @@ fn test_crossfade_very_short_track_plays_completely() {
     manager.add_to_queue_end(create_test_track("1", "Tiny Track", "Artist", 1));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Tiny Track", "Artist", 1);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_millis(500), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let mut buffer = vec![0.0f32; 1024];
@@ -300,9 +300,10 @@ fn test_crossfade_both_tracks_shorter_than_duration() {
     manager.add_to_queue_end(create_test_track("2", "Short 2", "Artist", 3));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Short 1", "Artist", 3);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(3), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(3), 44100);
@@ -352,9 +353,10 @@ fn test_crossfade_at_exact_track_boundary() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(5), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(5), 44100);
@@ -411,9 +413,10 @@ fn test_seek_to_crossfade_threshold() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 10));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 10);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(10), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     // Seek to exactly 9 seconds (1 second before end = exactly at crossfade threshold)
@@ -456,9 +459,10 @@ fn test_crossfade_zero_duration_instant_switch() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 2));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 2);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(2), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(2), 44100);
@@ -509,9 +513,10 @@ fn test_gapless_no_mixing() {
 
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 2));
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 2);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(2), 44100).with_amplitude(1.0)),
-        next_track.clone(),
+        current_track,
     );
 
     // With amplitude 1.0 track, output should never show mixing artifacts
@@ -539,9 +544,10 @@ fn test_crossfade_maximum_duration() {
     manager.add_to_queue_end(create_test_track("2", "Long Track 2", "Artist", 15));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Long Track 1", "Artist", 15);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(15), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(15), 44100);
@@ -623,9 +629,10 @@ fn test_crossfade_interrupted_by_pause() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(5), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(5), 44100);
@@ -687,9 +694,10 @@ fn test_crossfade_cancelled_by_seek_during_active() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 10));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 10);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(10), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(10), 44100);
@@ -753,9 +761,10 @@ fn test_crossfade_interrupted_by_skip() {
     }
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(5), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let mut buffer = vec![0.0f32; 4096];
@@ -795,9 +804,10 @@ fn test_crossfade_rapid_pause_play_cycles() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(5), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(5), 44100);
@@ -838,9 +848,10 @@ fn test_crossfade_identical_tracks() {
     manager.add_to_queue_end(create_test_track("same", "Same Track", "Artist", 5));
 
     manager.play().ok();
+    let current_track = create_test_track("same", "Same Track", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("same", Duration::from_secs(5), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     // Next source is the same track
@@ -889,9 +900,10 @@ fn test_repeat_one_no_self_crossfade() {
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 5));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(5), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     // Even if we set next source to the same track, RepeatOne should not crossfade
@@ -945,9 +957,10 @@ fn test_multiple_rapid_crossfades() {
     }
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 3);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(3), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let mut buffer = vec![0.0f32; 4096];
@@ -958,13 +971,14 @@ fn test_multiple_rapid_crossfades() {
         manager.next().ok();
 
         // Set up new audio source
+        let next_track = create_test_track(&i.to_string(), &format!("Track {}", i), "Artist", 3);
         manager.activate_source(
             Box::new(MockAudioSource::new(
                 &i.to_string(),
                 Duration::from_secs(3),
                 44100,
             )),
-            next_track.clone(),
+            next_track,
         );
 
         // Process a few buffers
@@ -1005,9 +1019,10 @@ fn test_back_to_back_crossfades() {
     }
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 3);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(3), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(3), 44100);
@@ -1071,9 +1086,10 @@ fn test_crossfade_state_reset_between_tracks() {
     manager.add_to_queue_end(create_test_track("3", "Track 3", "Artist", 2));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 2);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(2), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     // Track crossfade state changes
@@ -1120,9 +1136,10 @@ fn test_crossfade_audio_smoothness() {
     manager.play().ok();
 
     // Track 1 with specific amplitude pattern
+    let current_track = create_test_track("1", "Track 1", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(5), 44100).with_amplitude(0.8)),
-        next_track.clone(),
+        current_track,
     );
 
     // Track 2 with different amplitude
@@ -1177,9 +1194,10 @@ fn test_crossfade_buffer_cleanup() {
     // First playback cycle
     manager.add_to_queue_end(create_test_track("1", "Track 1", "Artist", 2));
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 2);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(2), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let mut buffer = vec![0.0f32; 4096];
@@ -1206,9 +1224,10 @@ fn test_crossfade_buffer_cleanup() {
     // Second playback cycle should work cleanly
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 2));
     manager.play().ok();
+    let current_track = create_test_track("2", "Track 2", "Artist", 2);
     manager.activate_source(
         Box::new(MockAudioSource::new("2", Duration::from_secs(2), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     // Should be able to process audio without issues
@@ -1248,9 +1267,10 @@ fn test_crossfade_state_transition_validity() {
     );
 
     // Set source and process
+    let current_track = create_test_track("1", "Track 1", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(5), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(5), 44100);
@@ -1297,9 +1317,10 @@ fn test_crossfade_position_reporting() {
     manager.add_to_queue_end(create_test_track("2", "Track 2", "Artist", 5));
 
     manager.play().ok();
+    let current_track = create_test_track("1", "Track 1", "Artist", 5);
     manager.activate_source(
         Box::new(MockAudioSource::new("1", Duration::from_secs(5), 44100)),
-        next_track.clone(),
+        current_track,
     );
 
     let next_source = MockAudioSource::new("2", Duration::from_secs(5), 44100);
