@@ -1248,13 +1248,6 @@ impl PlaybackManager {
 
     /// Seek to position (in seconds)
     pub fn seek(&self, position: f64) -> Result<(), AudioError> {
-        // STEP 3b: PlaybackManager wrapper entry
-        let entry_time = std::time::Instant::now();
-        tracing::trace!(
-            "[SEEK PERF] PlaybackManager.seek() ENTRY position={:.3}s",
-            position
-        );
-
         let playback = self
             .playback
             .lock()
@@ -1262,35 +1255,12 @@ impl PlaybackManager {
                 context: "seek command".to_string(),
             })?;
 
-        let lock_time = entry_time.elapsed();
-        tracing::trace!(
-            "[SEEK PERF] Lock acquired in {:.2}ms",
-            lock_time.as_millis()
-        );
-
-        let send_start = std::time::Instant::now();
-        let result = playback
+        playback
             .send_command(PlaybackCommand::Seek(position))
             .map_err(|e| AudioError::CommandFailed {
                 command: "Seek".to_string(),
                 reason: e.to_string(),
-            });
-
-        let send_time = send_start.elapsed();
-        match &result {
-            Ok(_) => {
-                tracing::trace!("[SEEK PERF] PlaybackManager.seek() EXIT - command sent in {:.2}ms (total: {:.2}ms)", send_time.as_millis(), entry_time.elapsed().as_millis());
-            }
-            Err(e) => {
-                tracing::error!(
-                    "[SEEK PERF] PlaybackManager.seek() ERROR after {:.2}ms: {}",
-                    entry_time.elapsed().as_millis(),
-                    e
-                );
-            }
-        }
-
-        result
+            })
     }
 
     /// Set volume (0-100)
@@ -1370,10 +1340,13 @@ impl PlaybackManager {
             })?;
 
         // Cycle shuffle and get new mode synchronously
-        let new_mode = {
-            let mut manager = playback.get_manager_mut();
-            manager.cycle_shuffle()
-        };
+        let new_mode = playback
+            .get_playback_manager()
+            .lock()
+            .map_err(|_| AudioError::MutexPoisoned {
+                context: "cycle_shuffle inner manager".to_string(),
+            })
+            .map(|mut mgr| mgr.cycle_shuffle())?;
 
         // Emit queue updated event
         playback.emit_queue_updated();

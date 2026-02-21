@@ -668,35 +668,11 @@ async fn seek_to(
     app: AppHandle,
     playback: State<'_, LazyPlaybackManager>,
 ) -> Result<(), String> {
-    // STEP 3: Rust seek_to entry timestamp
-    let entry_time = std::time::Instant::now();
-    tracing::info!(
-        "[SEEK PERF] === Rust seek_to() ENTRY === position={:.3}s",
-        position
-    );
-
     let result = playback.get().await?.seek(position);
 
-    let exit_time = entry_time.elapsed();
-    match &result {
-        Ok(_) => {
-            tracing::info!(
-                "[SEEK PERF] === Rust seek_to() EXIT === completed in {:.2}ms",
-                exit_time.as_millis()
-            );
-
-            // CRITICAL FIX: Emit position update immediately after seek completes
-            // This ensures frontend gets confirmation even when playback is paused
-            let _ = app.emit("playback:position-updated", position);
-            tracing::info!("[SEEK PERF] Position update emitted: {:.3}s", position);
-        }
-        Err(e) => {
-            tracing::error!(
-                "[SEEK PERF] === Rust seek_to() ERROR === after {:.2}ms: {}",
-                exit_time.as_millis(),
-                e
-            );
-        }
+    if result.is_ok() {
+        // Emit position update immediately so the frontend syncs even when paused
+        let _ = app.emit("playback:position-updated", position);
     }
 
     result.map_err(|e| format!("{}", e))

@@ -1,27 +1,21 @@
 /**
  * Progress bar with click-to-seek and drag-to-seek functionality.
  *
- * SIMPLIFIED implementation matching production players (VLC, Clementine, Audacious):
- * - Direct store access for instant updates (no interpolation layer)
+ * - Interpolated progress at 60fps between backend position updates (~250ms interval)
  * - Click-to-seek: Instant optimistic update + backend seek
  * - Drag-to-seek: Preview position while dragging, seek on release (no scrubbing)
- * - Visual feedback: hover, dragging, seeking states
- * - ~50-150ms latency like professional players
+ * - Visual feedback: hover and dragging states
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
 import { formatDuration } from '../../lib/utils';
 import { useSeekBar } from '../../hooks/useSeekBar';
-import { usePlayerStore } from '../../stores/player';
+import { useInterpolatedProgress } from '../../hooks/useInterpolatedProgress';
 
 export function ProgressBar() {
-  // Direct store access for instant updates (no interpolation layer)
-  const { progress, duration } = usePlayerStore(state => ({
-    progress: state.progress,
-    duration: state.duration,
-  }));
-  const { handleSeek, isSeeking } = useSeekBar();
+  // Smooth 60fps animation between backend updates; snaps immediately on seek.
+  const { progress, duration } = useInterpolatedProgress();
+  const { handleSeek } = useSeekBar();
 
   // State for drag interactions
   const [isDragging, setIsDragging] = useState(false);
@@ -96,11 +90,9 @@ export function ProgressBar() {
     // Don't seek on click if we just finished a drag
     if (isDragging) return;
 
-    // CRITICAL FIX: Prevent duplicate seek if mouseUp just fired (within 50ms)
-    // This fixes the race condition where click fires after mouseUp completes
+    // Prevent duplicate seek when click fires immediately after mouseUp (within 50ms)
     const timeSinceLastSeek = performance.now() - lastSeekTimeRef.current;
     if (timeSinceLastSeek < 50) {
-      console.log(`[SEEK PERF] Skipping duplicate click (${timeSinceLastSeek.toFixed(1)}ms after mouseUp)`);
       return;
     }
 
@@ -118,12 +110,12 @@ export function ProgressBar() {
         {formatDuration(currentTimeSeconds)}
       </span>
 
-      {/* Progress bar */}
+      {/* Progress bar — outer div is the hit area (h-4), inner div is the visual track (h-[3px]) */}
       <div
         ref={progressBarRef}
-        className="relative flex-1 h-2 bg-muted rounded-full overflow-hidden select-none"
+        className="relative flex-1 h-4 flex items-center select-none"
         style={{
-          cursor: isDragging ? 'grabbing' : isSeeking ? 'wait' : 'pointer',
+          cursor: isDragging ? 'grabbing' : 'pointer',
           userSelect: 'none'
         }}
         onClick={handleClick}
@@ -131,61 +123,30 @@ export function ProgressBar() {
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
-        {/* Filled progress */}
+        {/* Visual track — thin line, overflow-hidden clips fill div only */}
+        <div className="relative w-full h-1.5 bg-muted rounded-full overflow-hidden">
+          {/* Filled progress */}
+          <div
+            className="absolute inset-y-0 left-0 bg-primary rounded-full"
+            style={{
+              width: `${Math.max(0, Math.min(100, displayProgress))}%`,
+              maxWidth: '100%',
+              transition: 'none',
+              opacity: isDragging ? 0.8 : 1,
+            }}
+          />
+        </div>
+
+        {/* Ball — always in DOM, fades in/out via opacity to avoid pop-in */}
         <div
-          className="absolute inset-y-0 left-0 bg-primary rounded-full"
+          className="absolute top-1/2 w-2.5 h-2.5 bg-primary rounded-full pointer-events-none"
           style={{
-            width: `${Math.max(0, Math.min(100, displayProgress))}%`,
-            maxWidth: '100%',
-            // CRITICAL: Disable transition during drag OR seek for instant visual feedback
-            transition: (isDragging || isSeeking) ? 'none' : 'width 200ms ease-out',
-            opacity: isDragging ? 0.8 : isSeeking ? 0.9 : 1,
-            boxShadow: (isDragging || isSeeking) ? '0 0 8px 2px rgba(var(--primary-rgb, 59, 130, 246), 0.5)' : 'none'
+            left: `${Math.max(0, Math.min(100, displayProgress))}%`,
+            transform: `translate(-50%, -50%)${isDragging ? ' scale(1.2)' : ''}`,
+            opacity: isHovering || isDragging ? 1 : 0,
+            transition: 'opacity 150ms ease, transform 100ms ease',
           }}
         />
-
-        {/* Dragging handle (shown during drag) */}
-        {isDragging && (
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-primary rounded-full shadow-lg"
-            style={{
-              left: `${Math.max(0, Math.min(100, displayProgress))}%`,
-              transform: 'translate(-50%, -50%) scale(1.2)',
-              boxShadow: '0 0 12px 4px rgba(var(--primary-rgb, 59, 130, 246), 0.6)',
-              pointerEvents: 'none'
-            }}
-          />
-        )}
-
-        {/* Seeking handle (shown after release, during backend seek) */}
-        {isSeeking && !isDragging && (
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-all"
-            style={{
-              left: `${Math.max(0, Math.min(100, displayProgress))}%`,
-              transform: 'translate(-50%, -50%)',
-              boxShadow: '0 0 12px 4px rgba(var(--primary-rgb, 59, 130, 246), 0.6)',
-              pointerEvents: 'none'
-            }}
-          >
-            {/* Loading spinner during seek */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Loader2 className="w-3 h-3 animate-spin text-primary-foreground" />
-            </div>
-          </div>
-        )}
-
-        {/* Hover handle (only shown when hovering and not dragging/seeking) */}
-        {isHovering && !isDragging && !isSeeking && (
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg transition-opacity"
-            style={{
-              left: `${Math.max(0, Math.min(100, progress))}%`,
-              transform: 'translate(-50%, -50%)',
-              pointerEvents: 'none'
-            }}
-          />
-        )}
       </div>
 
       {/* Total duration */}

@@ -484,85 +484,42 @@ impl PlaybackManager {
 
     /// Seek to position in current track (by duration)
     pub fn seek_to(&mut self, position: Duration) -> Result<()> {
-        // STEP 4: Decoder seek timestamp (manager entry)
-        let entry_time = std::time::Instant::now();
-        tracing::info!(
-            "[SEEK PERF] === Manager.seek_to() ENTRY === position={:?}",
-            position
-        );
-
-        // Guard: Cannot seek while Loading (source may not be fully initialized)
-        // Allow seeking only in Playing or Paused states
         if self.state == PlaybackState::Stopped {
-            tracing::error!("[SEEK PERF] === Manager.seek_to() ERROR === NoTrackLoaded (state=Stopped) after {:.2}ms", entry_time.elapsed().as_millis());
             return Err(PlaybackError::NoTrackLoaded);
         }
 
-        // CRITICAL: If crossfade is active, cancel it before seeking
-        // Seeking during crossfade would cause stale mixing state and audio glitches
+        // Cancel crossfade — seeking during crossfade causes stale mixing state
         if self.crossfade.is_active() {
-            tracing::info!(
-                "[SEEK PERF] Cancelling active crossfade due to seek (took {:.2}ms so far)",
-                entry_time.elapsed().as_millis()
-            );
-            tracing::info!("[PLAYBACK] Cancelling active crossfade due to seek operation");
+            tracing::info!("[PLAYBACK] Cancelling active crossfade due to seek");
             self.crossfade.reset();
             self.crossfade_progress.reset();
             self.free_crossfade_buffers();
         }
 
-        // Cancel any active stop fade to prevent race conditions
-        // (e.g., seeking during fade-out should cancel the fade)
+        // Cancel stop-fade to avoid race conditions (e.g., seeking during fade-out)
         if self.stop_fade.is_active() {
-            tracing::debug!(
-                "[SEEK PERF] Cancelling active stop fade (took {:.2}ms so far)",
-                entry_time.elapsed().as_millis()
-            );
             tracing::debug!("[seek_to] Cancelling active stop fade due to seek");
             self.stop_fade.reset();
         }
 
         if let Some(source) = self.sources.current_source_mut() {
-            // Clamp position to avoid seeking exactly to end (which would trigger EOF)
-            // Leave 1ms margin before duration to ensure we can still read samples.
+            // Clamp to avoid seeking exactly to end (would trigger EOF immediately)
             let duration = source.duration();
             let max_seek_position = duration.saturating_sub(Duration::from_millis(1));
             let clamped_position = position.min(max_seek_position);
 
-            // Log if we clamped the position (only for near-end seeks)
             if clamped_position != position && position > Duration::ZERO {
                 tracing::debug!(
-                    "[SEEK PERF] Clamped seek near end: {:?} -> {:?} (duration: {:?})",
+                    "[seek_to] Clamped near-end seek: {:?} -> {:?} (duration: {:?})",
                     position,
                     clamped_position,
                     duration
                 );
             }
 
-            // STEP 4: Actual decoder seek call
-            let seek_start = std::time::Instant::now();
             source.seek(clamped_position)?;
-            let seek_duration = seek_start.elapsed();
-            tracing::info!(
-                "[SEEK PERF] Decoder.seek() completed in {:.2}ms (total manager time: {:.2}ms)",
-                seek_duration.as_millis(),
-                entry_time.elapsed().as_millis()
-            );
-
-            // CRITICAL FIX: Do NOT call start_fade.start() after seek!
-            // The StartFadeEnvelope waits up to 50ms for audio amplitude detection,
-            // then does a 30ms fade-in. This causes 80-1200ms audio delay after seek.
-            // Seeking should be instant - we're jumping to a new position in existing audio,
-            // not starting from silence, so no fade-in is needed.
-            // self.start_fade.start();  // REMOVED - was causing 1-2s audio delay
-            tracing::info!(
-                "[SEEK PERF] === Manager.seek_to() EXIT === completed in {:.2}ms",
-                entry_time.elapsed().as_millis()
-            );
-
             Ok(())
         } else {
-            tracing::error!("[SEEK PERF] === Manager.seek_to() ERROR === NoTrackLoaded (no current source) after {:.2}ms", entry_time.elapsed().as_millis());
             Err(PlaybackError::NoTrackLoaded)
         }
     }

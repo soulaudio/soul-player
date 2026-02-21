@@ -1044,37 +1044,51 @@ impl AudioSource for LocalAudioSource {
     ///
     /// Uses rtrb ring buffer for lock-free, wait-free reads from the audio thread.
     fn read_samples(&mut self, output: &mut [f32]) -> Result<usize> {
-        // CRITICAL FIX: Check if generation changed (seek occurred)
-        // If so, drain all stale samples from ring buffer to prevent 3-5s audio delay
+        // Fast path: seek in progress but decoder hasn't completed it yet.
+        // Drain the ring buffer immediately so stale pre-seek audio doesn't play.
+        // The decoder thread will increment `generation` once it finishes seeking,
+        // at which point the normal generation-change branch below takes over.
+        if self.shared.seek_pending.load(Ordering::Relaxed) {
+            let drained = Self::drain_ring_buffer(&mut self.buffer_consumer);
+            if drained > 0 {
+                tracing::debug!(
+                    "[LocalAudioSource] Drained {} stale samples (seek pending)",
+                    drained
+                );
+            }
+            output.fill(0.0);
+            return Ok(0);
+        }
+
+        // Decoder completed seek: generation was incremented to signal the
+        // consumer that all samples currently in the ring buffer are stale.
+        // Drain them now so playback jumps to the new position cleanly.
         let current_generation = self.shared.generation.load(Ordering::Acquire);
         if current_generation != self.last_generation {
-            // Seek detected! Drain ring buffer of stale samples
-            let mut drained = 0usize;
-            while let Ok(chunk) = self.buffer_consumer.read_chunk(self.output_buffer_capacity) {
-                if chunk.is_empty() {
-                    break;
-                }
-                drained += chunk.len();
-                chunk.commit_all();
-            }
+            let drained = Self::drain_ring_buffer(&mut self.buffer_consumer);
             self.last_generation = current_generation;
             tracing::info!(
-                "[SEEK PERF] Drained {} stale samples from ring buffer (generation {} -> {})",
+                "[LocalAudioSource] Drained {} stale samples after seek (generation {} -> {})",
                 drained,
                 current_generation - 1,
                 current_generation
             );
         }
 
-        // Wait-free read from ring buffer using read_chunk for efficiency
+        // Wait-free read from ring buffer using read_chunk for efficiency.
+        // rtrb ring buffers are circular: when the read pointer is near the end of
+        // the underlying allocation, read_chunk() returns two slices (first, second).
+        // Together they contain `chunk.len()` samples.  We must copy each part to
+        // its correct offset in `output` — copying the first slice to `output[..count]`
+        // panics whenever the chunk wraps (first.len() < count).
         let available = self.buffer_consumer.read_chunk(output.len());
         let read_count = if let Ok(chunk) = available {
             let count = chunk.len();
-            output[..count].copy_from_slice(chunk.as_slices().0);
-            // If the chunk wraps around the ring buffer, copy the second part
-            if !chunk.as_slices().1.is_empty() {
-                let first_len = chunk.as_slices().0.len();
-                output[first_len..count].copy_from_slice(chunk.as_slices().1);
+            let (first, second) = chunk.as_slices();
+            let first_len = first.len();
+            output[..first_len].copy_from_slice(first);
+            if !second.is_empty() {
+                output[first_len..count].copy_from_slice(second);
             }
             chunk.commit_all();
             count
@@ -1171,6 +1185,35 @@ impl AudioSource for LocalAudioSource {
     /// Returns the target sample rate after resampling, not the source file's rate.
     fn sample_rate(&self) -> Option<u32> {
         Some(self.target_sample_rate)
+    }
+}
+
+impl LocalAudioSource {
+    /// Drain all readable samples from the ring buffer, discarding them.
+    ///
+    /// Called during seek to discard pre-seek audio data so the audio callback
+    /// immediately outputs silence / new-position audio instead of stale samples.
+    ///
+    /// Uses `consumer.slots()` as the chunk size so `read_chunk` always succeeds
+    /// regardless of how full the buffer is (the previous drain loop used the
+    /// ring-buffer *capacity* as chunk size, causing it to silently no-op unless
+    /// the buffer was completely full).
+    fn drain_ring_buffer(consumer: &mut rtrb::Consumer<f32>) -> usize {
+        let mut drained = 0usize;
+        loop {
+            let available = consumer.slots();
+            if available == 0 {
+                break;
+            }
+            match consumer.read_chunk(available) {
+                Ok(chunk) => {
+                    drained += chunk.len();
+                    chunk.commit_all();
+                }
+                Err(_) => break,
+            }
+        }
+        drained
     }
 }
 

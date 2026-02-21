@@ -19,17 +19,19 @@ import { usePlayerStore } from '../stores/player';
  * @returns Interpolated progress percentage (0-100) and duration in seconds
  */
 export function useInterpolatedProgress() {
-  const { progress, duration, isPlaying, currentTrack } = usePlayerStore(state => ({
+  const { progress, duration, isPlaying, currentTrack, seekVersion, seekTarget } = usePlayerStore(state => ({
     progress: state.progress,
     duration: state.duration,
     isPlaying: state.isPlaying,
     currentTrack: state.currentTrack,
+    seekVersion: state.seekVersion,
+    seekTarget: state.seekTarget,
   }));
 
   // Interpolated progress state (in percentage 0-100)
   const [interpolatedProgress, setInterpolatedProgress] = useState(progress);
 
-  // Track last backend update to detect seeks
+  // Track last backend update for drift detection during normal playback
   const lastBackendProgress = useRef(progress);
   const lastBackendTimestamp = useRef(Date.now());
 
@@ -39,8 +41,16 @@ export function useInterpolatedProgress() {
   // Animation frame ID for cleanup
   const animationFrameRef = useRef<number | null>(null);
 
+  // User seek protection: tracks the last seekVersion we processed and a window
+  // during which stale backend position events (emitted before the seek completed)
+  // should be ignored so they don't snap the bar back to the pre-seek position.
+  const lastSeekVersionRef = useRef(seekVersion);
+  const postSeekUntilRef = useRef<number>(0);
+  // The progress value we snapped to on the user seek — used to identify stale events
+  const postSeekTargetRef = useRef<number>(progress);
+
   useEffect(() => {
-    // Detect track changes - reset immediately
+    // Detect track changes — reset immediately
     if (currentTrack?.id !== lastTrackId.current) {
       lastTrackId.current = currentTrack?.id;
       setInterpolatedProgress(0);
@@ -49,25 +59,49 @@ export function useInterpolatedProgress() {
       return;
     }
 
-    // Calculate progress difference to detect seeks
-    const progressDiff = Math.abs(progress - lastBackendProgress.current);
+    // --- User-initiated seek (seekVersion bumped by useSeekBar) ---
+    if (seekVersion !== lastSeekVersionRef.current) {
+      lastSeekVersionRef.current = seekVersion;
+      const now = Date.now();
+      // Use seekTarget (not progress): backend events may have already overwritten
+      // progress with a stale value by the time this effect runs.
+      setInterpolatedProgress(seekTarget);
+      lastBackendProgress.current = seekTarget;
+      lastBackendTimestamp.current = now;
+      // Open a 400ms window to ignore stale backend events from before the seek
+      postSeekUntilRef.current = now + 400;
+      postSeekTargetRef.current = seekTarget;
+      return;
+    }
 
-    // Threshold for seek detection: 0.5% = ~0.5 seconds on 100-second track
-    // This is larger than normal interpolation drift but smaller than typical seeks
+    // --- Backend position update ---
+
+    // If we're inside the post-seek protection window, drop any backend update that
+    // looks like a stale pre-seek position (i.e. far from where we just seeked to).
+    if (Date.now() < postSeekUntilRef.current) {
+      const distanceFromTarget = Math.abs(progress - postSeekTargetRef.current);
+      if (distanceFromTarget > 0.5) {
+        // Stale event — discard, keep interpolated at the seek target.
+        // Don't update lastBackendProgress; leave it at the seek target so the
+        // first real post-seek backend event has a small diff and enters normal flow.
+        return;
+      }
+    }
+
+    // Threshold for seek detection: 0.5% ≈ 0.5s on a 100s track
     const SEEK_THRESHOLD = 0.5;
+    const progressDiff = Math.abs(progress - lastBackendProgress.current);
+    const isBackendSeek = progressDiff > SEEK_THRESHOLD;
 
-    // Detect seeks: sudden jumps in progress (backward or forward)
-    const isSeek = progressDiff > SEEK_THRESHOLD;
-
-    if (isSeek) {
-      // Reset to new position immediately on seek
+    if (isBackendSeek) {
+      // Genuine backend-reported seek (e.g. loop, skip)
       setInterpolatedProgress(progress);
       lastBackendProgress.current = progress;
       lastBackendTimestamp.current = Date.now();
       return;
     }
 
-    // Update last backend values
+    // Normal backend update — advance reference
     lastBackendProgress.current = progress;
     lastBackendTimestamp.current = Date.now();
 
@@ -81,7 +115,7 @@ export function useInterpolatedProgress() {
       return;
     }
 
-    // Start interpolation animation
+    // Start RAF interpolation animation
     let lastFrameTime = Date.now();
 
     const animate = () => {
@@ -89,39 +123,37 @@ export function useInterpolatedProgress() {
       const deltaMs = now - lastFrameTime;
       lastFrameTime = now;
 
-      // Calculate how much progress should advance per millisecond
-      // Progress is 0-100%, duration is in seconds
-      // Advance rate: (100% / duration_in_seconds) / 1000ms = percent per millisecond
       const advanceRate = duration > 0 ? (100 / duration) / 1000 : 0;
       const progressDelta = advanceRate * deltaMs;
 
       setInterpolatedProgress(current => {
         const newProgress = current + progressDelta;
-
-        // Clamp to prevent overshooting
-        // Don't exceed 100% or the backend's last known position + reasonable drift
-        const maxProgress = Math.min(100, lastBackendProgress.current + 2); // Allow 2% drift
+        const maxProgress = Math.min(100, lastBackendProgress.current + 2);
         return Math.min(newProgress, maxProgress);
       });
 
-      // Continue animation
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    // Start animation
     animationFrameRef.current = requestAnimationFrame(animate);
 
-    // Cleanup on unmount or dependency change
     return () => {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
     };
-  }, [progress, duration, isPlaying, currentTrack?.id]);
+  }, [progress, duration, isPlaying, currentTrack?.id, seekVersion, seekTarget]);
+
+  // Eagerly use seekTarget on the render where a user seek is detected.
+  // useEffect runs *after* paint, so interpolatedProgress is still the old value for
+  // one frame. We detect the seek at render time (lastSeekVersionRef not yet updated)
+  // and return seekTarget — which backend events cannot overwrite — instead of progress,
+  // which may already have been clobbered by a stale backend position event.
+  const isUserSeekThisRender = seekVersion !== lastSeekVersionRef.current;
 
   return {
-    progress: interpolatedProgress,
+    progress: isUserSeekThisRender ? seekTarget : interpolatedProgress,
     duration,
   };
 }

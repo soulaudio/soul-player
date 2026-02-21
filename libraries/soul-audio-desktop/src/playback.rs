@@ -2181,58 +2181,122 @@ impl DesktopPlayback {
 
     /// Get current playback state
     pub fn get_state(&self) -> soul_playback::PlaybackState {
-        self.manager.lock().unwrap().get_state()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_state()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in get_state");
+            soul_playback::PlaybackState::Stopped
+        }
     }
 
     /// Get current track
     pub fn get_current_track(&self) -> Option<QueueTrack> {
-        self.manager.lock().unwrap().get_current_track().cloned()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_current_track().cloned()
+        } else {
+            tracing::error!(
+                "[DesktopPlayback] PlaybackManager mutex poisoned in get_current_track"
+            );
+            None
+        }
     }
 
     /// Get current queue index (0 if playing, -1 if stopped)
     pub fn get_queue_index(&self) -> i32 {
-        self.manager.lock().unwrap().get_queue_index()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_queue_index()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in get_queue_index");
+            -1
+        }
     }
 
     /// Get current position
     pub fn get_position(&self) -> std::time::Duration {
-        self.manager.lock().unwrap().get_position()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_position()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in get_position");
+            std::time::Duration::ZERO
+        }
     }
 
     /// Get queue
     pub fn get_queue(&self) -> Vec<soul_playback::QueueTrack> {
-        self.manager
-            .lock()
-            .unwrap()
-            .get_queue()
-            .into_iter()
-            .cloned()
-            .collect()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_queue().into_iter().cloned().collect()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in get_queue");
+            Vec::new()
+        }
     }
 
     /// Check if there is a next track
     pub fn has_next(&self) -> bool {
-        self.manager.lock().unwrap().has_next()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.has_next()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in has_next");
+            false
+        }
     }
 
     /// Check if there is a previous track
     pub fn has_previous(&self) -> bool {
-        self.manager.lock().unwrap().has_previous()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.has_previous()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in has_previous");
+            false
+        }
     }
 
     /// Get current volume
     pub fn get_volume(&self) -> u8 {
-        self.manager.lock().unwrap().get_volume()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_volume()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in get_volume");
+            0
+        }
     }
 
     /// Get current shuffle mode
     pub fn get_shuffle_mode(&self) -> soul_playback::ShuffleMode {
-        self.manager.lock().unwrap().get_shuffle_mode()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_shuffle_mode()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in get_shuffle_mode");
+            soul_playback::ShuffleMode::Off
+        }
     }
 
     /// Get current repeat mode
     pub fn get_repeat_mode(&self) -> soul_playback::RepeatMode {
-        self.manager.lock().unwrap().get_repeat()
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_repeat()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in get_repeat_mode");
+            soul_playback::RepeatMode::Off
+        }
+    }
+
+    /// Acquire the inner PlaybackManager lock, recovering from poisoning.
+    ///
+    /// If the audio callback crashed and left the mutex poisoned, this recovers
+    /// the guard rather than propagating a panic. The recovered state may be
+    /// slightly inconsistent but allows the system to keep running.
+    fn lock_manager(&self) -> std::sync::MutexGuard<'_, soul_playback::PlaybackManager> {
+        match self.manager.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                tracing::warn!(
+                    "[DesktopPlayback] PlaybackManager mutex recovered from poisoning - \
+                     audio callback may have crashed, state may be inconsistent"
+                );
+                poisoned.into_inner()
+            }
+        }
     }
 
     /// Get mutable reference to PlaybackManager
@@ -2321,7 +2385,7 @@ impl DesktopPlayback {
         // Step 1: Capture ALL state we need from manager in ONE lock acquisition
         // This prevents multiple lock/unlock cycles and potential deadlocks
         let (was_playing, position, current_track) = {
-            let mgr = self.manager.lock().unwrap();
+            let mgr = self.lock_manager();
             let state = mgr.get_state();
             let pos = mgr.get_position();
             let track = mgr.get_current_track().cloned();
@@ -2607,7 +2671,7 @@ impl DesktopPlayback {
 
                         // Now activate the pre-seeked source - this is the FIRST time we re-acquire manager lock
                         {
-                            let mut mgr = self.manager.lock().unwrap();
+                            let mut mgr = self.lock_manager();
                             mgr.activate_source(Box::new(source), track.clone());
                         } // Lock released
 
@@ -2630,7 +2694,7 @@ impl DesktopPlayback {
             // Even though we're not reloading, restore position in case it drifted
             if position > std::time::Duration::ZERO {
                 {
-                    let mut mgr = self.manager.lock().unwrap();
+                    let mut mgr = self.lock_manager();
                     if let Err(e) = mgr.seek_to(position) {
                         tracing::error!("[DesktopPlayback] Failed to restore position: {}", e);
                     } else {
@@ -2643,7 +2707,7 @@ impl DesktopPlayback {
         // Step 3: Resume playback if it was playing (separate lock acquisition)
         if was_playing {
             {
-                let mut mgr = self.manager.lock().unwrap();
+                let mut mgr = self.lock_manager();
                 if let Err(e) = mgr.play() {
                     tracing::debug!("[DesktopPlayback] Failed to resume playback: {}", e);
                 } else {
@@ -2654,7 +2718,7 @@ impl DesktopPlayback {
 
         // Step 4: Get final state and emit event (final lock acquisition)
         let current_state = {
-            let mgr = self.manager.lock().unwrap();
+            let mgr = self.lock_manager();
             mgr.get_state()
         }; // Lock released
         tracing::debug!(
@@ -2984,7 +3048,7 @@ impl DesktopPlayback {
     where
         F: FnOnce(&mut soul_audio::effects::EffectChain) -> R,
     {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         f(manager.effect_chain_mut())
     }
 
@@ -2992,13 +3056,13 @@ impl DesktopPlayback {
 
     /// Set volume leveling mode (`ReplayGain` track/album, EBU R128, etc.)
     pub fn set_volume_leveling_mode(&self, mode: soul_playback::NormalizationMode) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_volume_leveling_mode(mode);
     }
 
     /// Get current volume leveling mode
     pub fn get_volume_leveling_mode(&self) -> soul_playback::NormalizationMode {
-        let manager = self.manager.lock().unwrap();
+        let manager = self.lock_manager();
         manager.get_volume_leveling_mode()
     }
 
@@ -3008,7 +3072,7 @@ impl DesktopPlayback {
     /// * `gain_db` - `ReplayGain` value in dB
     /// * `peak_dbfs` - Peak value in dBFS (for clipping prevention)
     pub fn set_track_gain(&self, gain_db: f64, peak_dbfs: f64) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_track_gain(gain_db, peak_dbfs);
     }
 
@@ -3018,31 +3082,31 @@ impl DesktopPlayback {
     /// * `gain_db` - Album `ReplayGain` value in dB
     /// * `peak_dbfs` - Album peak value in dBFS
     pub fn set_album_gain(&self, gain_db: f64, peak_dbfs: f64) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_album_gain(gain_db, peak_dbfs);
     }
 
     /// Clear gain values (for new track without loudness data)
     pub fn clear_loudness_gains(&self) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.clear_loudness_gains();
     }
 
     /// Set pre-amp gain for volume leveling (-12 to +12 dB)
     pub fn set_loudness_preamp(&self, preamp_db: f64) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_loudness_preamp(preamp_db);
     }
 
     /// Get pre-amp gain
     pub fn get_loudness_preamp(&self) -> f64 {
-        let manager = self.manager.lock().unwrap();
+        let manager = self.lock_manager();
         manager.get_loudness_preamp()
     }
 
     /// Set whether clipping prevention is enabled
     pub fn set_prevent_clipping(&self, prevent: bool) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_prevent_clipping(prevent);
     }
 
@@ -3141,13 +3205,13 @@ impl DesktopPlayback {
     /// When enabled, tracks will blend into each other during transitions.
     /// When disabled, gapless playback is used.
     pub fn set_crossfade_enabled(&self, enabled: bool) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_crossfade_enabled(enabled);
     }
 
     /// Get current crossfade enabled state
     pub fn is_crossfade_enabled(&self) -> bool {
-        let manager = self.manager.lock().unwrap();
+        let manager = self.lock_manager();
         manager.is_crossfade_enabled()
     }
 
@@ -3156,13 +3220,13 @@ impl DesktopPlayback {
     /// Duration is capped at 10000ms (10 seconds).
     /// A duration of 0 means gapless playback (no crossfade).
     pub fn set_crossfade_duration(&self, duration_ms: u32) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_crossfade_duration(duration_ms);
     }
 
     /// Get crossfade duration in milliseconds
     pub fn get_crossfade_duration(&self) -> u32 {
-        let manager = self.manager.lock().unwrap();
+        let manager = self.lock_manager();
         manager.get_crossfade_duration()
     }
 
@@ -3174,13 +3238,13 @@ impl DesktopPlayback {
     /// - `SCurve`: Smooth acceleration at start/end
     /// - `EqualPower`: Constant perceived loudness (recommended)
     pub fn set_crossfade_curve(&self, curve: soul_playback::FadeCurve) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_crossfade_curve(curve);
     }
 
     /// Get crossfade curve type
     pub fn get_crossfade_curve(&self) -> soul_playback::FadeCurve {
-        let manager = self.manager.lock().unwrap();
+        let manager = self.lock_manager();
         manager.get_crossfade_curve()
     }
 
@@ -3189,7 +3253,7 @@ impl DesktopPlayback {
     /// When true, crossfade will also be used when the user manually
     /// skips to the next track (not just auto-advance).
     pub fn set_crossfade_on_skip(&self, on_skip: bool) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_crossfade_on_skip(on_skip);
     }
 
@@ -3326,56 +3390,56 @@ impl DesktopPlayback {
     /// - Disabled: No headroom attenuation
     #[cfg(feature = "volume-leveling")]
     pub fn set_headroom_mode(&self, mode: soul_playback::HeadroomMode) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_headroom_mode(mode);
     }
 
     /// Get current headroom mode
     #[cfg(feature = "volume-leveling")]
     pub fn get_headroom_mode(&self) -> soul_playback::HeadroomMode {
-        let manager = self.manager.lock().unwrap();
+        let manager = self.lock_manager();
         manager.get_headroom_mode()
     }
 
     /// Set headroom enabled state
     #[cfg(feature = "volume-leveling")]
     pub fn set_headroom_enabled(&self, enabled: bool) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_headroom_enabled(enabled);
     }
 
     /// Check if headroom management is enabled
     #[cfg(feature = "volume-leveling")]
     pub fn is_headroom_enabled(&self) -> bool {
-        let manager = self.manager.lock().unwrap();
+        let manager = self.lock_manager();
         manager.is_headroom_enabled()
     }
 
     /// Set EQ boost value for headroom calculation (used in Auto mode)
     #[cfg(feature = "volume-leveling")]
     pub fn set_headroom_eq_boost_db(&self, boost_db: f64) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_headroom_eq_boost_db(boost_db);
     }
 
     /// Set pre-amp value for headroom calculation (used in Auto mode)
     #[cfg(feature = "volume-leveling")]
     pub fn set_headroom_preamp_db(&self, preamp_db: f64) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.set_headroom_preamp_db(preamp_db);
     }
 
     /// Get total potential gain from all sources
     #[cfg(feature = "volume-leveling")]
     pub fn get_headroom_total_gain_db(&self) -> f64 {
-        let manager = self.manager.lock().unwrap();
+        let manager = self.lock_manager();
         manager.get_headroom_total_gain_db()
     }
 
     /// Get current attenuation being applied
     #[cfg(feature = "volume-leveling")]
     pub fn get_headroom_attenuation_db(&self) -> f64 {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.lock_manager();
         manager.get_headroom_attenuation_db()
     }
 }

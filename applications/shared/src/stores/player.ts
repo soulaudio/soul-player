@@ -9,6 +9,8 @@ interface PlayerState {
   previousVolume: number; // For mute toggle restore
   progress: number; // 0 to 100
   duration: number; // seconds
+  seekVersion: number; // incremented on every user-initiated seek
+  seekTarget: number;  // progress (0-100) the user seeked to; only written by useSeekBar
 
   // Queue
   queue: Track[];
@@ -41,6 +43,8 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   previousVolume: 0.8,
   progress: 0,
   duration: 0,
+  seekVersion: 0,
+  seekTarget: 0,
   queue: [],
   queueIndex: -1,
   repeatMode: 'off',

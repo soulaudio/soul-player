@@ -14,8 +14,15 @@ const mockHandleSeek = vi.fn();
 vi.mock('../../../hooks/useSeekBar', () => ({
   useSeekBar: () => ({
     handleSeek: mockHandleSeek,
-    isSeeking: false,
   }),
+}));
+
+// Mock useInterpolatedProgress — tests drive progress via the player store directly
+vi.mock('../../../hooks/useInterpolatedProgress', () => ({
+  useInterpolatedProgress: () => {
+    const { progress, duration } = usePlayerStore.getState();
+    return { progress, duration };
+  },
 }));
 
 describe('ProgressBar', () => {

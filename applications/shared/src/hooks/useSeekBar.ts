@@ -5,50 +5,39 @@ import { debug } from '../utils/debug';
 
 interface UseSeekBarReturn {
   handleSeek: (position: number) => void;
-  isSeeking: boolean; // Always false now (kept for API compatibility)
 }
 
 /**
- * Hook to manage seek interactions - SIMPLIFIED production pattern.
+ * Seek hook used by ProgressBar.
  *
- * Pattern used by VLC, Clementine, Audacious (50-150ms latency):
- * 1. Optimistic UI update (instant visual feedback)
- * 2. Send seek command to backend (async, fire-and-forget)
- * 3. Backend position updates naturally sync after completion
- *
- * No ignore windows, no timers, no complex state - just works.
- * Supports both click-to-seek and drag-to-seek (on release).
+ * 1. Optimistic UI update — writes to the store immediately so
+ *    useInterpolatedProgress snaps to the new position in the same frame.
+ * 2. Fire-and-forget backend seek — Tauri/WASM picks it up asynchronously.
+ * 3. Backend position events naturally re-sync the store after seek completes.
  */
 export function useSeekBar(): UseSeekBarReturn {
   const commands = usePlayerCommands();
 
   const handleSeek = useCallback((position: number) => {
-    const seekStartTime = performance.now();
-    console.log(`[SEEK PERF] ===== SEEK START ===== at ${seekStartTime.toFixed(2)}ms`);
-
     const { duration } = usePlayerStore.getState();
 
-    // Clamp position to valid range (leave 0.1s buffer to avoid EOF)
+    // Clamp to valid range (0.1s buffer avoids triggering EOF)
     const clampedPosition = Math.max(0, Math.min(position, duration - 0.1));
-    console.log(`[SEEK PERF] Target: ${clampedPosition.toFixed(3)}s`);
 
-    // Optimistic UI update (instant feedback - this is the key to instant feel)
+    // Optimistic update — bump seekVersion so useInterpolatedProgress knows this is
+    // a user seek (not a backend position update) and can ignore stale backend events
+    // that arrive during the seek operation.
     const progressPercentage = duration > 0 ? (clampedPosition / duration) * 100 : 0;
-    usePlayerStore.setState({ progress: progressPercentage });
-    console.log(`[SEEK PERF] UI updated to ${progressPercentage.toFixed(1)}% in ${(performance.now() - seekStartTime).toFixed(2)}ms`);
+    usePlayerStore.setState({
+      progress: progressPercentage,
+      seekVersion: usePlayerStore.getState().seekVersion + 1,
+      seekTarget: progressPercentage,
+    });
 
-    // Send to backend (fire-and-forget, position updates will sync naturally)
-    commands.seek(clampedPosition)
-      .then(() => {
-        const totalTime = performance.now() - seekStartTime;
-        console.log(`[SEEK PERF] ===== SEEK COMPLETE ===== (${totalTime.toFixed(2)}ms total)`);
-      })
-      .catch((error) => {
-        console.error(`[SEEK PERF] SEEK FAILED:`, error);
-        debug.error('[useSeekBar] Seek failed:', error);
-      });
+    commands.seek(clampedPosition).catch((error) => {
+      debug.error('[useSeekBar] Seek failed:', error);
+    });
   }, [commands]);
 
-  // Return false for isSeeking (kept for API compatibility, not needed anymore)
-  return { handleSeek, isSeeking: false };
+  return { handleSeek };
 }

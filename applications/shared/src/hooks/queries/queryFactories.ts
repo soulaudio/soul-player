@@ -48,7 +48,7 @@ export const CACHE_TIMES = {
  * ```
  */
 export function createDetailQueryOptions<T>(config: {
-  queryKey: unknown[]
+  queryKey: readonly unknown[]
   fetcher: () => Promise<T | null | undefined>
   entityName: string
   id: number | string
@@ -86,7 +86,7 @@ export function createDetailQueryOptions<T>(config: {
  * ```
  */
 export function createFetcherQueryOptions<T>(config: {
-  queryKey: unknown[]
+  queryKey: readonly unknown[]
   fetcher: () => Promise<T>
   cacheTime?: { staleTime: number; gcTime: number }
 }) {

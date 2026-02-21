@@ -23,7 +23,7 @@ TEST_EXIT=$?
 
 if [ $TEST_EXIT -eq 0 ]; then
     echo "✓ Rust tests OK"
-elif echo "$TEST_OUTPUT" | grep -q "The process cannot access the file"; then
+elif echo "$TEST_OUTPUT" | grep -qE "The process cannot access the file|Access is denied"; then
     echo "⚠ Warning: Rust tests skipped due to Windows file locks"
     echo "  Close running apps (dev server, IDE) and run tests manually"
     echo "  Or use: git commit --no-verify (tests will still run in CI)"

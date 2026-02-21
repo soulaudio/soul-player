@@ -507,20 +507,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       },
 
       async seek(position: number) {
-        // SIMPLIFIED: Direct seek without ignore window timer
-        // Pattern used by VLC, Clementine, Audacious (50-150ms latency)
-        // Optimistic updates in useSeekBar provide instant visual feedback
-        const seekStartTime = performance.now();
-        console.log(`[SEEK PERF] TauriProvider.seek() called at +${seekStartTime.toFixed(2)}ms`);
-
-        try {
-          await invoke('seek_to', { position });
-          const seekDuration = performance.now() - seekStartTime;
-          console.log(`[SEEK PERF] invoke('seek_to') completed in ${seekDuration.toFixed(2)}ms`);
-        } catch (error) {
-          console.error(`[SEEK PERF] invoke('seek_to') failed:`, error);
-          throw error;
-        }
+        await invoke('seek_to', { position });
       },
 
       async setVolume(volume: number) {
