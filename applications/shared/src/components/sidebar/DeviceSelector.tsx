@@ -234,7 +234,7 @@ export function DeviceSelector({
                 {backendDevices.map((device, deviceIndex) => (
                   <DropdownMenuItem
                     key={`${backend.backend}-${device.name}-${deviceIndex}`}
-                    onClick={() => onSwitchDevice(device.backend, device.name)}
+                    onClick={() => onSwitchDevice(backend.backend, device.name)}
                     className="flex items-center justify-between cursor-pointer"
                   >
                     <div className="flex flex-col min-w-0 flex-1">
@@ -244,7 +244,7 @@ export function DeviceSelector({
                       )}
                     </div>
                     {currentDevice?.name === device.name &&
-                      currentDevice?.backend === device.backend && (
+                      currentDevice?.backend === backend.backend && (
                         <Check className="h-4 w-4 text-primary ml-2" />
                       )}
                   </DropdownMenuItem>
