@@ -343,10 +343,33 @@ pub fn list_devices_with_capabilities(
             let name = device.description().ok()?.name().to_string();
             tracing::debug!(device = %name, iteration = device_iteration_count, "[Device] Processing device");
 
-            // Try to get default output config; skip device if unavailable
-            let config = device.default_output_config().ok()?;
-            let sample_rate = config.sample_rate();
-            let channels = config.channels();
+            // Try to get default output config.
+            // ASIO devices (ASIO4ALL etc.) may not report a config until the driver is
+            // connected/loaded. Rather than skipping them, use standard fallback values —
+            // the actual format is negotiated when the stream opens.
+            let (sample_rate, channels) = if let Ok(config) = device.default_output_config() {
+                (config.sample_rate(), config.channels())
+            } else {
+                let is_asio = {
+                    #[cfg(all(target_os = "windows", feature = "asio"))]
+                    {
+                        matches!(backend, AudioBackend::Asio)
+                    }
+                    #[cfg(not(all(target_os = "windows", feature = "asio")))]
+                    {
+                        false
+                    }
+                };
+                if is_asio {
+                    tracing::debug!(
+                        device = %name,
+                        "[Device] ASIO device has no default config, using 48kHz/2ch fallback"
+                    );
+                    (48000u32, 2u16)
+                } else {
+                    return None; // Non-ASIO: skip device as before
+                }
+            };
 
             // Get sample rate range if available (non-critical, so don't fail if missing)
             let sample_rate_range =
