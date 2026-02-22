@@ -83,6 +83,9 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, '../shared/src'),
+      // Direct alias for workspace package so Vite watches the real source
+      // directory instead of the node_modules symlink (fixes HMR for shared code)
+      '@soul-player/shared': path.resolve(__dirname, '../shared/src'),
     },
   },
 });
