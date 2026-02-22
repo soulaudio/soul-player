@@ -31,7 +31,7 @@ impl From<BackendInfo> for FrontendBackendInfo {
         // Convert backend to string representation
         let backend_str = match info.backend {
             AudioBackend::Default => "default",
-            #[cfg(all(target_os = "windows", feature = "asio"))]
+            #[cfg(target_os = "windows")]
             AudioBackend::Asio => "asio",
             #[cfg(feature = "jack")]
             AudioBackend::Jack => "jack",
@@ -156,7 +156,7 @@ impl From<AudioDeviceInfo> for FrontendDeviceInfo {
     fn from(info: AudioDeviceInfo) -> Self {
         let backend_str = match info.backend {
             AudioBackend::Default => "default",
-            #[cfg(all(target_os = "windows", feature = "asio"))]
+            #[cfg(target_os = "windows")]
             AudioBackend::Asio => "asio",
             #[cfg(feature = "jack")]
             AudioBackend::Jack => "jack",
@@ -182,7 +182,7 @@ impl From<AudioDeviceInfo> for FrontendDeviceInfo {
 fn parse_backend(backend_str: &str) -> Result<AudioBackend, String> {
     match backend_str {
         "default" => Ok(AudioBackend::Default),
-        #[cfg(all(target_os = "windows", feature = "asio"))]
+        #[cfg(target_os = "windows")]
         "asio" => Ok(AudioBackend::Asio),
         #[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "jack"))]
         "jack" => Ok(AudioBackend::Jack),
@@ -506,7 +506,7 @@ pub async fn initialize_audio_device(
                 let new_settings = serde_json::json!({
                     "backend": match current_backend {
                         AudioBackend::Default => "default",
-                        #[cfg(all(target_os = "windows", feature = "asio"))]
+                        #[cfg(target_os = "windows")]
                         AudioBackend::Asio => "asio",
                         #[cfg(feature = "jack")]
                         AudioBackend::Jack => "jack",
@@ -583,7 +583,7 @@ pub async fn get_current_audio_device(
 
     let backend_str = match backend {
         AudioBackend::Default => "default",
-        #[cfg(all(target_os = "windows", feature = "asio"))]
+        #[cfg(target_os = "windows")]
         AudioBackend::Asio => "asio",
         #[cfg(feature = "jack")]
         AudioBackend::Jack => "jack",
@@ -757,7 +757,7 @@ mod tests {
         assert!(result.unwrap_err().contains("Unknown backend"));
     }
 
-    #[cfg(all(target_os = "windows", feature = "asio"))]
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_parse_backend_asio() {
         let backend = parse_backend("asio").unwrap();
