@@ -236,10 +236,21 @@ pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDevice
 
     let backend = parse_backend(&backend_str)?;
 
-    // Use async timeout wrapper to prevent indefinite hangs if audio service is unresponsive
-    let devices = device::list_devices_async(backend)
-        .await
-        .map_err(|e| e.to_string())?;
+    // Use async timeout wrapper to prevent indefinite hangs if audio service is unresponsive.
+    // Return empty list on failure rather than an error — some backends (e.g. ASIO) can fail to
+    // enumerate if the driver was already initialized by get_audio_backends(), and we don't want
+    // that to prevent other backends from appearing in the frontend.
+    let devices = match device::list_devices_async(backend).await {
+        Ok(devs) => devs,
+        Err(e) => {
+            tracing::warn!(
+                backend = %backend_str,
+                error = %e,
+                "[audio_settings] Device enumeration failed, returning empty list"
+            );
+            vec![]
+        }
+    };
 
     let frontend_devices: Vec<FrontendDeviceInfo> =
         devices.into_iter().map(FrontendDeviceInfo::from).collect();

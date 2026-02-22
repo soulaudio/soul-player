@@ -93,8 +93,15 @@ export function useAudioDevice(hasRealDevices = true): UseAudioDeviceResult {
       const map = new Map<string, AudioDevice[]>()
       for (const b of backends) {
         if (b.available) {
-          const deviceList = await backend.getAudioDevices(b.backend)
-          map.set(b.backend, deviceList)
+          try {
+            const deviceList = await backend.getAudioDevices(b.backend)
+            map.set(b.backend, deviceList)
+          } catch (err) {
+            // Backend enumeration failed — skip this backend but continue loading others.
+            // This prevents a single problematic backend (e.g. ASIO driver crash) from
+            // blocking all other backends from appearing in the dropdown.
+            console.warn(`[useAudioDevice] Failed to enumerate ${b.backend} devices:`, err)
+          }
         }
       }
       setDevices(map)

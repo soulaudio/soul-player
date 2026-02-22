@@ -223,7 +223,8 @@ export function DeviceSelector({
           backends.map((backend, index) => {
             if (!backend.available) return null;
             const backendDevices = devices.get(backend.backend) || [];
-            if (backendDevices.length === 0) return null;
+            // Hide only if both the live enumeration AND the startup count report zero devices
+            if (backendDevices.length === 0 && backend.deviceCount === 0) return null;
             return (
               <div key={`${backend.backend}-${index}`}>
                 {backends.length > 1 && (
@@ -231,24 +232,30 @@ export function DeviceSelector({
                     {backend.name}
                   </DropdownMenuLabel>
                 )}
-                {backendDevices.map((device, deviceIndex) => (
-                  <DropdownMenuItem
-                    key={`${backend.backend}-${device.name}-${deviceIndex}`}
-                    onClick={() => onSwitchDevice(backend.backend, device.name)}
-                    className="flex items-center justify-between cursor-pointer"
-                  >
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-sm truncate">{device.name}</span>
-                      {device.sampleRate && (
-                        <span className="text-xs text-muted-foreground">{device.sampleRate}Hz</span>
-                      )}
-                    </div>
-                    {currentDevice?.name === device.name &&
-                      currentDevice?.backend === backend.backend && (
-                        <Check className="h-4 w-4 text-primary ml-2" />
-                      )}
+                {backendDevices.length === 0 ? (
+                  <DropdownMenuItem disabled>
+                    <span className="text-xs text-muted-foreground">{t('audio.noDevicesAvailable', 'No devices available')}</span>
                   </DropdownMenuItem>
-                ))}
+                ) : (
+                  backendDevices.map((device, deviceIndex) => (
+                    <DropdownMenuItem
+                      key={`${backend.backend}-${device.name}-${deviceIndex}`}
+                      onClick={() => onSwitchDevice(backend.backend, device.name)}
+                      className="flex items-center justify-between cursor-pointer"
+                    >
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-sm truncate">{device.name}</span>
+                        {device.sampleRate && (
+                          <span className="text-xs text-muted-foreground">{device.sampleRate}Hz</span>
+                        )}
+                      </div>
+                      {currentDevice?.name === device.name &&
+                        currentDevice?.backend === backend.backend && (
+                          <Check className="h-4 w-4 text-primary ml-2" />
+                        )}
+                    </DropdownMenuItem>
+                  ))
+                )}
                 {index < backends.filter((b) => b.available).length - 1 && <DropdownMenuSeparator />}
               </div>
             );
