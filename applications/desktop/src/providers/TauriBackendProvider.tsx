@@ -337,6 +337,14 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
       await invoke('set_audio_device', { backendStr, deviceName })
     },
 
+    async getCurrentAudioDevice() {
+      try {
+        return await invoke('get_current_audio_device')
+      } catch {
+        return null
+      }
+    },
+
     // Audio Settings - File Dialog (for convolution IR selection)
     async openFileDialog(multiple: boolean, filters: Array<{ name: string; extensions: string[] }>) {
       return invoke<string[] | null>('open_file_dialog', { multiple, filters })

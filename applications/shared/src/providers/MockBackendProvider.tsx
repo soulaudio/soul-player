@@ -743,6 +743,10 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
       debug.log('[MockBackend] Audio device selection not supported in demo mode')
     },
 
+    async getCurrentAudioDevice() {
+      return null
+    },
+
     // Audio Settings - File Dialog (mock/stub implementations)
     async openFileDialog(_multiple: boolean, _filters: Array<{ name: string; extensions: string[] }>) {
       debug.log('[MockBackend] File dialog not supported in demo mode')

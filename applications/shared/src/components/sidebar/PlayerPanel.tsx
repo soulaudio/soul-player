@@ -7,7 +7,8 @@ import { NowPlayingPanel, type CurrentTrackInfo } from './NowPlayingPanel';
 import { ProgressBar } from '../player/ProgressBar';
 import { PlaybackControls, type ShuffleMode, type RepeatMode } from './PlaybackControls';
 import { VolumeControl } from './VolumeControl';
-import { DeviceSelector, type AudioDevice, type AudioBackend } from './DeviceSelector';
+import { DeviceSelector } from './DeviceSelector';
+import { useAudioDevice } from '../../hooks/useAudioDevice';
 import { debug } from '../../utils/debug';
 
 export interface PlayerPanelProps {
@@ -38,115 +39,23 @@ export function PlayerPanel({
   onRepeatModeChange,
 }: PlayerPanelProps) {
   const commands = usePlayerCommands();
+  const {
+    backends,
+    devices,
+    currentDevice,
+    isLoading: isLoadingDevices,
+    switchDevice,
+    loadAll,
+  } = useAudioDevice(hasRealDevices);
   const [isMuted, setIsMuted] = useState(false);
   const [volumeBeforeMute, setVolumeBeforeMute] = useState(volume);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Device selector state
-  const [currentDevice, setCurrentDevice] = useState<AudioDevice | null>(null);
-  const [backends, setBackends] = useState<AudioBackend[]>([]);
-  const [devices, setDevices] = useState<Map<string, AudioDevice[]>>(new Map());
-  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
 
   useEffect(() => {
     if (volume > 0 && !isMuted) {
       setVolumeBeforeMute(volume);
     }
   }, [volume, isMuted]);
-
-  useEffect(() => {
-    if (!hasRealDevices) {
-      setCurrentDevice({
-        name: 'System Default',
-        backend: 'System',
-        isDefault: true,
-        sampleRate: 48000,
-        channels: 2,
-        isRunning: true,
-      });
-    } else {
-      loadCurrentDevice();
-    }
-  }, [hasRealDevices]);
-
-  const loadCurrentDevice = async () => {
-    try {
-      if (!commands?.getCurrentAudioDevice) return;
-      const device = await commands.getCurrentAudioDevice();
-      setCurrentDevice(device);
-    } catch (error) {
-      debug.error('[PlayerPanel] Failed to load current device:', error);
-    }
-  };
-
-  const loadDevices = async () => {
-    if (!hasRealDevices) {
-      const deviceMap = new Map<string, AudioDevice[]>();
-      deviceMap.set('System', [
-        {
-          name: 'System Default',
-          backend: 'System',
-          isDefault: true,
-          sampleRate: 48000,
-          channels: 2,
-          isRunning: true,
-        },
-      ]);
-      setDevices(deviceMap);
-      return;
-    }
-
-    if (isLoadingDevices) return;
-    setIsLoadingDevices(true);
-
-    try {
-      if (commands?.getAudioBackends) {
-        const backendList = await commands.getAudioBackends();
-        setBackends(backendList);
-
-        const deviceMap = new Map<string, AudioDevice[]>();
-        for (const backend of backendList) {
-          if (backend.available && commands?.getAudioDevices) {
-            try {
-              const backendDevices = await commands.getAudioDevices(backend.backend);
-              deviceMap.set(backend.backend, backendDevices);
-            } catch (error) {
-              debug.error(`[PlayerPanel] Failed to load devices for ${backend.backend}:`, error);
-            }
-          }
-        }
-        setDevices(deviceMap);
-      }
-    } catch (error) {
-      debug.error('[PlayerPanel] Failed to load devices:', error);
-    } finally {
-      setIsLoadingDevices(false);
-    }
-  };
-
-  const switchDevice = async (backend: string, deviceName: string) => {
-    if (!hasRealDevices) {
-      if (backend === 'System') {
-        setCurrentDevice({
-          name: 'System Default',
-          backend: 'System',
-          isDefault: true,
-          sampleRate: 48000,
-          channels: 2,
-          isRunning: true,
-        });
-      }
-      return;
-    }
-
-    try {
-      if (!commands?.setAudioDevice) return;
-      await commands.setAudioDevice(backend, deviceName);
-      await loadCurrentDevice();
-    } catch (error) {
-      debug.error('[PlayerPanel] Failed to switch device:', error);
-    }
-  };
 
   const handlePlayPause = useCallback(async () => {
     try {
@@ -301,7 +210,7 @@ export function PlayerPanel({
             devices={devices}
             isLoadingDevices={isLoadingDevices}
             hasRealDevices={hasRealDevices}
-            onLoadDevices={loadDevices}
+            onLoadDevices={loadAll}
             onSwitchDevice={switchDevice}
           />
         </div>

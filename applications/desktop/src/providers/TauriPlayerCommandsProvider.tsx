@@ -625,22 +625,6 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         return await invoke('get_all_sources');
       },
 
-      // Audio device management (Desktop only)
-      async getCurrentAudioDevice() {
-        return await invoke('get_current_audio_device');
-      },
-
-      async getAudioBackends() {
-        return await invoke('get_audio_backends');
-      },
-
-      async getAudioDevices(backend: string) {
-        return await invoke('get_audio_devices', { backendStr: backend });
-      },
-
-      async setAudioDevice(backend: string, deviceName: string) {
-        await invoke('set_audio_device', { backendStr: backend, deviceName });
-      },
     };
 
     // Events implementation using Tauri event listeners

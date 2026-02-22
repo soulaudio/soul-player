@@ -451,6 +451,10 @@ export function ServerBackendProvider({ apiBase, authToken, children }: ServerBa
       debug.log('[ServerBackend] Audio device selection not supported on server')
     },
 
+    async getCurrentAudioDevice() {
+      return null
+    },
+
     // Audio Settings - File Dialog (not supported on server)
     async openFileDialog(_multiple: boolean, _filters: Array<{ name: string; extensions: string[] }>) {
       debug.log('[ServerBackend] File dialog not supported on server')

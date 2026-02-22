@@ -88,11 +88,6 @@ export interface PlayerCommandsInterface {
   // Sources management
   getAllSources: () => Promise<Source[]>;
 
-  // Audio device management (Desktop only - optional)
-  getCurrentAudioDevice?: () => Promise<any>;
-  getAudioBackends?: () => Promise<any[]>;
-  getAudioDevices?: (backend: string) => Promise<any[]>;
-  setAudioDevice?: (backend: string, deviceName: string) => Promise<void>;
 }
 
 export interface PlaybackEventsInterface {

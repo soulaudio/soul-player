@@ -215,8 +215,8 @@ export interface AudioBackend {
   name: string
   description: string
   available: boolean
-  is_default: boolean
-  device_count: number
+  isDefault: boolean
+  deviceCount: number
 }
 
 export interface AudioDevice {
@@ -347,6 +347,7 @@ export interface BackendInterface {
   getAudioBackends: () => Promise<AudioBackend[]>
   getAudioDevices: (backendStr: string) => Promise<AudioDevice[]>
   setAudioDevice: (backendStr: string, deviceName: string) => Promise<void>
+  getCurrentAudioDevice: () => Promise<AudioDevice | null>
 
   // Audio Settings - File Dialog (for convolution IR selection)
   openFileDialog: (multiple: boolean, filters: Array<{ name: string; extensions: string[] }>) => Promise<string[] | null>

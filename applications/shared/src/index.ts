@@ -187,6 +187,8 @@ export { useGridScale } from './hooks/useGridScale';
 export { useResponsiveColumns } from './hooks/useResponsiveColumns';
 export { useInfiniteLibrary } from './hooks/useInfiniteLibrary';
 export { useNavigateWithHistory } from './hooks/useNavigateWithHistory';
+export { useAudioDevice } from './hooks/useAudioDevice';
+export type { UseAudioDeviceResult } from './hooks/useAudioDevice';
 
 // TanStack Query exports
 export { QueryClient, QueryClientProvider } from '@tanstack/react-query';

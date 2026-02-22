@@ -27,8 +27,8 @@ export interface AudioBackend {
   name: string;
   description: string;
   available: boolean;
-  is_default: boolean;
-  device_count: number;
+  isDefault: boolean;
+  deviceCount: number;
 }
 
 export interface DeviceSelectorProps {

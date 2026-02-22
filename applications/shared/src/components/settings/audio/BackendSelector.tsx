@@ -70,7 +70,7 @@ export function BackendSelector({
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold">{backend.name}</span>
-                    {backend.is_default && (
+                    {backend.isDefault && (
                       <span className="text-xs px-2 py-0.5 bg-muted rounded-full text-muted-foreground">
                         System Default
                       </span>
@@ -88,7 +88,7 @@ export function BackendSelector({
 
                   {isAvailable && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      {backend.device_count} {backend.device_count === 1 ? 'device' : 'devices'} available
+                      {backend.deviceCount} {backend.deviceCount === 1 ? 'device' : 'devices'} available
                     </p>
                   )}
 

@@ -11,11 +11,12 @@ import {
 } from 'lucide-react';
 import { usePlatform } from '../../contexts/PlatformContext';
 import { useBackend } from '../../contexts/BackendContext';
+import { useAudioDevice } from '../../hooks/useAudioDevice';
 import { ConfirmDialog } from '../ui/Dialog';
 import { PipelineVisualization } from './audio/PipelineVisualization';
 import { PipelineStage } from './audio/PipelineStage';
 import { BackendSelector } from './audio/BackendSelector';
-import { DeviceSelector, type AudioBackend, type AudioDevice } from '../sidebar/DeviceSelector';
+import { DeviceSelector } from '../sidebar/DeviceSelector';
 import { DspConfig } from './audio/DspConfig';
 import { UpsamplingSettings } from './audio/UpsamplingSettings';
 import { VolumeLevelingSettings } from './audio/VolumeLevelingSettings';
@@ -126,8 +127,15 @@ function AudioSettingsDesktop() {
   const { t } = useTranslation();
   const backend = useBackend();
 
-  const [backends, setBackends] = useState<AudioBackend[]>([]);
-  const [devices, setDevices] = useState<Map<string, AudioDevice[]>>(new Map());
+  const {
+    backends,
+    devices,
+    currentDevice: activeDevice,
+    isLoading: isLoadingDevices,
+    switchDevice: switchAudioDevice,
+    loadBackend,
+  } = useAudioDevice(true)
+
   const [settings, setSettings] = useState<AudioSettings>({
     backend: 'default',
     device_name: null,
@@ -155,6 +163,16 @@ function AudioSettingsDesktop() {
     loadAudioSettings();
   }, []);
 
+  // Sync the backend picker display with the actually playing device on first load
+  useEffect(() => {
+    if (activeDevice?.backend && !loading) {
+      setSettings(prev => ({
+        ...prev,
+        backend: activeDevice.backend as 'default' | 'asio' | 'jack',
+      }))
+    }
+  }, [activeDevice?.backend, loading])
+
   // Auto-hide notification after 3 seconds
   useEffect(() => {
     if (notification) {
@@ -170,17 +188,6 @@ function AudioSettingsDesktop() {
   const loadAudioSettings = async () => {
     try {
       setLoading(true);
-
-      // Load backends
-      const backendsData = await backend.getAudioBackends();
-      setBackends(backendsData);
-
-      // Load devices for current backend
-      const currentBackend = settings.backend;
-      const devicesData = await backend.getAudioDevices(currentBackend);
-      const deviceMap = new Map<string, AudioDevice[]>();
-      deviceMap.set(currentBackend, devicesData);
-      setDevices(deviceMap);
 
       // Load settings from database
       const savedSettings = await backend.getUserSetting('audio.pipeline');
@@ -243,28 +250,18 @@ function AudioSettingsDesktop() {
   };
 
   const handleBackendChange = async (selectedBackend: 'default' | 'asio' | 'jack') => {
-    updateSettings({ backend: selectedBackend });
-
-    // Reload devices for new backend
-    try {
-      const devicesData = await backend.getAudioDevices(selectedBackend);
-      const deviceMap = new Map<string, AudioDevice[]>();
-      deviceMap.set(selectedBackend, devicesData);
-      setDevices(deviceMap);
-    } catch (error) {
-      debug.error('Failed to load devices:', error);
-    }
+    updateSettings({ backend: selectedBackend })
+    await loadBackend(selectedBackend)
   };
 
-  const handleDeviceChange = async (deviceName: string) => {
-    updateSettings({ device_name: deviceName });
-
+  const handleSwitchDevice = async (backendStr: string, deviceName: string) => {
+    updateSettings({ backend: backendStr as 'default' | 'asio' | 'jack', device_name: deviceName })
     try {
-      await backend.setAudioDevice(settings.backend, deviceName);
-      showNotification('success', `Switched to audio device: ${deviceName}`);
+      await switchAudioDevice(backendStr, deviceName)
+      showNotification('success', `Switched to audio device: ${deviceName}`)
     } catch (error) {
-      debug.error('Failed to set audio device:', error);
-      showNotification('error', `Failed to switch audio device: ${error}`);
+      debug.error('Failed to set audio device:', error)
+      showNotification('error', `Failed to switch audio device: ${error}`)
     }
   };
 
@@ -632,26 +629,13 @@ function AudioSettingsDesktop() {
               loading={loading}
             />
             <DeviceSelector
-              currentDevice={
-                settings.device_name
-                  ? {
-                      name: settings.device_name,
-                      backend: settings.backend,
-                      isDefault: false,
-                      isRunning: false,
-                      sampleRate: undefined,
-                      channels: undefined,
-                    }
-                  : null
-              }
+              currentDevice={activeDevice}
               backends={backends}
               devices={devices}
-              isLoadingDevices={loading}
+              isLoadingDevices={isLoadingDevices}
               hasRealDevices={true}
-              onLoadDevices={() => {
-                // Already loaded on mount, no-op
-              }}
-              onSwitchDevice={(_backend, deviceName) => handleDeviceChange(deviceName)}
+              onLoadDevices={() => {}}
+              onSwitchDevice={handleSwitchDevice}
               variant="list"
             />
           </div>
