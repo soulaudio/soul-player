@@ -190,8 +190,8 @@ export function DropdownMenuItem({ children, onClick, disabled, className }: Dro
     <div
       className={cn(
         'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none',
-        'hover:bg-foreground/[var(--hover-bg-opacity)] hover:text-accent-foreground',
-        'focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground',
+        'hover:bg-foreground/[var(--hover-bg-opacity)]',
+        'focus:bg-foreground/[var(--hover-bg-opacity)]',
         disabled && 'pointer-events-none opacity-50',
         className
       )}
