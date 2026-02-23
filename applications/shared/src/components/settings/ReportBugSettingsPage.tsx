@@ -54,7 +54,7 @@ export function ReportBugSettingsPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold mb-2">{t('settings.reportBugTitle')}</h1>
+        <h1 className="text-2xl font-bold mb-6">{t('settings.reportBugTitle')}</h1>
         <p className="text-muted-foreground">
           {t('settings.reportBugDescription')}
         </p>
@@ -67,7 +67,7 @@ export function ReportBugSettingsPage() {
             <Bug className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold mb-2">{t('settings.reportBugTitle')}</h2>
+            <h2 className="text-base font-semibold mb-1">{t('settings.reportBugTitle')}</h2>
             <p className="text-sm text-muted-foreground">
               {t('settings.reportBugInstructions')}
             </p>
@@ -133,7 +133,7 @@ export function ReportBugSettingsPage() {
               <FileText className="w-6 h-6 text-blue-500" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold mb-2">{t('settings.reportBugLogs')}</h2>
+              <h2 className="text-base font-semibold mb-1">{t('settings.reportBugLogs')}</h2>
               <p className="text-sm text-muted-foreground">
                 {t('settings.reportBugLogsDescription')}
               </p>
@@ -207,7 +207,7 @@ export function ReportBugSettingsPage() {
 
       {/* Helpful Resources */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">Helpful Resources</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Helpful Resources</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <a
             href="https://github.com/soulaudio/soul-player"

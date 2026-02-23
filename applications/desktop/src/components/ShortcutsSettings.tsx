@@ -243,7 +243,7 @@ export function ShortcutsSettings() {
   return (
     <div className="max-w-2xl">
       <div className="mb-6">
-        <h2 className="text-2xl font-semibold mb-2">{t('settings.shortcuts')}</h2>
+        <h1 className="text-2xl font-bold mb-6">{t('settings.shortcuts')}</h1>
         <p className="text-sm text-muted-foreground">
           {t(
             'settings.shortcutsDescription',

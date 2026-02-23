@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18next from 'i18next';
 import { ThemePicker, useBackend, debug } from '@soul-player/shared';
 import { useSettings } from '../../contexts/SettingsContext';
+
+const LANGUAGES = [
+  { code: 'en-US', label: 'English' },
+  { code: 'de',    label: 'Deutsch' },
+  { code: 'ja',    label: '日本語'  },
+] as const;
 
 export function AppearanceSettingsPage() {
   const { t } = useTranslation();
@@ -10,15 +17,18 @@ export function AppearanceSettingsPage() {
 
   const [homeEnabled, setHomeEnabledState] = useState(true);
   const [hideLibrarySearch, setHideLibrarySearchState] = useState(false);
+  const [language, setLanguageState] = useState(i18next.language || 'en-US');
 
   useEffect(() => {
     Promise.all([
       backend.getUserSetting('home.enabled'),
       backend.getUserSetting('ui.hide_library_search'),
+      backend.getUserSetting('ui.language'),
     ])
-      .then(([home, hideSearch]) => {
+      .then(([home, hideSearch, lang]) => {
         setHomeEnabledState(home ?? true);
         setHideLibrarySearchState(hideSearch ?? false);
+        if (lang) setLanguageState(lang as string);
       })
       .catch(err => debug.error('Failed to load appearance settings:', err));
   }, [backend]);
@@ -30,6 +40,13 @@ export function AppearanceSettingsPage() {
         window.dispatchEvent(new CustomEvent('home-enabled-changed', { detail: { enabled } }));
       })
       .catch(err => debug.error('Failed to save home setting:', err));
+  }, [backend]);
+
+  const handleLanguageChange = useCallback((code: string) => {
+    setLanguageState(code);
+    i18next.changeLanguage(code);
+    backend.setUserSetting('ui.language', code)
+      .catch(err => debug.error('Failed to save language setting:', err));
   }, [backend]);
 
   const handleHideLibrarySearch = useCallback((hide: boolean) => {
@@ -44,7 +61,7 @@ export function AppearanceSettingsPage() {
   return (
     <div className="max-w-2xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold mb-1">{t('settings.appearance')}</h1>
+        <h1 className="text-2xl font-bold mb-6">{t('settings.appearance')}</h1>
       </div>
 
       {/* UI Options */}
@@ -89,9 +106,23 @@ export function AppearanceSettingsPage() {
         </label>
       </section>
 
+      {/* Localization */}
+      <section>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{t('settings.localization')}</h2>
+        <select
+          value={language}
+          onChange={e => handleLanguageChange(e.target.value)}
+          className="px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          {LANGUAGES.map(lang => (
+            <option key={lang.code} value={lang.code}>{lang.label}</option>
+          ))}
+        </select>
+      </section>
+
       {/* Theme — always at the bottom */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">{t('settings.theme')}</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{t('settings.theme')}</h2>
         <ThemePicker showImportExport={true} showAccessibilityInfo={true} />
       </section>
     </div>

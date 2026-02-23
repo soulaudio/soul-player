@@ -9,7 +9,18 @@
     "jumpBackInto": "Weiterhören",
     "discovery": "Entdecken",
     "recentlyPlayed": "Zuletzt gespielt",
-    "startPlaying": "Musik abspielen, um Ihren Verlauf zu sehen"
+    "startPlaying": "Musik abspielen, um Ihren Verlauf zu sehen",
+    "crateDigging": "Stöbern Sie ein wenig",
+    "timeCapsule": "Zeitkapsel",
+    "timeCapsuleSubtitle": "Musik von diesem Tag in vergangenen Jahren",
+    "dontForget": "Nicht vergessen",
+    "dontForgetSubtitle": "Verborgene Schätze in Ihrer Bibliothek",
+    "genreMix": "{{genre}}-Mix",
+    "genreMixSubtitle": "Kuratierte Auswahl, wird alle 4 Stunden aktualisiert",
+    "recentlyAdded": "Kürzlich hinzugefügt",
+    "recentlyAddedSubtitle": "Neue Zugänge in Ihrer Bibliothek",
+    "discoverArtists": "Künstler entdecken",
+    "emptyAlbum": "Leeres Album"
   },
   "nav": {
     "home": "Startseite",
@@ -41,11 +52,18 @@
     "pause": "Pausieren",
     "next": "Nächster Titel",
     "previous": "Vorheriger Titel",
-    "shuffle": "Zufällig",
+    "shuffle": {
+      "off": "Zufällig: Aus",
+      "random": "Zufällig: Zufällig",
+      "smart": "Zufällig: Smart"
+    },
     "repeat": "Wiederholen",
     "volume": "Lautstärke",
     "mute": "Stummschalten",
-    "unmute": "Stummschaltung aufheben"
+    "unmute": "Stummschaltung aufheben",
+    "shuffleOff": "Zufällig: Aus",
+    "shuffleRandom": "Zufällig: Zufällig",
+    "shuffleSmart": "Zufällig: Smart"
   },
   "library": {
     "tracks": "Titel",
@@ -82,8 +100,15 @@
       "albums": "Alben suchen...",
       "playlists": "Playlists suchen...",
       "artists": "Künstler suchen...",
-      "tracks": "Titel suchen..."
-    }
+      "tracks": "Titel suchen...",
+      "albumsWithCount": "{{count}} Alben suchen...",
+      "playlistsWithCount": "{{count}} Playlists suchen...",
+      "artistsWithCount": "{{count}} Künstler suchen...",
+      "tracksWithCount": "{{count}} Titel suchen..."
+    },
+    "scanning": "Bibliothek wird durchsucht",
+    "scanningLibrary": "Ihre Musikdateien werden durchsucht",
+    "scanComplete": "Suche abgeschlossen"
   },
   "settings": {
     "title": "Einstellungen",
@@ -104,7 +129,57 @@
     "showShortcutsDescription": "Tastenkombinationen in Tooltips und UI-Elementen anzeigen. Zum Beispiel:",
     "audio": {
       "title": "Audio",
-      "outputDevice": "Ausgabegerät"
+      "outputDevice": "Ausgabegerät",
+      "selectDevice": "Audiogerät auswählen",
+      "output": "Audioausgabe",
+      "noDevicesFound": "Keine Audiogeräte gefunden",
+      "warning": {
+        "title": "Experimentelle Audio-Pipeline",
+        "description": "Die Audio-Pipeline und die Funktionen befinden sich in aktiver Entwicklung und können Fehler oder Instabilitäten enthalten. Bei Problemen lesen Sie bitte den Bereich »Fehler melden« in den Einstellungen."
+      },
+      "latency": {
+        "title": "Latenzmonitor",
+        "loading": "Latenzinformationen werden geladen...",
+        "refresh": "Aktualisieren",
+        "buffer": "Pufferlatenz",
+        "total": "Gesamtlatenz",
+        "samples": "Samples",
+        "excellent": "Ausgezeichnet",
+        "good": "Gut",
+        "acceptable": "Akzeptabel",
+        "high": "Hohe Latenz",
+        "visualization": "Latenzübersicht"
+      },
+      "exclusive": {
+        "title": "Exklusivmodus",
+        "enabledDesc": "Bit-perfekte Ausgabe, umgeht den OS-Mixer",
+        "disabledDesc": "Geteilter Modus mit dem OS-Audio-Mixer",
+        "enable": "Aktivieren",
+        "disable": "Deaktivieren",
+        "benefit1": "Geringere Latenz und bit-perfekte Ausgabe",
+        "benefit2": "Direkter Hardwarezugriff (ASIO/WASAPI exklusiv)"
+      },
+      "graphicEq": {
+        "title": "Grafischer Equalizer",
+        "reset": "Zurücksetzen",
+        "selectPreset": "Preset auswählen",
+        "info": "Passen Sie Frequenzbänder an, um Ihren Klang zu formen. Schieberegler nach oben für Boost, nach unten für Cut. Die 10 Bänder folgen den ISO-Standardmittenfrequenzen.",
+        "presets": {
+          "flat": "Flat",
+          "bassboost": "Bass Boost",
+          "trebleboost": "Treble Boost",
+          "vocalboost": "Vocal Boost",
+          "rock": "Rock",
+          "pop": "Pop",
+          "jazz": "Jazz",
+          "classical": "Classical",
+          "loudness": "Loudness",
+          "custom": "Custom"
+        }
+      },
+      "resampling": {
+        "applyOnNextTrack": "Resampling-Einstellungen werden beim nächsten Titel übernommen"
+      }
     },
     "updates": "Updates",
     "autoUpdate": "Automatisch nach Updates suchen",
@@ -119,7 +194,84 @@
     "links": "Links",
     "github": "GitHub",
     "website": "Webseite",
-    "demoDisabled": "Verfügbar in der Desktop-App"
+    "demoDisabled": "Verfügbar in der Desktop-App",
+    "localization": "Lokalisierung",
+    "homePage": "Startseite",
+    "homePageEnabled": "Startseite aktivieren",
+    "homePageEnabledDescription": "Dynamische Startseite mit personalisierten Empfehlungen anzeigen",
+    "homeRefreshInterval": "Aktualisierungsintervall",
+    "homeRefreshIntervalDescription": "Wie oft die Startseiten-Bereiche aktualisiert werden (leer lassen für Aktualisierung bei jedem Besuch)",
+    "homeRefreshMinutes": "Minuten",
+    "homeRefreshOnVisit": "Bei jedem Besuch aktualisieren",
+    "upToDate": "Sie verwenden die neueste Version!",
+    "updateAvailable": "Update verfügbar",
+    "checkFailed": "Update-Prüfung fehlgeschlagen",
+    "reportBug": "Fehler melden",
+    "reportBugDescription": "Helfen Sie dabei, Soul Player zu verbessern, indem Sie aufgetretene Probleme melden",
+    "reportBugTitle": "Einen Fehler melden",
+    "reportBugInstructions": "Wenn Sie Probleme mit Soul Player feststellen, helfen Sie uns bitte, diese durch eine Meldung auf GitHub zu beheben.",
+    "reportBugSteps": {
+      "step1": "Prüfen Sie, ob das Problem bereits gemeldet wurde",
+      "step2": "Erstellen Sie einen detaillierten Fehlerbericht mit Schritten zur Reproduktion",
+      "step3": "Fügen Sie bei Bedarf Systeminformationen und Protokolle hinzu"
+    },
+    "reportBugGithubLink": "Auf GitHub Issues melden",
+    "reportBugLogs": "Protokolle anzeigen",
+    "reportBugLogsDescription": "Anwendungsprotokolle können bei der Diagnose von Problemen helfen. Aktivieren Sie die Protokollierung mit dem Flag --logs beim Start der App.",
+    "reportBugLoggingToggleTitle": "Protokollierungseinstellungen",
+    "reportBugLoggingToggleLabel": "Dateiprotokollierung aktivieren",
+    "reportBugLoggingToggleDescription": "Diagnosenprotokolle in Dateien speichern. Hilft bei der Fehlerbehebung. Protokolle werden täglich gespeichert und können im Laufe der Zeit wachsen.",
+    "reportBugLoggingRestartRequired": "Starten Sie die App neu, damit die Protokollierungsänderungen wirksam werden.",
+    "sections": {
+      "audio": "Audio",
+      "musicData": "Daten",
+      "appearance": "Erscheinungsbild",
+      "shortcuts": "Tastenkombinationen",
+      "reportBug": "Fehler melden",
+      "about": "Über"
+    },
+    "musicData": {
+      "sourcesHeading": "Quellen",
+      "dataHeading": "Daten"
+    },
+    "dataManagement": {
+      "title": "Datenverwaltung",
+      "description": "Verwalten Sie Ihre Bibliotheksdaten und Anwendungseinstellungen",
+      "warning": {
+        "title": "Wichtige Hinweise",
+        "description": "Beim Deinstallieren von Soul Player unter Linux werden Ihre Benutzerdaten standardmäßig beibehalten. Dazu gehören Ihre Bibliothek, Wiedergabelisten und Einstellungen in ~/.config/soul-player/."
+      },
+      "reset": {
+        "title": "Auf Werkseinstellungen zurücksetzen",
+        "description": "Alle Benutzerdaten löschen und Soul Player in den Ausgangszustand zurückversetzen. Die App wird neu gestartet und zeigt den Einrichtungsassistenten an.",
+        "button": "Auf Werkseinstellungen zurücksetzen",
+        "effects": {
+          "library": "Alle Titel, Alben und Künstler werden entfernt",
+          "playlists": "Alle Wiedergabelisten werden gelöscht",
+          "settings": "Alle Einstellungen werden auf die Standardwerte zurückgesetzt",
+          "logs": "Alle Protokolldateien werden gelöscht",
+          "restart": "Die App wird geschlossen und muss neu gestartet werden"
+        }
+      },
+      "resetDialog": {
+        "title": "Werksreset bestätigen",
+        "description": "Dadurch werden alle Ihre Soul Player-Daten dauerhaft gelöscht. Diese Aktion kann nicht rükgängig gemacht werden.",
+        "willBeDeleted": "Folgendes wird gelöscht:",
+        "items": {
+          "library": "Bibliotheksdatenbank (alle Titel, Alben, Künstler)",
+          "playlists": "Alle Wiedergabelisten",
+          "settings": "Alle benutzerdefinierten Einstellungen",
+          "logs": "Protokolldateien",
+          "cache": "Zwischengespeicherte Artwork und Vorschaubilder"
+        },
+        "confirmLabel": "Geben Sie \"reset\" zur Bestätigung ein",
+        "confirmPlaceholder": "reset",
+        "confirmHint": "Geben Sie das Wort \"reset\" genau wie angegeben ein, um die Schaltfläche zu aktivieren",
+        "cancel": "Abbrechen",
+        "confirm": "Soul Player zurücksetzen"
+      },
+      "resetError": "Soul Player konnte nicht zurückgesetzt werden. Bitte versuchen Sie es erneut oder löschen Sie manuell ~/.config/soul-player/ (Linux) bzw. %APPDATA%Soul Player (Windows)"
+    }
   },
   "shortcuts": {
     "playPause": "Wiedergabe/Pause",
@@ -137,7 +289,15 @@
     "selectFolder": "Ordner auswählen",
     "importing": "Wird importiert...",
     "imported": "{{count}} Titel importiert",
-    "cancel": "Import abbrechen"
+    "cancel": "Import abbrechen",
+    "dropToAdd": "Zum Hinzufügen ablegen",
+    "releaseToAdd": "Loslassen, um zur Bibliothek hinzuzufügen",
+    "fileDropped": "Dateien abgelegt",
+    "playNow": "Jetzt abspielen",
+    "playNowDescription": "Sofort abspielen ohne zur Bibliothek hinzuzufügen",
+    "importToLibrary": "In Bibliothek importieren",
+    "importToLibraryDescription": "Zur Musikbibliothek für dauerhaften Zugriff hinzufügen",
+    "rememberChoice": "Meine Wahl merken"
   },
   "playlist": {
     "create": "Wiedergabeliste erstellen",
@@ -152,7 +312,12 @@
     "createHint": "Erstellen Sie eine Wiedergabeliste, um Ihre Musik zu organisieren",
     "newPlaylistName": "Neue Wiedergabeliste",
     "empty": "Diese Wiedergabeliste ist leer",
-    "emptyHint": "Fügen Sie Titel aus Ihrer Bibliothek hinzu"
+    "emptyHint": "Fügen Sie Titel aus Ihrer Bibliothek hinzu",
+    "deleteConfirmTitle": "Wiedergabeliste löschen",
+    "deleteConfirmMessage": "Möchten Sie diese Wiedergabeliste wirklich löschen? Dies kann nicht rükgängig gemacht werden.",
+    "removeTrackTitle": "Titel entfernen",
+    "removeTrackMessage": "Diesen Titel aus der Wiedergabeliste entfernen?",
+    "delete": "Wiedergabeliste löschen"
   },
   "librarySettings": {
     "watchedFolders": "Überwachte Ordner",
@@ -161,7 +326,48 @@
     "addFolder": "Ordner hinzufügen",
     "errors": {
       "duplicatePath": "Dieser Ordner ist bereits in Ihrer Bibliothek vorhanden"
-    }
+    },
+    "sourceName": "Name (z. B. FLAC-Sammlung)",
+    "sourcePath": "Ordnerpfad",
+    "syncDeletes": "Titel entfernen, wenn Dateien gelöscht werden",
+    "lastScanned": "Zuletzt durchsucht",
+    "rescan": "Erneut durchsuchen",
+    "rescanAll": "Alle erneut durchsuchen",
+    "forceRefresh": "Erneut importieren",
+    "forceRefreshDescription": "Metadaten für alle Dateien neu extrahieren, auch unveränderte. Verwenden Sie dies, um fehlende Künstler-/Albuminformationen zu beheben.",
+    "managedLibrary": "Verwaltete Bibliothek",
+    "managedLibraryDescription": "Wo importierte Dateien organisiert werden",
+    "libraryPath": "Bibliotheksordner",
+    "libraryPathPlaceholder": "z. B. C:MusikSoul Player",
+    "pathTemplate": "Dateiorganisation",
+    "preview": "Vorschau",
+    "importAction": "Beim Importieren",
+    "action": {
+      "copy": "Dateien kopieren (Originale behalten)",
+      "move": "Dateien verschieben (Originale löschen)"
+    },
+    "preset": {
+      "audiophile": "Audiophil (Künstler/Jahr - Album/Titel)",
+      "simple": "Einfach (Künstler/Album/Titel)",
+      "genre": "Nach Genre (Genre/Künstler/Album/Titel)",
+      "custom": "Benutzerdefiniert"
+    },
+    "externalFiles": "Externe Dateien",
+    "externalFilesDescription": "Umgang mit Dateien, die von außerhalb der App geöffnet werden",
+    "defaultAction": "Standardaktion",
+    "externalAction": {
+      "ask": "Jedes Mal fragen",
+      "play": "Ohne Import abspielen",
+      "import": "In Bibliothek importieren"
+    },
+    "importDestination": "Importziel",
+    "destination": {
+      "managed": "Verwaltete Bibliothek",
+      "watched": "Überwachter Ordner"
+    },
+    "targetFolder": "Zielordner",
+    "selectFolder": "Ordner auswählen",
+    "showImportNotification": "Benachrichtigung nach dem Import anzeigen"
   },
   "common": {
     "save": "Speichern",
@@ -190,12 +396,20 @@
     "enabled": "Aktiviert",
     "retry": "Erneut versuchen",
     "error": "Fehler",
-    "saving": "Speichern..."
+    "saving": "Speichern...",
+    "items": "Elemente",
+    "file": "Datei",
+    "files": "Dateien",
+    "folder": "Ordner",
+    "folders": "Ordner",
+    "done": "Fertig",
+    "andMore": "und {{count}} weitere"
   },
   "trackMenu": {
     "showInExplorer": "Im Datei-Explorer anzeigen",
     "removeFromManagedLibrary": "Aus verwalteter Bibliothek entfernen",
-    "removeFromLibrary": "Aus Bibliothek entfernen"
+    "removeFromLibrary": "Aus Bibliothek entfernen",
+    "deleteFromManagedLibrary": "Aus verwalteter Bibliothek löschen"
   },
   "artwork": {
     "edit": {
@@ -216,8 +430,12 @@
       "description": "Wie möchten Sie dieses Artwork speichern?",
       "editMetadata": "Datei-Metadaten bearbeiten",
       "editMetadataDesc": "Schreibt das Artwork in alle Audiodateien dieses Albums",
-      "soulPlayerOnly": "Nur Soul Player",
-      "soulPlayerOnlyDesc": "Speichert das Artwork ohne Ihre Audiodateien zu ändern"
+      "soulPlayerOnly": "Nur Soul Player-Speicher",
+      "soulPlayerOnlyDesc": "Wird von Soul Player separat verwaltet, ohne Ihre Musikdateien zu ändern",
+      "albumFolderOnly": "Nur Album-Ordner",
+      "albumFolderOnlyDesc": "Speichert als cover.jpg im Album-Ordner (empfohlen für Audiophile)",
+      "albumFolderAndMetadata": "Album-Ordner + Track-Metadaten",
+      "albumFolderAndMetadataDesc": "Speichert als cover.jpg im Album-Ordner und bettet es in alle Trackdateien ein"
     },
     "errors": {
       "invalidFileType": "Bitte wählen Sie eine Bilddatei",
@@ -225,6 +443,357 @@
       "readFailed": "Bilddatei konnte nicht gelesen werden",
       "saveFailed": "Artwork konnte nicht gespeichert werden",
       "removeFailed": "Artwork konnte nicht entfernt werden"
+    },
+    "priority": {
+      "highest": "Höchste Priorität",
+      "medium": "Mittlere Priorität",
+      "lowest": "Niedrigste Priorität"
     }
+  },
+  "scan": {
+    "scanning": "Bibliothek wird durchsucht",
+    "scanningSource": "{{name}} wird durchsucht",
+    "scanningSources": "{{count}} Quellen werden durchsucht",
+    "complete": "Suche abgeschlossen",
+    "newFiles": "{{count}} neue Dateien",
+    "updatedFiles": "{{count}} aktualisiert",
+    "removedFiles": "{{count}} entfernt",
+    "errors": "{{count}} Fehler"
+  },
+  "sources": {
+    "title": "Quellen",
+    "description": "Musikquellen und Serververbindungen verwalten",
+    "localSource": "Lokale Dateien",
+    "localSourceDescription": "Auf diesem Gerät gespeicherte Musik",
+    "serverSources": "Serverquellen",
+    "serverSourcesDescription": "Mit Soul Player-Servern für Streaming und Synchronisierung verbinden",
+    "noServers": "Keine Server konfiguriert",
+    "addServer": "Server hinzufügen",
+    "serverName": "Servername",
+    "serverUrlPlaceholder": "https://music.example.com",
+    "testConnection": "Verbindung testen",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "signIn": "Anmelden",
+    "signOut": "Abmelden",
+    "signedInAs": "Angemeldet als {{username}}",
+    "notSignedIn": "Nicht angemeldet",
+    "authFailed": "Authentifizierung fehlgeschlagen",
+    "active": "Aktiv",
+    "setActive": "Als aktiv festlegen",
+    "syncFromServer": "Vom Server synchronisieren",
+    "uploadToServer": "Auf Server hochladen",
+    "syncFailed": "Synchronisierung fehlgeschlagen",
+    "lastSync": "Letzte Synchronisierung",
+    "connectionStatus": {
+      "online": "Online",
+      "offline": "Offline",
+      "checking": "Wird geprüft..."
+    }
+  },
+  "artist": {
+    "notFound": "Künstler nicht gefunden",
+    "backToArtists": "Zurück zu Künstlern",
+    "noArtists": "Keine Künstler gefunden",
+    "noArtistsHint": "Importieren Sie Musik, um Ihre Künstler zu sehen",
+    "topSongs": "Top-Songs",
+    "discography": "Diskografie",
+    "viewGrid": "Raster",
+    "viewList": "Liste",
+    "noTopSongs": "Noch kein Wiedergabeverlauf",
+    "noTopSongsHint": "Spielen Sie Titel ab, um Top-Songs zu sehen",
+    "expandAlbum": "Album aufklappen",
+    "collapseAlbum": "Album zuklappen"
+  },
+  "album": {
+    "notFound": "Album nicht gefunden",
+    "backToAlbums": "Zurück zu Alben"
+  },
+  "genre": {
+    "notFound": "Genre nicht gefunden",
+    "backToGenres": "Zurück zu Genres",
+    "noGenres": "Keine Genres gefunden",
+    "noGenresHint": "Genre-Informationen werden aus Ihren Musikdateien extrahiert"
+  },
+  "upload": {
+    "title": "Auf Server hochladen",
+    "subtitle": "Musik mit einem Soul Player-Server synchronisieren",
+    "selectServer": "Bitte einen Server auswählen",
+    "selectDestination": "Zielserver auswählen",
+    "noServers": "Keine authentifizierten Server verfügbar",
+    "addServerHint": "Fügen Sie einen Server in Einstellungen > Quellen hinzu und melden Sie sich an",
+    "whatToUpload": "Was hochladen",
+    "selectedTracks": "Ausgewählte Titel",
+    "tracksCount": "{{count}} Titel ausgewählt",
+    "noTracksSelected": "Keine Titel ausgewählt",
+    "entireLibrary": "Gesamte Bibliothek",
+    "syncAllTracks": "Alle Titel mit dem Server synchronisieren",
+    "fromFolder": "Aus Ordner",
+    "uploadFolder": "Musik aus einem Ordner hochladen",
+    "selectFolderPlaceholder": "Ordner auswählen...",
+    "startUpload": "Upload starten",
+    "uploading": "Wird hochgeladen...",
+    "complete": "Upload abgeschlossen",
+    "completeDescription": "Ihre Musik wurde auf den Server hochgeladen",
+    "someErrors": "{{count}} Dateien konnten nicht hochgeladen werden",
+    "error": "Upload fehlgeschlagen"
+  },
+  "queue": {
+    "playNext": "Als Nächstes abspielen",
+    "addToQueue": "Zur Warteschlange hinzufügen",
+    "clearPlayNext": "\"Als Nächstes\" leeren",
+    "clearQueue": "Warteschlange leeren"
+  },
+  "crossfeed": {
+    "title": "Crossfeed",
+    "subtitle": "Kopfhörer-Klangbühnenverbesserung",
+    "explanation": "Crossfeed fügt eine subtile Kanalmischung hinzu, um zu simulieren, wie Lautsprecher in einem Raum klingen. Dadurch wird die extreme Stereobreite von Kopfhörern reduziert, was lange Hörsitzungen angenehmer und natürlicher macht.",
+    "selectPreset": "Preset auswählen",
+    "recommended": "Empfohlen",
+    "level": "Crossfeed-Stärke",
+    "subtle": "Subtil",
+    "strong": "Stark",
+    "advancedControls": "Erweiterte Einstellungen",
+    "cutoffFrequency": "Crossfeed-Filter-Cutoff",
+    "cutoffExplanation": "Höhere Frequenzen sind stärker gerichtet. Niedrigere Cutoff-Werte wenden Crossfeed nur auf Bass und Mitten an und erhalten die Stereoabbildung in den Höhen.",
+    "currentSettings": "Aktuelle Einstellungen",
+    "preset": "Preset",
+    "cutoff": "Cutoff",
+    "presets": {
+      "natural": "Natural",
+      "naturalDesc": "Subtiler Crossfeed für eine natürliche Klangbühne. Am besten für die meisten Hörer.",
+      "relaxed": "Relaxed",
+      "relaxedDesc": "Moderater Crossfeed für entspanntes, ermüdungsfreies Hören.",
+      "meier": "Meier",
+      "meierDesc": "Klassischer Algorithmus mit ausgeprägtem Effekt. Basiert auf Jan Meiers Forschung.",
+      "custom": "Custom",
+      "customDesc": "Crossfeed-Parameter manuell feinjustieren."
+    }
+  },
+  "limiter": {
+    "title": "Limiter",
+    "ceiling": "Ceiling",
+    "release": "Release",
+    "gainReduction": "Gainreduktion",
+    "fast": "Schnell",
+    "slow": "Langsam",
+    "safe": "Sicher",
+    "recommended": "empfohlen",
+    "selectPreset": "Preset auswählen",
+    "presets": "Presets",
+    "backendPresets": "Systempresets",
+    "preset": {
+      "transparent": "Transparent",
+      "transparentDesc": "Sauberes Limiting mit minimalen Artefakten",
+      "punchy": "Punchy",
+      "punchyDesc": "Schneller Release für dynamisches Material",
+      "loud": "Loud",
+      "loudDesc": "Aggressives Limiting für maximale Lautheit",
+      "mastering": "Mastering",
+      "masteringDesc": "Weicher, transparenter Mastering-Limiter"
+    },
+    "warning": {
+      "title": "Ceiling bei 0dB",
+      "description": "Ein Ceiling bei 0dB kann auf einigen Wiedergabesystemen zu Inter-Sample-Peaks und Clipping führen. Verwenden Sie -0.1dB oder weniger für sicheren Headroom."
+    },
+    "info": {
+      "title": "Brick-Wall-Limiting",
+      "description": "Ein Limiter verhindert, dass Audio den Ceiling-Schwellenwert überschreitet. Verwenden Sie ihn, um Clipping zu verhindern und Peaks zu kontrollieren. Kürzere Release-Zeiten sind aggressiver, längere sind transparenter."
+    }
+  },
+  "convolution": {
+    "title": "Faltungshall",
+    "impulseResponse": "Impulsantwort",
+    "loadIr": "IR laden",
+    "clearIr": "Löschen",
+    "noIrLoaded": "Keine Impulsantwort geladen",
+    "audioFiles": "Audiodateien",
+    "supportedFormats": "Unterstützte Formate: WAV, FLAC, AIFF",
+    "wetDryMix": "Wet/Dry-Mix",
+    "dry": "Dry (Bypass)",
+    "wet": "Wet (Volleffekt)",
+    "preDelay": "Pre-Delay",
+    "preDelayDesc": "Fügt Raum vor dem Hall hinzu und simuliert die Raumtiefe",
+    "decay": "Decay / Länge",
+    "shorter": "50% (Kürzer)",
+    "normal": "100% (Normal)",
+    "longer": "200% (Länger)",
+    "builtInPresets": "Integrierte Presets",
+    "presetsNote": "Diese Presets verwenden mitgelieferte Impulsantworten, die für das Musikhören optimiert sind",
+    "notAvailable": "Faltungshall nicht verfügbar",
+    "notAvailableDesc": "Die Faltungs-Engine konnte nicht initialisiert werden. Bitte prüfen Sie, ob Ihr Audiogerät korrekt konfiguriert ist.",
+    "infoTitle": "Über Faltungshall",
+    "infoText": "Faltungshall verwendet akustische Aufnahmen aus der realen Welt (Impulsantworten), um realistische Halleffekte zu erzeugen. Laden Sie IR-Dateien von Aufnahmestudios, Konzertsälen oder Gitarrenkabinetten, um Ihrem Audio Raum und Charakter zu verleihen.",
+    "presets": {
+      "smallRoom": "Small Room",
+      "smallRoomDesc": "Intime Studioraum-Atmosphäre",
+      "largeHall": "Large Hall",
+      "largeHallDesc": "Konzertsaal mit langem Hallausklang",
+      "plate": "Plate Reverb",
+      "plateDesc": "Klassischer Plattenhall für Vocals",
+      "chamber": "Chamber",
+      "chamberDesc": "Natürlicher Echokammer-Hall"
+    },
+    "errors": {
+      "loadFailed": "Impulsantwortdatei konnte nicht geladen werden"
+    }
+  },
+  "effects": {
+    "compressor": {
+      "title": "Kompressor",
+      "presets": "Presets",
+      "reset": "Auf Standard zurücksetzen",
+      "threshold": "Threshold",
+      "thresholdDesc": "Threshold",
+      "thresholdHelp": "Signalpegel, bei dem die Kompression beginnt",
+      "ratio": "Ratio",
+      "ratioDesc": "Ratio",
+      "ratioHelp": "Kompressionstärke (4:1 = 4dB Eingang wird zu 1dB Ausgang über dem Threshold)",
+      "attack": "Attack",
+      "attackLabel": "ATK",
+      "release": "Release",
+      "releaseLabel": "REL",
+      "knee": "Knee",
+      "kneeDesc": "Knee",
+      "kneeHelp": "Weicht den Übergang am Threshold auf (0 = hart, höher = weicher)",
+      "makeupGain": "Makeup",
+      "hard": "hart",
+      "soft": "weich",
+      "timing": "Attack / Release Timing",
+      "gainReduction": "Gainreduktion",
+      "preset": {
+        "gentle": "Gentle",
+        "gentleDesc": "Subtile Kompression für Vocals und akustische Instrumente",
+        "moderate": "Moderate",
+        "moderateDesc": "Ausgewogene Kompression für den Mix-Bus",
+        "aggressive": "Aggressive",
+        "aggressiveDesc": "Starke Kompression zur Limitierung der Dynamik",
+        "transparent": "Transparent",
+        "transparentDesc": "Sehr subtil, breites Knee für natürliche Dynamik",
+        "punchy": "Punchy",
+        "punchyDesc": "Schneller Attack für Punch und Schlagkraft",
+        "vocal": "Vocal",
+        "vocalDesc": "Optimiert für Stimme mit weichem Attack",
+        "limiting": "Limiting",
+        "limitingDesc": "Hohes Ratio, schneller Attack für Brick-Wall-Limiting"
+      },
+      "info": {
+        "title": "Dynamikbereichskompression",
+        "description": "Ein Kompressor reduziert den Dynamikbereich, indem er Signale oberhalb des Thresholds abschwächt. Verwenden Sie ihn, um Peaks zu kontrollieren, Sustain hinzuzufügen oder Elemente zu verbinden."
+      }
+    }
+  },
+  "dsp": {
+    "addEffect": "Effekt hinzufügen",
+    "editEffect": "Effekt bearbeiten",
+    "effectSettings": "Effekteinstellungen",
+    "stereo": {
+      "preset": "Preset",
+      "customPreset": "Benutzerdefiniert",
+      "reset": "Auf Normal zurücksetzen",
+      "width": "Stereobreite",
+      "balance": "Balance",
+      "center": "Mitte",
+      "left": "L",
+      "right": "R",
+      "monoLabel": "Mono",
+      "normalLabel": "Normal",
+      "wideLabel": "Breit",
+      "advanced": "Erweitert",
+      "midSide": "Mid/Side-Verarbeitung",
+      "midGain": "Mid Gain",
+      "sideGain": "Side Gain",
+      "centerContent": "Mitteninhalt",
+      "stereoContent": "Stereoinhalt",
+      "midSideExplanationTitle": "Was ist Mid/Side?",
+      "midSideExplanation": "Mid enthält den Mitteninhalt (Mono) wie Vocals und Bass. Side enthält die Stereodifferenz wie Hallfahnen und breite Instrumente. Die unabhängige Anpassung dieser Parameter gibt präzise Kontrolle über das Stereobild.",
+      "monoWarningTitle": "Mono-Kompatibilitätswarnung",
+      "monoWarningDescription": "Eine Breite über 150% kann Phasenprobleme bei Mono-Wiedergabe verursachen. Einige Audioinhalte können auf Mono-Systemen ausfallen oder hohl klingen.",
+      "tips": "Profi-Tipps",
+      "tip1": "Mid anheben, um Vocals und Mitteninstrumente zu betonen",
+      "tip2": "Side anheben, um das Stereobild zu verbreitern und Räumlichkeit hinzuzufügen",
+      "tip3": "Side absenken, um übermäßige Stereobreite oder Hall zu reduzieren",
+      "presets": {
+        "normal": "Normal",
+        "mono": "Mono",
+        "narrow": "Schmal",
+        "wide": "Breit",
+        "extrawide": "Extra Breit"
+      }
+    }
+  },
+  "parametricEq": {
+    "title": "Parametrischer EQ",
+    "presets": "Presets",
+    "resetToFlat": "Auf Flat zurücksetzen",
+    "bands": "Bänder",
+    "addBand": "Band hinzufügen",
+    "removeBand": "Band entfernen",
+    "enable": "Band aktivieren",
+    "disable": "Band deaktivieren",
+    "tips": "Tipps",
+    "tipDrag": "Knoten ziehen, um Frequenz und Gain anzupassen",
+    "tipQ": "Niedrigere Q-Werte erzeugen breitere Kurven, höhere Q erzeugen schmalere Peaks",
+    "tipTypes": "Shelf-Filter für breite Klangkorrekturen verwenden, Bell für gezielte Cuts"
+  },
+  "filterTypes": {
+    "bell": "Bell",
+    "lowShelf": "Low Shelf",
+    "highShelf": "High Shelf",
+    "lowPass": "Low Pass",
+    "highPass": "High Pass"
+  },
+  "eqPresets": {
+    "flat": "Flat",
+    "bassBoost": "Bass Boost",
+    "trebleBoost": "Treble Boost",
+    "vocal": "Vocal Clarity",
+    "loudness": "Loudness",
+    "deEsser": "De-esser"
+  },
+  "onboarding": {
+    "welcome": "Willkommen bei Soul Player",
+    "welcomeSubtitle": "Wie möchten Sie Ihre Musikbibliothek verwalten?",
+    "chooseTheme": "Thema auswählen",
+    "chooseThemeDescription": "Wählen Sie einen visuellen Stil für Soul Player",
+    "useExistingFolders": "Meine vorhandenen Ordner verwenden",
+    "useExistingFoldersDescription": "Zeigen Sie Soul Player auf Ordner, in denen Sie bereits Musik haben.",
+    "letSoulOrganize": "Soul Player organisieren lassen",
+    "letSoulOrganizeDescription": "Dateien in eine von Soul Player verwaltete, organisierte Bibliothek importieren.",
+    "nonDestructive": "Nicht-destruktiv",
+    "keepsStructure": "Behält Ihre Ordnerstruktur",
+    "autoOrganized": "Automatisch nach Künstler/Album organisiert",
+    "easyImport": "Einfacher Drag & Drop-Import",
+    "useBoth": "Beides verwenden (Ich richte das selbst ein)",
+    "changeLater": "Sie können dies jederzeit in den Einstellungen ändern",
+    "changeLaterSkip": "Sie können dies in den Einstellungen ändern, überspringen",
+    "skipForNow": "Vorerst überspringen",
+    "finish": "Fertigstellen",
+    "addMusicFolders": "Musikordner hinzufügen",
+    "addMusicFoldersDescription": "Soul Player durchsucht diese Ordner und hält sie synchron. Ihre Dateien werden niemals verschoben oder geändert.",
+    "folderName": "Name (z. B. FLAC-Sammlung)",
+    "folderPath": "Ordnerpfad (z. B. D:Musik)",
+    "browseForFolder": "Ordner suchen",
+    "browse": "Durchsuchen",
+    "chooseLibraryLocation": "Bibliotheksort auswählen",
+    "chooseLibraryLocationDescription": "Soul Player organisiert Ihre Musik in diesem Ordner. Importierte Dateien werden mit einer übersichtlichen Struktur hierher kopiert.",
+    "organizationStyle": "Organisationsstil",
+    "allSet": "Alles bereit!",
+    "allSetDescription": "Ihre Bibliothek wird eingerichtet. Dies kann einen Moment dauern..."
+  },
+  "updateDialog": {
+    "title": "Update verfügbar",
+    "versionAvailable": "Eine neue Version ist verfügbar",
+    "releaseNotes": "Was ist neu",
+    "viewFullReleaseNotes": "Vollständige Versionshinweise anzeigen →",
+    "downloading": "Update wird heruntergeladen",
+    "installing": "Wird installiert...",
+    "installNow": "Jetzt installieren",
+    "later": "Später",
+    "packageManagerUpdateRequired": "Paketmanager-Update erforderlich",
+    "packageManagerUpdateDescription": "Ihre Installationsmethode erfordert eine Aktualisierung über Ihren Systempaketmanager. Kopieren Sie den folgenden Befehl und führen Sie ihn aus:",
+    "copy": "Kopieren",
+    "copied": "Kopiert!",
+    "viewRelease": "Release anzeigen"
   }
 }

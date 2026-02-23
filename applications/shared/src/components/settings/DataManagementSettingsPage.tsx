@@ -135,7 +135,7 @@ export function DataManagementSettingsPage({ embedded = false }: { embedded?: bo
     <div className={embedded ? 'space-y-6' : 'p-6 max-w-2xl'}>
       {!embedded && (
         <>
-          <h1 className="text-2xl font-bold mb-2">{t('settings.dataManagement.title')}</h1>
+          <h1 className="text-2xl font-bold mb-6">{t('settings.dataManagement.title')}</h1>
           <p className="text-muted-foreground mb-6">{t('settings.dataManagement.description')}</p>
         </>
       )}
@@ -157,7 +157,7 @@ export function DataManagementSettingsPage({ embedded = false }: { embedded?: bo
               <Trash2 className="w-6 h-6 text-destructive" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-semibold mb-2">
+              <h2 className="text-base font-semibold mb-1">
                 {t('settings.dataManagement.reset.title')}
               </h2>
               <p className="text-sm text-muted-foreground mb-4">

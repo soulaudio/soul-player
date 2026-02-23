@@ -1,8 +1,16 @@
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Volume2 } from 'lucide-react';
+import { useBackend, SITE_URL, GITHUB_URL } from '@soul-player/shared';
 
 export function AboutSettingsPage() {
   const { t } = useTranslation();
+  const backend = useBackend();
+  const [version, setVersion] = useState<string>('...');
+
+  useEffect(() => {
+    backend.getVersion().then(setVersion).catch(() => setVersion('—'));
+  }, [backend]);
 
   return (
     <div className="max-w-2xl">
@@ -15,7 +23,7 @@ export function AboutSettingsPage() {
         <div>
           <h3 className="text-lg font-semibold">{t('app.title', 'Soul Player')}</h3>
           <p className="text-sm text-muted-foreground">
-            {t('settings.version')} {process.env.TAURI_VERSION || '0.1.7'}
+            {t('settings.version')} {version}
           </p>
         </div>
       </div>
@@ -25,10 +33,10 @@ export function AboutSettingsPage() {
       </p>
 
       <section className="mb-6">
-        <h2 className="text-sm font-medium mb-3">{t('settings.links')}</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{t('settings.links')}</h2>
         <div className="space-y-2">
           <a
-            href="https://github.com/soulaudio/soul-player"
+            href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="block text-sm text-primary hover:underline"
@@ -36,7 +44,7 @@ export function AboutSettingsPage() {
             {t('settings.github')}
           </a>
           <a
-            href="https://soulplayer.app"
+            href={SITE_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="block text-sm text-primary hover:underline"

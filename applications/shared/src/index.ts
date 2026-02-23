@@ -86,6 +86,9 @@ export type { DemoTrack, DemoAlbum, DemoPlaylist, DemoData } from './lib/demo-st
 // Storage interfaces
 export type { PlaybackDataStorage } from './types/storage';
 
+// Constants
+export { SITE_URL, GITHUB_URL } from './constants/siteConfig';
+
 // Utils
 export { cn, formatDuration } from './lib/utils';
 export { getPlatform, isMac, getModifierKey, getModifierKeyName, formatShortcut } from './lib/platform';

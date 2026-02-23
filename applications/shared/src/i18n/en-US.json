@@ -220,10 +220,11 @@
     "links": "Links",
     "github": "GitHub",
     "website": "Website",
+    "localization": "Localization",
     "demoDisabled": "Available in desktop app",
     "sections": {
       "audio": "Audio",
-      "musicData": "Music & Data",
+      "musicData": "Data",
       "appearance": "Appearance",
       "shortcuts": "Keyboard Shortcuts",
       "reportBug": "Report Bug",

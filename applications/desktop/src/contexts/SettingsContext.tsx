@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import i18next from 'i18next';
 
 interface SettingsContextValue {
   showKeyboardShortcuts: boolean;
@@ -24,12 +25,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
-      const [shortcutsSetting, windowControlsSetting] = await Promise.all([
+      const [shortcutsSetting, windowControlsSetting, languageSetting] = await Promise.all([
         invoke<string | null>('get_user_setting', {
           key: 'ui.show_keyboard_shortcuts',
         }),
         invoke<string | null>('get_user_setting', {
           key: 'ui.hide_window_controls',
+        }),
+        invoke<string | null>('get_user_setting', {
+          key: 'ui.language',
         }),
       ]);
 
@@ -38,6 +42,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
       if (windowControlsSetting !== null) {
         setHideWindowControlsState(JSON.parse(windowControlsSetting));
+      }
+      if (languageSetting !== null) {
+        const lang = JSON.parse(languageSetting) as string;
+        if (lang && lang !== i18next.language) {
+          i18next.changeLanguage(lang);
+        }
       }
     } catch (error) {
       console.error('Failed to load settings:', error);

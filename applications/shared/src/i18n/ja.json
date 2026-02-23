@@ -9,7 +9,18 @@
     "jumpBackInto": "最近聴いた曲",
     "discovery": "ディスカバリー",
     "recentlyPlayed": "最近再生した曲",
-    "startPlaying": "音楽を再生して履歴を表示"
+    "startPlaying": "音楽を再生して履歴を表示",
+    "crateDigging": "クレートディギング",
+    "timeCapsule": "タイムカプセル",
+    "timeCapsuleSubtitle": "過去の同じ日の音楽",
+    "dontForget": "お忘れなく",
+    "dontForgetSubtitle": "ライブラリの隠れた名曲",
+    "genreMix": "{{genre}}ミックス",
+    "genreMixSubtitle": "厳選されたセレクション、4時間ごとに更新",
+    "recentlyAdded": "最近追加された曲",
+    "recentlyAddedSubtitle": "ライブラリへの新着",
+    "discoverArtists": "アーティストを発見",
+    "emptyAlbum": "空のアルバム"
   },
   "nav": {
     "home": "ホーム",
@@ -41,7 +52,14 @@
     "pause": "一時停止",
     "next": "次のトラック",
     "previous": "前のトラック",
-    "shuffle": "シャッフル",
+    "shuffle": {
+      "off": "シャッフル: オフ",
+      "random": "シャッフル: ランダム",
+      "smart": "シャッフル: スマート"
+    },
+    "shuffleOff": "シャッフル: オフ",
+    "shuffleRandom": "シャッフル: ランダム",
+    "shuffleSmart": "シャッフル: スマート",
     "repeat": "リピート",
     "volume": "音量",
     "mute": "ミュート",
@@ -72,6 +90,9 @@
     "loadFailed": "ライブラリの読み込みに失敗しました",
     "deleteTrack": "トラックを削除",
     "deleteTrackConfirm": "このトラックを削除してもよろしいですか？ライブラリから削除されます。",
+    "scanning": "ライブラリをスキャン中",
+    "scanningLibrary": "音楽ファイルをスキャンしています",
+    "scanComplete": "スキャン完了",
     "tab": {
       "albums": "アルバム",
       "playlists": "プレイリスト",
@@ -80,9 +101,13 @@
     },
     "search": {
       "albums": "アルバムを検索...",
+      "albumsWithCount": "{{count}}枚のアルバムを検索...",
       "playlists": "プレイリストを検索...",
+      "playlistsWithCount": "{{count}}件のプレイリストを検索...",
       "artists": "アーティストを検索...",
-      "tracks": "トラックを検索..."
+      "artistsWithCount": "{{count}}人のアーティストを検索...",
+      "tracks": "トラックを検索...",
+      "tracksWithCount": "{{count}}曲のトラックを検索..."
     }
   },
   "settings": {
@@ -96,30 +121,248 @@
     "themeOcean": "オーシャン",
     "themeAuto": "自動（デバイスに合わせる）",
     "language": "言語",
+    "localization": "ローカライゼーション",
     "hideWindowControls": "ウィンドウコントロールを自動非表示",
     "hideWindowControlsDescription": "スクロール時にウィンドウコントロール（最小化、最大化、閉じる）を自動的に非表示にします。上にスクロールするか、新しいページに移動すると再表示されます。",
     "hideLibrarySearch": "ライブラリ検索バーを非表示",
     "hideLibrarySearchDescription": "ライブラリビュー（アルバム、アーティスト、トラック、プレイリスト）の検索バーを常に非表示にします。",
     "showShortcuts": "キーボードショートカットを表示",
     "showShortcutsDescription": "ツールチップやUI要素にキーボードショートカットを表示します。例：",
+    "homePage": "ホームページ",
+    "homePageEnabled": "ホームページを有効化",
+    "homePageEnabledDescription": "パーソナライズされたレコメンデーションを含むダイナミックなホームページを表示",
+    "homeRefreshInterval": "更新間隔",
+    "homeRefreshIntervalDescription": "ホームページのセクションを更新する頻度（空白にすると毎回の訪問時に更新）",
+    "homeRefreshMinutes": "分",
+    "homeRefreshOnVisit": "訪問のたびに更新",
     "audio": {
       "title": "オーディオ",
-      "outputDevice": "出力デバイス"
+      "outputDevice": "出力デバイス",
+      "selectDevice": "オーディオデバイスを選択",
+      "output": "オーディオ出力",
+      "noDevicesFound": "オーディオデバイスが見つかりません",
+      "warning": {
+        "title": "実験的なオーディオパイプライン",
+        "description": "オーディオパイプラインと機能は現在も開発中であり、バグや不安定な動作が含まれる場合があります。問題が発生した場合は、設定の「バグを報告」セクションをご覧ください。"
+      },
+      "latency": {
+        "title": "レイテンシーモニター",
+        "loading": "レイテンシー情報を読み込み中...",
+        "refresh": "更新",
+        "buffer": "バッファレイテンシー",
+        "total": "合計レイテンシー",
+        "samples": "サンプル",
+        "excellent": "優秀",
+        "good": "良好",
+        "acceptable": "許容範囲",
+        "high": "高レイテンシー",
+        "visualization": "レイテンシー内訳"
+      },
+      "exclusive": {
+        "title": "エクスクルーシブモード",
+        "enabledDesc": "ビットパーフェクト出力、OSミキサーをバイパス",
+        "disabledDesc": "OSオーディオミキサーとの共有モード",
+        "enable": "有効化",
+        "disable": "無効化",
+        "benefit1": "低レイテンシーとビットパーフェクト出力",
+        "benefit2": "ダイレクトハードウェア制御（ASIO/WASAPI exclusive）"
+      },
+      "graphicEq": {
+        "title": "グラフィックイコライザー",
+        "reset": "リセット",
+        "selectPreset": "プリセットを選択",
+        "info": "周波数帯域を調整してサウンドを形作ります。スライダーを上にドラッグするとブースト、下にドラッグするとカットします。10バンドはISO標準の中心周波数に従っています。",
+        "presets": {
+          "flat": "フラット",
+          "bassboost": "Bass Boost",
+          "trebleboost": "Treble Boost",
+          "vocalboost": "Vocal Boost",
+          "rock": "Rock",
+          "pop": "Pop",
+          "jazz": "Jazz",
+          "classical": "Classical",
+          "loudness": "Loudness",
+          "custom": "カスタム"
+        }
+      },
+      "resampling": {
+        "applyOnNextTrack": "リサンプリング設定は次のトラックから適用されます"
+      }
     },
     "updates": "アップデート",
     "autoUpdate": "自動的にアップデートを確認",
     "silentUpdate": "自動的にアップデートをインストール",
     "checkNow": "今すぐ確認",
     "checking": "確認中...",
+    "upToDate": "最新バージョンをお使いです！",
+    "updateAvailable": "アップデートが利用可能",
+    "checkFailed": "アップデートの確認に失敗しました",
     "shortcuts": "キーボードショートカット",
     "resetShortcuts": "デフォルトに戻す",
+    "reportBug": "バグを報告",
+    "reportBugDescription": "発生した問題を報告してSoul Playerの改善にご協力ください",
+    "reportBugTitle": "バグを報告する",
+    "reportBugInstructions": "Soul Playerで問題が発生した場合は、GitHubで報告して改善にご協力ください。",
+    "reportBugSteps": {
+      "step1": "同じ問題がすでに報告されていないか確認する",
+      "step2": "再現手順を含む詳細なバグレポートを作成する",
+      "step3": "該当する場合はシステム情報とログを含める"
+    },
+    "reportBugGithubLink": "GitHub Issuesで報告する",
+    "reportBugLogs": "ログを表示",
+    "reportBugLogsDescription": "アプリケーションログは問題の診断に役立ちます。アプリ起動時に --logs フラグを使用してログを有効化してください。",
+    "reportBugLoggingToggleTitle": "ログ設定",
+    "reportBugLoggingToggleLabel": "ファイルログを有効化",
+    "reportBugLoggingToggleDescription": "診断ログをファイルに保存します。問題のトラブルシューティングに役立ちます。ログは毎日保存され、時間とともに増加する場合があります。",
+    "reportBugLoggingRestartRequired": "ログの変更を反映するにはアプリを再起動してください。",
     "about": "について",
     "aboutDescription": "高品質なオーディオ再生とプロフェッショナルなオーディオ処理パイプラインを備えたローカルファーストの音楽プレーヤー。",
     "version": "バージョン",
     "links": "リンク",
     "github": "GitHub",
     "website": "ウェブサイト",
-    "demoDisabled": "デスクトップアプリで利用可能"
+    "demoDisabled": "デスクトップアプリで利用可能",
+    "sections": {
+      "audio": "オーディオ",
+      "musicData": "データ",
+      "appearance": "外観",
+      "shortcuts": "キーボードショートカット",
+      "reportBug": "バグを報告",
+      "about": "について"
+    },
+    "musicData": {
+      "sourcesHeading": "ソース",
+      "dataHeading": "データ"
+    },
+    "dataManagement": {
+      "title": "データ管理",
+      "description": "ライブラリデータとアプリケーション設定を管理",
+      "warning": {
+        "title": "重要な情報",
+        "description": "Linux上でSoul Playerをアンインストールしても、デフォルトではユーザーデータが保持されます。これにはライブラリ、プレイリスト、および ~/.config/soul-player/ に保存された設定が含まれます。"
+      },
+      "reset": {
+        "title": "工場出荷時設定にリセット",
+        "description": "すべてのユーザーデータを削除し、Soul Playerを初期状態に戻します。アプリが再起動し、オンボーディング画面が表示されます。",
+        "button": "工場出荷時設定にリセット",
+        "effects": {
+          "library": "すべてのトラック、アルバム、アーティストが削除されます",
+          "playlists": "すべてのプレイリストが削除されます",
+          "settings": "すべての設定がデフォルトにリセットされます",
+          "logs": "すべてのログファイルが削除されます",
+          "restart": "アプリが閉じ、再起動が必要になります"
+        }
+      },
+      "resetDialog": {
+        "title": "工場出荷時設定のリセットを確認",
+        "description": "これにより、すべてのSoul Playerデータが完全に削除されます。この操作は取り消せません。",
+        "willBeDeleted": "以下が削除されます：",
+        "items": {
+          "library": "ライブラリデータベース（すべてのトラック、アルバム、アーティスト）",
+          "playlists": "すべてのプレイリスト",
+          "settings": "すべてのカスタム設定",
+          "logs": "ログファイル",
+          "cache": "キャッシュされたアートワークとサムネイル"
+        },
+        "confirmLabel": "確認のため \"reset\" と入力してください",
+        "confirmPlaceholder": "reset",
+        "confirmHint": "ボタンを有効にするには \"reset\" という単語をそのまま入力してください",
+        "cancel": "キャンセル",
+        "confirm": "Soul Playerをリセット"
+      },
+      "resetError": "Soul Playerのリセットに失敗しました。もう一度お試しいただくか、~/.config/soul-player/（Linux）または %APPDATA%Soul Player（Windows）を手動で削除してください"
+    }
+  },
+  "scan": {
+    "scanning": "ライブラリをスキャン中",
+    "scanningSource": "{{name}}をスキャン中",
+    "scanningSources": "{{count}}件のソースをスキャン中",
+    "complete": "スキャン完了",
+    "newFiles": "{{count}}件の新しいファイル",
+    "updatedFiles": "{{count}}件更新",
+    "removedFiles": "{{count}}件削除",
+    "errors": "{{count}}件のエラー"
+  },
+  "sources": {
+    "title": "ソース",
+    "description": "音楽ソースとサーバー接続を管理",
+    "localSource": "ローカルファイル",
+    "localSourceDescription": "このデバイスに保存されている音楽",
+    "serverSources": "サーバーソース",
+    "serverSourcesDescription": "Soul Playerサーバーに接続してストリーミングと同期を行う",
+    "noServers": "サーバーが設定されていません",
+    "addServer": "サーバーを追加",
+    "serverName": "サーバー名",
+    "serverUrlPlaceholder": "https://music.example.com",
+    "testConnection": "接続をテスト",
+    "username": "ユーザー名",
+    "password": "パスワード",
+    "signIn": "サインイン",
+    "signOut": "サインアウト",
+    "signedInAs": "{{username}}としてサインイン中",
+    "notSignedIn": "サインインしていません",
+    "authFailed": "認証に失敗しました",
+    "active": "アクティブ",
+    "setActive": "アクティブに設定",
+    "syncFromServer": "サーバーから同期",
+    "uploadToServer": "サーバーにアップロード",
+    "syncFailed": "同期に失敗しました",
+    "lastSync": "最終同期",
+    "connectionStatus": {
+      "online": "オンライン",
+      "offline": "オフライン",
+      "checking": "確認中..."
+    }
+  },
+  "librarySettings": {
+    "watchedFolders": "監視フォルダ",
+    "watchedFoldersDescription": "音楽ファイルをスキャンするフォルダ",
+    "noWatchedFolders": "監視フォルダが設定されていません",
+    "addFolder": "フォルダを追加",
+    "sourceName": "名前（例：FLACコレクション）",
+    "sourcePath": "フォルダのパス",
+    "syncDeletes": "ファイルが削除されたときにトラックを削除",
+    "lastScanned": "最終スキャン",
+    "rescan": "再スキャン",
+    "rescanAll": "すべて再スキャン",
+    "forceRefresh": "強制再インポート",
+    "forceRefreshDescription": "変更がないファイルも含め、すべてのファイルのメタデータを再抽出します。アーティスト/アルバム情報が欠けている場合に使用してください。",
+    "managedLibrary": "管理ライブラリ",
+    "managedLibraryDescription": "インポートされたファイルが整理される場所",
+    "libraryPath": "ライブラリフォルダ",
+    "libraryPathPlaceholder": "例：C:MusicSoul Player",
+    "pathTemplate": "ファイル整理",
+    "preview": "プレビュー",
+    "importAction": "インポート時の動作",
+    "action": {
+      "copy": "ファイルをコピー（オリジナルを保持）",
+      "move": "ファイルを移動（オリジナルを削除）"
+    },
+    "preset": {
+      "audiophile": "オーディオファイル（アーティスト/年 - アルバム/トラック）",
+      "simple": "シンプル（アーティスト/アルバム/トラック）",
+      "genre": "ジャンル別（ジャンル/アーティスト/アルバム/トラック）",
+      "custom": "カスタム"
+    },
+    "externalFiles": "外部ファイル",
+    "externalFilesDescription": "アプリ外から開いたファイルの処理方法",
+    "defaultAction": "デフォルトの動作",
+    "externalAction": {
+      "ask": "毎回確認する",
+      "play": "インポートせずに再生",
+      "import": "ライブラリにインポート"
+    },
+    "importDestination": "インポート先",
+    "destination": {
+      "managed": "管理ライブラリ",
+      "watched": "監視フォルダ"
+    },
+    "targetFolder": "対象フォルダ",
+    "selectFolder": "フォルダを選択",
+    "showImportNotification": "インポート後に通知を表示",
+    "errors": {
+      "duplicatePath": "このフォルダはすでにライブラリに追加されています"
+    }
   },
   "shortcuts": {
     "playPause": "再生/一時停止",
@@ -137,7 +380,39 @@
     "selectFolder": "フォルダを選択",
     "importing": "インポート中...",
     "imported": "{{count}}トラックをインポートしました",
-    "cancel": "インポートをキャンセル"
+    "cancel": "インポートをキャンセル",
+    "dropToAdd": "ドロップして追加",
+    "releaseToAdd": "離してライブラリに追加",
+    "fileDropped": "ファイルがドロップされました",
+    "playNow": "今すぐ再生",
+    "playNowDescription": "ライブラリに追加せずにすぐに再生",
+    "importToLibrary": "ライブラリにインポート",
+    "importToLibraryDescription": "永続的にアクセスできるように音楽ライブラリに追加",
+    "rememberChoice": "選択を記憶する"
+  },
+  "artist": {
+    "notFound": "アーティストが見つかりません",
+    "backToArtists": "アーティスト一覧に戻る",
+    "noArtists": "アーティストが見つかりません",
+    "noArtistsHint": "音楽をインポートしてアーティストを表示",
+    "topSongs": "トップソング",
+    "discography": "ディスコグラフィー",
+    "viewGrid": "グリッド",
+    "viewList": "リスト",
+    "noTopSongs": "まだ再生履歴がありません",
+    "noTopSongsHint": "トラックを再生してトップソングを表示",
+    "expandAlbum": "アルバムを展開",
+    "collapseAlbum": "アルバムを折りたたむ"
+  },
+  "album": {
+    "notFound": "アルバムが見つかりません",
+    "backToAlbums": "アルバム一覧に戻る"
+  },
+  "genre": {
+    "notFound": "ジャンルが見つかりません",
+    "backToGenres": "ジャンル一覧に戻る",
+    "noGenres": "ジャンルが見つかりません",
+    "noGenresHint": "ジャンル情報は音楽ファイルから抽出されます"
   },
   "playlist": {
     "create": "プレイリストを作成",
@@ -152,16 +427,35 @@
     "createHint": "プレイリストを作成して音楽を整理しましょう",
     "newPlaylistName": "新しいプレイリスト",
     "empty": "このプレイリストは空です",
-    "emptyHint": "ライブラリからトラックを追加してください"
+    "emptyHint": "ライブラリからトラックを追加してください",
+    "deleteConfirmTitle": "プレイリストを削除",
+    "deleteConfirmMessage": "このプレイリストを削除してもよろしいですか？この操作は取り消せません。",
+    "removeTrackTitle": "トラックを削除",
+    "removeTrackMessage": "このトラックをプレイリストから削除しますか？",
+    "delete": "プレイリストを削除"
   },
-  "librarySettings": {
-    "watchedFolders": "監視フォルダ",
-    "watchedFoldersDescription": "音楽ファイルをスキャンするフォルダ",
-    "noWatchedFolders": "監視フォルダが設定されていません",
-    "addFolder": "フォルダを追加",
-    "errors": {
-      "duplicatePath": "このフォルダはすでにライブラリに追加されています"
-    }
+  "upload": {
+    "title": "サーバーにアップロード",
+    "subtitle": "Soul Playerサーバーに音楽を同期",
+    "selectServer": "サーバーを選択してください",
+    "selectDestination": "送信先サーバーを選択",
+    "noServers": "認証済みのサーバーがありません",
+    "addServerHint": "設定 > ソースでサーバーを追加・認証してください",
+    "whatToUpload": "アップロード対象",
+    "selectedTracks": "選択したトラック",
+    "tracksCount": "{{count}}曲選択中",
+    "noTracksSelected": "トラックが選択されていません",
+    "entireLibrary": "ライブラリ全体",
+    "syncAllTracks": "すべてのトラックをサーバーに同期",
+    "fromFolder": "フォルダから",
+    "uploadFolder": "フォルダから音楽をアップロード",
+    "selectFolderPlaceholder": "フォルダを選択...",
+    "startUpload": "アップロード開始",
+    "uploading": "アップロード中...",
+    "complete": "アップロード完了",
+    "completeDescription": "音楽がサーバーにアップロードされました",
+    "someErrors": "{{count}}件のファイルのアップロードに失敗しました",
+    "error": "アップロード失敗"
   },
   "common": {
     "save": "保存",
@@ -177,10 +471,17 @@
     "title": "タイトル",
     "continue": "続ける",
     "back": "戻る",
+    "items": "件",
+    "file": "ファイル",
+    "files": "ファイル",
+    "folder": "フォルダ",
+    "folders": "フォルダ",
     "browse": "参照",
+    "done": "完了",
     "all": "すべて",
     "filters": "フィルター",
     "clearFilters": "フィルターをクリア",
+    "andMore": "他{{count}}件",
     "loading": "読み込み中...",
     "playAll": "すべて再生",
     "unknownArtist": "不明なアーティスト",
@@ -194,8 +495,15 @@
   },
   "trackMenu": {
     "showInExplorer": "エクスプローラーで表示",
+    "deleteFromManagedLibrary": "管理ライブラリから完全削除",
     "removeFromManagedLibrary": "管理ライブラリから削除",
     "removeFromLibrary": "ライブラリから削除"
+  },
+  "queue": {
+    "playNext": "次に再生",
+    "addToQueue": "キューに追加",
+    "clearPlayNext": "次に再生をクリア",
+    "clearQueue": "キューをクリア"
   },
   "artwork": {
     "edit": {
@@ -214,10 +522,17 @@
     "writeChoice": {
       "title": "アートワークを保存",
       "description": "このアートワークをどのように保存しますか？",
-      "editMetadata": "ファイルのメタデータを編集",
-      "editMetadataDesc": "このアルバムのすべてのオーディオファイルにアートワークを書き込みます",
+      "albumFolderOnly": "アルバムフォルダのみ",
+      "albumFolderOnlyDesc": "アルバムフォルダにcover.jpgとして保存（オーディオファイルに推奨）",
+      "albumFolderAndMetadata": "アルバムフォルダ＋トラックメタデータ",
+      "albumFolderAndMetadataDesc": "アルバムフォルダにcover.jpgとして保存し、すべてのトラックファイルに埋め込む",
       "soulPlayerOnly": "Soul Playerのみ",
-      "soulPlayerOnlyDesc": "オーディオファイルを変更せずにアートワークを保存します"
+      "soulPlayerOnlyDesc": "オーディオファイルを変更せずにSoul Playerが個別に管理"
+    },
+    "priority": {
+      "highest": "最高優先度",
+      "medium": "中優先度",
+      "lowest": "最低優先度"
     },
     "errors": {
       "invalidFileType": "画像ファイルを選択してください",
@@ -226,5 +541,257 @@
       "saveFailed": "アートワークの保存に失敗しました",
       "removeFailed": "アートワークの削除に失敗しました"
     }
+  },
+  "crossfeed": {
+    "title": "クロスフィード",
+    "subtitle": "ヘッドフォン音場拡張",
+    "explanation": "クロスフィードは、スピーカーが部屋で鳴るような雰囲気を再現するために、チャンネル間の微妙なミキシングを加えます。ヘッドフォンの極端なステレオ分離を軽減し、長時間のリスニングをより快適かつ自然にします。",
+    "selectPreset": "プリセットを選択",
+    "recommended": "推奨",
+    "level": "クロスフィードレベル",
+    "subtle": "控えめ",
+    "strong": "強め",
+    "advancedControls": "詳細コントロール",
+    "cutoffFrequency": "クロスフィードフィルターカットオフ",
+    "cutoffExplanation": "高周波数はより指向性があります。カットオフ値を低くすると、低音・中音域のみにクロスフィードが適用され、高音域のステレオイメージが保たれます。",
+    "currentSettings": "現在の設定",
+    "preset": "プリセット",
+    "cutoff": "カットオフ",
+    "presets": {
+      "natural": "ナチュラル",
+      "naturalDesc": "自然な音場のための控えめなクロスフィード。ほとんどのリスナーに最適。",
+      "relaxed": "リラックス",
+      "relaxedDesc": "カジュアルで疲れにくいリスニングのための適度なクロスフィード。",
+      "meier": "マイヤー",
+      "meierDesc": "顕著な効果を持つクラシックアルゴリズム。Jan Meierの研究に基づく。",
+      "custom": "カスタム",
+      "customDesc": "クロスフィードパラメーターを手動で微調整。"
+    }
+  },
+  "limiter": {
+    "title": "リミッター",
+    "ceiling": "シーリング",
+    "release": "リリース",
+    "gainReduction": "ゲインリダクション",
+    "fast": "速い",
+    "slow": "遅い",
+    "safe": "安全",
+    "recommended": "推奨",
+    "selectPreset": "プリセットを選択",
+    "presets": "プリセット",
+    "backendPresets": "システムプリセット",
+    "preset": {
+      "transparent": "Transparent",
+      "transparentDesc": "アーティファクトを最小限に抑えたクリーンなリミッティング",
+      "punchy": "Punchy",
+      "punchyDesc": "ダイナミックな素材向けの速いリリース",
+      "loud": "Loud",
+      "loudDesc": "最大ラウドネスのためのアグレッシブなリミッティング",
+      "mastering": "Mastering",
+      "masteringDesc": "スムーズで透明感のあるマスタリングリミッター"
+    },
+    "warning": {
+      "title": "シーリングが0dB",
+      "description": "0dBのシーリングは、一部の再生システムでインターサンプルピークやクリッピングを引き起こす可能性があります。安全なヘッドルームのために -0.1dB 以下の使用を検討してください。"
+    },
+    "info": {
+      "title": "ブリックウォールリミッティング",
+      "description": "リミッターはオーディオがシーリング閾値を超えないようにします。クリッピングを防ぎ、ピークをコントロールするために使用します。リリースタイムが短いほどアグレッシブに、長いほど透明感が増します。"
+    }
+  },
+  "convolution": {
+    "title": "コンボリューションリバーブ",
+    "impulseResponse": "インパルスレスポンス",
+    "loadIr": "IRを読み込む",
+    "clearIr": "クリア",
+    "noIrLoaded": "インパルスレスポンスが読み込まれていません",
+    "audioFiles": "オーディオファイル",
+    "supportedFormats": "対応フォーマット：WAV、FLAC、AIFF",
+    "wetDryMix": "ウェット/ドライミックス",
+    "dry": "ドライ（バイパス）",
+    "wet": "ウェット（フルエフェクト）",
+    "preDelay": "プリディレイ",
+    "preDelayDesc": "リバーブが始まる前にスペースを追加し、部屋の距離感を演出",
+    "decay": "ディケイ / 長さ",
+    "shorter": "50%（短め）",
+    "normal": "100%（標準）",
+    "longer": "200%（長め）",
+    "builtInPresets": "内蔵プリセット",
+    "presetsNote": "これらのプリセットは音楽リスニング向けに最適化されたバンドルインパルスレスポンスを使用します",
+    "notAvailable": "コンボリューションは利用できません",
+    "notAvailableDesc": "コンボリューションエンジンを初期化できませんでした。オーディオデバイスが正しく設定されているか確認してください。",
+    "infoTitle": "コンボリューションについて",
+    "infoText": "コンボリューションリバーブは実世界の音響録音（インパルスレスポンス）を使用して、リアルなリバーブエフェクトを生成します。レコーディングスタジオ、コンサートホール、ギターキャビネットのIRファイルを読み込んで、オーディオに空間と個性を加えます。",
+    "presets": {
+      "smallRoom": "スモールルーム",
+      "smallRoomDesc": "親密なスタジオルームの雰囲気",
+      "largeHall": "ラージホール",
+      "largeHallDesc": "長いリバーブテールを持つコンサートホール",
+      "plate": "プレートリバーブ",
+      "plateDesc": "ボーカル向けのクラシックなプレートリバーブ",
+      "chamber": "チェンバー",
+      "chamberDesc": "自然なエコーチェンバーリバーブ"
+    },
+    "errors": {
+      "loadFailed": "インパルスレスポンスファイルの読み込みに失敗しました"
+    }
+  },
+  "effects": {
+    "compressor": {
+      "title": "コンプレッサー",
+      "presets": "プリセット",
+      "reset": "デフォルトにリセット",
+      "threshold": "スレッショルド",
+      "thresholdDesc": "スレッショルド",
+      "thresholdHelp": "圧縮が始まる信号レベル",
+      "ratio": "レシオ",
+      "ratioDesc": "レシオ",
+      "ratioHelp": "圧縮量（4:1 = スレッショルド以上で4dB入力が1dB出力）",
+      "attack": "アタック",
+      "attackLabel": "ATK",
+      "release": "リリース",
+      "releaseLabel": "REL",
+      "knee": "ニー",
+      "kneeDesc": "ニー",
+      "kneeHelp": "スレッショルドでの遷移を滑らかにする（0 = ハード、高いほどソフト）",
+      "makeupGain": "メイクアップ",
+      "hard": "ハード",
+      "soft": "ソフト",
+      "timing": "アタック / リリースタイミング",
+      "gainReduction": "ゲインリダクション",
+      "preset": {
+        "gentle": "Gentle",
+        "gentleDesc": "ボーカルとアコースティック楽器向けの控えめな圧縮",
+        "moderate": "Moderate",
+        "moderateDesc": "ミックスバス向けのバランスの取れた圧縮",
+        "aggressive": "Aggressive",
+        "aggressiveDesc": "ダイナミクスを抑えるためのヘビーな圧縮",
+        "transparent": "Transparent",
+        "transparentDesc": "自然なダイナミクスのための非常に控えめなワイドニー",
+        "punchy": "Punchy",
+        "punchyDesc": "パンチとインパクトのための速いアタック",
+        "vocal": "Vocal",
+        "vocalDesc": "スムーズなアタックでボイスに最適化",
+        "limiting": "Limiting",
+        "limitingDesc": "ブリックウォールリミッティングのための高レシオと速いアタック"
+      },
+      "info": {
+        "title": "ダイナミックレンジ圧縮",
+        "description": "コンプレッサーはスレッショルド以上の信号を減衰させることでダイナミックレンジを低減します。ピークのコントロール、サスティンの追加、各要素をまとめるために使用します。"
+      }
+    }
+  },
+  "dsp": {
+    "addEffect": "エフェクトを追加",
+    "editEffect": "エフェクトを編集",
+    "effectSettings": "エフェクト設定",
+    "stereo": {
+      "preset": "プリセット",
+      "customPreset": "カスタム",
+      "reset": "ノーマルにリセット",
+      "width": "ステレオ幅",
+      "balance": "バランス",
+      "center": "センター",
+      "left": "L",
+      "right": "R",
+      "monoLabel": "モノ",
+      "normalLabel": "ノーマル",
+      "wideLabel": "ワイド",
+      "advanced": "詳細",
+      "midSide": "ミッド/サイド処理",
+      "midGain": "ミッドゲイン",
+      "sideGain": "サイドゲイン",
+      "centerContent": "センターコンテンツ",
+      "stereoContent": "ステレオコンテンツ",
+      "midSideExplanationTitle": "ミッド/サイドとは？",
+      "midSideExplanation": "ミッドにはボーカルやベースなどのセンター（モノ）コンテンツが含まれます。サイドにはリバーブやワイドな楽器などのステレオ差分が含まれます。これらを独立して調整することで、ステレオイメージを正確にコントロールできます。",
+      "monoWarningTitle": "モノ互換性の警告",
+      "monoWarningDescription": "150%以上の幅はモノで再生した際に位相の問題を引き起こす可能性があります。モノシステムでは一部のオーディオコンテンツがキャンセルされたり、空洞感が生じる場合があります。",
+      "tips": "プロのヒント",
+      "tip1": "ミッドをブーストしてボーカルとセンター楽器を強調",
+      "tip2": "サイドをブーストしてステレオイメージを広げ、空間感を追加",
+      "tip3": "サイドをカットして過度なステレオ幅やリバーブを低減",
+      "presets": {
+        "normal": "ノーマル",
+        "mono": "モノ",
+        "narrow": "ナロー",
+        "wide": "ワイド",
+        "extrawide": "エクストラワイド"
+      }
+    }
+  },
+  "parametricEq": {
+    "title": "パラメトリックEQ",
+    "presets": "プリセット",
+    "resetToFlat": "フラットにリセット",
+    "bands": "バンド",
+    "addBand": "バンドを追加",
+    "removeBand": "バンドを削除",
+    "enable": "バンドを有効化",
+    "disable": "バンドを無効化",
+    "tips": "ヒント",
+    "tipDrag": "ノードをドラッグして周波数とゲインを調整",
+    "tipQ": "Q値が低いほど広いカーブ、高いほど狭いピーク",
+    "tipTypes": "広いトーン調整にはシェルフフィルター、局所的なカットにはベルを使用"
+  },
+  "filterTypes": {
+    "bell": "ベル",
+    "lowShelf": "ローシェルフ",
+    "highShelf": "ハイシェルフ",
+    "lowPass": "ローパス",
+    "highPass": "ハイパス"
+  },
+  "eqPresets": {
+    "flat": "フラット",
+    "bassBoost": "Bass Boost",
+    "trebleBoost": "Treble Boost",
+    "vocal": "Vocal Clarity",
+    "loudness": "Loudness",
+    "deEsser": "De-esser"
+  },
+  "onboarding": {
+    "welcome": "Soul Playerへようこそ",
+    "welcomeSubtitle": "音楽ライブラリをどのように管理しますか？",
+    "chooseTheme": "テーマを選択",
+    "chooseThemeDescription": "Soul Playerのビジュアルスタイルを選択",
+    "useExistingFolders": "既存のフォルダを使用",
+    "useExistingFoldersDescription": "すでに音楽があるフォルダをSoul Playerに指定します。",
+    "letSoulOrganize": "Soul Playerに整理させる",
+    "letSoulOrganizeDescription": "Soul Playerが管理する整理されたライブラリにファイルをインポートします。",
+    "nonDestructive": "非破壊的",
+    "keepsStructure": "フォルダ構造を保持",
+    "autoOrganized": "アーティスト/アルバムで自動整理",
+    "easyImport": "簡単なドラッグ＆ドロップインポート",
+    "useBoth": "両方使用する（自分で設定します）",
+    "changeLater": "後から設定で変更できます",
+    "changeLaterSkip": "後から設定で変更できます。スキップ",
+    "skipForNow": "今はスキップ",
+    "finish": "完了",
+    "addMusicFolders": "音楽フォルダを追加",
+    "addMusicFoldersDescription": "Soul Playerはこれらのフォルダをスキャンして同期を保ちます。ファイルは移動または変更されません。",
+    "folderName": "名前（例：FLACコレクション）",
+    "folderPath": "フォルダのパス（例：D:Music）",
+    "browseForFolder": "フォルダを参照",
+    "browse": "参照",
+    "chooseLibraryLocation": "ライブラリの場所を選択",
+    "chooseLibraryLocationDescription": "Soul Playerはこのフォルダに音楽を整理します。インポートされたファイルはきれいな構造でここにコピーされます。",
+    "organizationStyle": "整理スタイル",
+    "allSet": "準備完了！",
+    "allSetDescription": "ライブラリをセットアップ中です。少々お待ちください..."
+  },
+  "updateDialog": {
+    "title": "アップデートが利用可能",
+    "versionAvailable": "新しいバージョンが利用可能です",
+    "releaseNotes": "新機能",
+    "viewFullReleaseNotes": "全リリースノートを表示 →",
+    "downloading": "アップデートをダウンロード中",
+    "installing": "インストール中...",
+    "installNow": "今すぐインストール",
+    "later": "後で",
+    "packageManagerUpdateRequired": "パッケージマネージャーによるアップデートが必要",
+    "packageManagerUpdateDescription": "インストール方法により、システムのパッケージマネージャーを使用してアップデートする必要があります。以下のコマンドをコピーして実行してください：",
+    "copy": "コピー",
+    "copied": "コピーしました！",
+    "viewRelease": "リリースを表示"
   }
 }

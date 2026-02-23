@@ -60,7 +60,7 @@ function AudioSettingsDemoView() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold mb-2">{t('settings.audio.title')}</h1>
+        <h1 className="text-2xl font-bold mb-6">{t('settings.audio.title')}</h1>
         <p className="text-muted-foreground">
           Audio processing pipeline configuration
         </p>
@@ -473,7 +473,7 @@ function AudioSettingsDesktop() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">{t('settings.audio.title')}</h1>
+          <h1 className="text-2xl font-bold mb-6">{t('settings.audio.title')}</h1>
           <p className="text-muted-foreground">
             Configure your audio processing pipeline stage by stage
           </p>
