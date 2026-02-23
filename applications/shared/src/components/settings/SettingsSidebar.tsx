@@ -38,7 +38,7 @@ export function SettingsSidebar() {
 
   return (
     <Tooltip.Provider delayDuration={600}>
-      <nav className="h-full flex flex-col items-center justify-center py-4 gap-1">
+      <nav className="flex flex-col items-center gap-1 bg-muted/40 rounded-xl p-1.5">
         {navigationItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
