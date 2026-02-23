@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../useTheme';
 import { ThemePreview } from './ThemePreview';
 import type { Theme } from '../types';
@@ -33,6 +34,7 @@ export function ThemePicker({
   showAccessibilityInfo = true,
   className = '',
 }: ThemePickerProps) {
+  const { t } = useTranslation();
   const {
     currentTheme,
     availableThemes,
@@ -68,7 +70,7 @@ export function ThemePicker({
         const result = importTheme(text);
 
         if (result.valid && result.theme) {
-          setImportSuccess(`Theme "${result.theme.name}" imported successfully!`);
+          setImportSuccess(t('theme.importSuccess', { name: result.theme.name }));
           setImportError(null);
           setImportWarnings(result.warnings);
 
@@ -80,7 +82,7 @@ export function ThemePicker({
           setImportSuccess(null);
         }
       } catch (error) {
-        setImportError(`Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setImportError(t('theme.importReadFailed', { error: error instanceof Error ? error.message : t('common.unknown') }));
         setImportWarnings([]);
         setImportSuccess(null);
       }
@@ -95,7 +97,7 @@ export function ThemePicker({
   const handleExport = (theme: Theme) => {
     const json = exportTheme(theme.id);
     if (!json) {
-      alert('Failed to export theme');
+      alert(t('theme.exportFailed'));
       return;
     }
 
@@ -118,7 +120,7 @@ export function ThemePicker({
     if (success) {
       setShowDeleteConfirm(null);
     } else {
-      alert('Failed to delete theme. Built-in themes cannot be deleted.');
+      alert(t('theme.deleteFailed'));
     }
   };
 
@@ -138,20 +140,20 @@ export function ThemePicker({
       {/* Import/Export Section */}
       {showImportExport && (
         <div className="border-b border-border pb-6">
-          <h3 className="text-lg font-semibold mb-3">Theme Management</h3>
+          <h3 className="text-lg font-semibold mb-3">{t('theme.management')}</h3>
           <div className="flex flex-wrap gap-3">
             <button
               onClick={handleImport}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-[var(--hover-button-opacity)] transition-opacity"
             >
-              Import Theme
+              {t('theme.import')}
             </button>
 
             <button
               onClick={() => handleExport(currentTheme)}
               className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:opacity-[var(--hover-button-opacity)] transition-opacity"
             >
-              Export Current Theme
+              {t('theme.exportCurrent')}
             </button>
           </div>
 
@@ -164,7 +166,7 @@ export function ThemePicker({
 
           {importError && (
             <div className="mt-3 p-3 bg-destructive/10 border border-destructive rounded-md">
-              <p className="text-sm font-semibold text-destructive mb-1">Import Failed:</p>
+              <p className="text-sm font-semibold text-destructive mb-1">{t('theme.importFailed')}</p>
               <pre className="text-xs text-destructive whitespace-pre-wrap">{importError}</pre>
             </div>
           )}
@@ -172,7 +174,7 @@ export function ThemePicker({
           {importWarnings.length > 0 && (
             <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500 rounded-md">
               <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-300 mb-1">
-                Warnings:
+                {t('theme.warnings')}
               </p>
               <ul className="text-xs text-yellow-700 dark:text-yellow-300 list-disc list-inside">
                 {importWarnings.map((warning, i) => (
@@ -186,7 +188,7 @@ export function ThemePicker({
 
       {/* Built-in Themes */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Built-in Themes</h3>
+        <h3 className="text-lg font-semibold mb-3">{t('theme.builtInThemes')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {builtInThemes.map((theme) => (
             <ThemePreview
@@ -202,7 +204,7 @@ export function ThemePicker({
       {/* Custom Themes */}
       {customThemes.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-3">Custom Themes</h3>
+          <h3 className="text-lg font-semibold mb-3">{t('theme.customThemes')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {customThemes.map((theme) => (
               <div key={theme.id} className="relative">
@@ -216,20 +218,20 @@ export function ThemePicker({
                 {showDeleteConfirm === theme.id ? (
                   <div className="absolute inset-0 bg-background/95 rounded-lg flex flex-col items-center justify-center p-4 border-2 border-destructive">
                     <p className="text-sm font-medium mb-3 text-center">
-                      Delete "{theme.name}"?
+                      {t('theme.deleteConfirm', { name: theme.name })}
                     </p>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleDelete(theme.id)}
                         className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm"
                       >
-                        Delete
+                        {t('common.delete')}
                       </button>
                       <button
                         onClick={() => setShowDeleteConfirm(null)}
                         className="px-3 py-1 bg-secondary text-secondary-foreground rounded text-sm"
                       >
-                        Cancel
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>
@@ -241,7 +243,7 @@ export function ThemePicker({
                         handleExport(theme);
                       }}
                       className="p-1.5 bg-secondary/80 hover:bg-secondary text-secondary-foreground rounded text-xs"
-                      title="Export theme"
+                      title={t('theme.exportTheme')}
                     >
                       💾
                     </button>
@@ -251,7 +253,7 @@ export function ThemePicker({
                         setShowDeleteConfirm(theme.id);
                       }}
                       className="p-1.5 bg-destructive/80 hover:bg-destructive text-destructive-foreground rounded text-xs"
-                      title="Delete theme"
+                      title={t('theme.deleteTheme')}
                     >
                       🗑️
                     </button>
@@ -266,19 +268,19 @@ export function ThemePicker({
       {/* Accessibility Information */}
       {showAccessibilityInfo && (
         <div className="border-t border-border pt-6">
-          <h3 className="text-lg font-semibold mb-3">Current Theme Info</h3>
+          <h3 className="text-lg font-semibold mb-3">{t('theme.currentInfo')}</h3>
           <div className="bg-muted/40 rounded-lg p-4 space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Name:</span>
+              <span className="text-sm font-medium">{t('theme.name')}:</span>
               <span className="text-sm text-muted-foreground">{currentTheme.name}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Version:</span>
+              <span className="text-sm font-medium">{t('settings.version')}:</span>
               <span className="text-sm text-muted-foreground">{currentTheme.version}</span>
             </div>
             {currentTheme.author && (
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Author:</span>
+                <span className="text-sm font-medium">{t('theme.author')}:</span>
                 <span className="text-sm text-muted-foreground">{currentTheme.author}</span>
               </div>
             )}

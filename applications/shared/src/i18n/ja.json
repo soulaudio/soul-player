@@ -1015,5 +1015,35 @@
   "demoView": {
     "yourLibrary": "ライブラリ",
     "livePreview": "これはSoul Playerデスクトップインターフェースのライブプレビューです"
+  },
+  "theme": {
+    "management": "テーマ管理",
+    "import": "テーマをインポート",
+    "exportCurrent": "現在のテーマをエクスポート",
+    "exportTheme": "テーマをエクスポート",
+    "deleteTheme": "テーマを削除",
+    "importSuccess": "テーマ「{{name}}」が正常にインポートされました！",
+    "importFailed": "インポート失敗:",
+    "importReadFailed": "ファイルの読み込みに失敗しました: {{error}}",
+    "exportFailed": "テーマのエクスポートに失敗しました",
+    "deleteFailed": "テーマを削除できませんでした。組み込みテーマは削除できません。",
+    "warnings": "警告:",
+    "builtInThemes": "組み込みテーマ",
+    "customThemes": "カスタムテーマ",
+    "deleteConfirm": "「{{name}}」を削除しますか？",
+    "currentInfo": "現在のテーマ情報",
+    "name": "名前",
+    "author": "作者",
+    "active": "アクティブ",
+    "builtIn": "組み込み",
+    "custom": "カスタム",
+    "colors": {
+      "background": "背景",
+      "foreground": "前景",
+      "primary": "プライマリ",
+      "secondary": "セカンダリ",
+      "accent": "アクセント",
+      "destructive": "破壊的"
+    }
   }
 }

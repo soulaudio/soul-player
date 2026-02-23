@@ -1017,5 +1017,35 @@
   "demoView": {
     "yourLibrary": "Ihre Bibliothek",
     "livePreview": "Dies ist eine Live-Vorschau der Soul Player Desktop-Oberfläche"
+  },
+  "theme": {
+    "management": "Thema-Verwaltung",
+    "import": "Thema importieren",
+    "exportCurrent": "Aktuelles Thema exportieren",
+    "exportTheme": "Thema exportieren",
+    "deleteTheme": "Thema löschen",
+    "importSuccess": "Thema \"{{name}}\" erfolgreich importiert!",
+    "importFailed": "Import fehlgeschlagen:",
+    "importReadFailed": "Datei konnte nicht gelesen werden: {{error}}",
+    "exportFailed": "Thema konnte nicht exportiert werden",
+    "deleteFailed": "Thema konnte nicht gelöscht werden. Integrierte Themen können nicht gelöscht werden.",
+    "warnings": "Warnungen:",
+    "builtInThemes": "Integrierte Themen",
+    "customThemes": "Benutzerdefinierte Themen",
+    "deleteConfirm": "\"{{name}}\" löschen?",
+    "currentInfo": "Aktuelle Thema-Info",
+    "name": "Name",
+    "author": "Autor",
+    "active": "Aktiv",
+    "builtIn": "Integriert",
+    "custom": "Benutzerdefiniert",
+    "colors": {
+      "background": "Hintergrund",
+      "foreground": "Vordergrund",
+      "primary": "Primär",
+      "secondary": "Sekundär",
+      "accent": "Akzent",
+      "destructive": "Destruktiv"
+    }
   }
 }

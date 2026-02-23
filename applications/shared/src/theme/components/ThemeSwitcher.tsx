@@ -3,6 +3,7 @@
  */
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../useTheme';
 
 interface ThemeSwitcherProps {
@@ -20,6 +21,7 @@ export function ThemeSwitcher({
   showLivePreview = true,
   className = '',
 }: ThemeSwitcherProps) {
+  const { t } = useTranslation();
   const { currentTheme, availableThemes, setTheme, previewTheme } = useTheme();
   const [restorePreview, setRestorePreview] = useState<(() => void) | null>(
     null
@@ -66,7 +68,7 @@ export function ThemeSwitcher({
         htmlFor="theme-select"
         className="block text-sm font-medium text-foreground mb-2"
       >
-        Theme
+        {t('settings.theme')}
       </label>
       <select
         id="theme-select"
@@ -82,7 +84,7 @@ export function ThemeSwitcher({
             onMouseEnter={() => handleMouseEnter(theme.id)}
           >
             {theme.name}
-            {theme.isBuiltIn ? '' : ' (Custom)'}
+            {theme.isBuiltIn ? '' : ` (${t('theme.custom')})`}
           </option>
         ))}
       </select>

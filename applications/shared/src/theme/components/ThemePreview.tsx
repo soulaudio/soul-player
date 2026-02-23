@@ -2,6 +2,7 @@
  * ThemePreview component - visual preview of a theme
  */
 
+import { useTranslation } from 'react-i18next';
 import type { Theme } from '../types';
 
 interface ThemePreviewProps {
@@ -25,6 +26,7 @@ export function ThemePreview({
   onClick,
   className = '',
 }: ThemePreviewProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={`theme-preview cursor-pointer rounded-lg border-2 p-4 transition-all hover:shadow-lg ${
@@ -44,7 +46,7 @@ export function ThemePreview({
         <h3 className="font-semibold text-foreground">
           {theme.name}
           {isActive && (
-            <span className="ml-2 text-xs text-primary">(Active)</span>
+            <span className="ml-2 text-xs text-primary">({t('theme.active')})</span>
           )}
         </h3>
         {theme.description && (
@@ -58,34 +60,16 @@ export function ThemePreview({
       <div className="grid grid-cols-6 gap-2 mb-3">
         <ColorSwatch
           color={theme.colors.background}
-          label="Background"
-          tooltip="Background"
+          label={t('theme.colors.background')}
         />
         <ColorSwatch
           color={theme.colors.foreground}
-          label="Foreground"
-          tooltip="Foreground"
+          label={t('theme.colors.foreground')}
         />
-        <ColorSwatch
-          color={theme.colors.primary}
-          label="Primary"
-          tooltip="Primary"
-        />
-        <ColorSwatch
-          color={theme.colors.secondary}
-          label="Secondary"
-          tooltip="Secondary"
-        />
-        <ColorSwatch
-          color={theme.colors.accent}
-          label="Accent"
-          tooltip="Accent"
-        />
-        <ColorSwatch
-          color={theme.colors.destructive}
-          label="Destructive"
-          tooltip="Destructive"
-        />
+        <ColorSwatch color={theme.colors.primary}     label={t('theme.colors.primary')}     />
+        <ColorSwatch color={theme.colors.secondary}   label={t('theme.colors.secondary')}   />
+        <ColorSwatch color={theme.colors.accent}      label={t('theme.colors.accent')}      />
+        <ColorSwatch color={theme.colors.destructive} label={t('theme.colors.destructive')} />
       </div>
 
       {/* Gradient preview if available */}
@@ -102,9 +86,9 @@ export function ThemePreview({
       <div className="mt-3 text-xs text-muted-foreground flex justify-between">
         <span>v{theme.version}</span>
         {theme.isBuiltIn ? (
-          <span className="text-primary">Built-in</span>
+          <span className="text-primary">{t('theme.builtIn')}</span>
         ) : (
-          <span>Custom</span>
+          <span>{t('theme.custom')}</span>
         )}
       </div>
     </div>

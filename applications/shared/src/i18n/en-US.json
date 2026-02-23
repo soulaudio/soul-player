@@ -1006,6 +1006,36 @@
   "sync": {
     "statusLabel": "Sync Status"
   },
+  "theme": {
+    "management": "Theme Management",
+    "import": "Import Theme",
+    "exportCurrent": "Export Current Theme",
+    "exportTheme": "Export theme",
+    "deleteTheme": "Delete theme",
+    "importSuccess": "Theme \"{{name}}\" imported successfully!",
+    "importFailed": "Import Failed:",
+    "importReadFailed": "Failed to read file: {{error}}",
+    "exportFailed": "Failed to export theme",
+    "deleteFailed": "Failed to delete theme. Built-in themes cannot be deleted.",
+    "warnings": "Warnings:",
+    "builtInThemes": "Built-in Themes",
+    "customThemes": "Custom Themes",
+    "deleteConfirm": "Delete \"{{name}}\"?",
+    "currentInfo": "Current Theme Info",
+    "name": "Name",
+    "author": "Author",
+    "active": "Active",
+    "builtIn": "Built-in",
+    "custom": "Custom",
+    "colors": {
+      "background": "Background",
+      "foreground": "Foreground",
+      "primary": "Primary",
+      "secondary": "Secondary",
+      "accent": "Accent",
+      "destructive": "Destructive"
+    }
+  },
   "marketing": {
     "hero": {
       "title1": "Your Music,",
