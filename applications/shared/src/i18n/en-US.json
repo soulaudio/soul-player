@@ -223,13 +223,15 @@
     "demoDisabled": "Available in desktop app",
     "sections": {
       "audio": "Audio",
-      "library": "Library",
-      "playback": "Playback",
+      "musicData": "Music & Data",
       "appearance": "Appearance",
       "shortcuts": "Keyboard Shortcuts",
-      "dataManagement": "Data Management",
       "reportBug": "Report Bug",
       "about": "About"
+    },
+    "musicData": {
+      "sourcesHeading": "Sources",
+      "dataHeading": "Data"
     },
     "dataManagement": {
       "title": "Data Management",

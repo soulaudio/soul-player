@@ -106,7 +106,7 @@ function ResetConfirmDialog({ isOpen, onClose, onConfirm }: ResetDialogProps) {
   );
 }
 
-export function DataManagementSettingsPage() {
+export function DataManagementSettingsPage({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation();
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
@@ -132,12 +132,16 @@ export function DataManagementSettingsPage() {
   };
 
   return (
-    <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-bold mb-2">{t('settings.dataManagement.title')}</h1>
-      <p className="text-muted-foreground mb-6">{t('settings.dataManagement.description')}</p>
+    <div className={embedded ? 'space-y-6' : 'p-6 max-w-2xl'}>
+      {!embedded && (
+        <>
+          <h1 className="text-2xl font-bold mb-2">{t('settings.dataManagement.title')}</h1>
+          <p className="text-muted-foreground mb-6">{t('settings.dataManagement.description')}</p>
+        </>
+      )}
 
       {/* Warning Banner */}
-      <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 mb-6 flex items-start gap-3">
+      <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
         <div className="text-sm">
           <p className="font-medium mb-1">{t('settings.dataManagement.warning.title')}</p>
