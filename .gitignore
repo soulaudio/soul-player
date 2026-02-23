@@ -100,4 +100,4 @@ test-*.mjs
 .flatpak/vendor.tar.gz
 
 # Windows cleanup scripts (developer utility)
-cleanup-soul-player.ps1
+cleanup-soul-player.ps1.worktrees/
