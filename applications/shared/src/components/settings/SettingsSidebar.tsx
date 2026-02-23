@@ -53,7 +53,7 @@ export function SettingsSidebar() {
                   className={[
                     'p-3 rounded-lg transition-all',
                     isActive
-                      ? 'text-primary bg-background shadow-sm'
+                      ? 'text-primary-foreground bg-primary shadow-sm'
                       : 'text-muted-foreground bg-background/50 hover:bg-background hover:opacity-80',
                   ].join(' ')}
                 >
