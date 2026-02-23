@@ -61,9 +61,18 @@
     "shuffleRandom": "Shuffle: Random",
     "shuffleSmart": "Shuffle: Smart",
     "repeat": "Repeat",
+    "repeatOff": "Repeat: Off",
+    "repeatAll": "Repeat: All",
+    "repeatOne": "Repeat: One",
     "volume": "Volume",
+    "volumePercent": "{{percent}} percent",
+    "volumeLabel": "Volume: {{percent}}%",
     "mute": "Mute",
-    "unmute": "Unmute"
+    "muteAudio": "Mute audio",
+    "muteWithKey": "Mute (M)",
+    "unmute": "Unmute",
+    "unmuteAudio": "Unmute audio",
+    "unmuteWithKey": "Unmute (M)"
   },
   "library": {
     "tracks": "tracks",
@@ -140,6 +149,8 @@
       "selectDevice": "Select audio device",
       "output": "Audio Output",
       "noDevicesFound": "No audio devices found",
+      "noDevicesAvailable": "No devices available",
+      "systemDefault": "System Default",
       "warning": {
         "title": "Experimental Audio Pipeline",
         "description": "The audio pipeline and features are under active development and may contain bugs or instability. If you experience issues, please see the \"Report Bug\" section in settings."
@@ -186,8 +197,90 @@
       },
       "resampling": {
         "applyOnNextTrack": "Resampling settings will apply on next track"
+      },
+      "pipelineDescription": "Audio processing pipeline configuration",
+      "pipelineConfigDescription": "Configure your audio processing pipeline stage by stage",
+      "professionalPipeline": "Professional Audio Pipeline",
+      "resetAll": "Reset All",
+      "auto": "Auto",
+      "deviceSwitched": "Switched to audio device: {{name}}",
+      "deviceSwitchFailed": "Failed to switch audio device: {{error}}",
+      "crossfadeApplyFailed": "Failed to apply crossfade settings",
+      "resamplingQualityFailed": "Failed to apply resampling quality",
+      "resamplingTargetRateFailed": "Failed to apply resampling target rate",
+      "resamplingBackendFailed": "Failed to apply resampling backend",
+      "resetDialog": {
+        "title": "Reset Audio Settings",
+        "message": "This will reset all audio settings to their default values. Your current configuration will be lost.",
+        "confirm": "Reset"
+      },
+      "volumeLeveling": {
+        "rgTrack": "RG Track",
+        "rgAlbum": "RG Album",
+        "off": "Off"
+      },
+      "features": {
+        "resampling": {
+          "title": "High-Quality Resampling",
+          "description": "r8brain and Rubato algorithms for sample rate conversion"
+        },
+        "dspChain": {
+          "title": "DSP Effects Chain",
+          "description": "4-slot parametric EQ, compressor, limiter, crossfeed"
+        },
+        "volumeLeveling": {
+          "title": "Volume Leveling",
+          "description": "ReplayGain (track/album) and EBU R128 normalization"
+        },
+        "gaplessPlayback": {
+          "title": "Gapless Playback",
+          "description": "Seamless transitions with crossfade support"
+        },
+        "asioJack": {
+          "title": "ASIO & JACK Support",
+          "description": "Low-latency audio output on Windows and Linux"
+        },
+        "headroom": {
+          "title": "Headroom Management",
+          "description": "Automatic clipping prevention during DSP processing"
+        }
+      },
+      "stages": {
+        "resampling": {
+          "title": "Resampling",
+          "description": "Automatic sample rate conversion to match your output device"
+        },
+        "dspEffects": {
+          "title": "DSP Effects",
+          "description": "Digital signal processing — EQ, compression, and effects applied to audio",
+          "activeCount": "{{count}} active",
+          "none": "None"
+        },
+        "volumeLeveling": {
+          "title": "Volume Leveling",
+          "description": "Automatic loudness normalization using ReplayGain or EBU R128"
+        },
+        "headroom": {
+          "title": "Headroom Management",
+          "description": "Prevents clipping by attenuating signal before DSP processing",
+          "active": "Active"
+        },
+        "buffer": {
+          "title": "Buffer & Performance",
+          "description": "Configure audio buffering and pre-loading for optimal playback",
+          "samples": "{{count}} samples",
+          "preloadOn": "Preload On",
+          "streaming": "Streaming"
+        },
+        "output": {
+          "title": "Audio Output",
+          "description": "Select your audio driver backend and output device for playback"
+        }
       }
     },
+    "pressKey": "Press keys...",
+    "shortcutsDescription": "Configure keyboard shortcuts for playback control. Shortcuts only work when the app is focused and are disabled when typing in text fields.",
+    "noShortcuts": "No shortcuts configured",
     "updates": "Updates",
     "autoUpdate": "Automatically check for updates",
     "silentUpdate": "Install updates silently",
@@ -196,6 +289,8 @@
     "upToDate": "You're on the latest version!",
     "updateAvailable": "Update available",
     "checkFailed": "Failed to check for updates",
+    "updateInstalledRestarting": "Update installed. Restarting app...",
+    "updateInstallFailed": "Failed to install update",
     "shortcuts": "Keyboard Shortcuts",
     "resetShortcuts": "Reset to Defaults",
     "reportBug": "Report Bug",
@@ -204,9 +299,17 @@
     "reportBugInstructions": "If you encounter any issues with Soul Player, please help us improve by reporting them on GitHub.",
     "reportBugSteps": {
       "step1": "Check if the issue has already been reported",
+      "step1Description": "Search existing issues to avoid duplicates",
       "step2": "Create a detailed bug report including steps to reproduce",
-      "step3": "Include system information and logs if applicable"
+      "step2Description": "Include what you expected vs. what actually happened",
+      "step3": "Include system information and logs if applicable",
+      "step3Description": "OS version, Soul Player version, error messages, etc."
     },
+    "reportBugResourcesHeading": "Helpful Resources",
+    "reportBugGithubRepoLabel": "GitHub Repository",
+    "reportBugGithubRepoDescription": "View source code and documentation",
+    "reportBugWikiLabel": "Wiki & Documentation",
+    "reportBugWikiDescription": "Guides, FAQs, and troubleshooting",
     "reportBugGithubLink": "Report on GitHub Issues",
     "reportBugLogs": "View Logs",
     "reportBugLogsDescription": "Application logs can help diagnose issues. Enable logging with the --logs flag when starting the app.",
@@ -281,7 +384,8 @@
     "newFiles": "{{count}} new files",
     "updatedFiles": "{{count}} updated",
     "removedFiles": "{{count}} removed",
-    "errors": "{{count}} errors"
+    "errors": "{{count}} errors",
+    "filesProgress": "{{processed}} of {{total}} files"
   },
   "sources": {
     "title": "Sources",
@@ -383,12 +487,36 @@
     "cancel": "Cancel Import",
     "dropToAdd": "Drop to Add",
     "releaseToAdd": "Release to add to your library",
+    "releaseToImport": "Release to import your music files",
     "fileDropped": "Files Dropped",
     "playNow": "Play Now",
     "playNowDescription": "Play immediately without adding to library",
     "importToLibrary": "Import to Library",
     "importToLibraryDescription": "Add to your music library for permanent access",
-    "rememberChoice": "Remember my choice"
+    "rememberChoice": "Remember my choice",
+    "addMusicToLibrary": "Add music files to your library",
+    "fileManagementStrategy": "File Management Strategy",
+    "recommended": "Recommended",
+    "copyFilesLabel": "Copy files to library",
+    "copyFilesDesc": "Creates copies in managed library folder, preserves original files",
+    "moveFilesLabel": "Move files to library",
+    "moveFilesDesc": "Moves files to managed library folder, saves disk space",
+    "referenceFilesLabel": "Reference in current location",
+    "referenceFilesWarning": "Warning: Library will break if files are moved or deleted",
+    "orDropFilesHere": "or just drop files here",
+    "processingProgress": "Processing {{processed}} of {{total}} files",
+    "statImported": "Imported",
+    "statSkipped": "Skipped",
+    "statFailed": "Failed",
+    "currentlyProcessing": "Currently processing:",
+    "estimatedTimeRemaining": "Estimated time remaining: {{minutes}} min",
+    "complete": "Import Complete!",
+    "processedSummary": "Processed {{count}} files in {{seconds}}s",
+    "requireReview": "{{count}} tracks require review",
+    "requireReviewDesc": "Some tracks had low confidence matches and need manual verification",
+    "failed": "Import Failed",
+    "unexpectedPayload": "Unexpected drag and drop payload format",
+    "noValidFiles": "No valid files or directories found. Please drop audio files or music folders."
   },
   "artist": {
     "notFound": "Artist not found",
@@ -419,6 +547,11 @@
     "name": "Playlist Name",
     "description": "Description",
     "addTrack": "Add to Playlist",
+    "addToPlaylist": "Add to Playlist",
+    "addingTrack": "Adding track",
+    "searchPlaylists": "Search playlists...",
+    "willRemove": "will remove",
+    "createNew": "Create new playlist",
     "removeTrack": "Remove from Playlist",
     "deletePlaylist": "Delete Playlist",
     "notFound": "Playlist not found",
@@ -469,6 +602,9 @@
     "artist": "Artist",
     "album": "Album",
     "title": "Title",
+    "format": "Format",
+    "track": "track",
+    "tracks": "tracks",
     "continue": "Continue",
     "back": "Back",
     "items": "items",
@@ -491,19 +627,35 @@
     "enabled": "Enabled",
     "retry": "Retry",
     "error": "Error",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "tryAgain": "Try Again",
+    "reloadPage": "Reload Page",
+    "processing": "Processing...",
+    "confirm": "Confirm"
   },
   "trackMenu": {
     "showInExplorer": "Show in File Explorer",
     "deleteFromManagedLibrary": "Delete from Managed Library",
     "removeFromManagedLibrary": "Remove from Managed Library",
-    "removeFromLibrary": "Remove from Library"
+    "removeFromLibrary": "Remove from Library",
+    "options": "Track options"
   },
   "queue": {
     "playNext": "Play Next",
     "addToQueue": "Add to Queue",
     "clearPlayNext": "Clear Play Next",
-    "clearQueue": "Clear Queue"
+    "clearQueue": "Clear Queue",
+    "title": "Queue",
+    "closeQueue": "Close queue",
+    "empty": "No tracks in queue",
+    "emptyHint": "Play a track to start building your queue",
+    "nowPlaying": "Now Playing",
+    "upNext": "Up Next",
+    "displayCount": "{{displayed}} of {{total}}",
+    "loadMore": "Load {{count}} more tracks",
+    "totalCount_one": "{{count}} track total",
+    "totalCount_other": "{{count}} tracks total",
+    "albumArt": "Album art"
   },
   "artwork": {
     "edit": {
@@ -777,7 +929,8 @@
     "chooseLibraryLocationDescription": "Soul Player will organize your music in this folder. Files you import will be copied here with a clean structure.",
     "organizationStyle": "Organization style",
     "allSet": "You're All Set!",
-    "allSetDescription": "Your library is being set up. This may take a moment..."
+    "allSetDescription": "Your library is being set up. This may take a moment...",
+    "defaultFolderName": "Music Folder"
   },
   "updateDialog": {
     "title": "Update Available",
@@ -793,6 +946,65 @@
     "copy": "Copy",
     "copied": "Copied!",
     "viewRelease": "View Release"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "description": "An unexpected error occurred. Please try refreshing the page or contact support if the problem persists.",
+    "showDetails": "Show error details",
+    "errorLabel": "Error:",
+    "stackLabel": "Stack:",
+    "componentStackLabel": "Component Stack:",
+    "tryAgain": "Try Again",
+    "reloadPage": "Reload Page"
+  },
+  "trackList": {
+    "empty": "No tracks found",
+    "emptyHint": "Add music to get started",
+    "columnTitle": "Title",
+    "columnArtist": "Artist",
+    "columnAlbum": "Album",
+    "columnFormat": "Format",
+    "columnDuration": "Duration",
+    "columnTrackNumber": "Track number",
+    "tooltipTitle": "Track title",
+    "tooltipArtist": "Artist name",
+    "tooltipAlbum": "Album title",
+    "tooltipFormat": "Audio format",
+    "tooltipDuration": "Track duration",
+    "fileNotFound": "File not found"
+  },
+  "sourcesDialog": {
+    "title": "Manage Sources",
+    "close": "Close",
+    "loadingSources": "Loading sources...",
+    "description": "Sources are where your music comes from. You can have local files and remote servers.",
+    "localFiles": "Local Files",
+    "remoteServer": "Remote Server",
+    "active": "Active",
+    "online": "Online",
+    "offline": "Offline",
+    "aboutSources": "About Sources:",
+    "aboutLocal": "Music stored on your device",
+    "aboutRemote": "Connect to Soul Player servers for streaming",
+    "aboutMultiple": "You can add multiple servers and switch between them",
+    "aboutCache": "Music from servers can be cached for offline playback",
+    "addServer": "Add Server",
+    "addServerComingSoon": "(Coming Soon)"
+  },
+  "qualityBadge": {
+    "tooltipFormat": "Format: {{format}}",
+    "tooltipBitrate": "Bitrate: {{bitrate}} kbps",
+    "tooltipSampleRate": "Sample Rate: {{kHz}} kHz",
+    "tooltipChannelMono": "Mono",
+    "tooltipChannelStereo": "Stereo",
+    "tooltipChannel51": "5.1 Surround",
+    "tooltipChannel71": "7.1 Surround",
+    "tooltipChannelN": "{{count}} channels",
+    "tooltipHiRes": "High Resolution Audio",
+    "tooltipLossless": "Lossless Audio"
+  },
+  "sync": {
+    "statusLabel": "Sync Status"
   },
   "marketing": {
     "hero": {
@@ -861,5 +1073,15 @@
       "privacyPolicy": "Privacy Policy",
       "termsOfService": "Terms of Service"
     }
+  },
+  "titleBar": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
+  "demoView": {
+    "yourLibrary": "Your Library",
+    "livePreview": "This is a live preview of the Soul Player desktop interface"
   }
 }

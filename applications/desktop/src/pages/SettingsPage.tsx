@@ -141,11 +141,11 @@ export function SettingsPage() {
     try {
       await invoke('install_update');
       // If we reach here, restart failed - app should have restarted automatically
-      toast.success('Update installed. Restarting app...');
+      toast.success(t('settings.updateInstalledRestarting'));
       setShowUpdateDialog(false);
     } catch (error) {
       console.error('Failed to install update:', error);
-      toast.error('Failed to install update');
+      toast.error(t('settings.updateInstallFailed'));
       setIsInstalling(false);
       setInstallProgress(0);
     }

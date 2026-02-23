@@ -128,7 +128,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
       if (folder) {
         // Extract folder name from path
         const parts = folder.split(/[/\\]/);
-        const name = parts[parts.length - 1] || 'Music Folder';
+        const name = parts[parts.length - 1] || t('onboarding.defaultFolderName');
         setWatchedFolders([...watchedFolders, { name, path: folder }]);
       }
     } catch (error) {
@@ -279,7 +279,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
             >
               <option value="en-US">English</option>
               <option value="de">Deutsch</option>
-              <option value="ja">Japanese</option>
+              <option value="ja">日本語</option>
             </select>
           </div>
         </footer>

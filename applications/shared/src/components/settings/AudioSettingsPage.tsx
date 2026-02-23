@@ -62,7 +62,7 @@ function AudioSettingsDemoView() {
       <div>
         <h1 className="text-2xl font-bold mb-6">{t('settings.audio.title')}</h1>
         <p className="text-muted-foreground">
-          Audio processing pipeline configuration
+          {t('settings.audio.pipelineDescription')}
         </p>
       </div>
 
@@ -73,7 +73,7 @@ function AudioSettingsDemoView() {
             <Volume2 className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h3 className="font-semibold">Professional Audio Pipeline</h3>
+            <h3 className="font-semibold">{t('settings.audio.professionalPipeline')}</h3>
             <p className="text-sm text-muted-foreground">
               {t('settings.demoDisabled')}
             </p>
@@ -83,28 +83,28 @@ function AudioSettingsDemoView() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FeatureCard
-              title="High-Quality Resampling"
-              description="r8brain and Rubato algorithms for sample rate conversion"
+              title={t('settings.audio.features.resampling.title')}
+              description={t('settings.audio.features.resampling.description')}
             />
             <FeatureCard
-              title="DSP Effects Chain"
-              description="4-slot parametric EQ, compressor, limiter, crossfeed"
+              title={t('settings.audio.features.dspChain.title')}
+              description={t('settings.audio.features.dspChain.description')}
             />
             <FeatureCard
-              title="Volume Leveling"
-              description="ReplayGain (track/album) and EBU R128 normalization"
+              title={t('settings.audio.features.volumeLeveling.title')}
+              description={t('settings.audio.features.volumeLeveling.description')}
             />
             <FeatureCard
-              title="Gapless Playback"
-              description="Seamless transitions with crossfade support"
+              title={t('settings.audio.features.gaplessPlayback.title')}
+              description={t('settings.audio.features.gaplessPlayback.description')}
             />
             <FeatureCard
-              title="ASIO & JACK Support"
-              description="Low-latency audio output on Windows and Linux"
+              title={t('settings.audio.features.asioJack.title')}
+              description={t('settings.audio.features.asioJack.description')}
             />
             <FeatureCard
-              title="Headroom Management"
-              description="Automatic clipping prevention during DSP processing"
+              title={t('settings.audio.features.headroom.title')}
+              description={t('settings.audio.features.headroom.description')}
             />
           </div>
         </div>
@@ -258,10 +258,10 @@ function AudioSettingsDesktop() {
     updateSettings({ backend: backendStr as 'default' | 'asio' | 'jack', device_name: deviceName })
     try {
       await switchAudioDevice(backendStr, deviceName)
-      showNotification('success', `Switched to audio device: ${deviceName}`)
+      showNotification('success', t('settings.audio.deviceSwitched', { name: deviceName }))
     } catch (error) {
       debug.error('Failed to set audio device:', error)
-      showNotification('error', `Failed to switch audio device: ${error}`)
+      showNotification('error', t('settings.audio.deviceSwitchFailed', { error: String(error) }))
     }
   };
 
@@ -324,10 +324,10 @@ function AudioSettingsDesktop() {
   // Get volume leveling mode display
   const getVolumeLevelingDisplay = () => {
     switch (settings.volume_leveling_mode) {
-      case 'replaygain_track': return 'RG Track';
-      case 'replaygain_album': return 'RG Album';
+      case 'replaygain_track': return t('settings.audio.volumeLeveling.rgTrack');
+      case 'replaygain_album': return t('settings.audio.volumeLeveling.rgAlbum');
       case 'ebu_r128': return 'EBU R128';
-      default: return 'Off';
+      default: return t('settings.audio.volumeLeveling.off');
     }
   };
 
@@ -381,7 +381,7 @@ function AudioSettingsDesktop() {
       );
     } catch (error) {
       debug.error('Failed to apply crossfade settings:', error);
-      showNotification('error', 'Failed to apply crossfade settings');
+      showNotification('error', t('settings.audio.crossfadeApplyFailed'));
     }
   };
 
@@ -396,7 +396,7 @@ function AudioSettingsDesktop() {
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
       debug.error('Failed to apply resampling quality:', error);
-      showNotification('error', 'Failed to apply resampling quality');
+      showNotification('error', t('settings.audio.resamplingQualityFailed'));
     }
   };
 
@@ -413,7 +413,7 @@ function AudioSettingsDesktop() {
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
       debug.error('Failed to apply resampling target rate:', error);
-      showNotification('error', 'Failed to apply resampling target rate');
+      showNotification('error', t('settings.audio.resamplingTargetRateFailed'));
     }
   };
 
@@ -428,7 +428,7 @@ function AudioSettingsDesktop() {
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
     } catch (error) {
       debug.error('Failed to apply resampling backend:', error);
-      showNotification('error', 'Failed to apply resampling backend');
+      showNotification('error', t('settings.audio.resamplingBackendFailed'));
     }
   };
 
@@ -475,7 +475,7 @@ function AudioSettingsDesktop() {
         <div>
           <h1 className="text-2xl font-bold mb-6">{t('settings.audio.title')}</h1>
           <p className="text-muted-foreground">
-            Configure your audio processing pipeline stage by stage
+            {t('settings.audio.pipelineConfigDescription')}
           </p>
         </div>
 
@@ -485,7 +485,7 @@ function AudioSettingsDesktop() {
           className="flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <RotateCcw className="w-4 h-4" />
-          Reset All
+          {t('settings.audio.resetAll')}
         </button>
       </div>
 
@@ -494,9 +494,9 @@ function AudioSettingsDesktop() {
         open={showResetDialog}
         onClose={() => setShowResetDialog(false)}
         onConfirm={resetToDefaults}
-        title="Reset Audio Settings"
-        message="This will reset all audio settings to their default values. Your current configuration will be lost."
-        confirmText="Reset"
+        title={t('settings.audio.resetDialog.title')}
+        message={t('settings.audio.resetDialog.message')}
+        confirmText={t('settings.audio.resetDialog.confirm')}
         variant="destructive"
       />
 
@@ -518,11 +518,11 @@ function AudioSettingsDesktop() {
         {/* Stage 1: Resampling */}
         <PipelineStage
           id="audio-stage-1"
-          title="Resampling"
-          description="Automatic sample rate conversion to match your output device"
+          title={t('settings.audio.stages.resampling.title')}
+          description={t('settings.audio.stages.resampling.description')}
           isActive={true}
           currentConfig={settings.resampling_quality.charAt(0).toUpperCase() + settings.resampling_quality.slice(1)}
-          statusText={settings.resampling_backend === 'auto' ? 'Auto' : settings.resampling_backend}
+          statusText={settings.resampling_backend === 'auto' ? t('settings.audio.auto') : settings.resampling_backend}
         >
           <UpsamplingSettings
             quality={settings.resampling_quality}
@@ -538,12 +538,12 @@ function AudioSettingsDesktop() {
         {/* Stage 2: DSP Effects */}
         <PipelineStage
           id="audio-stage-2"
-          title="DSP Effects"
-          description="Digital signal processing - EQ, compression, and effects applied to audio"
+          title={t('settings.audio.stages.dspEffects.title')}
+          description={t('settings.audio.stages.dspEffects.description')}
           isActive={settings.dsp_enabled}
           isOptional={true}
-          currentConfig={dspEffectCount > 0 ? `${dspEffectCount} active` : 'None'}
-          statusText={settings.dsp_enabled ? 'Enabled' : 'Disabled'}
+          currentConfig={dspEffectCount > 0 ? t('settings.audio.stages.dspEffects.activeCount', { count: dspEffectCount }) : t('settings.audio.stages.dspEffects.none')}
+          statusText={settings.dsp_enabled ? t('common.enabled') : t('common.disabled')}
         >
           <DspConfig onChainChange={handleDspChainChange} />
         </PipelineStage>
@@ -551,12 +551,12 @@ function AudioSettingsDesktop() {
         {/* Stage 3: Volume Leveling */}
         <PipelineStage
           id="audio-stage-3"
-          title="Volume Leveling"
-          description="Automatic loudness normalization using ReplayGain or EBU R128"
+          title={t('settings.audio.stages.volumeLeveling.title')}
+          description={t('settings.audio.stages.volumeLeveling.description')}
           isActive={settings.volume_leveling_mode !== 'disabled'}
           isOptional={true}
           currentConfig={getVolumeLevelingDisplay()}
-          statusText={settings.volume_leveling_mode !== 'disabled' ? 'Enabled' : 'Disabled'}
+          statusText={settings.volume_leveling_mode !== 'disabled' ? t('common.enabled') : t('common.disabled')}
         >
           <VolumeLevelingSettings
             mode={settings.volume_leveling_mode}
@@ -580,12 +580,12 @@ function AudioSettingsDesktop() {
         {/* Stage 4: Headroom Management */}
         <PipelineStage
           id="audio-stage-4"
-          title="Headroom Management"
-          description="Prevents clipping by attenuating signal before DSP processing"
+          title={t('settings.audio.stages.headroom.title')}
+          description={t('settings.audio.stages.headroom.description')}
           isActive={true}
           isOptional={true}
-          currentConfig="Auto"
-          statusText="Active"
+          currentConfig={t('settings.audio.auto')}
+          statusText={t('settings.audio.stages.headroom.active')}
         >
           <HeadroomSettings />
         </PipelineStage>
@@ -593,11 +593,11 @@ function AudioSettingsDesktop() {
         {/* Stage 5: Buffer Settings */}
         <PipelineStage
           id="audio-stage-5"
-          title="Buffer & Performance"
-          description="Configure audio buffering and pre-loading for optimal playback"
+          title={t('settings.audio.stages.buffer.title')}
+          description={t('settings.audio.stages.buffer.description')}
           isActive={true}
-          currentConfig={settings.buffer_size === 'auto' ? 'Auto' : `${settings.buffer_size} samples`}
-          statusText={settings.preload_enabled ? 'Preload On' : 'Streaming'}
+          currentConfig={settings.buffer_size === 'auto' ? t('settings.audio.auto') : t('settings.audio.stages.buffer.samples', { count: settings.buffer_size })}
+          statusText={settings.preload_enabled ? t('settings.audio.stages.buffer.preloadOn') : t('settings.audio.stages.buffer.streaming')}
         >
           <BufferSettings
             bufferSize={settings.buffer_size}
@@ -616,8 +616,8 @@ function AudioSettingsDesktop() {
         {/* Stage 6: Audio Output (Backend & Device) */}
         <PipelineStage
           id="audio-stage-6"
-          title="Audio Output"
-          description="Select your audio driver backend and output device for playback"
+          title={t('settings.audio.stages.output.title')}
+          description={t('settings.audio.stages.output.description')}
           isActive={true}
           isLast={true}
         >

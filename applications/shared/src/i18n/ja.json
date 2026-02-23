@@ -61,9 +61,18 @@
     "shuffleRandom": "シャッフル: ランダム",
     "shuffleSmart": "シャッフル: スマート",
     "repeat": "リピート",
+    "repeatOff": "リピート: オフ",
+    "repeatAll": "リピート: すべて",
+    "repeatOne": "リピート: 1曲",
     "volume": "音量",
+    "volumePercent": "{{percent}}パーセント",
+    "volumeLabel": "音量: {{percent}}%",
     "mute": "ミュート",
-    "unmute": "ミュート解除"
+    "muteAudio": "オーディオをミュート",
+    "muteWithKey": "ミュート (M)",
+    "unmute": "ミュート解除",
+    "unmuteAudio": "ミュートを解除",
+    "unmuteWithKey": "ミュート解除 (M)"
   },
   "library": {
     "tracks": "トラック",
@@ -141,6 +150,8 @@
       "selectDevice": "オーディオデバイスを選択",
       "output": "オーディオ出力",
       "noDevicesFound": "オーディオデバイスが見つかりません",
+      "noDevicesAvailable": "利用可能なデバイスがありません",
+      "systemDefault": "システムデフォルト",
       "warning": {
         "title": "実験的なオーディオパイプライン",
         "description": "オーディオパイプラインと機能は現在も開発中であり、バグや不安定な動作が含まれる場合があります。問題が発生した場合は、設定の「バグを報告」セクションをご覧ください。"
@@ -187,8 +198,90 @@
       },
       "resampling": {
         "applyOnNextTrack": "リサンプリング設定は次のトラックから適用されます"
+      },
+      "pipelineDescription": "オーディオ処理パイプラインの設定",
+      "pipelineConfigDescription": "オーディオパイプラインをステージごとに設定する",
+      "professionalPipeline": "プロフェッショナル・オーディオパイプライン",
+      "resetAll": "すべてリセット",
+      "auto": "自動",
+      "deviceSwitched": "オーディオデバイスを切り替えました：{{name}}",
+      "deviceSwitchFailed": "オーディオデバイスの切り替えに失敗しました：{{error}}",
+      "crossfadeApplyFailed": "クロスフェード設定の適用に失敗しました",
+      "resamplingQualityFailed": "リサンプリング品質の適用に失敗しました",
+      "resamplingTargetRateFailed": "リサンプリング目標レートの適用に失敗しました",
+      "resamplingBackendFailed": "リサンプリングバックエンドの適用に失敗しました",
+      "resetDialog": {
+        "title": "オーディオ設定のリセット",
+        "message": "すべてのオーディオ設定をデフォルト値にリセットします。現在の設定は失われます。",
+        "confirm": "リセット"
+      },
+      "volumeLeveling": {
+        "rgTrack": "RGトラック",
+        "rgAlbum": "RGアルバム",
+        "off": "オフ"
+      },
+      "features": {
+        "resampling": {
+          "title": "高品質リサンプリング",
+          "description": "サンプルレート変換のためのr8brainおよびRubatアルゴリズム"
+        },
+        "dspChain": {
+          "title": "DSPエフェクトチェーン",
+          "description": "4スロット：パラメトリックEQ、コンプレッサー、リミッター、クロスフィード"
+        },
+        "volumeLeveling": {
+          "title": "音量レベリング",
+          "description": "ReplayGain（トラック/アルバム）およびEBU R128正規化"
+        },
+        "gaplessPlayback": {
+          "title": "ギャップレス再生",
+          "description": "クロスフェード対応のシームレスなトラック遷移"
+        },
+        "asioJack": {
+          "title": "ASIO & JACKサポート",
+          "description": "WindowsおよびLinuxでの低レイテンシーオーディオ出力"
+        },
+        "headroom": {
+          "title": "ヘッドルーム管理",
+          "description": "DSP処理中の自動クリッピング防止"
+        }
+      },
+      "stages": {
+        "resampling": {
+          "title": "リサンプリング",
+          "description": "出力デバイスに合わせた自動サンプルレート変換"
+        },
+        "dspEffects": {
+          "title": "DSPエフェクト",
+          "description": "デジタル信号処理 — EQ、コンプレッション、エフェクト",
+          "activeCount": "{{count}}個有効",
+          "none": "なし"
+        },
+        "volumeLeveling": {
+          "title": "音量レベリング",
+          "description": "ReplayGainまたはEBU R128による自動ラウドネス正規化"
+        },
+        "headroom": {
+          "title": "ヘッドルーム管理",
+          "description": "DSP処理前にシグナルを減衰させてクリッピングを防止",
+          "active": "有効"
+        },
+        "buffer": {
+          "title": "バッファー & パフォーマンス",
+          "description": "最適な再生のためのバッファリングと先読みを設定",
+          "samples": "{{count}}サンプル",
+          "preloadOn": "先読み有効",
+          "streaming": "ストリーミング"
+        },
+        "output": {
+          "title": "オーディオ出力",
+          "description": "再生用のオーディオドライバーバックエンドと出力デバイスを選択"
+        }
       }
     },
+    "pressKey": "キーを押してください...",
+    "shortcutsDescription": "再生コントロールのキーボードショートカットを設定します。ショートカットはアプリがフォーカスされているときのみ機能し、テキスト入力中は無効になります。",
+    "noShortcuts": "ショートカットが設定されていません",
     "updates": "アップデート",
     "autoUpdate": "自動的にアップデートを確認",
     "silentUpdate": "自動的にアップデートをインストール",
@@ -197,6 +290,8 @@
     "upToDate": "最新バージョンをお使いです！",
     "updateAvailable": "アップデートが利用可能",
     "checkFailed": "アップデートの確認に失敗しました",
+    "updateInstalledRestarting": "アップデートをインストールしました。アプリを再起動します...",
+    "updateInstallFailed": "アップデートのインストールに失敗しました",
     "shortcuts": "キーボードショートカット",
     "resetShortcuts": "デフォルトに戻す",
     "reportBug": "バグを報告",
@@ -205,9 +300,17 @@
     "reportBugInstructions": "Soul Playerで問題が発生した場合は、GitHubで報告して改善にご協力ください。",
     "reportBugSteps": {
       "step1": "同じ問題がすでに報告されていないか確認する",
+      "step1Description": "既存のIssueを検索して重複を避ける",
       "step2": "再現手順を含む詳細なバグレポートを作成する",
-      "step3": "該当する場合はシステム情報とログを含める"
+      "step2Description": "期待した動作と実際に起きたことを記載する",
+      "step3": "該当する場合はシステム情報とログを含める",
+      "step3Description": "OSバージョン、Soul Playerのバージョン、エラーメッセージなど"
     },
+    "reportBugResourcesHeading": "役立つリソース",
+    "reportBugGithubRepoLabel": "GitHubリポジトリ",
+    "reportBugGithubRepoDescription": "ソースコードとドキュメントを表示",
+    "reportBugWikiLabel": "Wiki & ドキュメント",
+    "reportBugWikiDescription": "ガイド、FAQ、トラブルシューティング",
     "reportBugGithubLink": "GitHub Issuesで報告する",
     "reportBugLogs": "ログを表示",
     "reportBugLogsDescription": "アプリケーションログは問題の診断に役立ちます。アプリ起動時に --logs フラグを使用してログを有効化してください。",
@@ -281,7 +384,8 @@
     "newFiles": "{{count}}件の新しいファイル",
     "updatedFiles": "{{count}}件更新",
     "removedFiles": "{{count}}件削除",
-    "errors": "{{count}}件のエラー"
+    "errors": "{{count}}件のエラー",
+    "filesProgress": "{{processed}} / {{total}} ファイル"
   },
   "sources": {
     "title": "ソース",
@@ -388,7 +492,31 @@
     "playNowDescription": "ライブラリに追加せずにすぐに再生",
     "importToLibrary": "ライブラリにインポート",
     "importToLibraryDescription": "永続的にアクセスできるように音楽ライブラリに追加",
-    "rememberChoice": "選択を記憶する"
+    "rememberChoice": "選択を記憶する",
+    "releaseToImport": "離して音楽ファイルをインポート",
+    "addMusicToLibrary": "音楽ファイルをライブラリに追加",
+    "fileManagementStrategy": "ファイル管理方法",
+    "recommended": "推奨",
+    "copyFilesLabel": "ファイルをライブラリにコピー",
+    "copyFilesDesc": "管理ライブラリフォルダにコピーを作成し、元のファイルを保持します",
+    "moveFilesLabel": "ファイルをライブラリに移動",
+    "moveFilesDesc": "管理ライブラリフォルダにファイルを移動し、ディスク容量を節約します",
+    "referenceFilesLabel": "現在の場所を参照",
+    "referenceFilesWarning": "警告：ファイルが移動または削除されるとライブラリが壊れます",
+    "orDropFilesHere": "またはここにファイルをドロップ",
+    "processingProgress": "{{total}}件中{{processed}}件を処理中",
+    "statImported": "インポート済み",
+    "statSkipped": "スキップ済み",
+    "statFailed": "失敗",
+    "currentlyProcessing": "処理中:",
+    "estimatedTimeRemaining": "残り推定時間: {{minutes}} 分",
+    "complete": "インポート完了！",
+    "processedSummary": "{{seconds}}秒で{{count}}件のファイルを処理しました",
+    "requireReview": "{{count}}曲のトラックを確認が必要",
+    "requireReviewDesc": "一部のトラックは一致の信頼度が低く、手動での確認が必要です",
+    "failed": "インポート失敗",
+    "unexpectedPayload": "予期しないドラッグ＆ドロップ形式",
+    "noValidFiles": "有効なファイルまたはフォルダが見つかりません。オーディオファイルまたは音楽フォルダをドロップしてください。"
   },
   "artist": {
     "notFound": "アーティストが見つかりません",
@@ -419,6 +547,11 @@
     "name": "プレイリスト名",
     "description": "説明",
     "addTrack": "プレイリストに追加",
+    "addToPlaylist": "プレイリストに追加",
+    "addingTrack": "トラックを追加中",
+    "searchPlaylists": "プレイリストを検索...",
+    "willRemove": "削除されます",
+    "createNew": "新しいプレイリストを作成",
     "removeTrack": "プレイリストから削除",
     "deletePlaylist": "プレイリストを削除",
     "notFound": "プレイリストが見つかりません",
@@ -469,6 +602,9 @@
     "artist": "アーティスト",
     "album": "アルバム",
     "title": "タイトル",
+    "format": "フォーマット",
+    "track": "トラック",
+    "tracks": "トラック",
     "continue": "続ける",
     "back": "戻る",
     "items": "件",
@@ -491,19 +627,35 @@
     "enabled": "有効",
     "retry": "再試行",
     "error": "エラー",
-    "saving": "保存中..."
+    "saving": "保存中...",
+    "tryAgain": "再試行",
+    "reloadPage": "ページを再読み込み",
+    "processing": "処理中...",
+    "confirm": "確認"
   },
   "trackMenu": {
     "showInExplorer": "エクスプローラーで表示",
     "deleteFromManagedLibrary": "管理ライブラリから完全削除",
     "removeFromManagedLibrary": "管理ライブラリから削除",
-    "removeFromLibrary": "ライブラリから削除"
+    "removeFromLibrary": "ライブラリから削除",
+    "options": "トラックのオプション"
   },
   "queue": {
     "playNext": "次に再生",
     "addToQueue": "キューに追加",
     "clearPlayNext": "次に再生をクリア",
-    "clearQueue": "キューをクリア"
+    "clearQueue": "キューをクリア",
+    "title": "キュー",
+    "closeQueue": "キューを閉じる",
+    "empty": "キューにトラックがありません",
+    "emptyHint": "トラックを再生してキューを構築してください",
+    "nowPlaying": "再生中",
+    "upNext": "次に再生",
+    "displayCount": "{{displayed}} / {{total}}",
+    "loadMore": "{{count}}曲をさらに読み込む",
+    "totalCount_one": "合計{{count}}曲",
+    "totalCount_other": "合計{{count}}曲",
+    "albumArt": "アルバムアート"
   },
   "artwork": {
     "edit": {
@@ -777,7 +929,8 @@
     "chooseLibraryLocationDescription": "Soul Playerはこのフォルダに音楽を整理します。インポートされたファイルはきれいな構造でここにコピーされます。",
     "organizationStyle": "整理スタイル",
     "allSet": "準備完了！",
-    "allSetDescription": "ライブラリをセットアップ中です。少々お待ちください..."
+    "allSetDescription": "ライブラリをセットアップ中です。少々お待ちください...",
+    "defaultFolderName": "音楽フォルダ"
   },
   "updateDialog": {
     "title": "アップデートが利用可能",
@@ -793,5 +946,74 @@
     "copy": "コピー",
     "copied": "コピーしました！",
     "viewRelease": "リリースを表示"
+  },
+  "errorBoundary": {
+    "title": "エラーが発生しました",
+    "description": "予期しないエラーが発生しました。ページを再読み込みするか、問題が続く場合はサポートにお問い合わせください。",
+    "showDetails": "エラーの詳細を表示",
+    "errorLabel": "エラー:",
+    "stackLabel": "スタック:",
+    "componentStackLabel": "コンポーネントスタック:",
+    "tryAgain": "再試行",
+    "reloadPage": "ページを再読み込み"
+  },
+  "trackList": {
+    "empty": "トラックが見つかりません",
+    "emptyHint": "音楽を追加して始めましょう",
+    "columnTitle": "タイトル",
+    "columnArtist": "アーティスト",
+    "columnAlbum": "アルバム",
+    "columnFormat": "フォーマット",
+    "columnDuration": "再生時間",
+    "columnTrackNumber": "トラック番号",
+    "tooltipTitle": "トラックタイトル",
+    "tooltipArtist": "アーティスト名",
+    "tooltipAlbum": "アルバムタイトル",
+    "tooltipFormat": "オーディオフォーマット",
+    "tooltipDuration": "トラックの長さ",
+    "fileNotFound": "ファイルが見つかりません"
+  },
+  "sourcesDialog": {
+    "title": "ソースを管理",
+    "close": "閉じる",
+    "loadingSources": "ソースを読み込み中...",
+    "description": "ソースは音楽の取得元です。ローカルファイルとリモートサーバーを使用できます。",
+    "localFiles": "ローカルファイル",
+    "remoteServer": "リモートサーバー",
+    "active": "アクティブ",
+    "online": "オンライン",
+    "offline": "オフライン",
+    "aboutSources": "ソースについて:",
+    "aboutLocal": "デバイスに保存されている音楽",
+    "aboutRemote": "ストリーミングのためにSoul Playerサーバーに接続",
+    "aboutMultiple": "複数のサーバーを追加して切り替えることができます",
+    "aboutCache": "サーバーの音楽はオフライン再生のためにキャッシュできます",
+    "addServer": "サーバーを追加",
+    "addServerComingSoon": "（近日公開）"
+  },
+  "qualityBadge": {
+    "tooltipFormat": "フォーマット: {{format}}",
+    "tooltipBitrate": "ビットレート: {{bitrate}} kbps",
+    "tooltipSampleRate": "サンプルレート: {{kHz}} kHz",
+    "tooltipChannelMono": "モノ",
+    "tooltipChannelStereo": "ステレオ",
+    "tooltipChannel51": "5.1サラウンド",
+    "tooltipChannel71": "7.1サラウンド",
+    "tooltipChannelN": "{{count}}チャンネル",
+    "tooltipHiRes": "ハイレゾオーディオ",
+    "tooltipLossless": "ロスレスオーディオ"
+  },
+  "sync": {
+    "statusLabel": "同期ステータス"
+  },
+  "titleBar": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "元に戻す",
+    "close": "閉じる"
+  },
+  "demoView": {
+    "yourLibrary": "ライブラリ",
+    "livePreview": "これはSoul Playerデスクトップインターフェースのライブプレビューです"
   }
 }

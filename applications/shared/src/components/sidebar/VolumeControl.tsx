@@ -2,6 +2,7 @@
 
 import { Volume2, VolumeX } from 'lucide-react';
 import { useId } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface VolumeControlProps {
   volume: number;
@@ -51,6 +52,7 @@ export function VolumeControl({
   onMuteToggle,
   onWheel,
 }: VolumeControlProps) {
+  const { t } = useTranslation();
   const sliderId = useId();
 
   // Volume is already a level (0-1), no conversion needed
@@ -68,8 +70,8 @@ export function VolumeControl({
       <button
         onClick={onMuteToggle}
         aria-pressed={isMuted}
-        aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
-        title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
+        aria-label={isMuted ? t('playback.unmuteAudio') : t('playback.muteAudio')}
+        title={isMuted ? t('playback.unmuteWithKey') : t('playback.muteWithKey')}
         className="p-1 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         data-testid="volume-mute-button"
       >
@@ -94,12 +96,12 @@ export function VolumeControl({
           step="0.01"
           value={displayVolume}
           onChange={onVolumeChange}
-          aria-label="Volume"
+          aria-label={t('playback.volume')}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={volumePercent}
-          aria-valuetext={`${volumePercent} percent`}
-          title={`Volume: ${volumePercent}%`}
+          aria-valuetext={t('playback.volumePercent', { percent: volumePercent })}
+          title={t('playback.volumeLabel', { percent: volumePercent })}
           className="
             absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10
             focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2

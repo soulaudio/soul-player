@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Music2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { AlbumCard, type Album } from './AlbumCard';
 
 export type { Album };
@@ -30,6 +31,7 @@ function getColumnCount(containerWidth: number, _scale: number): number {
  * Automatically handles responsive column counts and window resizing.
  */
 export function AlbumGrid({ albums, scale = 1 }: AlbumGridProps) {
+  const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [columnCount, setColumnCount] = useState(4);
@@ -86,8 +88,8 @@ export function AlbumGrid({ albums, scale = 1 }: AlbumGridProps) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
         <Music2 className="w-12 h-12 mb-4 opacity-50" />
-        <p>No albums found</p>
-        <p className="text-sm mt-1">Import music to get started</p>
+        <p>{t('library.noAlbums')}</p>
+        <p className="text-sm mt-1">{t('library.noAlbumsHint')}</p>
       </div>
     );
   }

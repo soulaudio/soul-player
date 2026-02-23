@@ -10,6 +10,8 @@ import { Tooltip } from './ui/Tooltip';
 import { ArtistLink } from './ArtistLink';
 import { AlbumLink } from './AlbumLink';
 import { debug } from '../utils/debug';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 export type SourceType = 'local' | 'server' | 'cached';
 
@@ -303,6 +305,7 @@ interface TrackRowProps {
   onMouseLeave: () => void;
   renderMenu?: (track: Track) => React.ReactNode;
   showTrackNumber: boolean;
+  t: TFunction;
 }
 
 /** Single track row component - memoized for performance */
@@ -319,6 +322,7 @@ const TrackRowComponent = ({
   onMouseLeave,
   renderMenu,
   showTrackNumber,
+  t,
 }: TrackRowProps) => {
   const activeVersion = getActiveVersion(group);
   const showPauseButton = isCurrentTrack && isPlaying;
@@ -341,7 +345,7 @@ const TrackRowComponent = ({
       {showTrackNumber && (
         <div className="flex items-center">
           {isUnavailable ? (
-            <Tooltip content="File not found" position="right">
+            <Tooltip content={t('trackList.fileNotFound')} position="right">
               <div className="w-8 h-8 flex items-center justify-center text-amber-500">
                 <AlertTriangle className="w-4 h-4" />
               </div>
@@ -351,7 +355,7 @@ const TrackRowComponent = ({
               onClick={() => (showPauseButton ? onPause() : onPlay(group))}
               onMouseDown={(e) => e.preventDefault()}
               className="w-8 h-8 flex items-center justify-center rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
-              aria-label={showPauseButton ? 'Pause' : 'Play'}
+              aria-label={showPauseButton ? t('playback.pause') : t('playback.play')}
             >
               {showPauseButton ? (
                 <Pause className="w-4 h-4" fill="currentColor" />
@@ -372,7 +376,7 @@ const TrackRowComponent = ({
         {!showTrackNumber && (isHovered || isCurrentTrack || isUnavailable) && (
           <>
             {isUnavailable ? (
-              <Tooltip content="File not found" position="right">
+              <Tooltip content={t('trackList.fileNotFound')} position="right">
                 <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-amber-500">
                   <AlertTriangle className="w-4 h-4" />
                 </div>
@@ -382,7 +386,7 @@ const TrackRowComponent = ({
                 onClick={() => (showPauseButton ? onPause() : onPlay(group))}
                 onMouseDown={(e) => e.preventDefault()}
                 className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
-                aria-label={showPauseButton ? 'Pause' : 'Play'}
+                aria-label={showPauseButton ? t('playback.pause') : t('playback.play')}
               >
                 {showPauseButton ? (
                   <Pause className="w-4 h-4" fill="currentColor" />
@@ -469,6 +473,7 @@ export function TrackList({
   virtualItemSize = 56,
   showTrackNumber = false,
 }: TrackListProps) {
+  const { t } = useTranslation();
   const [hoveredGroupKey, setHoveredGroupKey] = useState<string | null>(null);
   const [selectedVersions, setSelectedVersions] = useState<Map<string, Track>>(new Map());
   const { currentTrack, isPlaying } = usePlayerPlayback();
@@ -539,8 +544,8 @@ export function TrackList({
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
         <Music className="w-12 h-12 mb-4 opacity-50" />
-        <p>No tracks found</p>
-        <p className="text-sm mt-1">Add music to get started</p>
+        <p>{t('trackList.empty')}</p>
+        <p className="text-sm mt-1">{t('trackList.emptyHint')}</p>
       </div>
     );
   }
@@ -557,24 +562,24 @@ export function TrackList({
         <div className="bg-muted/50 flex-shrink-0">
           <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium text-muted-foreground`}>
             {showTrackNumber && (
-              <Tooltip content="Track number" position="top" delay={700}>
+              <Tooltip content={t('trackList.columnTrackNumber')} position="top" delay={700}>
                 <div>#</div>
               </Tooltip>
             )}
-            <Tooltip content="Track title" position="top" delay={700}>
-              <div>Title</div>
+            <Tooltip content={t('trackList.tooltipTitle')} position="top" delay={700}>
+              <div>{t('trackList.columnTitle')}</div>
             </Tooltip>
-            <Tooltip content="Artist name" position="top" delay={700}>
-              <div>Artist</div>
+            <Tooltip content={t('trackList.tooltipArtist')} position="top" delay={700}>
+              <div>{t('trackList.columnArtist')}</div>
             </Tooltip>
-            <Tooltip content="Album title" position="top" delay={700}>
-              <div>Album</div>
+            <Tooltip content={t('trackList.tooltipAlbum')} position="top" delay={700}>
+              <div>{t('trackList.columnAlbum')}</div>
             </Tooltip>
-            <Tooltip content="Audio format" position="top" delay={700}>
-              <div>Format</div>
+            <Tooltip content={t('trackList.tooltipFormat')} position="top" delay={700}>
+              <div>{t('trackList.columnFormat')}</div>
             </Tooltip>
-            <Tooltip content="Track duration" position="top" delay={700}>
-              <div>Duration</div>
+            <Tooltip content={t('trackList.tooltipDuration')} position="top" delay={700}>
+              <div>{t('trackList.columnDuration')}</div>
             </Tooltip>
             <div></div>
           </div>
@@ -623,6 +628,7 @@ export function TrackList({
                     onMouseLeave={() => setHoveredGroupKey(null)}
                     renderMenu={renderMenu}
                     showTrackNumber={showTrackNumber}
+                    t={t}
                   />
                 </div>
               );
@@ -640,24 +646,24 @@ export function TrackList({
       <div className="bg-muted/50">
         <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium text-muted-foreground`}>
           {showTrackNumber && (
-            <Tooltip content="Track number" position="top" delay={700}>
+            <Tooltip content={t('trackList.columnTrackNumber')} position="top" delay={700}>
               <div>#</div>
             </Tooltip>
           )}
-          <Tooltip content="Track title" position="top" delay={700}>
-            <div>Title</div>
+          <Tooltip content={t('trackList.tooltipTitle')} position="top" delay={700}>
+            <div>{t('trackList.columnTitle')}</div>
           </Tooltip>
-          <Tooltip content="Artist name" position="top" delay={700}>
-            <div>Artist</div>
+          <Tooltip content={t('trackList.tooltipArtist')} position="top" delay={700}>
+            <div>{t('trackList.columnArtist')}</div>
           </Tooltip>
-          <Tooltip content="Album title" position="top" delay={700}>
-            <div>Album</div>
+          <Tooltip content={t('trackList.tooltipAlbum')} position="top" delay={700}>
+            <div>{t('trackList.columnAlbum')}</div>
           </Tooltip>
-          <Tooltip content="Audio format" position="top" delay={700}>
-            <div>Format</div>
+          <Tooltip content={t('trackList.tooltipFormat')} position="top" delay={700}>
+            <div>{t('trackList.columnFormat')}</div>
           </Tooltip>
-          <Tooltip content="Track duration" position="top" delay={700}>
-            <div className="text-right">Duration</div>
+          <Tooltip content={t('trackList.tooltipDuration')} position="top" delay={700}>
+            <div className="text-right">{t('trackList.columnDuration')}</div>
           </Tooltip>
           <div></div>
         </div>
@@ -685,6 +691,7 @@ export function TrackList({
               onMouseLeave={() => setHoveredGroupKey(null)}
               renderMenu={renderMenu}
               showTrackNumber={showTrackNumber}
+              t={t}
             />
           );
         })}

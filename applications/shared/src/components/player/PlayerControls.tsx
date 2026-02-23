@@ -3,8 +3,10 @@ import { usePlayerPlayback } from '../../stores/player';
 import { usePlayerCommands, usePlaybackEvents } from '../../contexts/PlayerCommandsContext';
 import { SkipBack, Play, Pause, SkipForward } from 'lucide-react';
 import { debug } from '../../utils/debug';
+import { useTranslation } from 'react-i18next';
 
 export function PlayerControls() {
+  const { t } = useTranslation();
   const { isPlaying, currentTrack } = usePlayerPlayback();
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
@@ -92,7 +94,7 @@ export function PlayerControls() {
         onClick={handlePrevious}
         disabled={isPreviousDisabled}
         className="p-2 rounded-full hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        aria-label="Previous track"
+        aria-label={t('playback.previous')}
       >
         <SkipBack className="w-5 h-5" />
       </button>
@@ -102,7 +104,7 @@ export function PlayerControls() {
         onClick={handlePlayPause}
         disabled={isPlayDisabled}
         className="p-3 rounded-full bg-primary text-primary-foreground hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? t('playback.pause') : t('playback.play')}
       >
         {isPlaying ? (
           <Pause className="w-6 h-6" fill="currentColor" />
@@ -116,7 +118,7 @@ export function PlayerControls() {
         onClick={handleNext}
         disabled={isNextDisabled}
         className="p-2 rounded-full hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        aria-label="Next track"
+        aria-label={t('playback.next')}
       >
         <SkipForward className="w-5 h-5" />
       </button>

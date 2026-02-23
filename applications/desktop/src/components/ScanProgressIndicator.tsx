@@ -207,7 +207,7 @@ export function ScanProgressIndicator({
                 {t('scan.scanning')}
               </p>
               <p className="text-xs text-muted-foreground">
-                {totalProcessed} of {totalFiles} files
+                {t('scan.filesProgress', { processed: totalProcessed, total: totalFiles })}
               </p>
             </div>
           </div>
@@ -225,13 +225,13 @@ export function ScanProgressIndicator({
             {scans.reduce((sum, s) => sum + s.newFiles, 0) > 0 && (
               <span className="flex items-center gap-1">
                 <Check className="w-3 h-3 text-green-500" />
-                {scans.reduce((sum, s) => sum + s.newFiles, 0)} new
+                {t('scan.newFiles', { count: scans.reduce((sum, s) => sum + s.newFiles, 0) })}
               </span>
             )}
             {scans.reduce((sum, s) => sum + s.errors, 0) > 0 && (
               <span className="flex items-center gap-1">
                 <AlertCircle className="w-3 h-3 text-red-500" />
-                {scans.reduce((sum, s) => sum + s.errors, 0)} errors
+                {t('scan.errors', { count: scans.reduce((sum, s) => sum + s.errors, 0) })}
               </span>
             )}
           </div>

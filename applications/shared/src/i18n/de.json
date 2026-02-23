@@ -58,9 +58,18 @@
       "smart": "Zufällig: Smart"
     },
     "repeat": "Wiederholen",
+    "repeatOff": "Wiederholen: Aus",
+    "repeatAll": "Wiederholen: Alle",
+    "repeatOne": "Wiederholen: Einer",
     "volume": "Lautstärke",
+    "volumePercent": "{{percent}} Prozent",
+    "volumeLabel": "Lautstärke: {{percent}}%",
     "mute": "Stummschalten",
+    "muteAudio": "Audio stummschalten",
+    "muteWithKey": "Stummschalten (M)",
     "unmute": "Stummschaltung aufheben",
+    "unmuteAudio": "Stummschaltung aufheben",
+    "unmuteWithKey": "Stummschaltung aufheben (M)",
     "shuffleOff": "Zufällig: Aus",
     "shuffleRandom": "Zufällig: Zufällig",
     "shuffleSmart": "Zufällig: Smart"
@@ -133,6 +142,8 @@
       "selectDevice": "Audiogerät auswählen",
       "output": "Audioausgabe",
       "noDevicesFound": "Keine Audiogeräte gefunden",
+      "noDevicesAvailable": "Keine Geräte verfügbar",
+      "systemDefault": "Systemstandard",
       "warning": {
         "title": "Experimentelle Audio-Pipeline",
         "description": "Die Audio-Pipeline und die Funktionen befinden sich in aktiver Entwicklung und können Fehler oder Instabilitäten enthalten. Bei Problemen lesen Sie bitte den Bereich »Fehler melden« in den Einstellungen."
@@ -179,8 +190,90 @@
       },
       "resampling": {
         "applyOnNextTrack": "Resampling-Einstellungen werden beim nächsten Titel übernommen"
+      },
+      "pipelineDescription": "Konfiguration der Audio-Verarbeitungspipeline",
+      "pipelineConfigDescription": "Konfigurieren Sie Ihre Audio-Pipeline Stufe für Stufe",
+      "professionalPipeline": "Professionelle Audio-Pipeline",
+      "resetAll": "Alle zurücksetzen",
+      "auto": "Automatisch",
+      "deviceSwitched": "Audiogerät gewechselt: {{name}}",
+      "deviceSwitchFailed": "Audiogerät konnte nicht gewechselt werden: {{error}}",
+      "crossfadeApplyFailed": "Crossfade-Einstellungen konnten nicht übernommen werden",
+      "resamplingQualityFailed": "Resampling-Qualität konnte nicht übernommen werden",
+      "resamplingTargetRateFailed": "Resampling-Zielrate konnte nicht übernommen werden",
+      "resamplingBackendFailed": "Resampling-Backend konnte nicht übernommen werden",
+      "resetDialog": {
+        "title": "Audio-Einstellungen zurücksetzen",
+        "message": "Dadurch werden alle Audio-Einstellungen auf ihre Standardwerte zurückgesetzt. Ihre aktuelle Konfiguration geht verloren.",
+        "confirm": "Zurücksetzen"
+      },
+      "volumeLeveling": {
+        "rgTrack": "RG-Titel",
+        "rgAlbum": "RG-Album",
+        "off": "Aus"
+      },
+      "features": {
+        "resampling": {
+          "title": "Hochwertiges Resampling",
+          "description": "r8brain- und Rubato-Algorithmen für die Abtastratenkonvertierung"
+        },
+        "dspChain": {
+          "title": "DSP-Effektkette",
+          "description": "4 Slots: Parametrischer EQ, Kompressor, Limiter, Crossfeed"
+        },
+        "volumeLeveling": {
+          "title": "Lautstärkeausgleich",
+          "description": "ReplayGain (Titel/Album) und EBU-R128-Normalisierung"
+        },
+        "gaplessPlayback": {
+          "title": "Lückenlose Wiedergabe",
+          "description": "Nahtlose Übergänge mit Crossfade-Unterstützung"
+        },
+        "asioJack": {
+          "title": "ASIO & JACK-Unterstützung",
+          "description": "Audioausgabe mit niedriger Latenz unter Windows und Linux"
+        },
+        "headroom": {
+          "title": "Headroom-Verwaltung",
+          "description": "Automatische Clipping-Prävention während der DSP-Verarbeitung"
+        }
+      },
+      "stages": {
+        "resampling": {
+          "title": "Resampling",
+          "description": "Automatische Abtastratenkonvertierung für das Ausgabegerät"
+        },
+        "dspEffects": {
+          "title": "DSP-Effekte",
+          "description": "Digitale Signalverarbeitung – EQ, Kompression und Effekte",
+          "activeCount": "{{count}} aktiv",
+          "none": "Keine"
+        },
+        "volumeLeveling": {
+          "title": "Lautstärkeausgleich",
+          "description": "Automatische Lautheitsanpassung mit ReplayGain oder EBU R128"
+        },
+        "headroom": {
+          "title": "Headroom-Verwaltung",
+          "description": "Verhindert Clipping durch Pegelabsenkung vor der DSP-Verarbeitung",
+          "active": "Aktiv"
+        },
+        "buffer": {
+          "title": "Puffer & Leistung",
+          "description": "Pufferung und Vorabladen für optimale Wiedergabe konfigurieren",
+          "samples": "{{count}} Samples",
+          "preloadOn": "Vorab laden",
+          "streaming": "Streaming"
+        },
+        "output": {
+          "title": "Audioausgabe",
+          "description": "Audio-Treiber-Backend und Ausgabegerät für die Wiedergabe auswählen"
+        }
       }
     },
+    "pressKey": "Tasten drücken...",
+    "shortcutsDescription": "Tastenkombinationen für die Wiedergabesteuerung konfigurieren. Tastenkombinationen funktionieren nur, wenn die App im Vordergrund ist, und sind in Texteingabefeldern deaktiviert.",
+    "noShortcuts": "Keine Tastenkombinationen konfiguriert",
     "updates": "Updates",
     "autoUpdate": "Automatisch nach Updates suchen",
     "silentUpdate": "Updates automatisch installieren",
@@ -206,15 +299,25 @@
     "upToDate": "Sie verwenden die neueste Version!",
     "updateAvailable": "Update verfügbar",
     "checkFailed": "Update-Prüfung fehlgeschlagen",
+    "updateInstalledRestarting": "Update installiert. App wird neu gestartet...",
+    "updateInstallFailed": "Update konnte nicht installiert werden",
     "reportBug": "Fehler melden",
     "reportBugDescription": "Helfen Sie dabei, Soul Player zu verbessern, indem Sie aufgetretene Probleme melden",
     "reportBugTitle": "Einen Fehler melden",
     "reportBugInstructions": "Wenn Sie Probleme mit Soul Player feststellen, helfen Sie uns bitte, diese durch eine Meldung auf GitHub zu beheben.",
     "reportBugSteps": {
       "step1": "Prüfen Sie, ob das Problem bereits gemeldet wurde",
+      "step1Description": "Suchen Sie in bestehenden Issues, um Duplikate zu vermeiden",
       "step2": "Erstellen Sie einen detaillierten Fehlerbericht mit Schritten zur Reproduktion",
-      "step3": "Fügen Sie bei Bedarf Systeminformationen und Protokolle hinzu"
+      "step2Description": "Beschreiben Sie, was Sie erwartet haben und was stattdessen passiert ist",
+      "step3": "Fügen Sie bei Bedarf Systeminformationen und Protokolle hinzu",
+      "step3Description": "BS-Version, Soul Player-Version, Fehlermeldungen usw."
     },
+    "reportBugResourcesHeading": "Hilfreiche Ressourcen",
+    "reportBugGithubRepoLabel": "GitHub-Repository",
+    "reportBugGithubRepoDescription": "Quellcode und Dokumentation ansehen",
+    "reportBugWikiLabel": "Wiki & Dokumentation",
+    "reportBugWikiDescription": "Anleitungen, FAQs und Fehlerbehebung",
     "reportBugGithubLink": "Auf GitHub Issues melden",
     "reportBugLogs": "Protokolle anzeigen",
     "reportBugLogsDescription": "Anwendungsprotokolle können bei der Diagnose von Problemen helfen. Aktivieren Sie die Protokollierung mit dem Flag --logs beim Start der App.",
@@ -297,13 +400,42 @@
     "playNowDescription": "Sofort abspielen ohne zur Bibliothek hinzuzufügen",
     "importToLibrary": "In Bibliothek importieren",
     "importToLibraryDescription": "Zur Musikbibliothek für dauerhaften Zugriff hinzufügen",
-    "rememberChoice": "Meine Wahl merken"
+    "rememberChoice": "Meine Wahl merken",
+    "releaseToImport": "Loslassen, um Ihre Musikdateien zu importieren",
+    "addMusicToLibrary": "Musikdateien zur Bibliothek hinzufügen",
+    "fileManagementStrategy": "Dateiverwaltungsstrategie",
+    "recommended": "Empfohlen",
+    "copyFilesLabel": "Dateien in Bibliothek kopieren",
+    "copyFilesDesc": "Erstellt Kopien im verwalteten Bibliotheksordner, Originaldateien bleiben erhalten",
+    "moveFilesLabel": "Dateien in Bibliothek verschieben",
+    "moveFilesDesc": "Verschiebt Dateien in den verwalteten Bibliotheksordner, spart Speicherplatz",
+    "referenceFilesLabel": "Am aktuellen Speicherort verweisen",
+    "referenceFilesWarning": "Warnung: Die Bibliothek wird beschädigt, wenn Dateien verschoben oder gelöscht werden",
+    "orDropFilesHere": "oder Dateien hier ablegen",
+    "processingProgress": "{{processed}} von {{total}} Dateien werden verarbeitet",
+    "statImported": "Importiert",
+    "statSkipped": "Übersprungen",
+    "statFailed": "Fehlgeschlagen",
+    "currentlyProcessing": "Wird verarbeitet:",
+    "estimatedTimeRemaining": "Verbleibende Zeit: {{minutes}} Min.",
+    "complete": "Import abgeschlossen!",
+    "processedSummary": "{{count}} Dateien in {{seconds}} s verarbeitet",
+    "requireReview": "{{count}} Titel erfordern Überprüfung",
+    "requireReviewDesc": "Bei einigen Titeln war die Übereinstimmungskonfidenz gering und eine manuelle Überprüfung ist notwendig",
+    "failed": "Import fehlgeschlagen",
+    "unexpectedPayload": "Unerwartetes Drag-and-Drop-Format",
+    "noValidFiles": "Keine gültigen Dateien oder Ordner gefunden. Bitte Audio-Dateien oder Musikordner ablegen."
   },
   "playlist": {
     "create": "Wiedergabeliste erstellen",
     "name": "Name der Wiedergabeliste",
     "description": "Beschreibung",
     "addTrack": "Zur Wiedergabeliste hinzufügen",
+    "addToPlaylist": "Zur Wiedergabeliste hinzufügen",
+    "addingTrack": "Titel wird hinzugefügt",
+    "searchPlaylists": "Wiedergabelisten suchen...",
+    "willRemove": "wird entfernt",
+    "createNew": "Neue Wiedergabeliste erstellen",
     "removeTrack": "Aus Wiedergabeliste entfernen",
     "deletePlaylist": "Wiedergabeliste löschen",
     "notFound": "Wiedergabeliste nicht gefunden",
@@ -381,6 +513,9 @@
     "artist": "Künstler",
     "album": "Album",
     "title": "Titel",
+    "format": "Format",
+    "track": "Titel",
+    "tracks": "Titel",
     "continue": "Weiter",
     "back": "Zurück",
     "browse": "Durchsuchen",
@@ -403,13 +538,18 @@
     "folder": "Ordner",
     "folders": "Ordner",
     "done": "Fertig",
-    "andMore": "und {{count}} weitere"
+    "andMore": "und {{count}} weitere",
+    "tryAgain": "Erneut versuchen",
+    "reloadPage": "Seite neu laden",
+    "processing": "Wird verarbeitet...",
+    "confirm": "Bestätigen"
   },
   "trackMenu": {
     "showInExplorer": "Im Datei-Explorer anzeigen",
     "removeFromManagedLibrary": "Aus verwalteter Bibliothek entfernen",
     "removeFromLibrary": "Aus Bibliothek entfernen",
-    "deleteFromManagedLibrary": "Aus verwalteter Bibliothek löschen"
+    "deleteFromManagedLibrary": "Aus verwalteter Bibliothek löschen",
+    "options": "Titeloptionen"
   },
   "artwork": {
     "edit": {
@@ -458,7 +598,8 @@
     "newFiles": "{{count}} neue Dateien",
     "updatedFiles": "{{count}} aktualisiert",
     "removedFiles": "{{count}} entfernt",
-    "errors": "{{count}} Fehler"
+    "errors": "{{count}} Fehler",
+    "filesProgress": "{{processed}} von {{total}} Dateien"
   },
   "sources": {
     "title": "Quellen",
@@ -542,7 +683,18 @@
     "playNext": "Als Nächstes abspielen",
     "addToQueue": "Zur Warteschlange hinzufügen",
     "clearPlayNext": "\"Als Nächstes\" leeren",
-    "clearQueue": "Warteschlange leeren"
+    "clearQueue": "Warteschlange leeren",
+    "title": "Warteschlange",
+    "closeQueue": "Warteschlange schließen",
+    "empty": "Keine Titel in der Warteschlange",
+    "emptyHint": "Spielen Sie einen Titel ab, um die Warteschlange zu befüllen",
+    "nowPlaying": "Aktuelle Wiedergabe",
+    "upNext": "Als Nächstes",
+    "displayCount": "{{displayed}} von {{total}}",
+    "loadMore": "{{count}} weitere Titel laden",
+    "totalCount_one": "{{count}} Titel insgesamt",
+    "totalCount_other": "{{count}} Titel insgesamt",
+    "albumArt": "Albumcover"
   },
   "crossfeed": {
     "title": "Crossfeed",
@@ -779,7 +931,8 @@
     "chooseLibraryLocationDescription": "Soul Player organisiert Ihre Musik in diesem Ordner. Importierte Dateien werden mit einer übersichtlichen Struktur hierher kopiert.",
     "organizationStyle": "Organisationsstil",
     "allSet": "Alles bereit!",
-    "allSetDescription": "Ihre Bibliothek wird eingerichtet. Dies kann einen Moment dauern..."
+    "allSetDescription": "Ihre Bibliothek wird eingerichtet. Dies kann einen Moment dauern...",
+    "defaultFolderName": "Musikordner"
   },
   "updateDialog": {
     "title": "Update verfügbar",
@@ -795,5 +948,74 @@
     "copy": "Kopieren",
     "copied": "Kopiert!",
     "viewRelease": "Release anzeigen"
+  },
+  "errorBoundary": {
+    "title": "Etwas ist schiefgelaufen",
+    "description": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie, die Seite neu zu laden, oder wenden Sie sich an den Support, falls das Problem anhält.",
+    "showDetails": "Fehlerdetails anzeigen",
+    "errorLabel": "Fehler:",
+    "stackLabel": "Stack:",
+    "componentStackLabel": "Komponentenstack:",
+    "tryAgain": "Erneut versuchen",
+    "reloadPage": "Seite neu laden"
+  },
+  "trackList": {
+    "empty": "Keine Titel gefunden",
+    "emptyHint": "Fügen Sie Musik hinzu, um zu beginnen",
+    "columnTitle": "Titel",
+    "columnArtist": "Künstler",
+    "columnAlbum": "Album",
+    "columnFormat": "Format",
+    "columnDuration": "Dauer",
+    "columnTrackNumber": "Titelnummer",
+    "tooltipTitle": "Titelname",
+    "tooltipArtist": "Künstlername",
+    "tooltipAlbum": "Albumtitel",
+    "tooltipFormat": "Audioformat",
+    "tooltipDuration": "Titeldauer",
+    "fileNotFound": "Datei nicht gefunden"
+  },
+  "sourcesDialog": {
+    "title": "Quellen verwalten",
+    "close": "Schließen",
+    "loadingSources": "Quellen werden geladen...",
+    "description": "Quellen sind der Ursprung Ihrer Musik. Sie können lokale Dateien und Remote-Server haben.",
+    "localFiles": "Lokale Dateien",
+    "remoteServer": "Remote-Server",
+    "active": "Aktiv",
+    "online": "Online",
+    "offline": "Offline",
+    "aboutSources": "Über Quellen:",
+    "aboutLocal": "Auf Ihrem Gerät gespeicherte Musik",
+    "aboutRemote": "Verbindung zu Soul Player-Servern für Streaming",
+    "aboutMultiple": "Sie können mehrere Server hinzufügen und zwischen ihnen wechseln",
+    "aboutCache": "Musik von Servern kann für die Offline-Wiedergabe zwischengespeichert werden",
+    "addServer": "Server hinzufügen",
+    "addServerComingSoon": "(Demnächst verfügbar)"
+  },
+  "qualityBadge": {
+    "tooltipFormat": "Format: {{format}}",
+    "tooltipBitrate": "Bitrate: {{bitrate}} kbps",
+    "tooltipSampleRate": "Abtastrate: {{kHz}} kHz",
+    "tooltipChannelMono": "Mono",
+    "tooltipChannelStereo": "Stereo",
+    "tooltipChannel51": "5.1 Surround",
+    "tooltipChannel71": "7.1 Surround",
+    "tooltipChannelN": "{{count}} Kanäle",
+    "tooltipHiRes": "Hochauflösendes Audio",
+    "tooltipLossless": "Verlustfreies Audio"
+  },
+  "sync": {
+    "statusLabel": "Synchronisierungsstatus"
+  },
+  "titleBar": {
+    "minimize": "Minimieren",
+    "maximize": "Maximieren",
+    "restore": "Wiederherstellen",
+    "close": "Schließen"
+  },
+  "demoView": {
+    "yourLibrary": "Ihre Bibliothek",
+    "livePreview": "Dies ist eine Live-Vorschau der Soul Player Desktop-Oberfläche"
   }
 }

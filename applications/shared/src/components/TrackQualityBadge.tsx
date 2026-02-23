@@ -1,4 +1,6 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 interface TrackQualityBadgeProps {
   format: string;
@@ -24,6 +26,7 @@ export const TrackQualityBadge = memo(function TrackQualityBadge({
   channels,
   className = '',
 }: TrackQualityBadgeProps) {
+  const { t } = useTranslation();
   const info = getQualityInfo(format, bitrate, sampleRate);
 
   return (
@@ -33,7 +36,7 @@ export const TrackQualityBadge = memo(function TrackQualityBadge({
         ${info.colorClass}
         ${className}
       `}
-      title={getTooltip(format, bitrate, sampleRate, channels)}
+      title={getTooltip(t, format, bitrate, sampleRate, channels)}
     >
       {info.label}
     </span>
@@ -105,6 +108,7 @@ function getQualityInfo(
 }
 
 function getTooltip(
+  t: TFunction,
   format: string,
   bitrate?: number,
   sampleRate?: number,
@@ -112,24 +116,24 @@ function getTooltip(
 ): string {
   const parts: string[] = [];
 
-  parts.push(`Format: ${format.toUpperCase()}`);
+  parts.push(t('qualityBadge.tooltipFormat', { format: format.toUpperCase() }));
 
   if (bitrate) {
-    parts.push(`Bitrate: ${bitrate} kbps`);
+    parts.push(t('qualityBadge.tooltipBitrate', { bitrate }));
   }
 
   if (sampleRate) {
     const kHz = (sampleRate / 1000).toFixed(1);
-    parts.push(`Sample Rate: ${kHz} kHz`);
+    parts.push(t('qualityBadge.tooltipSampleRate', { kHz }));
   }
 
   if (channels) {
     const channelLabel =
-      channels === 1 ? 'Mono' :
-      channels === 2 ? 'Stereo' :
-      channels === 6 ? '5.1 Surround' :
-      channels === 8 ? '7.1 Surround' :
-      `${channels} channels`;
+      channels === 1 ? t('qualityBadge.tooltipChannelMono') :
+      channels === 2 ? t('qualityBadge.tooltipChannelStereo') :
+      channels === 6 ? t('qualityBadge.tooltipChannel51') :
+      channels === 8 ? t('qualityBadge.tooltipChannel71') :
+      t('qualityBadge.tooltipChannelN', { count: channels });
     parts.push(channelLabel);
   }
 
@@ -138,9 +142,9 @@ function getTooltip(
   const isHiRes = sampleRate && sampleRate >= 88200;
 
   if (isHiRes) {
-    parts.push('High Resolution Audio');
+    parts.push(t('qualityBadge.tooltipHiRes'));
   } else if (isLossless) {
-    parts.push('Lossless Audio');
+    parts.push(t('qualityBadge.tooltipLossless'));
   }
 
   return parts.join('\n');

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { MainLayout } from '../layouts/MainLayout';
 
 /**
@@ -5,12 +6,13 @@ import { MainLayout } from '../layouts/MainLayout';
  * Shows the actual Soul Player interface in a non-interactive state
  */
 export function DemoView() {
+  const { t } = useTranslation();
   return (
     <MainLayout>
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">Your Library</h2>
+        <h2 className="text-2xl font-bold">{t('demoView.yourLibrary')}</h2>
         <p className="text-muted-foreground">
-          This is a live preview of the Soul Player desktop interface
+          {t('demoView.livePreview')}
         </p>
 
         {/* Placeholder content showing the interface */}

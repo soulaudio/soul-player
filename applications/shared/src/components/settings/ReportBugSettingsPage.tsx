@@ -83,7 +83,7 @@ export function ReportBugSettingsPage() {
             <div>
               <p className="text-sm font-medium">{t('settings.reportBugSteps.step1')}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Search existing issues to avoid duplicates
+                {t('settings.reportBugSteps.step1Description')}
               </p>
             </div>
           </div>
@@ -95,7 +95,7 @@ export function ReportBugSettingsPage() {
             <div>
               <p className="text-sm font-medium">{t('settings.reportBugSteps.step2')}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Include what you expected vs. what actually happened
+                {t('settings.reportBugSteps.step2Description')}
               </p>
             </div>
           </div>
@@ -107,7 +107,7 @@ export function ReportBugSettingsPage() {
             <div>
               <p className="text-sm font-medium">{t('settings.reportBugSteps.step3')}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                OS version, Soul Player version, error messages, etc.
+                {t('settings.reportBugSteps.step3Description')}
               </p>
             </div>
           </div>
@@ -207,7 +207,7 @@ export function ReportBugSettingsPage() {
 
       {/* Helpful Resources */}
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Helpful Resources</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{t('settings.reportBugResourcesHeading')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <a
             href="https://github.com/soulaudio/soul-player"
@@ -218,8 +218,8 @@ export function ReportBugSettingsPage() {
             <div className="flex items-center gap-3">
               <ExternalLink className="w-5 h-5 text-primary" />
               <div>
-                <h3 className="font-medium text-sm">GitHub Repository</h3>
-                <p className="text-xs text-muted-foreground">View source code and documentation</p>
+                <h3 className="font-medium text-sm">{t('settings.reportBugGithubRepoLabel')}</h3>
+                <p className="text-xs text-muted-foreground">{t('settings.reportBugGithubRepoDescription')}</p>
               </div>
             </div>
           </a>
@@ -233,8 +233,8 @@ export function ReportBugSettingsPage() {
             <div className="flex items-center gap-3">
               <FileText className="w-5 h-5 text-primary" />
               <div>
-                <h3 className="font-medium text-sm">Wiki & Documentation</h3>
-                <p className="text-xs text-muted-foreground">Guides, FAQs, and troubleshooting</p>
+                <h3 className="font-medium text-sm">{t('settings.reportBugWikiLabel')}</h3>
+                <p className="text-xs text-muted-foreground">{t('settings.reportBugWikiDescription')}</p>
               </div>
             </div>
           </a>

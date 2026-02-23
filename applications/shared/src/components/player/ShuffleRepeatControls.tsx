@@ -53,6 +53,19 @@ export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControls
     }
   };
 
+  const getRepeatTitle = () => {
+    switch (repeatMode) {
+      case 'off':
+        return t('playback.repeatOff');
+      case 'all':
+        return t('playback.repeatAll');
+      case 'one':
+        return t('playback.repeatOne');
+      default:
+        return t('playback.repeatOff');
+    }
+  };
+
   return (
     <div className="flex items-center gap-1">
       {/* Shuffle button */}
@@ -83,8 +96,8 @@ export function ShuffleRepeatControls({ onAddToPlaylist }: ShuffleRepeatControls
             ? 'text-primary hover:bg-foreground/[var(--hover-bg-opacity)]'
             : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]'
         }`}
-        aria-label={`Repeat: ${repeatMode}`}
-        title={`Repeat: ${repeatMode}`}
+        aria-label={getRepeatTitle()}
+        title={getRepeatTitle()}
       >
         {repeatMode === 'one' ? (
           <Repeat1 className="w-4 h-4" />

@@ -6,6 +6,7 @@ import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contex
 import { ArtworkImage } from './ArtworkImage';
 import { X, Music } from 'lucide-react';
 import { debug } from '../utils/debug';
+import { useTranslation } from 'react-i18next';
 
 interface QueueSidebarProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ const INITIAL_LOAD_COUNT = 100; // Load first 100 tracks
 const LOAD_MORE_COUNT = 50; // Load 50 more when clicking "Load More"
 
 export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
+  const { t } = useTranslation();
   const [fullQueue, setFullQueue] = useState<QueueTrack[]>([]);
   const [displayLimit, setDisplayLimit] = useState(INITIAL_LOAD_COUNT);
   const { currentTrack, isPlaying } = usePlayerPlayback();
@@ -86,11 +88,11 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
     <div className="w-80 border-l border-border bg-background flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-border flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Queue</h2>
+        <h2 className="text-lg font-semibold">{t('queue.title')}</h2>
         <button
           onClick={onClose}
           className="p-1 rounded-md hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
-          aria-label="Close queue"
+          aria-label={t('queue.closeQueue')}
         >
           <X className="w-5 h-5" />
         </button>
@@ -101,8 +103,8 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
         {!currentTrack && fullQueue.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8 text-center">
             <Music className="w-12 h-12 mb-4 opacity-50" />
-            <p>No tracks in queue</p>
-            <p className="text-sm mt-2">Play a track to start building your queue</p>
+            <p>{t('queue.empty')}</p>
+            <p className="text-sm mt-2">{t('queue.emptyHint')}</p>
           </div>
         ) : (
           <div className="py-2">
@@ -117,7 +119,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                   transition={{ duration: 0.2 }}
                 >
                   <h3 className="px-4 pt-2 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Now Playing
+                    {t('queue.nowPlaying')}
                   </h3>
                   <div className="px-4 py-2">
                     <div className="flex items-center gap-3">
@@ -126,7 +128,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                           <ArtworkImage
                             trackId={currentTrack.id}
                             coverArtPath={currentTrack.coverArtPath}
-                            alt={currentTrack.album || 'Album art'}
+                            alt={currentTrack.album || t('queue.albumArt')}
                             className="w-full h-full object-cover"
                             fallbackClassName="w-full h-full flex items-center justify-center"
                           />
@@ -162,10 +164,10 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
               <>
                 <div className="px-4 pt-4 pb-1 flex items-center justify-between">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Up Next
+                    {t('queue.upNext')}
                   </h3>
                   <span className="text-xs text-muted-foreground">
-                    {displayedQueue.length} of {fullQueue.length}
+                    {t('queue.displayCount', { displayed: displayedQueue.length, total: fullQueue.length })}
                   </span>
                 </div>
                 <div
@@ -198,7 +200,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                               <ArtworkImage
                                 trackId={track.trackId}
                                 coverArtPath={track.coverArtPath}
-                                alt={track.album || 'Album art'}
+                                alt={track.album || t('queue.albumArt')}
                                 className="w-full h-full object-cover"
                                 fallbackClassName="w-full h-full flex items-center justify-center"
                               />
@@ -225,7 +227,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                       onClick={loadMore}
                       className="px-4 py-2 text-sm bg-accent hover:opacity-[var(--hover-button-opacity)] rounded-md transition-opacity"
                     >
-                      Load {Math.min(LOAD_MORE_COUNT, fullQueue.length - displayLimit)} more tracks
+                      {t('queue.loadMore', { count: Math.min(LOAD_MORE_COUNT, fullQueue.length - displayLimit) })}
                     </button>
                   </div>
                 )}
@@ -238,7 +240,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
       {/* Footer stats */}
       {(currentTrack || fullQueue.length > 0) && (
         <div className="p-4 border-t border-border text-sm text-muted-foreground">
-          {(currentTrack ? 1 : 0) + fullQueue.length} {(currentTrack ? 1 : 0) + fullQueue.length !== 1 ? 'tracks' : 'track'} total
+          {t('queue.totalCount', { count: (currentTrack ? 1 : 0) + fullQueue.length })}
         </div>
       )}
     </div>

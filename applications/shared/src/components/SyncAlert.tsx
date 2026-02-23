@@ -44,7 +44,7 @@ export function SyncAlert() {
       <button
         onClick={handleClick}
         className="p-2 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
-        aria-label="Sync Status"
+        aria-label={t('sync.statusLabel')}
         title={getTooltipContent()}
       >
         {/* Alert Icon with animation */}

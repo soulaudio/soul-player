@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePlayerCommands, type Source } from '../contexts/PlayerCommandsContext';
 import { debug } from '../utils/debug';
+import { useTranslation } from 'react-i18next';
 
 interface SourcesDialogProps {
   open: boolean;
@@ -8,6 +9,7 @@ interface SourcesDialogProps {
 }
 
 export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
+  const { t } = useTranslation();
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(false);
   const commands = usePlayerCommands();
@@ -37,11 +39,11 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
       <div className="bg-background border rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold">Manage Sources</h2>
+          <h2 className="text-xl font-semibold">{t('sourcesDialog.title')}</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-full transition-colors"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -54,12 +56,12 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
-              <div className="text-muted-foreground mt-4">Loading sources...</div>
+              <div className="text-muted-foreground mt-4">{t('sourcesDialog.loadingSources')}</div>
             </div>
           ) : (
             <div className="space-y-4">
               <p className="text-muted-foreground text-sm">
-                Sources are where your music comes from. You can have local files and remote servers.
+                {t('sourcesDialog.description')}
               </p>
 
               <div className="space-y-3">
@@ -73,10 +75,10 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
                       <div>
                         <div className="font-medium">{source.name}</div>
                         <div className="text-sm text-muted-foreground">
-                          {source.sourceType === 'local' ? 'Local Files' : 'Remote Server'}
+                          {source.sourceType === 'local' ? t('sourcesDialog.localFiles') : t('sourcesDialog.remoteServer')}
                           {source.isActive && (
                             <span className="ml-2 text-xs bg-primary/20 text-primary px-2 py-0.5 rounded">
-                              Active
+                              {t('sourcesDialog.active')}
                             </span>
                           )}
                         </div>
@@ -89,7 +91,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
                           ? 'bg-green-500/10 text-green-500'
                           : 'bg-gray-500/10 text-gray-500'
                       }`}>
-                        {source.isOnline ? 'Online' : 'Offline'}
+                        {source.isOnline ? t('sourcesDialog.online') : t('sourcesDialog.offline')}
                       </div>
                     </div>
                   </div>
@@ -97,12 +99,12 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
               </div>
 
               <div className="mt-6 p-4 bg-muted/40 rounded-lg text-sm">
-                <div className="font-medium mb-2">About Sources:</div>
+                <div className="font-medium mb-2">{t('sourcesDialog.aboutSources')}</div>
                 <ul className="space-y-1 text-muted-foreground">
-                  <li>• <strong>Local Files</strong>: Music stored on your device</li>
-                  <li>• <strong>Remote Servers</strong>: Connect to Soul Player servers for streaming</li>
-                  <li>• You can add multiple servers and switch between them</li>
-                  <li>• Music from servers can be cached for offline playback</li>
+                  <li>• <strong>{t('sourcesDialog.localFiles')}</strong>: {t('sourcesDialog.aboutLocal')}</li>
+                  <li>• <strong>{t('sourcesDialog.remoteServer')}</strong>: {t('sourcesDialog.aboutRemote')}</li>
+                  <li>• {t('sourcesDialog.aboutMultiple')}</li>
+                  <li>• {t('sourcesDialog.aboutCache')}</li>
                 </ul>
               </div>
 
@@ -115,9 +117,9 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    Add Server
+                    {t('sourcesDialog.addServer')}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">(Coming Soon)</div>
+                  <div className="text-xs text-muted-foreground mt-1">{t('sourcesDialog.addServerComingSoon')}</div>
                 </button>
               </div>
             </div>
@@ -130,7 +132,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
             onClick={onClose}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-all duration-[var(--transition-duration)]"
           >
-            Close
+            {t('sourcesDialog.close')}
           </button>
         </div>
       </div>

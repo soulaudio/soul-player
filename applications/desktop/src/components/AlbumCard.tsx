@@ -151,7 +151,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
           title={album.artist_name}
           onClick={handleClick}
         >
-          {album.artist_name || 'Unknown Artist'}
+          {album.artist_name || t('common.unknownArtist')}
           {album.year && ` • ${album.year}`}
         </p>
       )}

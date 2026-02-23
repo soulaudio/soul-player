@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -17,10 +18,11 @@ export function ConfirmDialog({
   onConfirm,
   title,
   message,
-  confirmText = 'Confirm',
+  confirmText,
   confirmVariant = 'primary',
   isLoading = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   if (!open) return null;
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -68,7 +70,7 @@ export function ConfirmDialog({
             className="px-4 py-2 rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             disabled={isLoading}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -79,7 +81,7 @@ export function ConfirmDialog({
                 : 'bg-primary hover:opacity-[var(--hover-button-opacity)] text-primary-foreground'
             } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {isLoading ? 'Processing...' : confirmText}
+            {isLoading ? t('common.processing') : (confirmText ?? t('common.confirm'))}
           </button>
         </div>
       </div>
