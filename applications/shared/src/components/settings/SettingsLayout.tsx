@@ -11,7 +11,7 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
   return (
     <div className="flex h-full">
       {/* Sidebar */}
-      <aside className="w-56 border-r border-border bg-card/30 flex-shrink-0">
+      <aside className="w-14 border-r border-border bg-card/30 flex-shrink-0">
         <SettingsSidebar />
       </aside>
 
