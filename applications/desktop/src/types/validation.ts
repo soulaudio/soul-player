@@ -96,16 +96,16 @@ export const BackendGenreSchema = z.object({
 // =============================================================================
 
 export const PlaybackSessionSchema = z.object({
-  current_track_id: z.number().nullable().optional(),
-  queue_track_ids: z.array(z.number()).optional().default([]),
-  queue_index: z.number().optional().default(0),
-  position_seconds: z.number().optional().default(0),
+  currentTrackId: z.number().nullable().optional(),
+  queueTrackIds: z.array(z.number()).optional().default([]),
+  queueIndex: z.number().optional().default(0),
+  positionSeconds: z.number().optional().default(0),
   volume: z.number().optional().default(80),
-  repeat_mode: z.string().optional().default('off'),
-  shuffle_mode: z.string().optional().default('off'),
-  context_type: z.string().nullable().optional(),
-  context_id: z.string().nullable().optional(),
-  was_playing: z.boolean().optional().default(false),
+  repeatMode: z.string().optional().default('off'),
+  shuffleMode: z.string().optional().default('off'),
+  contextType: z.string().nullable().optional(),
+  contextId: z.string().nullable().optional(),
+  wasPlaying: z.boolean().optional().default(false),
 }).passthrough();
 
 export const QueueTrackSchema = z.object({

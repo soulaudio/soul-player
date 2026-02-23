@@ -17,14 +17,12 @@ import {
   type PlayerCommandsInterface,
   type PlaybackEventsInterface,
   type PlaybackCapabilities,
-  type QueueTrack,
   type BackendTrack,
 } from '@soul-player/shared';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import {
   invokeValidated,
   PlaybackSessionSchema,
-  QueueTrackSchema,
   PlaybackContextSchema,
 } from '../types/validation';
 
@@ -120,21 +118,21 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
         console.log('[PERSISTENCE] Session data from database:', session);
 
-        if (!session || !session.current_track_id) {
+        if (!session || !session.currentTrackId) {
           console.log('[PERSISTENCE] No saved session found or no current track ID');
           return;
         }
 
         // Validate session data
-        if (session.queue_track_ids.length === 0) {
+        if (session.queueTrackIds.length === 0) {
           console.warn('[PERSISTENCE] Invalid session: empty queue');
           await invoke('clear_playback_session');
           return;
         }
 
-        if (session.queue_index < 0 || session.queue_index >= session.queue_track_ids.length) {
+        if (session.queueIndex < 0 || session.queueIndex >= session.queueTrackIds.length) {
           console.warn('[PERSISTENCE] Invalid session: queue index out of bounds');
-          session.queue_index = 0;
+          session.queueIndex = 0;
         }
 
         if (session.volume < 0 || session.volume > 100) {
@@ -143,7 +141,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         }
 
         // Fetch full track objects by IDs
-        const tracks = await backend.getTracksByIds(session.queue_track_ids);
+        const tracks = await backend.getTracksByIds(session.queueTrackIds);
 
         // Filter out missing tracks and convert to Track format
         const validTracks = tracks.filter((t): t is BackendTrack => t !== null).map(convertBackendTrackToTrack);
@@ -162,7 +160,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         }
 
         // Adjust queue index if current track is missing
-        let queueIndex = session.queue_index;
+        let queueIndex = session.queueIndex;
         if (!validTracks[queueIndex]) {
           queueIndex = 0;
           console.warn('[PERSISTENCE] Current track missing - starting from first valid track');
@@ -171,11 +169,34 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         if (!isMounted) return;
 
         const currentTrackDuration = validTracks[queueIndex]?.duration ?? 0;
-        const restoredProgress = session.position_seconds && currentTrackDuration > 0
-          ? Math.min(100, (session.position_seconds / currentTrackDuration) * 100)
+        const restoredProgress = session.positionSeconds && currentTrackDuration > 0
+          ? Math.min(100, (session.positionSeconds / currentTrackDuration) * 100)
           : 0;
 
-        // Convert Track[] to QueueTrack[] for backend
+        // Update Zustand store FIRST so the sidebar shows the track immediately.
+        // This must happen before any async backend calls that could fail.
+        usePlayerStore.setState({
+          queue: validTracks,
+          queueIndex,
+          currentTrack: validTracks[queueIndex],
+          volume: session.volume / 100, // Convert 0-100 to 0-1
+          isPlaying: false, // Always paused on cold start
+          repeatMode: session.repeatMode as 'off' | 'all' | 'one',
+          shuffleMode: session.shuffleMode as 'off' | 'random' | 'smart',
+          progress: restoredProgress,
+          duration: currentTrackDuration,
+        });
+
+        console.log('[PERSISTENCE] State restored from database:', {
+          queueLength: validTracks.length,
+          queueIndex,
+          currentTrack: validTracks[queueIndex]?.title,
+          currentTrackId: validTracks[queueIndex]?.id,
+          position: session.positionSeconds,
+          progress: restoredProgress.toFixed(1) + '%',
+        });
+
+        // Restore backend playback state (queue + position) — isolated so UI is not affected by failure
         const queueForBackend = validTracks.map(track => ({
           trackId: String(track.id),
           title: track.title,
@@ -188,73 +209,36 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           coverArtPath: track.coverArtPath,
         }));
 
-        // Restore complete playback state in backend (single atomic operation)
-        await invoke('restore_playback_state', {
-          queue: queueForBackend,
-          startIndex: queueIndex,
-          positionSeconds: session.position_seconds,
-          volume: session.volume, // 0-100
-          repeatMode: session.repeat_mode,
-          shuffleMode: session.shuffle_mode,
-        });
-
-        // Update Zustand store to match restored backend state
-        usePlayerStore.setState({
-          queue: validTracks,
-          queueIndex,
-          currentTrack: validTracks[queueIndex],
-          volume: session.volume / 100, // Convert 0-100 to 0-1
-          isPlaying: false, // Always paused on cold start
-          repeatMode: session.repeat_mode as 'off' | 'all' | 'one',
-          shuffleMode: session.shuffle_mode as 'off' | 'random' | 'smart',
-          progress: restoredProgress,
-          duration: currentTrackDuration,
-        });
-
-        // Restore playback context
-        if (session.context_type && session.context_id) {
-          await backend.recordContext({
-            contextType: session.context_type as 'album' | 'artist' | 'playlist' | 'genre' | 'tracks',
-            contextId: session.context_id,
-            contextName: null,
-            contextArtworkPath: null,
+        try {
+          await invoke('restore_playback_state', {
+            queue: queueForBackend,
+            startIndex: queueIndex,
+            positionSeconds: session.positionSeconds,
+            volume: session.volume, // 0-100
+            repeatMode: session.repeatMode,
+            shuffleMode: session.shuffleMode,
           });
+        } catch (backendError) {
+          console.warn('[PERSISTENCE] Backend state restoration failed (UI still restored):', backendError);
         }
 
-        console.log('[PERSISTENCE] State restored from database:', {
-          queueLength: validTracks.length,
-          queueIndex,
-          currentTrack: validTracks[queueIndex]?.title,
-          currentTrackId: validTracks[queueIndex]?.id,
-          volumeFromDB: session.volume,
-          volumeConverted: session.volume / 100,
-          position: session.position_seconds,
-          progress: restoredProgress.toFixed(1) + '%',
-        });
-
-        console.log('[PERSISTENCE] Zustand store updated with:', {
-          currentTrack: usePlayerStore.getState().currentTrack?.title,
-          currentTrackId: usePlayerStore.getState().currentTrack?.id,
-          queueLength: usePlayerStore.getState().queue.length,
-        });
+        // Restore playback context
+        if (session.contextType && session.contextId) {
+          try {
+            await backend.recordContext({
+              contextType: session.contextType as 'album' | 'artist' | 'playlist' | 'genre' | 'tracks',
+              contextId: session.contextId,
+              contextName: null,
+              contextArtworkPath: null,
+            });
+          } catch (contextError) {
+            console.warn('[PERSISTENCE] Context restoration failed:', contextError);
+          }
+        }
       } catch (error) {
         console.error('[PERSISTENCE] Failed to restore from database:', error);
       }
     };
-
-    // Convert QueueTrack to Track (store expects Track type)
-    const convertQueueTrackToTrack = (queueTrack: QueueTrack): import('@soul-player/shared/types').Track => ({
-      id: parseInt(queueTrack.trackId, 10),
-      title: queueTrack.title,
-      artist: queueTrack.artist,
-      album: queueTrack.album || '',
-      albumId: queueTrack.albumId,
-      filePath: queueTrack.filePath,
-      duration: queueTrack.durationSeconds ?? 0,
-      trackNumber: queueTrack.trackNumber ?? undefined,
-      coverArtPath: queueTrack.coverArtPath,
-      addedAt: new Date().toISOString(), // Not available in QueueTrack, use current time
-    });
 
     // Convert BackendTrack to Track (store expects Track type)
     const convertBackendTrackToTrack = (backendTrack: BackendTrack): import('@soul-player/shared/types').Track => ({
@@ -276,39 +260,63 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       console.log('[PERSISTENCE] Hot reload detected - syncing from backend');
 
       try {
-        const [track, queue, queueIndex, position, volume, repeat, shuffle] = await Promise.all([
-          invoke<QueueTrack | null>('get_current_track'),
-          invoke<QueueTrack[]>('get_queue'),
+        // get_current_track returns soul_playback::QueueTrack (snake_case: id, path, duration as {secs,nanos}, track_number)
+        // get_volume returns 0.0-1.0 (already divided by 100 in Rust)
+        const [track, queue, queueIndex, position, volume, repeat, shuffle, playbackState] = await Promise.all([
+          invoke<any | null>('get_current_track'),
+          invoke<any[]>('get_queue'),
           invoke<number>('get_queue_index'),
           invoke<number>('get_position'),
           invoke<number>('get_volume'),
           invoke<string>('get_repeat'),
           invoke<string>('get_shuffle'),
+          invoke<string>('get_playback_state'),
         ]);
 
         if (!isMounted) return;
 
-        // Convert QueueTrack to Track format
-        const currentTrack = track ? convertQueueTrackToTrack(track) : null;
-        const queueTracks = queue.map(convertQueueTrackToTrack);
+        // Convert Rust QueueTrack (snake_case fields) to frontend Track
+        const convertRustTrack = (qt: any): import('@soul-player/shared/types').Track => {
+          const durationSecs = qt.duration && typeof qt.duration === 'object'
+            ? (qt.duration.secs ?? 0) + (qt.duration.nanos ?? 0) / 1e9
+            : (qt.durationSeconds ?? 0);
+          return {
+            id: parseInt(qt.id ?? qt.trackId, 10),
+            title: qt.title || '',
+            artist: qt.artist || '',
+            album: qt.album || '',
+            albumId: qt.albumId,
+            filePath: qt.filePath || String(qt.path || ''),
+            duration: durationSecs,
+            trackNumber: qt.track_number ?? qt.trackNumber ?? undefined,
+            coverArtPath: qt.cover_art_path ?? qt.coverArtPath ?? undefined,
+            addedAt: new Date().toISOString(),
+          };
+        };
 
-        // Update store with backend state
+        const currentTrack = track ? convertRustTrack(track) : null;
+        const queueTracks = (queue ?? []).map(convertRustTrack);
+        const durationSecs = currentTrack?.duration ?? 0;
+
         usePlayerStore.setState({
           currentTrack,
           queue: queueTracks,
           queueIndex,
-          volume: volume / 100, // Convert 0-100 to 0-1
-          progress: track && position ? (position / track.durationSeconds!) * 100 : 0,
-          duration: track?.durationSeconds ?? 0,
+          volume, // already 0-1 from Rust (get_volume divides by 100 internally)
+          isPlaying: playbackState === 'Playing',
+          progress: currentTrack && position && durationSecs > 0
+            ? Math.min(100, (position / durationSecs) * 100)
+            : 0,
+          duration: durationSecs,
           repeatMode: repeat as 'off' | 'all' | 'one',
           shuffleMode: shuffle as 'off' | 'random' | 'smart',
         });
 
         console.log('[PERSISTENCE] State synced from backend:', {
           hasTrack: !!track,
-          queueLength: queue.length,
-          volumeFromBackend: volume,
-          volumeConverted: volume / 100,
+          queueLength: queue?.length ?? 0,
+          isPlaying: playbackState === 'Playing',
+          volume,
         });
       } catch (error) {
         console.error('[PERSISTENCE] Failed to sync from backend:', error);
@@ -324,11 +332,12 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       await new Promise(resolve => setTimeout(resolve, 0));
 
       try {
-        // Check if backend has active state (hot reload scenario)
-        const backendTrack = await invokeValidated('get_current_track', QueueTrackSchema.nullable());
+        // Check if backend has active state (hot reload scenario).
+        // Use raw invoke — Rust returns soul_playback::QueueTrack with `id` (not `trackId`).
+        const backendTrack = await invoke<any>('get_current_track');
 
-        // Validate that we have a real track (not just an empty object)
-        const hasValidTrack = backendTrack && backendTrack.trackId && backendTrack.filePath;
+        // Any non-null response means the backend has a loaded track
+        const hasValidTrack = backendTrack != null && (backendTrack.id || backendTrack.trackId);
 
         console.log('[PERSISTENCE] Initial state sync - backend track:', hasValidTrack ? 'exists (hot reload)' : 'null (cold start)');
 
@@ -588,6 +597,22 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           // Small queue or no context - use regular playback
           await invoke('play_queue', { queue, startIndex });
         }
+
+        // Sync queue into Zustand store so the persistence subscription can save it.
+        // Without this, queue stays empty in the store and restoreFromDatabase bails on empty queue.
+        const tracks = queue.map(qt => ({
+          id: parseInt(qt.trackId, 10),
+          title: qt.title || '',
+          artist: qt.artist || '',
+          album: qt.album || '',
+          albumId: qt.albumId,
+          filePath: qt.filePath || '',
+          duration: qt.durationSeconds ?? 0,
+          trackNumber: qt.trackNumber ?? undefined,
+          coverArtPath: qt.coverArtPath,
+          addedAt: new Date().toISOString(),
+        }));
+        usePlayerStore.setState({ queue: tracks, queueIndex: startIndex });
       },
 
       async playQueueWithContext(context, initialBatch, startIndex, enableShuffle) {
@@ -598,6 +623,21 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           startIndex,
           enableShuffle,
         });
+
+        // Sync initial batch into store for persistence
+        const tracks = initialBatch.map(qt => ({
+          id: parseInt(qt.trackId, 10),
+          title: qt.title || '',
+          artist: qt.artist || '',
+          album: qt.album || '',
+          albumId: qt.albumId,
+          filePath: qt.filePath || '',
+          duration: qt.durationSeconds ?? 0,
+          trackNumber: qt.trackNumber ?? undefined,
+          coverArtPath: qt.coverArtPath,
+          addedAt: new Date().toISOString(),
+        }));
+        usePlayerStore.setState({ queue: tracks, queueIndex: startIndex });
       },
 
       async skipToQueueIndex(index: number) {
