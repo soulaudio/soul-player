@@ -53,8 +53,8 @@ export function SettingsSidebar() {
                   className={[
                     'p-3 rounded-lg transition-all',
                     isActive
-                      ? 'text-primary bg-accent/20'
-                      : 'text-muted-foreground hover:opacity-80 hover:bg-foreground/10',
+                      ? 'text-primary bg-background shadow-sm'
+                      : 'text-muted-foreground bg-background/50 hover:bg-background hover:opacity-80',
                   ].join(' ')}
                 >
                   <Icon className="w-5 h-5" />
