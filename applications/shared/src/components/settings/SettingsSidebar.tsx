@@ -1,7 +1,8 @@
-// Settings sidebar navigation
+// Settings sidebar navigation — icon-only toolbar with Radix tooltips
 
 import { useTranslation } from 'react-i18next';
 import { useLocation, Link } from 'react-router-dom';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import {
   Volume2,
   Palette,
@@ -21,54 +22,14 @@ interface NavItem {
 }
 
 const navigationItems: NavItem[] = [
-  {
-    id: 'audio',
-    labelKey: 'settings.sections.audio',
-    path: '/settings/audio',
-    icon: Volume2,
-  },
-  {
-    id: 'library',
-    labelKey: 'settings.sections.library',
-    path: '/settings/library',
-    icon: Music,
-  },
-  {
-    id: 'playback',
-    labelKey: 'settings.sections.playback',
-    path: '/settings/playback',
-    icon: Zap,
-  },
-  {
-    id: 'appearance',
-    labelKey: 'settings.sections.appearance',
-    path: '/settings/appearance',
-    icon: Palette,
-  },
-  {
-    id: 'shortcuts',
-    labelKey: 'settings.sections.shortcuts',
-    path: '/settings/shortcuts',
-    icon: Keyboard,
-  },
-  {
-    id: 'dataManagement',
-    labelKey: 'settings.sections.dataManagement',
-    path: '/settings/data-management',
-    icon: Database,
-  },
-  {
-    id: 'reportBug',
-    labelKey: 'settings.sections.reportBug',
-    path: '/settings/report-bug',
-    icon: Bug,
-  },
-  {
-    id: 'about',
-    labelKey: 'settings.sections.about',
-    path: '/settings/about',
-    icon: Info,
-  },
+  { id: 'audio',          labelKey: 'settings.sections.audio',          path: '/settings/audio',           icon: Volume2  },
+  { id: 'library',        labelKey: 'settings.sections.library',        path: '/settings/library',         icon: Music    },
+  { id: 'playback',       labelKey: 'settings.sections.playback',       path: '/settings/playback',        icon: Zap      },
+  { id: 'appearance',     labelKey: 'settings.sections.appearance',     path: '/settings/appearance',      icon: Palette  },
+  { id: 'shortcuts',      labelKey: 'settings.sections.shortcuts',      path: '/settings/shortcuts',       icon: Keyboard },
+  { id: 'dataManagement', labelKey: 'settings.sections.dataManagement', path: '/settings/data-management', icon: Database },
+  { id: 'reportBug',      labelKey: 'settings.sections.reportBug',      path: '/settings/report-bug',      icon: Bug      },
+  { id: 'about',          labelKey: 'settings.sections.about',          path: '/settings/about',           icon: Info     },
 ];
 
 export function SettingsSidebar() {
@@ -76,40 +37,43 @@ export function SettingsSidebar() {
   const location = useLocation();
 
   return (
-    <nav className="p-4 h-full flex flex-col">
-      <h2 className="text-lg font-semibold mb-6 px-3">{t('settings.title')}</h2>
-
-      <ul className="space-y-1 flex-1">
+    <Tooltip.Provider delayDuration={600}>
+      <nav className="h-full flex flex-col items-center justify-center py-4 gap-1">
         {navigationItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
 
           return (
-            <li key={item.id}>
-              <Link
-                to={item.path}
-                className={`
-                  flex items-center gap-3 px-3 py-2 rounded-lg text-sm
-                  transition-colors duration-150
-                  ${
+            <Tooltip.Root key={item.id}>
+              <Tooltip.Trigger asChild>
+                <Link
+                  to={item.path}
+                  data-state={isActive ? 'active' : 'inactive'}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={[
+                    'p-3 rounded-lg transition-all',
                     isActive
-                      ? 'bg-primary text-primary-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-foreground/[var(--hover-bg-opacity)] hover:opacity-[var(--hover-text-opacity)] transition-all duration-[var(--transition-duration)]'
-                  }
-                `}
-              >
-                <Icon className="w-4 h-4 flex-shrink-0" />
-                <span>{t(item.labelKey)}</span>
-              </Link>
-            </li>
+                      ? 'text-primary bg-accent/20'
+                      : 'text-muted-foreground hover:opacity-80 hover:bg-foreground/10',
+                  ].join(' ')}
+                >
+                  <Icon className="w-5 h-5" />
+                </Link>
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content
+                  side="right"
+                  sideOffset={8}
+                  className="z-50 px-2 py-1 text-xs rounded-md bg-popover text-popover-foreground shadow-md select-none"
+                >
+                  {t(item.labelKey)}
+                  <Tooltip.Arrow className="fill-popover" />
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
           );
         })}
-      </ul>
-
-      {/* Footer hint */}
-      <div className="text-xs text-muted-foreground px-3 pt-4 border-t">
-        <p>{t('settings.hint', 'Changes are saved automatically')}</p>
-      </div>
-    </nav>
+      </nav>
+    </Tooltip.Provider>
   );
 }
