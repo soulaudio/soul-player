@@ -20,7 +20,7 @@ export function SettingsRouter() {
     <SettingsLayout>
       <Routes>
         {/* Redirect /settings to /settings/audio by default */}
-        <Route index element={<Navigate to="/settings/audio" replace />} />
+        <Route index element={<Navigate to="/settings/appearance" replace />} />
 
         {/* Settings pages */}
         <Route path="audio" element={<AudioSettingsPage />} />
@@ -33,7 +33,7 @@ export function SettingsRouter() {
         <Route path="about" element={<AboutSettingsPage />} />
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to="/settings/audio" replace />} />
+        <Route path="*" element={<Navigate to="/settings/appearance" replace />} />
       </Routes>
     </SettingsLayout>
   );

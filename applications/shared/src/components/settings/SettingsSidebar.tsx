@@ -22,10 +22,10 @@ interface NavItem {
 }
 
 const navigationItems: NavItem[] = [
+  { id: 'appearance',     labelKey: 'settings.sections.appearance',     path: '/settings/appearance',      icon: Palette  },
   { id: 'audio',          labelKey: 'settings.sections.audio',          path: '/settings/audio',           icon: Volume2  },
   { id: 'library',        labelKey: 'settings.sections.library',        path: '/settings/library',         icon: Music    },
   { id: 'playback',       labelKey: 'settings.sections.playback',       path: '/settings/playback',        icon: Zap      },
-  { id: 'appearance',     labelKey: 'settings.sections.appearance',     path: '/settings/appearance',      icon: Palette  },
   { id: 'shortcuts',      labelKey: 'settings.sections.shortcuts',      path: '/settings/shortcuts',       icon: Keyboard },
   { id: 'dataManagement', labelKey: 'settings.sections.dataManagement', path: '/settings/data-management', icon: Database },
   { id: 'reportBug',      labelKey: 'settings.sections.reportBug',      path: '/settings/report-bug',      icon: Bug      },

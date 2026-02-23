@@ -98,6 +98,8 @@
     "language": "Sprache",
     "hideWindowControls": "Fenstersteuerelemente automatisch ausblenden",
     "hideWindowControlsDescription": "Fenstersteuerelemente (Minimieren, Maximieren, Schließen) beim Scrollen automatisch ausblenden. Die Steuerelemente werden beim Hochscrollen oder beim Navigieren zu einer neuen Seite wieder angezeigt.",
+    "hideLibrarySearch": "Bibliothek-Suchleiste ausblenden",
+    "hideLibrarySearchDescription": "Suchleiste in Bibliotheksansichten (Alben, Künstler, Titel, Playlists) dauerhaft ausblenden.",
     "showShortcuts": "Tastenkombinationen anzeigen",
     "showShortcutsDescription": "Tastenkombinationen in Tooltips und UI-Elementen anzeigen. Zum Beispiel:",
     "audio": {

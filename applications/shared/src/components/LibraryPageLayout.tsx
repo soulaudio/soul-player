@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { Search, X } from 'lucide-react'
 import { FeatureGate } from '../contexts/PlatformContext'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
+import { useBackend } from '../contexts/BackendContext'
 import { SkeletonCard } from './SkeletonCard'
 
 interface LibraryPageLayoutProps {
@@ -48,7 +49,19 @@ export function LibraryPageLayout({
   children,
 }: LibraryPageLayoutProps) {
   const { t } = useTranslation()
+  const backend = useBackend()
   const { showHeader: showSearchBar, setShowHeader: setShowSearchBar, scrollContainerRef } = useScrollVisibility()
+  const [hideSearch, setHideSearch] = useState(false)
+
+  useEffect(() => {
+    backend.getUserSetting('ui.hide_library_search')
+      .then(value => setHideSearch(value ?? false))
+      .catch(() => {/* ignore */})
+
+    const handler = (e: Event) => setHideSearch((e as CustomEvent).detail.hide)
+    window.addEventListener('library-search-hidden-changed', handler)
+    return () => window.removeEventListener('library-search-hidden-changed', handler)
+  }, [backend])
   const lastScrollTop = useRef(0)
   const idleTimerRef = useRef<number | null>(null)
   const hiddenByIdleRef = useRef(false) // Track if hidden by idle timeout
@@ -281,44 +294,46 @@ export function LibraryPageLayout({
       </FeatureGate>
 
       {/* Search bar - auto-hide on scroll, absolutely positioned */}
-      <div
-        className={`absolute top-0 left-0 right-0 bg-background z-10 transition-all duration-300 mr-6 pb-3 ${
-          showSearchBar ? 'translate-y-0' : '-translate-y-full'
-        }`}
-      >
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 sm:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={
-                isLoading || itemCount === 0
-                  ? t(searchPlaceholderKey.replace('WithCount', ''))
-                  : t(searchPlaceholderKey, { count: itemCount })
-              }
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-muted border border-transparent focus:border-primary focus:outline-none text-sm"
-              disabled={isLoading}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+      {!hideSearch && (
+        <div
+          className={`absolute top-0 left-0 right-0 bg-background z-10 transition-all duration-300 mr-6 pb-3 ${
+            showSearchBar ? 'translate-y-0' : '-translate-y-full'
+          }`}
+        >
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1 sm:max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={
+                  isLoading || itemCount === 0
+                    ? t(searchPlaceholderKey.replace('WithCount', ''))
+                    : t(searchPlaceholderKey, { count: itemCount })
+                }
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-muted border border-transparent focus:border-primary focus:outline-none text-sm"
+                disabled={isLoading}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {additionalButtons}
           </div>
-          {additionalButtons}
         </div>
-      </div>
+      )}
 
       {/* Scrollable Content - with dynamic padding for search bar */}
       <div
         ref={scrollContainerRef}
         className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom transition-all duration-300 ${
-          showSearchBar ? 'pt-14' : 'pt-6'
+          !hideSearch && showSearchBar ? 'pt-14' : 'pt-6'
         }`}
       >
         {isLoading ? (

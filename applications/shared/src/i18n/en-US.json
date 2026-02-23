@@ -123,6 +123,8 @@
     "language": "Language",
     "hideWindowControls": "Auto-hide window controls",
     "hideWindowControlsDescription": "Automatically hide window controls (minimize, maximize, close) when scrolling. Controls reappear when scrolling up or navigating to a new page.",
+    "hideLibrarySearch": "Hide library search bar",
+    "hideLibrarySearchDescription": "Permanently hide the search bar in library views (Albums, Artists, Tracks, Playlists).",
     "showShortcuts": "Show keyboard shortcuts",
     "showShortcutsDescription": "Display keyboard shortcuts in tooltips and UI elements. For example:",
     "homePage": "Home Page",
