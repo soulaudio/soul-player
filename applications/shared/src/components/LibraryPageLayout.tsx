@@ -48,8 +48,7 @@ export function LibraryPageLayout({
   children,
 }: LibraryPageLayoutProps) {
   const { t } = useTranslation()
-  const { showHeader: showSearchBar, setShowHeader: setShowSearchBar } = useScrollVisibility()
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const { showHeader: showSearchBar, setShowHeader: setShowSearchBar, scrollContainerRef } = useScrollVisibility()
   const lastScrollTop = useRef(0)
   const idleTimerRef = useRef<number | null>(null)
   const hiddenByIdleRef = useRef(false) // Track if hidden by idle timeout

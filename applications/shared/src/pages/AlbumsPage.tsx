@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next'
 import { Disc3 } from 'lucide-react'
 import { AlbumCard } from '../components/AlbumCard'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
-import { SkeletonGrid } from '../components/SkeletonGrid'
 import { VirtualizedGrid } from '../components/VirtualizedGrid'
 import { useGridScale } from '../hooks/useGridScale'
 import { useResponsiveColumns } from '../hooks/useResponsiveColumns'
@@ -75,7 +74,7 @@ export function AlbumsPage() {
   // Use virtualization for large collections (>100 items)
   const shouldVirtualize = filteredAlbums.length > 100
 
-  // Show error in LibraryPageLayout if present
+  // Show error if present
   const errorContent = isError ? (
     <div className="flex items-center justify-center py-12">
       <div className="text-center text-destructive">
@@ -97,9 +96,7 @@ export function AlbumsPage() {
       gridClass={gridClass}
       cacheKey="library-albums-count"
     >
-      {isLoading ? (
-        <SkeletonGrid count={24} type="album" gridClass={gridClass} />
-      ) : errorContent || (filteredAlbums.length > 0 ? (
+      {errorContent || (filteredAlbums.length > 0 ? (
         shouldVirtualize ? (
           <VirtualizedGrid
             items={filteredAlbums}

@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next'
 import { Users } from 'lucide-react'
 import { ArtistCard } from '../components/ArtistCard'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
-import { SkeletonGrid } from '../components/SkeletonGrid'
 import { VirtualizedGrid } from '../components/VirtualizedGrid'
 import { useGridScale } from '../hooks/useGridScale'
 import { useResponsiveColumns } from '../hooks/useResponsiveColumns'
@@ -71,7 +70,7 @@ export function ArtistsPage() {
   // Use virtualization for large collections (>100 items)
   const shouldVirtualize = filteredArtists.length > 100
 
-  // Show error in LibraryPageLayout if present
+  // Show error if present
   const errorContent = isError ? (
     <div className="flex items-center justify-center py-12">
       <div className="text-center text-destructive">
@@ -93,9 +92,7 @@ export function ArtistsPage() {
       gridClass={gridClass}
       cacheKey="library-artists-count"
     >
-      {isLoading ? (
-        <SkeletonGrid count={24} type="artist" gridClass={gridClass} />
-      ) : errorContent || (filteredArtists.length > 0 ? (
+      {errorContent || (filteredArtists.length > 0 ? (
         shouldVirtualize ? (
           <VirtualizedGrid
             items={filteredArtists}

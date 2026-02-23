@@ -9,8 +9,9 @@
  * @see https://borstch.com/blog/development/infinite-scroll-made-easy-with-tanstack-virtual-a-step-by-step-react-guide
  */
 
-import { useEffect, useRef, ReactNode } from 'react'
+import { useEffect, ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
 
 interface VirtualizedGridProps<T> {
   /** All items to display */
@@ -44,7 +45,9 @@ export function VirtualizedGrid<T>({
   onLoadMore,
   loadMoreThreshold = 5,
 }: VirtualizedGridProps<T>) {
-  const parentRef = useRef<HTMLDivElement>(null)
+  // Use the scroll container managed by LibraryPageLayout so we don't create
+  // a nested overflow-y-auto that breaks scroll events and doubles padding.
+  const { scrollContainerRef } = useScrollVisibility()
 
   // Calculate number of rows based on total count and columns
   const rowCount = Math.ceil(totalCount / columnCount)
@@ -56,12 +59,12 @@ export function VirtualizedGrid<T>({
     return items.slice(startIndex, endIndex)
   }
 
-  // Setup virtualizer for rows
+  // Setup virtualizer — uses LibraryPageLayout's scroll container as scroll element
   const virtualizer = useVirtualizer({
     count: rowCount,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => rowHeight, // Row height based on scale
-    overscan: 3, // Render 3 extra rows above/below viewport
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => rowHeight,
+    overscan: 3,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
@@ -79,51 +82,44 @@ export function VirtualizedGrid<T>({
     }
   }, [virtualItems, rowCount, loadMoreThreshold, onLoadMore, isLoading])
 
+  // Render directly — no own scroll wrapper. LibraryPageLayout's scroll container
+  // (scrollContainerRef) is the scroll element, so scroll events and padding are
+  // handled there. This avoids nested overflow-y-auto and duplicate pr-6/pb-6.
   return (
     <div
-      ref={parentRef}
-      className="flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom"
       style={{
-        height: '100%',
+        height: `${virtualizer.getTotalSize()}px`,
+        width: '100%',
+        position: 'relative',
       }}
     >
-      {/* Virtual scroll container */}
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {/* Render only visible rows */}
-        {virtualItems.map((virtualRow) => {
-          const rowItems = getRowItems(virtualRow.index)
+      {virtualItems.map((virtualRow) => {
+        const rowItems = getRowItems(virtualRow.index)
 
-          return (
-            <div
-              key={virtualRow.index}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-            >
-              <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
-                {rowItems.map((item, colIndex) => {
-                  const absoluteIndex = virtualRow.index * columnCount + colIndex
-                  return (
-                    <div key={absoluteIndex}>
-                      {renderItem(item, absoluteIndex)}
-                    </div>
-                  )
-                })}
-              </div>
+        return (
+          <div
+            key={virtualRow.index}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${virtualRow.start}px)`,
+            }}
+          >
+            <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
+              {rowItems.map((item, colIndex) => {
+                const absoluteIndex = virtualRow.index * columnCount + colIndex
+                return (
+                  <div key={absoluteIndex}>
+                    {renderItem(item, absoluteIndex)}
+                  </div>
+                )
+              })}
             </div>
-          )
-        })}
-      </div>
+          </div>
+        )
+      })}
 
       {/* Loading indicator at bottom */}
       {isLoading && (
