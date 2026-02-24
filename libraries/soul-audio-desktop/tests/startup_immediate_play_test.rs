@@ -41,6 +41,7 @@ where
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - run with --include-ignored in audio E2E environment"]
 fn test_cold_start_immediate_play() {
     println!("\n=== E2E Test: COLD START - Immediate Play After Init ===\n");
 
@@ -172,6 +173,7 @@ fn test_cold_start_immediate_play() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - run with --include-ignored in audio E2E environment"]
 fn test_warm_start_immediate_play() {
     println!("\n=== E2E Test: WARM START - With Device Pre-Warming ===\n");
 
@@ -316,6 +318,7 @@ fn test_warm_start_immediate_play() {
 }
 
 #[test]
+#[ignore = "Requires real audio hardware - run with --include-ignored in audio E2E environment"]
 fn test_user_immediate_play_simulation() {
     println!("\n=== E2E Test: Simulating Impatient User (Play at T+100ms) ===\n");
     println!("This simulates a user clicking play immediately after app starts");
