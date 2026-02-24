@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::util::{
     fs::{find_dirs, remove_dir_all},
@@ -75,7 +75,7 @@ pub fn run(cargo_cache: bool) -> Result<()> {
     Ok(())
 }
 
-fn clean_rust_targets(root: &PathBuf) -> Result<()> {
+fn clean_rust_targets(root: &Path) -> Result<()> {
     let targets = vec![
         root.join("target"),
         root.join("applications/desktop/src-tauri/target"),
@@ -91,7 +91,7 @@ fn clean_rust_targets(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_all_node_modules(root: &PathBuf) -> Result<()> {
+fn clean_all_node_modules(root: &Path) -> Result<()> {
     let node_modules_dirs = find_dirs(root, "node_modules")?;
 
     if node_modules_dirs.is_empty() {
@@ -107,7 +107,7 @@ fn clean_all_node_modules(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_sqlx_cache(root: &PathBuf) -> Result<()> {
+fn clean_sqlx_cache(root: &Path) -> Result<()> {
     let sqlx_dir = root.join("libraries/soul-storage/.sqlx");
 
     if sqlx_dir.exists() {
@@ -120,7 +120,7 @@ fn clean_sqlx_cache(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_test_databases(root: &PathBuf) -> Result<()> {
+fn clean_test_databases(root: &Path) -> Result<()> {
     let tmp_dir = root.join(".tmp");
 
     if !tmp_dir.exists() {
@@ -150,7 +150,7 @@ fn clean_test_databases(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_dist_folders(root: &PathBuf) -> Result<()> {
+fn clean_dist_folders(root: &Path) -> Result<()> {
     let applications_dir = root.join("applications");
     if !applications_dir.exists() {
         return Ok(());
@@ -171,7 +171,7 @@ fn clean_dist_folders(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_tmp_dirs(root: &PathBuf) -> Result<()> {
+fn clean_tmp_dirs(root: &Path) -> Result<()> {
     let tmp_dirs = find_dirs(root, ".tmp")?;
 
     if tmp_dirs.is_empty() {

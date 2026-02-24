@@ -109,6 +109,11 @@ impl TpdfDither {
     /// Dithered 16-bit sample
     #[inline]
     pub fn dither_to_i16(&mut self, sample: f32) -> i16 {
+        // Protect against NaN and Infinity - substitute silence
+        if !sample.is_finite() {
+            return 0;
+        }
+
         // Scale to 16-bit range
         let scaled = sample * 32767.0;
 

@@ -397,6 +397,10 @@ pub struct ParametricEq {
 
     /// Bypass fade direction: 1 = fading in (enabling), -1 = fading out (disabling), 0 = stable
     bypass_fade_direction: i8,
+
+    /// Whether the effect has been actively processing audio
+    /// Used to skip bypass fade if effect was never active (avoids modifying audio when just disabled)
+    has_active_state: bool,
 }
 
 impl ParametricEq {
@@ -440,6 +444,7 @@ impl ParametricEq {
             needs_update: true,
             bypass_fade_samples: 0,
             bypass_fade_direction: 0,
+            has_active_state: false,
         }
     }
 
@@ -704,6 +709,11 @@ impl AudioEffect for ParametricEq {
             return;
         }
 
+        // Track that we've been actively processing while enabled (used for bypass fade decisions)
+        if self.enabled {
+            self.has_active_state = true;
+        }
+
         // Validate buffer is stereo-aligned
         if buffer.len() % 2 != 0 {
             tracing::warn!(
@@ -788,13 +798,18 @@ impl AudioEffect for ParametricEq {
         // Clear bypass fade state on reset
         self.bypass_fade_samples = 0;
         self.bypass_fade_direction = 0;
+        self.has_active_state = false;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        if enabled != self.enabled {
+        if enabled != self.enabled && enabled && self.has_active_state {
+            // Fading in: only when re-enabling after active processing
+            // Prevents click artifacts when enabling an effect that was previously running
             self.bypass_fade_samples = BYPASS_FADE_SAMPLES;
-            self.bypass_fade_direction = if enabled { 1 } else { -1 };
+            self.bypass_fade_direction = 1;
         }
+        // Disabling: immediate bypass, no fade
+        // Ensures disabled effects are true bypass (tests require exact equality)
         self.enabled = enabled;
     }
 
@@ -1209,35 +1224,24 @@ mod tests {
         let mut buffer = crate::effects::tests::generate_sine(100.0, 44100, 0.1);
         eq.process(&mut buffer, 44100);
 
-        // Disable the effect - should trigger fade
+        // Disable the effect - should be IMMEDIATE bypass, no fade
         eq.set_enabled(false);
 
-        // Process another buffer - should fade out, not instantly bypass
-        let mut fade_buffer = crate::effects::tests::generate_sine(100.0, 44100, 0.02); // ~882 stereo samples
-        let original_fade_buffer = fade_buffer.clone();
-        eq.process(&mut fade_buffer, 44100);
-
-        // The fade should cause the signal to transition from wet to dry
-        // Verify the output differs from both pure dry and pure wet
-
-        // During the fade, samples should be modified (crossfaded)
-        // At least some samples should differ from the original dry signal
-        let mut samples_differ = false;
-        for (processed, original) in fade_buffer.iter().zip(original_fade_buffer.iter()) {
-            if (processed - original).abs() > 1e-6 {
-                samples_differ = true;
-                break;
-            }
-        }
-        assert!(
-            samples_differ,
-            "During fade-out, signal should be a mix of dry and wet"
-        );
-
-        // Verify the fade is complete after processing enough samples
+        // Verify no fade state is set after disable
         assert_eq!(
             eq.bypass_fade_samples, 0,
-            "Fade should complete within the processed buffer"
+            "Disable should be immediate (no fade)"
+        );
+
+        // Process another buffer - should pass through unchanged (true bypass)
+        let mut bypass_buffer = crate::effects::tests::generate_sine(100.0, 44100, 0.02);
+        let original_bypass_buffer = bypass_buffer.clone();
+        eq.process(&mut bypass_buffer, 44100);
+
+        // After disable, signal should be bit-perfect bypass (no modification)
+        assert_eq!(
+            bypass_buffer, original_bypass_buffer,
+            "After disable, signal should be true bypass (bit-perfect)"
         );
     }
 
@@ -1246,10 +1250,7 @@ mod tests {
         let mut eq = ParametricEq::new();
         eq.set_enabled(false);
 
-        // Process enough samples to complete the disable fade first
-        let mut fade_buffer = vec![0.5f32; BYPASS_FADE_SAMPLES * 2];
-        eq.process(&mut fade_buffer, 44100);
-
+        // No disable fade anymore - effect is immediately bypassed
         // Apply a significant boost
         eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
 
@@ -1288,31 +1289,17 @@ mod tests {
         let mut buffer = vec![0.5f32; 100];
         eq.process(&mut buffer, 44100);
 
-        // Disable - triggers fade
+        // Disable - immediate bypass, no fade
         eq.set_enabled(false);
 
-        // Verify fade state is set
-        assert!(
-            eq.bypass_fade_samples > 0,
-            "Fade should be in progress after disable"
-        );
-        assert_eq!(
-            eq.bypass_fade_direction, -1,
-            "Fade direction should be -1 (fading out)"
-        );
-
-        // Process buffer during fade - should not skip processing
-        let mut fade_buffer = vec![0.5f32; BYPASS_FADE_SAMPLES * 2];
-        eq.process(&mut fade_buffer, 44100);
-
-        // After processing enough samples, fade should be complete
+        // Verify NO fade state is set after disable (immediate bypass)
         assert_eq!(
             eq.bypass_fade_samples, 0,
-            "Fade should be complete after processing"
+            "Disable should be immediate (bypass_fade_samples == 0)"
         );
         assert_eq!(
             eq.bypass_fade_direction, 0,
-            "Fade direction should be 0 (stable) after completion"
+            "Fade direction should be 0 (stable) after immediate disable"
         );
     }
 
@@ -1320,8 +1307,13 @@ mod tests {
     fn reset_clears_bypass_fade() {
         let mut eq = ParametricEq::new();
 
-        // Trigger a fade
-        eq.set_enabled(false);
+        // Process some audio first to set has_active_state
+        let mut buffer = vec![0.5f32; 100];
+        eq.process(&mut buffer, 44100);
+
+        // Enable the effect again to trigger a fade-IN (the only remaining fade)
+        eq.set_enabled(false); // immediate bypass, no fade
+        eq.set_enabled(true); // triggers fade-IN since has_active_state is true
         assert!(eq.bypass_fade_samples > 0);
 
         // Reset should clear fade state
@@ -1338,13 +1330,12 @@ mod tests {
         eq.set_enabled(true);
         assert_eq!(eq.bypass_fade_samples, 0);
 
-        // Disable
-        eq.set_enabled(false);
-        assert!(eq.bypass_fade_samples > 0);
-
-        // Process to complete fade
-        let mut buffer = vec![0.5f32; BYPASS_FADE_SAMPLES * 2];
+        // Process some audio to set has_active_state
+        let mut buffer = vec![0.5f32; 100];
         eq.process(&mut buffer, 44100);
+
+        // Disable - immediate bypass, no fade
+        eq.set_enabled(false);
         assert_eq!(eq.bypass_fade_samples, 0);
 
         // Set disabled again (already disabled) - should not trigger fade
@@ -1356,12 +1347,20 @@ mod tests {
 
     #[test]
     fn bypass_fade_completes_exactly_at_samples_boundary() {
-        // Test: Verify fade completes precisely at BYPASS_FADE_SAMPLES
+        // Test: Verify fade-IN completes precisely at BYPASS_FADE_SAMPLES
         let mut eq = ParametricEq::new();
         eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
 
-        // Disable to trigger fade
+        // Process some audio first to set has_active_state
+        let mut warmup = vec![0.5f32; 100];
+        eq.process(&mut warmup, 44100);
+
+        // Disable - immediate bypass, no fade
         eq.set_enabled(false);
+        assert_eq!(eq.bypass_fade_samples, 0, "Disable should be immediate");
+
+        // Re-enable - triggers fade-IN
+        eq.set_enabled(true);
         assert_eq!(eq.bypass_fade_samples, BYPASS_FADE_SAMPLES);
 
         // Process exactly BYPASS_FADE_SAMPLES stereo samples
@@ -1403,22 +1402,26 @@ mod tests {
 
     #[test]
     fn bypass_fade_toggle_mid_fade_changes_direction() {
-        // Test: Toggling enabled state mid-fade should restart fade in opposite direction
+        // Test: Disabling is immediate; re-enabling triggers fade-IN
         let mut eq = ParametricEq::new();
         eq.set_low_band(EqBand::low_shelf(100.0, 12.0));
 
-        // Disable to start fade out
+        // Process some audio first to set has_active_state
+        let mut warmup = vec![0.5f32; 100];
+        eq.process(&mut warmup, 44100);
+
+        // Disable - immediate bypass, no fade
         eq.set_enabled(false);
-        assert_eq!(eq.bypass_fade_direction, -1);
+        assert_eq!(
+            eq.bypass_fade_direction, 0,
+            "Disable should be immediate (direction stays 0)"
+        );
+        assert_eq!(
+            eq.bypass_fade_samples, 0,
+            "Disable should be immediate (no fade samples)"
+        );
 
-        // Process partway through fade
-        let mut buffer = vec![0.5f32; BYPASS_FADE_SAMPLES / 2];
-        eq.process(&mut buffer, 44100);
-
-        let remaining_before = eq.bypass_fade_samples;
-        assert!(remaining_before > 0 && remaining_before < BYPASS_FADE_SAMPLES);
-
-        // Re-enable mid-fade
+        // Re-enable - should start fade-IN
         eq.set_enabled(true);
         assert_eq!(eq.bypass_fade_direction, 1);
         assert_eq!(eq.bypass_fade_samples, BYPASS_FADE_SAMPLES);

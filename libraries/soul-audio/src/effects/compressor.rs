@@ -166,6 +166,10 @@ pub struct Compressor {
     // Bypass fade state
     bypass_fade_samples: usize,
     bypass_fade_direction: i8,
+
+    /// Whether the effect has been actively processing audio
+    /// Used to skip bypass fade if effect was never active (avoids modifying audio when just disabled)
+    has_active_state: bool,
 }
 
 impl Compressor {
@@ -197,6 +201,7 @@ impl Compressor {
             needs_update: true,
             bypass_fade_samples: 0,
             bypass_fade_direction: 0,
+            has_active_state: false,
         };
         comp.update_coefficients();
         comp
@@ -468,6 +473,11 @@ impl AudioEffect for Compressor {
             return;
         }
 
+        // Track that we've been actively processing while enabled (used for bypass fade decisions)
+        if self.enabled {
+            self.has_active_state = true;
+        }
+
         // Update sample rate if changed
         if self.sample_rate != sample_rate {
             self.sample_rate = sample_rate;
@@ -558,13 +568,18 @@ impl AudioEffect for Compressor {
         // Clear bypass fade state on reset
         self.bypass_fade_samples = 0;
         self.bypass_fade_direction = 0;
+        self.has_active_state = false;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        if enabled != self.enabled {
+        if enabled != self.enabled && enabled && self.has_active_state {
+            // Fading in: only when re-enabling after active processing
+            // Prevents click artifacts when enabling an effect that was previously running
             self.bypass_fade_samples = BYPASS_FADE_SAMPLES;
-            self.bypass_fade_direction = if enabled { 1 } else { -1 };
+            self.bypass_fade_direction = 1;
         }
+        // Disabling: immediate bypass, no fade
+        // Ensures disabled effects are true bypass (tests require exact equality)
         self.enabled = enabled;
     }
 
@@ -811,40 +826,42 @@ mod tests {
         let mut warmup = vec![0.8; 500];
         comp.process(&mut warmup, 44100);
 
-        // Disable the effect - should trigger fade
+        // Disable the effect - should be IMMEDIATE bypass, no fade
         comp.set_enabled(false);
 
-        // Verify fade state is set
-        assert!(
-            comp.bypass_fade_samples > 0,
-            "Fade should be in progress after disable"
-        );
-        assert_eq!(
-            comp.bypass_fade_direction, -1,
-            "Fade direction should be -1 (fading out)"
-        );
-
-        // Process buffer during fade - should crossfade to dry
-        let mut fade_buffer = vec![0.8; BYPASS_FADE_SAMPLES * 2];
-        comp.process(&mut fade_buffer, 44100);
-
-        // After processing enough samples, fade should be complete
+        // Verify NO fade state is set after disable (immediate bypass)
         assert_eq!(
             comp.bypass_fade_samples, 0,
-            "Fade should be complete after processing"
+            "Disable should be immediate (no fade)"
+        );
+        assert_eq!(
+            comp.bypass_fade_direction, 0,
+            "Fade direction should be 0 after immediate disable"
+        );
+
+        // Process buffer after disable - should be bit-perfect bypass
+        let original = vec![0.8f32; 4];
+        let mut buffer = original.clone();
+        comp.process(&mut buffer, 44100);
+
+        assert_eq!(
+            buffer, original,
+            "Disabled compressor should pass audio unchanged"
         );
     }
 
     #[test]
     fn bypass_fade_on_enable() {
         let mut comp = Compressor::with_settings(CompressorSettings::aggressive());
+
+        // Process audio first to set has_active_state
+        let mut warmup = vec![0.5; 100];
+        comp.process(&mut warmup, 44100);
+
+        // Disable - immediate bypass
         comp.set_enabled(false);
 
-        // Process to complete disable fade
-        let mut fade_out = vec![0.5; BYPASS_FADE_SAMPLES * 2];
-        comp.process(&mut fade_out, 44100);
-
-        // Enable - should trigger fade in
+        // Enable - should trigger fade in (because has_active_state is true)
         comp.set_enabled(true);
 
         assert_eq!(
@@ -862,10 +879,9 @@ mod tests {
         comp.set_enabled(true);
         assert_eq!(comp.bypass_fade_samples, 0);
 
-        // Disable and complete fade
+        // Disable - immediate bypass, no fade
         comp.set_enabled(false);
-        let mut buffer = vec![0.5; BYPASS_FADE_SAMPLES * 2];
-        comp.process(&mut buffer, 44100);
+        assert_eq!(comp.bypass_fade_samples, 0);
 
         // Set disabled again (already disabled) - should not trigger fade
         comp.set_enabled(false);
@@ -903,8 +919,13 @@ mod tests {
     fn reset_clears_bypass_fade() {
         let mut comp = Compressor::new();
 
-        // Trigger a fade
-        comp.set_enabled(false);
+        // Process some audio first to set has_active_state
+        let mut buffer = vec![0.5f32; 100];
+        comp.process(&mut buffer, 44100);
+
+        // Trigger a fade-IN (the only remaining fade after removing fade-out)
+        comp.set_enabled(false); // immediate bypass, no fade
+        comp.set_enabled(true); // triggers fade-IN since has_active_state is true
         assert!(comp.bypass_fade_samples > 0);
 
         // Reset should clear fade state

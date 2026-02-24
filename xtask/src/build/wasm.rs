@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use notify::{Event, RecursiveMode, Watcher};
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
@@ -81,7 +81,7 @@ fn check_wasm_pack() -> Result<()> {
 }
 
 /// Build WASM once
-fn build_wasm_once(source: &PathBuf, output: &PathBuf, release: bool) -> Result<()> {
+fn build_wasm_once(source: &Path, output: &Path, release: bool) -> Result<()> {
     output::print_step("Building soul-playback WASM module...");
     output::print_info(&format!("Source: {}", source.display()));
     output::print_info(&format!("Output: {}", output.display()));
@@ -113,7 +113,7 @@ fn build_wasm_once(source: &PathBuf, output: &PathBuf, release: bool) -> Result<
 }
 
 /// Build WASM in watch mode
-fn build_wasm_watch(source: &PathBuf, output: &PathBuf, release: bool) -> Result<()> {
+fn build_wasm_watch(source: &Path, output: &Path, release: bool) -> Result<()> {
     use std::sync::{Arc, Mutex};
     use std::time::Instant;
 

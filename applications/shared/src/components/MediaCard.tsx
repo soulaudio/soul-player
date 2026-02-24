@@ -238,7 +238,7 @@ const MediaCardComponent = ({
   const shapeClasses = isCircle ? 'rounded-full' : 'rounded-lg'
 
   return (
-    <div className={`group ${className}`}>
+    <div className={`group pb-2 ${className}`}>
       {/* Artwork - always clickable */}
       <div
         className={`aspect-square ${shapeClasses} overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer`}
@@ -275,7 +275,7 @@ const MediaCardComponent = ({
       {/* Subtitle - independent element, NOT nested in album click handler */}
       {subtitle && type === 'album' ? (
         // Album card - artist link is completely independent, NO onClick on parent
-        <p className={`text-sm text-muted-foreground ${isCircle ? 'text-center' : ''}`}>
+        <p className={`text-sm text-muted-foreground truncate ${isCircle ? 'text-center' : ''}`}>
           <ArtistLink
             artistId={artistId}
             artistName={subtitle}
@@ -288,7 +288,7 @@ const MediaCardComponent = ({
       ) : subtitle ? (
         // Artist or playlist - entire subtitle navigates to that entity
         <p
-          className={`text-sm text-muted-foreground cursor-pointer ${isCircle ? 'text-center' : ''}`}
+          className={`text-sm text-muted-foreground truncate cursor-pointer ${isCircle ? 'text-center' : ''}`}
           title={subtitle}
           onClick={handleClick}
         >

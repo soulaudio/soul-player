@@ -38,9 +38,15 @@ pub fn check_on_main_branch(force: bool) -> Result<()> {
 
     if branch != "main" && branch != "master" {
         if force {
-            output::print_warning(&format!("On branch '{}' (not main/master) - forced", branch));
+            output::print_warning(&format!(
+                "On branch '{}' (not main/master) - forced",
+                branch
+            ));
         } else {
-            output::print_error(&format!("You are on branch '{}', not 'main' or 'master'", branch));
+            output::print_error(&format!(
+                "You are on branch '{}', not 'main' or 'master'",
+                branch
+            ));
             output::print_info("Version bumps are typically done on the main branch");
             output::print_info("Use --force to bypass this check");
             anyhow::bail!("Not on main branch");
@@ -77,7 +83,10 @@ pub fn create_commit(version: &str) -> Result<()> {
 
     git::commit(&repo, &message)?;
 
-    output::print_success(&format!("Commit: chore(release): bump version to {}", version));
+    output::print_success(&format!(
+        "Commit: chore(release): bump version to {}",
+        version
+    ));
 
     Ok(())
 }

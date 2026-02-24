@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::util::{
     fs::{find_dirs, remove_dir_all},
@@ -32,7 +32,7 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-fn clean_sqlx_cache(root: &PathBuf) -> Result<()> {
+fn clean_sqlx_cache(root: &Path) -> Result<()> {
     let sqlx_dir = root.join("libraries/soul-storage/.sqlx");
 
     if sqlx_dir.exists() {
@@ -45,7 +45,7 @@ fn clean_sqlx_cache(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_cargo_incremental_cache(root: &PathBuf) -> Result<()> {
+fn clean_cargo_incremental_cache(root: &Path) -> Result<()> {
     let incremental_dirs = vec![
         root.join("target/debug/incremental"),
         root.join("target/release/incremental"),
@@ -70,7 +70,7 @@ fn clean_cargo_incremental_cache(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_node_modules_cache(root: &PathBuf) -> Result<()> {
+fn clean_node_modules_cache(root: &Path) -> Result<()> {
     // Find all node_modules directories
     let node_modules_dirs = find_dirs(root, "node_modules")?;
 

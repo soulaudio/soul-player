@@ -135,13 +135,9 @@ fn install_macos(manual: bool, _package_manager: Option<&platform::PackageManage
     } else {
         output::print_step("Installing dependencies via Homebrew");
         let mut cmd = vec!["brew", "install"];
-        cmd.extend(packages.iter().map(|s| *s));
+        cmd.extend(packages.iter().copied());
 
-        let success = exec::run_command_inherit(
-            "brew",
-            &packages.iter().map(|s| *s).collect::<Vec<_>>(),
-            "Installing Homebrew packages",
-        )?;
+        let success = exec::run_command_inherit("brew", packages, "Installing Homebrew packages")?;
 
         if success {
             output::print_success("Dependencies installed");
@@ -310,10 +306,9 @@ fn install_windows(manual: bool, package_manager: Option<&platform::PackageManag
 
     // Check WebView2
     output::print_step("Checking WebView2 Runtime");
-    let _webview2_paths = [
-        r"HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
-        r"HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
-    ];
+    // Registry paths for WebView2 detection (checking these requires Windows-specific code):
+    // HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}
+    // HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}
 
     // Note: We can't easily check registry from Rust in cross-platform way
     output::print_info("WebView2 is usually pre-installed on Windows 10/11");

@@ -19,16 +19,15 @@ pub fn run_command_inherit(program: &str, args: &[&str], description: &str) -> R
     println!("  {} {}", "Running:".cyan(), description);
 
     // Try to find the full path to the program
-    let program_path = which::which(program)
-        .with_context(|| {
-            format!(
-                "{} not found in PATH.\n  \
+    let program_path = which::which(program).with_context(|| {
+        format!(
+            "{} not found in PATH.\n  \
                  Try running the command directly: {} {}",
-                program,
-                program,
-                args.join(" ")
-            )
-        })?;
+            program,
+            program,
+            args.join(" ")
+        )
+    })?;
 
     let status = Command::new(program_path)
         .args(args)
@@ -65,16 +64,15 @@ pub fn run_command_in_dir(
     println!("  {} {} (in {:?})", "Running:".cyan(), description, dir);
 
     // Try to find the full path to the program
-    let program_path = which::which(program)
-        .with_context(|| {
-            format!(
-                "{} not found in PATH.\n  \
+    let program_path = which::which(program).with_context(|| {
+        format!(
+            "{} not found in PATH.\n  \
                  Try running the command directly: {} {}",
-                program,
-                program,
-                args.join(" ")
-            )
-        })?;
+            program,
+            program,
+            args.join(" ")
+        )
+    })?;
 
     let status = Command::new(program_path)
         .args(args)

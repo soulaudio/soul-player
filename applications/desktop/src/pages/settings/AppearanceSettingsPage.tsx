@@ -16,18 +16,21 @@ export function AppearanceSettingsPage() {
   const { hideWindowControls, setHideWindowControls } = useSettings();
 
   const [homeEnabled, setHomeEnabledState] = useState(true);
-  const [hideLibrarySearch, setHideLibrarySearchState] = useState(false);
+  const [hideLibrarySearch, setHideLibrarySearchState] = useState(true);
+  const [showLibraryGradients, setShowLibraryGradientsState] = useState(true);
   const [language, setLanguageState] = useState(i18next.language || 'en-US');
 
   useEffect(() => {
     Promise.all([
       backend.getUserSetting('home.enabled'),
       backend.getUserSetting('ui.hide_library_search'),
+      backend.getUserSetting('ui.show_library_gradients'),
       backend.getUserSetting('ui.language'),
     ])
-      .then(([home, hideSearch, lang]) => {
+      .then(([home, hideSearch, showGradients, lang]) => {
         setHomeEnabledState(home ?? true);
-        setHideLibrarySearchState(hideSearch ?? false);
+        setHideLibrarySearchState(hideSearch ?? true);
+        setShowLibraryGradientsState(showGradients ?? true);
         if (lang) setLanguageState(lang as string);
       })
       .catch(err => debug.error('Failed to load appearance settings:', err));
@@ -49,11 +52,20 @@ export function AppearanceSettingsPage() {
       .catch(err => debug.error('Failed to save language setting:', err));
   }, [backend]);
 
-  const handleHideLibrarySearch = useCallback((hide: boolean) => {
-    setHideLibrarySearchState(hide);
-    backend.setUserSetting('ui.hide_library_search', hide)
+  const handleShowLibraryGradients = useCallback((show: boolean) => {
+    setShowLibraryGradientsState(show);
+    backend.setUserSetting('ui.show_library_gradients', show)
       .then(() => {
-        window.dispatchEvent(new CustomEvent('library-search-hidden-changed', { detail: { hide } }));
+        window.dispatchEvent(new CustomEvent('library-gradients-changed', { detail: { show } }));
+      })
+      .catch(err => debug.error('Failed to save library gradients setting:', err));
+  }, [backend]);
+
+  const handleHideLibrarySearch = useCallback((autoHide: boolean) => {
+    setHideLibrarySearchState(autoHide);
+    backend.setUserSetting('ui.hide_library_search', autoHide)
+      .then(() => {
+        window.dispatchEvent(new CustomEvent('library-search-hidden-changed', { detail: { autoHide } }));
       })
       .catch(err => debug.error('Failed to save library search setting:', err));
   }, [backend]);
@@ -89,6 +101,19 @@ export function AppearanceSettingsPage() {
           <div>
             <span className="text-sm font-medium block">{t('settings.hideLibrarySearch')}</span>
             <p className="text-xs text-muted-foreground mt-1">{t('settings.hideLibrarySearchDescription')}</p>
+          </div>
+        </label>
+
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showLibraryGradients}
+            onChange={e => handleShowLibraryGradients(e.target.checked)}
+            className="w-4 h-4 mt-0.5"
+          />
+          <div>
+            <span className="text-sm font-medium block">{t('settings.showLibraryGradients')}</span>
+            <p className="text-xs text-muted-foreground mt-1">{t('settings.showLibraryGradientsDescription')}</p>
           </div>
         </label>
 

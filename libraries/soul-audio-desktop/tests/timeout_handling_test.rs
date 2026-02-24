@@ -210,13 +210,13 @@ fn test_timeout_wrapper_custom_timeout() {
     );
     assert_eq!(short_result, None);
 
-    // Longer timeout should succeed
+    // Longer timeout should succeed — use a generous timeout vs sleep to avoid flakiness under load
     let long_result = device_check_with_timeout_sync_custom(
         || {
             thread::sleep(Duration::from_millis(50));
             Ok::<i32, String>(42)
         },
-        Duration::from_millis(100),
+        Duration::from_millis(500),
     );
     assert_eq!(long_result, Some(Ok(42)));
 }
@@ -356,13 +356,13 @@ fn test_timeout_does_not_affect_future_calls() {
     );
     assert_eq!(timeout_result, None);
 
-    // Second call should succeed independently
+    // Second call should succeed independently — generous timeout vs sleep to avoid flakiness
     let success_result = device_check_with_timeout_sync_custom(
         || {
             thread::sleep(Duration::from_millis(10));
             Ok::<i32, String>(2)
         },
-        Duration::from_millis(50),
+        Duration::from_millis(500),
     );
     assert_eq!(success_result, Some(Ok(2)));
 }

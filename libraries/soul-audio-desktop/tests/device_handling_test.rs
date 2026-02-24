@@ -1244,6 +1244,15 @@ mod automatic_resampling_tests {
 
         let mut source = LocalAudioSource::new(&wav_path, 96000).expect("Failed to create source");
 
+        // Wait for the background decoder to fill the buffer before reading.
+        // new() returns immediately; the decoder runs in a separate thread.
+        for _ in 0..100 {
+            if source.is_ready() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+
         // Read some samples
         let mut buffer = vec![0.0f32; 9600]; // 0.05s at 96kHz stereo
         let samples_read = source.read_samples(&mut buffer).expect("Failed to read");

@@ -27,11 +27,11 @@ pub fn run(release: bool) -> Result<()> {
     output::print_info(&format!("Directory: {}", desktop_dir.display()));
 
     let build_cmd = if release { "tauri:build" } else { "build" };
-    let args = vec!["workspace", "soul-player-desktop", "run", build_cmd];
+    let args = ["workspace", "soul-player-desktop", "run", build_cmd];
 
     let success = exec::run_command_in_dir(
         "yarn",
-        &args.iter().map(|s| *s).collect::<Vec<_>>(),
+        &args,
         &workspace_root,
         &format!("yarn workspace soul-player-desktop {}", build_cmd),
     )?;

@@ -7,7 +7,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { usePlayerPlayback } from '../stores/player'
-import { usePlayerCommands, usePlaybackEvents } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { ArtworkImage } from '../components/ArtworkImage'
@@ -332,11 +332,22 @@ export function NowPlayingPage() {
     }
   }
 
-  // Handle track click
-  const handleTrackClick = async (group: GroupedTrack<TrackForGrouping>) => {
-    const activeVersion = getActiveVersion(group)
+  // Handle track click — build full queue so playback context is preserved
+  const handleTrackClick = async (_group: GroupedTrack<TrackForGrouping>, groupIndex: number) => {
     try {
-      await commands.playTrack(activeVersion.id)
+      const queue: QueueTrack[] = groupedTracks.map((g) => {
+        const v = getActiveVersion(g)
+        return {
+          trackId: String(v.id),
+          title: v.title,
+          artist: v.artist_name || '',
+          album: v.album_title || null,
+          filePath: v.file_path ?? '',
+          durationSeconds: v.duration_seconds ?? null,
+          trackNumber: v.track_number ?? null,
+        }
+      })
+      await commands.playQueue(queue, groupIndex)
     } catch (err) {
       debug.error('Failed to play track:', err)
     }
@@ -425,11 +436,11 @@ export function NowPlayingPage() {
   const isContextClickable = playbackContext && ['album', 'artist', 'playlist'].includes(playbackContext.contextType)
 
   return (
-    <div className="h-full flex items-center justify-center">
-      <div className="flex gap-10 max-w-6xl w-full items-center">
-        {/* Left Side - Artwork */}
-        <div className="w-[400px] lg:w-[500px] flex-shrink-0">
-          <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-2xl bg-muted">
+    <div className="h-full flex items-center justify-center px-4 sm:px-6 lg:px-8">
+      <div className="flex gap-12 w-full max-w-[2000px] items-center">
+        {/* Left Side - Artwork (2 parts) */}
+        <div className="basis-2/5 flex-shrink-0">
+          <div className="aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-muted">
             <ArtworkImage
               trackId={currentTrack.id}
               coverArtPath={currentTrack.coverArtPath}
@@ -440,8 +451,8 @@ export function NowPlayingPage() {
           </div>
         </div>
 
-        {/* Right Side - Tracklist */}
-        <div className="flex-1 flex flex-col min-w-0 max-h-[400px] lg:max-h-[500px]">
+        {/* Right Side - Tracklist (3 parts) */}
+        <div className="basis-3/5 flex flex-col min-w-0 max-h-[800px] overflow-hidden">
           <div className="mb-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide mb-1">
               {headerIcon}
@@ -477,7 +488,7 @@ export function NowPlayingPage() {
                   return (
                     <div
                       key={group.groupKey}
-                      onClick={() => handleTrackClick(group)}
+                      onClick={() => handleTrackClick(group, idx)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
                         isCurrentTrack
                           ? 'bg-primary/10 border border-primary/20'

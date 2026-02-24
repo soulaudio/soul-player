@@ -64,7 +64,7 @@ pub fn run_lint(fix: bool, workspace: Option<String>) -> Result<()> {
     }
 
     // Only desktop and shared have ESLint configured
-    let lint_workspaces = vec!["soul-player-desktop", "@soul-player/shared"];
+    let lint_workspaces = ["soul-player-desktop", "@soul-player/shared"];
 
     let workspaces_to_lint = if let Some(ws) = workspace {
         if !lint_workspaces.contains(&ws.as_str()) {

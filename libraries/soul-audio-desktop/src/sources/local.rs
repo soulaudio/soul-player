@@ -135,6 +135,10 @@ struct SharedState {
     /// Generation counter - incremented on each seek to invalidate stale ring buffer samples
     /// This solves the 3-5 second audio delay by skipping old samples after seek
     generation: AtomicUsize,
+    /// Number of samples that were stale (pre-seek) in the ring buffer when the last seek
+    /// was processed.  The consumer drains exactly this many samples when it sees a
+    /// generation change, leaving any fresh post-seek samples intact.
+    stale_sample_count: AtomicUsize,
 }
 
 /// Audio source for local files with background decoder thread
@@ -211,7 +215,7 @@ fn handle_seek_command(
     decoder: &mut Box<dyn symphonia::core::codecs::Decoder>,
     resampler: &mut Option<SincFixedIn<f32>>,
     input_buffer: &mut VecDeque<f32>,
-    _producer: &mut Producer<f32>,
+    producer: &mut Producer<f32>,
     shared: &Arc<SharedState>,
     position: Duration,
     track_id: u32,
@@ -263,25 +267,31 @@ fn handle_seek_command(
         );
     }
 
-    // NOTE: We don't clear the ring buffer here because:
-    // 1. Producer doesn't have a clear() method (we're on write side)
-    // 2. The decoder will quickly refill with correct samples after seek
-    // 3. The consumer might briefly read stale data, but this is acceptable
-    //    during a seek operation (position is changing anyway)
-    //
-    // Update position to ACTUAL position (not requested)
-    // This fixes position drift with VBR files where seek lands at a different position
+    // Record how many samples are currently in the ring buffer: these are all
+    // stale (pre-seek) and must be drained by the consumer before it reads
+    // post-seek audio.  Store before incrementing generation so the consumer
+    // can read this value once it sees the generation change via Acquire.
+    let capacity = producer.buffer().capacity();
+    let stale_count = capacity - producer.slots();
+    shared
+        .stale_sample_count
+        .store(stale_count, Ordering::Relaxed);
+
+    // Update position to ACTUAL position (not requested).
+    // This fixes position drift with VBR files where seek lands at a different position.
     shared.samples_read.store(
         (actual_position.as_secs_f64() * target_sample_rate as f64 * channels as f64) as usize,
         Ordering::Relaxed,
     );
     shared.is_eof.store(false, Ordering::Relaxed);
-    shared.seek_pending.store(false, Ordering::Relaxed);
 
-    // CRITICAL FIX: Increment generation to invalidate stale ring buffer samples
-    // This prevents the 3-5 second audio delay by causing the audio callback
-    // to skip old samples that were buffered before the seek
+    // Increment generation to signal the consumer.  Release ordering makes
+    // stale_sample_count, samples_read, and is_eof visible to any Acquire load.
     shared.generation.fetch_add(1, Ordering::Release);
+
+    // Clear seek_pending AFTER generation so the consumer's Acquire load of
+    // seek_pending also synchronises generation and the metadata stores above.
+    shared.seek_pending.store(false, Ordering::Release);
 
     tracing::info!(
         "[DecoderThread] Seek completed: requested={:?}, actual={:?}, generation={}, reset all skip counters",
@@ -381,6 +391,7 @@ impl LocalAudioSource {
             is_eof: AtomicBool::new(false),
             seek_pending: AtomicBool::new(false),
             generation: AtomicUsize::new(0),
+            stale_sample_count: AtomicUsize::new(0),
         });
 
         // Create command channel
@@ -1045,31 +1056,26 @@ impl AudioSource for LocalAudioSource {
     /// Uses rtrb ring buffer for lock-free, wait-free reads from the audio thread.
     fn read_samples(&mut self, output: &mut [f32]) -> Result<usize> {
         // Fast path: seek in progress but decoder hasn't completed it yet.
-        // Drain the ring buffer immediately so stale pre-seek audio doesn't play.
-        // The decoder thread will increment `generation` once it finishes seeking,
-        // at which point the normal generation-change branch below takes over.
-        if self.shared.seek_pending.load(Ordering::Relaxed) {
-            let drained = Self::drain_ring_buffer(&mut self.buffer_consumer);
-            if drained > 0 {
-                tracing::debug!(
-                    "[LocalAudioSource] Drained {} stale samples (seek pending)",
-                    drained
-                );
-            }
+        // Return silence without draining.  The stale samples stay in the ring
+        // buffer; they will be drained precisely once in the generation-change
+        // path below, after the decoder has signalled completion via generation.
+        if self.shared.seek_pending.load(Ordering::Acquire) {
             output.fill(0.0);
             return Ok(0);
         }
 
-        // Decoder completed seek: generation was incremented to signal the
-        // consumer that all samples currently in the ring buffer are stale.
-        // Drain them now so playback jumps to the new position cleanly.
+        // Decoder completed seek: drain exactly the stale samples that were in
+        // the ring buffer at seek time, leaving any fresh post-seek samples.
+        // The decoder stored stale_sample_count (Relaxed) before the Release
+        // on generation, so this Acquire load guarantees its visibility.
         let current_generation = self.shared.generation.load(Ordering::Acquire);
         if current_generation != self.last_generation {
-            let drained = Self::drain_ring_buffer(&mut self.buffer_consumer);
+            let stale = self.shared.stale_sample_count.load(Ordering::Relaxed);
+            Self::drain_n_samples(&mut self.buffer_consumer, stale);
             self.last_generation = current_generation;
-            tracing::info!(
+            tracing::debug!(
                 "[LocalAudioSource] Drained {} stale samples after seek (generation {} -> {})",
-                drained,
+                stale,
                 current_generation - 1,
                 current_generation
             );
@@ -1081,8 +1087,16 @@ impl AudioSource for LocalAudioSource {
         // Together they contain `chunk.len()` samples.  We must copy each part to
         // its correct offset in `output` — copying the first slice to `output[..count]`
         // panics whenever the chunk wraps (first.len() < count).
-        let available = self.buffer_consumer.read_chunk(output.len());
-        let read_count = if let Ok(chunk) = available {
+        //
+        // Use slots() to support partial reads near EOF: request only what is
+        // available so the caller gets the actual sample count rather than 0.
+        let slots = self.buffer_consumer.slots();
+        let to_read = output.len().min(slots);
+        let read_count = if to_read > 0 {
+            let chunk = self
+                .buffer_consumer
+                .read_chunk(to_read)
+                .expect("read_chunk should succeed when to_read <= slots");
             let count = chunk.len();
             let (first, second) = chunk.as_slices();
             let first_len = first.len();
@@ -1214,6 +1228,19 @@ impl LocalAudioSource {
             }
         }
         drained
+    }
+
+    /// Drain exactly `n` samples (or fewer if not available) from the ring buffer, discarding them.
+    ///
+    /// Used after a seek to discard the exact number of stale pre-seek samples that were in the
+    /// buffer at seek time, leaving any fresh post-seek samples intact.
+    fn drain_n_samples(consumer: &mut rtrb::Consumer<f32>, n: usize) {
+        let to_drain = n.min(consumer.slots());
+        if to_drain > 0 {
+            if let Ok(chunk) = consumer.read_chunk(to_drain) {
+                chunk.commit_all();
+            }
+        }
     }
 }
 

@@ -24,6 +24,7 @@ pub struct TestMetrics {
 }
 
 /// Run complete audio E2E test suite
+#[allow(clippy::fn_params_excessive_bools)]
 pub fn run_e2e_tests(
     ci: bool,
     skip_device_check: bool,
@@ -63,12 +64,12 @@ pub fn run_e2e_tests(
     println!();
     println!("Step 2: Checking test assets...");
     let assets_present = check_test_assets()?;
-    if !assets_present {
+    if assets_present {
+        println!("  ✓ Test assets present");
+    } else {
         println!("  → Generating test assets...");
         generate_assets("tests/assets", false)?;
         println!("  ✓ Test assets generated");
-    } else {
-        println!("  ✓ Test assets present");
     }
 
     // Step 3: Run tests
@@ -119,7 +120,7 @@ pub fn run_e2e_tests(
         } else {
             0
         },
-        tests_failed: if test_result.success() { 0 } else { 1 },
+        tests_failed: usize::from(!test_result.success()),
         virtual_device_available: has_virtual_device,
         test_assets_present: assets_present,
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -162,7 +163,7 @@ pub fn run_ci_tests(timeout_secs: u64, export_metrics: Option<String>) -> Result
     println!("Running tests with timeout...");
 
     let test_process = Command::new("cargo")
-        .args(&[
+        .args([
             "test",
             "--package",
             "soul-audio-desktop",
@@ -186,8 +187,8 @@ pub fn run_ci_tests(timeout_secs: u64, export_metrics: Option<String>) -> Result
     let metrics = TestMetrics {
         total_duration_secs: elapsed.as_secs_f64(),
         tests_run: 1,
-        tests_passed: if test_result { 1 } else { 0 },
-        tests_failed: if test_result { 0 } else { 1 },
+        tests_passed: usize::from(test_result),
+        tests_failed: usize::from(!test_result),
         virtual_device_available: false,
         test_assets_present: assets_present,
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -253,7 +254,7 @@ pub fn generate_assets(_output: &str, _force: bool) -> Result<()> {
 fn check_virtual_device() -> Result<String> {
     // Run device listing test to check for virtual devices
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "test",
             "--package",
             "soul-audio-desktop",
@@ -370,15 +371,13 @@ fn wait_with_timeout(mut process: std::process::Child, timeout: Duration) -> Res
     let start = Instant::now();
 
     loop {
-        match process.try_wait()? {
-            Some(status) => return Ok(status.success()),
-            None => {
-                if start.elapsed() > timeout {
-                    process.kill()?;
-                    bail!("Test execution timed out after {:?}", timeout);
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
+        if let Some(status) = process.try_wait()? {
+            return Ok(status.success());
         }
+        if start.elapsed() > timeout {
+            process.kill()?;
+            bail!("Test execution timed out after {:?}", timeout);
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
 }

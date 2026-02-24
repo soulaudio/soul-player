@@ -10,7 +10,19 @@
 use soul_audio_desktop::sources::local::LocalAudioSource;
 use soul_playback::AudioSource;
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 use tempfile::TempDir;
+
+/// Poll is_ready() until the buffer has enough pre-buffered samples (or EOF).
+fn wait_for_ready(source: &LocalAudioSource) {
+    for _ in 0..200 {
+        if source.is_ready() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
 
 /// Helper to create a test WAV file
 fn create_test_wav(
@@ -164,6 +176,9 @@ fn test_resampled_audio_playback() {
     // Upsample to 96kHz
     let mut source = LocalAudioSource::new(&wav_path, 96000).expect("Failed to create source");
 
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
     // Read samples - should be resampled to 96kHz
     let mut buffer = vec![0.0f32; 96000 * 2]; // 1 second at 96kHz stereo
     let samples_read = source
@@ -205,6 +220,9 @@ fn test_resampling_frequency_preservation() {
 
     // Upsample to 96kHz
     let mut source = LocalAudioSource::new(&wav_path, 96000).expect("Failed to create source");
+
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
 
     // Read a chunk
     let mut buffer = vec![0.0f32; 9600]; // 0.05 seconds at 96kHz stereo
@@ -450,6 +468,9 @@ fn test_extreme_upsampling() {
 
     assert_eq!(source.sample_rate(), 192000);
 
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
     // Verify we can read samples
     let mut buffer = vec![0.0f32; 19200]; // 0.05s
     let samples = source.read_samples(&mut buffer).unwrap();
@@ -499,6 +520,9 @@ fn test_no_startup_artifacts_with_high_energy_content() {
 
     // Downsample from 96kHz to 48kHz
     let mut source = LocalAudioSource::new(&wav_path, 48000).expect("Failed to create source");
+
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
 
     // Read the first chunk of audio
     let mut buffer = vec![0.0f32; 4800]; // 50ms at 48kHz stereo

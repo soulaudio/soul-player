@@ -8,8 +8,31 @@ use soul_playback::AudioSource;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
+
+/// Poll is_ready() until the buffer has enough pre-buffered samples (or EOF).
+fn wait_for_ready(source: &LocalAudioSource) {
+    for _ in 0..200 {
+        if source.is_ready() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// Read samples with retries to handle the async decoder buffer temporarily being empty.
+fn read_with_retry(source: &mut LocalAudioSource, buffer: &mut [f32]) -> usize {
+    for _ in 0..100 {
+        let n = source.read_samples(buffer).unwrap();
+        if n > 0 || source.is_finished() {
+            return n;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    0
+}
 
 /// Generate a simple sine wave WAV file for testing
 fn generate_test_wav(path: &PathBuf, duration_secs: f64, frequency: f64) -> std::io::Result<()> {
@@ -64,6 +87,9 @@ fn test_streaming_decoder_loads_incrementally() {
     // Create source - should not load entire file immediately
     let mut source = LocalAudioSource::new(&wav_path, 44100).expect("Failed to create source");
 
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
     // Request small amount of data
     let mut buffer = vec![0.0f32; 1024];
     let samples_read = source.read_samples(&mut buffer).unwrap();
@@ -87,10 +113,13 @@ fn test_ring_buffer_refills_on_demand() {
 
     let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
     // Read multiple times - ring buffer should refill each time
     for iteration in 0..10 {
         let mut buffer = vec![0.0f32; 8192];
-        let samples_read = source.read_samples(&mut buffer).unwrap();
+        let samples_read = read_with_retry(&mut source, &mut buffer);
 
         assert!(
             samples_read > 0,
@@ -101,7 +130,7 @@ fn test_ring_buffer_refills_on_demand() {
 
     // Should still be able to read (not at EOF yet)
     let mut buffer = vec![0.0f32; 1024];
-    let samples_read = source.read_samples(&mut buffer).unwrap();
+    let samples_read = read_with_retry(&mut source, &mut buffer);
     assert!(samples_read > 0, "Ring buffer should keep refilling");
 }
 
@@ -114,13 +143,17 @@ fn test_decoder_handles_eof_gracefully() {
     let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut buffer = vec![0.0f32; 4096];
 
-    // Read entire file
+    // Read entire file — retry on temporary empty reads (async decoder)
     let mut total_samples = 0;
-    for _ in 0..100 {
+    for _ in 0..1000 {
         // Enough iterations to exhaust file
         let samples_read = source.read_samples(&mut buffer).unwrap();
         if samples_read == 0 {
-            break;
+            if source.is_finished() {
+                break; // True EOF
+            }
+            thread::sleep(Duration::from_millis(5));
+            continue;
         }
         total_samples += samples_read;
     }
@@ -140,10 +173,14 @@ fn test_partial_buffer_fill_near_end() {
     generate_test_wav(&wav_path, 0.1, 440.0).unwrap();
 
     let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
+
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
     let mut large_buffer = vec![0.0f32; 88200]; // 1 second worth for 0.1 second file
 
     // Request more than available
-    let samples_read = source.read_samples(&mut large_buffer).unwrap();
+    let samples_read = read_with_retry(&mut source, &mut large_buffer);
 
     // Should return partial read
     assert!(samples_read > 0, "Should read some samples");
@@ -369,6 +406,9 @@ fn test_tiny_buffer_reads() {
 
     let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
 
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
     // Read with very small buffer (edge case)
     let mut buffer = vec![0.0f32; 2];
     let samples_read = source.read_samples(&mut buffer).unwrap();
@@ -386,14 +426,18 @@ fn test_exact_duration_playback() {
     let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let reported_duration = source.duration();
 
-    // Read entire file
+    // Read entire file — retry on temporary empty reads (async decoder)
     let mut buffer = vec![0.0f32; 4096];
     let mut total_time = 0.0f64;
 
     loop {
         let samples_read = source.read_samples(&mut buffer).unwrap();
         if samples_read == 0 {
-            break;
+            if source.is_finished() {
+                break; // True EOF
+            }
+            thread::sleep(Duration::from_millis(5));
+            continue;
         }
 
         // Calculate time for samples read (stereo, 44.1kHz)
@@ -424,14 +468,17 @@ fn test_interleaved_seek_and_read() {
     let mut source = LocalAudioSource::new(&wav_path, 44100).unwrap();
     let mut buffer = vec![0.0f32; 1024];
 
-    // Interleave seeks and reads
-    source.read_samples(&mut buffer).unwrap();
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
+    // Interleave seeks and reads — each read after a seek may need retries
+    read_with_retry(&mut source, &mut buffer);
     source.seek(Duration::from_secs(2)).unwrap();
-    source.read_samples(&mut buffer).unwrap();
+    read_with_retry(&mut source, &mut buffer);
     source.seek(Duration::from_secs(1)).unwrap();
-    source.read_samples(&mut buffer).unwrap();
+    read_with_retry(&mut source, &mut buffer);
     source.seek(Duration::from_secs(4)).unwrap();
-    let final_read = source.read_samples(&mut buffer).unwrap();
+    let final_read = read_with_retry(&mut source, &mut buffer);
 
     assert!(final_read > 0, "Should handle interleaved seek/read");
 }

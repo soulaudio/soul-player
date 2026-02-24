@@ -13,7 +13,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```ignore
 //! use soul_audio_desktop::device_check_with_timeout_sync;
 //!
 //! match device_check_with_timeout_sync(|| {

@@ -167,7 +167,16 @@ fn test_local_source_reads_entire_file() {
         total_samples
     );
 
-    // Verify source reports finished
+    // Verify source reports finished.
+    // is_eof is set by the decoder thread after the last samples are pushed to
+    // the ring buffer, so there is a small window where all samples have been
+    // consumed but is_eof has not yet been stored.  Retry briefly.
+    for _ in 0..20 {
+        if source.is_finished() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
     assert!(source.is_finished(), "Source should report finished");
 }
 
@@ -201,8 +210,22 @@ fn test_local_source_seeking() {
         source.position().as_secs_f64()
     );
 
-    // Verify we can continue reading from new position
-    let samples_read = source.read_samples(&mut buffer).unwrap();
+    // Verify we can continue reading from new position.
+    // After a seek, two drain rounds may be needed before actual samples are
+    // available: one for seek_pending=true (position updated before flag cleared)
+    // and one for the generation-mismatch path.  Retry with a wait_for_ready
+    // between attempts to ensure the buffer is refilled before each read.
+    let mut samples_read = 0;
+    for _ in 0..5 {
+        samples_read = source.read_samples(&mut buffer).unwrap();
+        if samples_read > 0 {
+            break;
+        }
+        assert!(
+            wait_for_ready(&source, 1000),
+            "Buffer should refill within 1 second after seek"
+        );
+    }
     assert!(samples_read > 0, "Should be able to read after seeking");
 
     // Seek to beginning
@@ -634,9 +657,28 @@ fn test_local_source_seek_position_accuracy() {
             source.position().as_secs_f64()
         );
 
-        // Read some samples to verify playback continues correctly
+        // Read some samples to verify playback continues correctly.
+        // After a seek, the seek_pending=true path returns 0 while the decoder
+        // drains stale data from the ring buffer.  Once seek_pending is cleared,
+        // fresh samples may not yet be available if the decoder hasn't had time
+        // to fill the buffer; retry with a short sleep to allow it to catch up.
         let mut buffer = vec![0.0f32; 4410]; // 0.05 seconds
-        source.read_samples(&mut buffer).unwrap();
+        let mut got_samples = false;
+        for _ in 0..20usize {
+            let n = source.read_samples(&mut buffer).unwrap();
+            if n == buffer.len() {
+                got_samples = true;
+                break;
+            }
+            // Either a drain (0) or partial read; wait for decoder to fill.
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(
+            got_samples,
+            "Should read a full buffer after seek to {}s (position: {:.3}s)",
+            target_secs,
+            source.position().as_secs_f64()
+        );
 
         // Position should have advanced by ~0.05 seconds
         let position_after_read = source.position().as_secs_f64();

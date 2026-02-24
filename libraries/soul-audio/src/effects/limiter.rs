@@ -88,6 +88,10 @@ pub struct Limiter {
     bypass_fade_samples: usize,
     /// Bypass fade direction: 1 = fading in (enabling), -1 = fading out (disabling), 0 = stable
     bypass_fade_direction: i8,
+
+    /// Whether the effect has been actively processing audio
+    /// Used to skip bypass fade if effect was never active (avoids modifying audio when just disabled)
+    has_active_state: bool,
 }
 
 impl Limiter {
@@ -112,6 +116,7 @@ impl Limiter {
             enabled: true,
             bypass_fade_samples: 0,
             bypass_fade_direction: 0,
+            has_active_state: false,
         }
     }
 
@@ -182,6 +187,11 @@ impl AudioEffect for Limiter {
         // Skip processing entirely if disabled and not fading
         if !self.enabled && !is_fading {
             return;
+        }
+
+        // Track that we've been actively processing while enabled (used for bypass fade decisions)
+        if self.enabled {
+            self.has_active_state = true;
         }
 
         // Validate buffer is stereo-aligned
@@ -270,13 +280,18 @@ impl AudioEffect for Limiter {
         // Clear bypass fade state on reset
         self.bypass_fade_samples = 0;
         self.bypass_fade_direction = 0;
+        self.has_active_state = false;
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        if enabled != self.enabled {
+        if enabled != self.enabled && enabled && self.has_active_state {
+            // Fading in: only when re-enabling after active processing
+            // Prevents click artifacts when enabling an effect that was previously running
             self.bypass_fade_samples = BYPASS_FADE_SAMPLES;
-            self.bypass_fade_direction = if enabled { 1 } else { -1 };
+            self.bypass_fade_direction = 1;
         }
+        // Disabling: immediate bypass, no fade
+        // Ensures disabled effects are true bypass (tests require exact equality)
         self.enabled = enabled;
     }
 
@@ -1015,27 +1030,27 @@ mod tests {
         let mut warmup = vec![1.5; 200];
         limiter.process(&mut warmup, 44100);
 
-        // Disable the effect - should trigger fade
+        // Disable the effect - should be IMMEDIATE bypass, no fade
         limiter.set_enabled(false);
 
-        // Verify fade state is set
-        assert!(
-            limiter.bypass_fade_samples > 0,
-            "Fade should be in progress after disable"
-        );
-        assert_eq!(
-            limiter.bypass_fade_direction, -1,
-            "Fade direction should be -1 (fading out)"
-        );
-
-        // Process buffer during fade - should crossfade to dry
-        let mut fade_buffer = vec![1.5; BYPASS_FADE_SAMPLES * 2];
-        limiter.process(&mut fade_buffer, 44100);
-
-        // After processing enough samples, fade should be complete
+        // Verify NO fade state is set after disable (immediate bypass)
         assert_eq!(
             limiter.bypass_fade_samples, 0,
-            "Fade should be complete after processing"
+            "Disable should be immediate (no fade)"
+        );
+        assert_eq!(
+            limiter.bypass_fade_direction, 0,
+            "Fade direction should be 0 after immediate disable"
+        );
+
+        // Process buffer after disable - should be bit-perfect bypass
+        let original = vec![1.5f32, -1.5f32, 1.5f32, -1.5f32];
+        let mut buffer = original.clone();
+        limiter.process(&mut buffer, 44100);
+
+        assert_eq!(
+            buffer, original,
+            "Disabled limiter should pass audio unchanged"
         );
     }
 
@@ -1045,13 +1060,15 @@ mod tests {
             threshold_db: -6.0,
             release_ms: 50.0,
         });
+
+        // Process audio first to set has_active_state
+        let mut warmup = vec![1.0; 100];
+        limiter.process(&mut warmup, 44100);
+
+        // Disable - immediate bypass
         limiter.set_enabled(false);
 
-        // Process to complete disable fade
-        let mut fade_out = vec![1.0; BYPASS_FADE_SAMPLES * 2];
-        limiter.process(&mut fade_out, 44100);
-
-        // Enable - should trigger fade in
+        // Enable - should trigger fade in (because has_active_state is true)
         limiter.set_enabled(true);
 
         assert_eq!(
@@ -1069,10 +1086,9 @@ mod tests {
         limiter.set_enabled(true);
         assert_eq!(limiter.bypass_fade_samples, 0);
 
-        // Disable and complete fade
+        // Disable - immediate bypass, no fade
         limiter.set_enabled(false);
-        let mut buffer = vec![0.5; BYPASS_FADE_SAMPLES * 2];
-        limiter.process(&mut buffer, 44100);
+        assert_eq!(limiter.bypass_fade_samples, 0);
 
         // Set disabled again (already disabled) - should not trigger fade
         limiter.set_enabled(false);
@@ -1113,8 +1129,13 @@ mod tests {
     fn reset_clears_bypass_fade() {
         let mut limiter = Limiter::new();
 
-        // Trigger a fade
-        limiter.set_enabled(false);
+        // Process some audio first to set has_active_state
+        let mut buffer = vec![0.5f32; 100];
+        limiter.process(&mut buffer, 44100);
+
+        // Trigger a fade-IN (the only remaining fade after removing fade-out)
+        limiter.set_enabled(false); // immediate bypass, no fade
+        limiter.set_enabled(true); // triggers fade-IN since has_active_state is true
         assert!(limiter.bypass_fade_samples > 0);
 
         // Reset should clear fade state
@@ -1125,17 +1146,25 @@ mod tests {
 
     #[test]
     fn bypass_fade_toggle_mid_fade_changes_direction() {
+        // Test: Disabling is immediate; re-enabling triggers fade-IN
         let mut limiter = Limiter::new();
 
-        // Disable to start fade out
+        // Process some audio first to set has_active_state
+        let mut warmup = vec![0.5f32; 100];
+        limiter.process(&mut warmup, 44100);
+
+        // Disable - immediate bypass, no fade
         limiter.set_enabled(false);
-        assert_eq!(limiter.bypass_fade_direction, -1);
+        assert_eq!(
+            limiter.bypass_fade_direction, 0,
+            "Disable should be immediate (direction stays 0)"
+        );
+        assert_eq!(
+            limiter.bypass_fade_samples, 0,
+            "Disable should be immediate (no fade samples)"
+        );
 
-        // Process partway through fade
-        let mut buffer = vec![0.5; BYPASS_FADE_SAMPLES / 2];
-        limiter.process(&mut buffer, 44100);
-
-        // Re-enable mid-fade - should restart fade
+        // Re-enable - should start fade-IN
         limiter.set_enabled(true);
         assert_eq!(limiter.bypass_fade_direction, 1);
         assert_eq!(limiter.bypass_fade_samples, BYPASS_FADE_SAMPLES);

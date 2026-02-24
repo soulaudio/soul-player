@@ -46,15 +46,18 @@ impl SemVer {
             prerelease,
         })
     }
+}
 
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for SemVer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(ref prerelease) = self.prerelease {
-            format!(
+            write!(
+                f,
                 "{}.{}.{}-{}",
                 self.major, self.minor, self.patch, prerelease
             )
         } else {
-            format!("{}.{}.{}", self.major, self.minor, self.patch)
+            write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
         }
     }
 }

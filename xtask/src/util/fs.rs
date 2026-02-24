@@ -14,9 +14,8 @@ pub fn remove_dir_all(path: &Path) -> Result<()> {
         for attempt in 0..3 {
             match fs::remove_dir_all(path) {
                 Ok(_) => return Ok(()),
-                Err(e) if attempt < 2 => {
+                Err(_) if attempt < 2 => {
                     std::thread::sleep(std::time::Duration::from_millis(100));
-                    continue;
                 }
                 Err(e) => {
                     return Err(e)
@@ -43,9 +42,8 @@ pub fn remove_file(path: &Path) -> Result<()> {
         for attempt in 0..3 {
             match fs::remove_file(path) {
                 Ok(_) => return Ok(()),
-                Err(e) if attempt < 2 => {
+                Err(_) if attempt < 2 => {
                     std::thread::sleep(std::time::Duration::from_millis(100));
-                    continue;
                 }
                 Err(e) => {
                     return Err(e).with_context(|| format!("Failed to remove file: {:?}", path))

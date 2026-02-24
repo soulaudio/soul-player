@@ -101,7 +101,10 @@ pub fn update_package_json(path: &Path, version: &str) -> Result<()> {
     let mut json: serde_json::Value = serde_json::from_str(&content)?;
 
     if let Some(obj) = json.as_object_mut() {
-        obj.insert("version".to_string(), serde_json::Value::String(version.to_string()));
+        obj.insert(
+            "version".to_string(),
+            serde_json::Value::String(version.to_string()),
+        );
     }
 
     // Write with 2-space indent
@@ -154,7 +157,10 @@ pub fn update_tauri_conf(path: &Path, version: &str) -> Result<()> {
 
     // Update version field (Tauri 2.0 uses top-level "version")
     if let Some(obj) = json.as_object_mut() {
-        obj.insert("version".to_string(), serde_json::Value::String(version.to_string()));
+        obj.insert(
+            "version".to_string(),
+            serde_json::Value::String(version.to_string()),
+        );
     }
 
     // Write with 2-space indent
@@ -199,7 +205,10 @@ pub fn update_release_config(version: &str) -> Result<PathBuf> {
     let mut json: serde_json::Value = serde_json::from_str(&content)?;
 
     if let Some(obj) = json.as_object_mut() {
-        obj.insert("version".to_string(), serde_json::Value::String(version.to_string()));
+        obj.insert(
+            "version".to_string(),
+            serde_json::Value::String(version.to_string()),
+        );
     }
 
     // Write with 2-space indent
@@ -220,7 +229,7 @@ pub fn update_all_files(version: &str, dry_run: bool) -> Result<Vec<PathBuf>> {
         output::print_step("Would update: Cargo.toml (workspace)");
     } else {
         let path = update_workspace_cargo_toml(version)?;
-        output::print_success(&format!("Cargo.toml (workspace)"));
+        output::print_success("Cargo.toml (workspace)");
         all_files.push(path);
     }
 
@@ -230,7 +239,9 @@ pub fn update_all_files(version: &str, dry_run: bool) -> Result<Vec<PathBuf>> {
     } else {
         let mut libs = update_library_cargo_tomls(version)?;
         for lib in &libs {
-            let rel_path = lib.strip_prefix(&platform::workspace_root()?).unwrap_or(lib);
+            let rel_path = lib
+                .strip_prefix(&platform::workspace_root()?)
+                .unwrap_or(lib);
             output::print_success(&format!("{}", rel_path.display()));
         }
         all_files.append(&mut libs);
@@ -242,7 +253,9 @@ pub fn update_all_files(version: &str, dry_run: bool) -> Result<Vec<PathBuf>> {
     } else {
         let mut apps = update_app_cargo_tomls(version)?;
         for app in &apps {
-            let rel_path = app.strip_prefix(&platform::workspace_root()?).unwrap_or(app);
+            let rel_path = app
+                .strip_prefix(&platform::workspace_root()?)
+                .unwrap_or(app);
             output::print_success(&format!("{}", rel_path.display()));
         }
         all_files.append(&mut apps);
@@ -254,7 +267,9 @@ pub fn update_all_files(version: &str, dry_run: bool) -> Result<Vec<PathBuf>> {
     } else {
         let mut pkgs = update_package_jsons(version)?;
         for pkg in &pkgs {
-            let rel_path = pkg.strip_prefix(&platform::workspace_root()?).unwrap_or(pkg);
+            let rel_path = pkg
+                .strip_prefix(&platform::workspace_root()?)
+                .unwrap_or(pkg);
             output::print_success(&format!("{}", rel_path.display()));
         }
         all_files.append(&mut pkgs);
@@ -266,7 +281,9 @@ pub fn update_all_files(version: &str, dry_run: bool) -> Result<Vec<PathBuf>> {
     } else {
         let mut tauris = update_tauri_confs(version)?;
         for tauri in &tauris {
-            let rel_path = tauri.strip_prefix(&platform::workspace_root()?).unwrap_or(tauri);
+            let rel_path = tauri
+                .strip_prefix(&platform::workspace_root()?)
+                .unwrap_or(tauri);
             output::print_success(&format!("{}", rel_path.display()));
         }
         all_files.append(&mut tauris);
@@ -355,7 +372,10 @@ pub fn validate_updates(version: &str) -> Result<()> {
             anyhow::bail!("Version validation failed");
         }
 
-        output::print_success(&format!("release-config.json version = {}", release_version));
+        output::print_success(&format!(
+            "release-config.json version = {}",
+            release_version
+        ));
     }
 
     output::print_success("All files updated successfully");

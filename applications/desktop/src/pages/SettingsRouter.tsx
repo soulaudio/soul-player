@@ -6,7 +6,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import {
   SettingsLayout,
   AudioSettingsPage,
-  ReportBugSettingsPage,
 } from '@soul-player/shared';
 import { AboutSettingsPage } from './settings/AboutSettingsPage';
 import { AppearanceSettingsPage } from './settings/AppearanceSettingsPage';
@@ -23,7 +22,7 @@ export function SettingsRouter() {
         <Route path="music-data" element={<MusicDataSettingsPage />} />
         <Route path="audio" element={<AudioSettingsPage />} />
         <Route path="shortcuts" element={<ShortcutsSettings />} />
-        <Route path="report-bug" element={<ReportBugSettingsPage />} />
+        <Route path="report-bug" element={<Navigate to="/settings/about" replace />} />
         <Route path="about" element={<AboutSettingsPage />} />
 
         {/* Redirect old paths */}

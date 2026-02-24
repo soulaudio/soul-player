@@ -2,7 +2,7 @@
  * LibraryPageLayout - Reusable layout for library pages with search and auto-hide header
  */
 
-import { useEffect, useRef, ReactNode, useCallback, useState, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useRef, ReactNode, useCallback, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, X } from 'lucide-react'
 import { FeatureGate } from '../contexts/PlatformContext'
@@ -51,17 +51,47 @@ export function LibraryPageLayout({
   const { t } = useTranslation()
   const backend = useBackend()
   const { showHeader: showSearchBar, setShowHeader: setShowSearchBar, scrollContainerRef } = useScrollVisibility()
-  const [hideSearch, setHideSearch] = useState(false)
+  const autoHideSearchRef = useRef(true)
+  const [showGradients, setShowGradients] = useState(true)
+
+  // scrollContainerRef.current is null during render — refs are set in the layout phase
+  // after children's effects run (bottom-up). Delay rendering children until the scroll
+  // container is committed, so VirtualizedGrid always gets a non-null scroll element.
+  // useLayoutEffect fires synchronously before paint, so the browser never sees skeleton
+  // when data is already available.
+  const [scrollReady, setScrollReady] = useState(false)
+  useLayoutEffect(() => {
+    setScrollReady(true)
+  }, [])
 
   useEffect(() => {
-    backend.getUserSetting('ui.hide_library_search')
-      .then(value => setHideSearch(value ?? false))
+    Promise.all([
+      backend.getUserSetting('ui.hide_library_search'),
+      backend.getUserSetting('ui.show_library_gradients'),
+    ])
+      .then(([hideSearch, showGrad]) => {
+        const autoHide = hideSearch ?? true
+        autoHideSearchRef.current = autoHide
+        if (!autoHide) setShowSearchBar(true)
+        setShowGradients(showGrad ?? true)
+      })
       .catch(() => {/* ignore */})
 
-    const handler = (e: Event) => setHideSearch((e as CustomEvent).detail.hide)
-    window.addEventListener('library-search-hidden-changed', handler)
-    return () => window.removeEventListener('library-search-hidden-changed', handler)
-  }, [backend])
+    const searchHandler = (e: Event) => {
+      const val = (e as CustomEvent).detail.autoHide as boolean
+      autoHideSearchRef.current = val
+      if (!val) setShowSearchBar(true)
+    }
+    const gradientsHandler = (e: Event) => {
+      setShowGradients((e as CustomEvent).detail.show as boolean)
+    }
+    window.addEventListener('library-search-hidden-changed', searchHandler)
+    window.addEventListener('library-gradients-changed', gradientsHandler)
+    return () => {
+      window.removeEventListener('library-search-hidden-changed', searchHandler)
+      window.removeEventListener('library-gradients-changed', gradientsHandler)
+    }
+  }, [backend, setShowSearchBar])
   const lastScrollTop = useRef(0)
   const idleTimerRef = useRef<number | null>(null)
   const hiddenByIdleRef = useRef(false) // Track if hidden by idle timeout
@@ -121,8 +151,10 @@ export function LibraryPageLayout({
       setTopGradientOpacity(0)
     }
 
-    // Set new timer to hide after 3 seconds of inactivity
+    // Set new timer to hide after 3 seconds of inactivity (only when auto-hide is enabled)
     idleTimerRef.current = window.setTimeout(() => {
+      if (!autoHideSearchRef.current) return
+
       // Check if at bottom before hiding to prevent padding change loop
       const scrollContainer = scrollContainerRef.current
       if (scrollContainer) {
@@ -177,11 +209,11 @@ export function LibraryPageLayout({
           // 2. User has scrolled down (scrollTop > 10)
           let calculatedOpacity = 0
 
-          if (!showSearchBarRef.current && scrollTop > 10) {
-            // Header is hidden and scrolled down - show gradient
+          if (autoHideSearchRef.current && !showSearchBarRef.current && scrollTop > 10) {
+            // Auto-hide enabled, header is hidden and scrolled down - show gradient
             calculatedOpacity = 1
           } else {
-            // Header is visible OR at top - hide gradient
+            // Header is visible OR at top OR auto-hide disabled - hide gradient
             calculatedOpacity = 0
           }
 
@@ -204,8 +236,8 @@ export function LibraryPageLayout({
             return
           }
 
-          // Hide when scrolling down past threshold (but not when at bottom to prevent loop)
-          if (scrollDelta > 0 && scrollTop > 50 && !atBottom) {
+          // Hide when scrolling down past threshold (only when auto-hide is enabled)
+          if (autoHideSearchRef.current && scrollDelta > 0 && scrollTop > 50 && !atBottom) {
             setShowSearchBar(false)
             hiddenByIdleRef.current = false // Hidden by manual scroll, not idle
             // Clear idle timer when manually hiding
@@ -218,8 +250,8 @@ export function LibraryPageLayout({
           else if (scrollDelta < 0 && !atBottom) {
             setShowSearchBar(true)
             hiddenByIdleRef.current = false // Reset idle flag
-            // Reset idle timer on scroll up
-            resetIdleTimer()
+            // Reset idle timer on scroll up (only when auto-hide is enabled)
+            if (autoHideSearchRef.current) resetIdleTimer()
           }
 
           lastScrollTop.current = scrollTop
@@ -252,12 +284,12 @@ export function LibraryPageLayout({
         setTopGradientOpacity(0)
       }
 
-      // Always reset idle timer on mouse movement
-      resetIdleTimer()
+      // Reset idle timer on mouse movement (only when auto-hide is enabled)
+      if (autoHideSearchRef.current) resetIdleTimer()
     }
 
-    // Start idle timer on mount
-    resetIdleTimer()
+    // Start idle timer on mount (only when auto-hide is enabled)
+    if (autoHideSearchRef.current) resetIdleTimer()
 
     // Only listen to mouse movement within the scroll container (main content area)
     scrollContainer.addEventListener('mousemove', handleMouseMove, { passive: true })
@@ -293,13 +325,12 @@ export function LibraryPageLayout({
         )}
       </FeatureGate>
 
-      {/* Search bar - auto-hide on scroll, absolutely positioned */}
-      {!hideSearch && (
-        <div
-          className={`absolute top-0 left-0 right-0 bg-background z-10 transition-all duration-300 mr-6 pb-3 ${
-            showSearchBar ? 'translate-y-0' : '-translate-y-full'
-          }`}
-        >
+      {/* Search bar - auto-hide on scroll when enabled, absolutely positioned */}
+      <div
+        className={`absolute top-0 left-0 right-0 bg-background z-10 transition-all duration-300 mr-6 pb-3 ${
+          showSearchBar ? 'translate-y-0' : '-translate-y-full'
+        }`}
+      >
           <div className="flex items-center gap-4">
             <div className="relative flex-1 sm:max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -327,16 +358,15 @@ export function LibraryPageLayout({
             {additionalButtons}
           </div>
         </div>
-      )}
 
       {/* Scrollable Content - with dynamic padding for search bar */}
       <div
         ref={scrollContainerRef}
         className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom transition-all duration-300 ${
-          !hideSearch && showSearchBar ? 'pt-14' : 'pt-6'
+          showSearchBar ? 'pt-14' : 'pt-6'
         }`}
       >
-        {isLoading ? (
+        {(isLoading || !scrollReady) ? (
           <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
             {Array.from({ length: cachedCount }).map((_, index) => (
               <SkeletonCard key={index} type={itemType} />
@@ -348,23 +378,27 @@ export function LibraryPageLayout({
       </div>
 
       {/* Top gradient overlay - smoothly fades based on scroll position */}
-      <div
-        className="absolute top-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300"
-        style={{
-          background: 'linear-gradient(to bottom, hsl(var(--background)) 0%, transparent 100%)',
-          opacity: topGradientOpacity
-        }}
-      />
+      {showGradients && (
+        <div
+          className="absolute top-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300"
+          style={{
+            background: 'linear-gradient(to bottom, hsl(var(--background)) 0%, transparent 100%)',
+            opacity: topGradientOpacity
+          }}
+        />
+      )}
 
       {/* Bottom gradient overlay - subtle and disappears at bottom */}
-      <div
-        className={`absolute bottom-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300 ${
-          isAtBottom ? 'opacity-0' : 'opacity-100'
-        }`}
-        style={{
-          background: 'linear-gradient(to top, hsl(var(--background) / 0.75) 0%, transparent 100%)'
-        }}
-      />
+      {showGradients && (
+        <div
+          className={`absolute bottom-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300 ${
+            isAtBottom ? 'opacity-0' : 'opacity-100'
+          }`}
+          style={{
+            background: 'linear-gradient(to top, hsl(var(--background) / 0.75) 0%, transparent 100%)'
+          }}
+        />
+      )}
     </div>
   )
 }

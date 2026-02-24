@@ -1224,26 +1224,55 @@ mod integration_tests {
         let samples = generate_sine_wave(440.0, 0.5, sample_rate, 2);
         let data = AudioData::Float32(samples);
 
-        // Test play
+        // Test play — wait up to 2s for stream to start (WASAPI exclusive mode stream build can
+        // take 100-300ms on Windows)
         assert!(output.play(data).is_ok(), "Play should succeed");
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(output.is_playing(), "Should be playing after play()");
+        let mut playing = false;
+        for _ in 0..200 {
+            std::thread::sleep(Duration::from_millis(10));
+            if output.is_playing() {
+                playing = true;
+                break;
+            }
+        }
+        assert!(playing, "Should be playing after play()");
 
-        // Test pause
+        // Test pause — wait up to 1s for pause to take effect
         assert!(output.pause().is_ok(), "Pause should succeed");
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(output.is_paused(), "Should be paused after pause()");
+        let mut paused = false;
+        for _ in 0..100 {
+            std::thread::sleep(Duration::from_millis(10));
+            if output.is_paused() {
+                paused = true;
+                break;
+            }
+        }
+        assert!(paused, "Should be paused after pause()");
         assert!(!output.is_playing(), "Should not be playing when paused");
 
-        // Test resume
+        // Test resume — wait up to 1s
         assert!(output.resume().is_ok(), "Resume should succeed");
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(!output.is_paused(), "Should not be paused after resume()");
+        let mut not_paused = false;
+        for _ in 0..100 {
+            std::thread::sleep(Duration::from_millis(10));
+            if !output.is_paused() {
+                not_paused = true;
+                break;
+            }
+        }
+        assert!(not_paused, "Should not be paused after resume()");
 
-        // Test stop
+        // Test stop — wait up to 1s
         assert!(output.stop().is_ok(), "Stop should succeed");
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(!output.is_playing(), "Should not be playing after stop()");
+        let mut stopped = false;
+        for _ in 0..100 {
+            std::thread::sleep(Duration::from_millis(10));
+            if !output.is_playing() {
+                stopped = true;
+                break;
+            }
+        }
+        assert!(stopped, "Should not be playing after stop()");
     }
 
     #[test]
@@ -1342,10 +1371,17 @@ mod integration_tests {
         let data = AudioData::Float32(samples);
 
         assert!(output.play(data).is_ok());
-        std::thread::sleep(Duration::from_millis(100));
 
-        // Position should have advanced
-        let pos = output.position();
+        // Wait up to 2s for position to advance (WASAPI exclusive mode stream build can take
+        // 100-300ms on Windows before audio callback starts updating the position counter)
+        let mut pos = 0;
+        for _ in 0..200 {
+            std::thread::sleep(Duration::from_millis(10));
+            pos = output.position();
+            if pos > 0 {
+                break;
+            }
+        }
         assert!(pos > 0, "Position should advance during playback");
 
         assert!(output.stop().is_ok());

@@ -31,7 +31,10 @@ pub fn run() -> Result<()> {
     println!();
 
     // 3. Tests
-    rust::run_tests(None, vec![])?;
+    // Use --test-threads=1 to serialize test execution within each binary.
+    // This prevents timing-sensitive tests from competing with each other for CPU,
+    // avoiding flaky failures under concurrent debug build test loads.
+    rust::run_tests(None, vec!["--".to_string(), "--test-threads=1".to_string()])?;
     println!();
 
     // ========================================================================

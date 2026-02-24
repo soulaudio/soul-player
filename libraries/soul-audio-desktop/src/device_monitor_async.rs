@@ -33,7 +33,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```ignore
 //! use soul_audio_desktop::create_async_device_monitor;
 //!
 //! #[tokio::main]

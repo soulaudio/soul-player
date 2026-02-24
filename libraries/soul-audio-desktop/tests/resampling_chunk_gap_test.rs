@@ -13,7 +13,19 @@ use soul_playback::AudioSource;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
 use tempfile::TempDir;
+
+/// Poll is_ready() until the buffer has enough pre-buffered samples (or EOF).
+fn wait_for_ready(source: &LocalAudioSource) {
+    for _ in 0..200 {
+        if source.is_ready() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
 
 /// Generate a WAV file at a specific sample rate
 /// This allows testing resampling scenarios (`source_rate` != `target_rate`)
@@ -254,6 +266,9 @@ fn test_resampling_with_tiny_chunks() {
 
     let mut source = LocalAudioSource::new(&wav_path, 44100).expect("Failed to create source");
 
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
     // Use very small chunks (64 samples = ~0.7ms)
     // This is much smaller than the resampler's internal chunk size (1024)
     // and is most likely to expose the gap bug
@@ -262,24 +277,26 @@ fn test_resampling_with_tiny_chunks() {
     let mut buffer = vec![0.0f32; chunk_size];
 
     let mut consecutive_zeros = 0;
-    let max_zero_reads = 10; // Should never have this many consecutive zero reads mid-file
+    // Allow a short burst of zero reads while the decoder refills the ring buffer;
+    // this is NOT the chunk gap bug.  The bug would cause sustained zeros throughout.
+    let max_zero_reads = 50;
 
-    for i in 0..2000 {
+    for _ in 0..2000 {
         let samples_read = source.read_samples(&mut buffer).unwrap();
 
         if samples_read == 0 {
+            if source.is_finished() {
+                break; // True EOF
+            }
             consecutive_zeros += 1;
             if consecutive_zeros > max_zero_reads {
-                // If we're getting many zero reads in a row, we're at EOF
-                break;
+                panic!(
+                    "Too many consecutive zero reads ({}) when not at EOF - chunk gap bug!",
+                    consecutive_zeros
+                );
             }
-            // Zero read in the middle of the file is a bug!
-            // Allow zeros at end
-            assert!(
-                source.is_finished() || i >= 1500,
-                "Got zero samples at iteration {} when not at EOF - chunk gap bug!",
-                i
-            );
+            // Briefly wait for decoder to refill the ring buffer
+            thread::sleep(Duration::from_millis(2));
             continue;
         }
 
@@ -420,6 +437,9 @@ fn test_no_resampling_no_gaps() {
 
     let mut source = LocalAudioSource::new(&wav_path, 44100).expect("Failed to create source");
 
+    // Wait for background decoder to pre-buffer audio (async constructor)
+    wait_for_ready(&source);
+
     let chunk_size = 256;
     let mut all_samples: Vec<f32> = Vec::new();
     let mut buffer = vec![0.0f32; chunk_size];
@@ -427,7 +447,12 @@ fn test_no_resampling_no_gaps() {
     loop {
         let samples_read = source.read_samples(&mut buffer).unwrap();
         if samples_read == 0 {
-            break;
+            if source.is_finished() {
+                break; // True EOF
+            }
+            // Buffer temporarily empty - wait for decoder to refill
+            thread::sleep(Duration::from_millis(5));
+            continue;
         }
         all_samples.extend_from_slice(&buffer[..samples_read]);
     }

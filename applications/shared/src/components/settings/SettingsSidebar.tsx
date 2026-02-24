@@ -8,7 +8,6 @@ import {
   Palette,
   Info,
   Keyboard,
-  Bug,
   Database,
 } from 'lucide-react';
 
@@ -24,7 +23,6 @@ const navigationItems: NavItem[] = [
   { id: 'musicData',  labelKey: 'settings.sections.musicData',  path: '/settings/music-data', icon: Database },
   { id: 'audio',      labelKey: 'settings.sections.audio',      path: '/settings/audio',      icon: Volume2  },
   { id: 'shortcuts',  labelKey: 'settings.sections.shortcuts',  path: '/settings/shortcuts',  icon: Keyboard },
-  { id: 'reportBug',  labelKey: 'settings.sections.reportBug',  path: '/settings/report-bug', icon: Bug      },
   { id: 'about',      labelKey: 'settings.sections.about',      path: '/settings/about',      icon: Info     },
 ];
 

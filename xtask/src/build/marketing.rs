@@ -30,11 +30,11 @@ pub fn run(release: bool) -> Result<()> {
     output::print_step("Building marketing site...");
     output::print_info(&format!("Directory: {}", marketing_dir.display()));
 
-    let args = vec!["workspace", "@soul-player/marketing", "run", "build"];
+    let args = ["workspace", "@soul-player/marketing", "run", "build"];
 
     let success = exec::run_command_in_dir(
         "yarn",
-        &args.iter().map(|s| *s).collect::<Vec<_>>(),
+        &args,
         &workspace_root,
         "yarn workspace @soul-player/marketing build",
     )?;

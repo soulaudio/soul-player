@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::util::{
     fs::{find_dirs, find_files, remove_dir_all, remove_file},
@@ -41,7 +41,7 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-fn clean_rust_targets(root: &PathBuf) -> Result<()> {
+fn clean_rust_targets(root: &Path) -> Result<()> {
     let targets = vec![
         root.join("target"),
         root.join("applications/desktop/src-tauri/target"),
@@ -57,7 +57,7 @@ fn clean_rust_targets(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_node_modules(root: &PathBuf) -> Result<()> {
+fn clean_node_modules(root: &Path) -> Result<()> {
     let node_modules_dirs = find_dirs(root, "node_modules")?;
 
     if node_modules_dirs.is_empty() {
@@ -73,7 +73,7 @@ fn clean_node_modules(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_dist_folders(root: &PathBuf) -> Result<()> {
+fn clean_dist_folders(root: &Path) -> Result<()> {
     // Find all dist directories in applications/
     let applications_dir = root.join("applications");
     if !applications_dir.exists() {
@@ -95,7 +95,7 @@ fn clean_dist_folders(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_tmp_dirs(root: &PathBuf) -> Result<()> {
+fn clean_tmp_dirs(root: &Path) -> Result<()> {
     let tmp_dirs = find_dirs(root, ".tmp")?;
 
     if tmp_dirs.is_empty() {
@@ -111,7 +111,7 @@ fn clean_tmp_dirs(root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn clean_log_files(root: &PathBuf) -> Result<()> {
+fn clean_log_files(root: &Path) -> Result<()> {
     let log_files = find_files(root, ".log")?;
 
     if log_files.is_empty() {

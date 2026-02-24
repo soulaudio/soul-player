@@ -1,6 +1,10 @@
 # Cargo Configuration for Soul Player
 # See: https://doc.rust-lang.org/cargo/reference/config.html
 
+[alias]
+xtask = "run --package xtask --"
+xt = "run --package xtask --"
+
 [build]
 # Use project-local target directory for better hot reload detection
 # This will be overridden by CARGO_TARGET_DIR env var if set

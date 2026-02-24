@@ -1,7 +1,7 @@
 use anyhow::Result;
 use colored::Colorize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::util::{fs, output, platform, validation};
 use crate::version::{files, git};
@@ -10,12 +10,18 @@ use crate::version::{files, git};
 pub fn run(version: &str, dry_run: bool, skip_git: bool, force: bool) -> Result<()> {
     // Print header
     println!();
-    println!("{}", "═══════════════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "═══════════════════════════════════════════════════════".cyan()
+    );
     println!("{}", "  Soul Player Version Bumping".cyan().bold());
     if dry_run {
         println!("{}", "  [DRY-RUN MODE - No changes will be made]".cyan());
     }
-    println!("{}", "═══════════════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "═══════════════════════════════════════════════════════".cyan()
+    );
     println!();
 
     // Validate version format
@@ -106,7 +112,10 @@ pub fn run(version: &str, dry_run: bool, skip_git: bool, force: bool) -> Result<
             }
 
             println!();
-            println!("{}", "═══════════════════════════════════════════════════════".cyan());
+            println!(
+                "{}",
+                "═══════════════════════════════════════════════════════".cyan()
+            );
 
             if dry_run {
                 output::print_success("Dry-run complete - no changes were made");
@@ -121,7 +130,10 @@ pub fn run(version: &str, dry_run: bool, skip_git: bool, force: bool) -> Result<
                     git::run_git_operations(version, updated_files)?;
 
                     println!();
-                    println!("{}", "═══════════════════════════════════════════════════════".cyan());
+                    println!(
+                        "{}",
+                        "═══════════════════════════════════════════════════════".cyan()
+                    );
                     output::print_complete(&format!("Release v{} initiated!", version));
                     println!();
                     output::print_info("GitHub Actions will now:");
@@ -186,7 +198,7 @@ fn run_preflight_checks(force: bool) -> Result<()> {
 }
 
 /// Collect all files that will be updated
-fn collect_files_to_update(workspace_root: &PathBuf) -> Result<Vec<PathBuf>> {
+fn collect_files_to_update(workspace_root: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
     // Workspace Cargo.toml
@@ -272,7 +284,7 @@ fn rollback_changes(backups: &HashMap<PathBuf, PathBuf>) -> Result<()> {
 
 /// Cleanup backups on success
 fn cleanup_backups(backups: &HashMap<PathBuf, PathBuf>) -> Result<()> {
-    for (_, backup) in backups {
+    for backup in backups.values() {
         if backup.exists() {
             fs::remove_file(backup)?;
         }

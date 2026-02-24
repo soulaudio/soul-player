@@ -47,6 +47,8 @@ export function VirtualizedGrid<T>({
 }: VirtualizedGridProps<T>) {
   // Use the scroll container managed by LibraryPageLayout so we don't create
   // a nested overflow-y-auto that breaks scroll events and doubles padding.
+  // LibraryPageLayout's scrollReady gate ensures this ref is always set when
+  // VirtualizedGrid first mounts.
   const { scrollContainerRef } = useScrollVisibility()
 
   // Calculate number of rows based on total count and columns
@@ -99,6 +101,8 @@ export function VirtualizedGrid<T>({
         return (
           <div
             key={virtualRow.index}
+            data-index={virtualRow.index}
+            ref={virtualizer.measureElement}
             style={{
               position: 'absolute',
               top: 0,

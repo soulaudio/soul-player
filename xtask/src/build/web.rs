@@ -25,11 +25,11 @@ pub fn run(_release: bool) -> Result<()> {
     output::print_step("Building web application...");
     output::print_info(&format!("Directory: {}", web_dir.display()));
 
-    let args = vec!["workspace", "@soul-player/web", "run", "build"];
+    let args = ["workspace", "@soul-player/web", "run", "build"];
 
     let success = exec::run_command_in_dir(
         "yarn",
-        &args.iter().map(|s| *s).collect::<Vec<_>>(),
+        &args,
         &workspace_root,
         "yarn workspace @soul-player/web build",
     )?;

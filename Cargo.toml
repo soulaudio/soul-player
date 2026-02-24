@@ -18,6 +18,9 @@ members = [
     "libraries/soul-loudness",
     "libraries/soul-server-client",
 
+    # Build tooling
+    "xtask",
+
     # Applications
     "applications/desktop/src-tauri",
     # "applications/mobile/src-tauri",  # Will be created when initializing Tauri mobile

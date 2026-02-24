@@ -20,7 +20,7 @@ export function SettingsFooter({ version }: SettingsFooterProps) {
         onClick={() => navigate('/settings')}
         className={cn(
           'p-1.5 rounded-lg transition-opacity',
-          location.pathname === '/settings'
+          location.pathname.startsWith('/settings')
             ? 'text-primary bg-accent/20'
             : 'text-muted-foreground hover:opacity-[var(--hover-text-opacity)] hover:bg-foreground/10'
         )}

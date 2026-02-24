@@ -28,26 +28,26 @@ impl Platform {
         }
     }
 
-    pub fn is_windows(&self) -> bool {
+    pub fn is_windows(self) -> bool {
         matches!(self, Platform::Windows)
     }
 
-    pub fn is_macos(&self) -> bool {
+    pub fn is_macos(self) -> bool {
         matches!(self, Platform::MacOS)
     }
 
-    pub fn is_linux(&self) -> bool {
+    pub fn is_linux(self) -> bool {
         matches!(self, Platform::Linux)
     }
 
-    pub fn executable_extension(&self) -> &str {
+    pub fn executable_extension(self) -> &'static str {
         match self {
             Platform::Windows => ".exe",
             _ => "",
         }
     }
 
-    pub fn path_separator(&self) -> char {
+    pub fn path_separator(self) -> char {
         match self {
             Platform::Windows => ';',
             _ => ':',
@@ -93,7 +93,7 @@ impl PackageManager {
         }
     }
 
-    pub fn install_command(&self, packages: &[&str]) -> Vec<String> {
+    pub fn install_command(self, packages: &[&str]) -> Vec<String> {
         let mut cmd = vec![];
 
         match self {

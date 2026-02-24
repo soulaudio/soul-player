@@ -12,11 +12,11 @@ pub fn run(skip_create: bool, skip_migrate: bool) -> Result<()> {
     let env_file = workspace.join(".env");
 
     // Check/create .env from .env.example if needed
-    if !env_file.exists() {
+    if env_file.exists() {
+        output::print_success(".env exists");
+    } else {
         output::print_step("Creating .env from .env.example");
         crate::setup::env::run(false)?;
-    } else {
-        output::print_success(".env exists");
     }
 
     // Parse DATABASE_URL from .env
@@ -34,7 +34,9 @@ pub fn run(skip_create: bool, skip_migrate: bool) -> Result<()> {
 
     // Check sqlx-cli installed
     output::print_step("Checking sqlx-cli installation");
-    if !exec::command_exists("sqlx") {
+    if exec::command_exists("sqlx") {
+        output::print_success("sqlx-cli is installed");
+    } else {
         output::print_warning("sqlx-cli not found, installing...");
         let success = exec::run_command_inherit(
             "cargo",
@@ -53,8 +55,6 @@ pub fn run(skip_create: bool, skip_migrate: bool) -> Result<()> {
             anyhow::bail!("Failed to install sqlx-cli");
         }
         output::print_success("sqlx-cli installed");
-    } else {
-        output::print_success("sqlx-cli is installed");
     }
 
     // Run sqlx database create
