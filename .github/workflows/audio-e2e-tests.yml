@@ -72,23 +72,23 @@ jobs:
           echo "=== Creating ALSA configuration ==="
           mkdir -p ~/.config/alsa
           cat > ~/.config/alsa/asoundrc <<'EOF'
-# Virtual loopback device for testing
-pcm.!default {
-    type plug
-    slave.pcm "loopback"
-}
+          # Virtual loopback device for testing
+          pcm.!default {
+              type plug
+              slave.pcm "loopback"
+          }
 
-pcm.loopback {
-    type asym
-    playback.pcm "hw:Loopback,0,0"
-    capture.pcm "hw:Loopback,1,0"
-}
+          pcm.loopback {
+              type asym
+              playback.pcm "hw:Loopback,0,0"
+              capture.pcm "hw:Loopback,1,0"
+          }
 
-ctl.!default {
-    type hw
-    card Loopback
-}
-EOF
+          ctl.!default {
+              type hw
+              card Loopback
+          }
+          EOF
 
           echo "=== Testing ALSA configuration ==="
           aplay -L | grep -A 5 "default" || echo "Default device not configured"
