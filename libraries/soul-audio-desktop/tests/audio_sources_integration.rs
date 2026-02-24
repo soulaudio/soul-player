@@ -142,16 +142,25 @@ fn test_local_source_reads_entire_file() {
 
     let duration = source.duration();
 
-    // Read entire file
+    // Read entire file - loop until source is truly finished (is_eof + buffer empty).
+    // We must NOT break on read_samples()==0 alone because the new slot-based read
+    // returns 0 for transient underruns (decoder between packets) as well as real EOF.
     let mut total_samples = 0;
     let mut buffer = vec![0.0f32; 4096];
-
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
         let samples_read = source.read_samples(&mut buffer).unwrap();
-        if samples_read == 0 {
-            break; // EOF
-        }
         total_samples += samples_read;
+        if source.is_finished() {
+            break; // True EOF: decoder done AND buffer empty
+        }
+        if samples_read == 0 {
+            // Transient underrun - decoder still filling buffer; wait briefly
+            if std::time::Instant::now() >= deadline {
+                break; // Safety timeout
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     // Verify we read approximately the right number of samples
@@ -167,16 +176,6 @@ fn test_local_source_reads_entire_file() {
         total_samples
     );
 
-    // Verify source reports finished.
-    // is_eof is set by the decoder thread after the last samples are pushed to
-    // the ring buffer, so there is a small window where all samples have been
-    // consumed but is_eof has not yet been stored.  Retry briefly.
-    for _ in 0..20 {
-        if source.is_finished() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
     assert!(source.is_finished(), "Source should report finished");
 }
 
