@@ -182,7 +182,15 @@ fn test_source_creation_is_slow() {
 
 /// Test that demonstrates the problem: loading a source takes too long for audio callback
 /// This test shows WHY `load_next_track()` causes gaps when called from audio callback
+///
+/// Ignored: this test is inherently environment-dependent. On fast NVMe CI runners
+/// with release builds, source creation consistently measures 0ms (OS page-cache hit
+/// on the just-written temp file). The architectural requirement it documents — that
+/// track loading must happen off the audio thread — has already been implemented via
+/// background pre-loading. The test is kept for documentation but cannot be asserted
+/// in CI without a reliable way to force a cache miss.
 #[test]
+#[ignore = "environment-dependent timing: passes only on cold-cache HDD systems; architecture already fixed via background pre-loading"]
 fn test_source_loading_exceeds_callback_budget() {
     let temp_dir = TempDir::new().unwrap();
 
