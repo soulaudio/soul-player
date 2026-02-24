@@ -28,8 +28,8 @@ projects:
     shared: 'applications/shared'
     marketing: 'applications/marketing'
 
-# Runner configuration
-runner:
+# Pipeline configuration (was 'runner' in older Moon versions)
+pipeline:
   archivableTargets:
     - 'build'
     - 'build-release'
