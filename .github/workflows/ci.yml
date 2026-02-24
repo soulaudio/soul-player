@@ -226,7 +226,7 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             use_release: ${{ github.ref == 'refs/heads/main' }}
-          - os: macos-13
+          - os: macos-latest
             target: x86_64-apple-darwin
             use_release: ${{ github.ref == 'refs/heads/main' }}
           - os: macos-latest
@@ -278,24 +278,26 @@ jobs:
           cp applications/desktop/dist/index.html applications/desktop/src-tauri/dist/
 
       # Build in release mode on main, debug mode elsewhere
+      # Note: --exclude xtask because xtask is a host dev tool (uses git2/openssl)
+      # and should not be cross-compiled for non-host targets.
       - name: Build workspace (Release)
         if: matrix.use_release == true
-        run: cargo build --workspace --release --target ${{ matrix.target }}
+        run: cargo build --workspace --exclude xtask --release --target ${{ matrix.target }}
 
       - name: Build workspace (Debug)
         if: matrix.use_release != true
-        run: cargo build --workspace --target ${{ matrix.target }}
+        run: cargo build --workspace --exclude xtask --target ${{ matrix.target }}
 
       # Run tests (use same build profile)
       - name: Run unit tests (Release)
         if: matrix.use_release == true
-        run: cargo test --workspace --lib --bins --release --target ${{ matrix.target }}
+        run: cargo test --workspace --exclude xtask --lib --bins --release --target ${{ matrix.target }}
         env:
           RUST_TEST_THREADS: 4
 
       - name: Run unit tests (Debug)
         if: matrix.use_release != true
-        run: cargo test --workspace --lib --bins --target ${{ matrix.target }}
+        run: cargo test --workspace --exclude xtask --lib --bins --target ${{ matrix.target }}
         env:
           RUST_TEST_THREADS: 4
 
