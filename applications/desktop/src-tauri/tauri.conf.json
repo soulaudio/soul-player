@@ -158,7 +158,8 @@
       "nsis": {
         "compression": "lzma",
         "installMode": "currentUser",
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "startMenuFolder": "Soul Player"
       },
       "webviewInstallMode": {
         "silent": true,

@@ -1328,13 +1328,21 @@ jobs:
           }
 
           # Verify shortcuts removed (check both per-user and per-machine locations)
-          $perUserShortcut = Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
-          $perMachineShortcut = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
+          # NSIS with startMenuFolder="Soul Player" creates shortcuts in a subfolder:
+          #   %APPDATA%\...\Programs\Soul Player\Soul Player.lnk  (currentUser)
+          #   %ProgramData%\...\Programs\Soul Player\Soul Player.lnk  (perMachine)
+          $perUserShortcut = Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Soul Player\Soul Player.lnk"
+          $perMachineShortcut = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player\Soul Player.lnk"
+          # Also check for legacy flat shortcut (pre-startMenuFolder behavior)
+          $perUserFlat = Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
+          $perMachineFlat = Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Soul Player.lnk"
 
-          if ($perUserShortcut -or $perMachineShortcut) {
+          if ($perUserShortcut -or $perMachineShortcut -or $perUserFlat -or $perMachineFlat) {
             Write-Error "Uninstall incomplete: Start Menu shortcut still exists"
-            Write-Host "  Per-user shortcut: $perUserShortcut"
-            Write-Host "  Per-machine shortcut: $perMachineShortcut"
+            Write-Host "  Per-user subfolder shortcut: $perUserShortcut"
+            Write-Host "  Per-machine subfolder shortcut: $perMachineShortcut"
+            Write-Host "  Per-user flat shortcut: $perUserFlat"
+            Write-Host "  Per-machine flat shortcut: $perMachineFlat"
             exit 1
           }
 
