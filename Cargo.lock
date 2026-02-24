@@ -751,9 +751,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
+checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 dependencies = [
  "serde",
 ]
@@ -6733,7 +6733,7 @@ dependencies = [
 
 [[package]]
 name = "soul-artwork"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "base64 0.22.1",
  "lofty",
@@ -6746,7 +6746,7 @@ dependencies = [
 
 [[package]]
 name = "soul-audio"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "cpal",
  "criterion",
@@ -6767,7 +6767,7 @@ dependencies = [
 
 [[package]]
 name = "soul-audio-desktop"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "audio_thread_priority",
@@ -6808,11 +6808,11 @@ dependencies = [
 
 [[package]]
 name = "soul-audio-mobile"
-version = "0.1.10"
+version = "0.1.11"
 
 [[package]]
 name = "soul-core"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6825,7 +6825,7 @@ dependencies = [
 
 [[package]]
 name = "soul-discovery"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "reqwest 0.11.27",
  "serde",
@@ -6835,7 +6835,7 @@ dependencies = [
 
 [[package]]
 name = "soul-importer"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6864,7 +6864,7 @@ dependencies = [
 
 [[package]]
 name = "soul-loudness"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "ebur128",
  "lofty",
@@ -6878,7 +6878,7 @@ dependencies = [
 
 [[package]]
 name = "soul-metadata"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "lofty",
  "num_cpus",
@@ -6892,7 +6892,7 @@ dependencies = [
 
 [[package]]
 name = "soul-playback"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.2.17",
@@ -6912,7 +6912,7 @@ dependencies = [
 
 [[package]]
 name = "soul-player-desktop"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -6955,7 +6955,7 @@ dependencies = [
 
 [[package]]
 name = "soul-server"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "axum",
@@ -6992,7 +6992,7 @@ dependencies = [
 
 [[package]]
 name = "soul-server-client"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7013,7 +7013,7 @@ dependencies = [
 
 [[package]]
 name = "soul-storage"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7031,7 +7031,7 @@ dependencies = [
 
 [[package]]
 name = "soul-sync"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "chrono",
  "reqwest 0.11.27",
