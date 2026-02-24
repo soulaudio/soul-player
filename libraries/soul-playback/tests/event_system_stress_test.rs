@@ -156,7 +156,9 @@ fn test_position_update_throttling() {
     let mut process_count = 0;
 
     for _ in 0..1000 {
-        manager.process_audio(&mut buffer).ok();
+        let samples = manager.process_audio(&mut buffer).unwrap_or(0);
+        // Mirror what the platform layer does: emit position updates based on samples processed
+        manager.maybe_emit_position_update(samples);
         process_count += 1;
     }
 
