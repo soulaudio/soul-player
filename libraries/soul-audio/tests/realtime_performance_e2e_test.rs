@@ -473,6 +473,7 @@ fn test_total_pipeline_latency() {
 // ============================================================================
 
 #[test]
+#[ignore = "Performance test - machine dependent, run manually on reference hardware"]
 fn test_per_effect_cpu_measurement() {
     let sample_rate = 48000u32;
     let buffer_size = 512usize;
