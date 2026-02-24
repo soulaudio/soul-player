@@ -246,7 +246,9 @@ impl PlaybackManager {
             PlaybackState::Stopped => {
                 if self.loading {
                     // play_next_in_queue already called and we're waiting for activate_source
-                    tracing::debug!("[play] Already loading (waiting for activate_source), ignoring");
+                    tracing::debug!(
+                        "[play] Already loading (waiting for activate_source), ignoring"
+                    );
                     Ok(())
                 } else {
                     // Start playing from queue
