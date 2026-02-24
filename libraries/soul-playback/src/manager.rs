@@ -76,6 +76,18 @@ pub struct PlaybackManager {
     start_fade: StartFadeEnvelope,
     stop_fade: StopFadeEnvelope,
 
+    // ===== LOADING STATE =====
+    /// True when play_next_in_queue() has emitted a LoadNext event and we are
+    /// waiting for activate_source() to be called by the platform layer.
+    /// Prevents activate_source() from transitioning to Playing if the user
+    /// paused or stopped before the source finished loading.
+    loading: bool,
+
+    /// The track most recently dispatched via LoadNext but not yet activated.
+    /// Saved here so that if the user navigates (next/skip) before the platform
+    /// layer calls activate_source(), the track still appears in history.
+    pending_load_track: Option<QueueTrack>,
+
     // ===== EVENT SYSTEM =====
     pending_events: Vec<PlaybackEvent>,
     position_update_samples: usize,
@@ -149,6 +161,10 @@ impl PlaybackManager {
             // Fade envelopes
             start_fade: StartFadeEnvelope::new(44100),
             stop_fade: StopFadeEnvelope::new(44100),
+
+            // Loading state
+            loading: false,
+            pending_load_track: None,
 
             // Event system
             pending_events: Vec::with_capacity(64),
@@ -228,9 +244,15 @@ impl PlaybackManager {
                 Ok(())
             }
             PlaybackState::Stopped => {
-                // Start playing from queue
-                tracing::info!("[play] State was Stopped, calling play_next_in_queue");
-                self.play_next_in_queue()
+                if self.loading {
+                    // play_next_in_queue already called and we're waiting for activate_source
+                    tracing::debug!("[play] Already loading (waiting for activate_source), ignoring");
+                    Ok(())
+                } else {
+                    // Start playing from queue
+                    tracing::info!("[play] State was Stopped, calling play_next_in_queue");
+                    self.play_next_in_queue()
+                }
             }
             PlaybackState::Playing => {
                 // Already playing
@@ -248,7 +270,13 @@ impl PlaybackManager {
             !matches!(self.sources, SourceState::Empty)
         );
 
-        if self.state == PlaybackState::Playing {
+        if self.state == PlaybackState::Stopped && self.loading {
+            // User pressed pause while a track is loading (between play_next_in_queue
+            // emitting LoadNext and activate_source being called). Record the intent.
+            self.state = PlaybackState::Paused;
+            self.emit_state_changed(PlaybackState::Paused);
+            tracing::debug!("[pause] Paused during loading (source not yet ready)");
+        } else if self.state == PlaybackState::Playing {
             // Freeze start_fade to prevent volume spike during pause
             if self.start_fade.is_active() {
                 self.start_fade.freeze();
@@ -276,6 +304,8 @@ impl PlaybackManager {
     pub fn stop(&mut self) {
         self.stop_fade.reset();
         self.state = PlaybackState::Stopped;
+        self.loading = false;
+        self.pending_load_track = None;
 
         // Clear all audio sources using SourceState
         self.sources = SourceState::Empty;
@@ -307,8 +337,23 @@ impl PlaybackManager {
         // Activate the new source
         let track_id = track.id.clone();
         self.sources = SourceState::Playing { source, track };
-        self.state = PlaybackState::Playing;
-        self.start_fade.start();
+
+        // Only transition to Playing if a play() was requested (loading=true) and the
+        // user hasn't paused since then. If loading=false, the source was set
+        // without an explicit play() call - don't auto-start. If state is Paused,
+        // the user paused during loading - respect that and don't start playback.
+        let was_loading = self.loading;
+        self.loading = false;
+        self.pending_load_track = None; // Track is now active, clear the pending slot
+
+        if was_loading && self.state == PlaybackState::Stopped {
+            self.state = PlaybackState::Playing;
+            self.start_fade.start();
+            // Emit state changed event (transition to Playing)
+            self.emit_state_changed(PlaybackState::Playing);
+        }
+        // else: if state is Paused (user paused during loading) or Stopped
+        // (!was_loading), keep the current state without emitting StateChanged.
 
         // Emit track changed event
         self.pending_events.push(PlaybackEvent::TrackChanged {
@@ -316,10 +361,10 @@ impl PlaybackManager {
             previous_track_id,
         });
 
-        // Emit state changed event (transition to Playing)
-        self.emit_state_changed(PlaybackState::Playing);
-
-        tracing::info!("[activate_source] Source activated, state now Playing");
+        tracing::info!(
+            "[activate_source] Source activated, state now {:?}",
+            self.state
+        );
     }
 
     // Removed: reset_position_tracking() - no longer needed without deprecated fields
@@ -357,16 +402,19 @@ impl PlaybackManager {
         }
 
         // Go to previous track from history
-        if let Some(_prev_track) = self.history.pop() {
+        if let Some(prev_track) = self.history.pop() {
             // Decrement source index to restore queue position
             if self.sources.current_track().is_some() && self.queue.can_go_back() {
                 self.queue.go_back();
             }
 
             // FIXME: Need to implement loading for previous track in Phase 2
-            // For now, just stop playback
+            // For now, just stop playback and record the pending track so
+            // get_current_track() reflects the track we intend to play.
             self.state = PlaybackState::Stopped;
             self.sources = SourceState::Empty;
+            self.pending_load_track = Some(prev_track);
+            self.loading = true;
             tracing::warn!(
                 "[previous] Previous track loading not yet implemented, stopping playback"
             );
@@ -405,9 +453,13 @@ impl PlaybackManager {
         let next_track = self.get_next_track_from_queue()?;
         tracing::info!("[AUTO-ADVANCE] Next track: id={}", next_track.id);
 
-        // Save current track to history
+        // Save current track to history (either from active source or pending load)
         if let Some(track) = self.sources.current_track() {
             self.history.push(track.clone());
+        } else if let Some(pending) = self.pending_load_track.take() {
+            // Track was dispatched via LoadNext but activate_source was never called
+            // (e.g. user pressed next again before the track finished loading)
+            self.history.push(pending);
         }
 
         // Emit event to load track (handled by desktop layer in Phase 2)
@@ -415,9 +467,13 @@ impl PlaybackManager {
             "[AUTO-ADVANCE] Emitting LoadNext event for track: {}",
             next_track.id
         );
+        // Remember the track we're loading so it can be saved to history if the
+        // user navigates again before activate_source() is called.
+        self.pending_load_track = Some(next_track.clone());
         self.pending_events
             .push(PlaybackEvent::LoadNext(next_track));
         self.state = PlaybackState::Stopped;
+        self.loading = true;
 
         Ok(())
     }
@@ -731,9 +787,12 @@ impl PlaybackManager {
         // Reset any active fades
         self.stop_fade.reset();
 
-        // Save current track to history (if any) - only actually-played tracks
+        // Save current track to history (from active source or pending load)
         if let Some(track) = self.sources.take_current_track() {
             self.history.push(track);
+        } else if let Some(pending) = self.pending_load_track.take() {
+            // Track was dispatched via LoadNext but activate_source was never called
+            self.history.push(pending);
         }
 
         // Skip to target index - we intentionally discard the skipped tracks
@@ -834,8 +893,10 @@ impl PlaybackManager {
 
     /// Get currently playing track
     pub fn get_current_track(&self) -> Option<&QueueTrack> {
-        // Phase 1: Use new sources field only
-        self.sources.current_track()
+        // Active source takes priority over pending load
+        self.sources
+            .current_track()
+            .or(self.pending_load_track.as_ref())
     }
 
     /// Get current queue index

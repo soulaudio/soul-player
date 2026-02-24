@@ -629,6 +629,8 @@ fn test_previous_within_3_seconds_goes_to_previous_track() {
 fn test_seek_beyond_duration_clamps_to_near_end() {
     let mut manager = PlaybackManager::default();
     let track = create_test_track("1", "Track 1", "Artist A", 100);
+    manager.add_to_queue_end(track.clone());
+    let _ = manager.play(); // Transitions to loading (emits LoadNext)
     manager.activate_source(
         Box::new(MockAudioSource::new(Duration::from_secs(100), 44100)),
         track,
@@ -646,6 +648,7 @@ fn test_rapid_state_changes() {
 
     let track1 = create_test_track("1", "Track 1", "Artist A", 180);
     manager.add_to_queue_end(track1.clone());
+    let _ = manager.play(); // Transitions to loading (emits LoadNext)
     manager.activate_source(
         Box::new(MockAudioSource::new(Duration::from_secs(180), 44100)),
         track1,
