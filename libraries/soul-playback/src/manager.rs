@@ -316,9 +316,6 @@ impl PlaybackManager {
             previous_track_id,
         });
 
-        // Emit state changed event (transition to Playing)
-        self.emit_state_changed(PlaybackState::Playing);
-
         tracing::info!("[activate_source] Source activated, state now Playing");
     }
 
@@ -545,7 +542,6 @@ impl PlaybackManager {
     /// Set volume (0-100)
     pub fn set_volume(&mut self, level: u8) {
         self.volume.set_level(level);
-        self.emit_volume_changed();
     }
 
     /// Get current volume level (0-100)
