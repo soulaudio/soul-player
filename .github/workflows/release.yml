@@ -556,7 +556,7 @@ jobs:
     name: Build macOS Packages
     needs: [check-release-exists, check-ci-artifacts]
     if: needs.check-release-exists.outputs.should_continue == 'true'
-    runs-on: macos-latest
+    runs-on: ${{ matrix.target == 'x86_64-apple-darwin' && 'macos-13' || 'macos-latest' }}
     strategy:
       matrix:
         target: [x86_64-apple-darwin, aarch64-apple-darwin]
