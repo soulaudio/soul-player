@@ -1,21 +1,4 @@
 {
-  "name": "soul-player-desktop",
-  "version": "0.1.10",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri:dev": "tauri dev",
-    "tauri:dev:logs": "tauri dev -- -- --logs",
-    "tauri:build": "tauri build",
-    "lint": "eslint src --ext .ts,.tsx",
-    "type-check": "tsc --noEmit",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
-  },
   "dependencies": {
     "@radix-ui/react-dropdown-menu": "^2.0.6",
     "@soul-player/shared": "workspace:*",
@@ -56,5 +39,22 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"
-  }
+  },
+  "name": "soul-player-desktop",
+  "private": true,
+  "scripts": {
+    "build": "tsc && vite build",
+    "dev": "vite",
+    "lint": "eslint src --ext .ts,.tsx",
+    "preview": "vite preview",
+    "tauri:build": "tauri build",
+    "tauri:dev": "tauri dev",
+    "tauri:dev:logs": "tauri dev -- -- --logs",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "test:ui": "vitest --ui",
+    "type-check": "tsc --noEmit"
+  },
+  "type": "module",
+  "version": "0.1.11"
 }

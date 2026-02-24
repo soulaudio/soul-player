@@ -1,113 +1,113 @@
 {
-  "version": "0.1.10",
-  "repository": "soulaudio/soul-player",
   "artifacts": {
-    "windows": {
-      "nsis": {
-        "name": "Soul.Player_{version}_x64-setup.exe",
-        "artifactName": "windows-x86_64-pc-windows-msvc",
-        "path": "nsis",
-        "displayName": "Windows Installer",
-        "platform": "Windows",
-        "arch": "x64",
-        "recommended": true
-      }
-    },
     "linux": {
       "appimage": {
-        "name": "soul-player_{version}_x86_64.AppImage",
+        "arch": "x64",
         "artifactName": "linux-x86_64-unknown-linux-gnu",
-        "path": "",
+        "description": "Works on all Linux distributions. No installation required.",
         "displayName": "AppImage (Universal)",
-        "platform": "Linux",
-        "arch": "x64",
-        "recommended": true,
-        "description": "Works on all Linux distributions. No installation required."
-      },
-      "flatpak": {
-        "name": "io.github.soulaudio.SoulPlayer_{version}_x86_64.flatpak",
-        "artifactName": "linux-x86_64-unknown-linux-gnu",
+        "name": "soul-player_{version}_x86_64.AppImage",
         "path": "",
-        "displayName": "Flatpak",
         "platform": "Linux",
-        "arch": "x64",
-        "recommended": false,
-        "description": "Sandboxed universal package. Install: flatpak install <file>"
-      },
-      "deb": {
-        "name": "Soul.Player_{version}_amd64.deb",
-        "artifactName": "linux-tauri-x86_64-unknown-linux-gnu",
-        "path": "deb",
-        "displayName": "Debian/Ubuntu (.deb)",
-        "platform": "Linux",
-        "arch": "x64",
-        "recommended": false,
-        "description": "For Debian, Ubuntu, Linux Mint, Pop!_OS"
-      },
-      "rpm": {
-        "name": "Soul.Player-{version}-1.x86_64.rpm",
-        "artifactName": "linux-tauri-x86_64-unknown-linux-gnu",
-        "path": "rpm",
-        "displayName": "Fedora/RHEL (.rpm)",
-        "platform": "Linux",
-        "arch": "x64",
-        "recommended": false,
-        "description": "For Fedora, RHEL, CentOS, openSUSE"
+        "recommended": true
       },
       "aur": {
-        "name": "soul-player",
-        "artifactName": "",
-        "path": "",
-        "displayName": "Arch Linux (AUR)",
-        "platform": "Linux",
         "arch": "x64",
-        "recommended": false,
+        "artifactName": "",
         "description": "For Arch Linux: yay -S soul-player",
+        "displayName": "Arch Linux (AUR)",
         "installCommand": "yay -S soul-player",
-        "isAur": true
+        "isAur": true,
+        "name": "soul-player",
+        "path": "",
+        "platform": "Linux",
+        "recommended": false
+      },
+      "deb": {
+        "arch": "x64",
+        "artifactName": "linux-tauri-x86_64-unknown-linux-gnu",
+        "description": "For Debian, Ubuntu, Linux Mint, Pop!_OS",
+        "displayName": "Debian/Ubuntu (.deb)",
+        "name": "Soul.Player_{version}_amd64.deb",
+        "path": "deb",
+        "platform": "Linux",
+        "recommended": false
+      },
+      "flatpak": {
+        "arch": "x64",
+        "artifactName": "linux-x86_64-unknown-linux-gnu",
+        "description": "Sandboxed universal package. Install: flatpak install <file>",
+        "displayName": "Flatpak",
+        "name": "io.github.soulaudio.SoulPlayer_{version}_x86_64.flatpak",
+        "path": "",
+        "platform": "Linux",
+        "recommended": false
+      },
+      "rpm": {
+        "arch": "x64",
+        "artifactName": "linux-tauri-x86_64-unknown-linux-gnu",
+        "description": "For Fedora, RHEL, CentOS, openSUSE",
+        "displayName": "Fedora/RHEL (.rpm)",
+        "name": "Soul.Player-{version}-1.x86_64.rpm",
+        "path": "rpm",
+        "platform": "Linux",
+        "recommended": false
       }
     },
     "macos": {
-      "dmg-arm": {
-        "name": "Soul.Player_{version}_aarch64.dmg",
-        "artifactName": "macos-aarch64-apple-darwin",
-        "path": "dmg",
-        "displayName": "macOS Disk Image (Apple Silicon)",
-        "platform": "macOS",
+      "app-arm": {
         "arch": "arm64",
+        "artifactName": "macos-aarch64-apple-darwin",
+        "description": "For Tauri auto-updates. Users should download DMG instead.",
+        "displayName": "macOS App Bundle (Apple Silicon)",
+        "name": "Soul Player_{version}_aarch64.app.tar.gz",
+        "path": "macos",
+        "platform": "macOS",
+        "recommended": false
+      },
+      "app-intel": {
+        "arch": "x64",
+        "artifactName": "macos-x86_64-apple-darwin",
+        "description": "For Tauri auto-updates. Users should download DMG instead.",
+        "displayName": "macOS App Bundle (Intel)",
+        "name": "Soul Player_{version}_x64.app.tar.gz",
+        "path": "macos",
+        "platform": "macOS",
+        "recommended": false
+      },
+      "dmg-arm": {
+        "arch": "arm64",
+        "artifactName": "macos-aarch64-apple-darwin",
+        "displayName": "macOS Disk Image (Apple Silicon)",
+        "name": "Soul.Player_{version}_aarch64.dmg",
+        "path": "dmg",
+        "platform": "macOS",
         "recommended": true
       },
       "dmg-intel": {
-        "name": "Soul.Player_{version}_x64.dmg",
+        "arch": "x64",
         "artifactName": "macos-x86_64-apple-darwin",
-        "path": "dmg",
         "displayName": "macOS Disk Image (Intel)",
+        "name": "Soul.Player_{version}_x64.dmg",
+        "path": "dmg",
         "platform": "macOS",
-        "arch": "x64",
         "recommended": false
-      },
-      "app-arm": {
-        "name": "Soul Player_{version}_aarch64.app.tar.gz",
-        "artifactName": "macos-aarch64-apple-darwin",
-        "path": "macos",
-        "displayName": "macOS App Bundle (Apple Silicon)",
-        "platform": "macOS",
-        "arch": "arm64",
-        "recommended": false,
-        "description": "For Tauri auto-updates. Users should download DMG instead."
-      },
-      "app-intel": {
-        "name": "Soul Player_{version}_x64.app.tar.gz",
-        "artifactName": "macos-x86_64-apple-darwin",
-        "path": "macos",
-        "displayName": "macOS App Bundle (Intel)",
-        "platform": "macOS",
+      }
+    },
+    "windows": {
+      "nsis": {
         "arch": "x64",
-        "recommended": false,
-        "description": "For Tauri auto-updates. Users should download DMG instead."
+        "artifactName": "windows-x86_64-pc-windows-msvc",
+        "displayName": "Windows Installer",
+        "name": "Soul.Player_{version}_x64-setup.exe",
+        "path": "nsis",
+        "platform": "Windows",
+        "recommended": true
       }
     }
   },
   "downloadBaseUrl": "https://github.com/{repository}/releases/download/{tag}/{filename}",
-  "latestReleaseUrl": "https://api.github.com/repos/{repository}/releases/latest"
+  "latestReleaseUrl": "https://api.github.com/repos/{repository}/releases/latest",
+  "repository": "soulaudio/soul-player",
+  "version": "0.1.11"
 }

@@ -1,153 +1,148 @@
 {
-  "productName": "Soul Player",
-  "version": "0.1.10",
-  "identifier": "soul-player",
-  "mainBinaryName": "soul-player",
-  "build": {
-    "beforeDevCommand": "yarn dev",
-    "beforeBuildCommand": "yarn build",
-    "devUrl": "http://localhost:1420",
-    "frontendDist": "../dist"
-  },
   "app": {
-    "windows": [
-      {
-        "label": "splash",
-        "title": "Soul Player",
-        "width": 600,
-        "height": 400,
-        "resizable": false,
-        "fullscreen": false,
-        "decorations": false,
-        "transparent": true,
-        "center": true,
-        "visible": true,
-        "url": "splash.html",
-        "alwaysOnTop": true,
-        "skipTaskbar": true
-      },
-      {
-        "label": "main",
-        "title": "Soul Player",
-        "width": 1200,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
-        "resizable": true,
-        "fullscreen": false,
-        "visible": false,
-        "dragDropEnabled": true,
-        "decorations": false,
-        "transparent": false,
-        "center": true
-      }
-    ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https: artwork: asset:; media-src 'self' data:; script-src 'self' 'wasm-unsafe-eval';",
       "assetProtocol": {
         "enable": true,
         "scope": [
           "**"
         ]
+      },
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https: artwork: asset:; media-src 'self' data:; script-src 'self' 'wasm-unsafe-eval';"
+    },
+    "windows": [
+      {
+        "alwaysOnTop": true,
+        "center": true,
+        "decorations": false,
+        "fullscreen": false,
+        "height": 400,
+        "label": "splash",
+        "resizable": false,
+        "skipTaskbar": true,
+        "title": "Soul Player",
+        "transparent": true,
+        "url": "splash.html",
+        "visible": true,
+        "width": 600
+      },
+      {
+        "center": true,
+        "decorations": false,
+        "dragDropEnabled": true,
+        "fullscreen": false,
+        "height": 800,
+        "label": "main",
+        "minHeight": 600,
+        "minWidth": 800,
+        "resizable": true,
+        "title": "Soul Player",
+        "transparent": false,
+        "visible": false,
+        "width": 1200
       }
-    }
+    ]
+  },
+  "build": {
+    "beforeBuildCommand": "yarn build",
+    "beforeDevCommand": "yarn dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,
-    "targets": "all",
     "createUpdaterArtifacts": true,
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
     "fileAssociations": [
       {
+        "description": "MP3 Audio File",
         "ext": [
           "mp3"
         ],
         "mimeType": "audio/mpeg",
-        "description": "MP3 Audio File",
         "rank": "Owner"
       },
       {
+        "description": "FLAC Audio File",
         "ext": [
           "flac"
         ],
         "mimeType": "audio/flac",
-        "description": "FLAC Audio File",
         "rank": "Owner"
       },
       {
+        "description": "WAV Audio File",
         "ext": [
           "wav"
         ],
         "mimeType": "audio/wav",
-        "description": "WAV Audio File",
         "rank": "Default"
       },
       {
+        "description": "OGG Audio File",
         "ext": [
           "ogg",
           "oga"
         ],
         "mimeType": "audio/ogg",
-        "description": "OGG Audio File",
         "rank": "Default"
       },
       {
+        "description": "M4A/AAC Audio File",
         "ext": [
           "m4a",
           "mp4",
           "aac"
         ],
         "mimeType": "audio/mp4",
-        "description": "M4A/AAC Audio File",
         "rank": "Default"
       },
       {
+        "description": "Opus Audio File",
         "ext": [
           "opus"
         ],
         "mimeType": "audio/opus",
-        "description": "Opus Audio File",
         "rank": "Default"
       },
       {
+        "description": "Windows Media Audio File",
         "ext": [
           "wma"
         ],
         "mimeType": "audio/x-ms-wma",
-        "description": "Windows Media Audio File",
         "rank": "Alternate"
       },
       {
+        "description": "AIFF Audio File",
         "ext": [
           "aiff",
           "aif"
         ],
         "mimeType": "audio/aiff",
-        "description": "AIFF Audio File",
         "rank": "Alternate"
       },
       {
+        "description": "Monkey's Audio File",
         "ext": [
           "ape"
         ],
         "mimeType": "audio/x-ape",
-        "description": "Monkey's Audio File",
         "rank": "Alternate"
       },
       {
+        "description": "WavPack Audio File",
         "ext": [
           "wv"
         ],
         "mimeType": "audio/x-wavpack",
-        "description": "WavPack Audio File",
         "rank": "Alternate"
       }
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
     ],
     "linux": {
       "deb": {
@@ -158,22 +153,30 @@
       "minimumSystemVersion": "10.15",
       "signingIdentity": "-"
     },
+    "targets": "all",
     "windows": {
+      "nsis": {
+        "compression": "lzma",
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico"
+      },
       "webviewInstallMode": {
-        "type": "embedBootstrapper",
-        "silent": true
+        "silent": true,
+        "type": "embedBootstrapper"
       },
       "wix": {
         "language": "en-US"
-      },
-      "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "compression": "lzma",
-        "installMode": "currentUser"
       }
     }
   },
+  "identifier": "soul-player",
+  "mainBinaryName": "soul-player",
   "plugins": {
+    "deepLink": {
+      "schemes": [
+        "soul"
+      ]
+    },
     "shell": {
       "open": true
     },
@@ -182,11 +185,8 @@
         "https://github.com/soulaudio/soul-player/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZDRjgyNzhGMjA2NzU5MkUKUldRdVdXY2dqeWY0L0I4V2FpUzlZZEVGMnBFblVGZEZTS1I1blJ3WUx3emVaWmtCUzFQUkxLdGEK"
-    },
-    "deepLink": {
-      "schemes": [
-        "soul"
-      ]
     }
-  }
+  },
+  "productName": "Soul Player",
+  "version": "0.1.11"
 }

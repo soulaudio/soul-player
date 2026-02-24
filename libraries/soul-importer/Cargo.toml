@@ -1,6 +1,6 @@
 [package]
 name = "soul-importer"
-version.workspace = true
+version = "0.1.11"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true

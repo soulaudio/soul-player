@@ -1,7 +1,43 @@
 {
+  "devDependencies": {
+    "@esbuild/win32-x64": "0.21.5",
+    "husky": "^9.1.7",
+    "knip": "^5.82.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "name": "soul-player",
-  "version": "0.1.10",
+  "packageManager": "yarn@4.0.2",
   "private": true,
+  "scripts": {
+    "build:desktop": "yarn workspace soul-player-desktop tauri:build",
+    "build:marketing": "yarn workspace @soul-player/marketing build",
+    "build:mobile": "yarn workspace soul-player-mobile tauri:build",
+    "build:web": "yarn workspace @soul-player/web build",
+    "cleanup-test-data": "node scripts/seed-test-data.js cleanup",
+    "dev:all": "docker compose -f docker-compose.dev.yml up",
+    "dev:all:down": "docker compose -f docker-compose.dev.yml down",
+    "dev:desktop": "yarn workspace soul-player-desktop tauri:dev",
+    "dev:desktop:logs": "yarn workspace soul-player-desktop tauri:dev:logs",
+    "dev:marketing": "yarn workspace @soul-player/marketing dev",
+    "dev:mobile": "yarn workspace soul-player-mobile tauri:dev",
+    "dev:server": "docker compose up --build",
+    "dev:server:clean": "docker compose down -v",
+    "dev:server:down": "docker compose down",
+    "dev:server:logs": "docker compose logs -f server",
+    "dev:web": "yarn workspace @soul-player/web dev",
+    "knip": "knip",
+    "knip:fix": "knip --fix",
+    "lint": "yarn workspaces foreach run lint",
+    "prepare": "husky || true",
+    "seed-test-data": "node scripts/seed-test-data.js seed",
+    "test": "yarn workspaces foreach run test",
+    "test:e2e": "cd applications/desktop/e2e-tests && yarn test",
+    "test:e2e:ci": "cd applications/desktop/e2e-tests && yarn test:ci",
+    "type-check": "yarn workspaces foreach run type-check"
+  },
+  "version": "0.1.11",
   "workspaces": [
     "applications/shared",
     "applications/desktop",
@@ -9,41 +45,5 @@
     "applications/marketing",
     "applications/web",
     "libraries/soul-playback-web"
-  ],
-  "scripts": {
-    "prepare": "husky || true",
-    "dev:desktop": "yarn workspace soul-player-desktop tauri:dev",
-    "dev:desktop:logs": "yarn workspace soul-player-desktop tauri:dev:logs",
-    "dev:mobile": "yarn workspace soul-player-mobile tauri:dev",
-    "dev:marketing": "yarn workspace @soul-player/marketing dev",
-    "dev:web": "yarn workspace @soul-player/web dev",
-    "dev:server": "docker compose up --build",
-    "dev:server:down": "docker compose down",
-    "dev:server:logs": "docker compose logs -f server",
-    "dev:server:clean": "docker compose down -v",
-    "dev:all": "docker compose -f docker-compose.dev.yml up",
-    "dev:all:down": "docker compose -f docker-compose.dev.yml down",
-    "build:desktop": "yarn workspace soul-player-desktop tauri:build",
-    "build:mobile": "yarn workspace soul-player-mobile tauri:build",
-    "build:marketing": "yarn workspace @soul-player/marketing build",
-    "build:web": "yarn workspace @soul-player/web build",
-    "test": "yarn workspaces foreach run test",
-    "test:e2e": "cd applications/desktop/e2e-tests && yarn test",
-    "test:e2e:ci": "cd applications/desktop/e2e-tests && yarn test:ci",
-    "seed-test-data": "node scripts/seed-test-data.js seed",
-    "cleanup-test-data": "node scripts/seed-test-data.js cleanup",
-    "lint": "yarn workspaces foreach run lint",
-    "type-check": "yarn workspaces foreach run type-check",
-    "knip": "knip",
-    "knip:fix": "knip --fix"
-  },
-  "devDependencies": {
-    "@esbuild/win32-x64": "0.21.5",
-    "husky": "^9.1.7",
-    "knip": "^5.82.1"
-  },
-  "packageManager": "yarn@4.0.2",
-  "engines": {
-    "node": ">=20.0.0"
-  }
+  ]
 }
