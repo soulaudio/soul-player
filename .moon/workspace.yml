@@ -30,10 +30,6 @@ projects:
 
 # Pipeline configuration (was 'runner' in older Moon versions)
 pipeline:
-  archivableTargets:
-    - 'build'
-    - 'build-release'
-
   cacheLifetime: '7 days'
 
   logRunningCommand: true
