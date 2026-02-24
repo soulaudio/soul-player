@@ -167,14 +167,14 @@ jobs:
 
           # Parse JSON output into summary
           cat > test-results/linux-summary.json <<EOF
-{
-  "platform": "linux",
-  "runner": "ubuntu-latest",
-  "virtual_device": "ALSA snd-aloop",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "test_result": "${{ steps.e2e-tests.outcome }}"
-}
-EOF
+          {
+            "platform": "linux",
+            "runner": "ubuntu-latest",
+            "virtual_device": "ALSA snd-aloop",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "test_result": "${{ steps.e2e-tests.outcome }}"
+          }
+          EOF
 
           echo "=== Test metrics collected ==="
           cat test-results/linux-summary.json
@@ -306,14 +306,14 @@ EOF
 
           # Parse JSON output into summary
           cat > test-results/macos-summary.json <<EOF
-{
-  "platform": "macos",
-  "runner": "macos-latest",
-  "virtual_device": "BlackHole 2ch",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "test_result": "${{ steps.e2e-tests.outcome }}"
-}
-EOF
+          {
+            "platform": "macos",
+            "runner": "macos-latest",
+            "virtual_device": "BlackHole 2ch",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "test_result": "${{ steps.e2e-tests.outcome }}"
+          }
+          EOF
 
           echo "=== Test metrics collected ==="
           cat test-results/macos-summary.json
@@ -461,14 +461,14 @@ EOF
 
           # Parse JSON output into summary
           cat > test-results/windows-summary.json <<EOF
-{
-  "platform": "windows",
-  "runner": "windows-latest",
-  "virtual_device": "VB-Cable",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "test_result": "${{ steps.e2e-tests.outcome }}"
-}
-EOF
+          {
+            "platform": "windows",
+            "runner": "windows-latest",
+            "virtual_device": "VB-Cable",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "test_result": "${{ steps.e2e-tests.outcome }}"
+          }
+          EOF
 
           echo "=== Test metrics collected ==="
           cat test-results/windows-summary.json
