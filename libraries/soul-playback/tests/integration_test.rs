@@ -626,7 +626,7 @@ fn test_previous_within_3_seconds_goes_to_previous_track() {
 }
 
 #[test]
-fn test_seek_beyond_duration_fails() {
+fn test_seek_beyond_duration_clamps_to_near_end() {
     let mut manager = PlaybackManager::default();
     let track = create_test_track("1", "Track 1", "Artist A", 100);
     manager.activate_source(
@@ -634,10 +634,10 @@ fn test_seek_beyond_duration_fails() {
         track,
     );
 
-    // Try to seek beyond duration
+    // Seeking beyond duration clamps to near-end (duration - 1ms) rather than
+    // returning an error, to avoid immediately triggering EOF on seek.
     let result = manager.seek_to(Duration::from_secs(200));
-
-    assert!(result.is_err());
+    assert!(result.is_ok());
 }
 
 #[test]
