@@ -1246,18 +1246,28 @@ mod automatic_resampling_tests {
 
         // Wait for the background decoder to fill the buffer before reading.
         // new() returns immediately; the decoder runs in a separate thread.
-        for _ in 0..100 {
-            if source.is_ready() {
+        // Use deadline-based wait: the high-quality sinc resampler (sinc_len=256)
+        // can take >1s to initialize and produce its first chunk in debug mode.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            if source.is_ready() || std::time::Instant::now() >= deadline {
                 break;
             }
             thread::sleep(Duration::from_millis(10));
         }
 
-        // Read some samples
+        // Read some samples - retry on transient underrun (decoder may still be
+        // settling after is_ready() returns true in debug mode).
         let mut buffer = vec![0.0f32; 9600]; // 0.05s at 96kHz stereo
-        let samples_read = source.read_samples(&mut buffer).expect("Failed to read");
+        let samples_read = loop {
+            let n = source.read_samples(&mut buffer).expect("Failed to read");
+            if n > 0 || std::time::Instant::now() >= deadline {
+                break n;
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
 
-        assert!(samples_read > 0);
+        assert!(samples_read > 0, "Should read samples within 10s");
 
         // All samples should be in valid range
         for sample in &buffer[..samples_read] {
