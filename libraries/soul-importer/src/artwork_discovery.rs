@@ -122,12 +122,12 @@ mod tests {
 
         let result = discover_folder_artwork(temp_dir.path());
 
-        // On Windows (case-insensitive), this will find the file
-        // On Linux/macOS (case-sensitive), this won't find it
-        #[cfg(windows)]
+        // On Windows and macOS (case-insensitive filesystems), this will find the file.
+        // On Linux (case-sensitive), this won't find it.
+        #[cfg(any(windows, target_os = "macos"))]
         assert!(result.is_some());
 
-        #[cfg(not(windows))]
+        #[cfg(target_os = "linux")]
         assert!(result.is_none());
     }
 }
