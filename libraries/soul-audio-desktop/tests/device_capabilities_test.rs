@@ -642,7 +642,10 @@ mod device_enumeration {
                         assert!(!caps.sample_rates.is_empty(), "Should have sample rates");
                         // Virtual/null devices (e.g., ALSA null) may not report bit depths
                         if caps.bit_depths.is_empty() {
-                            eprintln!("Note: Device '{}' has no reported bit depths (virtual device?)", device.name);
+                            eprintln!(
+                                "Note: Device '{}' has no reported bit depths (virtual device?)",
+                                device.name
+                            );
                         }
                         assert!(caps.max_channels > 0, "Should have at least one channel");
                     }
@@ -689,7 +692,10 @@ mod device_enumeration {
 
                 let caps = device.capabilities.as_ref().unwrap();
                 assert!(!caps.sample_rates.is_empty());
-                assert!(!caps.bit_depths.is_empty());
+                // Virtual/null devices (e.g., ALSA null) may not report bit depths
+                if caps.bit_depths.is_empty() {
+                    eprintln!("Note: Default device has no reported bit depths (virtual device?)");
+                }
 
                 // Sample rates should be sorted
                 for i in 1..caps.sample_rates.len() {
