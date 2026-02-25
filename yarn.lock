@@ -2143,7 +2143,6 @@ __metadata:
     pagefind: "npm:^1.3.0"
     postcss: "npm:^8.4.49"
     react: "npm:^18.3.1"
-    react-awesome-reveal: "npm:^4.3.1"
     react-dom: "npm:^18.3.1"
     react-router-dom: "npm:^6.28.0"
     rehype-autolink-headings: "npm:^7.1.0"
@@ -6916,19 +6915,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-awesome-reveal@npm:^4.3.1":
-  version: 4.3.1
-  resolution: "react-awesome-reveal@npm:4.3.1"
-  dependencies:
-    react-intersection-observer: "npm:^9.13.0"
-    react-is: "npm:^18.3.1"
-  peerDependencies:
-    "@emotion/react": ^11.0.0
-    react: ">=16.14.0"
-  checksum: 018326aff8b0e8b3a04a026cae85fc754c0013bc188287a9a91a4e1f5ff883254fc0898ac13799e27b329cce0a9b57506de13940fe2908788ef8c2d220e40d46
-  languageName: node
-  linkType: hard
-
 "react-dom@npm:^18.3.1":
   version: 18.3.1
   resolution: "react-dom@npm:18.3.1"
@@ -6959,30 +6945,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-intersection-observer@npm:^9.13.0":
-  version: 9.16.0
-  resolution: "react-intersection-observer@npm:9.16.0"
-  peerDependencies:
-    react: ^17.0.0 || ^18.0.0 || ^19.0.0
-    react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
-  peerDependenciesMeta:
-    react-dom:
-      optional: true
-  checksum: 2aee5103fb460c6e5a3ab5a4fdc8c69a5215e23699a12d7857f25ba765fed48eacbed94ca835d79edf00c0edcc9c4fbb5bb057a373402d0551718546810e0e48
-  languageName: node
-  linkType: hard
-
 "react-is@npm:^17.0.1":
   version: 17.0.2
   resolution: "react-is@npm:17.0.2"
   checksum: 2bdb6b93fbb1820b024b496042cce405c57e2f85e777c9aabd55f9b26d145408f9f74f5934676ffdc46f3dcff656d78413a6e43968e7b3f92eea35b3052e9053
-  languageName: node
-  linkType: hard
-
-"react-is@npm:^18.3.1":
-  version: 18.3.1
-  resolution: "react-is@npm:18.3.1"
-  checksum: f2f1e60010c683479e74c63f96b09fb41603527cd131a9959e2aee1e5a8b0caf270b365e5ca77d4a6b18aae659b60a86150bb3979073528877029b35aecd2072
   languageName: node
   linkType: hard
 

@@ -1,7 +1,7 @@
 'use client'
 
-import { Fade } from 'react-awesome-reveal'
-import { ReactNode } from 'react'
+import { motion, useInView } from 'framer-motion'
+import { ReactNode, useRef } from 'react'
 
 interface FadeInProps {
   children: ReactNode
@@ -11,6 +11,14 @@ interface FadeInProps {
   className?: string
 }
 
+const directionOffset: Record<NonNullable<FadeInProps['direction']>, { x?: number; y?: number }> = {
+  up: { y: 24 },
+  down: { y: -24 },
+  left: { x: 24 },
+  right: { x: -24 },
+  none: {},
+}
+
 export function FadeIn({
   children,
   delay = 0,
@@ -18,25 +26,19 @@ export function FadeIn({
   fullWidth = false,
   className = ''
 }: FadeInProps) {
-  // Map direction to react-awesome-reveal direction
-  const directionMap = {
-    up: 'up',
-    down: 'down',
-    left: 'left',
-    right: 'right',
-    none: undefined
-  } as const
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: true, amount: 0.1 })
+  const offset = directionOffset[direction]
 
   return (
-    <Fade
-      direction={directionMap[direction]}
-      delay={delay * 1000}
-      duration={700}
-      triggerOnce
-      fraction={0.1}
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, ...offset }}
+      animate={isInView ? { opacity: 1, x: 0, y: 0 } : { opacity: 0, ...offset }}
+      transition={{ duration: 0.7, delay }}
       className={fullWidth ? 'w-full' : className}
     >
       {children}
-    </Fade>
+    </motion.div>
   )
 }

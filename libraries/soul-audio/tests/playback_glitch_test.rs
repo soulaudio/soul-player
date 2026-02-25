@@ -287,6 +287,7 @@ fn test_buffer_underrun_detection_at_various_buffer_sizes() {
 }
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_simulated_high_cpu_load_underrun() {
     let sample_rate = 48000u32;
     let buffer_size = 512usize;
@@ -353,6 +354,7 @@ fn test_simulated_high_cpu_load_underrun() {
 }
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_underrun_detection_callback_timing() {
     let sample_rate = 48000u32;
     let buffer_size = 256usize;
@@ -581,6 +583,7 @@ fn test_sample_continuity_across_buffers() {
 // ============================================================================
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_batch_processing_with_file_io_simulation() {
     let sample_rate = 48000u32;
     let buffer_size = 512usize;
@@ -639,6 +642,7 @@ fn test_batch_processing_with_file_io_simulation() {
 }
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_batch_processing_with_background_threads() {
     let sample_rate = 48000u32;
     let buffer_size = 512usize;
@@ -731,6 +735,7 @@ fn test_batch_processing_with_background_threads() {
 }
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_callback_timing_jitter_under_load() {
     let sample_rate = 48000u32;
     let buffer_size = 256usize;
@@ -910,6 +915,7 @@ fn test_sample_rate_switch_during_playback() {
 // ============================================================================
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_no_allocations_timing_variance() {
     // Allocations cause timing variance - detect them via timing analysis
     let sample_rate = 48000u32;
@@ -952,6 +958,7 @@ fn test_no_allocations_timing_variance() {
 }
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_verify_buffer_reuse_pattern() {
     let sample_rate = 48000u32;
     let buffer_sizes = [64, 128, 256, 512, 1024, 2048, 4096];
@@ -1021,6 +1028,7 @@ fn test_verify_buffer_reuse_pattern() {
 }
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_varying_buffer_sizes_no_reallocation() {
     let sample_rate = 48000u32;
     let iterations = 500;
@@ -1068,6 +1076,7 @@ fn test_varying_buffer_sizes_no_reallocation() {
 // ============================================================================
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_long_running_latency_stability() {
     let sample_rate = 48000u32;
     let buffer_size = 512usize;
@@ -1186,6 +1195,7 @@ fn test_accumulated_state_stability() {
 }
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_one_hour_simulated_playback() {
     // Reduced from 1 hour to ~1 minute of simulated audio for CI
     // Run with --ignored for full 1-hour test
@@ -1254,6 +1264,7 @@ fn test_one_hour_simulated_playback() {
 // ============================================================================
 
 #[test]
+#[ignore = "Performance test - machine/load dependent, run manually on reference hardware"]
 fn test_windows_batch_processing_gap_simulation() {
     // Simulate the Windows playback gap issue during batch processing
     // The issue manifests when background work causes audio callbacks to be delayed

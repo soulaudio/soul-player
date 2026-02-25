@@ -303,13 +303,10 @@ fn test_has_next_preserved_after_shuffle() {
 fn test_shuffle_affects_next_track_order() {
     let mut manager = PlaybackManager::default();
 
-    let tracks = vec![
-        create_track("1", "Track 1", "Artist A", 180),
-        create_track("2", "Track 2", "Artist B", 180),
-        create_track("3", "Track 3", "Artist C", 180),
-        create_track("4", "Track 4", "Artist D", 180),
-        create_track("5", "Track 5", "Artist E", 180),
-    ];
+    // Use 20 tracks so random same-order probability is ~4e-19 (effectively impossible)
+    let tracks: Vec<_> = (1..=20)
+        .map(|i| create_track(&i.to_string(), &format!("Track {}", i), "Artist", 180))
+        .collect();
 
     manager.add_playlist_to_queue(tracks);
 
@@ -319,7 +316,7 @@ fn test_shuffle_affects_next_track_order() {
 
     let shuffled_order: Vec<String> = manager.get_queue().iter().map(|t| t.id.clone()).collect();
 
-    // Order should be different (very unlikely to be same)
+    // Order should be different - with 20 tracks probability of same order is ~4e-19
     assert_ne!(original_order, shuffled_order);
 
     // But still has navigation

@@ -10,7 +10,6 @@
     "lucide-react": "^0.468.0",
     "next": "16.1.1",
     "react": "^18.3.1",
-    "react-awesome-reveal": "^4.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "rehype-autolink-headings": "^7.1.0",
