@@ -5,6 +5,7 @@
  */
 
 import { memo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Play, Pause, Disc3, Users, ListMusic, ListPlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -311,16 +312,16 @@ const MediaCardComponent = ({
         </p>
       ) : null}
 
-      {/* Context menu triggered by right-click on artwork */}
-      {contextMenuPos && onAddToPlaylist && (
+      {/* Context menu - portaled to body so it's above all cards and unaffected by transforms */}
+      {contextMenuPos && onAddToPlaylist && createPortal(
         <>
-          {/* Invisible backdrop - closes menu on any click outside */}
+          {/* Invisible backdrop - closes menu on any click/right-click outside */}
           <div
             className="fixed inset-0 z-40"
             onClick={() => setContextMenuPos(null)}
             onContextMenu={(e) => { e.preventDefault(); setContextMenuPos(null) }}
           />
-          {/* Menu positioned at cursor */}
+          {/* Menu at cursor position */}
           <div
             role="menu"
             style={{ position: 'fixed', left: contextMenuPos.x, top: contextMenuPos.y }}
@@ -336,7 +337,8 @@ const MediaCardComponent = ({
               <span>{t('playlist.addToPlaylist', 'Add to Playlist')}</span>
             </button>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )
