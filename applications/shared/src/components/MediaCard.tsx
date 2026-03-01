@@ -278,8 +278,9 @@ const MediaCardComponent = ({
           <button
             onClick={(e) => { e.stopPropagation(); onAddToPlaylist(); }}
             onMouseDown={(e) => e.preventDefault()}
+            onKeyDown={(e) => e.stopPropagation()}
             data-testid="media-card-add-to-playlist-button"
-            className="absolute bottom-2 right-2 w-8 h-8 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200"
+            className="absolute bottom-2 right-2 w-8 h-8 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200"
             aria-label={t('playlist.addToPlaylist')}
           >
             <ListPlus className="w-4 h-4 text-white" />
