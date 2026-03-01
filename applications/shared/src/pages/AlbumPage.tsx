@@ -270,9 +270,10 @@ export function AlbumPage() {
               {features.canCreatePlaylists && (
                 <button
                   onClick={() => setAlbumForPlaylist(true)}
-                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
                   data-testid="album-page-add-to-playlist"
-                  className="flex items-center gap-2 px-4 py-3 rounded-full border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
+                  className="flex items-center px-4 py-3 rounded-full border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
+                  aria-label={t('playlist.addAlbumToPlaylist', 'Add Album to Playlist')}
                   title={t('playlist.addAlbumToPlaylist', 'Add Album to Playlist')}
                 >
                   <ListPlus className="w-5 h-5" />
