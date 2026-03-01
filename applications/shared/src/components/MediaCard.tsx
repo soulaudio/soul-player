@@ -6,7 +6,6 @@
 
 import { memo, useRef, useState, type ReactNode } from 'react'
 import { Play, Pause, Disc3, Users, ListMusic, ListPlus } from 'lucide-react'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArtworkImage } from './ArtworkImage'
@@ -314,27 +313,30 @@ const MediaCardComponent = ({
 
       {/* Context menu triggered by right-click on artwork */}
       {contextMenuPos && onAddToPlaylist && (
-        <DropdownMenu.Root open onOpenChange={() => setContextMenuPos(null)}>
-          <DropdownMenu.Trigger asChild>
-            <div style={{ position: 'fixed', left: contextMenuPos.x, top: contextMenuPos.y, width: 0, height: 0 }} />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              className="min-w-[180px] bg-background border rounded-lg shadow-lg py-1 z-50"
-              sideOffset={2}
-              align="start"
+        <>
+          {/* Invisible backdrop - closes menu on any click outside */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setContextMenuPos(null)}
+            onContextMenu={(e) => { e.preventDefault(); setContextMenuPos(null) }}
+          />
+          {/* Menu positioned at cursor */}
+          <div
+            role="menu"
+            style={{ position: 'fixed', left: contextMenuPos.x, top: contextMenuPos.y }}
+            className="min-w-[180px] bg-background border rounded-lg shadow-lg py-1 z-50"
+          >
+            <button
+              role="menuitem"
+              className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-[var(--disabled-opacity)]"
+              onClick={() => { setContextMenuPos(null); onAddToPlaylist() }}
+              disabled={!features.canCreatePlaylists}
             >
-              <DropdownMenu.Item
-                className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-[var(--disabled-opacity)]"
-                onSelect={onAddToPlaylist}
-                disabled={!features.canCreatePlaylists}
-              >
-                <ListPlus className="w-4 h-4" />
-                <span>{t('playlist.addToPlaylist', 'Add to Playlist')}</span>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+              <ListPlus className="w-4 h-4" />
+              <span>{t('playlist.addToPlaylist', 'Add to Playlist')}</span>
+            </button>
+          </div>
+        </>
       )}
     </div>
   )
