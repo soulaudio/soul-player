@@ -4,8 +4,9 @@
  * Has play/pause functionality based on current playback context
  */
 
-import { memo, useRef, type ReactNode } from 'react'
-import { Play, Pause, Disc3, Users, ListMusic } from 'lucide-react'
+import { memo, useRef, useState, type ReactNode } from 'react'
+import { Play, Pause, Disc3, Users, ListMusic, ListPlus } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArtworkImage } from './ArtworkImage'
@@ -40,7 +41,7 @@ export interface MediaCardProps {
   additionalInfo?: string
   /** Priority: if true, loads artwork immediately without lazy loading. Use for above-the-fold items (first ~20-30 items) */
   priority?: boolean
-  /** When provided, shows an "Add to Playlist" button on hover in the bottom-right of the artwork */
+  /** When provided, enables a right-click context menu on the artwork with an "Add to Playlist" option */
   onAddToPlaylist?: () => void
 }
 
@@ -85,7 +86,7 @@ const MediaCardComponent = ({
   const { isPlaying, currentTrack } = usePlayerPlayback()
   const commands = usePlayerCommands()
   const backend = useBackend()
-  const { isDesktop } = usePlatform()
+  const { isDesktop, features } = usePlatform()
   const { isActiveContext } = usePlaybackSession()
 
   const isCircle = type === 'artist'
@@ -98,6 +99,7 @@ const MediaCardComponent = ({
     navigate(getRoute(type, id))
   }
 
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null)
   const isHandlingPlayRef = useRef(false);
 
   const handlePlayPause = async (e: React.MouseEvent) => {
@@ -254,7 +256,7 @@ const MediaCardComponent = ({
       <div
         className={`aspect-square ${shapeClasses} overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer`}
         onClick={handleClick}
-        onContextMenu={(e) => { if (onAddToPlaylist) { e.preventDefault(); e.stopPropagation(); onAddToPlaylist(); } }}
+        onContextMenu={(e) => { if (onAddToPlaylist) { e.preventDefault(); e.stopPropagation(); setContextMenuPos({ x: e.clientX, y: e.clientY }) } }}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && handleClick()}
@@ -309,6 +311,31 @@ const MediaCardComponent = ({
           {additionalInfo && ` • ${additionalInfo}`}
         </p>
       ) : null}
+
+      {/* Context menu triggered by right-click on artwork */}
+      {contextMenuPos && onAddToPlaylist && (
+        <DropdownMenu.Root open onOpenChange={() => setContextMenuPos(null)}>
+          <DropdownMenu.Trigger asChild>
+            <div style={{ position: 'fixed', left: contextMenuPos.x, top: contextMenuPos.y, width: 0, height: 0 }} />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              className="min-w-[180px] bg-background border rounded-lg shadow-lg py-1 z-50"
+              sideOffset={2}
+              align="start"
+            >
+              <DropdownMenu.Item
+                className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-[var(--disabled-opacity)]"
+                onSelect={onAddToPlaylist}
+                disabled={!features.canCreatePlaylists}
+              >
+                <ListPlus className="w-4 h-4" />
+                <span>{t('playlist.addToPlaylist', 'Add to Playlist')}</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      )}
     </div>
   )
 }

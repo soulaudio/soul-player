@@ -189,11 +189,22 @@ describe('Playlist: Add album via card right-click', () => {
   it('should add the album to a playlist via right-clicking the album card', async () => {
     const albumCard = await waitForEl('[data-testid="media-card-album-2001"]', 'album card 2001');
 
-    // Right-click the card artwork to open the Add to Playlist dialog
+    // Right-click the card artwork to open the context menu
     await albumCard.click({ button: 'right' });
     await browser.pause(500);
 
-    // Dialog should appear
+    // Find "Add to Playlist" in the context menu and click it
+    const menuItems = await $$('[role="menuitem"]');
+    let addToPlaylistItem = null;
+    for (const item of menuItems) {
+      const text = await item.getText();
+      if (text.includes('Playlist')) { addToPlaylistItem = item; break; }
+    }
+    expect(addToPlaylistItem).toBeTruthy();
+    await addToPlaylistItem.click();
+    await browser.pause(500);
+
+    // Dialog should appear after clicking the menu item
     const dialog = await waitForEl('[data-testid="add-to-playlist-dialog"]', 'add-to-playlist dialog');
     expect(await dialog.isDisplayed()).toBe(true);
 
