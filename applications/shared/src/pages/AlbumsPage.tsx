@@ -6,6 +6,7 @@ import { useState, useMemo, useDeferredValue } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Disc3 } from 'lucide-react'
 import { AlbumCard } from '../components/AlbumCard'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
 import { VirtualizedGrid } from '../components/VirtualizedGrid'
 import { useGridScale } from '../hooks/useGridScale'
@@ -20,6 +21,11 @@ export function AlbumsPage() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const deferredSearchQuery = useDeferredValue(searchQuery)
+
+  const [entityForPlaylist, setEntityForPlaylist] = useState<{
+    id: number | string
+    name: string
+  } | null>(null)
 
   // Fetch data using React Query hooks
   const { data: albums = [], isLoading, isError, error } = useAlbums()
@@ -85,6 +91,7 @@ export function AlbumsPage() {
   ) : null
 
   return (
+    <>
     <LibraryPageLayout
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
@@ -109,6 +116,7 @@ export function AlbumsPage() {
                 album={album}
                 showArtist={true}
                 priority={index < 24}
+                onAddToPlaylist={() => setEntityForPlaylist({ id: album.id, name: album.title })}
               />
             )}
           />
@@ -120,6 +128,7 @@ export function AlbumsPage() {
                 album={album}
                 showArtist={true}
                 priority={index < 24}
+                onAddToPlaylist={() => setEntityForPlaylist({ id: album.id, name: album.title })}
               />
             ))}
           </div>
@@ -136,5 +145,16 @@ export function AlbumsPage() {
         </div>
       ))}
     </LibraryPageLayout>
+    {entityForPlaylist && (
+      <AddToPlaylistDialog
+        open={!!entityForPlaylist}
+        onClose={() => setEntityForPlaylist(null)}
+        mode="entity"
+        entityType="album"
+        entityId={entityForPlaylist.id}
+        entityName={entityForPlaylist.name}
+      />
+    )}
+    </>
   )
 }
