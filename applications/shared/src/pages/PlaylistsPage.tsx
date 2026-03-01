@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { ListMusic, Plus } from 'lucide-react'
 import { PlaylistCard } from '../components/PlaylistCard'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
 import { SkeletonGrid } from '../components/SkeletonGrid'
 import { VirtualizedGrid } from '../components/VirtualizedGrid'
@@ -27,6 +28,11 @@ export function PlaylistsPage() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const deferredSearchQuery = useDeferredValue(searchQuery)
+
+  const [entityForPlaylist, setEntityForPlaylist] = useState<{
+    id: number | string
+    name: string
+  } | null>(null)
 
   // Fetch data using React Query hooks
   const { data: playlists = [], isLoading, isError, error } = usePlaylists()
@@ -102,6 +108,7 @@ export function PlaylistsPage() {
   ) : null
 
   return (
+    <>
     <LibraryPageLayout
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
@@ -115,6 +122,7 @@ export function PlaylistsPage() {
       additionalButtons={
         <FeatureGate feature="canCreatePlaylists">
           <button
+            data-testid="playlist-create-button"
             onClick={handleCreatePlaylist}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity"
           >
@@ -139,6 +147,7 @@ export function PlaylistsPage() {
                 playlist={playlist}
                 className="w-full"
                 priority={index < 24}
+                onAddToPlaylist={() => setEntityForPlaylist({ id: playlist.id, name: playlist.name })}
               />
             )}
           />
@@ -150,6 +159,7 @@ export function PlaylistsPage() {
                 playlist={playlist}
                 className="w-full"
                 priority={index < 24}
+                onAddToPlaylist={() => setEntityForPlaylist({ id: playlist.id, name: playlist.name })}
               />
             ))}
           </div>
@@ -174,5 +184,16 @@ export function PlaylistsPage() {
         </div>
       ))}
     </LibraryPageLayout>
+    {entityForPlaylist && (
+      <AddToPlaylistDialog
+        open={!!entityForPlaylist}
+        onClose={() => setEntityForPlaylist(null)}
+        mode="entity"
+        entityType="playlist"
+        entityId={entityForPlaylist.id}
+        entityName={entityForPlaylist.name}
+      />
+    )}
+    </>
   )
 }
