@@ -21,6 +21,7 @@ import {
   LogOut,
   Download,
 } from 'lucide-react';
+import { Select } from '../ui/select';
 
 // Types matching the Tauri backend
 interface LibrarySource {
@@ -686,23 +687,18 @@ export function LibrarySettingsPage() {
               <label className="block text-sm font-medium mb-2">
                 {t('librarySettings.pathTemplate')}
               </label>
-              <select
+              <Select
                 value={presets.find(p => p.template === managedSettings?.pathTemplate)?.id ?? 'custom'}
-                onChange={(e) => {
-                  const preset = presets.find(p => p.id === e.target.value);
-                  if (preset) {
-                    handleManagedSettingsChange('pathTemplate', preset.template);
-                  }
+                onChange={(val) => {
+                  const preset = presets.find(p => p.id === val);
+                  if (preset) handleManagedSettingsChange('pathTemplate', preset.template);
                 }}
-                className="w-full px-3 py-2 rounded-lg bg-muted border border-border mb-2"
-              >
-                {presets.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {t(`librarySettings.preset.${preset.id}`)}
-                  </option>
-                ))}
-                <option value="custom">{t('librarySettings.preset.custom')}</option>
-              </select>
+                options={[
+                  ...presets.map(p => ({ value: p.id, label: t(`librarySettings.preset.${p.id}`) })),
+                  { value: 'custom', label: t('librarySettings.preset.custom') },
+                ]}
+                className="w-full mb-2"
+              />
               <input
                 type="text"
                 value={managedSettings?.pathTemplate ?? ''}
@@ -721,14 +717,14 @@ export function LibrarySettingsPage() {
               <label className="block text-sm font-medium mb-2">
                 {t('librarySettings.importAction')}
               </label>
-              <select
+              <Select
                 value={managedSettings?.importAction ?? 'copy'}
-                onChange={(e) => handleManagedSettingsChange('importAction', e.target.value)}
-                className="w-full max-w-xs px-3 py-2 rounded-lg bg-muted border border-border"
-              >
-                <option value="copy">{t('librarySettings.action.copy')}</option>
-                <option value="move">{t('librarySettings.action.move')}</option>
-              </select>
+                onChange={(val) => handleManagedSettingsChange('importAction', val)}
+                options={[
+                  { value: 'copy', label: t('librarySettings.action.copy') },
+                  { value: 'move', label: t('librarySettings.action.move') },
+                ]}
+              />
             </div>
           </div>
         )}
@@ -762,29 +758,29 @@ export function LibrarySettingsPage() {
               <label className="block text-sm font-medium mb-2">
                 {t('librarySettings.defaultAction')}
               </label>
-              <select
+              <Select
                 value={externalSettings?.defaultAction ?? 'ask'}
-                onChange={(e) => handleExternalSettingsChange('defaultAction', e.target.value)}
-                className="w-full max-w-xs px-3 py-2 rounded-lg bg-muted border border-border"
-              >
-                <option value="ask">{t('librarySettings.externalAction.ask')}</option>
-                <option value="play">{t('librarySettings.externalAction.play')}</option>
-                <option value="import">{t('librarySettings.externalAction.import')}</option>
-              </select>
+                onChange={(val) => handleExternalSettingsChange('defaultAction', val)}
+                options={[
+                  { value: 'ask', label: t('librarySettings.externalAction.ask') },
+                  { value: 'play', label: t('librarySettings.externalAction.play') },
+                  { value: 'import', label: t('librarySettings.externalAction.import') },
+                ]}
+              />
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-2">
                 {t('librarySettings.importDestination')}
               </label>
-              <select
+              <Select
                 value={externalSettings?.importDestination ?? 'managed'}
-                onChange={(e) => handleExternalSettingsChange('importDestination', e.target.value)}
-                className="w-full max-w-xs px-3 py-2 rounded-lg bg-muted border border-border"
-              >
-                <option value="managed">{t('librarySettings.destination.managed')}</option>
-                <option value="watched">{t('librarySettings.destination.watched')}</option>
-              </select>
+                onChange={(val) => handleExternalSettingsChange('importDestination', val)}
+                options={[
+                  { value: 'managed', label: t('librarySettings.destination.managed') },
+                  { value: 'watched', label: t('librarySettings.destination.watched') },
+                ]}
+              />
             </div>
 
             {externalSettings?.importDestination === 'watched' && sources.length > 0 && (
@@ -792,23 +788,14 @@ export function LibrarySettingsPage() {
                 <label className="block text-sm font-medium mb-2">
                   {t('librarySettings.targetFolder')}
                 </label>
-                <select
-                  value={externalSettings?.importToSourceId ?? ''}
-                  onChange={(e) =>
-                    handleExternalSettingsChange(
-                      'importToSourceId',
-                      e.target.value ? Number(e.target.value) : null
-                    )
-                  }
-                  className="w-full max-w-xs px-3 py-2 rounded-lg bg-muted border border-border"
-                >
-                  <option value="">{t('librarySettings.selectFolder')}</option>
-                  {sources.map((source) => (
-                    <option key={source.id} value={source.id}>
-                      {source.name}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={String(externalSettings?.importToSourceId ?? '')}
+                  onChange={(val) => handleExternalSettingsChange('importToSourceId', val ? Number(val) : null)}
+                  options={[
+                    { value: '', label: t('librarySettings.selectFolder') },
+                    ...sources.map(s => ({ value: String(s.id), label: s.name })),
+                  ]}
+                />
               </div>
             )}
 
@@ -828,11 +815,8 @@ export function LibrarySettingsPage() {
       </section>
 
       {/* Server Sources Section */}
-      <section className="border border-border rounded-lg overflow-hidden">
-        <button
-          onClick={() => toggleSection('servers')}
-          className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
-        >
+      <section className="border border-border rounded-lg overflow-hidden opacity-60">
+        <div className="w-full flex items-center justify-between p-4 bg-muted/30 cursor-not-allowed">
           <div className="flex items-center gap-3">
             <Cloud className="w-5 h-5 text-primary" />
             <div className="text-left">
@@ -842,12 +826,10 @@ export function LibrarySettingsPage() {
               </p>
             </div>
           </div>
-          {expandedSection === 'servers' ? (
-            <ChevronUp className="w-5 h-5 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="w-5 h-5 text-muted-foreground" />
-          )}
-        </button>
+          <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">
+            {t('common.comingSoon')}
+          </span>
+        </div>
 
         {expandedSection === 'servers' && (
           <div className="p-4 space-y-4">

@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Power,
 } from 'lucide-react';
+import { Select } from '../../../ui/select';
 
 // EQ Band interface matching backend
 export interface EqBand {
@@ -689,18 +690,13 @@ export function ParametricEqEditor({
                 </button>
 
                 {/* Filter type selector */}
-                <select
-                  value={band.filterType}
-                  onChange={(e) => updateBand(index, { filterType: e.target.value as FilterType })}
-                  onClick={(e) => e.stopPropagation()}
-                  className="px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {Object.entries(FILTER_TYPE_LABELS).map(([type, label]) => (
-                    <option key={type} value={type}>
-                      {t(label, type)}
-                    </option>
-                  ))}
-                </select>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Select
+                    value={band.filterType}
+                    onChange={(val) => updateBand(index, { filterType: val as FilterType })}
+                    options={Object.entries(FILTER_TYPE_LABELS).map(([type, label]) => ({ value: type, label: t(label, type) }))}
+                  />
+                </div>
 
                 {/* Frequency input */}
                 <div className="flex items-center gap-1">

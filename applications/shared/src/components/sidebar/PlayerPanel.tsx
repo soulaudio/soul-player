@@ -136,8 +136,8 @@ export function PlayerPanel({
     [commands, isMuted]
   );
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    applyVolumeChange(parseFloat(e.target.value));
+  const handleVolumeChange = (newVolume: number) => {
+    applyVolumeChange(newVolume);
   };
 
   const handleMuteToggle = async () => {

@@ -410,16 +410,21 @@ impl PlaybackManager {
                 self.queue.go_back();
             }
 
-            // FIXME: Need to implement loading for previous track in Phase 2
-            // For now, just stop playback and record the pending track so
-            // get_current_track() reflects the track we intend to play.
-            self.state = PlaybackState::Stopped;
+            // Clear current source and transition to Stopped, same as play_next_in_queue().
+            // We emit StateChanged(Stopped) first so the UI stops the progress timer
+            // while the previous track is being loaded.
             self.sources = SourceState::Empty;
+            self.state = PlaybackState::Stopped;
+            self.emit_state_changed(PlaybackState::Stopped);
+
+            // Request the platform layer to load and activate the previous track,
+            // exactly like play_next_in_queue() does for forward navigation.
+            tracing::info!("[previous] Navigating to previous track: {}", prev_track.id);
+            self.pending_events
+                .push(PlaybackEvent::LoadNext(prev_track.clone()));
             self.pending_load_track = Some(prev_track);
             self.loading = true;
-            tracing::warn!(
-                "[previous] Previous track loading not yet implemented, stopping playback"
-            );
+
             Ok(())
         } else {
             // No history, restart current track
@@ -702,6 +707,14 @@ impl PlaybackManager {
         // IMPORTANT: Clear history when loading a new playlist
         // This ensures navigation starts fresh without old history interfering
         self.history.clear();
+
+        // Reset any pending loading state from previous navigation commands.
+        // If previous() or next() left loading=true without a corresponding activate_source(),
+        // play() would see loading=true and silently ignore the call.
+        // A new playlist supersedes any in-flight load, so we reset to idle.
+        self.loading = false;
+        self.pending_load_track = None;
+        self.sources = SourceState::Empty;
     }
 
     /// Load playlist/album to source queue

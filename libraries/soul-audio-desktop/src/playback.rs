@@ -1706,19 +1706,21 @@ impl DesktopPlayback {
     ///
     /// This drains events from the manager (e.g., crossfade progress, track changes at 50%)
     /// and converts them to desktop `PlaybackEvent` format.
-    /// Forward events from `PlaybackManager` to the desktop event channel
     ///
-    /// Processes ONE event per callback to bound latency. Real-time audio callbacks
-    /// must have predictable execution time. If multiple events are queued, they'll
-    /// be forwarded in subsequent callbacks.
+    /// All pending events are processed in a single audio callback. This is necessary
+    /// because some operations (e.g., `previous()`) emit multiple events in one call —
+    /// specifically `StateChanged(Stopped)` followed by `LoadNext(track)`. Processing
+    /// only the first event would silently drop `LoadNext`, leaving the platform layer
+    /// without a signal to load the previous track. Each event's processing is O(1)
+    /// (a channel send or a thread spawn), so processing all of them is safe in the
+    /// audio callback context.
     fn forward_manager_events(
         mgr: &mut PlaybackManager,
         event_tx: &Sender<PlaybackEvent>,
         command_tx: &Sender<PlaybackCommand>,
     ) {
-        // Process only ONE event per callback to bound latency
         let events = mgr.drain_events();
-        if let Some(event) = events.into_iter().next() {
+        for event in events {
             let desktop_event = match event {
                 soul_playback::PlaybackEvent::StateChanged { state } => {
                     // Convert PlaybackStateEvent to PlaybackState
@@ -3447,6 +3449,45 @@ impl DesktopPlayback {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression test: forward_manager_events must process ALL pending manager events,
+    /// not just the first one per audio callback.
+    ///
+    /// Root cause of "previous button broken" bug:
+    ///   previous() emits TWO events: StateChanged(Stopped) then LoadNext(prev_track).
+    ///   The old code used `if let Some(event) = events.into_iter().next()` which
+    ///   processed only the FIRST event (StateChanged) and silently DROPPED the second
+    ///   (LoadNext). Without LoadNext, the platform never spawned a loader thread, so
+    ///   the previous track never played.
+    ///
+    /// This test verifies the fix: process ALL events per audio callback.
+    #[test]
+    fn test_forward_manager_events_processes_all_events_not_just_first() {
+        use soul_playback::{PlaybackConfig, PlaybackManager};
+
+        let mut mgr = PlaybackManager::new(PlaybackConfig::default());
+
+        // Call stop() twice to push 2x StateChanged(Stopped) into pending_events.
+        // Both calls push events via emit_state_changed → pending_events.
+        mgr.stop();
+        mgr.stop();
+
+        let (event_tx, event_rx) = bounded(100);
+        let (command_tx, _command_rx) = bounded(100);
+
+        DesktopPlayback::forward_manager_events(&mut mgr, &event_tx, &command_tx);
+
+        let forwarded: Vec<_> = event_rx.try_iter().collect();
+
+        assert_eq!(
+            forwarded.len(),
+            2,
+            "forward_manager_events must process ALL pending events (got {}). \
+             Dropping events causes previous() navigation to silently lose the \
+             LoadNext event that triggers audio loading.",
+            forwarded.len()
+        );
+    }
 
     #[test]
     #[ignore = "Requires real audio hardware - not available in CI environments"]

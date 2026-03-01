@@ -31,7 +31,7 @@ interface ThemePickerProps {
  */
 export function ThemePicker({
   showImportExport = true,
-  showAccessibilityInfo = true,
+  showAccessibilityInfo: _showAccessibilityInfo = true,
   className = '',
 }: ThemePickerProps) {
   const { t } = useTranslation();
@@ -94,18 +94,41 @@ export function ThemePicker({
   /**
    * Handle theme export to file
    */
-  const handleExport = (theme: Theme) => {
+  const handleExport = async (theme: Theme) => {
     const json = exportTheme(theme.id);
     if (!json) {
       alert(t('theme.exportFailed'));
       return;
     }
 
+    const filename = `${theme.id}-theme.json`;
     const blob = new Blob([json], { type: 'application/json' });
+
+    // Use native save dialog if available (Tauri WebView2/WebKit, modern browsers)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const showSaveFilePicker = (window as any).showSaveFilePicker as ((options?: Record<string, unknown>) => Promise<{ createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }>) | undefined;
+    if (typeof showSaveFilePicker === 'function') {
+      try {
+        const handle = await showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: 'JSON Theme File', accept: { 'application/json': ['.json'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (err) {
+        // User cancelled — do nothing
+        if (err instanceof Error && err.name === 'AbortError') return;
+        // Otherwise fall through to download fallback
+      }
+    }
+
+    // Fallback: browser download
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${theme.id}-theme.json`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -139,7 +162,7 @@ export function ThemePicker({
     <div className={`theme-picker space-y-6 ${className}`}>
       {/* Import/Export Section */}
       {showImportExport && (
-        <div className="border-b border-border pb-6">
+        <div>
           <h3 className="text-lg font-semibold mb-3">{t('theme.management')}</h3>
           <div className="flex flex-wrap gap-3">
             <button
@@ -265,33 +288,6 @@ export function ThemePicker({
         </div>
       )}
 
-      {/* Accessibility Information */}
-      {showAccessibilityInfo && (
-        <div className="border-t border-border pt-6">
-          <h3 className="text-lg font-semibold mb-3">{t('theme.currentInfo')}</h3>
-          <div className="bg-muted/40 rounded-lg p-4 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">{t('theme.name')}:</span>
-              <span className="text-sm text-muted-foreground">{currentTheme.name}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">{t('settings.version')}:</span>
-              <span className="text-sm text-muted-foreground">{currentTheme.version}</span>
-            </div>
-            {currentTheme.author && (
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">{t('theme.author')}:</span>
-                <span className="text-sm text-muted-foreground">{currentTheme.author}</span>
-              </div>
-            )}
-            {currentTheme.description && (
-              <div className="pt-2 border-t border-border">
-                <p className="text-sm text-muted-foreground">{currentTheme.description}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

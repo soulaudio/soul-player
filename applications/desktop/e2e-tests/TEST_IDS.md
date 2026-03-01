@@ -2,11 +2,12 @@
 
 This document lists all `data-testid` attributes required for E2E testing.
 
-## Current Status: PARTIALLY IMPLEMENTED
+## Current Status: CORE PLAYBACK IMPLEMENTED
 
-**DSP Effect Components**: All DSP effect UI components have been implemented with `data-testid` attributes (see sections marked "IMPLEMENTED").
+**Playback Components**: All core playback UI components now have `data-testid` attributes.
+**DSP Effect Components**: All DSP effect UI components have `data-testid` attributes (sections marked "IMPLEMENTED").
 
-**Still needed**: Navigation components, page containers, and other audio settings components still need test IDs added.
+**Still needed**: Page containers (home-page, library-page etc.), audio settings pipeline stages.
 
 ## Priority Implementation Order
 
@@ -29,6 +30,61 @@ This document lists all `data-testid` attributes required for E2E testing.
 
 ## Navigation Components
 
+### NavBar (`applications/shared/src/components/sidebar/NavBar.tsx`) - IMPLEMENTED
+
+| Test ID | Component | Description |
+|---------|-----------|-------------|
+| `nav-home` | Home nav button | Navigate to home page |
+| `nav-albums` | Albums nav button | Navigate to albums |
+| `nav-artists` | Artists nav button | Navigate to artists |
+| `nav-playlists` | Playlists nav button | Navigate to playlists |
+| `nav-tracks` | Tracks nav button | Navigate to tracks page |
+
+### SettingsFooter (`applications/shared/src/components/sidebar/SettingsFooter.tsx`) - IMPLEMENTED
+
+| Test ID | Component | Description |
+|---------|-----------|-------------|
+| `settings-button` | Settings gear button | Navigate to settings |
+
+### PlaybackControls (`applications/shared/src/components/sidebar/PlaybackControls.tsx`) - IMPLEMENTED
+
+| Test ID | Component | Description |
+|---------|-----------|-------------|
+| `play-pause-button` | Play/Pause center button | Toggle playback |
+| `next-button` | Skip forward button | Skip to next track |
+| `previous-button` | Skip back button | Skip to previous track |
+| `shuffle-button` | Shuffle button | Cycle shuffle mode |
+| `repeat-button` | Repeat button | Cycle repeat mode |
+
+### NowPlayingPanel (`applications/shared/src/components/sidebar/NowPlayingPanel.tsx`) - IMPLEMENTED
+
+| Test ID | Component | Description |
+|---------|-----------|-------------|
+| `now-playing-panel` | Panel container | Always present |
+| `now-playing-title` | Track info wrapper | Present only when a track is playing |
+
+### MediaCard (`applications/shared/src/components/MediaCard.tsx`) - IMPLEMENTED
+
+| Test ID | Component | Description |
+|---------|-----------|-------------|
+| `media-card-{type}-{id}` | Card container | e.g. `media-card-album-42` |
+| `media-card-play-button` | Hover play/pause button | Visible on card hover |
+
+### QueueSidebar (`applications/shared/src/components/QueueSidebar.tsx`) - IMPLEMENTED
+
+| Test ID | Component | Description |
+|---------|-----------|-------------|
+| `queue-sidebar` | Sidebar container | The full queue sidebar |
+| `queue-close` | Close button | Close queue sidebar |
+| `queue-item` | Each virtual track row | Clickable queue item |
+
+### TrackList (`applications/shared/src/components/TrackList.tsx`) - IMPLEMENTED
+
+| Test ID | Component | Description |
+|---------|-----------|-------------|
+| `track-list` | List container | Outer wrapper (both virtualized and not) |
+| `track-row` | Each track row | Double-click to play |
+
 ### Header / MainLayout (`applications/shared/src/layouts/MainLayout.tsx`)
 
 | Test ID | Component | Description |
@@ -36,7 +92,6 @@ This document lists all `data-testid` attributes required for E2E testing.
 | `home-button` | Home button in header | Navigate to home page |
 | `nav-library` | Library tab | Navigate to library |
 | `search-button` | Search button | Open search page |
-| `settings-button` | Settings gear button | Navigate to settings |
 | `queue-button` | Queue button | Toggle queue sidebar |
 | `import-button` | Import button | Open import dialog |
 | `sources-button` | Sources button | Open sources dialog |

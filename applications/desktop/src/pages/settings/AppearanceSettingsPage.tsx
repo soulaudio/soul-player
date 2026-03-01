@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
-import { ThemePicker, useBackend, debug } from '@soul-player/shared';
+import { ThemePicker, useBackend, debug, Select } from '@soul-player/shared';
 import { useSettings } from '../../contexts/SettingsContext';
 
 const LANGUAGES = [
@@ -71,85 +71,73 @@ export function AppearanceSettingsPage() {
   }, [backend]);
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-2xl space-y-4">
+      <h1 className="text-2xl font-bold mb-6">{t('settings.appearance')}</h1>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={homeEnabled}
+          onChange={e => handleHomeToggle(e.target.checked)}
+          className="w-4 h-4 mt-0.5"
+        />
+        <div>
+          <span className="text-sm font-medium block">{t('settings.homePageEnabled')}</span>
+          <p className="text-xs text-muted-foreground mt-1">{t('settings.homePageEnabledDescription')}</p>
+        </div>
+      </label>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={hideLibrarySearch}
+          onChange={e => handleHideLibrarySearch(e.target.checked)}
+          className="w-4 h-4 mt-0.5"
+        />
+        <div>
+          <span className="text-sm font-medium block">{t('settings.hideLibrarySearch')}</span>
+          <p className="text-xs text-muted-foreground mt-1">{t('settings.hideLibrarySearchDescription')}</p>
+        </div>
+      </label>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={showLibraryGradients}
+          onChange={e => handleShowLibraryGradients(e.target.checked)}
+          className="w-4 h-4 mt-0.5"
+        />
+        <div>
+          <span className="text-sm font-medium block">{t('settings.showLibraryGradients')}</span>
+          <p className="text-xs text-muted-foreground mt-1">{t('settings.showLibraryGradientsDescription')}</p>
+        </div>
+      </label>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={hideWindowControls}
+          onChange={e => setHideWindowControls(e.target.checked)}
+          className="w-4 h-4 mt-0.5"
+        />
+        <div>
+          <span className="text-sm font-medium block">{t('settings.hideWindowControls')}</span>
+          <p className="text-xs text-muted-foreground mt-1">{t('settings.hideWindowControlsDescription')}</p>
+        </div>
+      </label>
+
       <div>
-        <h1 className="text-2xl font-bold mb-6">{t('settings.appearance')}</h1>
+        <h3 className="text-lg font-semibold mb-3">{t('settings.localization')}</h3>
+        <Select
+          value={language}
+          onChange={handleLanguageChange}
+          options={LANGUAGES.map(l => ({ value: l.code, label: l.label }))}
+        />
       </div>
 
-      {/* UI Options */}
-      <section className="space-y-4">
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={homeEnabled}
-            onChange={e => handleHomeToggle(e.target.checked)}
-            className="w-4 h-4 mt-0.5"
-          />
-          <div>
-            <span className="text-sm font-medium block">{t('settings.homePageEnabled')}</span>
-            <p className="text-xs text-muted-foreground mt-1">{t('settings.homePageEnabledDescription')}</p>
-          </div>
-        </label>
-
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={hideLibrarySearch}
-            onChange={e => handleHideLibrarySearch(e.target.checked)}
-            className="w-4 h-4 mt-0.5"
-          />
-          <div>
-            <span className="text-sm font-medium block">{t('settings.hideLibrarySearch')}</span>
-            <p className="text-xs text-muted-foreground mt-1">{t('settings.hideLibrarySearchDescription')}</p>
-          </div>
-        </label>
-
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showLibraryGradients}
-            onChange={e => handleShowLibraryGradients(e.target.checked)}
-            className="w-4 h-4 mt-0.5"
-          />
-          <div>
-            <span className="text-sm font-medium block">{t('settings.showLibraryGradients')}</span>
-            <p className="text-xs text-muted-foreground mt-1">{t('settings.showLibraryGradientsDescription')}</p>
-          </div>
-        </label>
-
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={hideWindowControls}
-            onChange={e => setHideWindowControls(e.target.checked)}
-            className="w-4 h-4 mt-0.5"
-          />
-          <div>
-            <span className="text-sm font-medium block">{t('settings.hideWindowControls')}</span>
-            <p className="text-xs text-muted-foreground mt-1">{t('settings.hideWindowControlsDescription')}</p>
-          </div>
-        </label>
-      </section>
-
-      {/* Localization */}
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{t('settings.localization')}</h2>
-        <select
-          value={language}
-          onChange={e => handleLanguageChange(e.target.value)}
-          className="px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          {LANGUAGES.map(lang => (
-            <option key={lang.code} value={lang.code}>{lang.label}</option>
-          ))}
-        </select>
-      </section>
-
-      {/* Theme — always at the bottom */}
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{t('settings.theme')}</h2>
+      <div className="pt-4">
         <ThemePicker showImportExport={true} showAccessibilityInfo={true} />
-      </section>
+      </div>
     </div>
   );
 }

@@ -81,8 +81,6 @@ export function DropdownMenuContent({ children, align = 'center', className }: D
     const menuHeight = ref.current?.offsetHeight || 300;
     const padding = 8;
 
-    // Position above the trigger
-    let top = triggerRect.top - menuHeight - padding;
     let left = triggerRect.right - menuWidth; // align end
 
     if (align === 'start') {
@@ -91,12 +89,17 @@ export function DropdownMenuContent({ children, align = 'center', className }: D
       left = triggerRect.left + triggerRect.width / 2 - menuWidth / 2;
     }
 
-    // Keep within viewport
+    // Keep within viewport horizontally
     left = Math.max(padding, Math.min(left, window.innerWidth - menuWidth - padding));
 
-    // If not enough space above, position below
-    if (top < padding) {
+    // Prefer opening downwards; fall back to above if not enough space below
+    const spaceBelow = window.innerHeight - triggerRect.bottom - padding;
+    const spaceAbove = triggerRect.top - padding;
+    let top: number;
+    if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
       top = triggerRect.bottom + padding;
+    } else {
+      top = triggerRect.top - menuHeight - padding;
     }
 
     setPosition({ top, left });
@@ -151,8 +154,9 @@ export function DropdownMenuContent({ children, align = 'center', className }: D
     <div
       ref={ref}
       className={cn(
-        'fixed z-[100] min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
-        'animate-in fade-in-0 zoom-in-95',
+        'fixed z-[100] min-w-[8rem] overflow-hidden',
+        'rounded-lg border border-border bg-popover text-popover-foreground',
+        'p-1 shadow-lg',
         className
       )}
       style={{ top: position.top, left: position.left }}
@@ -173,11 +177,13 @@ export function DropdownMenuContent({ children, align = 'center', className }: D
 export interface DropdownMenuItemProps {
   children: React.ReactNode;
   onClick?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   disabled?: boolean;
   className?: string;
 }
 
-export function DropdownMenuItem({ children, onClick, disabled, className }: DropdownMenuItemProps) {
+export function DropdownMenuItem({ children, onClick, onMouseEnter, onMouseLeave, disabled, className }: DropdownMenuItemProps) {
   const context = React.useContext(DropdownMenuContext);
 
   const handleClick = () => {
@@ -189,13 +195,16 @@ export function DropdownMenuItem({ children, onClick, disabled, className }: Dro
   return (
     <div
       className={cn(
-        'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none',
+        'relative flex cursor-pointer select-none items-center rounded-md px-2 py-1.5 text-sm outline-none',
+        'transition-colors duration-[var(--transition-duration)]',
         'hover:bg-foreground/[var(--hover-bg-opacity)]',
         'focus:bg-foreground/[var(--hover-bg-opacity)]',
-        disabled && 'pointer-events-none opacity-50',
+        disabled && 'pointer-events-none opacity-[var(--disabled-opacity)]',
         className
       )}
       onClick={handleClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       {children}
     </div>
@@ -209,12 +218,15 @@ export interface DropdownMenuLabelProps {
 
 export function DropdownMenuLabel({ children, className }: DropdownMenuLabelProps) {
   return (
-    <div className={cn('px-2 py-1.5 text-sm font-semibold', className)}>
+    <div className={cn(
+      'px-2 py-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground',
+      className
+    )}>
       {children}
     </div>
   );
 }
 
 export function DropdownMenuSeparator() {
-  return <div className="-mx-1 my-1 h-px bg-muted" />;
+  return <div className="-mx-1 my-1 h-px bg-border" />;
 }

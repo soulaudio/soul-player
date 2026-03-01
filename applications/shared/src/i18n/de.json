@@ -286,6 +286,7 @@
     "about": "Über",
     "aboutDescription": "Lokaler Musikplayer mit hochwertiger Audiowiedergabe und professioneller Audio-Verarbeitung.",
     "version": "Version",
+    "bySoulAudio": "von Soul Audio",
     "links": "Links",
     "github": "GitHub",
     "website": "Webseite",
@@ -318,10 +319,11 @@
     "reportBugResourcesHeading": "Hilfreiche Ressourcen",
     "reportBugGithubRepoLabel": "GitHub-Repository",
     "reportBugGithubRepoDescription": "Quellcode und Dokumentation ansehen",
-    "reportBugWikiLabel": "Wiki & Dokumentation",
+    "reportBugWikiLabel": "Dokumentation",
     "reportBugWikiDescription": "Anleitungen, FAQs und Fehlerbehebung",
     "reportBugGithubLink": "Auf GitHub Issues melden",
     "reportBugLogs": "Protokolle anzeigen",
+    "reportBugFindLogsHere": "Protokolle hier finden:",
     "reportBugLogsDescription": "Anwendungsprotokolle können bei der Diagnose von Problemen helfen. Aktivieren Sie die Protokollierung mit dem Flag --logs beim Start der App.",
     "reportBugLoggingToggleTitle": "Protokollierungseinstellungen",
     "reportBugLoggingToggleLabel": "Dateiprotokollierung aktivieren",
@@ -504,6 +506,7 @@
     "showImportNotification": "Benachrichtigung nach dem Import anzeigen"
   },
   "common": {
+    "comingSoon": "Demnächst verfügbar",
     "save": "Speichern",
     "cancel": "Abbrechen",
     "delete": "Löschen",

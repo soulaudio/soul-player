@@ -18,6 +18,7 @@ export function SettingsFooter({ version }: SettingsFooterProps) {
     <div className="border-t border-border px-3 py-2 flex items-center justify-between">
       <button
         onClick={() => navigate('/settings')}
+        data-testid="settings-button"
         className={cn(
           'p-1.5 rounded-lg transition-opacity',
           location.pathname.startsWith('/settings')

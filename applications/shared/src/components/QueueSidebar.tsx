@@ -85,12 +85,13 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="w-80 border-l border-border bg-background flex flex-col h-full">
+    <div className="w-80 border-l border-border bg-background flex flex-col h-full" data-testid="queue-sidebar">
       {/* Header */}
       <div className="p-4 border-b border-border flex items-center justify-between">
         <h2 className="text-lg font-semibold">{t('queue.title')}</h2>
         <button
           onClick={onClose}
+          data-testid="queue-close"
           className="p-1 rounded-md hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
           aria-label={t('queue.closeQueue')}
         >
@@ -183,6 +184,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
                       <div
                         key={`track-${track.trackId}`}
                         data-index={virtualItem.index}
+                        data-testid="queue-item"
                         ref={virtualizer.measureElement}
                         style={{
                           position: 'absolute',

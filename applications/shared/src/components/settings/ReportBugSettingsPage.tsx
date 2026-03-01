@@ -4,6 +4,7 @@ import { usePlatform } from '../../contexts/PlatformContext';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { debug } from '../../utils/debug';
+import { GITHUB_URL, SITE_URL } from '../../constants/siteConfig';
 
 export function ReportBugSettingsPage() {
   const { t } = useTranslation();
@@ -47,7 +48,7 @@ export function ReportBugSettingsPage() {
   };
 
   const handleOpenGitHub = () => {
-    window.open('https://github.com/soulaudio/soul-player/issues', '_blank', 'noopener,noreferrer');
+    window.open(`${GITHUB_URL}/issues/new`, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -210,7 +211,7 @@ export function ReportBugSettingsPage() {
         <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{t('settings.reportBugResourcesHeading')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <a
-            href="https://github.com/soulaudio/soul-player"
+            href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="block p-4 bg-muted/30 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
@@ -225,7 +226,7 @@ export function ReportBugSettingsPage() {
           </a>
 
           <a
-            href="https://github.com/soulaudio/soul-player/wiki"
+            href={`${SITE_URL}/docs`}
             target="_blank"
             rel="noopener noreferrer"
             className="block p-4 bg-muted/30 rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"

@@ -238,7 +238,7 @@ const MediaCardComponent = ({
   const shapeClasses = isCircle ? 'rounded-full' : 'rounded-lg'
 
   return (
-    <div className={`group pb-2 ${className}`}>
+    <div className={`group pb-2 ${className}`} data-testid={`media-card-${type}-${id}`}>
       {/* Artwork - always clickable */}
       <div
         className={`aspect-square ${shapeClasses} overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer`}
@@ -252,6 +252,7 @@ const MediaCardComponent = ({
         <button
           onClick={handlePlayPause}
           onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
+          data-testid="media-card-play-button"
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200"
           aria-label={(isActive && isPlaying) ? t('playback.pause') : t('playback.play')}
         >

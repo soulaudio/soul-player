@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { Play, Pause } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
-import { ArtworkImage, getDeduplicatedTracks, useIsPlaying, usePlayerCommands, useBackend, usePlaybackSession } from '@soul-player/shared';
+import { ArtworkImage, getDeduplicatedTracks, useIsPlaying, usePlayerCommands, useBackend, usePlaybackSession, type BackendTrack } from '@soul-player/shared';
 
 export interface Album {
   id: number;
@@ -19,15 +18,6 @@ interface AlbumCardProps {
   className?: string;
   /** Show artist and year below title */
   showArtist?: boolean;
-}
-
-interface AlbumTrack {
-  id: number;
-  title: string;
-  artist_name?: string;
-  album_title?: string;
-  file_path?: string;
-  duration_seconds?: number;
 }
 
 export function AlbumCard({ album, className = 'w-full', showArtist = true }: AlbumCardProps) {
@@ -73,9 +63,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
     console.log('[AlbumCard] handlePlayPause - playing album:', album.id);
 
     try {
-      const tracks = await invoke<AlbumTrack[]>('get_album_tracks', {
-        albumId: album.id,
-      });
+      const tracks: BackendTrack[] = await backend.getAlbumTracks(album.id);
       console.log('[AlbumCard] Got tracks:', tracks.length);
 
       // Deduplicate tracks (selects best quality version for each unique track)
@@ -104,7 +92,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
         contextArtworkPath: album.cover_art_path || null,
       });
 
-      await invoke('play_queue', { queue, startIndex: 0 });
+      await commands.playQueue(queue, 0);
     } catch (err) {
       console.error('Failed to play album:', err);
     }

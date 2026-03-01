@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { DesktopOnly } from '../../contexts/PlatformContext';
+import { getPlatform } from '../../lib/platform';
 
 interface ResetDialogProps {
   isOpen: boolean;
@@ -110,6 +111,7 @@ export function DataManagementSettingsPage({ embedded = false }: { embedded?: bo
   const { t } = useTranslation();
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const isLinux = getPlatform() === 'linux';
 
   const handleResetToFactory = async () => {
     try {
@@ -140,14 +142,16 @@ export function DataManagementSettingsPage({ embedded = false }: { embedded?: bo
         </>
       )}
 
-      {/* Warning Banner */}
-      <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-        <div className="text-sm">
-          <p className="font-medium mb-1">{t('settings.dataManagement.warning.title')}</p>
-          <p className="text-muted-foreground">{t('settings.dataManagement.warning.description')}</p>
+      {/* Warning Banner - Linux only */}
+      {isLinux && (
+        <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-medium mb-1">{t('settings.dataManagement.warning.title')}</p>
+            <p className="text-muted-foreground">{t('settings.dataManagement.warning.description')}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Reset Section */}
       <DesktopOnly>

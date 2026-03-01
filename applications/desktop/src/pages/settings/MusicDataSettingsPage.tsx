@@ -17,10 +17,7 @@ export function MusicDataSettingsPage() {
       </section>
 
       {/* Data section */}
-      <section className="border-t border-border pt-8">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">
-          {t('settings.musicData.dataHeading')}
-        </h2>
+      <section>
         <DataManagementSettingsPage embedded />
       </section>
     </div>

@@ -21,6 +21,7 @@ export { lightTheme, darkTheme, oceanTheme, builtInThemes, defaultTheme } from '
 
 // Manager
 export { ThemeManager, themeManager } from './ThemeManager';
+export type { ThemeFileBackend } from './ThemeManager';
 
 // React components
 export { ThemeProvider, useTheme } from './ThemeProvider';

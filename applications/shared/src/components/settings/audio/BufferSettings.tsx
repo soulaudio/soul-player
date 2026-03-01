@@ -1,6 +1,7 @@
 // Audio buffer, pre-loading, and crossfade settings component
 
 import { Info, Shuffle } from 'lucide-react';
+import { Select } from '../../ui/select';
 
 export type CrossfadeCurve = 'linear' | 'logarithmic' | 's_curve' | 'equal_power';
 
@@ -76,17 +77,12 @@ export function BufferSettings({
           </span>
         </label>
 
-        <select
-          value={bufferSize}
-          onChange={(e) => onBufferSizeChange(e.target.value === 'auto' ? 'auto' : parseInt(e.target.value))}
-          className="w-full px-3 py-2 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary/50 transition-all"
-        >
-          {bufferSizes.map((size) => (
-            <option key={size.value} value={size.value}>
-              {size.label} - {size.description} ({size.latency})
-            </option>
-          ))}
-        </select>
+        <Select
+          value={String(bufferSize)}
+          onChange={(val) => onBufferSizeChange(val === 'auto' ? 'auto' : parseInt(val))}
+          options={bufferSizes.map(s => ({ value: String(s.value), label: `${s.label} - ${s.description} (${s.latency})` }))}
+          className="w-full"
+        />
 
         <p className="text-xs text-muted-foreground">
           Smaller buffers reduce latency but may cause audio glitches on slower systems.
@@ -181,33 +177,23 @@ export function BufferSettings({
             <div className="space-y-3 pl-4 border-l-2 border-primary/30">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Crossfade Duration</label>
-                <select
-                  value={crossfade.durationMs}
-                  onChange={(e) => handleCrossfadeDurationChange(parseInt(e.target.value))}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary/50 transition-all"
-                >
-                  {crossfadeDurations.filter(d => d.value > 0).map((duration) => (
-                    <option key={duration.value} value={duration.value}>
-                      {duration.label} - {duration.description}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={String(crossfade.durationMs)}
+                  onChange={(val) => handleCrossfadeDurationChange(parseInt(val))}
+                  options={crossfadeDurations.filter(d => d.value > 0).map(d => ({ value: String(d.value), label: `${d.label} - ${d.description}` }))}
+                  className="w-full"
+                />
               </div>
 
               {/* Crossfade Curve */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Fade Curve</label>
-                <select
+                <Select
                   value={crossfade.curve}
-                  onChange={(e) => handleCrossfadeCurveChange(e.target.value as CrossfadeCurve)}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary/50 transition-all"
-                >
-                  {crossfadeCurves.map((curve) => (
-                    <option key={curve.value} value={curve.value}>
-                      {curve.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => handleCrossfadeCurveChange(val as CrossfadeCurve)}
+                  options={crossfadeCurves.map(c => ({ value: c.value, label: c.label }))}
+                  className="w-full"
+                />
                 <p className="text-xs text-muted-foreground">
                   {crossfadeCurves.find(c => c.value === crossfade.curve)?.description}
                 </p>

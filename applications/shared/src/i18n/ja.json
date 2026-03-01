@@ -311,10 +311,11 @@
     "reportBugResourcesHeading": "役立つリソース",
     "reportBugGithubRepoLabel": "GitHubリポジトリ",
     "reportBugGithubRepoDescription": "ソースコードとドキュメントを表示",
-    "reportBugWikiLabel": "Wiki & ドキュメント",
+    "reportBugWikiLabel": "ドキュメント",
     "reportBugWikiDescription": "ガイド、FAQ、トラブルシューティング",
     "reportBugGithubLink": "GitHub Issuesで報告する",
     "reportBugLogs": "ログを表示",
+    "reportBugFindLogsHere": "ログはこちら：",
     "reportBugLogsDescription": "アプリケーションログは問題の診断に役立ちます。アプリ起動時に --logs フラグを使用してログを有効化してください。",
     "reportBugLoggingToggleTitle": "ログ設定",
     "reportBugLoggingToggleLabel": "ファイルログを有効化",
@@ -323,6 +324,7 @@
     "about": "について",
     "aboutDescription": "高品質なオーディオ再生とプロフェッショナルなオーディオ処理パイプラインを備えたローカルファーストの音楽プレーヤー。",
     "version": "バージョン",
+    "bySoulAudio": "Soul Audio 製",
     "links": "リンク",
     "github": "GitHub",
     "website": "ウェブサイト",
@@ -593,6 +595,7 @@
     "error": "アップロード失敗"
   },
   "common": {
+    "comingSoon": "近日公開",
     "save": "保存",
     "cancel": "キャンセル",
     "delete": "削除",

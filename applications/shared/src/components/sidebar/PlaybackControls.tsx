@@ -45,6 +45,7 @@ export function PlaybackControls({
         <button
           onClick={onShuffleToggle}
           disabled={!hasCurrentTrack}
+          data-testid="shuffle-button"
           className={cn(
             'p-1.5 transition-opacity relative',
             !hasCurrentTrack && 'opacity-50 cursor-not-allowed',
@@ -69,6 +70,7 @@ export function PlaybackControls({
         <button
           onClick={onPrevious}
           disabled={!hasCurrentTrack}
+          data-testid="previous-button"
           className={cn(
             'p-1.5 text-muted-foreground transition-opacity',
             hasCurrentTrack
@@ -84,6 +86,7 @@ export function PlaybackControls({
       <button
         onClick={onPlayPause}
         disabled={!hasCurrentTrack}
+        data-testid="play-pause-button"
         className={cn(
           'w-8 h-8 bg-primary text-primary-foreground rounded-full transition-all duration-[var(--transition-duration)] flex items-center justify-center',
           hasCurrentTrack
@@ -103,6 +106,7 @@ export function PlaybackControls({
         <button
           onClick={onNext}
           disabled={!hasCurrentTrack}
+          data-testid="next-button"
           className={cn(
             'p-1.5 text-muted-foreground transition-opacity',
             hasCurrentTrack
@@ -115,6 +119,7 @@ export function PlaybackControls({
         <button
           onClick={onRepeatToggle}
           disabled={!hasCurrentTrack}
+          data-testid="repeat-button"
           className={cn(
             'p-1.5 transition-opacity',
             !hasCurrentTrack && 'opacity-50 cursor-not-allowed',

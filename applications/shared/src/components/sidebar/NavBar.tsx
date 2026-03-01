@@ -48,6 +48,7 @@ export function NavBar({ homeEnabled = true }: NavBarProps) {
           <li key={item.id}>
             <button
               onClick={() => navigate(item.path)}
+              data-testid={`nav-${item.id}`}
               className={cn(
                 'w-full text-left px-3 py-1 text-xl font-semibold tracking-wide transition-opacity flex items-center justify-between gap-2',
                 isActive(item.path)

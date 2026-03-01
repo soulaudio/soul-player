@@ -1,6 +1,7 @@
 // Upsampling/Resampling settings component
 
 import { Info, Check, Zap, Scale, Sparkles, Crown } from 'lucide-react';
+import { Select } from '../../ui/select';
 
 export type ResamplingQuality = 'fast' | 'balanced' | 'high' | 'maximum';
 export type ResamplingBackend = 'auto' | 'rubato' | 'r8brain';
@@ -162,20 +163,12 @@ export function UpsamplingSettings({
       {/* Target Sample Rate */}
       <div>
         <label className="text-sm font-medium mb-2 block">Target Sample Rate</label>
-        <select
-          value={targetRate}
-          onChange={(e) => {
-            const val = e.target.value;
-            onTargetRateChange(val === 'auto' ? 'auto' : parseInt(val, 10));
-          }}
-          className="w-full p-3 rounded-lg border border-border bg-background text-sm"
-        >
-          {targetRates.map((rate) => (
-            <option key={rate.value} value={rate.value}>
-              {rate.label}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={String(targetRate)}
+          onChange={(val) => onTargetRateChange(val === 'auto' ? 'auto' : parseInt(val, 10))}
+          options={targetRates.map(r => ({ value: String(r.value), label: r.label }))}
+          className="w-full"
+        />
         <p className="text-xs text-muted-foreground mt-2">
           Auto mode matches your output device's native sample rate for optimal performance.
         </p>

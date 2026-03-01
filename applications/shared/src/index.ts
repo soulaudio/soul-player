@@ -87,7 +87,7 @@ export type { DemoTrack, DemoAlbum, DemoPlaylist, DemoData } from './lib/demo-st
 export type { PlaybackDataStorage } from './types/storage';
 
 // Constants
-export { SITE_URL, GITHUB_URL } from './constants/siteConfig';
+export { SITE_URL, COMPANY_URL, GITHUB_URL } from './constants/siteConfig';
 
 // Utils
 export { cn, formatDuration } from './lib/utils';
@@ -145,6 +145,8 @@ export {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from './components/ui/dropdown-menu';
+export { Select } from './components/ui/select';
+export type { SelectOption, SelectGroup, SelectProps } from './components/ui/select';
 export {
   Dialog,
   DialogContent,

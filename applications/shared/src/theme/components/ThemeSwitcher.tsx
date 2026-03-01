@@ -2,9 +2,10 @@
  * ThemeSwitcher component - dropdown to select themes
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../useTheme';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../../components/ui/dropdown-menu';
 
 interface ThemeSwitcherProps {
   /** Show live preview on hover/focus */
@@ -27,35 +28,22 @@ export function ThemeSwitcher({
     null
   );
 
-  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const themeId = event.target.value;
-
-    // Clear any active preview
+  const handleSelect = (themeId: string) => {
     if (restorePreview) {
       restorePreview();
       setRestorePreview(null);
     }
-
-    // Set the new theme
     setTheme(themeId);
   };
 
-  const handleMouseEnter = (themeId: string) => {
-    if (!showLivePreview || themeId === currentTheme.id) {
-      return;
-    }
-
-    // Clear any existing preview
-    if (restorePreview) {
-      restorePreview();
-    }
-
-    // Start new preview
+  const handleItemMouseEnter = (themeId: string) => {
+    if (!showLivePreview || themeId === currentTheme.id) return;
+    if (restorePreview) restorePreview();
     const restore = previewTheme(themeId);
     setRestorePreview(() => restore);
   };
 
-  const handleMouseLeave = () => {
+  const handleItemMouseLeave = () => {
     if (restorePreview) {
       restorePreview();
       setRestorePreview(null);
@@ -64,30 +52,30 @@ export function ThemeSwitcher({
 
   return (
     <div className={`theme-switcher ${className}`}>
-      <label
-        htmlFor="theme-select"
-        className="block text-sm font-medium text-foreground mb-2"
-      >
-        {t('settings.theme')}
-      </label>
-      <select
-        id="theme-select"
-        value={currentTheme.id}
-        onChange={handleChange}
-        onMouseLeave={handleMouseLeave}
-        className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-      >
-        {availableThemes.map((theme) => (
-          <option
-            key={theme.id}
-            value={theme.id}
-            onMouseEnter={() => handleMouseEnter(theme.id)}
-          >
-            {theme.name}
-            {theme.isBuiltIn ? '' : ` (${t('theme.custom')})`}
-          </option>
-        ))}
-      </select>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
+            <span>{currentTheme.name}{!currentTheme.isBuiltIn ? ` (${t('theme.custom')})` : ''}</span>
+            <svg className="w-4 h-4 text-muted-foreground flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {availableThemes.map((theme) => (
+            <DropdownMenuItem
+              key={theme.id}
+              onClick={() => handleSelect(theme.id)}
+              onMouseEnter={() => handleItemMouseEnter(theme.id)}
+              onMouseLeave={handleItemMouseLeave}
+              className={theme.id === currentTheme.id ? 'text-primary' : ''}
+            >
+              {theme.name}
+              {!theme.isBuiltIn && <span className="ml-1 text-muted-foreground">({t('theme.custom')})</span>}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {currentTheme.description && (
         <p className="mt-2 text-sm text-muted-foreground">
           {currentTheme.description}

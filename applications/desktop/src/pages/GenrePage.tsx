@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog, useBackend } from '@soul-player/shared';
+import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog, useBackend, usePlayerCommands } from '@soul-player/shared';
 import { ArrowLeft, Play, Guitar, Clock } from 'lucide-react';
 
 interface Genre {
@@ -21,6 +21,7 @@ export function GenrePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const backend = useBackend();
+  const commands = usePlayerCommands();
 
   const [genre, setGenre] = useState<Genre | null>(null);
   const [tracks, setTracks] = useState<DesktopTrack[]>([]);
@@ -124,7 +125,7 @@ export function GenrePage() {
           contextArtworkPath: null,
         });
       }
-      await invoke('play_queue', { queue, startIndex: 0 });
+      await commands.playQueue(queue, 0);
     } catch (err) {
       console.error('Failed to play all tracks:', err);
     }

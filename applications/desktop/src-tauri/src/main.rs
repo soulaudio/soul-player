@@ -33,6 +33,7 @@ mod sources;
 mod splash;
 mod sync;
 // mod tray; // Temporarily disabled - Tauri 2.0 API change
+mod themes;
 mod updater;
 mod window_state_manager;
 
@@ -3303,6 +3304,10 @@ fn main() {
             playback_context::get_recent_playback_contexts,
             playback_context::get_current_playback_context,
             playback_context::clear_playback_context_history,
+            // Custom themes
+            themes::theme_list_custom,
+            themes::theme_save,
+            themes::theme_delete,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

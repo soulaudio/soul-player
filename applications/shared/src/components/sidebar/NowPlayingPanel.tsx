@@ -31,13 +31,13 @@ export function NowPlayingPanel({
   const { t } = useTranslation();
 
   return (
-    <div className="p-4">
+    <div className="p-4" data-testid="now-playing-panel">
       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
         {t('sidebar.nowPlaying')}
       </div>
 
       <div className="h-12 flex items-center gap-2">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0" data-testid={currentTrack ? 'now-playing-title' : undefined}>
           {currentTrack ? (
             <TrackItem
               key={String(currentTrack.id)}

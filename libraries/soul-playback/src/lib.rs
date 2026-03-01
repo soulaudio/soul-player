@@ -107,9 +107,21 @@
 //! }
 //!
 //! // Use with playback manager
+//! use soul_playback::QueueTrack;
+//! use std::path::PathBuf;
 //! let mut manager = PlaybackManager::default();
-//! let decoder = MyAudioDecoder { /* ... */ };
-//! manager.set_audio_source(Box::new(decoder));
+//! let track = QueueTrack {
+//!     id: "1".to_string(),
+//!     path: PathBuf::from("/music/track.mp3"),
+//!     title: "Track 1".to_string(),
+//!     artist: "Artist".to_string(),
+//!     album: None,
+//!     duration: Duration::from_secs(180),
+//!     track_number: None,
+//!     source: soul_playback::TrackSource::Single,
+//! };
+//! // Platform layer calls activate_source after loading the audio file
+//! manager.activate_source(Box::new(MyAudioDecoder {}), track);
 //!
 //! // Process audio in platform audio callback
 //! let mut output_buffer = vec![0.0f32; 1024];

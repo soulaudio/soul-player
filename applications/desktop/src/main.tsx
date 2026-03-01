@@ -1,10 +1,12 @@
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@soul-player/shared/theme';
+import { themeManager } from '@soul-player/shared/theme';
 import { initI18n, PlatformProvider, QueryClient, QueryClientProvider, PlaybackSessionProvider } from '@soul-player/shared';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { TauriPlayerCommandsProvider } from './providers/TauriPlayerCommandsProvider';
 import { TauriBackendProvider } from './providers/TauriBackendProvider';
+import { loadThemesFromDisk, tauriThemeFileBackend } from './theme/tauriThemeAdapter';
 import App from './App';
 import './index.css';
 import { initTestHelpers } from './test-helpers';
@@ -28,53 +30,63 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  // StrictMode disabled in production for performance (50-80ms faster FCP)
-  // Re-enable during development for debugging: wrap in <React.StrictMode>
-  <>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true,
-        }}
-      >
-        <ThemeProvider>
-          <PlatformProvider
-          platform="desktop"
-          features={{
-            // Library features
-            canDeleteTracks: true,
-            canCreatePlaylists: true,
-            hasFilters: true,
-            hasHealthCheck: true,
-            hasVirtualization: true,
-            hasTrackMenu: true,
-            hasPlaybackContext: true,
-            // Settings features
-            hasLibrarySettings: true,
-            hasAudioSettings: true,
-            hasShortcutSettings: true,
-            hasUpdateSettings: true,
-            hasLanguageSettings: true,
-            hasThemeImportExport: true,
-            // Audio features
-            hasRealAudioDevices: true,
-            hasRealDeviceSelection: true,
+// Load custom themes from disk before rendering so ThemeProvider sees the full
+// list on first render. Files are small and local so this adds negligible delay.
+async function init() {
+  const themes = await loadThemesFromDisk();
+  themeManager.seedCustomThemes(themes);
+  themeManager.setFileBackend(tauriThemeFileBackend);
+
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    // StrictMode disabled in production for performance (50-80ms faster FCP)
+    // Re-enable during development for debugging: wrap in <React.StrictMode>
+    <>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
           }}
         >
-          <TauriBackendProvider>
-            <PlaybackSessionProvider>
-              <TauriPlayerCommandsProvider>
-                <SettingsProvider>
-                  <App />
-                </SettingsProvider>
-              </TauriPlayerCommandsProvider>
-            </PlaybackSessionProvider>
-          </TauriBackendProvider>
-        </PlatformProvider>
-      </ThemeProvider>
-    </BrowserRouter>
-    </QueryClientProvider>
-  </>
-);
+          <ThemeProvider>
+            <PlatformProvider
+              platform="desktop"
+              features={{
+                // Library features
+                canDeleteTracks: true,
+                canCreatePlaylists: true,
+                hasFilters: true,
+                hasHealthCheck: true,
+                hasVirtualization: true,
+                hasTrackMenu: true,
+                hasPlaybackContext: true,
+                // Settings features
+                hasLibrarySettings: true,
+                hasAudioSettings: true,
+                hasShortcutSettings: true,
+                hasUpdateSettings: true,
+                hasLanguageSettings: true,
+                hasThemeImportExport: true,
+                // Audio features
+                hasRealAudioDevices: true,
+                hasRealDeviceSelection: true,
+              }}
+            >
+              <TauriBackendProvider>
+                <PlaybackSessionProvider>
+                  <TauriPlayerCommandsProvider>
+                    <SettingsProvider>
+                      <App />
+                    </SettingsProvider>
+                  </TauriPlayerCommandsProvider>
+                </PlaybackSessionProvider>
+              </TauriBackendProvider>
+            </PlatformProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </>
+  );
+}
+
+init();

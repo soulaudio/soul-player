@@ -12,15 +12,49 @@ const STORAGE_KEY_CURRENT_THEME = 'soul-player-current-theme';
 const STORAGE_KEY_CUSTOM_THEMES = 'soul-player-custom-themes';
 
 /**
+ * Optional file backend for persistent theme storage.
+ * On desktop, this is backed by Tauri FS commands writing to the app data dir.
+ * Writes are fire-and-forget; localStorage acts as the runtime cache.
+ */
+export interface ThemeFileBackend {
+  saveTheme(theme: Theme): void;
+  deleteTheme(themeId: string): void;
+}
+
+/**
  * ThemeManager class - manages all theme operations
  */
 export class ThemeManager {
   private currentTheme: Theme;
   private customThemes: Theme[] = [];
+  private fileBackend?: ThemeFileBackend;
 
   constructor() {
     this.currentTheme = defaultTheme;
     this.loadFromStorage();
+  }
+
+  /**
+   * Attach a file backend for persistent disk storage.
+   * Called once at app startup (desktop only) after async file reads complete.
+   */
+  setFileBackend(backend: ThemeFileBackend): void {
+    this.fileBackend = backend;
+  }
+
+  /**
+   * Seed custom themes loaded from disk (called at desktop startup).
+   * Replaces any localStorage-cached customs with the authoritative file list.
+   */
+  seedCustomThemes(themes: Theme[]): void {
+    this.customThemes = themes;
+    this.saveCustomThemesToStorage();
+    // Re-validate current theme is still available
+    if (!this.getThemeById(this.currentTheme.id)) {
+      this.currentTheme = defaultTheme;
+      this.saveCurrentThemeToStorage();
+      this.applyTheme(this.currentTheme);
+    }
   }
 
   /**
@@ -146,6 +180,7 @@ export class ThemeManager {
       // Add to custom themes
       this.customThemes.push(theme);
       this.saveCustomThemesToStorage();
+      this.fileBackend?.saveTheme(theme);
 
       return {
         ...validation,
@@ -193,6 +228,7 @@ export class ThemeManager {
 
     this.customThemes = this.customThemes.filter((t) => t.id !== themeId);
     this.saveCustomThemesToStorage();
+    this.fileBackend?.deleteTheme(themeId);
 
     // If we deleted the current theme, switch to default
     if (this.currentTheme.id === themeId) {

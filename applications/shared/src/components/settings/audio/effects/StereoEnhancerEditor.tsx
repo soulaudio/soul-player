@@ -10,6 +10,7 @@ import {
   Info,
   RotateCcw
 } from 'lucide-react';
+import { Select } from '../../../ui/select';
 
 export interface StereoSettings {
   width: number;      // 0.0 (mono) to 2.0 (extra wide), 1.0 = normal
@@ -124,19 +125,19 @@ export function StereoEnhancerEditor({
           <label className="text-sm font-medium mb-1 block">
             {t('dsp.stereo.preset')}
           </label>
-          <select
+          <Select
             data-testid="stereo-preset-select"
             value={currentPreset}
-            onChange={(e) => handlePresetChange(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            <option value="">{t('dsp.stereo.customPreset')}</option>
-            {DEFAULT_PRESETS.map((preset) => (
-              <option key={preset.name} value={preset.name}>
-                {t(`dsp.stereo.presets.${preset.name.toLowerCase().replace(' ', '')}`, preset.name)}
-              </option>
-            ))}
-          </select>
+            onChange={handlePresetChange}
+            options={[
+              { value: '', label: t('dsp.stereo.customPreset') },
+              ...DEFAULT_PRESETS.map(preset => ({
+                value: preset.name,
+                label: t(`dsp.stereo.presets.${preset.name.toLowerCase().replace(' ', '')}`, preset.name),
+              })),
+            ]}
+            className="w-full"
+          />
         </div>
         <button
           onClick={handleReset}

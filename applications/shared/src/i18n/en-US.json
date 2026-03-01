@@ -310,10 +310,11 @@
     "reportBugResourcesHeading": "Helpful Resources",
     "reportBugGithubRepoLabel": "GitHub Repository",
     "reportBugGithubRepoDescription": "View source code and documentation",
-    "reportBugWikiLabel": "Wiki & Documentation",
+    "reportBugWikiLabel": "Documentation",
     "reportBugWikiDescription": "Guides, FAQs, and troubleshooting",
     "reportBugGithubLink": "Report on GitHub Issues",
     "reportBugLogs": "View Logs",
+    "reportBugFindLogsHere": "Find logs here:",
     "reportBugLogsDescription": "Application logs can help diagnose issues. Enable logging with the --logs flag when starting the app.",
     "reportBugLoggingToggleTitle": "Logging Settings",
     "reportBugLoggingToggleLabel": "Enable file logging",
@@ -322,6 +323,7 @@
     "about": "About",
     "aboutDescription": "Local-first music player with high-quality audio playback and professional audio processing pipeline.",
     "version": "Version",
+    "bySoulAudio": "by Soul Audio",
     "links": "Links",
     "github": "GitHub",
     "website": "Website",
@@ -593,6 +595,7 @@
     "error": "Upload Failed"
   },
   "common": {
+    "comingSoon": "Coming soon",
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",

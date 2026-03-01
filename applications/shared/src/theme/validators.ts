@@ -155,14 +155,19 @@ export function validateThemeAccessibility(theme: Theme): ThemeValidationResult 
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Critical contrast checks (must pass AA)
+  // Critical contrast checks (must pass AA) — primary readable text
   const criticalPairs: Array<[string, string, string]> = [
     ['foreground', 'background', 'Main text on background'],
     ['primary-foreground', 'primary', 'Primary button text'],
-    ['secondary-foreground', 'secondary', 'Secondary button text'],
     ['card-foreground', 'card', 'Card text'],
     ['popover-foreground', 'popover', 'Popover text'],
     ['destructive-foreground', 'destructive', 'Destructive button text'],
+  ];
+
+  // Decorative/secondary pairs — intentionally lower contrast by design,
+  // treat as warnings only so imports are not blocked
+  const warningPairs: Array<[string, string, string]> = [
+    ['secondary-foreground', 'secondary', 'Secondary button text'],
     ['accent-foreground', 'accent', 'Accent text'],
     ['muted-foreground', 'muted', 'Muted text'],
   ];
@@ -181,6 +186,21 @@ export function validateThemeAccessibility(theme: Theme): ThemeValidationResult 
       } else if (!result.passes.aaa) {
         warnings.push(
           `${description}: Contrast ratio ${result.ratio.toFixed(2)}:1 passes AA but not AAA (7:1)`
+        );
+      }
+    }
+  }
+
+  for (const [fgKey, bgKey, description] of warningPairs) {
+    const fg = theme.colors[fgKey as keyof typeof theme.colors];
+    const bg = theme.colors[bgKey as keyof typeof theme.colors];
+
+    if (fg && bg) {
+      const result = checkContrast(fg, bg);
+
+      if (!result.passes.aa) {
+        warnings.push(
+          `${description}: Contrast ratio ${result.ratio.toFixed(2)}:1 is below WCAG AA — this is often intentional for secondary text`
         );
       }
     }

@@ -22,6 +22,7 @@ import {
   Bug,
 } from 'lucide-react'
 import { debug } from '../utils/debug'
+import { Select } from '../components/ui/select'
 
 type SettingsTab = 'general' | 'library' | 'audio' | 'shortcuts' | 'reportBug' | 'about'
 
@@ -323,18 +324,16 @@ function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
 
           <div>
             <label className="block text-sm font-medium mb-2">{t('settings.language')}</label>
-            <select
+            <Select
               value={i18n.language}
-              onChange={(e) => handlers?.handleLanguageChange?.(e.target.value)}
+              onChange={(value) => handlers?.handleLanguageChange?.(value)}
               disabled={!canChangeLanguage}
-              className={`w-full max-w-xs px-3 py-2 rounded-lg bg-muted ${
-                !canChangeLanguage ? 'opacity-60 cursor-not-allowed' : ''
-              }`}
-            >
-              <option value="en-US">English (US)</option>
-              <option value="de">Deutsch</option>
-              <option value="ja">日本語</option>
-            </select>
+              options={[
+                { value: 'en-US', label: 'English (US)' },
+                { value: 'de', label: 'Deutsch' },
+                { value: 'ja', label: '日本語' },
+              ]}
+            />
             {!canChangeLanguage && (
               <p className="text-xs text-muted-foreground mt-1">
                 {t('settings.demoDisabled')}

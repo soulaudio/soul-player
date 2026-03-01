@@ -337,6 +337,7 @@ const TrackRowComponent = ({
       className={`grid ${gridCols} gap-4 px-4 py-3 hover:bg-foreground/[var(--hover-bg-opacity)] border-b last:border-b-0 transition-colors group ${
         isCurrentTrack ? 'bg-accent/20' : ''
       } ${isUnavailable ? 'opacity-60' : ''}`}
+      data-testid="track-row"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onDoubleClick={() => !isUnavailable && onPlay(group)}
@@ -557,7 +558,7 @@ export function TrackList({
   // Virtualized rendering
   if (virtualized) {
     return (
-      <div className="border rounded-lg overflow-hidden h-full flex flex-col">
+      <div className="border rounded-lg overflow-hidden h-full flex flex-col" data-testid="track-list">
         {/* Header */}
         <div className="bg-muted/50 flex-shrink-0">
           <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium text-muted-foreground`}>
@@ -641,7 +642,7 @@ export function TrackList({
 
   // Non-virtualized rendering (original behavior)
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border rounded-lg overflow-hidden" data-testid="track-list">
       {/* Header */}
       <div className="bg-muted/50">
         <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium text-muted-foreground`}>
