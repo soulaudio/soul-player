@@ -86,8 +86,7 @@ export function AddToPlaylistDialog(props: AddToPlaylistDialogProps) {
     setSearchQuery('');
     setNewPlaylistName('');
     setShowNewPlaylistInput(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, entityKey]);
+  }, [open, entityKey, backend, props.mode]);
 
   // Filter playlists by search query
   const filteredPlaylists = useMemo(() => {
@@ -151,7 +150,11 @@ export function AddToPlaylistDialog(props: AddToPlaylistDialogProps) {
         const selectedPlaylistIds = Array.from(selectedIds);
         await Promise.all(
           selectedPlaylistIds.flatMap((playlistId) =>
-            tracks.map((track) => backend.addTrackToPlaylist(playlistId, track.id))
+            tracks.map((track) =>
+              backend.addTrackToPlaylist(playlistId, track.id).catch((err) =>
+                debug.error(`Failed to add track ${track.id} to playlist ${playlistId}:`, err)
+              )
+            )
           )
         );
         onClose();
@@ -224,19 +227,14 @@ export function AddToPlaylistDialog(props: AddToPlaylistDialogProps) {
   }, [props.mode, selectedIds, containingPlaylistIds]);
 
   // Compute dialog title
-  const dialogTitle = useMemo(() => {
-    if (props.mode === 'track') {
-      return t('playlist.addToPlaylist', 'Add to Playlist');
-    }
+  const dialogTitle = (() => {
+    if (props.mode === 'track') return t('playlist.addToPlaylist', 'Add to Playlist');
     switch (props.entityType) {
-      case 'album':
-        return t('playlist.addAlbumToPlaylist', 'Add Album to Playlist');
-      case 'artist':
-        return t('playlist.addArtistToPlaylist', 'Add Artist to Playlist');
-      case 'playlist':
-        return t('playlist.addPlaylistToPlaylist', 'Add Playlist to Playlist');
+      case 'album': return t('playlist.addAlbumToPlaylist', 'Add Album to Playlist');
+      case 'artist': return t('playlist.addArtistToPlaylist', 'Add Artist to Playlist');
+      case 'playlist': return t('playlist.addPlaylistToPlaylist', 'Add Playlist to Playlist');
     }
-  }, [props, t]);
+  })();
 
   // Context display name/label
   const contextLabel = props.mode === 'track'
