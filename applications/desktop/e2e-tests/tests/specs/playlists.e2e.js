@@ -71,67 +71,47 @@ describe('Playlist: Add track via TrackMenu', () => {
     await browser.pause(1500);
   });
 
-  it('should open the track options menu for the first track', async () => {
+  it('adds a track to the Favorites playlist via the track context menu', async () => {
+    // Step 1: hover first track row and open menu
     const trackList = await waitForEl('[data-testid="track-list"]', 'track list');
     const firstRow = await trackList.$('[data-testid="track-row"]');
-    await firstRow.waitForExist({ timeout: 10000, timeoutMsg: 'First track row not found' });
-
     await hoverElement(firstRow);
 
-    const optionsBtn = await firstRow.$('[aria-label="Track options"]');
-    await optionsBtn.waitForExist({ timeout: 8000, timeoutMsg: 'Track options button not found' });
-    await optionsBtn.click();
+    const menuBtn = await firstRow.$('[aria-label="Track options"]');
+    await menuBtn.waitForExist({ timeout: 5000 });
+    await menuBtn.click();
+    await browser.pause(500);
 
-    // Find and click the menu item containing 'Playlist'
-    await browser.waitUntil(
-      async () => {
-        const menuItems = await $$('[role="menuitem"]');
-        for (const item of menuItems) {
-          const text = await item.getText();
-          if (text.includes('Playlist')) {
-            await item.click();
-            return true;
-          }
-        }
-        return false;
-      },
-      {
-        timeout: 8000,
-        timeoutMsg: 'Could not find a menu item containing "Playlist"',
-      }
-    );
-  });
+    // Step 2: find and click "Add to Playlist" menu item
+    const menuItems = await $$('[role="menuitem"]');
+    let addToPlaylistItem = null;
+    for (const item of menuItems) {
+      const text = await item.getText();
+      if (text.includes('Playlist')) { addToPlaylistItem = item; break; }
+    }
+    expect(addToPlaylistItem).toBeTruthy();
+    await addToPlaylistItem.click();
+    await browser.pause(500);
 
-  it('should display the add-to-playlist dialog', async () => {
-    const dialog = await waitForEl('[data-testid="add-to-playlist-dialog"]', 'add-to-playlist dialog');
-    expect(await dialog.isDisplayed()).toBe(true);
-  });
+    // Step 3: assert dialog is open
+    const dialog = await waitForEl('[data-testid="add-to-playlist-dialog"]', 'Add to Playlist dialog');
+    await expect(dialog).toBeDisplayed();
 
-  it('should list playlists in the dialog including Favorites', async () => {
-    const dialogItems = await $$('[data-testid="playlist-dialog-item"]');
-    expect(dialogItems.length).toBeGreaterThan(0);
+    // Step 4: assert Favorites is listed
+    const items = await $$('[data-testid="playlist-dialog-item"]');
+    expect(items.length).toBeGreaterThanOrEqual(1);
+    const firstText = await items[0].getText();
+    expect(firstText).toContain('Favorites');
 
-    const firstItemText = await dialogItems[0].getText();
-    expect(firstItemText).toContain('Favorites');
-  });
-
-  it('should add the track to the playlist and close the dialog', async () => {
-    const dialogItems = await $$('[data-testid="playlist-dialog-item"]');
-    await dialogItems[0].click();
-
+    // Step 5: select Favorites and save
+    await items[0].click();
+    await browser.pause(300);
     const doneBtn = await $('button=Done');
-    await doneBtn.waitForExist({ timeout: 8000, timeoutMsg: 'Done button not found' });
+    await doneBtn.waitForClickable({ timeout: 3000 });
     await doneBtn.click();
-
     await browser.waitUntil(
-      async () => {
-        const dialog = await $('[data-testid="add-to-playlist-dialog"]');
-        return !(await dialog.isExisting());
-      },
-      {
-        timeout: 8000,
-        timeoutMsg: 'Expected add-to-playlist dialog to close after clicking Done',
-      }
+      async () => !(await $('[data-testid="add-to-playlist-dialog"]').isExisting()),
+      { timeout: 5000, timeoutMsg: 'Dialog did not close after clicking Done' }
     );
   });
 });
@@ -176,29 +156,26 @@ describe('Playlist: Play from card', () => {
     await navigateTo('nav-playlists');
   });
 
-  it('should play the first playlist by clicking the play button on its card', async () => {
-    // Wait for at least one playlist card to appear
+  it('plays the Favorites playlist from its card hover play button', async () => {
+    // Find the Favorites card by name (it's the only seeded playlist with tracks)
+    let favoritesCard = null;
     await browser.waitUntil(
       async () => {
         const cards = await $$('[data-testid^="media-card-playlist-"]');
-        return cards.length > 0;
+        for (const card of cards) {
+          const text = await card.getText();
+          if (text.includes('Favorites')) { favoritesCard = card; return true; }
+        }
+        return false;
       },
-      {
-        timeout: 10000,
-        timeoutMsg: 'No playlist cards found on the playlists page',
-      }
+      { timeout: 10000, timeoutMsg: 'Could not find Favorites playlist card' }
     );
-
-    const cards = await $$('[data-testid^="media-card-playlist-"]');
-    const firstCard = cards[0];
-
-    await hoverElement(firstCard);
-
-    const playBtn = await firstCard.$('[data-testid="media-card-play-button"]');
-    await playBtn.waitForExist({ timeout: 8000, timeoutMsg: 'Play button not found on playlist card' });
+    await hoverElement(favoritesCard);
+    const playBtn = await favoritesCard.$('[data-testid="media-card-play-button"]');
+    await playBtn.waitForClickable({ timeout: 5000 });
     await playBtn.click();
-
-    await waitForNowPlaying();
+    const nowPlaying = await waitForNowPlaying(12000);
+    await expect(nowPlaying).toBeDisplayed();
   });
 });
 
