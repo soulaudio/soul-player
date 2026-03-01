@@ -115,6 +115,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
         <AddToPlaylistDialog
           open={showAddToPlaylist}
           onClose={() => setShowAddToPlaylist(false)}
+          mode="track"
           trackId={currentTrack.id}
           trackTitle={currentTrack.title}
         />

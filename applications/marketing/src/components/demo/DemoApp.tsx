@@ -181,6 +181,7 @@ export function DemoApp() {
                     <AddToPlaylistDialog
                       open={showAddToPlaylist}
                       onClose={() => setShowAddToPlaylist(false)}
+                      mode="track"
                       trackId={currentTrack.id}
                       trackTitle={currentTrack.title}
                     />

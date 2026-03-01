@@ -735,6 +735,14 @@ impl PlaybackManager {
         // IMPORTANT: Clear history when loading a new playlist
         // This ensures navigation starts fresh without old history interfering
         self.history.clear();
+
+        // IMPORTANT: Reset loading state — mirrors what load_playlist() does.
+        // Without this, if loading=true from a previous navigation command,
+        // any subsequent play() call will be silently ignored because play()
+        // checks `self.loading` before emitting LoadNext.
+        self.loading = false;
+        self.pending_load_track = None;
+        self.sources = SourceState::Empty;
     }
 
     /// Append tracks to source queue
@@ -1075,6 +1083,17 @@ impl PlaybackManager {
             }
         }
 
+        // TODO(Phase 5 — crossfade): Route through process_active_crossfade() when a
+        // crossfade is in progress.  The full integration requires:
+        //   a) Detect "approaching end of track" here and call crossfade.start() +
+        //      sources.start_transition(incoming, incoming_track, …) at the right moment.
+        //   b) emit LoadNext early (before track ends) so the platform can pre-load the
+        //      incoming source and call activate_source() with the Transitioning variant.
+        //   c) Replace the block below with `return self.process_active_crossfade(output)`
+        //      when `self.sources.is_transitioning()`.
+        // Until then, crossfade settings are accepted but have no audio effect — gapless
+        // auto-advance via handle_track_finished() → next() continues to work normally.
+
         // 3. Get current source (single source of truth)
         let Some(source) = self.sources.current_source_mut() else {
             self.fill_underrun_buffer(output);
@@ -1148,15 +1167,21 @@ impl PlaybackManager {
     fn process_active_crossfade(&mut self, output: &mut [f32]) -> Result<usize> {
         let buffer_len = output.len();
 
-        // Get mutable references to the buffers (guaranteed to exist - allocated at crossfade start)
-        let outgoing_buffer = self
-            .outgoing_buffer
-            .as_mut()
-            .expect("Crossfade buffers must be allocated before calling process_active_crossfade");
-        let incoming_buffer = self
-            .incoming_buffer
-            .as_mut()
-            .expect("Crossfade buffers must be allocated before calling process_active_crossfade");
+        // Get mutable references to the buffers (must be allocated at crossfade start via
+        // ensure_crossfade_buffers_allocated — never allocate inside this hot path).
+        let (Some(outgoing_buffer), Some(incoming_buffer)) =
+            (self.outgoing_buffer.as_mut(), self.incoming_buffer.as_mut())
+        else {
+            // Buffers missing means crossfade was started without allocating — cancel it
+            // and fall back to silence rather than panicking the audio thread.
+            tracing::error!(
+                "[Crossfade] process_active_crossfade called without allocated buffers — \
+                 cancelling crossfade. Call ensure_crossfade_buffers_allocated() first."
+            );
+            self.crossfade.cancel();
+            self.fill_underrun_buffer(output);
+            return Ok(output.len());
+        };
 
         // Read from outgoing (current) track
         let outgoing_samples = if let Some(source) = self.sources.current_source_mut() {
@@ -1247,19 +1272,39 @@ impl PlaybackManager {
         Ok(processed)
     }
 
-    /// Transition from current track to next track (DEPRECATED - Phase 5)
+    /// Complete the crossfade transition: promote incoming source to current.
     ///
-    /// TODO: Phase 5 - Reimplement using SourceState for crossfade transitions
-    /// For now, this is a stub to maintain compilation.
+    /// Called by `process_active_crossfade()` once the crossfade mix is done.
+    /// Uses `SourceState::complete_transition()` to atomically drop the outgoing
+    /// source and promote the incoming source, then emits a `TrackChanged` event.
+    ///
+    /// If sources are not in `Transitioning` state (defensive), logs a warning
+    /// and returns without modifying state.
     fn transition_to_next_track(&mut self) -> Result<()> {
-        tracing::warn!("[transition_to_next_track] DEPRECATED: Called old transition method - needs Phase 5 rewrite");
+        if !self.sources.is_transitioning() {
+            tracing::warn!(
+                "[Crossfade] transition_to_next_track called while not in Transitioning state — \
+                 no-op (sources={:?})",
+                std::mem::discriminant(&self.sources)
+            );
+            return Ok(());
+        }
 
-        // Stub implementation - just emit events to maintain basic functionality
+        // Atomically swap: outgoing source is dropped, incoming becomes current.
+        // We temporarily replace sources with Empty so we can take ownership.
+        let old = std::mem::replace(&mut self.sources, SourceState::Empty);
+        self.sources = old.complete_transition();
+
+        // Emit TrackChanged for the now-current (formerly incoming) track
         if let Some(track) = self.sources.current_track() {
+            tracing::info!(
+                "[Crossfade] Transition complete — now playing track id={}",
+                track.id
+            );
             self.emit_track_changed(track.id.clone(), None);
         }
 
-        // Reset loudness normalizer for new track
+        // Reset loudness normalizer for the new track
         #[cfg(feature = "volume-leveling")]
         self.loudness_normalizer.reset();
 

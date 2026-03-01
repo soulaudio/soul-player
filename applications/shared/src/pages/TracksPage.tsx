@@ -211,6 +211,7 @@ export function TracksPage() {
       {selectedTrackForPlaylist && (
         <AddToPlaylistDialog
           open={true}
+          mode="track"
           trackId={selectedTrackForPlaylist.id}
           trackTitle={selectedTrackForPlaylist.title}
           onClose={() => setSelectedTrackForPlaylist(null)}

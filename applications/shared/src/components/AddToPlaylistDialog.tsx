@@ -4,60 +4,77 @@ import { Search, ListMusic, Plus, Check, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter } from './ui/Dialog';
 import { useBackend, type BackendPlaylist } from '../contexts/BackendContext';
 import { useAddTrackToPlaylist, useRemoveTrackFromPlaylist, useCreatePlaylist } from '../hooks/queries/usePlaylistMutations';
+import { usePlatform } from '../contexts/PlatformContext';
+import { ArtworkImage } from './ArtworkImage';
 import { debug } from '../utils/debug';
 
-interface AddToPlaylistDialogProps {
+type AddToPlaylistDialogProps = {
   open: boolean;
   onClose: () => void;
-  trackId: number;
-  trackTitle?: string;
-}
+} & (
+  | { mode: 'track'; trackId: number; trackTitle?: string }
+  | { mode: 'entity'; entityType: 'album' | 'artist' | 'playlist'; entityId: number | string; entityName?: string }
+);
 
-export function AddToPlaylistDialog({
-  open,
-  onClose,
-  trackId,
-  trackTitle,
-}: AddToPlaylistDialogProps) {
+export function AddToPlaylistDialog(props: AddToPlaylistDialogProps) {
+  const { open, onClose } = props;
   const { t } = useTranslation();
   const backend = useBackend();
+  const { isDesktop } = usePlatform();
+
   const [playlists, setPlaylists] = useState<BackendPlaylist[]>([]);
   const [containingPlaylistIds, setContainingPlaylistIds] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [showNewPlaylistInput, setShowNewPlaylistInput] = useState(false);
 
-  // Mutation hooks with optimistic updates
+  // Mutation hooks with optimistic updates (track mode only)
   const addTrackMutation = useAddTrackToPlaylist();
   const removeTrackMutation = useRemoveTrackFromPlaylist();
   const createPlaylistMutation = useCreatePlaylist();
 
-  // Load playlists and which ones contain this track
+  // Extract the identity key for the useEffect dependency
+  const entityKey = props.mode === 'track' ? props.trackId : props.entityId;
+
+  // Load playlists and (for track mode) which ones contain this track
   useEffect(() => {
     if (!open) return;
 
     const loadData = async () => {
       setIsLoading(true);
+      setSelectedIds(new Set());
+      setContainingPlaylistIds(new Set());
+
       try {
-        // Check if backend methods exist
-        if (!backend.getAllPlaylists || !backend.getPlaylistsContainingTrack) {
+        if (!backend.getAllPlaylists) {
           debug.error('[AddToPlaylistDialog] Backend methods missing');
           setIsLoading(false);
           return;
         }
 
-        const [playlistsResult, containingIds] = await Promise.all([
-          backend.getAllPlaylists(),
-          backend.getPlaylistsContainingTrack(trackId),
-        ]);
-
-        setPlaylists(playlistsResult);
-        const containingSet = new Set(containingIds);
-        setContainingPlaylistIds(containingSet);
-        // Pre-select playlists that already contain the track
-        setSelectedIds(new Set(containingSet));
+        if (props.mode === 'track') {
+          if (!backend.getPlaylistsContainingTrack) {
+            debug.error('[AddToPlaylistDialog] Backend methods missing');
+            setIsLoading(false);
+            return;
+          }
+          const [playlistsResult, containingIds] = await Promise.all([
+            backend.getAllPlaylists(),
+            backend.getPlaylistsContainingTrack(props.trackId),
+          ]);
+          setPlaylists(playlistsResult);
+          const containingSet = new Set(containingIds);
+          setContainingPlaylistIds(containingSet);
+          // Pre-select playlists that already contain the track
+          setSelectedIds(new Set(containingSet));
+        } else {
+          // Entity mode: no pre-selection
+          const playlistsResult = await backend.getAllPlaylists();
+          setPlaylists(playlistsResult);
+        }
       } catch (error) {
         debug.error('[AddToPlaylistDialog] Failed to load playlists:', error);
       } finally {
@@ -69,7 +86,8 @@ export function AddToPlaylistDialog({
     setSearchQuery('');
     setNewPlaylistName('');
     setShowNewPlaylistInput(false);
-  }, [open, trackId, backend]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, entityKey]);
 
   // Filter playlists by search query
   const filteredPlaylists = useMemo(() => {
@@ -115,82 +133,149 @@ export function AddToPlaylistDialog({
     );
   };
 
-  // Save changes (add/remove track from playlists) with optimistic updates
+  // Save changes
   const handleSave = async () => {
-    const toAdd = Array.from(selectedIds).filter((id) => !containingPlaylistIds.has(id));
-    const toRemove = Array.from(containingPlaylistIds).filter((id) => !selectedIds.has(id));
+    if (props.mode === 'entity') {
+      // Entity mode: fetch all tracks for the entity, then batch-add to selected playlists
+      setIsSaving(true);
+      try {
+        let tracks: { id: number }[] = [];
+        if (props.entityType === 'album') {
+          tracks = await backend.getAlbumTracks(props.entityId as number);
+        } else if (props.entityType === 'artist') {
+          tracks = await backend.getArtistTracks(props.entityId as number);
+        } else if (props.entityType === 'playlist') {
+          tracks = await backend.getPlaylistTracks(props.entityId as string);
+        }
 
-    // Track pending mutations
-    let pendingCount = toAdd.length + toRemove.length;
-    let hasError = false;
+        const selectedPlaylistIds = Array.from(selectedIds);
+        await Promise.all(
+          selectedPlaylistIds.flatMap((playlistId) =>
+            tracks.map((track) => backend.addTrackToPlaylist(playlistId, track.id))
+          )
+        );
+        onClose();
+      } catch (error) {
+        debug.error('[AddToPlaylistDialog] Failed to save entity tracks:', error);
+      } finally {
+        setIsSaving(false);
+      }
+    } else {
+      // Track mode: diff-based add/remove
+      const toAdd = Array.from(selectedIds).filter((id) => !containingPlaylistIds.has(id));
+      const toRemove = Array.from(containingPlaylistIds).filter((id) => !selectedIds.has(id));
 
-    const onMutationComplete = () => {
-      pendingCount--;
-      if (pendingCount === 0 && !hasError) {
+      let pendingCount = toAdd.length + toRemove.length;
+      let hasError = false;
+
+      const onMutationComplete = () => {
+        pendingCount--;
+        if (pendingCount === 0 && !hasError) {
+          onClose();
+        }
+      };
+
+      const onError = (error: unknown) => {
+        hasError = true;
+        debug.error('Failed to save playlist changes:', error);
+        if (pendingCount === 1) {
+          pendingCount--;
+        }
+      };
+
+      toAdd.forEach((playlistId) => {
+        addTrackMutation.mutate(
+          { playlistId, trackId: props.trackId },
+          {
+            onSuccess: onMutationComplete,
+            onError,
+          }
+        );
+      });
+
+      toRemove.forEach((playlistId) => {
+        removeTrackMutation.mutate(
+          { playlistId, trackId: props.trackId },
+          {
+            onSuccess: onMutationComplete,
+            onError,
+          }
+        );
+      });
+
+      if (pendingCount === 0) {
         onClose();
       }
-    };
-
-    const onError = (error: unknown) => {
-      hasError = true;
-      debug.error('Failed to save playlist changes:', error);
-      if (pendingCount === 1) {
-        // Last mutation failed, don't close dialog
-        pendingCount--;
-      }
-    };
-
-    // Add track to new playlists with optimistic updates
-    toAdd.forEach((playlistId) => {
-      addTrackMutation.mutate(
-        { playlistId, trackId },
-        {
-          onSuccess: onMutationComplete,
-          onError,
-        }
-      );
-    });
-
-    // Remove track from deselected playlists with optimistic updates
-    toRemove.forEach((playlistId) => {
-      removeTrackMutation.mutate(
-        { playlistId, trackId },
-        {
-          onSuccess: onMutationComplete,
-          onError,
-        }
-      );
-    });
-
-    // If no changes, close immediately
-    if (pendingCount === 0) {
-      onClose();
     }
   };
 
   // Check if there are any changes
   const hasChanges = useMemo(() => {
+    if (props.mode === 'entity') {
+      return selectedIds.size > 0;
+    }
+    // Track mode: diff-based check
     if (selectedIds.size !== containingPlaylistIds.size) return true;
     const selectedArray = Array.from(selectedIds);
     for (let i = 0; i < selectedArray.length; i++) {
       if (!containingPlaylistIds.has(selectedArray[i])) return true;
     }
     return false;
-  }, [selectedIds, containingPlaylistIds]);
+  }, [props.mode, selectedIds, containingPlaylistIds]);
+
+  // Compute dialog title
+  const dialogTitle = useMemo(() => {
+    if (props.mode === 'track') {
+      return t('playlist.addToPlaylist', 'Add to Playlist');
+    }
+    switch (props.entityType) {
+      case 'album':
+        return t('playlist.addAlbumToPlaylist', 'Add Album to Playlist');
+      case 'artist':
+        return t('playlist.addArtistToPlaylist', 'Add Artist to Playlist');
+      case 'playlist':
+        return t('playlist.addPlaylistToPlaylist', 'Add Playlist to Playlist');
+    }
+  }, [props, t]);
+
+  // Context display name/label
+  const contextLabel = props.mode === 'track'
+    ? t('playlist.addingTrack', 'Adding track')
+    : t('playlist.addingAllTracks', 'Adding all tracks');
+
+  const contextName = props.mode === 'track'
+    ? props.trackTitle
+    : props.entityName;
+
+  const isDoneDisabled = useMemo(() => {
+    if (props.mode === 'entity') {
+      return isSaving || !hasChanges;
+    }
+    return addTrackMutation.isPending || removeTrackMutation.isPending || !hasChanges;
+  }, [props.mode, isSaving, hasChanges, addTrackMutation.isPending, removeTrackMutation.isPending]);
+
+  const doneLabel = useMemo(() => {
+    if (props.mode === 'entity') {
+      return isSaving ? t('common.saving', 'Saving...') : t('common.done', 'Done');
+    }
+    return addTrackMutation.isPending || removeTrackMutation.isPending
+      ? t('common.saving', 'Saving...')
+      : t('common.done', 'Done');
+  }, [props.mode, isSaving, addTrackMutation.isPending, removeTrackMutation.isPending, t]);
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md" data-testid="add-to-playlist-dialog">
         <DialogHeader onClose={onClose}>
-          {t('playlist.addToPlaylist', 'Add to Playlist')}
+          {dialogTitle}
         </DialogHeader>
 
         <DialogBody>
-          {/* Track info */}
-          {trackTitle && (
+          {/* Context info */}
+          {contextName && (
             <div className="mb-4 p-3 rounded-lg bg-muted/50">
-              <p className="text-sm text-muted-foreground">{t('playlist.addingTrack', 'Adding track')}</p>
-              <p className="font-medium truncate">{trackTitle}</p>
+              <p className="text-sm text-muted-foreground">{contextLabel}</p>
+              <p className="font-medium truncate">{contextName}</p>
             </div>
           )}
 
@@ -257,7 +342,7 @@ export function AddToPlaylistDialog({
           )}
 
           {/* Playlist list */}
-          <div className="max-h-64 overflow-y-auto -mx-6 px-6">
+          <div className="max-h-80 overflow-y-auto -mx-6 px-6">
             {isLoading ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
@@ -277,11 +362,12 @@ export function AddToPlaylistDialog({
               <div className="space-y-1">
                 {filteredPlaylists.map((playlist) => {
                   const isSelected = selectedIds.has(playlist.id);
-                  const wasInPlaylist = containingPlaylistIds.has(playlist.id);
+                  const wasInPlaylist = props.mode === 'track' && containingPlaylistIds.has(playlist.id);
 
                   return (
                     <button
                       key={playlist.id}
+                      data-testid="playlist-dialog-item"
                       onClick={() => togglePlaylist(playlist.id)}
                       className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors duration-[var(--transition-duration)] text-left ${
                         isSelected
@@ -289,9 +375,19 @@ export function AddToPlaylistDialog({
                           : 'hover:bg-foreground/[var(--hover-bg-opacity)] border border-transparent'
                       }`}
                     >
-                      {/* Playlist cover placeholder */}
-                      <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
-                        <ListMusic className="w-5 h-5 text-muted-foreground" />
+                      {/* Playlist cover */}
+                      <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {isDesktop ? (
+                          <ArtworkImage
+                            playlistId={playlist.id}
+                            alt={playlist.name}
+                            className="w-full h-full object-cover rounded-md"
+                            fallbackClassName="w-full h-full flex items-center justify-center"
+                            fallbackIcon="playlist"
+                          />
+                        ) : (
+                          <ListMusic className="w-5 h-5 text-muted-foreground" />
+                        )}
                       </div>
 
                       {/* Playlist info */}
@@ -313,7 +409,7 @@ export function AddToPlaylistDialog({
                         {isSelected && <Check className="w-4 h-4" />}
                       </div>
 
-                      {/* "Already added" indicator */}
+                      {/* "will remove" indicator (track mode only) */}
                       {wasInPlaylist && !isSelected && (
                         <span className="text-xs text-muted-foreground ml-2">
                           {t('playlist.willRemove', 'will remove')}
@@ -336,10 +432,10 @@ export function AddToPlaylistDialog({
           </button>
           <button
             onClick={handleSave}
-            disabled={!hasChanges || addTrackMutation.isPending || removeTrackMutation.isPending}
+            disabled={isDoneDisabled}
             className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:opacity-[var(--hover-button-opacity)] transition-all duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
           >
-            {addTrackMutation.isPending || removeTrackMutation.isPending ? t('common.saving', 'Saving...') : t('common.done', 'Done')}
+            {doneLabel}
           </button>
         </DialogFooter>
       </DialogContent>
