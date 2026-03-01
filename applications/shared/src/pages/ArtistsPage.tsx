@@ -6,6 +6,7 @@ import { useState, useMemo, useDeferredValue } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Users } from 'lucide-react'
 import { ArtistCard } from '../components/ArtistCard'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
 import { VirtualizedGrid } from '../components/VirtualizedGrid'
 import { useGridScale } from '../hooks/useGridScale'
@@ -20,6 +21,11 @@ export function ArtistsPage() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const deferredSearchQuery = useDeferredValue(searchQuery)
+
+  const [entityForPlaylist, setEntityForPlaylist] = useState<{
+    id: number | string
+    name: string
+  } | null>(null)
 
   // Fetch data using React Query hooks
   const { data: artists = [], isLoading, isError, error } = useArtists()
@@ -81,6 +87,7 @@ export function ArtistsPage() {
   ) : null
 
   return (
+    <>
     <LibraryPageLayout
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
@@ -104,6 +111,7 @@ export function ArtistsPage() {
               <ArtistCard
                 artist={artist}
                 priority={index < 24}
+                onAddToPlaylist={() => setEntityForPlaylist({ id: artist.id, name: artist.name })}
               />
             )}
           />
@@ -114,6 +122,7 @@ export function ArtistsPage() {
                 key={artist.id}
                 artist={artist}
                 priority={index < 24}
+                onAddToPlaylist={() => setEntityForPlaylist({ id: artist.id, name: artist.name })}
               />
             ))}
           </div>
@@ -130,5 +139,16 @@ export function ArtistsPage() {
         </div>
       ))}
     </LibraryPageLayout>
+    {entityForPlaylist && (
+      <AddToPlaylistDialog
+        open={!!entityForPlaylist}
+        onClose={() => setEntityForPlaylist(null)}
+        mode="entity"
+        entityType="artist"
+        entityId={entityForPlaylist.id}
+        entityName={entityForPlaylist.name}
+      />
+    )}
+    </>
   )
 }
