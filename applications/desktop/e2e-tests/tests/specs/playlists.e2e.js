@@ -2,7 +2,7 @@
  * Playlists E2E Tests
  *
  * Covers: create, add track via TrackMenu, navigate to detail, play from card,
- * and add album via card button.
+ * and add album via card right-click.
  *
  * Requires: wdio.playlists.conf.js (seeds 1 artist, 1 album, 5 tracks, 1 playlist)
  */
@@ -179,20 +179,19 @@ describe('Playlist: Play from card', () => {
   });
 });
 
-// ---- Suite 5: Playlist Add Album via Card Button ----
+// ---- Suite 5: Playlist Add Album via Card Right-Click ----
 
-describe('Playlist: Add album via card button', () => {
+describe('Playlist: Add album via card right-click', () => {
   before(async () => {
     await navigateTo('nav-albums');
   });
 
-  it('should add the album to a playlist via the card add-to-playlist button', async () => {
+  it('should add the album to a playlist via right-clicking the album card', async () => {
     const albumCard = await waitForEl('[data-testid="media-card-album-2001"]', 'album card 2001');
-    await hoverElement(albumCard);
 
-    const addBtn = await albumCard.$('[data-testid="media-card-add-to-playlist-button"]');
-    await addBtn.waitForExist({ timeout: 8000, timeoutMsg: 'Add-to-playlist button not found on album card' });
-    await addBtn.click();
+    // Right-click the card artwork to open the Add to Playlist dialog
+    await albumCard.click({ button: 'right' });
+    await browser.pause(500);
 
     // Dialog should appear
     const dialog = await waitForEl('[data-testid="add-to-playlist-dialog"]', 'add-to-playlist dialog');

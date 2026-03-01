@@ -263,7 +263,7 @@ export function AddToPlaylistDialog(props: AddToPlaylistDialogProps) {
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogContent className="max-w-md" data-testid="add-to-playlist-dialog">
+      <DialogContent className="max-w-lg" data-testid="add-to-playlist-dialog">
         <DialogHeader onClose={onClose}>
           {dialogTitle}
         </DialogHeader>
