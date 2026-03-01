@@ -7,7 +7,7 @@ import { useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
-import { ArrowLeft, Play, Clock, Disc3, Pencil } from 'lucide-react'
+import { ArrowLeft, Play, Clock, Disc3, Pencil, ListPlus } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
@@ -44,6 +44,7 @@ export function AlbumPage() {
     id: number
     title: string
   } | null>(null)
+  const [albumForPlaylist, setAlbumForPlaylist] = useState(false)
 
   // Helper to build queue from tracks
   const buildQueueFromTracks = useCallback(
@@ -255,15 +256,29 @@ export function AlbumPage() {
               {tracks.length} {t('library.tracks')} • {formatDuration(totalDuration)}
             </p>
 
-            <button
-              onClick={handlePlayAll}
-              onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
-              disabled={tracks.filter(t => t.file_path).length === 0}
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
-            >
-              <Play className="w-5 h-5" fill="currentColor" />
-              <span>{t('common.playAll')}</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handlePlayAll}
+                onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
+                disabled={tracks.filter(t => t.file_path).length === 0}
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+              >
+                <Play className="w-5 h-5" fill="currentColor" />
+                <span>{t('common.playAll')}</span>
+              </button>
+
+              {features.canCreatePlaylists && (
+                <button
+                  onClick={() => setAlbumForPlaylist(true)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  data-testid="album-page-add-to-playlist"
+                  className="flex items-center gap-2 px-4 py-3 rounded-full border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
+                  title={t('playlist.addAlbumToPlaylist', 'Add Album to Playlist')}
+                >
+                  <ListPlus className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
         </div>
@@ -331,6 +346,18 @@ export function AlbumPage() {
           mode="track"
           trackId={selectedTrackForPlaylist.id}
           trackTitle={selectedTrackForPlaylist.title}
+        />
+      )}
+
+      {/* Add Album to Playlist Dialog */}
+      {features.canCreatePlaylists && album && albumForPlaylist && (
+        <AddToPlaylistDialog
+          open={albumForPlaylist}
+          onClose={() => setAlbumForPlaylist(false)}
+          mode="entity"
+          entityType="album"
+          entityId={album.id}
+          entityName={album.title}
         />
       )}
     </div>
