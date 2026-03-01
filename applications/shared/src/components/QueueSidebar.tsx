@@ -24,6 +24,7 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
   const parentRef = useRef<HTMLDivElement>(null);
+  const isNavigatingRef = useRef(false);
 
   // Windowed queue - only display limited number of tracks
   const displayedQueue = useMemo(() => {
@@ -68,10 +69,14 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   };
 
   const handleQueueItemClick = async (index: number) => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
     try {
       await commands.skipToQueueIndex(index);
     } catch (error) {
       debug.error('[QueueSidebar] Failed to skip to queue index:', error);
+    } finally {
+      isNavigatingRef.current = false;
     }
   };
 

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog, useBackend, usePlayerCommands } from '@soul-player/shared';
+import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog, useBackend, usePlayerCommands, debug } from '@soul-player/shared';
 import { ArrowLeft, Play, Guitar, Clock } from 'lucide-react';
 
 interface Genre {
@@ -51,7 +51,7 @@ export function GenrePage() {
       setGenre(genreData);
       setTracks(tracksData);
     } catch (err) {
-      console.error('Failed to load genre:', err);
+      debug.error('Failed to load genre:', err);
       setError(err instanceof Error ? err.message : 'Failed to load genre');
     } finally {
       setLoading(false);
@@ -74,16 +74,6 @@ export function GenrePage() {
       return desktopTrack?.file_path;
     });
 
-    // Record playback context when playing from genre
-    if (genre) {
-      backend.recordContext({
-        contextType: 'genre',
-        contextId: String(genre.id),
-        contextName: genre.name,
-        contextArtworkPath: null,
-      });
-    }
-
     // Return the full queue in original order
     // The startIndex passed to playQueue() will determine which track plays first
     return validTracks.map((t) => {
@@ -93,12 +83,13 @@ export function GenrePage() {
         title: String(t.title || 'Unknown'),
         artist: desktopTrack.artist_name || 'Unknown Artist',
         album: desktopTrack.album_title || null,
+        albumId: desktopTrack.album_id || undefined,
         filePath: desktopTrack.file_path!,
         durationSeconds: desktopTrack.duration_seconds || null,
         trackNumber: desktopTrack.track_number || null,
       };
     });
-  }, [tracks, genre, backend]);
+  }, [tracks]);
 
   const handlePlayAll = async () => {
     // Deduplicate tracks (selects best quality version for each unique track)
@@ -110,6 +101,7 @@ export function GenrePage() {
       title: String(t.title || 'Unknown'),
       artist: t.artist_name || 'Unknown Artist',
       album: t.album_title || null,
+      albumId: t.album_id || undefined,
       filePath: t.file_path!,
       durationSeconds: t.duration_seconds || null,
       trackNumber: t.track_number || null,
@@ -127,7 +119,7 @@ export function GenrePage() {
       }
       await commands.playQueue(queue, 0);
     } catch (err) {
-      console.error('Failed to play all tracks:', err);
+      debug.error('Failed to play all tracks:', err);
     }
   };
 

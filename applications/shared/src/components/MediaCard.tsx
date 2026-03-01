@@ -4,7 +4,7 @@
  * Has play/pause functionality based on current playback context
  */
 
-import { memo, type ReactNode } from 'react'
+import { memo, useRef, type ReactNode } from 'react'
 import { Play, Pause, Disc3, Users, ListMusic } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -95,99 +95,107 @@ const MediaCardComponent = ({
     navigate(getRoute(type, id))
   }
 
+  const isHandlingPlayRef = useRef(false);
+
   const handlePlayPause = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-
-    // If this context is active AND there's a track loaded AND queue has items, use pause/resume logic
-    // CRITICAL: Check currentTrack to prevent resume on empty player (fixes first play ignored bug)
-    // ALSO CRITICAL: Check queue length - don't try to resume if queue is empty
-    const currentQueue = await commands.getQueue()
-
-    if (isActive && currentTrack && currentQueue.length > 0) {
-      try {
-        if (isPlaying) {
-          await commands.pausePlayback()
-        } else {
-          await commands.resumePlayback()
-        }
-      } catch (err) {
-        debug.error(`[MediaCard] Failed to pause/resume:`, err)
-      }
-      return
-    }
-
-    // Otherwise, play the entity from beginning
+    if (isHandlingPlayRef.current) return;
+    isHandlingPlayRef.current = true;
     try {
-      let tracks: Awaited<ReturnType<typeof backend.getAllTracks>> = []
+      e.stopPropagation()
 
-      switch (type) {
-        case 'album':
-          tracks = await backend.getAlbumTracks(Number(id))
-          break
-        case 'artist':
-          tracks = await backend.getArtistTracks(Number(id))
-          break
-        case 'playlist':
-          tracks = await backend.getPlaylistTracks(String(id))
-          break
-      }
+      // If this context is active AND there's a track loaded AND queue has items, use pause/resume logic
+      // CRITICAL: Check currentTrack to prevent resume on empty player (fixes first play ignored bug)
+      // ALSO CRITICAL: Check queue length - don't try to resume if queue is empty
+      const currentQueue = await commands.getQueue()
 
-      // Deduplicate tracks (selects best quality version for each unique track)
-      const tracksWithPath = tracks.filter((t) => t.file_path)
-      const deduplicatedTracks = getDeduplicatedTracks(tracksWithPath)
-
-      if (deduplicatedTracks.length === 0) {
-        debug.warn(`[MediaCard] No playable tracks found for ${type} ${id}`)
+      if (isActive && currentTrack && currentQueue.length > 0) {
+        try {
+          if (isPlaying) {
+            await commands.pausePlayback()
+          } else {
+            await commands.resumePlayback()
+          }
+        } catch (err) {
+          debug.error(`[MediaCard] Failed to pause/resume:`, err)
+        }
         return
       }
 
-      const queue = deduplicatedTracks.map((t) => ({
-        trackId: String(t.id),
-        title: t.title || 'Unknown',
-        artist: t.artist_name || 'Unknown Artist',
-        album: t.album_title || null,
-        albumId: t.album_id,
-        filePath: t.file_path!,
-        durationSeconds: t.duration_seconds || null,
-        trackNumber: t.track_number || null,
-      }))
+      // Otherwise, play the entity from beginning
+      try {
+        let tracks: Awaited<ReturnType<typeof backend.getAllTracks>> = []
 
-      // Record playback context BEFORE starting playback
-      // This ensures backend tracking is updated
-      await backend.recordContext({
-        contextType: type,
-        contextId: String(id),
-        contextName: title,
-        contextArtworkPath: coverUrl || null,
-      })
+        switch (type) {
+          case 'album':
+            tracks = await backend.getAlbumTracks(Number(id))
+            break
+          case 'artist':
+            tracks = await backend.getArtistTracks(Number(id))
+            break
+          case 'playlist':
+            tracks = await backend.getPlaylistTracks(String(id))
+            break
+        }
 
-      // Build queue context for lazy loading
-      let context: QueueContext | undefined
-      switch (type) {
-        case 'album':
-          context = {
-            type: 'Album',
-            albumId: Number(id),
-            totalCount: queue.length,
-          }
-          break
-        case 'artist':
-          context = {
-            type: 'Artist',
-            artistId: Number(id),
-            totalCount: queue.length,
-          }
-          break
-        case 'playlist':
-          // Playlists need owner_id - we don't have it here, so skip context
-          // This is fine since playlist pages use their own handlers
-          context = undefined
-          break
+        // Deduplicate tracks (selects best quality version for each unique track)
+        const tracksWithPath = tracks.filter((t) => t.file_path)
+        const deduplicatedTracks = getDeduplicatedTracks(tracksWithPath)
+
+        if (deduplicatedTracks.length === 0) {
+          debug.warn(`[MediaCard] No playable tracks found for ${type} ${id}`)
+          return
+        }
+
+        const queue = deduplicatedTracks.map((t) => ({
+          trackId: String(t.id),
+          title: t.title || 'Unknown',
+          artist: t.artist_name || 'Unknown Artist',
+          album: t.album_title || null,
+          albumId: t.album_id,
+          filePath: t.file_path!,
+          durationSeconds: t.duration_seconds || null,
+          trackNumber: t.track_number || null,
+        }))
+
+        // Record playback context BEFORE starting playback
+        // This ensures backend tracking is updated
+        await backend.recordContext({
+          contextType: type,
+          contextId: String(id),
+          contextName: title,
+          contextArtworkPath: coverUrl || null,
+        })
+
+        // Build queue context for lazy loading
+        let context: QueueContext | undefined
+        switch (type) {
+          case 'album':
+            context = {
+              type: 'Album',
+              albumId: Number(id),
+              totalCount: queue.length,
+            }
+            break
+          case 'artist':
+            context = {
+              type: 'Artist',
+              artistId: Number(id),
+              totalCount: queue.length,
+            }
+            break
+          case 'playlist':
+            // Playlists need owner_id - we don't have it here, so skip context
+            // This is fine since playlist pages use their own handlers
+            context = undefined
+            break
+        }
+
+        await commands.playQueue(queue, 0, context)
+      } catch (err) {
+        debug.error(`[MediaCard] Failed to play ${type}:`, err)
       }
-
-      await commands.playQueue(queue, 0, context)
-    } catch (err) {
-      debug.error(`[MediaCard] Failed to play ${type}:`, err)
+    } finally {
+      isHandlingPlayRef.current = false;
     }
   }
 

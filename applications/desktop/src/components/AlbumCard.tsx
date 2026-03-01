@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Play, Pause } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArtworkImage, getDeduplicatedTracks, useIsPlaying, usePlayerCommands, useBackend, usePlaybackSession, type BackendTrack } from '@soul-player/shared';
+import { ArtworkImage, debug, getDeduplicatedTracks, useIsPlaying, usePlayerCommands, useBackend, usePlaybackSession, type BackendTrack } from '@soul-player/shared';
 
 export interface Album {
   id: number;
@@ -41,7 +41,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
   }, [isPlaying, album.id, isActiveContext]);
 
   const handleClick = () => {
-    console.log('[AlbumCard] handleClick - navigating to album:', album.id);
+    debug.log('[AlbumCard] handleClick - navigating to album:', album.id);
     navigate(`/albums/${album.id}`);
   };
 
@@ -50,38 +50,39 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
 
     // If this album is currently playing, pause it
     if (isThisAlbumPlaying) {
-      console.log('[AlbumCard] handlePlayPause - pausing album:', album.id);
+      debug.log('[AlbumCard] handlePlayPause - pausing album:', album.id);
       try {
         await commands.pausePlayback();
       } catch (err) {
-        console.error('Failed to pause:', err);
+        debug.error('Failed to pause:', err);
       }
       return;
     }
 
     // Otherwise, play the album
-    console.log('[AlbumCard] handlePlayPause - playing album:', album.id);
+    debug.log('[AlbumCard] handlePlayPause - playing album:', album.id);
 
     try {
       const tracks: BackendTrack[] = await backend.getAlbumTracks(album.id);
-      console.log('[AlbumCard] Got tracks:', tracks.length);
+      debug.log('[AlbumCard] Got tracks:', tracks.length);
 
       // Deduplicate tracks (selects best quality version for each unique track)
       const deduplicatedTracks = getDeduplicatedTracks(tracks.filter((t) => t.file_path));
       if (deduplicatedTracks.length === 0) {
-        console.log('[AlbumCard] No valid tracks with file_path');
+        debug.log('[AlbumCard] No valid tracks with file_path');
         return;
       }
-      console.log('[AlbumCard] Deduplicated to', deduplicatedTracks.length, 'tracks from', tracks.length);
+      debug.log('[AlbumCard] Deduplicated to', deduplicatedTracks.length, 'tracks from', tracks.length);
 
       const queue = deduplicatedTracks.map((t) => ({
         trackId: String(t.id),
         title: t.title || 'Unknown',
         artist: t.artist_name || 'Unknown Artist',
         album: t.album_title || album.title,
+        albumId: t.album_id,
         filePath: t.file_path!,
         durationSeconds: t.duration_seconds || null,
-        trackNumber: null,
+        trackNumber: t.track_number || null,
       }));
 
       // Record playback context
@@ -94,7 +95,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
 
       await commands.playQueue(queue, 0);
     } catch (err) {
-      console.error('Failed to play album:', err);
+      debug.error('Failed to play album:', err);
     }
   };
 

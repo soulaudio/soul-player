@@ -810,6 +810,11 @@ impl PlaybackManager {
             self.history.push(pending);
         }
 
+        // Emit StateChanged(Stopped) so the UI stops the progress timer while the
+        // target track is loading — matches the same pattern used in previous().
+        self.state = PlaybackState::Stopped;
+        self.emit_state_changed(PlaybackState::Stopped);
+
         // Skip to target index - we intentionally discard the skipped tracks
         // because they were never played and shouldn't appear in history
         let _skipped_tracks = self

@@ -513,23 +513,29 @@ export function TrackList({
     setSelectedVersions((prev) => new Map(prev).set(groupKey, track));
   }, []);
 
+  const isPlayingRef = useRef(false);
+
   const handlePlay = useCallback(async (group: GroupedTrack) => {
-    const activeVersion = getActiveVersion(group);
-
-    // Build queue using all grouped tracks' active versions
-    const activeTracks = groupedTracks.map((g) => getActiveVersion(g));
-    const clickedIndex = groupedTracks.findIndex((g) => g.groupKey === group.groupKey);
-
-    const queue = buildQueue(activeTracks, activeVersion, clickedIndex);
-
-    debug.log('[TrackList] Playing queue with', queue.length, 'tracks, starting at index', clickedIndex);
-
+    if (isPlayingRef.current) return;
+    isPlayingRef.current = true;
     try {
+      const activeVersion = getActiveVersion(group);
+
+      // Build queue using all grouped tracks' active versions
+      const activeTracks = groupedTracks.map((g) => getActiveVersion(g));
+      const clickedIndex = groupedTracks.findIndex((g) => g.groupKey === group.groupKey);
+
+      const queue = buildQueue(activeTracks, activeVersion, clickedIndex);
+
+      debug.log('[TrackList] Playing queue with', queue.length, 'tracks, starting at index', clickedIndex);
+
       // CRITICAL: Pass clickedIndex as startIndex so the clicked track plays, not always the first track
       await commands.playQueue(queue, clickedIndex);
       onTrackAction?.(activeVersion);
     } catch (error) {
       debug.error('[TrackList] Failed to play track:', error);
+    } finally {
+      isPlayingRef.current = false;
     }
   }, [groupedTracks, getActiveVersion, buildQueue, commands, onTrackAction]);
 

@@ -11,6 +11,10 @@
  *    - TauriPlayerCommandsProvider.tsx  (playback commands)
  *    - TauriBackendProvider.tsx         (data / backend operations)
  *
+ * 3. Source files must use the `debug` utility from @soul-player/shared instead of
+ *    raw `console.log / console.error / console.warn`. This ensures log output
+ *    is filtered by the DEBUG flag and never leaks in production builds.
+ *
  * WHY THIS MATTERS
  * ----------------
  * When a component calls `invoke('play_queue', ...)` directly it bypasses the
@@ -22,6 +26,10 @@
  * ------------------------------
  * If a new provider legitimately needs to invoke playback commands, add its
  * path to `ALLOWED_PLAYBACK_INVOKE_FILES` below. Do NOT add pages or components.
+ *
+ * For console.log violations in existing files, add to CONSOLE_LOG_KNOWN_VIOLATIONS
+ * as a temporary allowlist entry — then clean up the file and remove it from the list.
+ * DO NOT add new files to CONSOLE_LOG_KNOWN_VIOLATIONS; fix the violation instead.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -101,6 +109,11 @@ function collectSourceFiles(dir: string): string[] {
   return result;
 }
 
+/** Return true if the file is a test or spec file (by naming convention). */
+function isTestFile(filePath: string): boolean {
+  return /\.(test|spec)\.(ts|tsx)$/.test(filePath);
+}
+
 /** Return true if the file is in the allowed list (matched by normalized suffix). */
 function isAllowedFile(filePath: string): boolean {
   const normalized = path.normalize(filePath);
@@ -139,6 +152,94 @@ function findPlaybackInvokeViolations(filePath: string): Violation[] {
           snippet: line.trim(),
         });
       }
+    }
+  }
+
+  return violations;
+}
+
+// ===== Console Logging Configuration =====
+
+/**
+ * Files permanently allowed to use console.log:
+ * - debug.ts is the implementation of the debug utility — it wraps console.log internally.
+ * - test-helpers.ts is a test-only helper file (not shipped in production).
+ */
+const CONSOLE_LOG_ALWAYS_ALLOWED = [
+  path.normalize('applications/shared/src/utils/debug.ts'),
+  path.normalize('applications/desktop/src/test-helpers.ts'),
+];
+
+/**
+ * Files with KNOWN console.log violations that have not yet been migrated to
+ * `debug.log / debug.error / debug.warn`. Each entry is a temporary TODO.
+ *
+ * ⚠ DO NOT ADD NEW FILES HERE — fix the violation instead by importing `debug`
+ *   from '@soul-player/shared' and replacing the console.* call.
+ *
+ * Remove a file from this list once it has been cleaned up.
+ */
+const CONSOLE_LOG_KNOWN_VIOLATIONS = new Set([
+  // applications/desktop
+  'applications/desktop/src/pages/OnboardingPage.tsx',
+  'applications/desktop/src/components/ImportDialog.tsx',
+  'applications/desktop/src/components/ScanProgressIndicator.tsx',
+  'applications/desktop/src/pages/SettingsPage.tsx',
+  'applications/desktop/src/contexts/SettingsContext.tsx',
+  'applications/desktop/src/components/ShortcutsSettings.tsx',
+  'applications/desktop/src/providers/TauriPlayerCommandsProvider.tsx',
+  'applications/desktop/src/App.tsx',
+  'applications/desktop/src/layouts/MainLayout.tsx',
+  'applications/desktop/src/hooks/useKeyboardShortcuts.ts',
+  'applications/desktop/src/components/FileDropHandler.tsx',
+  'applications/desktop/src/components/WindowControls.tsx',
+  'applications/desktop/src/components/UpdateDialog.tsx',
+  // applications/shared
+  'applications/shared/src/components/settings/DataManagementSettingsPage.tsx',
+  'applications/shared/src/hooks/useAudioDevice.ts',
+  'applications/shared/src/providers/MockBackendProvider.tsx',
+  'applications/shared/src/providers/WebPlaybackProvider.tsx',
+  'applications/shared/src/hooks/usePlaybackEvents.ts',
+  'applications/shared/src/hooks/queries/useArtworkMutations.ts',
+  'applications/shared/src/components/settings/audio/LatencyMonitor.tsx',
+  'applications/shared/src/components/settings/audio/VolumeLevelingSettings.tsx',
+  'applications/shared/src/stores/sync.ts',
+]);
+
+interface ConsoleViolation {
+  file: string;
+  line: number;
+  call: string;
+  snippet: string;
+}
+
+/** Scan a file for raw console.log/error/warn/info calls. */
+function findConsoleLogViolations(filePath: string): ConsoleViolation[] {
+  // Skip permanently allowed files
+  const normalized = path.normalize(filePath);
+  if (CONSOLE_LOG_ALWAYS_ALLOWED.some((a) => normalized.endsWith(a))) return [];
+
+  // Skip test / spec files
+  if (isTestFile(filePath)) return [];
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split('\n');
+  const violations: ConsoleViolation[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    // Skip commented-out lines
+    if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+
+    const match = line.match(/console\.(log|error|warn|info|debug)\s*\(/);
+    if (match) {
+      violations.push({
+        file: path.relative(REPO_ROOT, filePath).replace(/\\/g, '/'),
+        line: i + 1,
+        call: `console.${match[1]}`,
+        snippet: line.trim(),
+      });
     }
   }
 
@@ -198,5 +299,81 @@ describe('Architecture: Playback command routing', () => {
 
     // Sanity-check: it must call invoke() at least once
     expect(content).toMatch(/invoke\s*\(/);
+  });
+});
+
+describe('Architecture: Logging discipline', () => {
+  it('source files must use debug utility instead of raw console.log/error/warn', () => {
+    const allFiles = SCAN_DIRS.flatMap(collectSourceFiles);
+    const newViolations: ConsoleViolation[] = [];
+
+    for (const file of allFiles) {
+      const violations = findConsoleLogViolations(file);
+      if (violations.length === 0) continue;
+
+      const relative = path.relative(REPO_ROOT, file).replace(/\\/g, '/');
+      const isKnown = CONSOLE_LOG_KNOWN_VIOLATIONS.has(relative);
+
+      if (!isKnown) {
+        newViolations.push(...violations);
+      }
+    }
+
+    if (newViolations.length > 0) {
+      const report = newViolations
+        .map(
+          (v) =>
+            `  ${v.file}:${v.line}\n    ${v.call}() — import { debug } from '../utils/debug' and use debug.log/error/warn\n    > ${v.snippet}`
+        )
+        .join('\n\n');
+
+      throw new Error(
+        `Found ${newViolations.length} NEW console.log violation(s).\n\n` +
+          `Use debug.log / debug.error / debug.warn from @soul-player/shared instead of raw console.*.\n` +
+          `Example: import { debug } from '../utils/debug';\n\n` +
+          report
+      );
+    }
+
+    expect(newViolations).toHaveLength(0);
+  });
+
+  it('debug utility (debug.ts) exists and wraps console', () => {
+    const debugFile = path.join(
+      REPO_ROOT,
+      'applications/shared/src/utils/debug.ts'
+    );
+    expect(fs.existsSync(debugFile)).toBe(true);
+
+    const content = fs.readFileSync(debugFile, 'utf-8');
+    // Must export a `debug` object with at least a log/error method
+    expect(content).toMatch(/export\s+(const|default)\s+debug/);
+  });
+
+  it('CONSOLE_LOG_KNOWN_VIOLATIONS contains no false positives (all listed files exist and still have violations)', () => {
+    // Warn if a file was cleaned up but not removed from the list
+    const staleEntries: string[] = [];
+
+    for (const relative of CONSOLE_LOG_KNOWN_VIOLATIONS) {
+      const full = path.join(REPO_ROOT, relative.replace(/\//g, path.sep));
+      if (!fs.existsSync(full)) {
+        staleEntries.push(`  ${relative} (file not found — remove from list)`);
+        continue;
+      }
+      const violations = findConsoleLogViolations(full);
+      if (violations.length === 0) {
+        staleEntries.push(`  ${relative} (no violations remain — remove from list)`);
+      }
+    }
+
+    if (staleEntries.length > 0) {
+      throw new Error(
+        `CONSOLE_LOG_KNOWN_VIOLATIONS has ${staleEntries.length} stale entries.\n` +
+          `Remove them from the list to keep the enforcement tight:\n\n` +
+          staleEntries.join('\n')
+      );
+    }
+
+    expect(staleEntries).toHaveLength(0);
   });
 });
