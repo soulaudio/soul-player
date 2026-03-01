@@ -5,7 +5,7 @@
  */
 
 import { memo, useRef, type ReactNode } from 'react'
-import { Play, Pause, Disc3, Users, ListMusic } from 'lucide-react'
+import { Play, Pause, Disc3, Users, ListMusic, ListPlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArtworkImage } from './ArtworkImage'
@@ -40,6 +40,8 @@ export interface MediaCardProps {
   additionalInfo?: string
   /** Priority: if true, loads artwork immediately without lazy loading. Use for above-the-fold items (first ~20-30 items) */
   priority?: boolean
+  /** When provided, shows an "Add to Playlist" button on hover in the bottom-right of the artwork */
+  onAddToPlaylist?: () => void
 }
 
 /** Get fallback icon for media type */
@@ -76,6 +78,7 @@ const MediaCardComponent = ({
   className = 'w-40',
   additionalInfo,
   priority = false,
+  onAddToPlaylist,
 }: MediaCardProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -270,6 +273,18 @@ const MediaCardComponent = ({
             <Play className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" />
           )}
         </button>
+        {/* Add to Playlist button - bottom right, visible on hover */}
+        {onAddToPlaylist && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAddToPlaylist(); }}
+            onMouseDown={(e) => e.preventDefault()}
+            data-testid="media-card-add-to-playlist-button"
+            className="absolute bottom-2 right-2 w-8 h-8 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200"
+            aria-label={t('playlist.addToPlaylist')}
+          >
+            <ListPlus className="w-4 h-4 text-white" />
+          </button>
+        )}
       </div>
 
       {/* Title - always clickable */}
