@@ -13,9 +13,10 @@ interface PlaylistCardProps {
   className?: string
   /** Priority: if true, loads artwork immediately without lazy loading. Use for above-the-fold items (first ~20-30 items) */
   priority?: boolean
+  onAddToPlaylist?: () => void
 }
 
-export function PlaylistCard({ playlist, className = 'w-full', priority = false }: PlaylistCardProps) {
+export function PlaylistCard({ playlist, className = 'w-full', priority = false, onAddToPlaylist }: PlaylistCardProps) {
   const { t } = useTranslation()
 
   return (
@@ -27,6 +28,7 @@ export function PlaylistCard({ playlist, className = 'w-full', priority = false 
       coverUrl={playlist.cover_art_path ?? undefined}
       className={className}
       priority={priority}
+      onAddToPlaylist={onAddToPlaylist}
     />
   )
 }

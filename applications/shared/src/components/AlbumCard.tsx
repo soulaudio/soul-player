@@ -24,9 +24,10 @@ interface AlbumCardProps {
   showArtist?: boolean
   /** Priority: if true, loads artwork immediately without lazy loading. Use for above-the-fold items (first ~20-30 items) */
   priority?: boolean
+  onAddToPlaylist?: () => void
 }
 
-const AlbumCardComponent = ({ album, className = 'w-full', showArtist = true, priority = false }: AlbumCardProps) => {
+const AlbumCardComponent = ({ album, className = 'w-full', showArtist = true, priority = false, onAddToPlaylist }: AlbumCardProps) => {
   return (
     <MediaCard
       type="album"
@@ -38,6 +39,7 @@ const AlbumCardComponent = ({ album, className = 'w-full', showArtist = true, pr
       coverUrl={album.coverUrl || album.cover_art_path}
       className={className}
       priority={priority}
+      onAddToPlaylist={onAddToPlaylist}
     />
   )
 }
