@@ -12,6 +12,9 @@ wdio-*.log
 # Coverage
 coverage/
 
+# Playwright output
+playwright-report/
+
 # Lock files (use project root lock file)
 package-lock.json
 yarn.lock
