@@ -46,6 +46,8 @@ export function PlaybackControls({
           onClick={onShuffleToggle}
           disabled={!hasCurrentTrack}
           data-testid="shuffle-button"
+          data-state={shuffleMode}
+          aria-pressed={shuffleMode !== 'off'}
           className={cn(
             'p-1.5 transition-opacity relative',
             !hasCurrentTrack && 'opacity-50 cursor-not-allowed',
@@ -120,6 +122,8 @@ export function PlaybackControls({
           onClick={onRepeatToggle}
           disabled={!hasCurrentTrack}
           data-testid="repeat-button"
+          data-state={repeatMode}
+          aria-pressed={repeatMode !== 'off'}
           className={cn(
             'p-1.5 transition-opacity',
             !hasCurrentTrack && 'opacity-50 cursor-not-allowed',

@@ -31,7 +31,7 @@ export function QueueSection({ queue, currentTrackId, scrollRef, onTrackClick }:
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0" data-testid="queue-sidebar">
       <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0">
         {t('sidebar.queue')}
       </div>
@@ -48,6 +48,7 @@ export function QueueSection({ queue, currentTrackId, scrollRef, onTrackClick }:
               artist={track.artist}
               coverArtPath={track.coverArtPath}
               album={track.album ?? undefined}
+              data-testid="queue-item"
               onClick={() => onTrackClick(originalIndex)}
             />
           ))}

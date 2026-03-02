@@ -2,6 +2,7 @@ import { X, Download, Terminal, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { debug } from '@soul-player/shared';
 
 interface UpdateInfo {
   version: string;
@@ -43,7 +44,7 @@ export function UpdateDialog({
     if (open) {
       invoke<InstallationInfo>('get_installation_info')
         .then(setInstallationInfo)
-        .catch((err) => console.error('Failed to get installation info:', err));
+        .catch((err) => debug.error('Failed to get installation info:', err));
     }
   }, [open]);
 
@@ -77,6 +78,7 @@ export function UpdateDialog({
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
+      data-testid="update-dialog"
     >
       <div className="bg-background border rounded-lg shadow-lg max-w-md w-full mx-4">
         {/* Header */}
@@ -100,7 +102,7 @@ export function UpdateDialog({
             <p className="text-sm text-muted-foreground">
               {t('updateDialog.versionAvailable')}
             </p>
-            <p className="text-xl font-semibold text-primary">v{updateInfo.version}</p>
+            <p className="text-xl font-semibold text-primary" data-testid="update-dialog-version">v{updateInfo.version}</p>
           </div>
 
           {updateInfo.body && (
@@ -158,7 +160,7 @@ export function UpdateDialog({
                 <span className="text-muted-foreground">{t('updateDialog.downloading')}</span>
                 <span className="font-medium">{progress}%</span>
               </div>
-              <div className="w-full bg-accent rounded-full h-2">
+              <div className="w-full bg-accent rounded-full h-2" data-testid="update-progress-bar">
                 <div
                   className="bg-primary h-2 rounded-full transition-all duration-300"
                   style={{ width: `${progress}%` }}
@@ -174,6 +176,7 @@ export function UpdateDialog({
             onClick={onClose}
             className="px-4 py-2 rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
             disabled={isInstalling}
+            data-testid="update-dialog-later"
           >
             {t('updateDialog.later')}
           </button>
@@ -184,6 +187,7 @@ export function UpdateDialog({
               className={`px-4 py-2 rounded transition-opacity duration-[var(--transition-duration)] bg-primary hover:opacity-[var(--hover-button-opacity)] text-primary-foreground flex items-center gap-2 ${
                 isInstalling ? 'opacity-50 cursor-not-allowed' : ''
               }`}
+              data-testid="update-dialog-install"
             >
               <Download className="w-4 h-4" />
               {isInstalling ? t('updateDialog.installing') : t('updateDialog.installNow')}

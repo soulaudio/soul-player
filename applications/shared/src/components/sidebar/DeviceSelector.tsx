@@ -117,7 +117,7 @@ export function DeviceSelector({
     }
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-3" data-testid="audio-device-section">
         {showLabel && <label className="text-sm font-medium">{t('audio.outputDevice', 'Output Device')}</label>}
 
         {displayDevices.length === 0 ? (
@@ -125,7 +125,7 @@ export function DeviceSelector({
             {t('audio.noDevicesFound', 'No audio devices found')}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2" data-testid="audio-device-list">
             {displayDevices.map((device) => {
               const isSelected = device.name === activeDevice && device.backend === currentDevice?.backend;
 
@@ -133,6 +133,7 @@ export function DeviceSelector({
                 <button
                   key={`${device.backend}-${device.name}`}
                   onClick={() => onSwitchDevice(device.backend, device.name)}
+                  data-testid={`audio-device-${device.name.replace(/\s+/g, '-').toLowerCase()}`}
                   className={cn(
                     'w-full text-left p-3 rounded-lg border transition-all',
                     isSelected

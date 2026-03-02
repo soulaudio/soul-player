@@ -58,28 +58,28 @@ export function LatencyMonitor({
 
   // Initial fetch and periodic refresh
   useEffect(() => {
-    console.log('[LatencyMonitor] Setting up latency monitoring');
+    debug.log('[LatencyMonitor] Setting up latency monitoring');
 
     const init = async () => {
-      console.log('[LatencyMonitor] Initial fetch starting');
+      debug.log('[LatencyMonitor] Initial fetch starting');
       setIsLoading(true);
       await fetchLatencyInfo();
       await fetchExclusiveStatus();
       setIsLoading(false);
-      console.log('[LatencyMonitor] Initial fetch complete');
+      debug.log('[LatencyMonitor] Initial fetch complete');
     };
 
     void init();
 
     // Refresh every 5 seconds
-    console.log('[LatencyMonitor] Starting 5-second refresh interval');
+    debug.log('[LatencyMonitor] Starting 5-second refresh interval');
     const interval = setInterval(() => {
-      console.log('[LatencyMonitor] Periodic refresh triggered');
+      debug.log('[LatencyMonitor] Periodic refresh triggered');
       void fetchLatencyInfo();
     }, 5000);
 
     return () => {
-      console.log('[LatencyMonitor] Cleaning up interval');
+      debug.log('[LatencyMonitor] Cleaning up interval');
       clearInterval(interval);
     };
   }, []); // Empty dependency array to prevent interval leak - callbacks are stable

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import type { Track } from '../types';
 
 interface PlayerState {
@@ -89,21 +90,29 @@ export const useRepeatMode = () => usePlayerStore(state => state.repeatMode);
 export const useQueue = () => usePlayerStore(state => state.queue);
 export const useQueueIndex = () => usePlayerStore(state => state.queueIndex);
 
-// Composite selectors for components that need multiple values
-// Still better than full store subscription
-export const usePlayerPlayback = () => usePlayerStore(state => ({
-  currentTrack: state.currentTrack,
-  isPlaying: state.isPlaying,
-}));
+// Composite selectors for components that need multiple values.
+// useShallow performs a one-level shallow equality check on the returned
+// object so that components only re-render when one of the selected fields
+// actually changes — not on every unrelated store update.
+export const usePlayerPlayback = () => usePlayerStore(
+  useShallow((state) => ({
+    currentTrack: state.currentTrack,
+    isPlaying: state.isPlaying,
+  }))
+);
 
-export const usePlayerProgress = () => usePlayerStore(state => ({
-  progress: state.progress,
-  duration: state.duration,
-}));
+export const usePlayerProgress = () => usePlayerStore(
+  useShallow((state) => ({
+    progress: state.progress,
+    duration: state.duration,
+  }))
+);
 
-export const usePlayerModes = () => usePlayerStore(state => ({
-  shuffleMode: state.shuffleMode,
-  repeatMode: state.repeatMode,
-  setShuffleMode: state.setShuffleMode,
-  setRepeatMode: state.setRepeatMode,
-}));
+export const usePlayerModes = () => usePlayerStore(
+  useShallow((state) => ({
+    shuffleMode: state.shuffleMode,
+    repeatMode: state.repeatMode,
+    setShuffleMode: state.setShuffleMode,
+    setRepeatMode: state.setRepeatMode,
+  }))
+);

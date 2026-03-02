@@ -23,7 +23,7 @@
  */
 import { ReactNode, useState, useCallback, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { MainLayout as SharedMainLayout, useCurrentTrack, AddToPlaylistDialog, ScrollVisibilityProvider, useScrollVisibility } from '@soul-player/shared';
+import { MainLayout as SharedMainLayout, useCurrentTrack, AddToPlaylistDialog, ScrollVisibilityProvider, useScrollVisibility, debug } from '@soul-player/shared';
 import { ScanProgressIndicator } from '../components/ScanProgressIndicator';
 import { WindowControls } from '../components/WindowControls';
 import { useSettings } from '../contexts/SettingsContext';
@@ -58,7 +58,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
     try {
       await appWindow.toggleMaximize();
     } catch (err) {
-      console.error('Failed to toggle maximize:', err);
+      debug.error('Failed to toggle maximize:', err);
     }
   }, [appWindow, isMacOS]);
 

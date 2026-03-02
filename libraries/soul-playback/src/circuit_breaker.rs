@@ -170,6 +170,21 @@ impl CircuitBreaker {
     /// Returns true if we should skip to the next track.
     /// Returns false if we should retry the current track.
     pub fn record_failure(&mut self, track_id: Arc<str>) -> CircuitBreakerAction {
+        // HalfOpen means we sent one probe track. If that probe fails, we must
+        // return the circuit to Open for another full cooldown period.
+        // Without this check, failures in HalfOpen fall through to the
+        // window/consecutive logic and leave the circuit stuck in HalfOpen,
+        // which incorrectly continues allowing load attempts.
+        if self.state == CircuitState::HalfOpen {
+            tracing::warn!(
+                track_id = %track_id,
+                "[CircuitBreaker] HalfOpen probe failed — returning to Open state"
+            );
+            self.state = CircuitState::Open;
+            self.opened_at = Some(Instant::now());
+            return CircuitBreakerAction::OpenCircuit;
+        }
+
         // If track changed, reset consecutive failure counter
         if self.current_track_id.as_deref() != Some(&track_id) {
             self.consecutive_failures = 0;
@@ -473,5 +488,89 @@ mod tests {
         cb.try_halfopen();
         assert_eq!(cb.state(), CircuitState::HalfOpen);
         assert!(cb.is_loading_allowed());
+    }
+
+    // ===== TDD TESTS: Bug 1 — HalfOpen failure must re-open circuit =====
+    //
+    // Design intent (CIRCUIT_BREAKER.md): "If failed [in HalfOpen] → return to Open"
+    // Bug: record_failure() has no HalfOpen branch; failure falls through to
+    // window/consecutive logic and returns RetryWithDelay or SkipTrack, leaving
+    // the circuit stuck in HalfOpen.
+
+    /// FAILING TEST (before fix): A single failure in HalfOpen must return OpenCircuit
+    /// and transition state back to Open.
+    #[test]
+    fn test_halfopen_failure_returns_open_circuit() {
+        let mut cb = CircuitBreaker::new();
+        cb.state = CircuitState::HalfOpen;
+
+        let action = cb.record_failure("probe_track".into());
+
+        assert_eq!(
+            action,
+            CircuitBreakerAction::OpenCircuit,
+            "HalfOpen failure must return OpenCircuit (design: 'failure in HalfOpen → return to Open')"
+        );
+        assert_eq!(
+            cb.state(),
+            CircuitState::Open,
+            "state must be Open after HalfOpen failure"
+        );
+        assert!(
+            !cb.is_loading_allowed(),
+            "loading must be blocked after HalfOpen failure re-opens circuit"
+        );
+    }
+
+    /// FAILING TEST (before fix): After HalfOpen failure re-opens, opened_at must
+    /// be set to Some(now) so the 30-second cooldown restarts correctly.
+    #[test]
+    fn test_halfopen_failure_sets_opened_at_for_fresh_cooldown() {
+        let mut cb = CircuitBreaker::new();
+        cb.state = CircuitState::HalfOpen;
+        cb.opened_at = None; // try_halfopen() clears opened_at
+
+        cb.record_failure("probe_track".into());
+
+        assert!(
+            cb.opened_at.is_some(),
+            "opened_at must be set when HalfOpen failure re-opens the circuit"
+        );
+        assert!(
+            !cb.should_try_halfopen(),
+            "should_try_halfopen must be false immediately after re-opening from HalfOpen"
+        );
+    }
+
+    /// FAILING TEST (before fix): After HalfOpen failure, a success on the same
+    /// track must be able to close the circuit (i.e., cycling through Open → HalfOpen
+    /// → success → Closed should work after the fix).
+    #[test]
+    fn test_halfopen_fail_then_succeed_closes_circuit() {
+        let mut cb = CircuitBreaker::new();
+
+        // Open → HalfOpen via simulated timeout
+        cb.state = CircuitState::Open;
+        cb.opened_at = Some(Instant::now() - OPEN_TO_HALFOPEN_TIMEOUT - Duration::from_secs(1));
+        cb.try_halfopen();
+        assert_eq!(cb.state(), CircuitState::HalfOpen);
+
+        // First probe fails → should re-open
+        let action = cb.record_failure("probe".into());
+        assert_eq!(action, CircuitBreakerAction::OpenCircuit);
+        assert_eq!(cb.state(), CircuitState::Open);
+
+        // Simulate another cooldown expiry
+        cb.opened_at = Some(Instant::now() - OPEN_TO_HALFOPEN_TIMEOUT - Duration::from_secs(1));
+        cb.try_halfopen();
+        assert_eq!(cb.state(), CircuitState::HalfOpen);
+
+        // Second probe succeeds → should close
+        cb.record_success("probe".into());
+        assert_eq!(
+            cb.state(),
+            CircuitState::Closed,
+            "success in second HalfOpen probe must close the circuit"
+        );
     }
 }

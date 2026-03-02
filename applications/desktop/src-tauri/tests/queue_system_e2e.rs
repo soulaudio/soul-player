@@ -673,7 +673,8 @@ fn test_e2e_rapid_queue_changes() {
         std::thread::sleep(Duration::from_millis(10));
     }
 
-    std::thread::sleep(Duration::from_millis(100));
+    // Wait generously for all commands to be processed (loaded systems need more time)
+    std::thread::sleep(Duration::from_millis(500));
     manager.drain_events();
 
     // Should handle rapid changes

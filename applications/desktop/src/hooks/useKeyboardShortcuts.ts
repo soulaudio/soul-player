@@ -11,7 +11,7 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { usePlayerStore, usePlayerCommands } from '@soul-player/shared';
+import { usePlayerStore, usePlayerCommands, debug } from '@soul-player/shared';
 
 interface GlobalShortcut {
   action: string;
@@ -119,7 +119,7 @@ export function useKeyboardShortcuts() {
         const result = await invoke<GlobalShortcut[]>('get_global_shortcuts');
         setShortcuts(result);
       } catch (error) {
-        console.error('[useKeyboardShortcuts] Failed to load shortcuts:', error);
+        debug.error('[useKeyboardShortcuts] Failed to load shortcuts:', error);
       }
     };
 
@@ -200,7 +200,7 @@ export function useKeyboardShortcuts() {
         }
       }
     } catch (error) {
-      console.error('[useKeyboardShortcuts] Failed to execute action:', action, error);
+      debug.error('[useKeyboardShortcuts] Failed to execute action:', action, error);
     }
   }, [commands]);
 
@@ -211,6 +211,13 @@ export function useKeyboardShortcuts() {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Don't trigger shortcuts when typing in input fields
       if (isEditableElement(document.activeElement)) {
+        return;
+      }
+
+      // Ignore key-repeat events fired while a key is held down.
+      // Without this guard, volume_up/volume_down spike/drop rapidly and
+      // next/previous skip multiple tracks on a single held keypress.
+      if (event.repeat) {
         return;
       }
 
@@ -238,7 +245,7 @@ export function useKeyboardShortcuts() {
         const result = await invoke<GlobalShortcut[]>('get_global_shortcuts');
         setShortcuts(result);
       } catch (error) {
-        console.error('[useKeyboardShortcuts] Failed to reload shortcuts:', error);
+        debug.error('[useKeyboardShortcuts] Failed to reload shortcuts:', error);
       }
     };
 
@@ -252,7 +259,7 @@ export function useKeyboardShortcuts() {
       const result = await invoke<GlobalShortcut[]>('get_global_shortcuts');
       setShortcuts(result);
     } catch (error) {
-      console.error('[useKeyboardShortcuts] Failed to reload shortcuts:', error);
+      debug.error('[useKeyboardShortcuts] Failed to reload shortcuts:', error);
     }
   }, []);
 

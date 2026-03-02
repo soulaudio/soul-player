@@ -45,6 +45,7 @@ function ArtistAlbumCard({
     <div
       className="group cursor-pointer border rounded-lg p-4 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
       onClick={onClick}
+      data-testid={`artist-album-card-${album.id}`}
     >
       <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden">
         {hasDesktopArtwork ? (
@@ -234,7 +235,7 @@ export function ArtistPage() {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden" data-testid="artist-detail-page">
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto pr-6">
         {/* Header */}
@@ -276,8 +277,8 @@ export function ArtistPage() {
               <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
                 {t('library.artist')}
               </p>
-              <h1 className="text-4xl font-bold mb-2">{artist.name}</h1>
-              <p className="text-muted-foreground mb-4">
+              <h1 className="text-4xl font-bold mb-2" data-testid="artist-name">{artist.name}</h1>
+              <p className="text-muted-foreground mb-4" data-testid="artist-stats">
                 {artist.album_count} {t('library.albums')} • {artist.track_count} {t('library.tracks')}
               </p>
 
@@ -285,6 +286,7 @@ export function ArtistPage() {
                 onClick={handlePlayAll}
                 onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
                 disabled={tracks.filter(t => t.file_path).length === 0}
+                data-testid="artist-play-all-button"
                 className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
               >
                 <Play className="w-5 h-5" fill="currentColor" />

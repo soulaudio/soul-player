@@ -13,6 +13,7 @@ export interface TrackItemProps {
   isPlaying?: boolean;
   showEqualizer?: boolean;
   onClick?: () => void;
+  'data-testid'?: string;
 }
 
 export function TrackItem({
@@ -25,6 +26,7 @@ export function TrackItem({
   isPlaying,
   showEqualizer,
   onClick,
+  'data-testid': dataTestId,
 }: TrackItemProps) {
   return (
     <div
@@ -34,6 +36,7 @@ export function TrackItem({
         onClick && 'cursor-pointer'
       )}
       onClick={onClick}
+      data-testid={dataTestId}
     >
       <div
         className={cn(

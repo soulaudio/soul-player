@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBackend } from '../contexts/BackendContext'
 import type { AudioBackend, AudioDevice } from '../contexts/BackendContext'
+import { debug } from '../utils/debug'
 
 export interface UseAudioDeviceResult {
   backends: AudioBackend[]
@@ -100,7 +101,7 @@ export function useAudioDevice(hasRealDevices = true): UseAudioDeviceResult {
             // Backend enumeration failed — skip this backend but continue loading others.
             // This prevents a single problematic backend (e.g. ASIO driver crash) from
             // blocking all other backends from appearing in the dropdown.
-            console.warn(`[useAudioDevice] Failed to enumerate ${b.backend} devices:`, err)
+            debug.warn(`[useAudioDevice] Failed to enumerate ${b.backend} devices:`, err)
           }
         }
       }

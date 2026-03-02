@@ -177,12 +177,17 @@ fn test_stop_during_transitioning_state_emits_state_changed_stopped() {
 /// stop() from every state (Stopped, Playing, Paused) must:
 /// - Leave sources = Empty
 /// - Leave state = Stopped
-/// - Emit StateChanged(Stopped) exactly once (no duplicate when already Stopped)
+/// - Emit StateChanged(Stopped) exactly once when there was something to stop
+/// - NOT emit StateChanged(Stopped) when already fully idle (already Stopped,
+///   no loading, no active source) — idempotent no-op
 #[test]
 fn test_stop_clears_sources_in_all_states() {
-    // --- From Stopped (never played) ---
+    // --- From Stopped with no active source (fresh manager) ---
+    // Calling stop() when already idle is a semantic no-op: no state transition
+    // occurs, so no event should be emitted.
     {
         let mut manager = PlaybackManager::default();
+        // Fresh manager is: state=Stopped, loading=false, sources=Empty — fully idle.
         let _ = manager.drain_events();
 
         manager.stop();
@@ -190,10 +195,6 @@ fn test_stop_clears_sources_in_all_states() {
         let events = manager.drain_events();
         let state_events = state_changed_events(&events);
 
-        // stop() when already Stopped should NOT emit a duplicate StateChanged(Stopped)
-        // because emit_state_changed() deduplicates consecutive identical events.
-        // The pending_events queue is empty before the call, so it will emit.
-        // But on the SECOND call to stop() in a row, it should be suppressed.
         assert_eq!(
             manager.get_state(),
             PlaybackState::Stopped,
@@ -201,29 +202,29 @@ fn test_stop_clears_sources_in_all_states() {
         );
         assert!(
             manager.get_current_track().is_none(),
-            "no current track after stop from Stopped"
+            "no current track after stop from idle Stopped"
         );
         assert_eq!(
             state_events.len(),
-            1,
-            "first stop() from fresh Stopped must emit exactly one StateChanged(Stopped)"
+            0,
+            "stop() on idle (already Stopped+empty) must emit NO events (idempotent), got {:?}",
+            state_events
         );
 
-        // Call stop() again — this should be SUPPRESSED by deduplication
-        // because the last event was already StateChanged(Stopped)
-        let _ = manager.drain_events(); // flush the first event
-        manager.stop(); // second stop — should be deduplicated IF last event was Stopped
+        // A second stop() in a row must also be a no-op
+        manager.stop();
         let events2 = manager.drain_events();
         let state_events2 = state_changed_events(&events2);
         assert_eq!(
             state_events2.len(),
             0,
-            "second consecutive stop() must NOT emit duplicate StateChanged(Stopped), got {:?}",
+            "second consecutive stop() on idle must NOT emit events, got {:?}",
             state_events2
         );
     }
 
     // --- From Playing ---
+    // stop() from Playing IS a real transition: must emit StateChanged(Stopped).
     {
         let mut manager = PlaybackManager::default();
         let t1 = make_track("t1", 30);
@@ -246,6 +247,17 @@ fn test_stop_clears_sources_in_all_states() {
             "stop() from Playing must emit exactly one StateChanged(Stopped)"
         );
         assert_eq!(state_events[0], PlaybackStateEvent::Stopped);
+
+        // Calling stop() AGAIN after successfully stopping must be idempotent
+        manager.stop();
+        let events3 = manager.drain_events();
+        let state_events3 = state_changed_events(&events3);
+        assert_eq!(
+            state_events3.len(),
+            0,
+            "stop() called again after successful stop must be a no-op, got {:?}",
+            state_events3
+        );
     }
 }
 

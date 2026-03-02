@@ -36,6 +36,11 @@ export function usePlaybackEvents() {
           // Note: Ignore window for seek race condition is handled in TauriPlayerCommandsProvider
 
           const positionInSeconds = event.payload;
+
+          // Guard: IPC can deliver undefined if the backend serialises an absent field.
+          // NaN would propagate through the percentage formula and corrupt the store.
+          if (typeof positionInSeconds !== 'number' || !isFinite(positionInSeconds)) return;
+
           const { duration } = usePlayerStore.getState();
 
           // Convert position to percentage (0-100)
@@ -63,6 +68,12 @@ export function usePlaybackEvents() {
 
           // Reset progress when track changes
           usePlayerStore.getState().setProgress(0);
+
+          // When the track becomes null the queue has ended — ensure isPlaying is cleared
+          // so the play/pause button reflects the stopped state.
+          if (track === null) {
+            usePlayerStore.getState().setIsPlaying(false);
+          }
         });
         unlistenFunctions.push(unlistenTrackChanged);
 
@@ -94,17 +105,27 @@ export function usePlaybackEvents() {
         });
         unlistenFunctions.push(unlistenError);
       } catch (error) {
-        console.error('[usePlaybackEvents] Failed to set up listeners:', error);
+        debug.error('[usePlaybackEvents] Failed to set up listeners:', error);
       }
     };
 
-    // Setup listeners asynchronously
-    void setupListeners();
+    // Setup listeners asynchronously.
+    // We keep a reference to the promise so that the cleanup function can await it
+    // before invoking the unlisten callbacks — otherwise listeners registered after
+    // the synchronous cleanup call would leak.
+    const setupPromise = setupListeners();
 
     // Cleanup: Unsubscribe from all events on unmount
     return () => {
       isMounted = false;
-      unlistenFunctions.forEach(fn => fn());
+      // Wait for setup to finish before calling unlisten, so all registered listeners
+      // are properly removed even if unmount races with the async registration.
+      setupPromise.then(() => {
+        unlistenFunctions.forEach(fn => fn());
+      }).catch(() => {
+        // setup already logged any error; still clean up whatever was registered
+        unlistenFunctions.forEach(fn => fn());
+      });
     };
   }, []); // Empty dependency array - setup once on mount
 }

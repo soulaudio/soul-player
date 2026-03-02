@@ -5,6 +5,7 @@ import { useBackend, SITE_URL, COMPANY_URL, GITHUB_URL } from '@soul-player/shar
 import { invoke } from '@tauri-apps/api/core';
 import { debug } from '@soul-player/shared';
 import { getPlatform } from '../../utils/platform';
+import { useUpdateSettings } from '../../contexts/UpdateSettingsContext';
 
 const LOG_PATHS: Record<string, string> = {
   windows: '%APPDATA%\\Soul Player\\logs\\soul-player.log.YYYY-MM-DD',
@@ -18,6 +19,7 @@ export function AboutSettingsPage() {
   const [version, setVersion] = useState<string>('...');
   const [loggingEnabled, setLoggingEnabled] = useState(false);
   const [showRestartMessage, setShowRestartMessage] = useState(false);
+  const { autoUpdate, silentUpdate, checking, onAutoUpdateChange, onSilentUpdateChange, checkForUpdates } = useUpdateSettings();
 
   const platform = getPlatform();
   const logPath = LOG_PATHS[platform];
@@ -67,7 +69,40 @@ export function AboutSettingsPage() {
           </a>
         </div>
 
-
+        {/* Updates */}
+        <section className="mt-6 pt-6 border-t border-border">
+          <h3 className="text-base font-semibold mb-3">{t('settings.updates')}</h3>
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
+              <input
+                type="checkbox"
+                checked={autoUpdate}
+                onChange={(e) => onAutoUpdateChange(e.target.checked)}
+                data-testid="auto-update-toggle"
+                className="w-4 h-4"
+              />
+              <span className="text-sm">{t('settings.autoUpdate')}</span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
+              <input
+                type="checkbox"
+                checked={silentUpdate}
+                onChange={(e) => onSilentUpdateChange(e.target.checked)}
+                data-testid="silent-update-toggle"
+                className="w-4 h-4"
+              />
+              <span className="text-sm">{t('settings.silentUpdate')}</span>
+            </label>
+            <button
+              onClick={checkForUpdates}
+              disabled={checking}
+              data-testid="check-for-updates-button"
+              className="px-4 py-2 rounded bg-primary text-primary-foreground hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] disabled:opacity-50"
+            >
+              {checking ? t('settings.checking') : t('settings.checkNow')}
+            </button>
+          </div>
+        </section>
       </div>
 
       {/* Report a Bug */}

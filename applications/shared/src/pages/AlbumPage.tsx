@@ -191,7 +191,7 @@ export function AlbumPage() {
   const hasDesktopArtwork = isDesktop && typeof album.id === 'number'
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden" data-testid="album-detail-page">
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto pr-6">
         {/* Header */}
@@ -240,8 +240,8 @@ export function AlbumPage() {
             <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
               {t('library.album')}
             </p>
-            <h1 className="text-4xl font-bold mb-2">{album.title}</h1>
-            <p className="text-lg mb-2">
+            <h1 className="text-4xl font-bold mb-2" data-testid="album-title">{album.title}</h1>
+            <p className="text-lg mb-2" data-testid="album-artist">
               <ArtistLink
                 artistId={album.artist_id}
                 artistName={album.artist_name}
@@ -251,7 +251,7 @@ export function AlbumPage() {
                 <span className="text-muted-foreground"> • {album.year}</span>
               )}
             </p>
-            <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
+            <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4" data-testid="album-track-count">
               <Clock className="w-4 h-4" />
               {tracks.length} {t('library.tracks')} • {formatDuration(totalDuration)}
             </p>
@@ -261,6 +261,7 @@ export function AlbumPage() {
                 onClick={handlePlayAll}
                 onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
                 disabled={tracks.filter(t => t.file_path).length === 0}
+                data-testid="album-play-all-button"
                 className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
               >
                 <Play className="w-5 h-5" fill="currentColor" />

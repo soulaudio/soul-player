@@ -108,7 +108,7 @@ export function PlaylistsPage() {
   ) : null
 
   return (
-    <>
+    <div data-testid="playlists-page">
     <LibraryPageLayout
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
@@ -194,6 +194,6 @@ export function PlaylistsPage() {
         entityName={entityForPlaylist.name}
       />
     )}
-    </>
+    </div>
   )
 }

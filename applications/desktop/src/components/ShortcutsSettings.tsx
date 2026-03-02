@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { Kbd } from '@soul-player/shared';
+import { Kbd, debug } from '@soul-player/shared';
 import { notifyShortcutsChanged } from '../hooks/useKeyboardShortcuts';
 
 interface GlobalShortcut {
@@ -196,7 +196,7 @@ export function ShortcutsSettings() {
       const result = await invoke<GlobalShortcut[]>('get_global_shortcuts');
       setShortcuts(result);
     } catch (err) {
-      console.error('Failed to load shortcuts:', err);
+      debug.error('Failed to load shortcuts:', err);
       setError(String(err));
     } finally {
       setLoading(false);
@@ -215,7 +215,7 @@ export function ShortcutsSettings() {
       await loadShortcuts();
       notifyShortcutsChanged(); // Notify the keyboard handler to reload
     } catch (err) {
-      console.error('Failed to save shortcut:', err);
+      debug.error('Failed to save shortcut:', err);
       setError(String(err));
     }
   };
@@ -227,7 +227,7 @@ export function ShortcutsSettings() {
       await loadShortcuts();
       notifyShortcutsChanged(); // Notify the keyboard handler to reload
     } catch (err) {
-      console.error('Failed to reset shortcuts:', err);
+      debug.error('Failed to reset shortcuts:', err);
       setError(String(err));
     }
   };

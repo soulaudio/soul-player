@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, TauriEvent } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
-import { usePlayerCommands } from '@soul-player/shared';
+import { usePlayerCommands, debug } from '@soul-player/shared';
 import { Music, FolderPlus, Play, X, Loader2, Check } from 'lucide-react';
 
 interface DroppedFile {
@@ -39,7 +39,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
         settingsRef.current = settings;
       })
       .catch((err) => {
-        console.error('Failed to load external file settings:', err);
+        debug.error('Failed to load external file settings:', err);
       });
   }, []);
 
@@ -83,27 +83,27 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
         }
       }
     } catch (err) {
-      console.error('File processing error:', err);
+      debug.error('File processing error:', err);
     }
   }, [playQueue]);
 
   // Tauri file drop events (dragDropEnabled: true)
   useEffect(() => {
-    console.log('[FileDropHandler] Setting up file drop listeners');
+    debug.log('[FileDropHandler] Setting up file drop listeners');
     const unlistenFunctions: (() => void)[] = [];
     let isMounted = true;
 
     const setupListeners = async () => {
       try {
         if (!isMounted) {
-          console.log('[FileDropHandler] Component unmounted before setup, aborting');
+          debug.log('[FileDropHandler] Component unmounted before setup, aborting');
           return;
         }
 
         // Listen for file drop
         const unlistenDrop = await listen(TauriEvent.DRAG_DROP, async (event) => {
           if (!isMounted) return;
-          console.log('[FileDropHandler] File drop event received');
+          debug.log('[FileDropHandler] File drop event received');
           setIsDragging(false);
 
           // Normalize payload to always be an array of strings
@@ -119,44 +119,44 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
               ? (payload as { paths: string[] }).paths
               : [(payload as { paths: string }).paths];
           } else {
-            console.error('[FileDropHandler] Unexpected payload format:', payload);
+            debug.error('[FileDropHandler] Unexpected payload format:', payload);
             return;
           }
 
-          console.log('[FileDropHandler] Processing', paths.length, 'file(s)');
+          debug.log('[FileDropHandler] Processing', paths.length, 'file(s)');
           await processFilePaths(paths);
         });
         unlistenFunctions.push(unlistenDrop);
-        console.log('[FileDropHandler] DRAG_DROP listener registered');
+        debug.log('[FileDropHandler] DRAG_DROP listener registered');
 
         // Listen for drag hover
         const unlistenHover = await listen(TauriEvent.DRAG_ENTER, () => {
           if (!isMounted) return;
-          console.log('[FileDropHandler] Drag enter detected');
+          debug.log('[FileDropHandler] Drag enter detected');
           setIsDragging(true);
         });
         unlistenFunctions.push(unlistenHover);
-        console.log('[FileDropHandler] DRAG_ENTER listener registered');
+        debug.log('[FileDropHandler] DRAG_ENTER listener registered');
 
         // Listen for drag leave
         const unlistenCancel = await listen(TauriEvent.DRAG_LEAVE, () => {
           if (!isMounted) return;
-          console.log('[FileDropHandler] Drag leave detected');
+          debug.log('[FileDropHandler] Drag leave detected');
           setIsDragging(false);
         });
         unlistenFunctions.push(unlistenCancel);
-        console.log('[FileDropHandler] DRAG_LEAVE listener registered');
+        debug.log('[FileDropHandler] DRAG_LEAVE listener registered');
 
-        console.log('[FileDropHandler] All file drop listeners registered successfully');
+        debug.log('[FileDropHandler] All file drop listeners registered successfully');
       } catch (error) {
-        console.error('[FileDropHandler] Failed to set up listeners:', error);
+        debug.error('[FileDropHandler] Failed to set up listeners:', error);
       }
     };
 
     void setupListeners();
 
     return () => {
-      console.log('[FileDropHandler] Cleaning up file drop listeners, count:', unlistenFunctions.length);
+      debug.log('[FileDropHandler] Cleaning up file drop listeners, count:', unlistenFunctions.length);
       isMounted = false;
       unlistenFunctions.forEach(fn => fn());
     };
@@ -164,36 +164,36 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
 
   // Listen for files opened via file association (double-click on audio files)
   useEffect(() => {
-    console.log('[FileDropHandler] Setting up files-opened listener');
+    debug.log('[FileDropHandler] Setting up files-opened listener');
     const unlistenFunctions: (() => void)[] = [];
     let isMounted = true;
 
     const setupListener = async () => {
       try {
         if (!isMounted) {
-          console.log('[FileDropHandler] Component unmounted before files-opened setup, aborting');
+          debug.log('[FileDropHandler] Component unmounted before files-opened setup, aborting');
           return;
         }
 
         const unlistenFilesOpened = await listen<string[]>('files-opened', async (event) => {
           if (!isMounted) return;
           const paths = event.payload;
-          console.log('[FileDropHandler] files-opened event received, count:', paths?.length || 0);
+          debug.log('[FileDropHandler] files-opened event received, count:', paths?.length || 0);
           if (paths && paths.length > 0) {
             await processFilePaths(paths);
           }
         });
         unlistenFunctions.push(unlistenFilesOpened);
-        console.log('[FileDropHandler] files-opened listener registered');
+        debug.log('[FileDropHandler] files-opened listener registered');
       } catch (error) {
-        console.error('[FileDropHandler] Failed to set up files-opened listener:', error);
+        debug.error('[FileDropHandler] Failed to set up files-opened listener:', error);
       }
     };
 
     void setupListener();
 
     return () => {
-      console.log('[FileDropHandler] Cleaning up files-opened listener');
+      debug.log('[FileDropHandler] Cleaning up files-opened listener');
       isMounted = false;
       unlistenFunctions.forEach(fn => fn());
     };
@@ -233,7 +233,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
         await playQueue(tracks, 0);
       }
     } catch (err) {
-      console.error('Failed to play files:', err);
+      debug.error('Failed to play files:', err);
     }
   };
 
@@ -253,7 +253,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
         await invoke('import_files', { files: filePaths });
       }
     } catch (err) {
-      console.error('Failed to import files:', err);
+      debug.error('Failed to import files:', err);
     }
   };
 
@@ -275,7 +275,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
         settingsRef.current.defaultAction = action;
       }
     } catch (err) {
-      console.error('Failed to save preference:', err);
+      debug.error('Failed to save preference:', err);
     }
   };
 

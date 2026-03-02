@@ -13,6 +13,7 @@ import {
   usePlayerStore,
   usePlaybackSession,
   useBackend,
+  debug,
   type PlayerContextValue,
   type PlayerCommandsInterface,
   type PlaybackEventsInterface,
@@ -48,11 +49,11 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       const state = usePlayerStore.getState();
 
       if (!state.currentTrack) {
-        console.log('[PERSISTENCE] Skipping save - no current track');
+        debug.log('[PERSISTENCE] Skipping save - no current track');
         return;
       }
 
-      console.log('[PERSISTENCE] Saving session with track:', state.currentTrack.title);
+      debug.log('[PERSISTENCE] Saving session with track:', state.currentTrack.title);
 
       const sessionData = {
         currentTrackId: state.currentTrack.id,
@@ -69,18 +70,18 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
       await invoke('save_playback_session', { session: sessionData });
 
-      console.log('[PERSISTENCE] Session saved:', {
+      debug.log('[PERSISTENCE] Session saved:', {
         currentTrackId: sessionData.currentTrackId,
         currentTrackTitle: state.currentTrack.title,
         queueLength: sessionData.queueTrackIds.length,
         position: sessionData.positionSeconds.toFixed(1) + 's',
       });
     } catch (error) {
-      console.error('[PERSISTENCE] Failed to save session:', error);
+      debug.error('[PERSISTENCE] Failed to save session:', error);
 
       // Retry once after 1 second
       if (retryCount === 0) {
-        console.log('[PERSISTENCE] Retrying save in 1 second...');
+        debug.log('[PERSISTENCE] Retrying save in 1 second...');
         setTimeout(() => savePlaybackSession(1), 1000);
       }
     }
@@ -107,7 +108,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
     // Restore state from database (cold start scenario - no backend state)
     const restoreFromDatabase = async () => {
-      console.log('[PERSISTENCE] Cold start detected - restoring from database');
+      debug.log('[PERSISTENCE] Cold start detected - restoring from database');
 
       try {
         // Load persisted session (with runtime validation)
@@ -116,27 +117,27 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           PlaybackSessionSchema.nullable()
         );
 
-        console.log('[PERSISTENCE] Session data from database:', session);
+        debug.log('[PERSISTENCE] Session data from database:', session);
 
         if (!session || !session.currentTrackId) {
-          console.log('[PERSISTENCE] No saved session found or no current track ID');
+          debug.log('[PERSISTENCE] No saved session found or no current track ID');
           return;
         }
 
         // Validate session data
         if (session.queueTrackIds.length === 0) {
-          console.warn('[PERSISTENCE] Invalid session: empty queue');
+          debug.warn('[PERSISTENCE] Invalid session: empty queue');
           await invoke('clear_playback_session');
           return;
         }
 
         if (session.queueIndex < 0 || session.queueIndex >= session.queueTrackIds.length) {
-          console.warn('[PERSISTENCE] Invalid session: queue index out of bounds');
+          debug.warn('[PERSISTENCE] Invalid session: queue index out of bounds');
           session.queueIndex = 0;
         }
 
         if (session.volume < 0 || session.volume > 100) {
-          console.warn('[PERSISTENCE] Invalid session: volume out of range');
+          debug.warn('[PERSISTENCE] Invalid session: volume out of range');
           session.volume = 80;
         }
 
@@ -148,13 +149,13 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
         const missingCount = tracks.length - validTracks.length;
         if (missingCount > 0) {
-          console.warn(`[PERSISTENCE] ${missingCount} track(s) were unavailable and skipped`);
+          debug.warn(`[PERSISTENCE] ${missingCount} track(s) were unavailable and skipped`);
           // TODO: Show toast notification when toast system is available
           // toast.info(`${missingCount} track(s) were unavailable and skipped`);
         }
 
         if (validTracks.length === 0) {
-          console.warn('[PERSISTENCE] All tracks missing - clearing session');
+          debug.warn('[PERSISTENCE] All tracks missing - clearing session');
           await invoke('clear_playback_session');
           return;
         }
@@ -163,7 +164,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         let queueIndex = session.queueIndex;
         if (!validTracks[queueIndex]) {
           queueIndex = 0;
-          console.warn('[PERSISTENCE] Current track missing - starting from first valid track');
+          debug.warn('[PERSISTENCE] Current track missing - starting from first valid track');
         }
 
         if (!isMounted) return;
@@ -187,7 +188,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           duration: currentTrackDuration,
         });
 
-        console.log('[PERSISTENCE] State restored from database:', {
+        debug.log('[PERSISTENCE] State restored from database:', {
           queueLength: validTracks.length,
           queueIndex,
           currentTrack: validTracks[queueIndex]?.title,
@@ -219,7 +220,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
             shuffleMode: session.shuffleMode,
           });
         } catch (backendError) {
-          console.warn('[PERSISTENCE] Backend state restoration failed (UI still restored):', backendError);
+          debug.warn('[PERSISTENCE] Backend state restoration failed (UI still restored):', backendError);
         }
 
         // Restore playback context
@@ -232,11 +233,11 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
               contextArtworkPath: null,
             });
           } catch (contextError) {
-            console.warn('[PERSISTENCE] Context restoration failed:', contextError);
+            debug.warn('[PERSISTENCE] Context restoration failed:', contextError);
           }
         }
       } catch (error) {
-        console.error('[PERSISTENCE] Failed to restore from database:', error);
+        debug.error('[PERSISTENCE] Failed to restore from database:', error);
       }
     };
 
@@ -257,7 +258,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
     // Sync state from backend (hot reload scenario - backend is still running)
     const syncFromBackend = async () => {
-      console.log('[PERSISTENCE] Hot reload detected - syncing from backend');
+      debug.log('[PERSISTENCE] Hot reload detected - syncing from backend');
 
       try {
         // get_current_track returns soul_playback::QueueTrack (snake_case: id, path, duration as {secs,nanos}, track_number)
@@ -312,14 +313,14 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           shuffleMode: shuffle as 'off' | 'random' | 'smart',
         });
 
-        console.log('[PERSISTENCE] State synced from backend:', {
+        debug.log('[PERSISTENCE] State synced from backend:', {
           hasTrack: !!track,
           queueLength: queue?.length ?? 0,
           isPlaying: playbackState === 'Playing',
           volume,
         });
       } catch (error) {
-        console.error('[PERSISTENCE] Failed to sync from backend:', error);
+        debug.error('[PERSISTENCE] Failed to sync from backend:', error);
         // Fall back to database restore
         await restoreFromDatabase();
       }
@@ -339,25 +340,25 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         // Any non-null response means the backend has a loaded track
         const hasValidTrack = backendTrack != null && (backendTrack.id || backendTrack.trackId);
 
-        console.log('[PERSISTENCE] Initial state sync - backend track:', hasValidTrack ? 'exists (hot reload)' : 'null (cold start)');
+        debug.log('[PERSISTENCE] Initial state sync - backend track:', hasValidTrack ? 'exists (hot reload)' : 'null (cold start)');
 
         if (hasValidTrack) {
           // Hot reload - backend is alive
-          console.log('[PERSISTENCE] Hot reload path - syncing from backend');
+          debug.log('[PERSISTENCE] Hot reload path - syncing from backend');
           await syncFromBackend();
         } else {
           // Cold start - restore from database
-          console.log('[PERSISTENCE] Cold start path - restoring from database');
+          debug.log('[PERSISTENCE] Cold start path - restoring from database');
           await restoreFromDatabase();
         }
       } catch (error) {
-        console.error('[PERSISTENCE] Failed to sync initial state:', error);
+        debug.error('[PERSISTENCE] Failed to sync initial state:', error);
         // On error, try database restore as fallback
-        console.log('[PERSISTENCE] Error in sync - falling back to database restore');
+        debug.log('[PERSISTENCE] Error in sync - falling back to database restore');
         try {
           await restoreFromDatabase();
         } catch (fallbackError) {
-          console.error('[PERSISTENCE] Fallback restore also failed:', fallbackError);
+          debug.error('[PERSISTENCE] Fallback restore also failed:', fallbackError);
         }
       }
     };
@@ -385,10 +386,8 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         unlistenFunctions.push(unlistenPositionUpdated);
 
         // Listen for track changes
-        const unlistenTrackChanged = await listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string }>('playback:track-changed', async (event) => {
+        const unlistenTrackChanged = await listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string } | null>('playback:track-changed', async (event) => {
           const trackPayload = event.payload;
-          // Only update if track is valid - don't clear current track on null/undefined
-          // (e.g., when skipPrevious is called at the start of queue)
           if (trackPayload && trackPayload.id) {
             // Convert id from string to number to match Track type
             const track = {
@@ -413,8 +412,17 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
                 });
               }
             } catch (error) {
-              console.error('[TauriPlayerCommandsProvider] Failed to get context:', error);
+              debug.error('[TauriPlayerCommandsProvider] Failed to get context:', error);
             }
+          } else {
+            // Null track means the queue has ended. Clear the current track and
+            // reset isPlaying so the play/pause button reflects the stopped state.
+            usePlayerStore.setState({
+              currentTrack: null,
+              isPlaying: false,
+              duration: 0,
+              progress: 0,
+            });
           }
         });
         unlistenFunctions.push(unlistenTrackChanged);
@@ -432,18 +440,18 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
             const shuffleMode = await invoke<string>('get_shuffle');
             usePlayerStore.setState({ shuffleMode: shuffleMode as 'off' | 'random' | 'smart' });
           } catch (error) {
-            console.error('[TauriPlayerCommandsProvider] Failed to get shuffle mode:', error);
+            debug.error('[TauriPlayerCommandsProvider] Failed to get shuffle mode:', error);
           }
         });
         unlistenFunctions.push(unlistenQueueUpdated);
 
         // Listen for errors
         const unlistenError = await listen<string>('playback:error', (event) => {
-          console.error('[TauriPlayerCommandsProvider] Playback error:', event.payload);
+          debug.error('[TauriPlayerCommandsProvider] Playback error:', event.payload);
         });
         unlistenFunctions.push(unlistenError);
       } catch (error) {
-        console.error('[TauriPlayerCommandsProvider] Failed to set up event listeners:', error);
+        debug.error('[TauriPlayerCommandsProvider] Failed to set up event listeners:', error);
       }
     };
 
@@ -451,7 +459,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     // Use proper promise handling to avoid loading cursor issues on macOS
     Promise.all([setupListeners(), syncInitialState()])
       .catch((error) => {
-        console.error('[TauriPlayerCommandsProvider] Initialization failed:', error);
+        debug.error('[TauriPlayerCommandsProvider] Initialization failed:', error);
       });
 
     // Cleanup function
@@ -520,8 +528,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       },
 
       async setVolume(volume: number) {
-        // Desktop backend expects 0-100, but shared interface uses 0-1
-        await invoke('set_volume', { volume: Math.round(volume * 100) });
+        // Desktop backend expects 0-100, but shared interface uses 0-1.
+        // Clamp to [0, 1] before converting to avoid sending values like 101 to the backend.
+        const clamped = Math.max(0, Math.min(1, volume));
+        await invoke('set_volume', { volume: Math.round(clamped * 100) });
       },
 
       async setShuffle(mode: 'off' | 'random' | 'smart') {
@@ -572,7 +582,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         const totalCount = context && 'totalCount' in context ? context.totalCount : queue.length;
 
         if (context && totalCount > LAZY_LOADING_THRESHOLD) {
-          console.log('[TauriPlayerCommandsProvider] Using lazy loading:', {
+          debug.log('[TauriPlayerCommandsProvider] Using lazy loading:', {
             totalCount,
             queueSize: queue.length,
             context: context.type,
@@ -670,8 +680,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     // Events implementation using Tauri event listeners
     const events: PlaybackEventsInterface = {
       onStateChange(callback) {
-        const unlisten = listen<boolean>('playback:state-changed', (event) => {
-          callback(event.payload);
+        // The backend emits a string ("Playing" | "Paused" | "Stopped"), not a boolean.
+        // Typed as string here so the conversion to boolean is explicit.
+        const unlisten = listen<string>('playback:state-changed', (event) => {
+          callback(event.payload === 'Playing');
         });
         return () => {
           unlisten.then((fn) => fn());

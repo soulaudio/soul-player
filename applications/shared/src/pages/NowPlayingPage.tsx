@@ -436,11 +436,11 @@ export function NowPlayingPage() {
   const isContextClickable = playbackContext && ['album', 'artist', 'playlist'].includes(playbackContext.contextType)
 
   return (
-    <div className="h-full flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div data-testid="now-playing-page" className="h-full flex items-center justify-center px-4 sm:px-6 lg:px-8">
       <div className="flex gap-12 w-full max-w-[2000px] items-center">
         {/* Left Side - Artwork (2 parts) */}
         <div className="basis-2/5 flex-shrink-0">
-          <div className="aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-muted">
+          <div data-testid="now-playing-artwork" className="aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-muted">
             <ArtworkImage
               trackId={currentTrack.id}
               coverArtPath={currentTrack.coverArtPath}
@@ -456,9 +456,10 @@ export function NowPlayingPage() {
           <div className="mb-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide mb-1">
               {headerIcon}
-              <span>{headerSubtitle}</span>
+              <span data-testid="now-playing-artist">{headerSubtitle}</span>
             </div>
             <h2
+              data-testid="now-playing-track-title"
               className={`text-lg font-bold ${isContextClickable ? 'hover:text-primary cursor-pointer hover:underline' : ''}`}
               onClick={isContextClickable ? handleContextClick : undefined}
             >
@@ -480,7 +481,7 @@ export function NowPlayingPage() {
                 <p>{t('nowPlaying.emptyQueue', 'Queue is empty')}</p>
               </div>
             ) : (
-              <div className="space-y-0.5">
+              <div data-testid="now-playing-queue-list" className="space-y-0.5">
                 {groupedTracks.map((group, idx) => {
                   const activeVersion = getActiveVersion(group)
                   const isCurrentTrack = group.versions.some((v) => v.id === currentTrack.id)
@@ -488,6 +489,7 @@ export function NowPlayingPage() {
                   return (
                     <div
                       key={group.groupKey}
+                      data-testid={`now-playing-queue-item-${idx}`}
                       onClick={() => handleTrackClick(group, idx)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
                         isCurrentTrack

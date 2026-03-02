@@ -799,9 +799,10 @@ async fn skip_to_queue_index(
 async fn get_playback_capabilities(
     playback: State<'_, LazyPlaybackManager>,
 ) -> Result<serde_json::Value, String> {
+    let pm = playback.get().await?;
     Ok(serde_json::json!({
-        "hasNext": playback.get().await?.has_next(),
-        "hasPrevious": playback.get().await?.has_previous(),
+        "hasNext": pm.has_next(),
+        "hasPrevious": pm.has_previous(),
     }))
 }
 
@@ -2662,7 +2663,7 @@ fn main() {
                         let error_response = tauri::http::Response::builder()
                             .status(500)
                             .body(format!("Error: {}", e).into_bytes())
-                            .unwrap();
+                            .expect("Failed to build 500 error response for artwork protocol");
                         responder.respond(error_response)
                     }
                 }
@@ -3274,6 +3275,9 @@ fn main() {
             // Updater
             updater::check_for_updates,
             updater::install_update,
+            updater::emit_test_update_available,
+            updater::set_test_update_response,
+            updater::set_test_install_delay,
             // Loudness analysis
             loudness::get_track_loudness,
             loudness::analyze_track,

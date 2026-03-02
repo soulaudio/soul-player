@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, TauriEvent } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
+import { debug } from '@soul-player/shared';
 
 interface ImportDialogProps {
   open: boolean;
@@ -66,7 +67,7 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
       const config = await invoke<ImportConfig>('get_import_config');
       setFileStrategy(config.fileStrategy);
     } catch (err) {
-      console.error('Failed to load import config:', err);
+      debug.error('Failed to load import config:', err);
     }
   };
 
@@ -86,62 +87,62 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
         },
       });
     } catch (err) {
-      console.error('Failed to update file strategy:', err);
+      debug.error('Failed to update file strategy:', err);
       setError(err instanceof Error ? err.message : String(err));
     }
   };
 
   useEffect(() => {
-    console.log('[ImportDialog] Setting up import event listeners');
+    debug.log('[ImportDialog] Setting up import event listeners');
     const unlistenFunctions: (() => void)[] = [];
     let isMounted = true;
 
     const setupListeners = async () => {
       try {
         if (!isMounted) {
-          console.log('[ImportDialog] Component unmounted before setup, aborting');
+          debug.log('[ImportDialog] Component unmounted before setup, aborting');
           return;
         }
 
         // Listen for import progress
         const unlistenProgress = await listen<ImportProgress>('import-progress', (event) => {
           if (!isMounted) return;
-          console.log('[ImportDialog] Import progress event:', event.payload);
+          debug.log('[ImportDialog] Import progress event:', event.payload);
           setProgress(event.payload);
         });
         unlistenFunctions.push(unlistenProgress);
-        console.log('[ImportDialog] import-progress listener registered');
+        debug.log('[ImportDialog] import-progress listener registered');
 
         // Listen for import completion
         const unlistenComplete = await listen<ImportSummary>('import-complete', (event) => {
           if (!isMounted) return;
-          console.log('[ImportDialog] Import complete event:', event.payload);
+          debug.log('[ImportDialog] Import complete event:', event.payload);
           setSummary(event.payload);
           setImporting(false);
         });
         unlistenFunctions.push(unlistenComplete);
-        console.log('[ImportDialog] import-complete listener registered');
+        debug.log('[ImportDialog] import-complete listener registered');
 
         // Listen for import errors
         const unlistenError = await listen<string>('import-error', (event) => {
           if (!isMounted) return;
-          console.error('[ImportDialog] Import error event:', event.payload);
+          debug.error('[ImportDialog] Import error event:', event.payload);
           setError(event.payload);
           setImporting(false);
         });
         unlistenFunctions.push(unlistenError);
-        console.log('[ImportDialog] import-error listener registered');
+        debug.log('[ImportDialog] import-error listener registered');
 
-        console.log('[ImportDialog] All import listeners registered successfully');
+        debug.log('[ImportDialog] All import listeners registered successfully');
       } catch (error) {
-        console.error('[ImportDialog] Failed to set up import listeners:', error);
+        debug.error('[ImportDialog] Failed to set up import listeners:', error);
       }
     };
 
     void setupListeners();
 
     return () => {
-      console.log('[ImportDialog] Cleaning up import listeners, count:', unlistenFunctions.length);
+      debug.log('[ImportDialog] Cleaning up import listeners, count:', unlistenFunctions.length);
       isMounted = false;
       unlistenFunctions.forEach(fn => fn());
     };
@@ -150,33 +151,33 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
   // Tauri file drop events (dragDropEnabled: true)
   useEffect(() => {
     if (!open) {
-      console.log('[ImportDialog] Dialog closed, skipping file drop setup');
+      debug.log('[ImportDialog] Dialog closed, skipping file drop setup');
       return;
     }
 
-    console.log('[ImportDialog] Setting up Tauri file drop listeners');
+    debug.log('[ImportDialog] Setting up Tauri file drop listeners');
     const unlistenFunctions: (() => void)[] = [];
     let isMounted = true;
 
     const setupListeners = async () => {
       try {
         if (!isMounted) {
-          console.log('[ImportDialog] Component unmounted before drop setup, aborting');
+          debug.log('[ImportDialog] Component unmounted before drop setup, aborting');
           return;
         }
 
         // Listen for file drop
         const unlistenDrop = await listen(TauriEvent.DRAG_DROP, async (event) => {
           if (!isMounted) return;
-          console.log('[ImportDialog] Tauri file drop event:', event);
+          debug.log('[ImportDialog] Tauri file drop event:', event);
           setIsDragging(false);
 
           // Normalize payload to always be an array of strings
           let paths: string[];
           const payload = event.payload;
 
-          console.log('[ImportDialog] Payload type:', typeof payload);
-          console.log('[ImportDialog] Payload value:', payload);
+          debug.log('[ImportDialog] Payload type:', typeof payload);
+          debug.log('[ImportDialog] Payload value:', payload);
 
           if (typeof payload === 'string') {
             // Single file/folder path
@@ -189,12 +190,12 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
             const payloadObj = payload as { paths: string | string[] };
             paths = Array.isArray(payloadObj.paths) ? payloadObj.paths : [payloadObj.paths];
           } else {
-            console.error('[ImportDialog] Unexpected payload format:', payload);
+            debug.error('[ImportDialog] Unexpected payload format:', payload);
             setError(t('import.unexpectedPayload'));
             return;
           }
 
-          console.log('[ImportDialog] Normalized paths:', paths);
+          debug.log('[ImportDialog] Normalized paths:', paths);
 
           try {
             const files: string[] = [];
@@ -210,14 +211,14 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
             }
 
             if (directories.length > 0) {
-              console.log('[ImportDialog] Importing directory:', directories[0]);
+              debug.log('[ImportDialog] Importing directory:', directories[0]);
               setImporting(true);
               setError(null);
               setSummary(null);
               setProgress(null);
               await invoke('import_directory', { directory: directories[0] });
             } else if (files.length > 0) {
-              console.log('[ImportDialog] Importing files:', files);
+              debug.log('[ImportDialog] Importing files:', files);
               setImporting(true);
               setError(null);
               setSummary(null);
@@ -225,44 +226,44 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
               await invoke('import_files', { files });
             }
           } catch (err) {
-            console.error('[ImportDialog] File drop error:', err);
+            debug.error('[ImportDialog] File drop error:', err);
             setError(err instanceof Error ? err.message : String(err));
             setImporting(false);
           }
         });
         unlistenFunctions.push(unlistenDrop);
-        console.log('[ImportDialog] DRAG_DROP listener registered');
+        debug.log('[ImportDialog] DRAG_DROP listener registered');
 
         // Listen for drag hover
         const unlistenHover = await listen(TauriEvent.DRAG_ENTER, () => {
           if (!isMounted) return;
-          console.log('[ImportDialog] Drag hover detected');
+          debug.log('[ImportDialog] Drag hover detected');
           if (!importing) {
             setIsDragging(true);
           }
         });
         unlistenFunctions.push(unlistenHover);
-        console.log('[ImportDialog] DRAG_ENTER listener registered');
+        debug.log('[ImportDialog] DRAG_ENTER listener registered');
 
         // Listen for drag leave/cancel
         const unlistenCancel = await listen(TauriEvent.DRAG_LEAVE, () => {
           if (!isMounted) return;
-          console.log('[ImportDialog] Drag cancelled');
+          debug.log('[ImportDialog] Drag cancelled');
           setIsDragging(false);
         });
         unlistenFunctions.push(unlistenCancel);
-        console.log('[ImportDialog] DRAG_LEAVE listener registered');
+        debug.log('[ImportDialog] DRAG_LEAVE listener registered');
 
-        console.log('[ImportDialog] All file drop listeners registered successfully');
+        debug.log('[ImportDialog] All file drop listeners registered successfully');
       } catch (error) {
-        console.error('[ImportDialog] Failed to set up file drop listeners:', error);
+        debug.error('[ImportDialog] Failed to set up file drop listeners:', error);
       }
     };
 
     void setupListeners();
 
     return () => {
-      console.log('[ImportDialog] Cleaning up file drop listeners, count:', unlistenFunctions.length);
+      debug.log('[ImportDialog] Cleaning up file drop listeners, count:', unlistenFunctions.length);
       isMounted = false;
       unlistenFunctions.forEach(fn => fn());
     };
@@ -294,9 +295,9 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
     e.stopPropagation();
     setIsDragging(false);
 
-    console.log('=== DROP EVENT ===');
-    console.log('Files dropped:', e.dataTransfer.files.length);
-    console.log('DataTransfer items:', e.dataTransfer.items.length);
+    debug.log('=== DROP EVENT ===');
+    debug.log('Files dropped:', e.dataTransfer.files.length);
+    debug.log('DataTransfer items:', e.dataTransfer.items.length);
 
     try {
       const files: string[] = [];
@@ -306,7 +307,7 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
       for (let i = 0; i < e.dataTransfer.files.length; i++) {
         const file = e.dataTransfer.files[i];
 
-        console.log(`File ${i}:`, {
+        debug.log(`File ${i}:`, {
           name: file.name,
           size: file.size,
           type: file.type,
@@ -319,17 +320,17 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
         const path = file.path;
 
         if (!path) {
-          console.warn('No path found for dropped file:', file.name, 'File object:', file);
-          console.log('All file properties:', Object.keys(file));
-          console.log('File prototype:', Object.getPrototypeOf(file));
+          debug.warn('No path found for dropped file:', file.name, 'File object:', file);
+          debug.log('All file properties:', Object.keys(file));
+          debug.log('File prototype:', Object.getPrototypeOf(file));
           continue;
         }
 
-        console.log('Processing dropped item with path:', path);
+        debug.log('Processing dropped item with path:', path);
 
         // Check if it's a directory or file
         const isDir = await invoke<boolean>('is_directory', { path });
-        console.log('Is directory:', isDir);
+        debug.log('Is directory:', isDir);
 
         if (isDir) {
           directories.push(path);
@@ -338,29 +339,29 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
         }
       }
 
-      console.log('Results - Files:', files.length, 'Directories:', directories.length);
+      debug.log('Results - Files:', files.length, 'Directories:', directories.length);
 
       // Import based on what was dropped
       if (directories.length > 0) {
-        console.log('Importing directory:', directories[0]);
+        debug.log('Importing directory:', directories[0]);
         setImporting(true);
         setError(null);
         setSummary(null);
         setProgress(null);
         await invoke('import_directory', { directory: directories[0] });
       } else if (files.length > 0) {
-        console.log('Importing files:', files);
+        debug.log('Importing files:', files);
         setImporting(true);
         setError(null);
         setSummary(null);
         setProgress(null);
         await invoke('import_files', { files });
       } else {
-        console.error('ERROR: No valid files or directories found');
+        debug.error('ERROR: No valid files or directories found');
         setError(t('import.noValidFiles'));
       }
     } catch (err) {
-      console.error('Drop error:', err);
+      debug.error('Drop error:', err);
       setError(err instanceof Error ? err.message : String(err));
       setImporting(false);
     }
@@ -368,28 +369,28 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
 
   const handleImportFiles = async () => {
     try {
-      console.log('Opening file dialog...');
+      debug.log('Opening file dialog...');
       // Use Tauri command to open file dialog
       const files = await invoke<string[] | null>('open_file_dialog', {
         multiple: true,
         filters: [{ name: 'Audio Files', extensions: ['mp3', 'flac', 'ogg', 'wav', 'aac', 'm4a', 'opus'] }]
       });
 
-      console.log('File dialog result:', files);
+      debug.log('File dialog result:', files);
 
       if (files && files.length > 0) {
-        console.log('Starting file import:', files.length, 'files');
+        debug.log('Starting file import:', files.length, 'files');
         setImporting(true);
         setError(null);
         setSummary(null);
         setProgress(null);
         await invoke('import_files', { files });
-        console.log('Import command sent');
+        debug.log('Import command sent');
       } else {
-        console.log('No files selected');
+        debug.log('No files selected');
       }
     } catch (err) {
-      console.error('File import error:', err);
+      debug.error('File import error:', err);
       setError(err instanceof Error ? err.message : String(err));
       setImporting(false);
     }
@@ -397,25 +398,25 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
 
   const handleImportFolder = async () => {
     try {
-      console.log('Opening folder dialog...');
+      debug.log('Opening folder dialog...');
       // Use Tauri command to open folder dialog
       const folder = await invoke<string | null>('open_folder_dialog');
 
-      console.log('Folder dialog result:', folder);
+      debug.log('Folder dialog result:', folder);
 
       if (folder) {
-        console.log('Starting directory import:', folder);
+        debug.log('Starting directory import:', folder);
         setImporting(true);
         setError(null);
         setSummary(null);
         setProgress(null);
         await invoke('import_directory', { directory: folder });
-        console.log('Import command sent');
+        debug.log('Import command sent');
       } else {
-        console.log('No folder selected');
+        debug.log('No folder selected');
       }
     } catch (err) {
-      console.error('Folder import error:', err);
+      debug.error('Folder import error:', err);
       setError(err instanceof Error ? err.message : String(err));
       setImporting(false);
     }
@@ -427,16 +428,16 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
       await invoke('cancel_import');
       setImporting(false);
     } catch (err) {
-      console.error('Failed to cancel import:', err);
+      debug.error('Failed to cancel import:', err);
     }
   };
 
   if (!open) return null;
 
-  console.log('ImportDialog rendering:', { open, importing, hasProgress: !!progress, hasSummary: !!summary, hasError: !!error });
+  debug.log('ImportDialog rendering:', { open, importing, hasProgress: !!progress, hasSummary: !!summary, hasError: !!error });
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div data-testid="import-dialog" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-background border rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
@@ -453,6 +454,7 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
 
         {/* Content */}
         <div
+          data-testid="import-dropzone"
           className="flex-1 overflow-auto p-6"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -557,6 +559,7 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
 
                   <div className="flex gap-4">
                     <button
+                      data-testid="import-files-button"
                       onClick={handleImportFiles}
                       className="flex flex-col items-center gap-3 px-8 py-6 border-2 rounded-lg hover:border-primary hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] group min-w-[180px]"
                     >
@@ -567,6 +570,7 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
                     </button>
 
                     <button
+                      data-testid="import-folder-button"
                       onClick={handleImportFolder}
                       className="flex flex-col items-center gap-3 px-8 py-6 border-2 rounded-lg hover:border-primary hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] group min-w-[180px]"
                     >
@@ -595,7 +599,7 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
               </div>
 
               {/* Progress Bar */}
-              <div className="relative h-2 bg-muted rounded-full overflow-hidden">
+              <div data-testid="import-progress-bar" className="relative h-2 bg-muted rounded-full overflow-hidden">
                 <div
                   className="absolute inset-y-0 left-0 bg-primary transition-all duration-300"
                   style={{ width: `${progress.percentage}%` }}
@@ -643,7 +647,7 @@ export function ImportDialog({ open, onClose }: ImportDialogProps) {
           )}
 
           {summary && (
-            <div className="space-y-4">
+            <div data-testid="import-summary" className="space-y-4">
               <div className="text-center">
                 <div className="text-5xl mb-3">✓</div>
                 <div className="text-xl font-semibold mb-2">{t('import.complete')}</div>

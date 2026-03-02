@@ -154,7 +154,7 @@ export function HomePage() {
     }
 
     return () => resizeObserver.disconnect()
-  }, [])
+  }, [isLoading])
 
   const totalCells = gridDimensions.rows * gridDimensions.cols
 
@@ -720,14 +720,14 @@ export function HomePage() {
   // Show loading skeleton while data is loading
   if (isLoading) {
     return (
-      <div className="h-full w-full flex items-center justify-center">
+      <div data-testid="home-page-loading" className="h-full w-full flex items-center justify-center">
         <SkeletonGrid count={12} type="album" />
       </div>
     )
   }
 
   return (
-    <div className="h-full w-full overflow-hidden">
+    <div data-testid="home-page" className="h-full w-full overflow-hidden">
       <style>{`
         .grid-container {
           height: 100%;
@@ -915,6 +915,7 @@ export function HomePage() {
                 key={section.id}
                 className="bento-section"
                 data-section-id={section.id}
+                data-testid={`home-section-${section.id}`}
                 style={{
                   gridColumn: section.gridColumn,
                   gridRow: section.gridRow,
@@ -930,6 +931,7 @@ export function HomePage() {
                   {/* Heading - spans full width, first row, aligned bottom */}
                   <div
                     className="bento-section-header"
+                    data-testid={`home-section-header-${section.id}`}
                     style={{
                       gridColumn: `1 / ${section.cols + 1}`,
                       gridRow: '1 / 2',

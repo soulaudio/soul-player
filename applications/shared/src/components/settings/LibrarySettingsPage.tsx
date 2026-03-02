@@ -462,6 +462,7 @@ export function LibrarySettingsPage() {
       {/* Library Sources Section */}
       <section className="border border-border rounded-lg overflow-hidden">
         <button
+          data-testid="library-sources-toggle"
           onClick={() => toggleSection('sources')}
           className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
@@ -489,6 +490,7 @@ export function LibrarySettingsPage() {
                 {sources.map((source) => (
                   <div
                     key={source.id}
+                    data-testid={`watch-folder-item-${source.id}`}
                     className="flex items-center gap-3 p-3 bg-muted/20 rounded-lg"
                   >
                     <input
@@ -511,6 +513,7 @@ export function LibrarySettingsPage() {
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
                       ) : (
                         <button
+                          data-testid={`rescan-button-${source.id}`}
                           onClick={() => handleRescanSource(source.id)}
                           className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-lg transition-colors duration-[var(--transition-duration)]"
                           title={t('librarySettings.rescan')}
@@ -595,6 +598,7 @@ export function LibrarySettingsPage() {
             ) : (
               <div className="flex gap-2">
                 <button
+                  data-testid="add-watch-folder-button"
                   onClick={() => setAddingSource(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
                 >
@@ -604,6 +608,7 @@ export function LibrarySettingsPage() {
                 {sources.length > 0 && (
                   <>
                     <button
+                      data-testid="rescan-all-button"
                       onClick={() => handleRescanAll(false)}
                       disabled={scanningSourceId !== null}
                       className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"

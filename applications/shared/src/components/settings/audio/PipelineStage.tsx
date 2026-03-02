@@ -6,6 +6,8 @@ import { ReactNode } from 'react';
 export interface PipelineStageProps {
   /** HTML id for navigation */
   id?: string;
+  /** data-testid for E2E targeting */
+  'data-testid'?: string;
   /** Stage title */
   title: string;
   /** Stage description shown below title */
@@ -28,6 +30,7 @@ export interface PipelineStageProps {
 
 export function PipelineStage({
   id,
+  'data-testid': dataTestId,
   title,
   description,
   isActive = true,
@@ -38,7 +41,7 @@ export function PipelineStage({
   children,
 }: PipelineStageProps) {
   return (
-    <div id={id} className={`scroll-mt-4 ${!isLast ? 'pb-8 mb-8 border-b border-border/40' : ''}`}>
+    <div id={id} data-testid={dataTestId} className={`scroll-mt-4 ${!isLast ? 'pb-8 mb-8 border-b border-border/40' : ''}`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-5">
         <div className="flex-1 min-w-0">

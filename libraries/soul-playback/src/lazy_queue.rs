@@ -199,11 +199,21 @@ impl LazyQueueState {
         let start = self.window_start;
         let end = self.window_end.min(total);
 
+        // Guard against inverted or out-of-range windows.  This can arise if
+        // window_start was advanced past window_end (e.g. after a batch load
+        // failure or incorrect window management by the caller).  Both paths
+        // use `end - start` / a range, so we must ensure `start <= end` first.
+        if start >= end {
+            return Vec::new();
+        }
+
+        let window_size = end - start; // safe: start < end guaranteed above
+
         if let Some(seed) = self.shuffle_seed {
             // Shuffle enabled: generate shuffled indices for this window
             // This generates the full shuffle temporarily to extract our window
             // For very large datasets (>100k), we could use a stateless permutation instead
-            generate_shuffled_window(seed, start, end - start, total)
+            generate_shuffled_window(seed, start, window_size, total)
         } else {
             // No shuffle: return sequential indices
             (start..end).collect()

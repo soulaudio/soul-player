@@ -16,9 +16,10 @@
  *
  * Backend Requirements:
  * - Rust scanner must emit 'scan-complete' event after scan finishes
- * - Event payload can be empty or include scan statistics
+ * - Rust importer must emit 'import-complete' event after import finishes
  *
  * @see applications/desktop/src-tauri/src/scanner.rs
+ * @see applications/desktop/src-tauri/src/import.rs
  */
 
 import { useEffect, useState } from 'react'
@@ -26,16 +27,27 @@ import { useQueryClient } from '@tanstack/react-query'
 import { invalidateAfterFileScan } from './queries/invalidationHelpers'
 import { debug } from '../utils/debug'
 
+// ----------------------------------------------------------------
+// Platform detection: is the app running inside Tauri?
+// Tauri injects __TAURI_INTERNALS__ when running as a native app.
+// This avoids depending on window.__TAURI__ (which requires the
+// non-default withGlobalTauri config option).
+// ----------------------------------------------------------------
+function isRunningInTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
+
 /**
- * Hook that listens for library scan completion and invalidates caches.
+ * Hook that listens for library scan completion and import completion,
+ * then invalidates caches.
  *
  * Platform Support:
- * - Desktop (Tauri): Listens to Tauri events
+ * - Desktop (Tauri): Listens to Tauri events via @tauri-apps/api/event
  * - Web/Demo: No-op (no file scanning in web mode)
  *
  * Performance:
  * - Uses broad invalidation (all albums, artists, tracks, genres)
- * - Only triggers once per scan completion
+ * - Only triggers once per scan/import completion
  * - Background refetch doesn't block UI
  *
  * @example
@@ -53,46 +65,46 @@ export function useScanCompletionInvalidation(): void {
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    // Only set up listener if Tauri is available (desktop app)
-    if (typeof window === 'undefined' || !window.__TAURI__) {
-      debug.log('[useScanCompletionInvalidation] Tauri not available, skipping scan listener')
+    // Only set up listeners in the Tauri desktop app.
+    if (!isRunningInTauri()) {
+      debug.log('[useScanCompletionInvalidation] Not running in Tauri, skipping event listeners')
       return
     }
 
-    let unlisten: (() => void) | null = null
+    let unlistenScan: (() => void) | null = null
+    let unlistenImport: (() => void) | null = null
 
-    // Set up Tauri event listener
-    const setupListener = async () => {
+    const setupListeners = async () => {
       try {
-        if (!window.__TAURI__) {
-          debug.log('[useScanCompletionInvalidation] Not running in Tauri, skipping listener setup')
-          return
-        }
-        const { listen } = window.__TAURI__.event
+        const { listen } = await import('@tauri-apps/api/event')
 
-        unlisten = await listen('scan-complete', (event) => {
+        unlistenScan = await listen('scan-complete', (event) => {
           debug.log('[useScanCompletionInvalidation] Scan completed, invalidating library caches', event.payload)
-
-          // Invalidate all library-related queries
           invalidateAfterFileScan(queryClient)
-
           debug.log('[useScanCompletionInvalidation] Cache invalidation complete')
         })
 
-        debug.log('[useScanCompletionInvalidation] Scan listener registered')
+        // Also listen for import-complete — import_directory uses a separate
+        // pipeline (import-progress / import-complete) that does NOT fire
+        // scan-started/scan-complete events.
+        unlistenImport = await listen('import-complete', (event) => {
+          debug.log('[useScanCompletionInvalidation] Import completed, invalidating library caches', event.payload)
+          invalidateAfterFileScan(queryClient)
+          debug.log('[useScanCompletionInvalidation] Cache invalidation complete')
+        })
+
+        debug.log('[useScanCompletionInvalidation] Scan and import listeners registered')
       } catch (error) {
-        debug.error('[useScanCompletionInvalidation] Failed to register scan listener:', error)
+        debug.error('[useScanCompletionInvalidation] Failed to register event listeners:', error)
       }
     }
 
-    setupListener()
+    void setupListeners()
 
-    // Cleanup: unregister listener on unmount
     return () => {
-      if (unlisten) {
-        unlisten()
-        debug.log('[useScanCompletionInvalidation] Scan listener unregistered')
-      }
+      unlistenScan?.()
+      unlistenImport?.()
+      debug.log('[useScanCompletionInvalidation] Event listeners unregistered')
     }
   }, [queryClient])
 }
@@ -131,7 +143,7 @@ export function useScanProgress() {
   }, [isDirty, isScanning, queryClient])
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.__TAURI__) {
+    if (!isRunningInTauri()) {
       return
     }
 
@@ -141,8 +153,7 @@ export function useScanProgress() {
 
     const setupListeners = async () => {
       try {
-        if (!window.__TAURI__) return
-        const { listen } = window.__TAURI__.event
+        const { listen } = await import('@tauri-apps/api/event')
 
         // Listen for scan start
         unlistenStart = await listen('scan-started', () => {
@@ -188,7 +199,7 @@ export function useScanProgress() {
       }
     }
 
-    setupListeners()
+    void setupListeners()
 
     return () => {
       unlistenProgress?.()
@@ -201,17 +212,10 @@ export function useScanProgress() {
 }
 
 /**
- * Type declarations for Tauri events (if not in @tauri-apps/api types)
+ * Type declaration for Tauri internals (subset needed for Tauri detection).
  */
 declare global {
   interface Window {
-    __TAURI__?: {
-      event: {
-        listen: <T = unknown>(
-          event: string,
-          handler: (event: { event: string; payload: T }) => void
-        ) => Promise<() => void>
-      }
-    }
+    __TAURI_INTERNALS__?: unknown
   }
 }

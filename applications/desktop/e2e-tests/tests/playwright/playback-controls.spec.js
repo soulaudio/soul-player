@@ -338,9 +338,9 @@ test('track auto-advances to the next track after the current one finishes', asy
 // ----------------------------------------------------------------
 // Test 7: Queue ends → isPlaying becomes false  (BUG-3 / BUG-6 regression)
 //
-// With 5 tracks × 2 s each waiting for all to auto-advance would take 10+ seconds.
+// With 5 tracks × 10 s each waiting for all to auto-advance would take 50+ seconds.
 // Instead we jump directly to the last track using skipToQueueIndex(), then
-// wait the 2 seconds for it to finish. After the queue is exhausted the backend emits
+// wait for it to finish. After the queue is exhausted the backend emits
 // TrackChanged(null). The regression was that isPlaying was NOT reset to false, so
 // the play-pause button kept showing the Pause icon. This test verifies the fix.
 //
@@ -364,8 +364,10 @@ test('BUG-3/BUG-6: isPlaying resets to false when the queue is exhausted', async
   const stateBeforeEnd = await page.evaluate(async () => window.__TAURI_INTERNALS__.invoke('get_playback_state'));
   expect(stateBeforeEnd).toBe('Playing');
 
-  // Track Five is 2 seconds long — wait 4 seconds for it to finish and the queue to exhaust
-  await page.waitForTimeout(4_000);
+  // Track Five is 10 seconds long — wait 11 seconds for it to finish naturally.
+  // Allowing the track to exhaust cleanly (rather than stopping early via stop_playback)
+  // avoids a race condition between the natural end-of-track callback and a manual stop.
+  await page.waitForTimeout(11_000);
 
   // After the queue is exhausted, state must be Stopped (not Playing or Paused).
   // Use a flat wait then check — avoids IPC contention from waitForFunction polling.

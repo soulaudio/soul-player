@@ -55,13 +55,15 @@ export function Dialog({ open, onClose, children }: DialogProps) {
 interface DialogContentProps {
   children: ReactNode;
   className?: string;
+  'data-testid'?: string;
 }
 
-export function DialogContent({ children, className = '' }: DialogContentProps) {
+export function DialogContent({ children, className = '', 'data-testid': testId }: DialogContentProps) {
   return (
     <div
       className={`bg-background border border-border rounded-xl shadow-xl max-w-md w-full mx-4 ${className}`}
       onClick={(e) => e.stopPropagation()}
+      data-testid={testId}
     >
       {children}
     </div>
@@ -119,6 +121,7 @@ interface ConfirmDialogProps {
   confirmText?: string;
   cancelText?: string;
   variant?: 'default' | 'destructive';
+  'data-testid'?: string;
 }
 
 export function ConfirmDialog({
@@ -130,6 +133,7 @@ export function ConfirmDialog({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   variant = 'default',
+  'data-testid': testId,
 }: ConfirmDialogProps) {
   const handleConfirm = useCallback(() => {
     onConfirm();
@@ -138,7 +142,7 @@ export function ConfirmDialog({
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogContent>
+      <DialogContent data-testid={testId ?? 'confirm-dialog'}>
         <DialogHeader onClose={onClose}>{title}</DialogHeader>
         <DialogBody>
           <p className="text-muted-foreground">{message}</p>

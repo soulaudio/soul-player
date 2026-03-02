@@ -43,7 +43,7 @@ export function BackendSelector({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="audio-backend-section">
       <label className="text-sm font-medium">Audio Backend</label>
 
       <div className="space-y-2">
@@ -56,6 +56,8 @@ export function BackendSelector({
               key={backend.backend}
               onClick={() => isAvailable && onBackendChange(backend.backend as 'default' | 'asio' | 'jack')}
               disabled={!isAvailable}
+              data-testid={`audio-backend-${backend.backend}`}
+              aria-pressed={isSelected}
               className={`
                 w-full text-left p-4 rounded-lg border-2 transition-all
                 ${

@@ -566,7 +566,7 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
     // App metadata
     async getVersion() {
       // If version provided (from GitHub API), format as "v{version} (Demo)"
-      console.log('[MockBackendProvider] getVersion called, versionProp:', versionProp, 'type:', typeof versionProp)
+      debug.log('[MockBackendProvider] getVersion called, versionProp:', versionProp, 'type:', typeof versionProp)
 
       // Check if version is valid (not null, not empty)
       if (versionProp && typeof versionProp === 'string' && versionProp.trim().length > 0) {
@@ -574,11 +574,11 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
         // e.g., "0.1.7" not "v0.1.7"
         const cleanVersion = versionProp.trim()
         const result = `v${cleanVersion} (Demo)`
-        console.log('[MockBackendProvider] Formatted version:', result)
+        debug.log('[MockBackendProvider] Formatted version:', result)
         return result
       }
 
-      console.log('[MockBackendProvider] No valid version, returning "Demo"')
+      debug.log('[MockBackendProvider] No valid version, returning "Demo"')
       return 'Demo'
     },
 

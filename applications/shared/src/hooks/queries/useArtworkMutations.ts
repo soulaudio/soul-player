@@ -24,6 +24,7 @@ import {
   invalidateAfterPlaylistArtworkChange,
 } from './invalidationHelpers'
 import { clearArtworkCache } from '../../components/ArtworkImage'
+import { debug } from '../../utils/debug'
 
 /**
  * Mutation hook for setting artwork on albums, artists, or playlists.
@@ -78,7 +79,7 @@ export function useSetArtwork() {
       }
     },
     onError: (error, params) => {
-      console.error(`[useSetArtwork] Failed to set ${params.entityType} artwork:`, error)
+      debug.error(`[useSetArtwork] Failed to set ${params.entityType} artwork:`, error)
     },
   })
 }
@@ -135,7 +136,7 @@ export function useRemoveArtwork() {
       }
     },
     onError: (error, params) => {
-      console.error(`[useRemoveArtwork] Failed to remove ${params.entityType} artwork:`, error)
+      debug.error(`[useRemoveArtwork] Failed to remove ${params.entityType} artwork:`, error)
     },
   })
 }

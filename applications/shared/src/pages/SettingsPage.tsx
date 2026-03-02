@@ -393,6 +393,7 @@ function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
               onChange={(e) => handlers?.handleAutoUpdateChange?.(e.target.checked)}
               disabled={!canChangeUpdates}
               className="w-4 h-4"
+              data-testid="auto-update-toggle"
             />
             <span className="text-sm">{t('settings.autoUpdate')}</span>
           </label>
@@ -406,6 +407,7 @@ function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
               onChange={(e) => handlers?.handleSilentUpdateChange?.(e.target.checked)}
               disabled={!canChangeUpdates || !handlers?.autoUpdate}
               className="w-4 h-4 disabled:opacity-[var(--disabled-opacity)]"
+              data-testid="silent-update-toggle"
             />
             <span className={`text-sm ${!handlers?.autoUpdate ? 'text-muted-foreground' : ''}`}>
               {t('settings.silentUpdate')}
@@ -418,6 +420,7 @@ function GeneralSettings({ handlers }: { handlers?: SettingsHandlers }) {
             className={`px-4 py-2 bg-primary text-primary-foreground rounded-lg ${
               canChangeUpdates ? 'hover:opacity-[var(--hover-button-opacity)] transition-opacity' : 'opacity-50 cursor-not-allowed'
             } disabled:opacity-[var(--disabled-opacity)]`}
+            data-testid="check-for-updates-button"
           >
             {handlers?.checking ? t('settings.checking') : t('settings.checkNow')}
           </button>

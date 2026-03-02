@@ -42,6 +42,7 @@ export function SettingsSidebar() {
               <Tooltip.Trigger asChild>
                 <Link
                   to={item.path}
+                  data-testid={`nav-settings-${item.id}`}
                   data-state={isActive ? 'active' : 'inactive'}
                   aria-current={isActive ? 'page' : undefined}
                   className={[

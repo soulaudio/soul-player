@@ -15,6 +15,7 @@ import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contex
 import { usePlatform } from '../contexts/PlatformContext'
 import { usePlaylistWithTracks, usePlaylistArtwork } from '../hooks/queries/useLibraryQueries'
 import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
+import { useDeletePlaylist } from '../hooks/queries/usePlaylistMutations'
 import { ConfirmDialog } from '../components/ui/Dialog'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
@@ -32,6 +33,7 @@ export function PlaylistPage() {
   // React Query hooks - replaces manual loading state
   const { playlist, tracks = [], isLoading, isError, error } = usePlaylistWithTracks(id)
   const deleteTrackMutation = useDeleteTrack()
+  const deletePlaylistMutation = useDeletePlaylist()
 
   // Load playlist artwork separately (only for desktop)
   const { data: playlistArtworkUrl } = usePlaylistArtwork(isDesktop && id ? id : undefined)
@@ -125,7 +127,7 @@ export function PlaylistPage() {
     if (!playlist) return
 
     try {
-      await backend.deletePlaylist(playlist.id)
+      await deletePlaylistMutation.mutateAsync(playlist.id)
       goBack('/playlists')
     } catch (err) {
       debug.error('Failed to delete playlist:', err)
@@ -169,7 +171,7 @@ export function PlaylistPage() {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div data-testid="playlist-detail-page" className="h-full flex flex-col overflow-hidden">
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto pr-6">
         {/* Header */}
@@ -211,7 +213,7 @@ export function PlaylistPage() {
             <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
               {t('library.playlist', 'Playlist')}
             </p>
-            <h1 className="text-4xl font-bold mb-2">{playlist.name}</h1>
+            <h1 data-testid="playlist-title" className="text-4xl font-bold mb-2">{playlist.name}</h1>
             {playlist.description && (
               <p className="text-muted-foreground mb-2">{playlist.description}</p>
             )}
@@ -233,6 +235,7 @@ export function PlaylistPage() {
 
               {features.canCreatePlaylists && (
                 <button
+                  data-testid="delete-playlist-button"
                   onClick={() => setDeleteConfirm({ type: 'playlist' })}
                   className="p-3 rounded-full hover:bg-destructive/10 text-destructive"
                   title={t('playlist.delete', 'Delete Playlist')}
@@ -247,7 +250,7 @@ export function PlaylistPage() {
 
         {/* Track List */}
         {tracks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <div data-testid="playlist-empty-state" className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <ListMusic className="w-12 h-12 mb-4 opacity-50" />
             <p className="font-medium">{t('playlist.empty', 'This playlist is empty')}</p>
             <p className="text-sm mt-1">{t('playlist.emptyHint', 'Add tracks from your library')}</p>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useBackend, clearArtworkCache, ScanProgressToast } from '@soul-player/shared';
+import { Toaster } from 'sonner';
+import { useBackend, clearArtworkCache, ScanProgressToast, debug } from '@soul-player/shared';
 import { MainLayout } from './layouts/MainLayout';
 // Use shared pages for cross-platform parity
 import {
@@ -31,7 +32,7 @@ function HomeRoute() {
           setHomeEnabled(value ?? true);
         })
         .catch(err => {
-          console.error('Failed to load home.enabled setting:', err);
+          debug.error('Failed to load home.enabled setting:', err);
           setHomeEnabled(true); // Default to enabled on error
         });
     };
@@ -72,23 +73,23 @@ function App() {
 
   useEffect(() => {
     // Check if onboarding is needed
-    console.log('[App] Checking onboarding status...');
+    debug.log('[App] Checking onboarding status...');
 
     // Add timeout protection (5 seconds)
     const timeoutId = setTimeout(() => {
-      console.error('[App] Onboarding check timed out after 5s, skipping onboarding');
+      debug.error('[App] Onboarding check timed out after 5s, skipping onboarding');
       setShowOnboarding(false);
     }, 5000);
 
     backend.checkOnboardingNeeded()
       .then((needed) => {
         clearTimeout(timeoutId);
-        console.log('[App] Onboarding check result:', needed);
+        debug.log('[App] Onboarding check result:', needed);
         setShowOnboarding(needed);
       })
       .catch((error) => {
         clearTimeout(timeoutId);
-        console.error('[App] Onboarding check failed:', error);
+        debug.error('[App] Onboarding check failed:', error);
         setShowOnboarding(false); // On error, skip onboarding
       });
 
@@ -111,7 +112,7 @@ function App() {
           if (!isMounted) return;
 
           unlisten = await listen<{ entityType: string; entityId: string }>('artwork-changed', async (event) => {
-            console.log('[App] Artwork changed:', event.payload);
+            debug.log('[App] Artwork changed:', event.payload);
             const { entityType, entityId } = event.payload;
 
             // Clear the cache for this entity to force reload
@@ -127,19 +128,19 @@ function App() {
                 tracks.forEach(track => {
                   clearArtworkCache('track', track.id);
                 });
-                console.log(`[App] Cleared cache for album ${entityId} and ${tracks.length} tracks`);
+                debug.log(`[App] Cleared cache for album ${entityId} and ${tracks.length} tracks`);
               } catch (error) {
-                console.error('[App] Failed to get album tracks for cache clearing:', error);
+                debug.error('[App] Failed to get album tracks for cache clearing:', error);
               }
             } else if (entityType === 'artist' || entityType === 'playlist') {
               clearArtworkCache(entityType, entityId);
             }
           });
 
-          console.log('[App] Listening for artwork-changed events');
+          debug.log('[App] Listening for artwork-changed events');
         }
       } catch (error) {
-        console.error('[App] Failed to set up artwork listener:', error);
+        debug.error('[App] Failed to set up artwork listener:', error);
       }
     }
 
@@ -191,6 +192,7 @@ function App() {
       </MainLayout>
       {/* Scan progress toast with automatic cache invalidation */}
       <ScanProgressToast />
+      <Toaster richColors position="bottom-right" />
     </FileDropHandler>
   );
 }

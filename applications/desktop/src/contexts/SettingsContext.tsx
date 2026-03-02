@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import i18next from 'i18next';
+import { debug } from '@soul-player/shared';
 
 interface SettingsContextValue {
   showKeyboardShortcuts: boolean;
@@ -50,7 +51,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      debug.error('Failed to load settings:', error);
     }
   };
 
@@ -62,7 +63,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       });
       setShowKeyboardShortcutsState(show);
     } catch (error) {
-      console.error('Failed to save keyboard shortcuts setting:', error);
+      debug.error('Failed to save keyboard shortcuts setting:', error);
     }
   };
 
@@ -74,7 +75,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       });
       setHideWindowControlsState(hide);
     } catch (error) {
-      console.error('Failed to save window controls setting:', error);
+      debug.error('Failed to save window controls setting:', error);
     }
   };
 

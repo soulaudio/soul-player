@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslation } from 'react-i18next';
 import { Minus, Square, X, Copy } from 'lucide-react';
+import { debug } from '@soul-player/shared';
 
 /**
  * Window control buttons for frameless window.
@@ -19,7 +20,7 @@ export function WindowControls() {
         const maximized = await appWindow.isMaximized();
         setIsMaximized(maximized);
       } catch (err) {
-        console.error('Failed to check maximized state:', err);
+        debug.error('Failed to check maximized state:', err);
       }
     };
 
@@ -36,7 +37,7 @@ export function WindowControls() {
     try {
       await appWindow.minimize();
     } catch (err) {
-      console.error('Failed to minimize window:', err);
+      debug.error('Failed to minimize window:', err);
     }
   }, [appWindow]);
 
@@ -44,7 +45,7 @@ export function WindowControls() {
     try {
       await appWindow.toggleMaximize();
     } catch (err) {
-      console.error('Failed to toggle maximize:', err);
+      debug.error('Failed to toggle maximize:', err);
     }
   }, [appWindow]);
 
@@ -52,7 +53,7 @@ export function WindowControls() {
     try {
       await appWindow.close();
     } catch (err) {
-      console.error('Failed to close window:', err);
+      debug.error('Failed to close window:', err);
     }
   }, [appWindow]);
 

@@ -102,6 +102,7 @@ export function AlbumsPage() {
       itemType="album"
       gridClass={gridClass}
       cacheKey="library-albums-count"
+      pageTestId="albums-page"
     >
       {errorContent || (filteredAlbums.length > 0 ? (
         shouldVirtualize ? (
@@ -134,7 +135,7 @@ export function AlbumsPage() {
           </div>
         )
       ) : (
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+        <div data-testid="empty-state" className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Disc3 className="w-12 h-12 mb-4 opacity-50" />
           <p className="font-medium">
             {searchQuery ? t('library.noSearchResults') : t('library.noAlbums')}

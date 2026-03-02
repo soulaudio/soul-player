@@ -33,6 +33,7 @@ import { usePlayerStore } from '../stores/player';
 import { usePlaybackSession } from '../contexts/PlaybackSessionContext';
 import type { PlaybackDataStorage } from '../types/storage';
 import type { Track } from '../types';
+import { debug } from '../utils/debug';
 
 interface WebPlaybackProviderProps {
   storage: PlaybackDataStorage;
@@ -41,6 +42,7 @@ interface WebPlaybackProviderProps {
 
 export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderProps) {
   const [isInitialized, setIsInitialized] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
   const managerRef = useRef<WasmPlaybackAdapter | null>(null);
   const instanceId = useRef(Math.random().toString(36).substring(7));
   const { updateSession, clearSession } = usePlaybackSession();
@@ -53,14 +55,14 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
     manager
       .initialize()
       .then(() => {
-        console.log(`[WebPlaybackProvider:${instanceId.current}] WASM manager initialized`);
+        debug.log(`[WebPlaybackProvider:${instanceId.current}] WASM manager initialized`);
 
         // Setup event bridge to shared store
         setupEventBridge(manager, storage);
 
         // CRITICAL FIX: Clear any stale UI state if queue is empty
         if (manager.queueLength() === 0) {
-          console.log('[WebPlaybackProvider] Queue is empty on init, clearing stale UI state');
+          debug.log('[WebPlaybackProvider] Queue is empty on init, clearing stale UI state');
           usePlayerStore.setState({
             currentTrack: null,
             queue: [],
@@ -74,13 +76,17 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
         setIsInitialized(true);
       })
       .catch((err) => {
-        console.error(`[WebPlaybackProvider:${instanceId.current}] Failed to initialize WASM:`, err);
+        const message = err instanceof Error ? err.message : String(err);
+        debug.error(`[WebPlaybackProvider:${instanceId.current}] Failed to initialize WASM:`, err);
+        // Surface the error so callers can render a useful error state rather than
+        // a blank screen (previously isInitialized stayed false forever on failure).
+        setInitError(message);
       });
 
     // Cleanup on unmount
     return () => {
       if (managerRef.current) {
-        console.log('[WebPlaybackProvider] Cleaning up WASM manager');
+        debug.log('[WebPlaybackProvider] Cleaning up WASM manager');
         managerRef.current.destroy();
         managerRef.current = null;
       }
@@ -122,7 +128,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
         const manager = getManagerOrThrow();
         // Validate queue exists before pausing
         if (manager.queueLength() === 0) {
-          console.warn('[WebPlaybackProvider] Cannot pause - queue is empty');
+          debug.warn('[WebPlaybackProvider] Cannot pause - queue is empty');
           return;
         }
         manager.pause();
@@ -132,7 +138,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
         const manager = getManagerOrThrow();
         // Validate queue exists before resuming
         if (manager.queueLength() === 0) {
-          console.warn('[WebPlaybackProvider] Cannot resume - queue is empty');
+          debug.warn('[WebPlaybackProvider] Cannot resume - queue is empty');
           return;
         }
         // Unlock audio during user gesture
@@ -245,7 +251,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
         // Note: coverUrl is not stored in WASM, so we look it up from storage
         const manager = managerRef.current;
         if (!manager || !isInitialized) {
-          console.warn('[WebPlaybackProvider] getQueue called before initialization, returning empty queue');
+          debug.warn('[WebPlaybackProvider] getQueue called before initialization, returning empty queue');
           return [];
         }
 
@@ -269,7 +275,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
       },
 
       async playQueueWithContext(context, initialBatch, startIndex, enableShuffle) {
-        console.log('[WebPlaybackProvider] playQueueWithContext called:', {
+        debug.log('[WebPlaybackProvider] playQueueWithContext called:', {
           context,
           batchSize: initialBatch.length,
           startIndex,
@@ -288,7 +294,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
 
       async playQueue(queue, startIndex = 0, context) {
         try {
-          console.log(`[WebPlaybackProvider:${instanceId.current}] playQueue called:`, {
+          debug.log(`[WebPlaybackProvider:${instanceId.current}] playQueue called:`, {
             queueLength: queue.length,
             startIndex,
             context,
@@ -326,7 +332,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
                 contextName: queue[0]?.album || queue[0]?.artist || 'Unknown',
                 startedAt: new Date(),
               });
-              console.log('[WebPlaybackProvider] Session context updated:', { contextType, contextId });
+              debug.log('[WebPlaybackProvider] Session context updated:', { contextType, contextId });
             }
           }
 
@@ -334,7 +340,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
           const wasmQueue = queue.map((track) => {
             const demoTrack = storage.getTrackById(track.trackId);
             if (!demoTrack) {
-              console.error('[WebPlaybackProvider] Track not found:', track.trackId);
+              debug.error('[WebPlaybackProvider] Track not found:', track.trackId);
             }
             return {
               id: track.trackId,
@@ -348,7 +354,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
             };
           });
 
-        console.log('[WebPlaybackProvider] Converted to WASM queue:', {
+        debug.log('[WebPlaybackProvider] Converted to WASM queue:', {
           length: wasmQueue.length,
           firstPath: wasmQueue[0]?.path,
           allHavePaths: wasmQueue.every((t) => t.path),
@@ -357,7 +363,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
         // Load the queue starting from the specified index
         const reorderedQueue = [...wasmQueue.slice(startIndex), ...wasmQueue.slice(0, startIndex)];
 
-        console.log('[WebPlaybackProvider] Loading playlist to WASM, starting track:', reorderedQueue[0]?.title);
+        debug.log('[WebPlaybackProvider] Loading playlist to WASM, starting track:', reorderedQueue[0]?.title);
 
         // Validate queue has tracks
         if (reorderedQueue.length === 0) {
@@ -367,11 +373,11 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
         // Validate all tracks have required fields (WASM requires: id, path, title, artist)
         const invalidTracks = reorderedQueue.filter((t) => !t.path || !t.id || !t.title || !t.artist);
         if (invalidTracks.length > 0) {
-          console.error('[WebPlaybackProvider] Invalid tracks in queue:', invalidTracks);
+          debug.error('[WebPlaybackProvider] Invalid tracks in queue:', invalidTracks);
           throw new Error(`Queue contains ${invalidTracks.length} invalid track(s) - missing required fields`);
         }
 
-        console.log('[WebPlaybackProvider] Queue validation passed:', {
+        debug.log('[WebPlaybackProvider] Queue validation passed:', {
           totalTracks: reorderedQueue.length,
           firstTrack: {
             id: reorderedQueue[0].id,
@@ -394,15 +400,15 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
             throw new Error('Queue is empty after loading playlist');
           }
 
-          console.log('[WebPlaybackProvider] Queue loaded, length:', manager.queueLength());
+          debug.log('[WebPlaybackProvider] Queue loaded, length:', manager.queueLength());
           await manager.play();
-          console.log('[WebPlaybackProvider] Playback started successfully');
+          debug.log('[WebPlaybackProvider] Playback started successfully');
         } catch (error) {
-          console.error('[WebPlaybackProvider] Failed to start playback:', error);
+          debug.error('[WebPlaybackProvider] Failed to start playback:', error);
           throw error;
         }
         } catch (error) {
-          console.error('[WebPlaybackProvider] ERROR in playQueue:', error);
+          debug.error('[WebPlaybackProvider] ERROR in playQueue:', error);
           throw error;
         }
       },
@@ -457,7 +463,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
         // Defensive: if not initialized yet, return no-op unsubscribe
         const manager = managerRef.current;
         if (!manager || !isInitialized) {
-          console.warn('[WebPlaybackProvider] onStateChange called before initialization, returning no-op');
+          debug.warn('[WebPlaybackProvider] onStateChange called before initialization, returning no-op');
           return () => {};
         }
         const handler = (state: PlaybackState) => {
@@ -469,7 +475,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
       onTrackChange(callback) {
         const manager = managerRef.current;
         if (!manager || !isInitialized) {
-          console.warn('[WebPlaybackProvider] onTrackChange called before initialization, returning no-op');
+          debug.warn('[WebPlaybackProvider] onTrackChange called before initialization, returning no-op');
           return () => {};
         }
         return manager.on('trackChange', callback);
@@ -478,7 +484,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
       onPositionUpdate(callback) {
         const manager = managerRef.current;
         if (!manager || !isInitialized) {
-          console.warn('[WebPlaybackProvider] onPositionUpdate called before initialization, returning no-op');
+          debug.warn('[WebPlaybackProvider] onPositionUpdate called before initialization, returning no-op');
           return () => {};
         }
         return manager.on('positionUpdate', callback);
@@ -487,7 +493,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
       onVolumeChange(callback) {
         const manager = managerRef.current;
         if (!manager || !isInitialized) {
-          console.warn('[WebPlaybackProvider] onVolumeChange called before initialization, returning no-op');
+          debug.warn('[WebPlaybackProvider] onVolumeChange called before initialization, returning no-op');
           return () => {};
         }
         return manager.on('volumeChange', callback);
@@ -496,7 +502,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
       onQueueUpdate(callback) {
         const manager = managerRef.current;
         if (!manager || !isInitialized) {
-          console.warn('[WebPlaybackProvider] onQueueUpdate called before initialization, returning no-op');
+          debug.warn('[WebPlaybackProvider] onQueueUpdate called before initialization, returning no-op');
           return () => {};
         }
         return manager.on('queueChange', callback);
@@ -505,7 +511,7 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
       onError(callback) {
         const manager = managerRef.current;
         if (!manager || !isInitialized) {
-          console.warn('[WebPlaybackProvider] onError called before initialization, returning no-op');
+          debug.warn('[WebPlaybackProvider] onError called before initialization, returning no-op');
           return () => {};
         }
         return manager.on('error', callback);
@@ -515,13 +521,23 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
     return { commands, events };
   }, [storage, isInitialized, updateSession, clearSession]);
 
-  // Don't render children until WASM is initialized
-  if (!isInitialized) {
-    console.log('[WebPlaybackProvider] Not initialized yet, returning null');
+  // Surface WASM initialization failure — previously isInitialized stayed false
+  // forever and the app rendered nothing with no indication of why.
+  if (initError) {
+    debug.error('[WebPlaybackProvider] WASM init failed, cannot render player:', initError);
+    // Return null so callers that wrap WebPlaybackProvider in an error boundary
+    // can catch and display a proper error UI. The error is also available via
+    // initError if the caller wants to conditionally render a fallback.
     return null;
   }
 
-  console.log('[WebPlaybackProvider] Initialized, rendering children');
+  // Don't render children until WASM is initialized
+  if (!isInitialized) {
+    debug.log('[WebPlaybackProvider] Not initialized yet, returning null');
+    return null;
+  }
+
+  debug.log('[WebPlaybackProvider] Initialized, rendering children');
   return <PlayerCommandsProvider value={value}>{children}</PlayerCommandsProvider>;
 }
 
@@ -531,11 +547,11 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
  * PlaybackSession context derives from store, so no dual updates needed
  */
 function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataStorage) {
-  console.log('[WebPlaybackProvider] Setting up event bridge');
+  debug.log('[WebPlaybackProvider] Setting up event bridge');
 
   // Bridge WASM events to shared store (session context derives from store)
   manager.on('stateChange', (state: PlaybackState) => {
-    console.log('[WebPlaybackProvider] State change:', state);
+    debug.log('[WebPlaybackProvider] State change:', state);
     const isPlaying = state === PlaybackState.Playing;
     usePlayerStore.setState({ isPlaying });
   });
@@ -549,7 +565,7 @@ function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataSto
       const demoTrack = storage.getTrackById(track.id);
       const coverUrl = demoTrack?.coverUrl || undefined;
 
-      console.log('[WebPlaybackProvider] Track changed:', {
+      debug.log('[WebPlaybackProvider] Track changed:', {
         id: track.id,
         convertedId: trackId,
         title: track.title,
@@ -569,7 +585,7 @@ function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataSto
 
       usePlayerStore.setState({ currentTrack: sharedTrack, duration: track.duration_secs || 0 });
     } else {
-      console.log('[WebPlaybackProvider] Track cleared');
+      debug.log('[WebPlaybackProvider] Track cleared');
       usePlayerStore.setState({ currentTrack: null, duration: 0 });
     }
   });
@@ -583,7 +599,7 @@ function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataSto
   });
 
   manager.on('volumeChange', (volume: number) => {
-    console.log('[WebPlaybackProvider] Volume change:', volume, '-> store:', volume / 100);
+    debug.log('[WebPlaybackProvider] Volume change:', volume, '-> store:', volume / 100);
     usePlayerStore.setState({ volume: volume / 100 }); // 0-100 to 0-1
   });
 
@@ -619,7 +635,7 @@ function setupEventBridge(manager: WasmPlaybackAdapter, storage: PlaybackDataSto
         addedAt: new Date().toISOString(),
       };
     });
-    console.log('[WebPlaybackProvider] Queue change, syncing', tracks.length, 'tracks to store');
+    debug.log('[WebPlaybackProvider] Queue change, syncing', tracks.length, 'tracks to store');
     usePlayerStore.setState({ queue: tracks });
   });
 }

@@ -118,7 +118,7 @@ export function VolumeLevelingSettings({
         });
         unlistenFunctions.push(unlistenStopped);
       } catch (error) {
-        console.error('[VolumeLevelingSettings] Failed to set up listeners:', error);
+        debug.error('[VolumeLevelingSettings] Failed to set up listeners:', error);
       }
     };
 
@@ -199,10 +199,10 @@ export function VolumeLevelingSettings({
   return (
     <div className="space-y-6">
       {/* Mode Selection */}
-      <div className="space-y-3">
+      <div className="space-y-3" data-testid="volume-leveling-mode-section">
         <label className="text-sm font-medium">Normalization Mode</label>
 
-        <div className="space-y-2">
+        <div className="space-y-2" data-testid="volume-leveling-mode-options">
           {modes.map((option) => {
             const isSelected = option.value === mode;
 
@@ -210,6 +210,8 @@ export function VolumeLevelingSettings({
               <button
                 key={option.value}
                 onClick={() => onModeChange(option.value)}
+                data-testid={`volume-leveling-mode-${option.value}`}
+                aria-pressed={isSelected}
                 className={`
                   w-full text-left p-4 rounded-lg border-2 transition-all
                   ${
@@ -266,6 +268,7 @@ export function VolumeLevelingSettings({
                 step="0.5"
                 value={localPreampDb}
                 onChange={(e) => handlePreampChange(parseFloat(e.target.value))}
+                data-testid="volume-leveling-preamp-slider"
                 className="w-full"
               />
               <span className="text-sm font-mono w-16 text-right">

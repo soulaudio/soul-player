@@ -31,6 +31,8 @@ interface LibraryPageLayoutProps {
   gridClass?: string
   /** Cache key for storing item count in localStorage */
   cacheKey?: string
+  /** Optional data-testid for the page container (e.g., 'albums-page') */
+  pageTestId?: string
   /** The main content (grid, list, etc.) */
   children: ReactNode
 }
@@ -46,6 +48,7 @@ export function LibraryPageLayout({
   itemType = 'album',
   gridClass = 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
   cacheKey,
+  pageTestId,
   children,
 }: LibraryPageLayoutProps) {
   const { t } = useTranslation()
@@ -303,7 +306,7 @@ export function LibraryPageLayout({
   }, [resetIdleTimer, setShowSearchBar])
 
   return (
-    <div className="h-full flex flex-col overflow-hidden relative">
+    <div className="h-full flex flex-col overflow-hidden relative" data-testid={pageTestId}>
       {/* Health warning */}
       <FeatureGate feature="hasHealthCheck">
         {healthWarning && (
@@ -336,6 +339,7 @@ export function LibraryPageLayout({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
+                data-testid="search-input"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={

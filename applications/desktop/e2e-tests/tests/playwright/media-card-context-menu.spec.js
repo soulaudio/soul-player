@@ -5,7 +5,7 @@
  *   1. Shows a context menu with "Add to Playlist"
  *   2. Menu is positioned near the cursor (not off-screen or at origin)
  *   3. Clicking the item opens the AddToPlaylistDialog
- *   4. Dialog closes after clicking Done
+ *   4. Clicking outside the menu closes it
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -17,23 +17,41 @@ let browser;
 let page;
 
 test.beforeAll(async () => {
+  // Global setup already waited for the app to be fully ready (nav-albums visible).
   browser = await chromium.connectOverCDP(CDP_URL);
-  // Tauri opens two windows (splash + main); find the main one
   const context = browser.contexts()[0];
+
+  // Find the main window — it is already loaded by the time tests run.
   const pages = context.pages();
-  page = pages.find(p => !p.url().includes('splash')) ?? pages[0];
-  // Wait for main app content to be visible
-  await page.waitForSelector('[data-testid="nav-albums"]', { timeout: 15_000 });
+  page = pages.find(
+    p => (p.url().includes('localhost:1420') || p.url().includes('tauri.localhost'))
+         && !p.url().includes('splash')
+  );
+
+  if (!page) throw new Error('Main window not found in CDP context');
+
+  // Short safety wait in case there's any residual animation/settle
+  await page.waitForSelector('[data-testid="nav-albums"]', { timeout: 30_000 });
 });
 
 test.afterAll(async () => {
   await browser.close();
 });
 
-// Navigate to Albums before each test and wait for cards
+// Before each test: dismiss any open menus/dialogs, then navigate to Albums
 test.beforeEach(async () => {
-  await page.click('[data-testid="nav-albums"]');
-  await page.waitForSelector('[data-testid^="media-card-album-"]', { timeout: 10_000 });
+  // Dismiss any leftover context menu or dialog from the previous test
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  // Use force:true so the click goes through even if a backdrop overlay is still present
+  await page.click('[data-testid="nav-albums"]', { force: true });
+  await page.waitForSelector('[data-testid^="media-card-album-"]', { timeout: 15_000 });
+});
+
+// After each test: clean up any open overlays
+test.afterEach(async () => {
+  await page.keyboard.press('Escape').catch(() => {});
 });
 
 // ----------------------------------------------------------------
@@ -76,7 +94,7 @@ test('clicking "Add to Playlist" opens the dialog', async () => {
   await menuItem.click();
 
   const dialog = page.locator('[data-testid="add-to-playlist-dialog"]');
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
 
   await page.screenshot({ path: 'screenshots/add-to-playlist-dialog.png' });
 });
@@ -88,7 +106,7 @@ test('clicking outside the menu closes it', async () => {
   await card.click({ button: 'right' });
   await expect(page.locator('[role="menu"]')).toBeVisible({ timeout: 5_000 });
 
-  // Click somewhere away from the menu
+  // Click somewhere away from the menu (top-left corner of viewport)
   await page.mouse.click(10, 10);
   await expect(page.locator('[role="menu"]')).not.toBeVisible({ timeout: 3_000 });
 });

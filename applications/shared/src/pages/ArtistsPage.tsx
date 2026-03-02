@@ -98,6 +98,7 @@ export function ArtistsPage() {
       itemType="artist"
       gridClass={gridClass}
       cacheKey="library-artists-count"
+      pageTestId="artists-page"
     >
       {errorContent || (filteredArtists.length > 0 ? (
         shouldVirtualize ? (
@@ -128,7 +129,7 @@ export function ArtistsPage() {
           </div>
         )
       ) : (
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+        <div data-testid="empty-state" className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Users className="w-12 h-12 mb-4 opacity-50" />
           <p className="font-medium">
             {searchQuery ? t('library.noSearchResults') : t('artist.noArtists')}

@@ -4,7 +4,7 @@
  * Has play/pause functionality based on current playback context
  */
 
-import { memo, useRef, useState, type ReactNode } from 'react'
+import { memo, useRef, useState, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Play, Pause, Disc3, Users, ListMusic, ListPlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -101,6 +101,14 @@ const MediaCardComponent = ({
 
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null)
   const isHandlingPlayRef = useRef(false);
+
+  // Close context menu on Escape key
+  useEffect(() => {
+    if (!contextMenuPos) return
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setContextMenuPos(null) }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [contextMenuPos])
 
   const handlePlayPause = async (e: React.MouseEvent) => {
     if (isHandlingPlayRef.current) return;

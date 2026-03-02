@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { DesktopOnly } from '../../contexts/PlatformContext';
 import { getPlatform } from '../../lib/platform';
+import { debug } from '../../utils/debug';
 
 interface ResetDialogProps {
   isOpen: boolean;
@@ -40,7 +41,7 @@ function ResetConfirmDialog({ isOpen, onClose, onConfirm }: ResetDialogProps) {
   const isConfirmed = confirmText.toLowerCase() === 'reset';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div data-testid="reset-confirm-dialog" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-background border border-border rounded-lg shadow-lg max-w-md w-full mx-4 p-6">
         <div className="flex items-start gap-3 mb-4">
           <AlertTriangle className="w-6 h-6 text-destructive flex-shrink-0 mt-1" />
@@ -87,6 +88,7 @@ function ResetConfirmDialog({ isOpen, onClose, onConfirm }: ResetDialogProps) {
 
         <div className="flex gap-2 justify-end">
           <button
+            data-testid="reset-dialog-cancel-button"
             onClick={onClose}
             disabled={isResetting}
             className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
@@ -124,7 +126,7 @@ export function DataManagementSettingsPage({ embedded = false }: { embedded?: bo
       // If we reach here, reset failed (app should have exited)
       setResetError(t('settings.dataManagement.resetError'));
     } catch (error) {
-      console.error('Failed to reset to factory settings:', error);
+      debug.error('Failed to reset to factory settings:', error);
       setResetError(
         error instanceof Error ? error.message : t('settings.dataManagement.resetError')
       );
@@ -183,6 +185,7 @@ export function DataManagementSettingsPage({ embedded = false }: { embedded?: bo
               )}
 
               <button
+                data-testid="reset-factory-settings-button"
                 onClick={() => setIsResetDialogOpen(true)}
                 className="px-4 py-2 text-sm rounded-lg bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity flex items-center gap-2"
               >

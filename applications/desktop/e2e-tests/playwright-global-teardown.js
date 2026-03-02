@@ -5,13 +5,12 @@
 import { rmSync } from 'fs';
 
 export default async function globalTeardown() {
-  const pid = process.env.PLAYWRIGHT_APP_PID;
-  if (pid) {
-    try {
-      process.kill(parseInt(pid));
-      console.log(`[Playwright Teardown] Killed app PID ${pid}`);
-    } catch { /* already gone */ }
-  }
+  // Kill by name — more reliable than by PID on Windows
+  try {
+    const { execSync } = await import('child_process');
+    execSync('powershell -Command "Stop-Process -Name soul-player-desktop -Force -ErrorAction SilentlyContinue"', { stdio: 'ignore' });
+    console.log('[Playwright Teardown] Killed soul-player-desktop');
+  } catch { /* already gone */ }
 
   const dir = process.env.PLAYWRIGHT_TEST_DIR;
   if (dir) {

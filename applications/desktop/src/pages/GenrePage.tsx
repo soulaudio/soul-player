@@ -162,10 +162,11 @@ export function GenrePage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div data-testid="genre-detail-page" className="h-full flex flex-col">
       {/* Header */}
       <div className="mb-6">
         <button
+          data-testid="genre-back-button"
           onClick={() => navigate('/library?tab=genres')}
           className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
         >
@@ -184,13 +185,14 @@ export function GenrePage() {
             <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
               {t('library.genre', 'Genre')}
             </p>
-            <h1 className="text-4xl font-bold mb-2">{genre.name}</h1>
-            <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
+            <h1 data-testid="genre-title" className="text-4xl font-bold mb-2">{genre.name}</h1>
+            <p data-testid="genre-track-count" className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
               <Clock className="w-4 h-4" />
               {genre.track_count} {t('library.tracks', 'tracks')} • {formatDuration(totalDuration)}
             </p>
 
             <button
+              data-testid="genre-play-all-button"
               onClick={handlePlayAll}
               disabled={tracks.filter(t => t.file_path).length === 0}
               className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)] transition-opacity duration-[var(--transition-duration)]"

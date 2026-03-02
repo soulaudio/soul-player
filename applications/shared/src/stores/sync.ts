@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { debug } from '../utils/debug';
 
 export type SyncStatus = 'idle' | 'scanning' | 'extracting' | 'validating' | 'cleaning' | 'error';
 export type SyncPhase = 'scanning' | 'metadata_extraction' | 'validation' | 'cleanup';
@@ -112,15 +113,22 @@ export function setupSyncListeners(): () => void {
       });
       unlistenFunctions.push(unlistenRequired);
     } catch (error) {
-      console.error('[setupSyncListeners] Failed to set up listeners:', error);
+      debug.error('[setupSyncListeners] Failed to set up listeners:', error);
     }
   };
 
-  // Setup listeners asynchronously
-  void setup();
+  // Setup listeners asynchronously.
+  // Keep a reference so the cleanup function can await registration before
+  // calling unlisten — prevents leaking listeners when the caller unmounts
+  // before the async setup resolves.
+  const setupPromise = setup();
 
   // Return cleanup function
   return () => {
-    unlistenFunctions.forEach(fn => fn());
+    setupPromise.then(() => {
+      unlistenFunctions.forEach(fn => fn());
+    }).catch(() => {
+      unlistenFunctions.forEach(fn => fn());
+    });
   };
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { debug } from '@soul-player/shared';
 import {
   FolderOpen,
   FolderInput,
@@ -132,7 +133,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         setWatchedFolders([...watchedFolders, { name, path: folder }]);
       }
     } catch (error) {
-      console.error('Failed to open folder dialog:', error);
+      debug.error('Failed to open folder dialog:', error);
     }
   };
 
@@ -143,7 +144,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         setLibraryPath(folder);
       }
     } catch (error) {
-      console.error('Failed to open folder dialog:', error);
+      debug.error('Failed to open folder dialog:', error);
     }
   };
 
@@ -183,14 +184,14 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
       if ((setupType === 'watched' || setupType === 'both') && watchedFolders.length > 0) {
         // Note: Fire this asynchronously - we don't wait for scan to complete
         invoke('rescan_all_sources').catch((error) => {
-          console.error('[OnboardingPage] Failed to start initial scan:', error);
+          debug.error('[OnboardingPage] Failed to start initial scan:', error);
         });
       }
 
       setStep('complete');
       setTimeout(onComplete, 1500);
     } catch (error) {
-      console.error('Failed to complete onboarding:', error);
+      debug.error('Failed to complete onboarding:', error);
     } finally {
       setLoading(false);
     }
@@ -214,7 +215,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         onComplete();
       })
       .catch((error) => {
-        console.error('[OnboardingPage] Failed to complete onboarding on skip:', error);
+        debug.error('[OnboardingPage] Failed to complete onboarding on skip:', error);
         // Still call onComplete to avoid stuck state
         onComplete();
       });

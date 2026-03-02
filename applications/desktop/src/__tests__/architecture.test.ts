@@ -179,31 +179,9 @@ const CONSOLE_LOG_ALWAYS_ALLOWED = [
  *
  * Remove a file from this list once it has been cleaned up.
  */
-const CONSOLE_LOG_KNOWN_VIOLATIONS = new Set([
-  // applications/desktop
-  'applications/desktop/src/pages/OnboardingPage.tsx',
-  'applications/desktop/src/components/ImportDialog.tsx',
-  'applications/desktop/src/components/ScanProgressIndicator.tsx',
-  'applications/desktop/src/pages/SettingsPage.tsx',
-  'applications/desktop/src/contexts/SettingsContext.tsx',
-  'applications/desktop/src/components/ShortcutsSettings.tsx',
-  'applications/desktop/src/providers/TauriPlayerCommandsProvider.tsx',
-  'applications/desktop/src/App.tsx',
-  'applications/desktop/src/layouts/MainLayout.tsx',
-  'applications/desktop/src/hooks/useKeyboardShortcuts.ts',
-  'applications/desktop/src/components/FileDropHandler.tsx',
-  'applications/desktop/src/components/WindowControls.tsx',
-  'applications/desktop/src/components/UpdateDialog.tsx',
-  // applications/shared
-  'applications/shared/src/components/settings/DataManagementSettingsPage.tsx',
-  'applications/shared/src/hooks/useAudioDevice.ts',
-  'applications/shared/src/providers/MockBackendProvider.tsx',
-  'applications/shared/src/providers/WebPlaybackProvider.tsx',
-  'applications/shared/src/hooks/usePlaybackEvents.ts',
-  'applications/shared/src/hooks/queries/useArtworkMutations.ts',
-  'applications/shared/src/components/settings/audio/LatencyMonitor.tsx',
-  'applications/shared/src/components/settings/audio/VolumeLevelingSettings.tsx',
-  'applications/shared/src/stores/sync.ts',
+const CONSOLE_LOG_KNOWN_VIOLATIONS = new Set<string>([
+  // All violations have been resolved. This list is intentionally empty.
+  // Do NOT add new files here — fix violations at the source instead.
 ]);
 
 interface ConsoleViolation {

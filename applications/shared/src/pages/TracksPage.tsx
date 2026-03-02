@@ -152,6 +152,7 @@ export function TracksPage() {
       itemType="track"
       gridClass="grid-cols-1"
       cacheKey="library-tracks-count"
+      pageTestId="tracks-page"
     >
       {isLoading ? (
         <SkeletonGrid count={20} type="track" gridClass="grid-cols-1" />
@@ -196,7 +197,7 @@ export function TracksPage() {
           }}
         />
       ) : (
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+        <div data-testid="empty-state" className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Music className="w-12 h-12 mb-4 opacity-50" />
           <p className="font-medium">
             {searchQuery ? t('library.noSearchResults') : t('library.noTracks')}

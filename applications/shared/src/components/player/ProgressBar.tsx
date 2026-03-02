@@ -104,14 +104,15 @@ export function ProgressBar() {
   }, [isDragging, calculatePosition, duration, handleSeek]);
 
   return (
-    <div className="flex items-center gap-3 w-full">
+    <div data-testid="now-playing-progress-bar" className="flex items-center gap-3 w-full">
       {/* Current time */}
-      <span className="text-xs text-muted-foreground font-mono min-w-[40px] text-right">
+      <span data-testid="seek-current-time" className="text-xs text-muted-foreground font-mono min-w-[40px] text-right">
         {formatDuration(currentTimeSeconds)}
       </span>
 
       {/* Progress bar — outer div is the hit area (h-4), inner div is the visual track (h-[3px]) */}
       <div
+        data-testid="seek-track"
         ref={progressBarRef}
         className="relative flex-1 h-4 flex items-center select-none"
         style={{
@@ -150,7 +151,7 @@ export function ProgressBar() {
       </div>
 
       {/* Total duration */}
-      <span className="text-xs text-muted-foreground font-mono min-w-[40px]">
+      <span data-testid="seek-total-time" className="text-xs text-muted-foreground font-mono min-w-[40px]">
         {formatDuration(duration)}
       </span>
     </div>

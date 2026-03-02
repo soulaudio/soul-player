@@ -5,7 +5,7 @@
 use crate::{
     crossfade::{CrossfadeEngine, CrossfadeSettings, CrossfadeState, FadeCurve},
     error::{PlaybackError, Result},
-    events::{CrossfadeProgressTracker, PlaybackEvent},
+    events::{CrossfadeProgressTracker, PlaybackEvent, PlaybackStateEvent},
     fade_envelopes::{
         FadeCompleteAction, StartFadeEnvelope, StopFadeEnvelope, DAC_KEEPALIVE_NOISE,
     },
@@ -303,7 +303,18 @@ impl PlaybackManager {
     ///
     /// Stops playback and clears current track (but not queue).
     /// Uses smooth fade-out to prevent clicks.
+    ///
+    /// Idempotent: calling stop() when already fully stopped (Stopped state,
+    /// no loading in progress, no active source) does NOT emit a duplicate
+    /// StateChanged(Stopped) event.
     pub fn stop(&mut self) {
+        // Determine whether there is actually something to stop.
+        // If we're already in a fully-idle state (Stopped + not loading + no source),
+        // suppress the event to avoid flooding listeners with duplicate Stopped events.
+        let already_idle = self.state == PlaybackState::Stopped
+            && !self.loading
+            && matches!(self.sources, SourceState::Empty);
+
         self.stop_fade.reset();
         self.state = PlaybackState::Stopped;
         self.loading = false;
@@ -319,7 +330,9 @@ impl PlaybackManager {
         self.start_fade.reset();
         self.position_update_samples = 0;
 
-        self.emit_state_changed(PlaybackState::Stopped);
+        if !already_idle {
+            self.emit_state_changed(PlaybackState::Stopped);
+        }
     }
 
     /// Activate a loaded source for playback
@@ -356,6 +369,24 @@ impl PlaybackManager {
         }
         // else: if state is Paused (user paused during loading) or Stopped
         // (!was_loading), keep the current state without emitting StateChanged.
+
+        // Reset audio pipeline state for the incoming track.
+        // The output limiter maintains a lookahead ring buffer and a gain_reduction
+        // value. Without reset, audio frames from the end of the previous track
+        // linger in the lookahead buffer and the gain_reduction from the previous
+        // track bleeds into the start of the new track — causing an audible click
+        // or incorrect initial loudness.
+        // The loudness normalizer's internal limiter also needs to be reset.
+        // Note: transition_to_next_track() (crossfade path) already calls
+        // loudness_normalizer.reset(). This reset covers the non-crossfade path.
+        #[cfg(feature = "volume-leveling")]
+        self.loudness_normalizer.reset();
+
+        #[cfg(feature = "volume-leveling")]
+        self.output_limiter.reset();
+
+        #[cfg(feature = "volume-leveling")]
+        self.headroom_manager.reset();
 
         // Emit track changed event
         self.pending_events.push(PlaybackEvent::TrackChanged {
@@ -474,12 +505,19 @@ impl PlaybackManager {
             "[AUTO-ADVANCE] Emitting LoadNext event for track: {}",
             next_track.id
         );
+
+        // Notify listeners that we've stopped the current track before loading
+        // the next one.  This mirrors the same pattern used in previous() and
+        // skip_to_queue_index() so the UI stops the progress timer while the
+        // incoming track is being loaded by the platform layer.
+        self.state = PlaybackState::Stopped;
+        self.emit_state_changed(PlaybackState::Stopped);
+
         // Remember the track we're loading so it can be saved to history if the
         // user navigates again before activate_source() is called.
         self.pending_load_track = Some(next_track.clone());
         self.pending_events
             .push(PlaybackEvent::LoadNext(next_track));
-        self.state = PlaybackState::Stopped;
         self.loading = true;
 
         Ok(())
@@ -489,16 +527,33 @@ impl PlaybackManager {
     ///
     /// Used by background loading to determine which track to load.
     /// This does NOT modify queue state - it only looks ahead.
+    ///
+    /// Mirrors the priority logic in `get_next_track_from_queue`:
+    /// - If no track is currently active or pending (truly starting playback),
+    ///   play_next items are skipped so the first source track plays first.
+    /// - If RepeatAll is active and the queue is exhausted, returns the first
+    ///   track from the original source (the track that would play after reload).
     pub fn peek_next_track(&self) -> Result<QueueTrack> {
-        // If starting playback (no history), skip play_next queue
-        // Play Next tracks should play AFTER the first track, not instead of it
-        let track = if self.history.is_empty() {
+        // Skip play_next queue only when no track has been activated yet.
+        // Once a track is active or pending, play_next has normal priority.
+        let track = if self.get_current_track().is_none() {
             self.queue.peek_next_skip_play_next()
         } else {
             self.queue.peek_next().cloned()
         };
 
-        track.ok_or(PlaybackError::QueueEmpty)
+        if let Some(t) = track {
+            return Ok(t);
+        }
+
+        // Queue exhausted — check RepeatAll: would reload source and play first track
+        if self.repeat == RepeatMode::All {
+            if let Some(first) = self.queue.peek_first_source_track() {
+                return Ok(first.clone());
+            }
+        }
+
+        Err(PlaybackError::QueueEmpty)
     }
 
     /// Get next track considering repeat mode
@@ -991,8 +1046,9 @@ impl PlaybackManager {
             return true;
         }
 
-        // Repeat One always has next (same track)
-        if self.repeat == RepeatMode::One {
+        // Repeat One repeats the *current* track — only meaningful when a track is loaded.
+        // If the queue is empty and no track is active there is nothing to repeat.
+        if self.repeat == RepeatMode::One && self.get_current_track().is_some() {
             return true;
         }
 
@@ -1876,16 +1932,33 @@ impl PlaybackManager {
         self.pending_events.push(event);
     }
 
-    /// Emit a state changed event
-    /// Emit a state changed event with duplicate suppression
+    /// Emit a state changed event with deduplication.
     ///
-    /// Emit a state changed event
+    /// Consecutive identical StateChanged events are suppressed: if the last
+    /// event already in the pending queue is a `StateChanged` for the same
+    /// state, the new event is silently dropped.  This prevents UI flicker
+    /// and wasted bandwidth when callers (e.g. `stop()`) are invoked more
+    /// than once while already in the target state.
     ///
-    /// TODO: Phase 5 - Re-implement event deduplication using local state
+    /// Non-consecutive repeats (e.g. Stopped → Playing → Stopped) are always
+    /// emitted because each represents a real transition.
     fn emit_state_changed(&mut self, state: PlaybackState) {
-        // For now, emit all events (slight performance cost)
+        let new_state_event: PlaybackStateEvent = state.into();
+        // Check if the most recently queued event is already this same state.
+        if let Some(PlaybackEvent::StateChanged {
+            state: last_state, ..
+        }) = self.pending_events.last()
+        {
+            if *last_state == new_state_event {
+                tracing::debug!(
+                    "[PLAYBACK] Suppressed duplicate StateChanged({:?})",
+                    new_state_event
+                );
+                return;
+            }
+        }
         self.push_event(PlaybackEvent::StateChanged {
-            state: state.into(),
+            state: new_state_event,
         });
     }
 

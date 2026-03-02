@@ -5,7 +5,7 @@
  * through Edge WebView2's remote debugging port.
  *
  * Prerequisites:
- *   1. Build release binary: cargo build --release -p soul-player-desktop
+ *   1. Build debug binary:   cargo build -p soul-player-desktop
  *   2. Install Playwright: npm run playwright:install
  *
  * Run: npm run test:playwright

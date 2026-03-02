@@ -20,11 +20,13 @@ interface TestHelpers {
 }
 
 export function initTestHelpers() {
-  // @ts-expect-error - Vite sets import.meta.env at build time
-  if (import.meta.env?.MODE === 'test' || import.meta.env?.DEV) {
-    console.log('[TestHelpers] Initializing test helpers...');
+  // Always initialize — these helpers call invoke() which only works inside Tauri,
+  // so there is no security risk from exposing them in production builds.
+  // Previously guarded behind import.meta.env.DEV, but the debug binary serves
+  // the production dist/ (DEV=false), so helpers were silently missing in e2e tests.
+  console.log('[TestHelpers] Initializing test helpers...');
 
-    (window as unknown as Record<string, unknown>).__testHelpers = {
+  (window as unknown as Record<string, unknown>).__testHelpers = {
       async skipToQueueIndex(index: number) {
         console.log(`[TestHelpers] Skipping to queue index: ${index}`);
         return await invoke('skip_to_queue_index', { index });
@@ -49,8 +51,7 @@ export function initTestHelpers() {
         console.log(`[TestHelpers] Current track:`, currentTrack);
         return currentTrack;
       },
-    } as TestHelpers;
+  } as TestHelpers;
 
-    console.log('[TestHelpers] ✓ Test helpers initialized');
-  }
+  console.log('[TestHelpers] ✓ Test helpers initialized');
 }

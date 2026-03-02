@@ -128,6 +128,7 @@
 //! manager.process_audio(&mut output_buffer).ok();
 //! ```
 
+pub mod circuit_breaker;
 mod crossfade;
 mod error;
 pub mod events;
@@ -136,6 +137,7 @@ mod history;
 pub mod lazy_queue;
 mod manager;
 mod queue;
+pub mod replay_gain;
 mod shuffle;
 mod source;
 pub mod types;
@@ -146,6 +148,7 @@ mod volume;
 pub mod wasm;
 
 // Public exports
+pub use circuit_breaker::{CircuitBreaker, CircuitBreakerAction, CircuitState};
 pub use crossfade::{CrossfadeEngine, CrossfadeSettings, CrossfadeState, FadeCurve};
 pub use error::{PlaybackError, Result};
 pub use events::{CrossfadeProgressTracker, PlaybackEvent, PlaybackStateEvent};

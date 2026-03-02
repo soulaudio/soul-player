@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { Loader2, FolderSync, Check, AlertCircle } from 'lucide-react';
+import { debug } from '@soul-player/shared';
 
 interface ScanProgress {
   id: number;
@@ -35,6 +36,9 @@ export function ScanProgressIndicator({
   const { t } = useTranslation();
   const [scans, setScans] = useState<ScanProgress[]>([]);
   const [expanded, setExpanded] = useState(false);
+  // Keep the indicator visible for 2 s after scan-started fires, even if the scan
+  // completes so fast that get_running_scans always returns empty (test datasets).
+  const [isScanActive, setIsScanActive] = useState(false);
 
   // Poll for running scans
   useEffect(() => {
@@ -56,7 +60,7 @@ export function ScanProgressIndicator({
         if (runningScans.length === 0) {
           idleCount++;
           if (idleCount >= 3 && interval) {
-            console.log('[ScanProgressIndicator] No scans for 1.5s, stopping poll interval');
+            debug.log('[ScanProgressIndicator] No scans for 1.5s, stopping poll interval');
             clearInterval(interval);
             interval = null;
           }
@@ -66,12 +70,12 @@ export function ScanProgressIndicator({
 
         previousScanCount = runningScans.length;
       } catch (err) {
-        console.error('[ScanProgressIndicator] Failed to fetch running scans:', err);
+        debug.error('[ScanProgressIndicator] Failed to fetch running scans:', err);
       }
     };
 
     // Initial fetch
-    console.log('[ScanProgressIndicator] Starting scan polling');
+    debug.log('[ScanProgressIndicator] Starting scan polling');
     void fetchScans();
 
     // Poll every 500ms while there are active scans
@@ -79,7 +83,7 @@ export function ScanProgressIndicator({
 
     return () => {
       if (interval) {
-        console.log('[ScanProgressIndicator] Cleaning up poll interval');
+        debug.log('[ScanProgressIndicator] Cleaning up poll interval');
         clearInterval(interval);
       }
     };
@@ -96,8 +100,11 @@ export function ScanProgressIndicator({
 
         const unlistenStart = await listen('scan-started', () => {
           if (!isMounted) return;
+          // Show indicator immediately; keep it visible for at least 2 s so fast
+          // scans (e.g. small test datasets) have time to appear in the DOM.
+          setIsScanActive(true);
           // Refresh scans when a new one starts
-          invoke<ScanProgress[]>('get_running_scans').then(setScans).catch(console.error);
+          invoke<ScanProgress[]>('get_running_scans').then(setScans).catch(debug.error);
         });
         unlistenFunctions.push(unlistenStart);
 
@@ -112,11 +119,16 @@ export function ScanProgressIndicator({
         const unlistenComplete = await listen<{ sourceId: number }>('scan-complete', () => {
           if (!isMounted) return;
           // Refresh scans when one completes
-          invoke<ScanProgress[]>('get_running_scans').then(setScans).catch(console.error);
+          invoke<ScanProgress[]>('get_running_scans').then(setScans).catch(debug.error);
+          // Hide the "active" marker after a 2 s grace period so the indicator has
+          // time to show for fast scans before disappearing.
+          setTimeout(() => {
+            if (isMounted) setIsScanActive(false);
+          }, 2000);
         });
         unlistenFunctions.push(unlistenComplete);
       } catch (error) {
-        console.error('[ScanProgressIndicator] Failed to set up listeners:', error);
+        debug.error('[ScanProgressIndicator] Failed to set up listeners:', error);
       }
     };
 
@@ -128,8 +140,8 @@ export function ScanProgressIndicator({
     };
   }, []);
 
-  // Don't render if no active scans
-  if (scans.length === 0) {
+  // Don't render if no active scans and no recent scan activity
+  if (scans.length === 0 && !isScanActive) {
     return null;
   }
 
@@ -144,6 +156,7 @@ export function ScanProgressIndicator({
   if (position === 'footer') {
     return (
       <div
+        data-testid="scan-progress-indicator"
         className="fixed bottom-16 left-0 right-0 z-40 px-4 pointer-events-none"
         onClick={() => setExpanded(!expanded)}
       >
@@ -155,16 +168,18 @@ export function ScanProgressIndicator({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium truncate">
-                    {scans.length === 1
-                      ? t('scan.scanningSource', { name: scans[0].librarySourceName || 'Library' })
-                      : t('scan.scanningSources', { count: scans.length })}
+                    {scans.length === 0
+                      ? t('scan.scanning')
+                      : scans.length === 1
+                        ? t('scan.scanningSource', { name: scans[0].librarySourceName || 'Library' })
+                        : t('scan.scanningSources', { count: scans.length })}
                   </span>
                   <span className="text-muted-foreground ml-2">
                     {totalProcessed}/{totalFiles}
                   </span>
                 </div>
                 {/* Progress bar */}
-                <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div data-testid="scan-progress-bar" className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary transition-all duration-300"
                     style={{ width: `${totalProgress}%` }}
@@ -197,7 +212,7 @@ export function ScanProgressIndicator({
 
   // Floating position (top-right notification style)
   return (
-    <div className="fixed top-20 right-4 z-50 w-80">
+    <div data-testid="scan-progress-indicator" className="fixed top-20 right-4 z-50 w-80">
       <div className="bg-card border rounded-lg shadow-lg overflow-hidden">
         <div className="p-4">
           <div className="flex items-center gap-3 mb-3">

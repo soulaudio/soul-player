@@ -433,7 +433,7 @@ function AudioSettingsDesktop() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="audio-settings-page">
       {/* Notification Toast */}
       {notification && (
         <div
@@ -482,6 +482,7 @@ function AudioSettingsDesktop() {
         {/* Reset Button */}
         <button
           onClick={() => setShowResetDialog(true)}
+          data-testid="audio-reset-button"
           className="flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
         >
           <RotateCcw className="w-4 h-4" />
@@ -501,6 +502,7 @@ function AudioSettingsDesktop() {
       />
 
       {/* Pipeline Overview */}
+      <div data-testid="audio-pipeline-overview">
       <PipelineVisualization
         backend={getBackendName()}
         deviceName={settings.device_name}
@@ -512,12 +514,14 @@ function AudioSettingsDesktop() {
         volumeLevelingMode={getVolumeLevelingDisplay()}
         loading={loading}
       />
+      </div>
 
       {/* Pipeline Stages - Order matches overview: Resample → DSP → Leveling → Buffer → Output */}
       <div>
         {/* Stage 1: Resampling */}
         <PipelineStage
           id="audio-stage-1"
+          data-testid="audio-stage-resampling"
           title={t('settings.audio.stages.resampling.title')}
           description={t('settings.audio.stages.resampling.description')}
           isActive={true}
@@ -538,6 +542,7 @@ function AudioSettingsDesktop() {
         {/* Stage 2: DSP Effects */}
         <PipelineStage
           id="audio-stage-2"
+          data-testid="audio-stage-dsp"
           title={t('settings.audio.stages.dspEffects.title')}
           description={t('settings.audio.stages.dspEffects.description')}
           isActive={settings.dsp_enabled}
@@ -551,6 +556,7 @@ function AudioSettingsDesktop() {
         {/* Stage 3: Volume Leveling */}
         <PipelineStage
           id="audio-stage-3"
+          data-testid="audio-stage-volume-leveling"
           title={t('settings.audio.stages.volumeLeveling.title')}
           description={t('settings.audio.stages.volumeLeveling.description')}
           isActive={settings.volume_leveling_mode !== 'disabled'}
@@ -580,6 +586,7 @@ function AudioSettingsDesktop() {
         {/* Stage 4: Headroom Management */}
         <PipelineStage
           id="audio-stage-4"
+          data-testid="audio-stage-headroom"
           title={t('settings.audio.stages.headroom.title')}
           description={t('settings.audio.stages.headroom.description')}
           isActive={true}
@@ -593,6 +600,7 @@ function AudioSettingsDesktop() {
         {/* Stage 5: Buffer Settings */}
         <PipelineStage
           id="audio-stage-5"
+          data-testid="audio-stage-buffer"
           title={t('settings.audio.stages.buffer.title')}
           description={t('settings.audio.stages.buffer.description')}
           isActive={true}
@@ -616,6 +624,7 @@ function AudioSettingsDesktop() {
         {/* Stage 6: Audio Output (Backend & Device) */}
         <PipelineStage
           id="audio-stage-6"
+          data-testid="audio-stage-output"
           title={t('settings.audio.stages.output.title')}
           description={t('settings.audio.stages.output.description')}
           isActive={true}

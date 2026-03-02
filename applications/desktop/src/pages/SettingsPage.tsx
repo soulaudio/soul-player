@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { SettingsPage as SharedSettingsPage, type SettingsHandlers } from '@soul-player/shared';
+import { SettingsPage as SharedSettingsPage, type SettingsHandlers, debug } from '@soul-player/shared';
 import { useSettings } from '../contexts/SettingsContext';
 import { ShortcutsSettings } from '../components/ShortcutsSettings';
 import { UpdateDialog } from '../components/UpdateDialog';
@@ -55,7 +55,7 @@ export function SettingsPage() {
         i18n.changeLanguage(locale);
       }
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      debug.error('Failed to load settings:', error);
     }
   }, [i18n]);
 
@@ -89,7 +89,7 @@ export function SettingsPage() {
       });
       i18n.changeLanguage(locale);
     } catch (error) {
-      console.error('Failed to save language:', error);
+      debug.error('Failed to save language:', error);
     }
   }, [i18n]);
 
@@ -101,7 +101,7 @@ export function SettingsPage() {
       });
       setAutoUpdate(enabled);
     } catch (error) {
-      console.error('Failed to save auto-update setting:', error);
+      debug.error('Failed to save auto-update setting:', error);
     }
   }, []);
 
@@ -113,7 +113,7 @@ export function SettingsPage() {
       });
       setSilentUpdate(enabled);
     } catch (error) {
-      console.error('Failed to save silent update setting:', error);
+      debug.error('Failed to save silent update setting:', error);
     }
   }, []);
 
@@ -128,7 +128,7 @@ export function SettingsPage() {
         toast.success(t('settings.upToDate'));
       }
     } catch (error) {
-      console.error('Failed to check for updates:', error);
+      debug.error('Failed to check for updates:', error);
       toast.error(t('settings.checkFailed'));
     } finally {
       setChecking(false);
@@ -144,7 +144,7 @@ export function SettingsPage() {
       toast.success(t('settings.updateInstalledRestarting'));
       setShowUpdateDialog(false);
     } catch (error) {
-      console.error('Failed to install update:', error);
+      debug.error('Failed to install update:', error);
       toast.error(t('settings.updateInstallFailed'));
       setIsInstalling(false);
       setInstallProgress(0);
