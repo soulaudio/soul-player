@@ -3463,14 +3463,36 @@ mod tests {
     /// This test verifies the fix: process ALL events per audio callback.
     #[test]
     fn test_forward_manager_events_processes_all_events_not_just_first() {
-        use soul_playback::{PlaybackConfig, PlaybackManager};
+        use soul_playback::{PlaybackConfig, PlaybackManager, QueueTrack, TrackSource};
+        use std::time::Duration;
 
         let mut mgr = PlaybackManager::new(PlaybackConfig::default());
 
-        // Call stop() twice to push 2x StateChanged(Stopped) into pending_events.
-        // Both calls push events via emit_state_changed → pending_events.
-        mgr.stop();
-        mgr.stop();
+        // Produce 2 distinct events using play() then stop():
+        //   play()  → LoadNext(T1)        — 1st event
+        //   stop()  → StateChanged(Stopped) — 2nd event (not idle: state was Playing+loading)
+        //
+        // The old approach of calling stop() twice no longer works: stop() now guards
+        // against no-op calls when already idle, and emit_state_changed deduplicates
+        // consecutive identical events. Both guards exist to prevent UI flicker.
+        let track = QueueTrack {
+            id: "t1".to_string(),
+            path: "fake.flac".into(),
+            title: "Track 1".to_string(),
+            artist: "Artist".to_string(),
+            album: None,
+            duration: Duration::from_secs(3),
+            track_number: None,
+            source: TrackSource::Album {
+                id: "a1".to_string(),
+                name: "Album".to_string(),
+            },
+        };
+
+        mgr.load_playlist(vec![track], 0);
+        mgr.drain_events(); // discard any events from load_playlist itself
+        let _ = mgr.play(); // → LoadNext(T1) queued
+        mgr.stop(); // → StateChanged(Stopped) queued (state was Playing+loading)
 
         let (event_tx, event_rx) = bounded(100);
         let (command_tx, _command_rx) = bounded(100);

@@ -20,20 +20,15 @@
 use serde::{Deserialize, Serialize};
 
 /// ReplayGain normalization mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ReplayGainMode {
     /// No normalization
+    #[default]
     Off,
     /// Use per-track gain (normalizes each track independently)
     Track,
     /// Use album gain (keeps relative volume within album)
     Album,
-}
-
-impl Default for ReplayGainMode {
-    fn default() -> Self {
-        Self::Off
-    }
 }
 
 impl ReplayGainMode {
@@ -58,7 +53,7 @@ impl ReplayGainMode {
 }
 
 /// ReplayGain values for a track
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct ReplayGainValues {
     /// Track gain in dB (from REPLAYGAIN_TRACK_GAIN tag)
     pub track_gain_db: Option<f32>,
@@ -68,17 +63,6 @@ pub struct ReplayGainValues {
     pub album_gain_db: Option<f32>,
     /// Album peak value (linear, 0.0 to 1.0+)
     pub album_peak: Option<f32>,
-}
-
-impl Default for ReplayGainValues {
-    fn default() -> Self {
-        Self {
-            track_gain_db: None,
-            track_peak: None,
-            album_gain_db: None,
-            album_peak: None,
-        }
-    }
 }
 
 impl ReplayGainValues {
@@ -208,23 +192,47 @@ impl ReplayGainProcessor {
         }
     }
 
+    /// Check whether the cached linear gain is a normal finite value (for tests)
+    pub fn linear_gain_is_finite(&self) -> bool {
+        self.linear_gain.is_finite()
+    }
+
     /// Recalculate the linear gain multiplier
     fn recalculate_gain(&mut self) {
-        // Start with unity gain
-        let mut total_gain_db = 0.0;
+        // When mode is Off, always use unity gain — ignore both RG tags and preamp.
+        // Preamp is only meaningful when normalization is active; applying it in Off
+        // mode would silently alter the output level contrary to the user's intent.
+        if self.mode == ReplayGainMode::Off {
+            self.linear_gain = 1.0;
+            tracing::debug!(
+                mode = ?self.mode,
+                "[ReplayGain] Mode is Off — using unity gain"
+            );
+            return;
+        }
 
-        // Add ReplayGain if enabled
-        if self.mode != ReplayGainMode::Off {
-            if let Some(gain_db) = self.current_values.gain_for_mode(self.mode) {
+        // Start with unity gain
+        let mut total_gain_db = 0.0f32;
+
+        // Add ReplayGain value for the current mode
+        if let Some(gain_db) = self.current_values.gain_for_mode(self.mode) {
+            // Guard against corrupt/invalid tag values (NaN, Inf) to prevent
+            // downstream sample corruption.  Treat them as 0 dB (no adjustment).
+            if gain_db.is_finite() {
                 total_gain_db += gain_db;
+            } else {
+                tracing::warn!(
+                    gain_db = %gain_db,
+                    "[ReplayGain] Non-finite gain value in metadata, treating as 0 dB"
+                );
             }
         }
 
-        // Add pre-amp
+        // Add pre-amp (only active when a normalization mode is selected)
         total_gain_db += self.preamp_db;
 
         // Apply clipping prevention if enabled
-        if self.prevent_clipping && self.mode != ReplayGainMode::Off {
+        if self.prevent_clipping {
             if let Some(peak) = self.current_values.peak_for_mode(self.mode) {
                 if peak > 0.0 {
                     // Calculate max safe gain: the gain that would bring peak to 1.0
@@ -238,7 +246,11 @@ impl ReplayGainProcessor {
         }
 
         // Convert dB to linear gain: 10^(dB/20)
-        self.linear_gain = db_to_linear(total_gain_db);
+        let linear = db_to_linear(total_gain_db);
+
+        // Final safety net: if the result is still non-finite (e.g. total_gain_db
+        // was somehow ±Inf after all the guards), fall back to unity gain.
+        self.linear_gain = if linear.is_finite() { linear } else { 1.0 };
 
         tracing::debug!(
             mode = ?self.mode,
