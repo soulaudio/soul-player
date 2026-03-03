@@ -7,6 +7,7 @@
 
 use crate::app_state::AppState;
 use crate::playback::PlaybackManager;
+use crate::playback_lazy::LazyPlaybackManager;
 use serde::{Deserialize, Serialize};
 use soul_audio::effects::{
     CompressorSettings, CrossfeedPreset, CrossfeedSettings, EqBand, GraphicEqPreset,
@@ -435,16 +436,21 @@ pub async fn restore_dsp_chain_from_database(
     }
 }
 
-/// Helper to persist DSP chain after modification using PlaybackManager and AppState
-async fn persist_current_chain(playback: &PlaybackManager, app_state: &AppState) {
+/// Helper to persist DSP chain after modification using LazyPlaybackManager and AppState
+async fn persist_current_chain(playback: &LazyPlaybackManager, app_state: &AppState) {
     #[cfg(feature = "effects")]
     {
-        match playback.get_effect_slots() {
-            Ok(slots) => {
-                persist_dsp_chain(&app_state.pool, &app_state.user_id, &slots).await;
-            }
+        match playback.get().await {
+            Ok(pm) => match pm.get_effect_slots() {
+                Ok(slots) => {
+                    persist_dsp_chain(&app_state.pool, &app_state.user_id, &slots).await;
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "[persist_current_chain] Failed to get effect slots");
+                }
+            },
             Err(e) => {
-                tracing::error!(error = %e, "[persist_current_chain] Failed to get effect slots");
+                tracing::error!(error = %e, "[persist_current_chain] Failed to get PlaybackManager");
             }
         }
     }
@@ -472,11 +478,15 @@ pub async fn get_available_effects() -> Result<Vec<String>, String> {
 /// Get current DSP chain configuration
 #[tauri::command]
 pub async fn get_dsp_chain(
-    #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] playback: State<'_, LazyPlaybackManager>,
 ) -> Result<Vec<EffectSlot>, soul_audio_desktop::AudioError> {
     #[cfg(feature = "effects")]
     {
-        let slots = playback.get_effect_slots()?;
+        let pm = playback
+            .get()
+            .await
+            .map_err(|e| soul_audio_desktop::AudioError::DeviceError(e))?;
+        let slots = pm.get_effect_slots()?;
 
         Ok((0..4)
             .map(|index| EffectSlot {
@@ -517,7 +527,7 @@ pub async fn get_dsp_chain(
 /// Add effect to chain at specified slot
 #[tauri::command]
 pub async fn add_effect_to_chain(
-    #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] playback: State<'_, LazyPlaybackManager>,
     #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
     #[allow(unused_variables)] effect: EffectType,
@@ -531,6 +541,11 @@ pub async fn add_effect_to_chain(
 
     #[cfg(feature = "effects")]
     {
+        let pm = playback
+            .get()
+            .await
+            .map_err(|e| soul_audio_desktop::AudioError::DeviceError(e))?;
+
         let effect_type = match &effect {
             EffectType::Eq { .. } => "eq",
             EffectType::Compressor { .. } => "compressor",
@@ -541,7 +556,7 @@ pub async fn add_effect_to_chain(
             EffectType::Convolution { .. } => "convolution",
         };
 
-        playback.set_effect_slot(
+        pm.set_effect_slot(
             slot_index,
             Some(EffectSlotState {
                 effect,
@@ -569,7 +584,7 @@ pub async fn add_effect_to_chain(
 /// Remove effect from chain slot
 #[tauri::command]
 pub async fn remove_effect_from_chain(
-    #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] playback: State<'_, LazyPlaybackManager>,
     #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
 ) -> Result<(), soul_audio_desktop::AudioError> {
@@ -582,7 +597,11 @@ pub async fn remove_effect_from_chain(
 
     #[cfg(feature = "effects")]
     {
-        playback.set_effect_slot(slot_index, None)?;
+        let pm = playback
+            .get()
+            .await
+            .map_err(|e| soul_audio_desktop::AudioError::DeviceError(e))?;
+        pm.set_effect_slot(slot_index, None)?;
         tracing::info!(slot_index, "[remove_effect_from_chain] Effect removed");
 
         // Persist the updated chain
@@ -600,7 +619,7 @@ pub async fn remove_effect_from_chain(
 /// Enable/disable effect in chain slot
 #[tauri::command]
 pub async fn toggle_effect(
-    #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] playback: State<'_, LazyPlaybackManager>,
     #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
     #[allow(unused_variables)] enabled: bool,
@@ -614,10 +633,14 @@ pub async fn toggle_effect(
 
     #[cfg(feature = "effects")]
     {
-        let slots = playback.get_effect_slots()?;
+        let pm = playback
+            .get()
+            .await
+            .map_err(|e| soul_audio_desktop::AudioError::DeviceError(e))?;
+        let slots = pm.get_effect_slots()?;
         if let Some(mut slot_state) = slots[slot_index].clone() {
             slot_state.enabled = enabled;
-            playback.set_effect_slot(slot_index, Some(slot_state))?;
+            pm.set_effect_slot(slot_index, Some(slot_state))?;
             tracing::info!(
                 slot_index = slot_index,
                 enabled = enabled,
@@ -649,7 +672,7 @@ pub async fn toggle_effect(
 /// rebuild only if the effect type changed or the effect doesn't exist yet.
 #[tauri::command]
 pub async fn update_effect_parameters(
-    #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] playback: State<'_, LazyPlaybackManager>,
     #[allow(unused_variables)] app_state: State<'_, AppState>,
     slot_index: usize,
     #[allow(unused_variables)] effect: EffectType,
@@ -661,11 +684,11 @@ pub async fn update_effect_parameters(
 
     #[cfg(feature = "effects")]
     {
-        let slots = playback.get_effect_slots()?;
+        let pm = playback.get().await.map_err(|e| e.clone())?;
+        let slots = pm.get_effect_slots()?;
         if let Some(slot_state) = &slots[slot_index] {
             // Try in-place update first (preserves filter states, no sizzle)
-            let updated_in_place =
-                playback.update_effect_parameters_in_place(slot_index, &effect)?;
+            let updated_in_place = pm.update_effect_parameters_in_place(slot_index, &effect)?;
 
             if updated_in_place {
                 tracing::info!(
@@ -675,7 +698,7 @@ pub async fn update_effect_parameters(
                 );
             } else {
                 // Fall back to full rebuild (effect type mismatch or effect not found)
-                playback.set_effect_slot(
+                pm.set_effect_slot(
                     slot_index,
                     Some(EffectSlotState {
                         effect,
@@ -707,13 +730,14 @@ pub async fn update_effect_parameters(
 /// Clear entire DSP chain
 #[tauri::command]
 pub async fn clear_dsp_chain(
-    #[allow(unused_variables)] playback: State<'_, PlaybackManager>,
+    #[allow(unused_variables)] playback: State<'_, LazyPlaybackManager>,
     #[allow(unused_variables)] app_state: State<'_, AppState>,
 ) -> Result<(), String> {
     #[cfg(feature = "effects")]
     {
+        let pm = playback.get().await.map_err(|e| e.clone())?;
         for i in 0..4 {
-            playback.set_effect_slot(i, None)?;
+            pm.set_effect_slot(i, None)?;
         }
         tracing::info!("[clear_dsp_chain] All effects cleared");
 
@@ -1039,7 +1063,7 @@ pub async fn delete_dsp_chain_preset(
 #[tauri::command]
 pub async fn load_dsp_chain_preset(
     preset_id: i64,
-    playback: State<'_, PlaybackManager>,
+    playback: State<'_, LazyPlaybackManager>,
     app_state: State<'_, crate::app_state::AppState>,
 ) -> Result<(), String> {
     let user_id: i64 = app_state
