@@ -96,14 +96,6 @@ export function usePlaybackEvents() {
         });
         unlistenFunctions.push(unlistenQueueUpdated);
 
-        // Listen for playback errors
-        const unlistenError = await listen<string>('playback:error', (event) => {
-          if (!isMounted) return;
-          debug.error('[Playback Error]', event.payload);
-          // TODO: Show user-facing error notification (toast/snackbar)
-          // Currently errors are only logged to console for debugging.
-        });
-        unlistenFunctions.push(unlistenError);
       } catch (error) {
         debug.error('[usePlaybackEvents] Failed to set up listeners:', error);
       }

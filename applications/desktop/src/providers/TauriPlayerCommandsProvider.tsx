@@ -7,6 +7,7 @@
 import { ReactNode, useMemo, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { toast } from 'sonner';
 import debounce from 'lodash.debounce';
 import {
   PlayerCommandsProvider,
@@ -445,9 +446,15 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         });
         unlistenFunctions.push(unlistenQueueUpdated);
 
-        // Listen for errors
+        // Listen for errors — show toast and auto-skip to next track
         const unlistenError = await listen<string>('playback:error', (event) => {
-          debug.error('[TauriPlayerCommandsProvider] Playback error:', event.payload);
+          const message = event.payload ?? 'Playback error';
+          debug.error('[TauriPlayerCommandsProvider] Playback error:', message);
+          toast.error(message, { duration: 4000 });
+          // Auto-skip: if queue has more tracks they will load; if not, playback stops naturally
+          invoke('next_track').catch(() => {
+            // Queue exhausted — ignore
+          });
         });
         unlistenFunctions.push(unlistenError);
       } catch (error) {
