@@ -492,10 +492,10 @@ fn test_double_buffering_pattern() {
             let _ = back_buffer.len();
             drop(back_buffer);
 
-            // Swap buffers
+            // Swap buffers (no yield here — yielding after every swap causes
+            // starvation on saturated systems; the consumer yields instead)
             current_buffer_clone.store(!is_a, Ordering::Release);
             swaps_completed_clone.fetch_add(1, Ordering::Relaxed);
-            thread::yield_now();
         }
     });
 
