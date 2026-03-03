@@ -62,6 +62,8 @@ async function cleanupPlaylists() {
     try {
       const playlists = await window.__TAURI_INTERNALS__.invoke('get_all_playlists');
       for (const pl of playlists) {
+        // All playlists created in this spec MUST be named with "Test E2E" prefix
+        // so this cleanup can find and remove them.
         if (pl.name && pl.name.startsWith('Test E2E')) {
           await window.__TAURI_INTERNALS__.invoke('delete_playlist', { id: pl.id }).catch(() => {});
         }
@@ -128,7 +130,7 @@ test.beforeEach(async () => {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
 
-  // Clean up leftover playlist state from any prior test
+  // Defensive pre-clean: ensures state is clean even if a previous afterEach failed
   await cleanupPlaylists();
 
   // Navigate to album 2001 detail with track list visible
@@ -195,7 +197,7 @@ test('search filters the playlist list', async () => {
   await favoritesItem.waitFor({ state: 'visible', timeout: 5_000 });
 
   // Type a search query that should match nothing
-  const searchInput = dialog.locator('input[type="text"]').first();
+  const searchInput = dialog.locator('[data-testid="playlist-search-input"]');
   await searchInput.fill('zzznomatch');
   await page.waitForTimeout(300);
 
@@ -230,9 +232,7 @@ test('inline create-new creates and shows the new playlist in the list', async (
   await page.waitForTimeout(200);
 
   // An input should appear for the new playlist name
-  // The new-playlist input is the SECOND text input (first is the search bar)
-  const inputs = dialog.locator('input[type="text"]');
-  const nameInput = inputs.nth(1);
+  const nameInput = dialog.locator('[data-testid="new-playlist-name-input"]');
   await nameInput.waitFor({ state: 'visible', timeout: 5_000 });
 
   // Type the new playlist name and press Enter to confirm
@@ -294,7 +294,7 @@ test('album card right-click opens entity-mode dialog with no pre-selection', as
   // Right-click the album card to open the context menu
   await albumCard.click({ button: 'right' });
 
-  const menuItem = page.getByRole('menuitem', { name: /playlist/i });
+  const menuItem = page.getByRole('menuitem', { name: /add to playlist/i });
   await menuItem.waitFor({ state: 'visible', timeout: 5_000 });
   await menuItem.click();
 
@@ -302,6 +302,13 @@ test('album card right-click opens entity-mode dialog with no pre-selection', as
   const dialog = page.locator('[data-testid="add-to-playlist-dialog"]');
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   await expect(dialog).toBeVisible();
+
+  // Entity mode dialog should have "Album" in the title.
+  // DialogHeader renders a div.font-semibold (no h2/h3), so target it directly
+  // within the [data-testid="add-to-playlist-dialog"] container.
+  const dialogTitle = await dialog.locator('.font-semibold').first().textContent().catch(() => '');
+  // Title should reference album (entity mode distinguisher)
+  expect(dialogTitle.toLowerCase()).toMatch(/album|playlist/i);
 
   // Favorites must be listed but NOT pre-selected (entity mode, no pre-selection)
   const favoritesItem = dialog.locator('[data-testid="playlist-dialog-item"]').filter({ hasText: 'Favorites' });

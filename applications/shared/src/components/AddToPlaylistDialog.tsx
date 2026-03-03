@@ -282,6 +282,7 @@ export function AddToPlaylistDialog(props: AddToPlaylistDialogProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
+              data-testid="playlist-search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('playlist.searchPlaylists', 'Search playlists...')}
@@ -302,6 +303,7 @@ export function AddToPlaylistDialog(props: AddToPlaylistDialogProps) {
             <div className="flex items-center gap-2 mb-4">
               <input
                 type="text"
+                data-testid="new-playlist-name-input"
                 value={newPlaylistName}
                 onChange={(e) => setNewPlaylistName(e.target.value)}
                 placeholder={t('playlist.newPlaylistName', 'New Playlist')}
