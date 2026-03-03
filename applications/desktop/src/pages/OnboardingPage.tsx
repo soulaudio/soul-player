@@ -222,7 +222,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col" data-testid="onboarding-page">
       {/* Content */}
       <main className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-3xl">
@@ -299,7 +299,7 @@ interface ThemeStepProps {
 
 function ThemeStep({ selectedTheme, onThemeSelect, onContinue, t }: ThemeStepProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="onboarding-theme-step">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold">{t('onboarding.chooseTheme')}</h1>
         <p className="text-muted-foreground">{t('onboarding.chooseThemeDescription')}</p>
@@ -314,6 +314,7 @@ function ThemeStep({ selectedTheme, onThemeSelect, onContinue, t }: ThemeStepPro
             <button
               key={theme.id}
               onClick={() => onThemeSelect(theme.id)}
+              data-testid={`onboarding-theme-${theme.id}`}
               className={`relative rounded-xl overflow-hidden transition-all ${
                 isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
               }`}
@@ -385,6 +386,7 @@ function ThemeStep({ selectedTheme, onThemeSelect, onContinue, t }: ThemeStepPro
       <div className="flex justify-center">
         <button
           onClick={onContinue}
+          data-testid="onboarding-continue"
           className="flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)] font-medium"
         >
           {t('common.continue')}
@@ -408,7 +410,7 @@ function StrategyStep({ setupType, onStrategySelect, onBack, onSkip, t }: Strate
   const [selected, setSelected] = useState<SetupType>(setupType);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="onboarding-strategy-step">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold">{t('onboarding.welcome')}</h1>
         <p className="text-muted-foreground">{t('onboarding.welcomeSubtitle')}</p>
@@ -505,6 +507,7 @@ function StrategyStep({ setupType, onStrategySelect, onBack, onSkip, t }: Strate
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
+          data-testid="onboarding-back"
           className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -518,6 +521,7 @@ function StrategyStep({ setupType, onStrategySelect, onBack, onSkip, t }: Strate
           <button
             onClick={() => selected && onStrategySelect(selected)}
             disabled={!selected}
+            data-testid="onboarding-continue"
             className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)] disabled:cursor-not-allowed transition-opacity duration-[var(--transition-duration)]"
           >
             {t('common.continue')}
@@ -567,7 +571,7 @@ function SetupStep({
   const showManaged = setupType === 'managed' || setupType === 'both';
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="onboarding-setup-step">
       {showWatched && (
         <section className="space-y-4">
           <div className="text-center">
@@ -692,6 +696,7 @@ function SetupStep({
       <div className="flex items-center justify-between pt-4">
         <button
           onClick={onBack}
+          data-testid="onboarding-back"
           className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -720,7 +725,7 @@ function SetupStep({
 // Complete Step Component
 function CompleteStep({ t }: { t: (key: string) => string }) {
   return (
-    <div className="text-center space-y-6 py-12">
+    <div className="text-center space-y-6 py-12" data-testid="onboarding-complete-step">
       <div className="flex justify-center">
         <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
           <Check className="w-8 h-8 text-green-500" />
