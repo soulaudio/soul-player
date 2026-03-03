@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { Disc3, SlidersHorizontal, X } from 'lucide-react'
 import { AlbumCard } from '../components/AlbumCard'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
 import { VirtualizedGrid } from '../components/VirtualizedGrid'
 import { useGridScale } from '../hooks/useGridScale'
@@ -27,6 +28,11 @@ export function AlbumsPage() {
 
   const [entityForPlaylist, setEntityForPlaylist] = useState<{
     id: number | string
+    name: string
+  } | null>(null)
+
+  const [albumForArtwork, setAlbumForArtwork] = useState<{
+    id: number
     name: string
   } | null>(null)
 
@@ -194,6 +200,7 @@ export function AlbumsPage() {
                 showArtist={true}
                 priority={index < 24}
                 onAddToPlaylist={() => setEntityForPlaylist({ id: album.id, name: album.title })}
+                onEditArtwork={() => setAlbumForArtwork({ id: album.id, name: album.title })}
               />
             )}
           />
@@ -206,6 +213,7 @@ export function AlbumsPage() {
                 showArtist={true}
                 priority={index < 24}
                 onAddToPlaylist={() => setEntityForPlaylist({ id: album.id, name: album.title })}
+                onEditArtwork={() => setAlbumForArtwork({ id: album.id, name: album.title })}
               />
             ))}
           </div>
@@ -232,6 +240,13 @@ export function AlbumsPage() {
         entityName={entityForPlaylist.name}
       />
     )}
+    <EditArtworkDialog
+      open={!!albumForArtwork}
+      onClose={() => setAlbumForArtwork(null)}
+      entityType="album"
+      entityId={albumForArtwork ? String(albumForArtwork.id) : ''}
+      entityName={albumForArtwork?.name ?? ''}
+    />
     </>
   )
 }

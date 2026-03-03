@@ -258,17 +258,19 @@ export function EditArtworkDialog({
   if (state === 'crop' && rawImageUrl) {
     return (
       <Dialog open={open} onClose={handleClose}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" data-testid="edit-artwork-dialog">
           <DialogHeader onClose={handleClose}>
             {t('artwork.edit.cropTitle')}
           </DialogHeader>
           <DialogBody>
-            <ImageCropper
-              imageSrc={rawImageUrl}
-              cropShape={entityType === 'artist' ? 'circle' : 'square'}
-              onCrop={handleCropComplete}
-              onCancel={handleCropCancel}
-            />
+            <div data-testid="artwork-cropper">
+              <ImageCropper
+                imageSrc={rawImageUrl}
+                cropShape={entityType === 'artist' ? 'circle' : 'square'}
+                onCrop={handleCropComplete}
+                onCancel={handleCropCancel}
+              />
+            </div>
           </DialogBody>
         </DialogContent>
       </Dialog>
@@ -279,7 +281,7 @@ export function EditArtworkDialog({
   if (state === 'preview' && previewUrl) {
     return (
       <Dialog open={open} onClose={handleClose}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" data-testid="edit-artwork-dialog">
           <DialogHeader onClose={handleClose}>
             {t('artwork.edit.title')}
           </DialogHeader>
@@ -374,12 +376,12 @@ export function EditArtworkDialog({
             )}
           </DialogBody>
           <DialogFooter>
-            <Button variant="outline" onClick={handleCropCancel} disabled={saving}>
+            <Button variant="outline" onClick={handleCropCancel} disabled={saving} data-testid="artwork-cancel-button">
               {t('common.back')}
             </Button>
             {/* For artists/playlists, show Save button */}
             {entityType !== 'album' && (
-              <Button onClick={() => handleAlbumChoice('folder')} disabled={saving}>
+              <Button onClick={() => handleAlbumChoice('folder')} disabled={saving} data-testid="artwork-save-button">
                 {saving ? t('common.saving') : t('common.save')}
               </Button>
             )}
@@ -393,7 +395,7 @@ export function EditArtworkDialog({
   // Render main select dialog
   return (
     <Dialog open={open} onClose={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" data-testid="edit-artwork-dialog">
         <DialogHeader onClose={handleClose}>
           {t('artwork.edit.title')}
         </DialogHeader>
@@ -425,6 +427,7 @@ export function EditArtworkDialog({
 
           {/* Drop zone */}
           <div
+            data-testid="artwork-drop-zone"
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onClick={handleBrowseClick}
@@ -443,6 +446,7 @@ export function EditArtworkDialog({
             accept="image/*"
             onChange={handleFileSelect}
             className="hidden"
+            data-testid="artwork-file-input"
           />
 
           {/* Error message */}
@@ -464,15 +468,16 @@ export function EditArtworkDialog({
               onClick={handleRemove}
               disabled={saving || loadingArtwork}
               className="mr-auto text-destructive hover:text-destructive hover:bg-destructive/10"
+              data-testid="artwork-remove-button"
             >
               <Trash2 className="w-4 h-4 mr-2" />
               {t('artwork.edit.remove')}
             </Button>
           )}
-          <Button variant="outline" onClick={handleClose} disabled={saving}>
+          <Button variant="outline" onClick={handleClose} disabled={saving} data-testid="artwork-cancel-button">
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleBrowseClick} disabled={saving}>
+          <Button onClick={handleBrowseClick} disabled={saving} data-testid="artwork-select-button">
             {t('artwork.edit.selectImage')}
           </Button>
         </DialogFooter>

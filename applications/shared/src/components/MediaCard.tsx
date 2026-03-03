@@ -43,6 +43,8 @@ export interface MediaCardProps {
   priority?: boolean
   /** When provided, enables a right-click context menu on the artwork with an "Add to Playlist" option */
   onAddToPlaylist?: () => void
+  /** When provided, adds an "Edit Artwork" option to the right-click context menu */
+  onEditArtwork?: () => void
 }
 
 /** Get fallback icon for media type */
@@ -80,6 +82,7 @@ const MediaCardComponent = ({
   additionalInfo,
   priority = false,
   onAddToPlaylist,
+  onEditArtwork,
 }: MediaCardProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -264,7 +267,7 @@ const MediaCardComponent = ({
       <div
         className={`aspect-square ${shapeClasses} overflow-hidden bg-muted mb-2 shadow group-hover:shadow-md transition-shadow relative cursor-pointer`}
         onClick={handleClick}
-        onContextMenu={(e) => { if (onAddToPlaylist) { e.preventDefault(); e.stopPropagation(); setContextMenuPos({ x: e.clientX, y: e.clientY }) } }}
+        onContextMenu={(e) => { if (onAddToPlaylist || onEditArtwork) { e.preventDefault(); e.stopPropagation(); setContextMenuPos({ x: e.clientX, y: e.clientY }) } }}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && handleClick()}
@@ -321,7 +324,7 @@ const MediaCardComponent = ({
       ) : null}
 
       {/* Context menu - portaled to body so it's above all cards and unaffected by transforms */}
-      {contextMenuPos && onAddToPlaylist && createPortal(
+      {contextMenuPos && (onAddToPlaylist || onEditArtwork) && createPortal(
         <>
           {/* Invisible backdrop - closes menu on any click/right-click outside */}
           <div
@@ -335,15 +338,27 @@ const MediaCardComponent = ({
             style={{ position: 'fixed', left: contextMenuPos.x, top: contextMenuPos.y }}
             className="min-w-[180px] bg-background border rounded-lg shadow-lg py-1 z-50"
           >
-            <button
-              role="menuitem"
-              className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-[var(--disabled-opacity)]"
-              onClick={() => { setContextMenuPos(null); onAddToPlaylist() }}
-              disabled={!features.canCreatePlaylists}
-            >
-              <ListPlus className="w-4 h-4" />
-              <span>{t('playlist.addToPlaylist', 'Add to Playlist')}</span>
-            </button>
+            {onAddToPlaylist && (
+              <button
+                role="menuitem"
+                className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-[var(--disabled-opacity)]"
+                onClick={() => { setContextMenuPos(null); onAddToPlaylist() }}
+                disabled={!features.canCreatePlaylists}
+              >
+                <ListPlus className="w-4 h-4" />
+                <span>{t('playlist.addToPlaylist', 'Add to Playlist')}</span>
+              </button>
+            )}
+            {onEditArtwork && (
+              <button
+                role="menuitem"
+                data-testid="context-menu-edit-artwork"
+                className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground"
+                onClick={() => { setContextMenuPos(null); onEditArtwork() }}
+              >
+                <span>{t('artwork.editArtwork', 'Edit Artwork')}</span>
+              </button>
+            )}
           </div>
         </>,
         document.body
