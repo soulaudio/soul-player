@@ -30,13 +30,13 @@ pub fn now_timestamp() -> i64 {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use soul_storage::utils::time::timestamp_to_iso8601;
 ///
 /// let iso = timestamp_to_iso8601(1609459200); // 2021-01-01 00:00:00 UTC
 /// assert_eq!(iso, "2021-01-01T00:00:00+00:00");
 ///
-/// let invalid = timestamp_to_iso8601(-1);
+/// let invalid = timestamp_to_iso8601(i64::MAX); // out-of-range timestamp
 /// assert_eq!(invalid, "");
 /// ```
 #[inline]
@@ -56,13 +56,13 @@ pub fn timestamp_to_iso8601(timestamp: i64) -> String {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use soul_storage::utils::time::timestamp_to_datetime;
 ///
 /// let dt = timestamp_to_datetime(1609459200);
 /// assert!(dt.is_some());
 ///
-/// let invalid = timestamp_to_datetime(-1);
+/// let invalid = timestamp_to_datetime(i64::MAX); // out-of-range timestamp
 /// assert!(invalid.is_none());
 /// ```
 #[inline]

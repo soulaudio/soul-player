@@ -442,7 +442,8 @@ fn test_e2e_queue_sidebar_updates_on_skip() {
     ];
 
     manager.play_queue(tracks).unwrap();
-    std::thread::sleep(Duration::from_millis(50));
+    std::thread::sleep(Duration::from_millis(500));
+    manager.drain_events();
 
     let initial_queue = manager.get_queue().unwrap();
     // get_queue() returns upcoming tracks; track 1 is current, so 2 remain.
@@ -450,7 +451,7 @@ fn test_e2e_queue_sidebar_updates_on_skip() {
 
     // Skip track
     manager.next().unwrap();
-    std::thread::sleep(Duration::from_millis(50));
+    std::thread::sleep(Duration::from_millis(500));
     manager.drain_events();
 
     // Queue should be updated
@@ -673,8 +674,10 @@ fn test_e2e_rapid_queue_changes() {
         std::thread::sleep(Duration::from_millis(10));
     }
 
-    // Wait generously for all commands to be processed (loaded systems need more time)
-    std::thread::sleep(Duration::from_millis(500));
+    // Wait generously for all commands to be processed. 40 commands × 10ms audio callback
+    // = ~400ms minimum; add 1600ms headroom for heavily loaded CI systems where the audio
+    // thread can be starved after the long convolution stress test suite.
+    std::thread::sleep(Duration::from_millis(2000));
     manager.drain_events();
 
     // Should handle rapid changes

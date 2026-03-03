@@ -120,12 +120,18 @@ fn test_shuffle_off_preserves_original_order() {
 fn test_shuffle_off_after_shuffle_on_restores_order() {
     let mut manager = PlaybackManager::default();
 
+    // Use 10 tracks so P(same order after shuffle) = 1/10! ≈ 0.000028%
     let tracks = vec![
         create_track("1", "Track 1", "Artist A", 180),
         create_track("2", "Track 2", "Artist B", 180),
         create_track("3", "Track 3", "Artist C", 180),
         create_track("4", "Track 4", "Artist D", 180),
         create_track("5", "Track 5", "Artist E", 180),
+        create_track("6", "Track 6", "Artist F", 180),
+        create_track("7", "Track 7", "Artist G", 180),
+        create_track("8", "Track 8", "Artist H", 180),
+        create_track("9", "Track 9", "Artist I", 180),
+        create_track("10", "Track 10", "Artist J", 180),
     ];
 
     let original_order: Vec<String> = tracks.iter().map(|t| t.id.clone()).collect();

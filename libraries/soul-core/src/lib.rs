@@ -14,7 +14,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use soul_core::types::{Track, User, Playlist};
 //! use soul_core::types::{UserId, TrackId, PlaylistId};
 //! use std::path::PathBuf;

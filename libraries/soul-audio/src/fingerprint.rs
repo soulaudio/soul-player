@@ -15,7 +15,7 @@
 //! let fingerprinter = Fingerprinter::new(FingerprintConfig::default());
 //! let result = fingerprinter.fingerprint_file(Path::new("song.mp3"))?;
 //!
-//! println!("Fingerprint: {}", result.fingerprint);
+//! println!("Fingerprint: {:?}", result.fingerprint);
 //! println!("Duration: {}s", result.duration_seconds);
 //! # Ok(())
 //! # }

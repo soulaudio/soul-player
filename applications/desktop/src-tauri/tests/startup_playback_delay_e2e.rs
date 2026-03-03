@@ -265,8 +265,9 @@ async fn test_startup_to_first_playback_delay() {
     let mut audio_started = false;
     let event_wait_start = Instant::now();
 
-    for _ in 0..100 {
-        tokio::time::sleep(Duration::from_millis(10)).await;
+    let audio_deadline = event_wait_start + Duration::from_secs(5);
+    loop {
+        tokio::time::sleep(Duration::from_millis(20)).await;
 
         while let Some(event) = playback.try_recv_event() {
             match event {
@@ -290,7 +291,7 @@ async fn test_startup_to_first_playback_delay() {
             }
         }
 
-        if audio_started {
+        if audio_started || Instant::now() >= audio_deadline {
             break;
         }
     }
@@ -383,17 +384,25 @@ async fn test_cold_start_vs_warm_playback() {
     let cold_play_start = Instant::now();
     pm_cold.play().expect("Failed to play");
 
-    // Wait for actual audio start
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Poll for StateChanged(Playing) with a 3-second timeout.  On a heavily-loaded
+    // system (e.g. right after the 30-min convolution stress suite) the audio
+    // backend can take well over 50 ms to open the device and start the stream.
     let mut cold_audio_started = false;
-    while let Some(event) = pm_cold.try_recv_event() {
-        if matches!(
-            event,
-            PlaybackEvent::StateChanged(soul_playback::PlaybackState::Playing)
-        ) {
-            cold_audio_started = true;
+    let cold_deadline = cold_play_start + Duration::from_secs(3);
+    loop {
+        while let Some(event) = pm_cold.try_recv_event() {
+            if matches!(
+                event,
+                PlaybackEvent::StateChanged(soul_playback::PlaybackState::Playing)
+            ) {
+                cold_audio_started = true;
+                break;
+            }
+        }
+        if cold_audio_started || Instant::now() >= cold_deadline {
             break;
         }
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
     let cold_play_duration = cold_play_start.elapsed();
@@ -427,17 +436,23 @@ async fn test_cold_start_vs_warm_playback() {
     let warm_play_start = Instant::now();
     pm_warm.play().expect("Failed to play");
 
-    // Wait for actual audio start
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Same timeout-based poll as cold start.
     let mut warm_audio_started = false;
-    while let Some(event) = pm_warm.try_recv_event() {
-        if matches!(
-            event,
-            PlaybackEvent::StateChanged(soul_playback::PlaybackState::Playing)
-        ) {
-            warm_audio_started = true;
+    let warm_deadline = warm_play_start + Duration::from_secs(3);
+    loop {
+        while let Some(event) = pm_warm.try_recv_event() {
+            if matches!(
+                event,
+                PlaybackEvent::StateChanged(soul_playback::PlaybackState::Playing)
+            ) {
+                warm_audio_started = true;
+                break;
+            }
+        }
+        if warm_audio_started || Instant::now() >= warm_deadline {
             break;
         }
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
     let warm_play_duration = warm_play_start.elapsed();
