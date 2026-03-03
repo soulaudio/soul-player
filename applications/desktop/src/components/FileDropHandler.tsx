@@ -317,7 +317,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
 
       {/* Global drag overlay */}
       {isDragging && (
-        <div className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary pointer-events-none flex items-center justify-center">
+        <div data-testid="drag-overlay" className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary pointer-events-none flex items-center justify-center">
           <div className="bg-background/95 backdrop-blur-sm rounded-2xl p-8 shadow-2xl text-center">
             <Music className="w-16 h-16 mx-auto mb-4 text-primary animate-bounce" />
             <p className="text-2xl font-bold">{t('import.dropToAdd')}</p>
