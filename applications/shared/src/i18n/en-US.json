@@ -544,7 +544,8 @@
     "notFound": "Genre not found",
     "backToGenres": "Back to Genres",
     "noGenres": "No genres found",
-    "noGenresHint": "Genre information is extracted from your music files"
+    "noGenresHint": "Genre information is extracted from your music files",
+    "trackCount": "{{count}} tracks"
   },
   "playlist": {
     "create": "Create Playlist",

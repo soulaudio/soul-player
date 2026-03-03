@@ -22,7 +22,7 @@ export function GenresListPage() {
   if (isLoading) {
     return (
       <div data-testid="genres-page" className="p-6">
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
           ))}
@@ -35,7 +35,7 @@ export function GenresListPage() {
     return (
       <div data-testid="genres-page" className="flex flex-col items-center justify-center py-24 text-muted-foreground">
         <Music className="w-12 h-12 mb-4 opacity-50" />
-        <p className="font-medium">{t('genres.empty', 'No genres found')}</p>
+        <p className="font-medium">{t('genre.noGenres')}</p>
       </div>
     )
   }
@@ -55,7 +55,7 @@ export function GenresListPage() {
           >
             <p className="font-semibold text-foreground truncate">{genre.name}</p>
             <p className="text-sm text-muted-foreground mt-1">
-              {t('genres.trackCount', `${genre.track_count} tracks`, { count: genre.track_count })}
+              {t('genre.trackCount', { count: genre.track_count })}
             </p>
           </button>
         ))}
