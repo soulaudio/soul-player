@@ -2,16 +2,17 @@
  * TracksPage - displays all tracks with search
  */
 
-import { useState, useCallback, useMemo, useDeferredValue } from 'react'
+import { useState, useCallback, useMemo, useDeferredValue, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Music } from 'lucide-react'
+import { Music, SlidersHorizontal, X } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
 import { SkeletonGrid } from '../components/SkeletonGrid'
-import type { BackendTrack } from '../contexts/BackendContext'
+import { useBackend, type BackendTrack, type BackendGenre } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
+import { cn } from '../lib/utils'
 import { removeConsecutiveDuplicates } from '../utils/queue'
 import { useTracks } from '../hooks/queries/useLibraryQueries'
 import { useDatabaseHealth } from '../hooks/queries/useLibraryQueries'
@@ -20,6 +21,7 @@ import { debug } from '../utils/debug';
 
 export function TracksPage() {
   const { t } = useTranslation()
+  const backend = useBackend()
   const commands = usePlayerCommands()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -31,13 +33,82 @@ export function TracksPage() {
     title: string
   } | null>(null)
 
+  const [genres, setGenres] = useState<BackendGenre[]>([])
+  const [selectedGenreId, setSelectedGenreId] = useState<number | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
+  const [genreTracks, setGenreTracks] = useState<BackendTrack[]>([])
+  const [genreTracksLoading, setGenreTracksLoading] = useState(false)
+
+  useEffect(() => {
+    backend.getAllGenres().then(setGenres).catch(() => {})
+  }, [backend])
+
+  useEffect(() => {
+    if (selectedGenreId === null) {
+      setGenreTracks([])
+      return
+    }
+    setGenreTracksLoading(true)
+    backend.getGenreTracks(selectedGenreId)
+      .then(setGenreTracks)
+      .catch(() => setGenreTracks([]))
+      .finally(() => setGenreTracksLoading(false))
+  }, [selectedGenreId, backend])
+
   // Fetch data using React Query hooks
-  const { data: tracks = [], isLoading, isError, error } = useTracks()
+  const { data: allTracks = [], isLoading: tracksLoading, isError, error } = useTracks()
+  const tracks = selectedGenreId !== null ? genreTracks : allTracks
+  const isLoading = selectedGenreId !== null ? genreTracksLoading : tracksLoading
+
   const { data: health } = useDatabaseHealth()
   const deleteTrackMutation = useDeleteTrack()
 
   // Health warning from database health check
   const healthWarning = health?.issues.length ? health.issues.join(' ') : null
+
+  const filterPanel = genres.length === 0 ? null : (
+    <div className={`overflow-hidden transition-all duration-200 ${showFilters ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className="flex flex-wrap gap-2 pt-2 pb-1">
+        {genres.map((genre) => (
+          <button
+            key={genre.id}
+            data-testid={`genre-chip-${genre.id}${selectedGenreId === genre.id ? '-active' : ''}`}
+            onClick={() => setSelectedGenreId(selectedGenreId === genre.id ? null : genre.id)}
+            className={cn(
+              'px-3 py-1 rounded-full text-sm transition-all border',
+              selectedGenreId === genre.id
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-muted text-muted-foreground border-transparent hover:border-muted-foreground/30'
+            )}
+          >
+            {genre.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
+  const filtersButton = (
+    <button
+      data-testid="filter-toggle-button"
+      onClick={() => {
+        setShowFilters(v => !v)
+        if (showFilters) setSelectedGenreId(null)
+      }}
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all border',
+        showFilters || selectedGenreId !== null
+          ? 'border-primary text-primary bg-primary/10'
+          : 'border-transparent text-muted-foreground bg-muted hover:opacity-[var(--hover-text-opacity)]'
+      )}
+    >
+      {selectedGenreId !== null ? <X className="w-3.5 h-3.5" /> : <SlidersHorizontal className="w-3.5 h-3.5" />}
+      <span>Filters</span>
+      {selectedGenreId !== null && (
+        <span className="w-2 h-2 rounded-full bg-primary" />
+      )}
+    </button>
+  )
 
   // Filter tracks by search
   const filteredTracks = useMemo(() => {
@@ -148,6 +219,9 @@ export function TracksPage() {
       itemCount={tracks.length}
       searchPlaceholderKey="library.search.tracksWithCount"
       healthWarning={healthWarning}
+      additionalButtons={filtersButton}
+      filterPanel={filterPanel}
+      filterPanelVisible={showFilters}
       isLoading={isLoading}
       itemType="track"
       gridClass="grid-cols-1"
