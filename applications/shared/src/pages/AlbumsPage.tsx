@@ -240,13 +240,15 @@ export function AlbumsPage() {
         entityName={entityForPlaylist.name}
       />
     )}
-    <EditArtworkDialog
-      open={!!albumForArtwork}
-      onClose={() => setAlbumForArtwork(null)}
-      entityType="album"
-      entityId={albumForArtwork ? String(albumForArtwork.id) : ''}
-      entityName={albumForArtwork?.name ?? ''}
-    />
+    {albumForArtwork && (
+      <EditArtworkDialog
+        open={true}
+        onClose={() => setAlbumForArtwork(null)}
+        entityType="album"
+        entityId={String(albumForArtwork.id)}
+        entityName={albumForArtwork.name}
+      />
+    )}
     </>
   )
 }
