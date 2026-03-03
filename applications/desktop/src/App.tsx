@@ -14,6 +14,7 @@ import {
   ArtistPage,
   NowPlayingPage,
   PlaylistPage,
+  GenresListPage,
 } from '@soul-player/shared';
 // Desktop-specific pages
 import { SettingsRouter } from './pages/SettingsRouter';
@@ -185,6 +186,7 @@ function App() {
           <Route path="/playlists" element={<PlaylistsPage />} />
           <Route path="/playlists/:id" element={<PlaylistPage />} />
           <Route path="/tracks" element={<TracksPage />} />
+          <Route path="/genres" element={<GenresListPage />} />
           <Route path="/genres/:id" element={<GenrePage />} />
           <Route path="/now-playing" element={<NowPlayingPage />} />
           <Route path="/settings/*" element={<SettingsRouter />} />

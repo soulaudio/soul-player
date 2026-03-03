@@ -15,6 +15,7 @@ const navigationItems: NavItem[] = [
   { id: 'albums', labelKey: 'library.tab.albums', path: '/albums' },
   { id: 'artists', labelKey: 'library.tab.artists', path: '/artists' },
   { id: 'playlists', labelKey: 'library.tab.playlists', path: '/playlists' },
+  { id: 'genres', labelKey: 'nav.genres', path: '/genres' },
   { id: 'tracks', labelKey: 'library.tab.tracks', path: '/tracks' },
 ];
 

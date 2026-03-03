@@ -169,6 +169,7 @@ export { AlbumPage } from './pages/AlbumPage';
 export { ArtistPage } from './pages/ArtistPage';
 export { PlaylistPage } from './pages/PlaylistPage';
 export { NowPlayingPage } from './pages/NowPlayingPage';
+export { GenresListPage } from './pages/GenresListPage';
 export { SettingsPage } from './pages/SettingsPage';
 export type { SettingsHandlers, ShortcutsSettingsProps } from './pages/SettingsPage';
 export { SettingsLayout } from './components/settings/SettingsLayout';
