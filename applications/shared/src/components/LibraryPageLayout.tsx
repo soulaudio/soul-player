@@ -33,6 +33,10 @@ interface LibraryPageLayoutProps {
   cacheKey?: string
   /** Optional data-testid for the page container (e.g., 'albums-page') */
   pageTestId?: string
+  /** Optional expandable filter panel rendered below the search bar */
+  filterPanel?: ReactNode
+  /** When true, increases content top padding to account for filter panel height */
+  filterPanelVisible?: boolean
   /** The main content (grid, list, etc.) */
   children: ReactNode
 }
@@ -49,6 +53,8 @@ export function LibraryPageLayout({
   gridClass = 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
   cacheKey,
   pageTestId,
+  filterPanel,
+  filterPanelVisible = false,
   children,
 }: LibraryPageLayoutProps) {
   const { t } = useTranslation()
@@ -361,13 +367,14 @@ export function LibraryPageLayout({
             </div>
             {additionalButtons}
           </div>
+          {filterPanel}
         </div>
 
       {/* Scrollable Content - with dynamic padding for search bar */}
       <div
         ref={scrollContainerRef}
         className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom transition-all duration-300 ${
-          showSearchBar ? 'pt-14' : 'pt-6'
+          showSearchBar ? (filterPanelVisible ? 'pt-28' : 'pt-14') : 'pt-6'
         }`}
       >
         {(isLoading || !scrollReady) ? (
