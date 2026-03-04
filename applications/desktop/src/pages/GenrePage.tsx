@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useDeferredValue, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog, useBackend, usePlayerCommands, debug } from '@soul-player/shared';
+import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog, LibraryPageLayout, useBackend, usePlayerCommands, debug } from '@soul-player/shared';
 import { ArrowLeft, Play, Guitar, Clock } from 'lucide-react';
 
 interface Genre {
@@ -27,6 +27,9 @@ export function GenrePage() {
   const [tracks, setTracks] = useState<DesktopTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   // Add to playlist dialog state
   const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
@@ -63,10 +66,21 @@ export function GenrePage() {
     loadGenre(parseInt(id, 10));
   }, [id, loadGenre]);
 
+  const filteredTracks = useMemo(() => {
+    if (!deferredSearchQuery.trim()) return tracks;
+    const query = deferredSearchQuery.toLowerCase();
+    return tracks.filter(
+      t =>
+        t.title?.toLowerCase().includes(query) ||
+        (t.artist_name || '').toLowerCase().includes(query) ||
+        (t.album_title || '').toLowerCase().includes(query),
+    );
+  }, [tracks, deferredSearchQuery]);
+
   const buildQueue = useCallback((allTracks: Track[], _clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
     // allTracks is already deduplicated by TrackList's internal grouping
     // We need to map back to DesktopTrack to get file_path
-    const trackMap = new Map(tracks.map(t => [String(t.id), t]));
+    const trackMap = new Map(filteredTracks.map(t => [String(t.id), t]));
 
     // Filter to only tracks we have file_path for
     const validTracks = allTracks.filter(t => {
@@ -89,7 +103,7 @@ export function GenrePage() {
         trackNumber: desktopTrack.track_number || null,
       };
     });
-  }, [tracks]);
+  }, [filteredTracks]);
 
   const handlePlayAll = async () => {
     // Deduplicate tracks (selects best quality version for each unique track)
@@ -134,126 +148,122 @@ export function GenrePage() {
 
   const totalDuration = tracks.reduce((acc, t) => acc + (t.duration_seconds || 0), 0);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">{t('common.loading', 'Loading...')}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !genre) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-destructive">
-          <p className="font-medium mb-2">{error || t('genre.notFound', 'Genre not found')}</p>
-          <button
-            onClick={() => navigate('/library?tab=genres')}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
-          >
-            {t('common.back', 'Back')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div data-testid="genre-detail-page" className="h-full flex flex-col">
-      {/* Header */}
-      <div className="mb-6">
-        <button
-          data-testid="genre-back-button"
-          onClick={() => navigate('/library?tab=genres')}
-          className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{t('genre.backToGenres', 'Back to Genres')}</span>
-        </button>
-
-        <div className="flex items-start gap-6">
-          {/* Genre Icon */}
-          <div className="w-32 h-32 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Guitar className="w-16 h-16 text-primary" />
-          </div>
-
-          {/* Genre Info */}
-          <div className="flex-1">
-            <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
-              {t('library.genre', 'Genre')}
-            </p>
-            <h1 data-testid="genre-title" className="text-4xl font-bold mb-2">{genre.name}</h1>
-            <p data-testid="genre-track-count" className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
-              <Clock className="w-4 h-4" />
-              {genre.track_count} {t('library.tracks', 'tracks')} • {formatDuration(totalDuration)}
-            </p>
-
+    <LibraryPageLayout
+      searchQuery={searchQuery}
+      setSearchQuery={setSearchQuery}
+      itemCount={tracks.length}
+      searchPlaceholderKey="library.search.tracksWithCount"
+      isLoading={loading}
+      itemType="track"
+      gridClass="grid-cols-1"
+      pageTestId="genre-detail-page"
+    >
+      {error || !genre ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center text-destructive">
+            <p className="font-medium mb-2">{error || t('genre.notFound', 'Genre not found')}</p>
             <button
-              data-testid="genre-play-all-button"
-              onClick={handlePlayAll}
-              disabled={tracks.filter(t => t.file_path).length === 0}
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)] transition-opacity duration-[var(--transition-duration)]"
+              onClick={() => navigate('/genres')}
+              className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-[var(--hover-button-opacity)] transition-opacity duration-[var(--transition-duration)]"
             >
-              <Play className="w-5 h-5" fill="currentColor" />
-              <span>{t('common.playAll', 'Play All')}</span>
+              {t('common.back', 'Back')}
             </button>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Genre Header */}
+          <div className="mb-6">
+            <button
+              data-testid="genre-back-button"
+              onClick={() => navigate('/genres')}
+              className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>{t('genre.backToGenres', 'Back to Genres')}</span>
+            </button>
 
-      {/* Track List */}
-      <div className="flex-1 overflow-auto">
-        <TrackList
-          tracks={tracks.map(t => ({
-            id: t.id,
-            title: String(t.title || 'Unknown'),
-            artist: t.artist_name,
-            album: t.album_title,
-            duration: t.duration_seconds,
-            trackNumber: t.track_number,
-            isAvailable: !!t.file_path,
-            format: t.file_format,
-            bitrate: t.bit_rate,
-            sampleRate: t.sample_rate,
-            channels: t.channels,
-          }))}
-          buildQueue={buildQueue}
-          onTrackAction={() => {}}
-          renderMenu={(track) => {
-            const desktopTrack = tracks.find(t => t.id === track.id);
-            if (!desktopTrack) return null;
-            return (
-              <TrackMenu
-                track={desktopTrack}
-                onAddToPlaylist={() => {
-                  setSelectedTrackForPlaylist({
-                    id: desktopTrack.id,
-                    title: desktopTrack.title,
-                  });
-                }}
-                onDelete={async () => {
-                  await invoke('delete_track', { id: desktopTrack.id });
-                  if (id) loadGenre(parseInt(id, 10));
-                }}
-              />
-            );
-          }}
-        />
-      </div>
+            <div className="flex items-start gap-6">
+              {/* Genre Icon */}
+              <div className="w-32 h-32 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Guitar className="w-16 h-16 text-primary" />
+              </div>
 
-      {/* Add to Playlist Dialog */}
-      {selectedTrackForPlaylist && (
-        <AddToPlaylistDialog
-          open={!!selectedTrackForPlaylist}
-          onClose={() => setSelectedTrackForPlaylist(null)}
-          mode="track"
-          trackId={selectedTrackForPlaylist.id}
-          trackTitle={selectedTrackForPlaylist.title}
-        />
+              {/* Genre Info */}
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
+                  {t('library.genre', 'Genre')}
+                </p>
+                <h1 data-testid="genre-title" className="text-4xl font-bold mb-2">{genre.name}</h1>
+                <p data-testid="genre-track-count" className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
+                  <Clock className="w-4 h-4" />
+                  {genre.track_count} {t('library.tracks', 'tracks')} • {formatDuration(totalDuration)}
+                </p>
+
+                <button
+                  data-testid="genre-play-all-button"
+                  onClick={handlePlayAll}
+                  disabled={tracks.filter(t => t.file_path).length === 0}
+                  className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] disabled:opacity-[var(--disabled-opacity)] transition-opacity duration-[var(--transition-duration)]"
+                >
+                  <Play className="w-5 h-5" fill="currentColor" />
+                  <span>{t('common.playAll', 'Play All')}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Track List */}
+          <TrackList
+            tracks={filteredTracks.map(t => ({
+              id: t.id,
+              title: String(t.title || 'Unknown'),
+              artist: t.artist_name,
+              album: t.album_title,
+              duration: t.duration_seconds,
+              trackNumber: t.track_number,
+              isAvailable: !!t.file_path,
+              format: t.file_format,
+              bitrate: t.bit_rate,
+              sampleRate: t.sample_rate,
+              channels: t.channels,
+            }))}
+            buildQueue={buildQueue}
+            onTrackAction={() => {}}
+            renderMenu={(track) => {
+              const desktopTrack = filteredTracks.find(t => t.id === track.id);
+              if (!desktopTrack) return null;
+              return (
+                <TrackMenu
+                  track={desktopTrack}
+                  onAddToPlaylist={() => {
+                    setSelectedTrackForPlaylist({
+                      id: desktopTrack.id,
+                      title: desktopTrack.title,
+                    });
+                  }}
+                  onDelete={async () => {
+                    await invoke('delete_track', { id: desktopTrack.id });
+                    if (id) loadGenre(parseInt(id, 10));
+                  }}
+                />
+              );
+            }}
+          />
+
+          {/* Add to Playlist Dialog */}
+          {selectedTrackForPlaylist && (
+            <AddToPlaylistDialog
+              open={!!selectedTrackForPlaylist}
+              onClose={() => setSelectedTrackForPlaylist(null)}
+              mode="track"
+              trackId={selectedTrackForPlaylist.id}
+              trackTitle={selectedTrackForPlaylist.title}
+            />
+          )}
+        </>
       )}
-    </div>
+    </LibraryPageLayout>
   );
 }

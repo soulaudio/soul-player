@@ -372,7 +372,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 100));
         manager.play().ok(); // Must start playback for seek to work
-        let track = create_stress_track("stress", 100);
+        let track = create_stress_track("1", 100); // id must match pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(100), 44100)),
@@ -401,7 +401,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 200));
         manager.play().ok(); // Must start playback for seek to work
-        let track = create_stress_track("stress", 200);
+        let track = create_stress_track("1", 200); // id must match pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(200), 44100)),
@@ -430,7 +430,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 100));
         manager.play().ok(); // Must start playback for seek to work
-        let track = create_stress_track("stress", 100);
+        let track = create_stress_track("1", 100); // id must match pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(100), 44100)),
@@ -494,7 +494,7 @@ mod rapid_seek {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 100));
         manager.play().ok();
-        let track = create_stress_track("stress", 100);
+        let track = create_stress_track("1", 100); // id must match pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(100), 44100)),
@@ -747,7 +747,7 @@ mod queue_stress {
 
         manager.add_to_queue_end(create_stress_track("initial", 180));
         manager.play().ok();
-        let track = create_stress_track("stress", 180);
+        let track = create_stress_track("initial", 180); // id must match pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
@@ -786,7 +786,7 @@ mod queue_stress {
         }
 
         manager.play().ok();
-        let track = create_stress_track("stress", 180);
+        let track = create_stress_track("1", 180); // id must match first pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
@@ -852,7 +852,7 @@ mod queue_stress {
         }
 
         manager.play().ok();
-        let track = create_stress_track("stress", 180);
+        let track = create_stress_track("1", 180); // id must match first pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
@@ -1017,7 +1017,7 @@ mod volume_stress {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
         manager.play().ok();
-        let track = create_stress_track("stress", 180);
+        let track = create_stress_track("1", 180); // id must match pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
@@ -1372,7 +1372,9 @@ mod combined_stress {
 
             // Start playback
             manager.play().ok();
-            let track = create_stress_track("stress", 180);
+            // id must match the first pending_load_track for this cycle
+            let first_id = format!("{}_1", cycle);
+            let track = create_stress_track(&first_id, 180);
 
             manager.activate_source(
                 Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
@@ -1390,10 +1392,11 @@ mod combined_stress {
             assert_eq!(manager.get_state(), PlaybackState::Stopped);
         }
 
-        // Final start should work
+        // Final start should work — clear leftover queue from last cycle first.
+        manager.clear_queue();
         manager.add_to_queue_end(create_stress_track("final", 180));
         manager.play().ok();
-        let track = create_stress_track("stress", 180);
+        let track = create_stress_track("final", 180); // id must match pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),
@@ -1478,7 +1481,7 @@ mod edge_case_stress {
         let mut manager = PlaybackManager::default();
         manager.add_to_queue_end(create_stress_track("1", 180));
         manager.play().ok(); // Start playback
-        let track = create_stress_track("stress", 180);
+        let track = create_stress_track("1", 180); // id must match pending_load_track
 
         manager.activate_source(
             Box::new(StressMockSource::new(Duration::from_secs(180), 44100)),

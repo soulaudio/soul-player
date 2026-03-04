@@ -27,6 +27,7 @@
     "library": "Library",
     "discovery": "Discovery",
     "playlists": "Playlists",
+    "genres": "Genres",
     "settings": "Settings",
     "import": "Import"
   },

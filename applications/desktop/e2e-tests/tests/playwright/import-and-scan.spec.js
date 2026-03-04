@@ -78,6 +78,20 @@ test.beforeEach(async () => {
   // Navigate to Albums so we start from a known page.
   await page.click('[data-testid="nav-albums"]', { force: true });
   await page.waitForSelector('[data-testid^="media-card-album-"]', { timeout: 15_000 });
+
+  // Wait for any import triggered by a previous test to fully complete.
+  // import_directory may spawn a follow-up scan that briefly sets is_importing=true
+  // after the primary import resolves. Without this wait, test 2's pre-condition
+  // check (expect(beforeState).toBe(false)) can see the tail of test 1's import.
+  await page
+    .waitForFunction(
+      async () => {
+        const importing = await window.__TAURI_INTERNALS__.invoke('is_importing');
+        return importing === false;
+      },
+      { timeout: 30_000 },
+    )
+    .catch(() => {});
 });
 
 test.afterEach(async () => {

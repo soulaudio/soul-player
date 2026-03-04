@@ -891,7 +891,7 @@ fn test_no_click_on_seek() {
 
     // Use a sine wave source
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 5.0));
-    let seek_track = create_test_track("seek-audio-test");
+    let seek_track = create_test_track("seek-test"); // id must match pending_load_track
     manager.activate_source(source, seek_track);
 
     // Process some audio first to get past initial fade
@@ -933,7 +933,7 @@ fn test_no_click_on_multiple_seeks() {
     manager.play().expect("Should start playback");
 
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 10.0));
-    let multiple_seek_track = create_test_track("multiple-seek-test");
+    let multiple_seek_track = create_test_track("seek-test"); // id must match pending_load_track
     manager.activate_source(source, multiple_seek_track);
 
     // Process initial fade
@@ -1084,7 +1084,7 @@ fn test_no_click_on_rapid_seeks() {
     manager.play().expect("Should start playback");
 
     let source = Box::new(ConstantLevelSource::new(0.8, 440.0, sample_rate, 10.0));
-    let rapid_seek_track = create_test_track("rapid-seek-audio-test");
+    let rapid_seek_track = create_test_track("seek-test"); // id must match pending_load_track
     manager.activate_source(source, rapid_seek_track);
 
     // Rapid seeks without processing in between

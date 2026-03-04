@@ -6,6 +6,7 @@
  *  - Chain of multiple consecutive auto-advances (T1 → T2 → T3)
  *  - Queue fully exhausted via natural playback → state becomes Stopped, UI resets
  *  - Auto-advance still fires after a pause/resume cycle
+ *  - Auto-advance fires after seeking to near the end of a track
  *
  * These tests extend the single auto-advance check in playback-controls.spec.js
  * (which only verifies T1 → T2) by covering the multi-step chain and the
@@ -287,6 +288,50 @@ test('natural queue exhaustion → state Stopped and now-playing-title disappear
 // auto-advance pipeline — the track still finishes and the next one
 // starts.
 // ================================================================
+
+// ================================================================
+// Test 4: Auto-advance fires after seeking to near the end
+//
+// Seeks Track One to 9.0 s (1 s before end) then lets it finish
+// naturally.  Regression guard for:
+//   (a) seek resetting position tracking so auto-advance still detects EOF
+//   (b) sources that report duration incorrectly after seek
+// ================================================================
+
+test('auto-advance fires after seeking to near end of track', async () => {
+  test.setTimeout(25_000);
+
+  await startPlayback(page);
+
+  // Seek to 9.0 s (1 s before the 10-second track ends).
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 9.0 });
+  });
+
+  // Wait for the UI position to advance past 9.0 s (confirms seek landed).
+  await page.waitForTimeout(300);
+
+  // Now wait up to 15 s for Track One to finish and Track Two to start.
+  await page.waitForFunction(
+    () => {
+      const container = document.querySelector('[data-testid="now-playing-title"]');
+      if (!container) return false;
+      const titleEl = container.querySelector('.text-sm');
+      if (!titleEl) return false;
+      const title = titleEl.textContent.trim();
+      return title !== '' && title !== 'Track One';
+    },
+    { timeout: 15_000 },
+  );
+
+  const title = await getNowPlayingTitle(page);
+  expect(title).toBe('Track Two');
+
+  const state = await page.evaluate(async () =>
+    window.__TAURI_INTERNALS__.invoke('get_playback_state'),
+  );
+  expect(state).toBe('Playing');
+});
 
 test('auto-advance fires after a pause/resume cycle', async () => {
   // T1 takes ~10 s to finish after resume.

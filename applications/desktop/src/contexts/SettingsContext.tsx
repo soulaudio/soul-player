@@ -45,7 +45,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setHideWindowControlsState(JSON.parse(windowControlsSetting));
       }
       if (languageSetting !== null) {
-        const lang = JSON.parse(languageSetting) as string;
+        let lang: string;
+        try {
+          lang = JSON.parse(languageSetting) as string;
+        } catch {
+          lang = languageSetting; // stored as raw string, not JSON-encoded
+        }
         if (lang && lang !== i18next.language) {
           i18next.changeLanguage(lang);
         }

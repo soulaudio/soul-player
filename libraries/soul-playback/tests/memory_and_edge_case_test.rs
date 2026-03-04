@@ -547,7 +547,8 @@ fn test_negative_seek_via_zero() {
 
     manager.add_to_queue_end(create_test_track("1", 100));
     manager.play().ok();
-    let track = create_test_track("test", 180);
+    // Track id must match the pending_load_track id ("1") to pass the stale activation guard.
+    let track = create_test_track("1", 180);
     manager.activate_source(
         Box::new(MemoryMockSource::new(Duration::from_secs(100))),
         track,

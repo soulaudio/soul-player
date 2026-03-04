@@ -456,37 +456,47 @@ fn test_load_playlist_clears_pending_load_track() {
 // ===== SCENARIO 5: activate_source with a different track than pending =====
 
 /// What if activate_source() is called with a DIFFERENT track than pending_load_track?
-/// This could happen if the platform delivers a stale response.
-/// The manager must accept the activated source as-is (the platform is authoritative
-/// about what was loaded). Verify state remains consistent.
+/// This could happen if the platform delivers a stale response (e.g. device switch
+/// mid-load causes the old loader thread to send back a result for a track that is
+/// no longer expected).
+///
+/// The stale-activation guard introduced in the previous session REJECTS such
+/// activations so that the queue is not corrupted by an out-of-order response.
+/// The manager stays in Stopped state; the caller is expected to retry loading.
 #[test]
-fn test_activate_source_with_unexpected_track_is_accepted() {
+fn test_activate_source_with_stale_track_is_rejected() {
     let mut mgr = PlaybackManager::default();
 
     mgr.load_playlist(vec![make_track("1", 30), make_track("2", 30)], 0);
 
-    // play() → pending_load_track = t1
+    // play() → pending_load_track = "1"
     mgr.play().ok();
     mgr.drain_events();
 
-    // Platform activates with a DIFFERENT track data (track id "999")
-    // This simulates a platform providing unexpected data
-    let unexpected_track = make_track("999", 60);
-    mgr.activate_source(Box::new(MockAudioSource::new(60)), unexpected_track);
+    // Platform activates with a DIFFERENT track id ("999") — this is a stale response.
+    let stale_track = make_track("999", 60);
+    let accepted = mgr.activate_source(Box::new(MockAudioSource::new(60)), stale_track);
 
-    // Manager should accept whatever was activated (platform is authoritative)
-    assert_eq!(
-        mgr.get_state(),
-        PlaybackState::Playing,
-        "Manager must accept any track activated by the platform"
+    // The stale-activation guard must reject mismatched track ids.
+    assert!(
+        !accepted,
+        "Stale activation (track id mismatch) must be rejected, got accepted=true"
     );
 
-    let current = mgr.get_current_track().map(|t| t.id.clone());
+    // Manager must stay Stopped — a stale source must not corrupt playback state.
     assert_eq!(
-        current,
+        mgr.get_state(),
+        PlaybackState::Stopped,
+        "Manager must remain Stopped after a stale activation is rejected"
+    );
+
+    // Current track must NOT be the stale one.
+    let current_id = mgr.get_current_track().map(|t| t.id.clone());
+    assert_ne!(
+        current_id,
         Some("999".to_string()),
-        "Current track must be whatever the platform activated, got: {:?}",
-        current
+        "Stale track must not become the current track, got: {:?}",
+        current_id
     );
 }
 

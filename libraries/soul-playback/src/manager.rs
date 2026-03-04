@@ -1209,21 +1209,40 @@ impl PlaybackManager {
         // 4. Read samples from source
         let samples_read = source.read_samples(output)?;
         if samples_read == 0 {
-            // Check if track really finished or just buffering
+            // Determine whether the source has truly ended or is just buffering.
+            //
+            // Two conditions trigger auto-advance (OR):
+            //   1. position >= duration — works for formats where the container
+            //      reports an accurate total frame count (WAV, CBR MP3, FLAC, …).
+            //   2. source.is_finished() — catches formats where Symphonia cannot
+            //      determine n_frames (VBR MP3, some OGG/Opus containers), which
+            //      causes LocalAudioSource to set total_duration = Duration::MAX.
+            //      In that case position never reaches duration, but is_finished()
+            //      correctly returns true once the decoder has drained all packets
+            //      and the ring buffer is empty.
             let position = source.position();
             let duration = source.duration();
+            let is_finished = source.is_finished();
+            let position_past_end = position >= duration;
             tracing::debug!(
-                "[AUTO-ADVANCE] samples_read=0, position={:?}, duration={:?}",
+                "[AUTO-ADVANCE] samples_read=0, position={:?}, duration={:?}, is_finished={}",
                 position,
-                duration
+                duration,
+                is_finished,
             );
-            if position >= duration {
-                tracing::info!("[AUTO-ADVANCE] Track reached end (position >= duration), triggering auto-advance");
+            if is_finished || position_past_end {
+                tracing::info!(
+                    "[AUTO-ADVANCE] Track ended (is_finished={}, position_past_end={}), triggering auto-advance",
+                    is_finished,
+                    position_past_end,
+                );
                 self.handle_track_finished()?;
                 return Ok(0);
             }
             // Still buffering - output keepalive
-            tracing::debug!("[AUTO-ADVANCE] Still buffering (position < duration)");
+            tracing::debug!(
+                "[AUTO-ADVANCE] Still buffering (position < duration and not finished)"
+            );
             self.fill_underrun_buffer(output);
             return Ok(output.len());
         }

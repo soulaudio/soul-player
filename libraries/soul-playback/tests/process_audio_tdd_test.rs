@@ -12,7 +12,9 @@
 //! All four scenarios were expected to be safe by design; the goal is to confirm
 //! that assumption and catch any regression.
 
-use soul_playback::{AudioSource, PlaybackManager, PlaybackState, QueueTrack, TrackSource};
+use soul_playback::{
+    AudioSource, PlaybackEvent, PlaybackManager, PlaybackState, QueueTrack, TrackSource,
+};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -330,6 +332,61 @@ fn process_audio_partial_source_read_fills_remainder_with_keepalive_noise() {
 // Scenario 5: very large buffer — ensure no out-of-bounds access
 // ──────────────────────────────────────────────────────────────────────────────
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Mock: source with Duration::MAX (simulates VBR MP3 / files where n_frames
+// is absent from codec params → LocalAudioSource sets total_duration = Duration::MAX)
+//
+// This mock has a FINITE number of samples and returns 0 from read_samples()
+// once they are exhausted, but its duration() is Duration::MAX.  The old
+// `position >= duration` check can never fire for such a source; auto-advance
+// must fall back on source.is_finished() instead.
+// ──────────────────────────────────────────────────────────────────────────────
+
+struct EofAudioSource {
+    samples_remaining: usize,
+    total_samples: usize,
+}
+
+impl EofAudioSource {
+    /// 10 seconds of stereo silence at 44100 Hz = 882 000 samples
+    fn ten_seconds() -> Self {
+        let total = (10.0_f64 * 44100.0 * 2.0) as usize; // 882000
+        Self {
+            samples_remaining: total,
+            total_samples: total,
+        }
+    }
+}
+
+impl AudioSource for EofAudioSource {
+    fn read_samples(&mut self, buffer: &mut [f32]) -> soul_playback::Result<usize> {
+        let to_read = buffer.len().min(self.samples_remaining);
+        buffer[..to_read].fill(0.0);
+        self.samples_remaining -= to_read;
+        Ok(to_read)
+    }
+
+    fn seek(&mut self, _: Duration) -> soul_playback::Result<()> {
+        Ok(())
+    }
+
+    fn duration(&self) -> Duration {
+        // Deliberately report an unknown / infinite duration, as real VBR MP3
+        // files do when Symphonia cannot determine n_frames from the container.
+        Duration::MAX
+    }
+
+    fn position(&self) -> Duration {
+        let consumed = self.total_samples - self.samples_remaining;
+        // Position never reaches Duration::MAX — that is the whole problem.
+        Duration::from_secs_f64(consumed as f64 / (44100.0 * 2.0))
+    }
+
+    fn is_finished(&self) -> bool {
+        self.samples_remaining == 0
+    }
+}
+
 #[test]
 fn process_audio_large_buffer_while_stopped_does_not_panic() {
     let mut manager = PlaybackManager::default();
@@ -340,4 +397,58 @@ fn process_audio_large_buffer_while_stopped_does_not_panic() {
     for &s in &buffer {
         assert!(s.is_finite());
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Scenario 6: auto-advance fires when source.is_finished() but duration is MAX
+//
+// Regression test for VBR MP3 / container formats where Symphonia cannot
+// determine n_frames → LocalAudioSource::total_duration = Duration::MAX.
+// The position counter never reaches Duration::MAX, so the old condition
+//   `if position >= duration { handle_track_finished() }`
+// never fires.  Fix: also trigger auto-advance when source.is_finished().
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn auto_advance_fires_when_source_is_finished_but_duration_is_max() {
+    // Arrange: 2-track queue; T1 uses an EofAudioSource with duration=MAX.
+    let mut mgr = PlaybackManager::default();
+    let track1 = make_track("1", 10);
+    let track2 = make_track("2", 10);
+
+    mgr.load_playlist(vec![track1.clone(), track2.clone()], 0);
+    mgr.play().unwrap();
+    mgr.drain_events(); // discard LoadNext(T1) from play()
+
+    let accepted = mgr.activate_source(Box::new(EofAudioSource::ten_seconds()), track1);
+    assert!(accepted, "activate_source must accept the first track");
+    assert_eq!(mgr.get_state(), PlaybackState::Playing);
+    mgr.drain_events(); // discard StateChanged(Playing)
+
+    // Act: pump process_audio() until all samples from T1 are consumed and
+    // then for a few extra callbacks so any deferred events are emitted.
+    let mut buf = vec![0.0f32; 4096];
+    let mut found_load_next = false;
+    let max_iters = 1_000; // 1000 * 4096 >> 882_000 samples in the source
+
+    for _ in 0..max_iters {
+        mgr.process_audio(&mut buf).unwrap();
+        let events = mgr.drain_events();
+        if events
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::LoadNext(_)))
+        {
+            found_load_next = true;
+            break;
+        }
+    }
+
+    // Assert: auto-advance must have emitted LoadNext(T2).
+    assert!(
+        found_load_next,
+        "Auto-advance (LoadNext) must fire when source.is_finished() is true, \
+         even when source.duration() == Duration::MAX. \
+         This regression affects VBR MP3 and other formats where Symphonia \
+         cannot determine n_frames from container metadata."
+    );
 }
