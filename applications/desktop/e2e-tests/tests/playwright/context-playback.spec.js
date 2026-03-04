@@ -254,3 +254,274 @@ async function navigateToTracksPage(p) {
   await p.waitForSelector('[data-testid="tracks-page"]', { timeout: 15_000 });
   await p.waitForSelector('[data-testid="track-list"]', { timeout: 10_000 });
 }
+
+// ---------------------------------------------------------------------------
+// Album context (4 tests)
+// ---------------------------------------------------------------------------
+
+test.describe('Album context', () => {
+  test('Play All: Track One is current, queue is [2002, 2003, 2004, 2005] in order', async () => {
+    await navigateToAlbumDetail(page);
+    const playAllBtn = page.locator('[data-testid="album-play-all-button"]');
+    await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await playAllBtn.click();
+    await waitForPlaying(page, 'Track One');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2001);
+    expect(await getQueueIds(page)).toEqual([2002, 2003, 2004, 2005]);
+  });
+
+  test('Track Three double-click: Track Three is current, queue is [2004, 2005]', async () => {
+    await navigateToAlbumDetail(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    expect(await getQueueIds(page)).toEqual([2004, 2005]);
+  });
+
+  test('Shuffle + Play All: all 5 track IDs present in current + queue', async () => {
+    await enableShuffle(page);
+    await navigateToAlbumDetail(page);
+    const playAllBtn = page.locator('[data-testid="album-play-all-button"]');
+    await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await playAllBtn.click();
+    await waitForPlaying(page);  // shuffle: any track may start first
+    await pauseAfterPlay(page);
+
+    const allIds = await getAllActiveIds(page);
+    expect([...allIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2003, 2004, 2005]);
+  });
+
+  test('Shuffle + Track Three: Track Three is current, remaining 4 IDs in queue (any order)', async () => {
+    await enableShuffle(page);
+    await navigateToAlbumDetail(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    const queueIds = await getQueueIds(page);
+    expect(queueIds).toHaveLength(4);
+    expect([...queueIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2004, 2005]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Artist context (4 tests)
+// ---------------------------------------------------------------------------
+
+test.describe('Artist context', () => {
+  test('Play All: Track One is current, queue is [2002, 2003, 2004, 2005] in order', async () => {
+    await navigateToArtistDetail(page);
+    const playAllBtn = page.locator('[data-testid="artist-play-all-button"]');
+    await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await playAllBtn.click();
+    await waitForPlaying(page, 'Track One');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2001);
+    expect(await getQueueIds(page)).toEqual([2002, 2003, 2004, 2005]);
+  });
+
+  test('Track Three double-click: Track Three is current, queue is [2004, 2005]', async () => {
+    await navigateToArtistDetail(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    expect(await getQueueIds(page)).toEqual([2004, 2005]);
+  });
+
+  test('Shuffle + Play All: all 5 track IDs present in current + queue', async () => {
+    await enableShuffle(page);
+    await navigateToArtistDetail(page);
+    const playAllBtn = page.locator('[data-testid="artist-play-all-button"]');
+    await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await playAllBtn.click();
+    await waitForPlaying(page);
+    await pauseAfterPlay(page);
+
+    const allIds = await getAllActiveIds(page);
+    expect([...allIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2003, 2004, 2005]);
+  });
+
+  test('Shuffle + Track Three: Track Three is current, remaining 4 IDs in queue (any order)', async () => {
+    await enableShuffle(page);
+    await navigateToArtistDetail(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    const queueIds = await getQueueIds(page);
+    expect(queueIds).toHaveLength(4);
+    expect([...queueIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2004, 2005]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Genre context (4 tests)
+// Note: navigateToGenrePage uses history.pushState — no NavBar link to /genres/:id.
+// ---------------------------------------------------------------------------
+
+test.describe('Genre context', () => {
+  test('Play All: Track One is current, queue is [2002, 2003, 2004, 2005] in order', async () => {
+    await navigateToGenrePage(page);
+    const playAllBtn = page.locator('[data-testid="genre-play-all-button"]');
+    await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await playAllBtn.click();
+    await waitForPlaying(page, 'Track One');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2001);
+    expect(await getQueueIds(page)).toEqual([2002, 2003, 2004, 2005]);
+  });
+
+  test('Track Three double-click: Track Three is current, queue is [2004, 2005]', async () => {
+    await navigateToGenrePage(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    expect(await getQueueIds(page)).toEqual([2004, 2005]);
+  });
+
+  test('Shuffle + Play All: all 5 track IDs present in current + queue', async () => {
+    await enableShuffle(page);
+    await navigateToGenrePage(page);
+    const playAllBtn = page.locator('[data-testid="genre-play-all-button"]');
+    await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await playAllBtn.click();
+    await waitForPlaying(page);
+    await pauseAfterPlay(page);
+
+    const allIds = await getAllActiveIds(page);
+    expect([...allIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2003, 2004, 2005]);
+  });
+
+  test('Shuffle + Track Three: Track Three is current, remaining 4 IDs in queue (any order)', async () => {
+    await enableShuffle(page);
+    await navigateToGenrePage(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    const queueIds = await getQueueIds(page);
+    expect(queueIds).toHaveLength(4);
+    expect([...queueIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2004, 2005]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Playlist context (4 tests)
+// Playlist 3001 "Favorites" has tracks 2001–2005 added in beforeAll.
+// ---------------------------------------------------------------------------
+
+test.describe('Playlist context', () => {
+  test('Play All: Track One is current, queue is [2002, 2003, 2004, 2005] in order', async () => {
+    await navigateToPlaylistDetail(page);
+    const playAllBtn = page.locator('[data-testid="playlist-play-all-button"]');
+    await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(playAllBtn).not.toBeDisabled();
+    await playAllBtn.click();
+    await waitForPlaying(page, 'Track One');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2001);
+    expect(await getQueueIds(page)).toEqual([2002, 2003, 2004, 2005]);
+  });
+
+  test('Track Three double-click: Track Three is current, queue is [2004, 2005]', async () => {
+    await navigateToPlaylistDetail(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    expect(await getQueueIds(page)).toEqual([2004, 2005]);
+  });
+
+  test('Shuffle + Play All: all 5 track IDs present in current + queue', async () => {
+    await enableShuffle(page);
+    await navigateToPlaylistDetail(page);
+    const playAllBtn = page.locator('[data-testid="playlist-play-all-button"]');
+    await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await playAllBtn.click();
+    await waitForPlaying(page);
+    await pauseAfterPlay(page);
+
+    const allIds = await getAllActiveIds(page);
+    expect([...allIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2003, 2004, 2005]);
+  });
+
+  test('Shuffle + Track Three: Track Three is current, remaining 4 IDs in queue (any order)', async () => {
+    await enableShuffle(page);
+    await navigateToPlaylistDetail(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    const queueIds = await getQueueIds(page);
+    expect(queueIds).toHaveLength(4);
+    expect([...queueIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2004, 2005]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tracks context (4 tests)
+// No Play All button — double-click Track One for the full-queue test.
+// Test DB has exactly 5 tracks (2001–2005).
+// ---------------------------------------------------------------------------
+
+test.describe('Tracks context', () => {
+  test('Track One double-click: Track One is current, queue is [2002, 2003, 2004, 2005]', async () => {
+    await navigateToTracksPage(page);
+    await dblclickTrackRow(page, 'Track One');
+    await waitForPlaying(page, 'Track One');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2001);
+    expect(await getQueueIds(page)).toEqual([2002, 2003, 2004, 2005]);
+  });
+
+  test('Track Three double-click: Track Three is current, queue is [2004, 2005]', async () => {
+    await navigateToTracksPage(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    expect(await getQueueIds(page)).toEqual([2004, 2005]);
+  });
+
+  test('Shuffle + Track One double-click: all 5 track IDs present', async () => {
+    await enableShuffle(page);
+    await navigateToTracksPage(page);
+    await dblclickTrackRow(page, 'Track One');
+    await waitForPlaying(page);  // shuffle: any track may be first
+    await pauseAfterPlay(page);
+
+    const allIds = await getAllActiveIds(page);
+    expect([...allIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2003, 2004, 2005]);
+  });
+
+  test('Shuffle + Track Three: Track Three is current, remaining 4 IDs in queue (any order)', async () => {
+    await enableShuffle(page);
+    await navigateToTracksPage(page);
+    await dblclickTrackRow(page, 'Track Three');
+    await waitForPlaying(page, 'Track Three');
+    await pauseAfterPlay(page);
+
+    expect(await getCurrentTrackId(page)).toBe(2003);
+    const queueIds = await getQueueIds(page);
+    expect(queueIds).toHaveLength(4);
+    expect([...queueIds].sort((a, b) => a - b)).toEqual([2001, 2002, 2004, 2005]);
+  });
+});
