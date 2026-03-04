@@ -79,6 +79,21 @@ test.afterEach(async () => {
   await page.waitForTimeout(200);
 });
 
+// Before each test: stop any active playback, dismiss open overlays, navigate to stable base.
+test.beforeEach(async () => {
+  await page.evaluate(async () => {
+    try { await window.__TAURI_INTERNALS__.invoke('stop_playback'); } catch {}
+  }).catch(() => {});
+  await page.waitForTimeout(200);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+
+  // Navigate to Albums as a stable base — force:true pierces any residual backdrop.
+  await page.click('[data-testid="nav-albums"]', { force: true });
+  await page.waitForSelector('[data-testid="media-card-album-2001"]', { timeout: 15_000 });
+});
+
 // ---------------------------------------------------------------------------
 // IPC helpers
 // ---------------------------------------------------------------------------
