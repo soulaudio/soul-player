@@ -153,12 +153,16 @@ test('good track plays normally; bad next track surfaces an error state', async 
     { timeout: 15_000 }
   );
 
-  // Now-playing title should show the good track
-  await page.waitForSelector('[data-testid="now-playing-title"]', { timeout: 10_000 });
-  const container = page.locator('[data-testid="now-playing-title"]');
-  const titleEl = container.locator('.text-sm').first();
-  const title = (await titleEl.textContent()).trim();
-  expect(title).toBe('Track One');
+  // Wait for now-playing title to show Track One (prior test may have left a different track)
+  await page.waitForFunction(
+    () => {
+      const container = document.querySelector('[data-testid="now-playing-title"]');
+      if (!container) return false;
+      const titleEl = container.querySelector('.text-sm');
+      return titleEl && titleEl.textContent.trim() === 'Track One';
+    },
+    { timeout: 10_000 }
+  );
 
   // After the 2-second good track finishes, the bad track fails.
   // State must settle to Stopped or Error (not hang indefinitely).

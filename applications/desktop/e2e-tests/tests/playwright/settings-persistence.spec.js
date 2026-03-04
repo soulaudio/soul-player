@@ -49,6 +49,14 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  // Restore app.auto_update_enabled to true so subsequent test files (e.g., updater.spec.js)
+  // see the expected default state. Tests that write settings must clean up after themselves.
+  try {
+    await page.evaluate(
+      async ({ k, v }) => window.__TAURI_INTERNALS__.invoke('set_user_setting', { key: k, value: v }),
+      { k: 'app.auto_update_enabled', v: true }
+    );
+  } catch { /* best-effort cleanup */ }
   await browser.close();
 });
 

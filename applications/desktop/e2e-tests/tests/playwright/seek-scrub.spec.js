@@ -240,17 +240,19 @@ test('seek bar current time advances during active playback', async () => {
 // ----------------------------------------------------------------
 
 test('seek_to near beginning keeps state Playing and updates position', async () => {
-  // Let a moment of audio play so we are not already at the start
-  await page.waitForTimeout(400);
+  // Let > 0.5s of audio play so our pre-seek position is clearly past the target.
+  // This ensures the waitForFunction below only passes AFTER the seek takes effect,
+  // not because we happened to start at < 0.5s.
+  await page.waitForTimeout(700);
 
   // Seek to 0.1 seconds via IPC (near beginning of the 2s track)
   await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('seek_to', { position: 0.1 })
   );
 
-  // The backend emits playback:position-updated immediately on seek_to,
-  // so the UI should reflect the new position quickly.
-  // Poll until the backend confirms position is close to 0.1s (within 0.3s tolerance)
+  // Poll until the backend position drops to near the seek target.
+  // Before seek: position was ~0.7s. After seek: position should be ~0.1s.
+  // The waitForFunction condition (pos < 0.5) only becomes true once the seek applies.
   await page.waitForFunction(
     async () => {
       const pos = await window.__TAURI_INTERNALS__.invoke('get_position');
@@ -264,13 +266,6 @@ test('seek_to near beginning keeps state Playing and updates position', async ()
     window.__TAURI_INTERNALS__.invoke('get_playback_state')
   );
   expect(state).toBe('Playing');
-
-  // Verify backend-reported position is near the seek target
-  const position = await page.evaluate(async () =>
-    window.__TAURI_INTERNALS__.invoke('get_position')
-  );
-  expect(position).toBeLessThan(0.5);
-  expect(position).toBeGreaterThanOrEqual(0);
 });
 
 // ----------------------------------------------------------------

@@ -88,10 +88,10 @@ test('onboarding theme step shows theme selection cards', async () => {
   // Theme step should be immediately visible
   await expect(page.locator('[data-testid="onboarding-theme-step"]')).toBeVisible();
 
-  // Count theme cards — should have at least 2
+  // Count theme cards — component defines 4 themes (light, dark, ocean, earth)
   const themeCards = page.locator('[data-testid^="onboarding-theme-"]');
   const count = await themeCards.count();
-  expect(count).toBeGreaterThanOrEqual(2);
+  expect(count).toBeGreaterThanOrEqual(4);
 });
 
 test('clicking Continue on theme step navigates to strategy step', async () => {

@@ -70,8 +70,8 @@ test('right-click opens context menu above other cards', async () => {
   const menu = page.locator('[role="menu"]');
   await expect(menu).toBeVisible({ timeout: 5_000 });
 
-  // Menu must contain "Add to Playlist"
-  await expect(menu.getByRole('menuitem')).toContainText('Playlist');
+  // Menu must contain "Add to Playlist" item (menu may have multiple items)
+  await expect(menu.getByRole('menuitem', { name: /playlist/i })).toBeVisible({ timeout: 5_000 });
 
   // Menu position must be near the click point (within 50 px), not at origin
   const menuBox = await menu.boundingBox();

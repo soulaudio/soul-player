@@ -41,6 +41,29 @@ test.beforeAll(async () => {
   if (!page) throw new Error('Main window not found in CDP context');
 
   await page.waitForSelector('[data-testid="nav-albums"]', { timeout: 30_000 });
+
+  // Warm up by navigating to Audio settings before any test runs.
+  // LazyPlaybackManager.get() spawns a background task (restore_audio_settings)
+  // after first use that calls initialize_audio_device, which on Windows can take
+  // several seconds. If the first test navigates to Audio settings while this task
+  // is still running, the WebView briefly becomes unresponsive and Playwright sees
+  // "Target page, context or browser has been closed".
+  //
+  // Fix: navigate to Audio settings NOW (in beforeAll), wait for effect-slot-0
+  // (which requires getDspChain() to resolve AND the DSP UI to render), then wait
+  // an additional 3s for audio device initialization to complete fully, then close.
+  // By the time the first test's beforeEach navigates to Audio settings, the
+  // background restore is already done and the UI is stable.
+  await page.click('[data-testid="settings-button"]', { force: true });
+  await page.waitForSelector('[data-testid="nav-settings-about"]', { timeout: 15_000 });
+  await page.click('[data-testid="nav-settings-audio"]');
+  await page.waitForSelector('[data-testid="audio-stage-dsp"]', { timeout: 15_000 });
+  await page.locator('[data-testid="audio-stage-dsp"]').scrollIntoViewIfNeeded();
+  await page.waitForSelector('[data-testid="effect-slot-0"]', { timeout: 20_000 });
+  // Allow background audio device initialization to fully complete.
+  await page.waitForTimeout(3000);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
 });
 
 test.afterAll(async () => {
@@ -65,7 +88,11 @@ test.beforeEach(async () => {
   // Wait for the audio settings page container
   await page.waitForSelector('[data-testid="audio-settings-page"]', { timeout: 10_000 });
 
-  // Scroll to the DSP section and wait for it to render (including async chain load)
+  // Wait for the DSP section to be in the DOM before scrolling.
+  // Using waitForSelector first avoids a "not attached to DOM" race where
+  // the audio-settings page briefly re-renders after getDspChain() resolves,
+  // causing the locator reference to become stale before scrollIntoViewIfNeeded.
+  await page.waitForSelector('[data-testid="audio-stage-dsp"]', { timeout: 10_000 });
   await page.locator('[data-testid="audio-stage-dsp"]').scrollIntoViewIfNeeded();
   await page.waitForSelector('[data-testid="dsp-config"]', { timeout: 10_000 });
 
