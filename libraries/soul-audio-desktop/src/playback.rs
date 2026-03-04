@@ -1699,7 +1699,51 @@ impl DesktopPlayback {
 
         // Forward pending events from manager to UI
         // Uses the conversion function to translate between event types
-        Self::forward_manager_events(&mut mgr, ctx.event_tx, ctx.command_tx);
+        Self::forward_manager_events(&mut mgr, ctx.event_tx, ctx.command_tx, ctx.load_requested);
+
+        // Stream-restart recovery: if manager is loading but no load has been issued
+        // on this stream (load_requested == false), the CPAL stream was recreated while
+        // a background loader thread held the old command_tx. That thread's
+        // ActivateSource send failed (old command_rx was dropped). Re-trigger the load
+        // now with the new command_tx so playback can resume.
+        if !*ctx.load_requested && mgr.is_loading() {
+            if let Some(pending_track) = mgr.get_pending_load_track().cloned() {
+                *ctx.load_requested = true;
+                let command_tx_clone = ctx.command_tx.clone();
+                let sample_rate = mgr.get_sample_rate();
+                std::thread::spawn(move || {
+                    match load_source_blocking(
+                        &pending_track,
+                        sample_rate,
+                        Duration::from_millis(500),
+                    ) {
+                        Ok(source) => {
+                            if let Err(e) = command_tx_clone.send(PlaybackCommand::ActivateSource {
+                                source,
+                                track: pending_track,
+                            }) {
+                                tracing::error!(
+                                    "[StreamRestart] Failed to send ActivateSource: {}",
+                                    e
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "[StreamRestart] Failed to reload source after stream restart: {:?}",
+                                e
+                            );
+                        }
+                    }
+                });
+                tracing::info!(
+                    "[StreamRestart] Re-triggered load for '{}' after stream restart",
+                    mgr.get_pending_load_track()
+                        .map(|t| t.title.as_str())
+                        .unwrap_or("unknown")
+                );
+            }
+        }
     }
 
     /// Forward events from `PlaybackManager` to the desktop event channel
@@ -1718,6 +1762,7 @@ impl DesktopPlayback {
         mgr: &mut PlaybackManager,
         event_tx: &Sender<PlaybackEvent>,
         command_tx: &Sender<PlaybackCommand>,
+        load_requested: &mut bool,
     ) {
         let events = mgr.drain_events();
         for event in events {
@@ -1810,6 +1855,10 @@ impl DesktopPlayback {
                         "[forward_manager_events] LoadNext event for: {}",
                         track.title
                     );
+
+                    // Mark that we've issued a load request on this stream.
+                    // This prevents the stream-restart recovery from double-loading.
+                    *load_requested = true;
 
                     // Spawn background thread to load the track
                     let command_tx_clone = command_tx.clone();
@@ -1974,11 +2023,15 @@ impl DesktopPlayback {
                     "[PlaybackCommand::ActivateSource] Activating: {}",
                     track.title
                 );
-                mgr.activate_source(source, track);
-                let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-                let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
-                    mgr.get_current_track().cloned(),
-                ));
+                // activate_source() returns false if this is a stale command from a
+                // background loader that was launched before the last stop()/play() cycle.
+                // In that case, suppress the state-change events to avoid confusing the UI.
+                if mgr.activate_source(source, track) {
+                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                    let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
+                        mgr.get_current_track().cloned(),
+                    ));
+                }
             }
             PlaybackCommand::Pause => {
                 tracing::debug!(
@@ -3497,7 +3550,13 @@ mod tests {
         let (event_tx, event_rx) = bounded(100);
         let (command_tx, _command_rx) = bounded(100);
 
-        DesktopPlayback::forward_manager_events(&mut mgr, &event_tx, &command_tx);
+        let mut load_requested = false;
+        DesktopPlayback::forward_manager_events(
+            &mut mgr,
+            &event_tx,
+            &command_tx,
+            &mut load_requested,
+        );
 
         let forwarded: Vec<_> = event_rx.try_iter().collect();
 

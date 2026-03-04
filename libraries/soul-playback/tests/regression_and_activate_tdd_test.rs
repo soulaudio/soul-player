@@ -487,3 +487,70 @@ fn test_double_activate_source_no_duplicate_state_events() {
          loading was already cleared by the first call, so was_loading=false"
     );
 }
+
+/// Test 9: Stale activation from a background loader from a prior play() cycle is rejected.
+///
+/// Scenario (mirrors the E2E test race that caused queue-operations test 4 to fail):
+///   1. play() with track T1 → loading=true, pending=Some(T1)
+///   2. stop() → loading=false, pending=None
+///   3. play() with track T2 → loading=true, pending=Some(T2)
+///   4. Stale ActivateSource(T1) arrives (background thread from step 1 finishes late)
+///   5. T1 must be rejected — T2 must still be pending (not replaced by T1)
+///   6. Real ActivateSource(T2) arrives → accepted, state transitions to Playing
+#[test]
+fn test_stale_activate_source_from_prior_play_cycle_is_rejected() {
+    let mut mgr = PlaybackManager::default();
+    let t1 = make_track("t1", 180);
+    let t2 = make_track("t2", 180);
+
+    // First play cycle: load T1
+    mgr.add_playlist_to_queue(vec![t1.clone()]);
+    mgr.play().ok(); // pending=Some(T1), loading=true
+
+    // User stops before T1 arrives
+    mgr.stop(); // loading=false, pending=None
+    mgr.drain_events();
+
+    // Second play cycle: new queue with T2
+    mgr.add_playlist_to_queue(vec![t2.clone()]);
+    mgr.play().ok(); // pending=Some(T2), loading=true
+    mgr.drain_events();
+
+    // Stale T1 arrives (background thread from first cycle finishes late)
+    let accepted = mgr.activate_source(Box::new(MockAudioSource::new(180)), t1);
+    assert!(
+        !accepted,
+        "stale T1 activation must be rejected (pending is T2)"
+    );
+
+    // State must still be Stopped (T1 was not allowed to start Playing)
+    assert_eq!(
+        mgr.get_state(),
+        PlaybackState::Stopped,
+        "state must remain Stopped after stale T1 activation is rejected"
+    );
+
+    // Stale activation must not emit any events
+    let stale_events = mgr.drain_events();
+    assert!(
+        stale_events.is_empty(),
+        "stale activation must not emit any events; got: {:?}",
+        stale_events
+    );
+
+    // Real T2 arrives — must be accepted and start Playing
+    let accepted = mgr.activate_source(Box::new(MockAudioSource::new(180)), t2);
+    assert!(accepted, "real T2 activation must be accepted");
+
+    assert_eq!(
+        mgr.get_state(),
+        PlaybackState::Playing,
+        "state must be Playing after real T2 activation"
+    );
+
+    let events = mgr.drain_events();
+    assert!(
+        has_state_playing(&events),
+        "real T2 activation must emit StateChanged(Playing)"
+    );
+}

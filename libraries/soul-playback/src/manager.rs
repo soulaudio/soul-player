@@ -339,7 +339,40 @@ impl PlaybackManager {
     ///
     /// Called from audio callback when background loading completes.
     /// This is the final step after `load_source_blocking()` has prepared the source.
-    pub fn activate_source(&mut self, source: Box<dyn AudioSource>, track: QueueTrack) {
+    ///
+    /// Returns `true` if the source was accepted and activated, `false` if it was
+    /// rejected as stale (a background loader from a previous play() call finishing
+    /// after stop() + new play() was already called).
+    pub fn activate_source(&mut self, source: Box<dyn AudioSource>, track: QueueTrack) -> bool {
+        // Guard against stale activations from background loader threads.
+        //
+        // Scenario: test calls next() → background thread A starts loading T2 → afterEach
+        // calls stop() → startPlayback() calls play() → background thread B starts loading T1
+        // → stale ActivateSource(T2) from thread A arrives while loading=true and
+        // pending_load_track=Some(T1). Without this guard, T2 incorrectly becomes the active
+        // source and transitions to Playing state.
+        //
+        // When loading=true we know exactly which track we're waiting for via
+        // pending_load_track. Reject anything that doesn't match.
+        //
+        // Note: when loading=false (e.g. device-change reload calls activate_source directly),
+        // this guard does not apply.
+        if self.loading {
+            if let Some(ref expected) = self.pending_load_track {
+                if expected.id != track.id {
+                    tracing::warn!(
+                        "[activate_source] Ignoring stale activation for '{}' (id={}); \
+                         expected '{}' (id={}) — loader from prior play() arrived late",
+                        track.title,
+                        track.id,
+                        expected.title,
+                        expected.id
+                    );
+                    return false;
+                }
+            }
+        }
+
         tracing::info!(
             "[activate_source] Activating track: {} (state was {:?})",
             track.title,
@@ -398,6 +431,8 @@ impl PlaybackManager {
             "[activate_source] Source activated, state now {:?}",
             self.state
         );
+
+        true
     }
 
     // Removed: reset_position_tracking() - no longer needed without deprecated fields
@@ -980,6 +1015,21 @@ impl PlaybackManager {
         self.sources
             .current_track()
             .or(self.pending_load_track.as_ref())
+    }
+
+    /// Returns true when PlaybackManager is waiting for activate_source() to be called.
+    ///
+    /// Used by the audio backend to detect stream-restart recovery scenarios where
+    /// the CPAL stream was recreated while a background loader had the old command_tx.
+    pub fn is_loading(&self) -> bool {
+        self.loading
+    }
+
+    /// Returns the track currently being loaded (if any).
+    ///
+    /// Used by the audio backend to re-trigger loading after a stream restart.
+    pub fn get_pending_load_track(&self) -> Option<&QueueTrack> {
+        self.pending_load_track.as_ref()
     }
 
     /// Get current queue index
