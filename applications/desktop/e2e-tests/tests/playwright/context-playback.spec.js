@@ -264,6 +264,7 @@ test.describe('Album context', () => {
     await navigateToAlbumDetail(page);
     const playAllBtn = page.locator('[data-testid="album-play-all-button"]');
     await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(playAllBtn).not.toBeDisabled();
     await playAllBtn.click();
     await waitForPlaying(page, 'Track One');
     await pauseAfterPlay(page);
@@ -287,6 +288,7 @@ test.describe('Album context', () => {
     await navigateToAlbumDetail(page);
     const playAllBtn = page.locator('[data-testid="album-play-all-button"]');
     await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(playAllBtn).not.toBeDisabled();
     await playAllBtn.click();
     await waitForPlaying(page);  // shuffle: any track may start first
     await pauseAfterPlay(page);
@@ -318,6 +320,7 @@ test.describe('Artist context', () => {
     await navigateToArtistDetail(page);
     const playAllBtn = page.locator('[data-testid="artist-play-all-button"]');
     await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(playAllBtn).not.toBeDisabled();
     await playAllBtn.click();
     await waitForPlaying(page, 'Track One');
     await pauseAfterPlay(page);
@@ -341,6 +344,7 @@ test.describe('Artist context', () => {
     await navigateToArtistDetail(page);
     const playAllBtn = page.locator('[data-testid="artist-play-all-button"]');
     await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(playAllBtn).not.toBeDisabled();
     await playAllBtn.click();
     await waitForPlaying(page);
     await pauseAfterPlay(page);
@@ -373,6 +377,7 @@ test.describe('Genre context', () => {
     await navigateToGenrePage(page);
     const playAllBtn = page.locator('[data-testid="genre-play-all-button"]');
     await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(playAllBtn).not.toBeDisabled();
     await playAllBtn.click();
     await waitForPlaying(page, 'Track One');
     await pauseAfterPlay(page);
@@ -396,6 +401,7 @@ test.describe('Genre context', () => {
     await navigateToGenrePage(page);
     const playAllBtn = page.locator('[data-testid="genre-play-all-button"]');
     await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(playAllBtn).not.toBeDisabled();
     await playAllBtn.click();
     await waitForPlaying(page);
     await pauseAfterPlay(page);
@@ -452,6 +458,7 @@ test.describe('Playlist context', () => {
     await navigateToPlaylistDetail(page);
     const playAllBtn = page.locator('[data-testid="playlist-play-all-button"]');
     await playAllBtn.waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(playAllBtn).not.toBeDisabled();
     await playAllBtn.click();
     await waitForPlaying(page);
     await pauseAfterPlay(page);
