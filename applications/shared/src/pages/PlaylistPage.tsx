@@ -224,6 +224,7 @@ export function PlaylistPage() {
 
             <div className="flex items-center gap-3">
               <button
+                data-testid="playlist-play-all-button"
                 onClick={handlePlayAll}
                 onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
                 disabled={tracks.length === 0}
