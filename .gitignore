@@ -77,6 +77,15 @@ libraries/soul-storage/.tmp/
 **/PAUSE_FIX_*.md
 **/FINAL_FIX_*.md
 **/AUDIO_SETUP_*.md
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Test audio artifacts
+applications/desktop/src-tauri/test_startup_audio/
+
+# Windows NUL device artifact (created by some shell redirections)
+/nul
 **/CONTRAST-FIXES.md
 **/PLAYBACK_DEBUG_*.md
 **/WASM_FIELD_*.md
