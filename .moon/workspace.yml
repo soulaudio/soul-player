@@ -1,9 +1,9 @@
-# Moon workspace configuration
+# Moon workspace configuration (v2)
 # https://moonrepo.dev/docs/config/workspace
 
 $schema: 'https://moonrepo.dev/schemas/workspace.json'
 
-# Project discovery - Updated for new folder structure
+# Project discovery
 projects:
   globs:
     - 'libraries/*'
@@ -28,29 +28,20 @@ projects:
     shared: 'applications/shared'
     marketing: 'applications/marketing'
 
-# Pipeline configuration (was 'runner' in older Moon versions)
+# Pipeline configuration
 pipeline:
   cacheLifetime: '7 days'
-
   logRunningCommand: true
-
-  # Inherit colors from terminal
   inheritColorsForPipedTasks: true
 
 # Version control
 vcs:
-  manager: 'git'
+  client: 'git'
   defaultBranch: 'main'
-
-  # Sync projects with remote changes
-  syncHooks: true
 
 # Hashing - for smart caching
 hasher:
-  batchSize: 2500
   optimization: 'performance'
-
-  # Ignore these patterns when hashing
   ignorePatterns:
     - '*.md'
     - 'docs/**/*'
@@ -58,10 +49,6 @@ hasher:
     - 'target/**/*'
     - '.moon/**/*'
 
-# Notifier (optional - for team notifications)
-notifier:
-  webhookUrl: null
-
-# Constraints - ensure proper tooling versions
+# Constraints
 constraints:
-  enforceProjectTypeRelationships: true
+  enforceLayerRelationships: true

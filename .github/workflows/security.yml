@@ -12,6 +12,10 @@ on:
       - '**/Cargo.toml'
       - 'Cargo.lock'
 
+permissions:
+  contents: read
+  issues: write
+
 env:
   CARGO_TERM_COLOR: always
 
