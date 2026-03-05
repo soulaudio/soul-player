@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { debug } from '@soul-player/shared';
+import { debug, useTheme } from '@soul-player/shared';
 import {
   FolderOpen,
   FolderInput,
@@ -79,6 +79,7 @@ const THEMES = [
 
 export function OnboardingPage({ onComplete }: OnboardingPageProps) {
   const { t, i18n } = useTranslation();
+  const { setTheme } = useTheme();
   const [step, setStep] = useState<Step>('theme');
   const [selectedTheme, setSelectedTheme] = useState<string>('dark');
   const [setupType, setSetupType] = useState<SetupType>(null);
@@ -114,13 +115,11 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
 
   const handleThemeSelect = async (themeId: string) => {
     setSelectedTheme(themeId);
-    // Apply theme immediately
+    setTheme(themeId);
     await invoke('set_user_setting', {
       key: 'ui.theme',
       value: JSON.stringify(themeId),
     });
-    // Trigger theme change in the app
-    document.documentElement.setAttribute('data-theme', themeId);
   };
 
   const handleBrowseFolder = async () => {

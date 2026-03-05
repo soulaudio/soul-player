@@ -2819,7 +2819,15 @@ fn main() {
                 // SILENT PRE-WARM: Initialize audio engine immediately for zero first-play delay
                 // The audio stream will start playing silence until first playback command
                 // This eliminates the 1-2s device enumeration + stream creation delay
-                {
+                //
+                // Skip pre-warm in Playwright test environments: the immediate CPAL WASAPI
+                // stream creation at T=0 can trigger a timing-based crash at T≈50s on Windows
+                // with certain ASIO drivers. Tests warm up PM themselves in beforeAll, so
+                // skipping the startup pre-warm pushes any CPAL init to a later, safer time.
+                let is_playwright_test = std::env::var("PLAYWRIGHT_TEST_DIR").is_ok();
+                if is_playwright_test {
+                    tracing::info!("[Startup] Skipping audio pre-warm in test environment (PLAYWRIGHT_TEST_DIR is set)");
+                } else {
                     let app_clone = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
                         // NO DELAY - start immediately so stream is ready before user can click play

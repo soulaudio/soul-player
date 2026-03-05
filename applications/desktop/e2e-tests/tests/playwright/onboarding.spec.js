@@ -11,6 +11,9 @@
  *   2. Theme step loads with theme cards visible
  *   3. Continue navigates from theme step to strategy step
  *   4. Back button returns from strategy step to theme step
+ *   5. Clicking a theme card applies CSS variables immediately (data-theme + CSS vars)
+ *   6. Selected theme is saved to localStorage as plain string (correct format)
+ *   7. Loading modal uses the selected theme (data-theme set before React renders)
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -125,4 +128,90 @@ test('Back button on strategy step returns to theme step', async () => {
   await expect(page.locator('[data-testid="onboarding-theme-step"]')).toBeVisible({
     timeout: 5_000,
   });
+});
+
+test('clicking a theme card applies CSS variables immediately', async () => {
+  await removeLibrarySources();
+  await page.reload();
+  await expect(page.locator('[data-testid="onboarding-page"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-testid="onboarding-theme-step"]')).toBeVisible();
+
+  // Click the dark theme card
+  await page.click('[data-testid="onboarding-theme-dark"]');
+
+  // data-theme attribute must be updated
+  const datatheme = await page.evaluate(() =>
+    document.documentElement.getAttribute('data-theme'),
+  );
+  expect(datatheme).toBe('dark');
+
+  // CSS custom property --background must be set (ThemeManager sets it via style.setProperty)
+  const bgVar = await page.evaluate(() =>
+    document.documentElement.style.getPropertyValue('--background').trim(),
+  );
+  expect(bgVar).toBeTruthy();
+  expect(bgVar).not.toBe('');
+
+  // Click the ocean theme card and verify it switches
+  await page.click('[data-testid="onboarding-theme-ocean"]');
+  const datatheme2 = await page.evaluate(() =>
+    document.documentElement.getAttribute('data-theme'),
+  );
+  expect(datatheme2).toBe('ocean');
+});
+
+test('selected theme is saved to localStorage as a plain string', async () => {
+  await removeLibrarySources();
+  await page.reload();
+  await expect(page.locator('[data-testid="onboarding-page"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-testid="onboarding-theme-step"]')).toBeVisible();
+
+  // Click the earth theme card
+  await page.click('[data-testid="onboarding-theme-earth"]');
+  await page.waitForTimeout(300);
+
+  const result = await page.evaluate(() => ({
+    datatheme: document.documentElement.getAttribute('data-theme'),
+    stored: localStorage.getItem('soul-player-current-theme'),
+  }));
+
+  // ThemeManager.saveCurrentThemeToStorage() stores plain string, NOT JSON.
+  expect(result.stored).toBe('earth');
+  expect(result.stored).not.toBe('"earth"');
+  expect(result.datatheme).toBe('earth');
+});
+
+test('loading modal uses the selected theme after page reload', async () => {
+  await removeLibrarySources();
+  await page.reload();
+  await expect(page.locator('[data-testid="onboarding-page"]')).toBeVisible({ timeout: 15_000 });
+
+  // Select dark theme to ensure a non-default theme is stored
+  await page.click('[data-testid="onboarding-theme-dark"]');
+
+  // Wait a tick for localStorage to be written
+  await page.waitForTimeout(200);
+
+  const stored = await page.evaluate(() =>
+    localStorage.getItem('soul-player-current-theme'),
+  );
+  expect(stored).toBe('dark');
+
+  // Restore so the reload shows main app, then check theme is applied immediately on load.
+  // We verify via the data-theme attribute which ThemeManager sets synchronously before
+  // React renders (in the ThemeManager constructor, called from ThemeProvider).
+  await restoreLibrarySource();
+
+  // Reload and check that data-theme is set correctly before nav-albums appears
+  await page.reload();
+  // The very first paint should already have data-theme='dark' because ThemeManager
+  // runs synchronously in the constructor before React rendering begins.
+  await page.waitForSelector('[data-testid="nav-albums"]', { timeout: 30_000 });
+  const themeAttr = await page.evaluate(() =>
+    document.documentElement.getAttribute('data-theme'),
+  );
+  expect(themeAttr).toBe('dark');
+
+  // Clean up: reset savedLibrarySource to null to prevent double-restore in afterEach
+  savedLibrarySource = null;
 });

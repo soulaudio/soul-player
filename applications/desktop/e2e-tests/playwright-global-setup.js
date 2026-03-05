@@ -4,9 +4,9 @@
  */
 
 import { spawn, execSync } from 'child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import Database from 'better-sqlite3';
@@ -197,6 +197,22 @@ export default async function globalSetup() {
     console.log('[Playwright Setup] Killed any existing soul-player instance');
   } catch { /* nothing was running */ }
 
+  // Clear WebView2 cache to ensure fresh JS is served after dist rebuilds.
+  // WebView2 persists its cache in the app's EBWebView folder; --disable-cache only
+  // disables the HTTP network cache but does NOT clear the existing code cache.
+  const webView2CacheDir = join(
+    process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'),
+    'com.soulaudio.player', 'EBWebView', 'Default', 'Cache'
+  );
+  try {
+    if (existsSync(webView2CacheDir)) {
+      rmSync(webView2CacheDir, { recursive: true, force: true });
+      console.log('[Playwright Setup] ✓ Cleared WebView2 cache at', webView2CacheDir);
+    }
+  } catch (e) {
+    console.log('[Playwright Setup] ⚠ Could not clear WebView2 cache:', e.message);
+  }
+
   // Ensure the Vite dev server is running (debug binary loads frontend from localhost:1420)
   const devServerReady = await fetch('http://localhost:1420').then(r => r.ok).catch(() => false);
   if (!devServerReady) {
@@ -233,8 +249,12 @@ export default async function globalSetup() {
     env: {
       ...process.env,
       DATABASE_PATH: dbPath,
-      // Enable Edge WebView2 remote debugging so Playwright can connect via CDP
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT}`,
+      // Enable Edge WebView2 remote debugging so Playwright can connect via CDP.
+      // --disable-cache: prevents WebView2 from serving stale JS after a dist rebuild.
+      // Without this, the browser cache can serve old JS (e.g. without role="menuitem")
+      // even after `yarn build` produces updated assets, causing `[role="menuitem"]`
+      // queries to find 0 elements and time out.
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT} --disable-cache`,
     },
     stdio: 'ignore',
     detached: false,
@@ -290,6 +310,16 @@ export default async function globalSetup() {
       }
 
       if (!mainPage) throw new Error('[Playwright Setup] Main window never appeared in CDP');
+
+      // Clear browser cache to ensure fresh JS files are loaded (not stale WebView2 cache)
+      try {
+        const cdpSession = await mainPage.context().newCDPSession(mainPage);
+        await cdpSession.send('Network.clearBrowserCache');
+        console.log('[Playwright Setup] ✓ Browser cache cleared');
+        await cdpSession.detach();
+      } catch (e) {
+        console.log('[Playwright Setup] ⚠ Could not clear browser cache:', e.message);
+      }
 
       // Verify nav-albums is accessible
       const hasNav = await mainPage.evaluate(() =>

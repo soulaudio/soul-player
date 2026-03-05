@@ -27,17 +27,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use windows::{
-    core::HSTRING,
-    Devices::Enumeration::{
-        DeviceInformation, DeviceInformationCollection, DeviceInformationUpdate, DeviceWatcher,
-    },
-    Foundation::TypedEventHandler,
+    Devices::Enumeration::{DeviceInformation, DeviceWatcher},
     Media::Devices::MediaDevice,
 };
 
 use crate::device_monitor_async::{
-    AsyncDeviceInfo, AsyncDeviceMonitor, DeviceChangeCallback, DeviceEvent, DeviceMonitorError,
-    WatchHandle,
+    AsyncDeviceInfo, AsyncDeviceMonitor, DeviceChangeCallback, DeviceMonitorError, WatchHandle,
 };
 
 /// Windows WinRT async device monitor
@@ -104,7 +99,7 @@ impl WindowsDeviceMonitor {
 
                     let is_default = default_id
                         .as_ref()
-                        .map(|default| default.to_string() == id)
+                        .map(|default| *default == id)
                         .unwrap_or(false);
 
                     let is_enabled = device.IsEnabled().unwrap_or(false);
@@ -178,231 +173,15 @@ impl AsyncDeviceMonitor for WindowsDeviceMonitor {
 
     async fn watch_for_changes(
         &self,
-        callback: DeviceChangeCallback,
+        _callback: DeviceChangeCallback,
     ) -> Result<Box<dyn WatchHandle>, DeviceMonitorError> {
-        tracing::debug!(
-            "[DEVICE_MONITOR] Creating WinRT DeviceWatcher for real-time hotplug notifications"
-        );
-
-        // Create DeviceWatcher in a blocking context (WinRT is COM-based, needs careful threading)
-        let watcher_result =
-            tokio::task::spawn_blocking(|| -> Result<DeviceWatcher, DeviceMonitorError> {
-                // Get audio render selector (output devices)
-                let selector = MediaDevice::GetAudioRenderSelector().map_err(|e| {
-                    tracing::error!(
-                        "[DEVICE_MONITOR] Failed to get audio render selector: {}",
-                        e
-                    );
-                    DeviceMonitorError::EnumerationFailed(format!(
-                        "Failed to get audio render selector: {}",
-                        e
-                    ))
-                })?;
-
-                // Create DeviceWatcher for audio render devices
-                let watcher = DeviceInformation::CreateWatcher(&selector).map_err(|e| {
-                    tracing::error!("[DEVICE_MONITOR] Failed to create DeviceWatcher: {}", e);
-                    DeviceMonitorError::Internal(format!("Failed to create DeviceWatcher: {}", e))
-                })?;
-
-                tracing::debug!("[DEVICE_MONITOR] DeviceWatcher created successfully");
-                Ok(watcher)
-            })
-            .await
-            .map_err(|e| {
-                DeviceMonitorError::Internal(format!("Failed to spawn watcher task: {}", e))
-            })??;
-
-        let watcher = watcher_result;
-        let running = Arc::new(AtomicBool::new(true));
-
-        // Create channel for forwarding events from WinRT callbacks to async context
-        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<DeviceEvent>(64);
-
-        // Register event handlers in a blocking context
-        // WinRT callbacks run on COM threads, so we send events to a channel
-        // and process them asynchronously with spawn_blocking
-        let event_tx_added = event_tx.clone();
-        let event_tx_removed = event_tx.clone();
-        let event_tx_updated = event_tx.clone();
-
-        tokio::task::spawn_blocking(move || -> Result<(), DeviceMonitorError> {
-            // Register Added event handler
-            watcher
-                .Added(&TypedEventHandler::new(
-                    move |_sender, device_info| {
-                        if let Some(device) = device_info {
-                            let id = device.Id().map(|h| h.to_string()).unwrap_or_default();
-                            let name = device.Name().map(|h| h.to_string()).unwrap_or_else(|_| "Unknown Device".to_string());
-
-                            tracing::info!("[DEVICE_MONITOR] Device added: {} (id: {})", name, id);
-
-                            if let Err(e) = event_tx_added.send(DeviceEvent::DeviceAdded {
-                                id: id.clone(),
-                                name: name.clone(),
-                            }) {
-                                tracing::debug!(
-                                    error = ?e,
-                                    "[DEVICE_MONITOR] Failed to send device added event (receiver may have dropped)"
-                                );
-                            }
-
-                            // Check if this is the new default device
-                            if let Ok(default_id) = MediaDevice::GetDefaultAudioRenderId(
-                                windows::Media::Devices::AudioDeviceRole::Default,
-                            ) {
-                                if default_id.to_string() == id {
-                                    tracing::info!("[DEVICE_MONITOR] Default device changed: {} (id: {})", name, id);
-                                    if let Err(e) = event_tx_added.send(DeviceEvent::DefaultDeviceChanged {
-                                        id,
-                                        name,
-                                    }) {
-                                        tracing::debug!(
-                                            error = ?e,
-                                            "[DEVICE_MONITOR] Failed to send default device changed event (receiver may have dropped)"
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        Ok(())
-                    },
-                ))
-                .map_err(|e| {
-                    tracing::error!("[DEVICE_MONITOR] Failed to register Added event handler: {}", e);
-                    DeviceMonitorError::Internal(format!("Failed to register Added event handler: {}", e))
-                })?;
-
-            // Register Removed event handler
-            watcher
-                .Removed(&TypedEventHandler::new(
-                    move |_sender, device_update| {
-                        if let Some(update) = device_update {
-                            let id = update.Id().map(|h| h.to_string()).unwrap_or_default();
-                            tracing::info!("[DEVICE_MONITOR] Device removed: id={}", id);
-
-                            if let Err(e) = event_tx_removed.send(DeviceEvent::DeviceRemoved { id }) {
-                                tracing::debug!(
-                                    error = ?e,
-                                    "[DEVICE_MONITOR] Failed to send device removed event (receiver may have dropped)"
-                                );
-                            }
-                        }
-                        Ok(())
-                    },
-                ))
-                .map_err(|e| {
-                    tracing::error!("[DEVICE_MONITOR] Failed to register Removed event handler: {}", e);
-                    DeviceMonitorError::Internal(format!("Failed to register Removed event handler: {}", e))
-                })?;
-
-            // Register Updated event handler (for property changes like default device)
-            watcher
-                .Updated(&TypedEventHandler::new(
-                    move |_sender, device_update| {
-                        if let Some(update) = device_update {
-                            let id = update.Id().map(|h| h.to_string()).unwrap_or_default();
-                            tracing::debug!("[DEVICE_MONITOR] Device updated: id={}", id);
-
-                            // Check if default device changed
-                            if let Ok(default_id) = MediaDevice::GetDefaultAudioRenderId(
-                                windows::Media::Devices::AudioDeviceRole::Default,
-                            ) {
-                                if default_id.to_string() == id {
-                                    // Get device name for the event
-                                    if let Ok(selector) = MediaDevice::GetAudioRenderSelector() {
-                                        if let Ok(devices_async) = DeviceInformation::FindAllAsyncAqsFilter(&selector) {
-                                            if let Ok(devices) = devices_async.get() {
-                                                for i in 0..devices.Size().unwrap_or(0) {
-                                                    if let Ok(device) = devices.GetAt(i) {
-                                                        let device_id = device.Id().map(|h| h.to_string()).unwrap_or_default();
-                                                        if device_id == id {
-                                                            let name = device.Name().map(|h| h.to_string()).unwrap_or_else(|_| "Unknown Device".to_string());
-                                                            tracing::info!("[DEVICE_MONITOR] Default device changed: {} (id: {})", name, id);
-                                                            if let Err(e) = event_tx_updated.send(DeviceEvent::DefaultDeviceChanged {
-                                                                id: id.clone(),
-                                                                name,
-                                                            }) {
-                                                                tracing::debug!(
-                                                                    error = ?e,
-                                                                    "[DEVICE_MONITOR] Failed to send default device changed event (receiver may have dropped)"
-                                                                );
-                                                            }
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Emit property changed event for other updates
-                            if let Err(e) = event_tx_updated.send(DeviceEvent::DevicePropertyChanged {
-                                id,
-                                property: "device_properties".to_string(),
-                            }) {
-                                tracing::debug!(
-                                    error = ?e,
-                                    "[DEVICE_MONITOR] Failed to send device property changed event (receiver may have dropped)"
-                                );
-                            }
-                        }
-                        Ok(())
-                    },
-                ))
-                .map_err(|e| {
-                    tracing::error!("[DEVICE_MONITOR] Failed to register Updated event handler: {}", e);
-                    DeviceMonitorError::Internal(format!("Failed to register Updated event handler: {}", e))
-                })?;
-
-            // Start the watcher
-            watcher.Start().map_err(|e| {
-                tracing::error!("[DEVICE_MONITOR] Failed to start DeviceWatcher: {}", e);
-                DeviceMonitorError::Internal(format!("Failed to start DeviceWatcher: {}", e))
-            })?;
-
-            tracing::info!("[DEVICE_MONITOR] DeviceWatcher started - monitoring for device changes");
-            Ok(())
-        })
-        .await
-        .map_err(|e| DeviceMonitorError::Internal(format!("Failed to register event handlers: {}", e)))??;
-
-        // Spawn task to forward events from channel to user callback with spawn_blocking
-        let callback = Arc::new(callback);
-        tokio::spawn(async move {
-            tracing::debug!("[DEVICE_MONITOR] Event forwarding task started");
-            while let Some(event) = event_rx.recv().await {
-                tracing::trace!(event = ?event, "[DEVICE_MONITOR] Forwarding event to user callback");
-                // Use spawn_blocking to handle async/sync boundary properly with error handling
-                let callback_clone = callback.clone();
-                match tokio::task::spawn_blocking(move || {
-                    callback_clone(event);
-                })
-                .await
-                {
-                    Ok(()) => {
-                        tracing::trace!(
-                            "[DEVICE_MONITOR] Device event callback executed successfully"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            error = %e,
-                            "[DEVICE_MONITOR] Device event callback failed to execute"
-                        );
-                    }
-                }
-            }
-            tracing::debug!("[DEVICE_MONITOR] Event forwarding task stopped");
-        });
-
-        Ok(Box::new(WindowsWatchHandle {
-            running,
-            watcher: Arc::new(Mutex::new(Some(watcher))),
-            join_handle: None,
-        }))
+        // WinRT DeviceWatcher API differs across windows crate versions and its COM callbacks
+        // can fire after Rust closures are freed during process exit (STATUS_ACCESS_VIOLATION).
+        // For now, return PlatformUnavailable — callers can fall back to polling enumerate_devices.
+        tracing::warn!("[DEVICE_MONITOR] watch_for_changes not yet available on Windows; use enumerate_devices for polling");
+        Err(DeviceMonitorError::PlatformUnavailable(
+            "WinRT DeviceWatcher watch_for_changes not yet available".to_string(),
+        ))
     }
 
     async fn is_device_available(&self, device_id: &str) -> bool {
@@ -440,7 +219,8 @@ impl WatchHandle for WindowsWatchHandle {
         let watcher = self.watcher.clone();
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let stop_task = handle.spawn(async move {
-                if let Ok(mut watcher_guard) = watcher.lock().await {
+                {
+                    let mut watcher_guard = watcher.lock().await;
                     if let Some(w) = watcher_guard.take() {
                         tokio::task::spawn_blocking(move || {
                             if let Err(e) = w.Stop() {

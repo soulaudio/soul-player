@@ -35,6 +35,14 @@
             --muted-foreground: 200 25% 45%;
         }
 
+        /* Earth theme */
+        [data-theme='earth'] {
+            --background: 120 18% 7%;
+            --foreground: 90 15% 88%;
+            --primary: 100 25% 42%;
+            --muted-foreground: 90 10% 55%;
+        }
+
         body {
             width: 100vw;
             height: 100vh;
@@ -67,8 +75,9 @@
             filter: brightness(0) saturate(100%);
         }
 
-        /* Keep logo white for dark theme */
-        [data-theme='dark'] #logo {
+        /* Keep logo white for dark/earth themes */
+        [data-theme='dark'] #logo,
+        [data-theme='earth'] #logo {
             filter: none;
         }
 
@@ -140,11 +149,8 @@
         (function() {
             try {
                 const stored = localStorage.getItem('soul-player-current-theme');
-                if (stored) {
-                    const themeId = JSON.parse(stored);
-                    if (themeId && ['dark', 'ocean', 'light'].includes(themeId)) {
-                        document.documentElement.setAttribute('data-theme', themeId);
-                    }
+                if (stored && ['dark', 'ocean', 'light', 'earth'].includes(stored)) {
+                    document.documentElement.setAttribute('data-theme', stored);
                 }
             } catch (e) {
                 // Fallback to light theme

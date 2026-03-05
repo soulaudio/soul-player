@@ -3,6 +3,7 @@
 // Audio backend selection and management for multi-driver support
 // (WASAPI, ASIO, JACK, CoreAudio, ALSA)
 
+#[cfg(not(target_os = "windows"))]
 use cpal::traits::HostTrait;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -107,7 +108,36 @@ impl AudioBackend {
     }
 
     /// Check if backend is available on current system
+    ///
+    /// On Windows, **never** calls any CPAL host operations (not even `cpal::default_host()`).
+    ///
+    /// Both `cpal::host_from_id(Asio)` and `cpal::default_host()` (WASAPI) can trigger
+    /// unhandled Windows SEH exceptions when ASIO drivers are installed — especially when
+    /// called concurrently from `spawn_blocking` tasks while the main thread initialises
+    /// audio playback. SEH exceptions bypass Rust's panic machinery and kill the process.
+    ///
+    /// On Windows the availability is inferred statically:
+    /// - `Default` (WASAPI) is always available on Windows.
+    /// - `Asio` availability is inferred from `cpal::available_hosts()`, which only
+    ///   checks whether the ASIO host was compiled in — it does not initialise any drivers.
     pub fn is_available(&self) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            match self {
+                Self::Default => true, // WASAPI is always available on Windows
+                #[cfg(feature = "asio")]
+                Self::Asio => {
+                    // Safe: available_hosts() is a compile-time check, no driver init.
+                    cpal::available_hosts()
+                        .into_iter()
+                        .any(|id| id == cpal::HostId::Asio)
+                }
+                #[allow(unreachable_patterns)]
+                _ => false,
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
         self.to_cpal_host().is_ok()
     }
 }
@@ -173,12 +203,19 @@ pub fn get_backend_info() -> Vec<BackendInfo> {
         .map(|backend| {
             let available = backend.is_available();
 
-            // Count devices for the default backend only during backend enumeration.
-            // ASIO and JACK device enumeration can be problematic (some drivers crash
-            // when enumerated multiple times or concurrently), so we defer device
-            // counting for those backends to when devices are explicitly requested.
+            // Count devices for backend info display.
+            // On Windows, avoid calling host.output_devices() for ANY backend:
+            // - ASIO/JACK: can crash via SEH exceptions on some driver setups
+            // - Default (WASAPI): can also trigger SEH with ASIO drivers installed,
+            //   because WASAPI enumeration sometimes initializes COM objects that
+            //   conflict with the ASIO runtime, causing unhandled exceptions.
+            // Instead, we use a placeholder count of 1 on Windows and let the
+            // actual device listing (via WinRT) provide the real device names.
             let device_count = if available {
                 match backend {
+                    #[cfg(target_os = "windows")]
+                    AudioBackend::Default => 1, // Avoid CPAL WASAPI enumeration (SEH-prone on Windows with ASIO drivers)
+                    #[cfg(not(target_os = "windows"))]
                     AudioBackend::Default => backend
                         .to_cpal_host()
                         .ok()
@@ -188,9 +225,9 @@ pub fn get_backend_info() -> Vec<BackendInfo> {
                     // For ASIO/JACK, just indicate availability without counting
                     // to avoid driver crashes from repeated enumeration
                     #[cfg(all(target_os = "windows", feature = "asio"))]
-                    AudioBackend::Asio => 1, // Indicate at least one device exists
+                    AudioBackend::Asio => 1,
                     #[cfg(feature = "jack")]
-                    AudioBackend::Jack => 1, // Indicate at least one device exists
+                    AudioBackend::Jack => 1,
                 }
             } else {
                 0
