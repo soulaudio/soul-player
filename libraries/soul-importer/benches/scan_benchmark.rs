@@ -298,13 +298,9 @@ fn bench_progress_updates(c: &mut Criterion) {
                         .expect("start progress");
 
                         for _ in 0..count {
-                            soul_storage::scan_progress::increment_processed(
-                                &pool,
-                                progress.id,
-                                1,
-                            )
-                            .await
-                            .expect("increment");
+                            soul_storage::scan_progress::increment_processed(&pool, progress.id, 1)
+                                .await
+                                .expect("increment");
                         }
                     });
                 });

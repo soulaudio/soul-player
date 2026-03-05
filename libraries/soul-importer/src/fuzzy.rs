@@ -1,7 +1,9 @@
 //! Fuzzy matching with confidence scoring for artists, albums, and genres
 
 use crate::{FuzzyMatch, MatchType, Result};
-use soul_core::types::{Album, AlbumId, Artist, ArtistId, CreateAlbum, CreateArtist, Genre, GenreId};
+use soul_core::types::{
+    Album, AlbumId, Artist, ArtistId, CreateAlbum, CreateArtist, Genre, GenreId,
+};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use strsim::normalized_levenshtein;

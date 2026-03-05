@@ -15,8 +15,8 @@ use crate::{
 };
 use soul_core::types::{LibrarySource, ScanStatus};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
-use std::path::Path;
+use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Statistics from a library scan
@@ -47,6 +47,8 @@ pub struct LibraryScanner {
     metadata_extractor: MetadataExtractor,
     /// Force re-extraction of metadata even for unchanged files
     force_metadata_refresh: bool,
+    /// Maximum number of concurrent metadata extraction tasks
+    concurrency: usize,
 }
 
 impl LibraryScanner {
@@ -60,6 +62,7 @@ impl LibraryScanner {
             progress_callback: None,
             metadata_extractor: MetadataExtractor::new(),
             force_metadata_refresh: false,
+            concurrency: 8,
         }
     }
 
@@ -72,6 +75,12 @@ impl LibraryScanner {
     /// Force re-extraction of metadata even for unchanged files
     pub fn force_metadata_refresh(mut self, force: bool) -> Self {
         self.force_metadata_refresh = force;
+        self
+    }
+
+    /// Set maximum number of concurrent metadata extraction tasks (default: 8)
+    pub fn concurrency(mut self, max: usize) -> Self {
+        self.concurrency = max.max(1);
         self
     }
 
@@ -186,59 +195,178 @@ impl LibraryScanner {
         let existing_tracks = self.get_existing_tracks_map(source.id).await?;
         let mut seen_paths: HashMap<String, bool> = HashMap::new();
 
-        // Process each file
+        // ── Phase 1: Filter unchanged files (cheap stat-only pass) ──
+        // Separate files into unchanged (skip) and needs-processing buckets.
+        let mut files_to_process: Vec<(PathBuf, i64, i64, Option<ExistingTrack>)> = Vec::new();
+        let mut skipped_count: i64 = 0;
+
         for file_path in &files {
             let path_str = file_path.display().to_string();
             seen_paths.insert(path_str.clone(), true);
 
-            match self
-                .process_file(file_path, source.id, &existing_tracks)
-                .await
-            {
-                Ok(action) => {
-                    stats.processed += 1;
-                    match action {
-                        FileAction::New => {
-                            stats.new_files += 1;
-                            soul_storage::scan_progress::increment_new(&self.pool, progress.id, 1)
-                                .await?;
-                        }
-                        FileAction::Updated => {
-                            stats.updated_files += 1;
-                            soul_storage::scan_progress::increment_updated(
-                                &self.pool,
-                                progress.id,
-                                1,
-                            )
-                            .await?;
-                        }
-                        FileAction::Unchanged => {}
-                        FileAction::Relocated => {
-                            stats.relocated_files += 1;
-                            stats.updated_files += 1;
-                            soul_storage::scan_progress::increment_updated(
-                                &self.pool,
-                                progress.id,
-                                1,
-                            )
-                            .await?;
-                        }
-                    }
-                    soul_storage::scan_progress::increment_processed(&self.pool, progress.id, 1)
-                        .await?;
-                }
+            // Get file metadata (mtime + size) for change detection
+            let fs_meta = match std::fs::metadata(file_path) {
+                Ok(m) => m,
                 Err(e) => {
-                    tracing::warn!("Failed to process file {:?}: {}", file_path, e);
+                    tracing::warn!("Failed to stat file {:?}: {}", file_path, e);
                     stats.errors += 1;
-                    soul_storage::scan_progress::increment_errors(&self.pool, progress.id, 1)
+                    stats.processed += 1;
+                    skipped_count += 1;
+                    continue;
+                }
+            };
+            let file_size = fs_meta.len() as i64;
+            let file_mtime = fs_meta
+                .modified()
+                .map(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0)
+                })
+                .unwrap_or(0);
+
+            if let Some(existing) = existing_tracks.get(&path_str) {
+                let unchanged = existing.file_size == Some(file_size)
+                    && existing.file_mtime == Some(file_mtime);
+
+                if unchanged && !self.force_metadata_refresh {
+                    // Unchanged — skip
+                    stats.processed += 1;
+                    skipped_count += 1;
+                    continue;
+                }
+                // Changed or force-refresh — need to reprocess
+                files_to_process.push((
+                    file_path.clone(),
+                    file_size,
+                    file_mtime,
+                    Some(existing.clone()),
+                ));
+            } else {
+                // New file
+                files_to_process.push((file_path.clone(), file_size, file_mtime, None));
+            }
+        }
+
+        // Flush progress for all skipped files in one batch
+        if skipped_count > 0 {
+            soul_storage::scan_progress::update_counts(
+                &self.pool,
+                progress.id,
+                skipped_count,
+                0,
+                0,
+                0,
+                0,
+            )
+            .await?;
+        }
+
+        // ── Phase 2: Parallel metadata extraction → sequential DB writes ──
+        // Spawn up to `concurrency` extraction tasks ahead of the consumer.
+        // The consumer awaits the oldest task, writes to DB, then loops.
+        // This keeps N extractions in-flight while the DB write is happening.
+
+        let max_inflight = self.concurrency;
+        let mut inflight: VecDeque<tokio::task::JoinHandle<ExtractionResult>> = VecDeque::new();
+
+        // Preload entity cache once for the entire scan
+        let mut cache = crate::fuzzy::EntityCache::preload(&self.pool).await?;
+
+        let mut batch_processed: i64 = 0;
+        let mut batch_new: i64 = 0;
+        let mut batch_updated: i64 = 0;
+        let mut batch_errors: i64 = 0;
+        let mut total_phase2_processed: usize = 0;
+
+        let files_to_process_len = files_to_process.len();
+
+        for (file_path, file_size, file_mtime, existing) in files_to_process {
+            // Spawn metadata extraction task
+            let fp = file_path.clone();
+            let handle: tokio::task::JoinHandle<ExtractionResult> = tokio::spawn(async move {
+                let extractor = MetadataExtractor::new();
+                match extractor.extract_metadata(&fp).await {
+                    Ok(raw) => Ok((file_path, file_size, file_mtime, existing, raw)),
+                    Err(e) => Err((file_path, e)),
+                }
+            });
+            inflight.push_back(handle);
+
+            // When buffer is full, consume the oldest result
+            while inflight.len() >= max_inflight {
+                if let Some(handle) = inflight.pop_front() {
+                    self.process_extraction_result(
+                        handle,
+                        source.id,
+                        &mut cache,
+                        &mut stats,
+                        &mut batch_processed,
+                        &mut batch_new,
+                        &mut batch_updated,
+                        &mut batch_errors,
+                    )
+                    .await?;
+
+                    total_phase2_processed += 1;
+
+                    // Flush progress every 100 files
+                    if total_phase2_processed % 100 == 0 {
+                        self.flush_progress(
+                            progress.id,
+                            &mut batch_processed,
+                            &mut batch_new,
+                            &mut batch_updated,
+                            &mut batch_errors,
+                            &stats,
+                        )
                         .await?;
+                    }
                 }
             }
+        }
 
-            // Call progress callback
-            if let Some(ref callback) = self.progress_callback {
-                callback(&stats);
+        // Drain remaining in-flight tasks
+        while let Some(handle) = inflight.pop_front() {
+            self.process_extraction_result(
+                handle,
+                source.id,
+                &mut cache,
+                &mut stats,
+                &mut batch_processed,
+                &mut batch_new,
+                &mut batch_updated,
+                &mut batch_errors,
+            )
+            .await?;
+
+            total_phase2_processed += 1;
+
+            if total_phase2_processed % 100 == 0 && total_phase2_processed < files_to_process_len {
+                self.flush_progress(
+                    progress.id,
+                    &mut batch_processed,
+                    &mut batch_new,
+                    &mut batch_updated,
+                    &mut batch_errors,
+                    &stats,
+                )
+                .await?;
             }
+        }
+
+        // Final flush of remaining batch counters
+        if batch_processed > 0 || batch_errors > 0 {
+            soul_storage::scan_progress::update_counts(
+                &self.pool,
+                progress.id,
+                batch_processed,
+                batch_new,
+                batch_updated,
+                0,
+                batch_errors,
+            )
+            .await?;
         }
 
         // Handle missing files (soft delete)
@@ -282,6 +410,186 @@ impl LibraryScanner {
         Ok(stats)
     }
 
+    /// Process the result of a single metadata extraction task.
+    /// Handles entity matching and DB writes sequentially.
+    #[allow(clippy::too_many_arguments)]
+    async fn process_extraction_result(
+        &self,
+        handle: tokio::task::JoinHandle<ExtractionResult>,
+        source_id: i64,
+        cache: &mut crate::fuzzy::EntityCache,
+        stats: &mut ScanStats,
+        batch_processed: &mut i64,
+        batch_new: &mut i64,
+        batch_updated: &mut i64,
+        batch_errors: &mut i64,
+    ) -> Result<()> {
+        let result = match handle.await {
+            Ok(inner) => inner,
+            Err(e) => {
+                tracing::warn!("Extraction task panicked: {}", e);
+                stats.errors += 1;
+                stats.processed += 1;
+                *batch_processed += 1;
+                *batch_errors += 1;
+                return Ok(());
+            }
+        };
+
+        match result {
+            Ok((file_path, file_size, file_mtime, existing, raw)) => {
+                // Sequential: entity matching (using cache) + DB write
+                let action = self
+                    .process_extracted_file(
+                        &file_path, source_id, file_size, file_mtime, existing, raw, cache,
+                    )
+                    .await;
+
+                match action {
+                    Ok(FileAction::New) => {
+                        stats.new_files += 1;
+                        *batch_new += 1;
+                    }
+                    Ok(FileAction::Updated) => {
+                        stats.updated_files += 1;
+                        *batch_updated += 1;
+                    }
+                    Ok(FileAction::Relocated) => {
+                        stats.relocated_files += 1;
+                        stats.updated_files += 1;
+                        *batch_updated += 1;
+                    }
+                    Ok(FileAction::Unchanged) => {}
+                    Err(e) => {
+                        tracing::warn!("Failed to process file {:?}: {}", file_path, e);
+                        stats.errors += 1;
+                        *batch_errors += 1;
+                    }
+                }
+                stats.processed += 1;
+                *batch_processed += 1;
+            }
+            Err((file_path, e)) => {
+                tracing::warn!("Metadata extraction failed for {:?}: {}", file_path, e);
+                stats.errors += 1;
+                stats.processed += 1;
+                *batch_processed += 1;
+                *batch_errors += 1;
+            }
+        }
+
+        // Call progress callback
+        if let Some(ref callback) = self.progress_callback {
+            callback(stats);
+        }
+
+        Ok(())
+    }
+
+    /// Process a file with pre-extracted metadata: entity matching + DB write.
+    #[allow(clippy::too_many_arguments)]
+    async fn process_extracted_file(
+        &self,
+        file_path: &Path,
+        source_id: i64,
+        file_size: i64,
+        file_mtime: i64,
+        existing: Option<ExistingTrack>,
+        raw: crate::metadata::ExtractedMetadata,
+        cache: &mut crate::fuzzy::EntityCache,
+    ) -> Result<FileAction> {
+        if let Some(existing) = existing {
+            // Existing track — update metadata
+            let processor =
+                FileProcessor::new(&self.pool, &self.metadata_extractor, self.compute_hashes);
+            processor
+                .update_track_with_metadata(
+                    existing.id,
+                    file_path,
+                    file_size,
+                    file_mtime,
+                    raw,
+                    cache,
+                )
+                .await?;
+            return Ok(FileAction::Updated);
+        }
+
+        // New file — check for relocation by hash
+        let content_hash = if self.compute_hashes {
+            Some(hash_computer::compute_file_hash(file_path).await?)
+        } else {
+            None
+        };
+
+        if let Some(ref hash) = content_hash {
+            if let Some(track) = soul_storage::tracks::find_by_hash(&self.pool, hash).await? {
+                let path_str = file_path.display().to_string();
+                soul_storage::tracks::update_file_path(
+                    &self.pool,
+                    track.id.as_str(),
+                    &path_str,
+                    source_id,
+                    file_size,
+                    file_mtime,
+                )
+                .await?;
+                tracing::info!("Relocated track {} to {}", track.id, path_str);
+                return Ok(FileAction::Relocated);
+            }
+        }
+
+        // Truly new file — import with pre-extracted metadata
+        let processor =
+            FileProcessor::new(&self.pool, &self.metadata_extractor, self.compute_hashes);
+        processor
+            .import_with_metadata(
+                file_path,
+                source_id,
+                file_size,
+                file_mtime,
+                content_hash,
+                raw,
+                cache,
+            )
+            .await?;
+        Ok(FileAction::New)
+    }
+
+    /// Flush batched progress counters to the database and invoke callback.
+    async fn flush_progress(
+        &self,
+        progress_id: i64,
+        batch_processed: &mut i64,
+        batch_new: &mut i64,
+        batch_updated: &mut i64,
+        batch_errors: &mut i64,
+        stats: &ScanStats,
+    ) -> Result<()> {
+        if *batch_processed > 0 || *batch_errors > 0 {
+            soul_storage::scan_progress::update_counts(
+                &self.pool,
+                progress_id,
+                *batch_processed,
+                *batch_new,
+                *batch_updated,
+                0,
+                *batch_errors,
+            )
+            .await?;
+            *batch_processed = 0;
+            *batch_new = 0;
+            *batch_updated = 0;
+            *batch_errors = 0;
+        }
+
+        if let Some(ref callback) = self.progress_callback {
+            callback(stats);
+        }
+
+        Ok(())
+    }
+
     /// Get a map of existing tracks for this source
     async fn get_existing_tracks_map(
         &self,
@@ -307,81 +615,6 @@ impl LibraryScanner {
         Ok(map)
     }
 
-    /// Process a single file
-    async fn process_file(
-        &self,
-        file_path: &Path,
-        source_id: i64,
-        existing_tracks: &HashMap<String, ExistingTrack>,
-    ) -> Result<FileAction> {
-        let path_str = file_path.display().to_string();
-
-        // Get file metadata
-        let fs_meta = std::fs::metadata(file_path)?;
-        let file_size = fs_meta.len() as i64;
-        let file_mtime = fs_meta
-            .modified()
-            .map(|t| {
-                t.duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0)
-            })
-            .unwrap_or(0);
-
-        // Check if file exists in our database
-        if let Some(existing) = existing_tracks.get(&path_str) {
-            // File exists - check if it changed (or if we're forcing refresh)
-            let unchanged =
-                existing.file_size == Some(file_size) && existing.file_mtime == Some(file_mtime);
-
-            if unchanged && !self.force_metadata_refresh {
-                // Unchanged and no force refresh - skip
-                return Ok(FileAction::Unchanged);
-            }
-
-            // File changed or force refresh - update metadata
-            let processor =
-                FileProcessor::new(&self.pool, &self.metadata_extractor, self.compute_hashes);
-            processor
-                .update_track_metadata(existing.id, file_path, file_size, file_mtime)
-                .await?;
-            return Ok(FileAction::Updated);
-        }
-
-        // File is new - check if it's a relocated file (by hash)
-        let content_hash = if self.compute_hashes {
-            Some(hash_computer::compute_file_hash(file_path).await?)
-        } else {
-            None
-        };
-
-        if let Some(ref hash) = content_hash {
-            // Check if this hash exists elsewhere (file was moved)
-            if let Some(track) = soul_storage::tracks::find_by_hash(&self.pool, hash).await? {
-                // Update the track's path using the storage function
-                soul_storage::tracks::update_file_path(
-                    &self.pool,
-                    track.id.as_str(),
-                    &path_str,
-                    source_id,
-                    file_size,
-                    file_mtime,
-                )
-                .await?;
-                tracing::info!("Relocated track {} to {}", track.id, path_str);
-                return Ok(FileAction::Relocated);
-            }
-        }
-
-        // Truly new file - import it
-        let processor =
-            FileProcessor::new(&self.pool, &self.metadata_extractor, self.compute_hashes);
-        processor
-            .import_new_file(file_path, source_id, file_size, file_mtime, content_hash)
-            .await?;
-        Ok(FileAction::New)
-    }
-
     /// Mark files that are no longer present as unavailable
     async fn mark_missing_files_unavailable(
         &self,
@@ -404,8 +637,20 @@ impl LibraryScanner {
     }
 }
 
+/// Result type for parallel metadata extraction tasks.
+type ExtractionResult = std::result::Result<
+    (
+        PathBuf,
+        i64,
+        i64,
+        Option<ExistingTrack>,
+        crate::metadata::ExtractedMetadata,
+    ),
+    (PathBuf, crate::ImportError),
+>;
+
 /// Represents an existing track in the database
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ExistingTrack {
     id: i64,
     file_size: Option<i64>,

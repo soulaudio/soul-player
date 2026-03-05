@@ -4,7 +4,8 @@
 //! scanning, including importing new files and updating existing track metadata.
 
 use crate::{
-    artwork_discovery, hash_computer, metadata_extractor::MetadataExtractor, ImportError, Result,
+    artwork_discovery, fuzzy::EntityCache, hash_computer, metadata,
+    metadata_extractor::MetadataExtractor, ImportError, Result,
 };
 use soul_core::types::{CreateTrack, TrackId};
 use sqlx::SqlitePool;
@@ -247,6 +248,253 @@ impl<'a> FileProcessor<'a> {
 
         tracing::info!(
             "[UPDATE] Successfully updated track {}: {}",
+            track_id,
+            file_path.display()
+        );
+
+        Ok(())
+    }
+
+    /// Import a new file using pre-extracted metadata (avoids re-extracting).
+    ///
+    /// This is the parallel-scan variant of `import_new_file`: metadata has
+    /// already been extracted in a concurrent task, so we skip `extract_and_match`
+    /// and use the `EntityCache` for fast entity resolution.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn import_with_metadata(
+        &self,
+        file_path: &Path,
+        source_id: i64,
+        file_size: i64,
+        file_mtime: i64,
+        content_hash: Option<String>,
+        raw: metadata::ExtractedMetadata,
+        cache: &mut EntityCache,
+    ) -> Result<()> {
+        tracing::info!(
+            "[IMPORT] Importing new file (parallel): {}",
+            file_path.display()
+        );
+
+        let fuzzy = self.metadata_extractor.fuzzy_matcher();
+
+        // Match artist via cache
+        let artist_id = if let Some(ref artist_name) = raw.artist {
+            let m = fuzzy
+                .find_or_create_artist_cached(self.pool, artist_name, cache)
+                .await?;
+            Some(m.entity.id)
+        } else {
+            None
+        };
+
+        // Match album via cache
+        let album_id = if let Some(ref album_title) = raw.album {
+            let m = fuzzy
+                .find_or_create_album_cached(self.pool, album_title, artist_id, cache)
+                .await?;
+            Some(m.entity.id)
+        } else {
+            None
+        };
+
+        // Match album artist via cache (if different from track artist)
+        let album_artist_id = if let Some(ref album_artist_name) = raw.album_artist {
+            if raw.artist.as_ref() != Some(album_artist_name) {
+                let m = fuzzy
+                    .find_or_create_artist_cached(self.pool, album_artist_name, cache)
+                    .await?;
+                Some(m.entity.id)
+            } else {
+                artist_id
+            }
+        } else {
+            None
+        };
+
+        // Match genres via cache
+        let mut genre_ids = Vec::new();
+        for genre_name in &raw.genres {
+            let m = fuzzy
+                .find_or_create_genre_cached(self.pool, genre_name, cache)
+                .await?;
+            genre_ids.push(m.entity.id);
+        }
+
+        // Create the track
+        let create_track = CreateTrack {
+            title: raw.title.clone().unwrap_or_else(|| {
+                file_path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Unknown".to_string())
+            }),
+            artist_id,
+            album_id,
+            album_artist_id,
+            track_number: raw.track_number.map(|n| n as i32),
+            disc_number: raw.disc_number.map(|n| n as i32),
+            year: raw.year,
+            duration_seconds: raw.duration_seconds,
+            bitrate: raw.bitrate.map(|b| b as i32),
+            sample_rate: raw.sample_rate.map(|s| s as i32),
+            channels: raw.channels.map(|c| c as i32),
+            file_format: raw.file_format.to_uppercase(),
+            file_hash: content_hash,
+            origin_source_id: 1,
+            local_file_path: Some(file_path.display().to_string()),
+            musicbrainz_recording_id: raw.musicbrainz_recording_id.clone(),
+            fingerprint: None,
+        };
+
+        let track = soul_storage::tracks::create(self.pool, create_track).await?;
+
+        let track_id: i64 = track
+            .id
+            .as_str()
+            .parse()
+            .map_err(|_| ImportError::Unknown(format!("Invalid track ID: {}", track.id)))?;
+
+        soul_storage::tracks::set_library_source(
+            self.pool, track_id, source_id, file_size, file_mtime,
+        )
+        .await?;
+
+        // Add genres
+        let track_id_typed = TrackId::new(track_id.to_string());
+        self.metadata_extractor
+            .add_genres_to_track(self.pool, track_id_typed, &genre_ids)
+            .await?;
+
+        // Discover folder artwork
+        if let Some(album_id) = album_id {
+            if let Some(folder_path) = file_path.parent() {
+                let folder_path_buf = folder_path.to_path_buf();
+                let artwork_path = tokio::task::spawn_blocking(move || {
+                    artwork_discovery::discover_folder_artwork(&folder_path_buf)
+                })
+                .await
+                .unwrap_or(None);
+
+                if let Some(artwork_path) = artwork_path {
+                    soul_storage::albums::set_artwork_source(
+                        self.pool,
+                        album_id,
+                        "folder",
+                        &artwork_path.to_string_lossy(),
+                    )
+                    .await
+                    .ok();
+                }
+            }
+        }
+
+        tracing::info!(
+            "[IMPORT] Successfully imported (parallel): {} (track_id: {})",
+            file_path.display(),
+            track_id
+        );
+
+        Ok(())
+    }
+
+    /// Update track metadata using pre-extracted metadata and entity cache.
+    ///
+    /// Parallel-scan variant of `update_track_metadata`.
+    pub async fn update_track_with_metadata(
+        &self,
+        track_id: i64,
+        file_path: &Path,
+        file_size: i64,
+        file_mtime: i64,
+        raw: metadata::ExtractedMetadata,
+        cache: &mut EntityCache,
+    ) -> Result<()> {
+        tracing::info!(
+            "[UPDATE] Updating metadata (parallel) for track {}: {}",
+            track_id,
+            file_path.display()
+        );
+
+        let fuzzy = self.metadata_extractor.fuzzy_matcher();
+
+        // Match artist via cache
+        let artist_id = if let Some(ref artist_name) = raw.artist {
+            let m = fuzzy
+                .find_or_create_artist_cached(self.pool, artist_name, cache)
+                .await?;
+            Some(m.entity.id)
+        } else {
+            None
+        };
+
+        // Match album via cache
+        let album_id = if let Some(ref album_title) = raw.album {
+            let m = fuzzy
+                .find_or_create_album_cached(self.pool, album_title, artist_id, cache)
+                .await?;
+            Some(m.entity.id)
+        } else {
+            None
+        };
+
+        // Compute content hash if enabled
+        let content_hash = if self.compute_hashes {
+            Some(hash_computer::compute_file_hash(file_path).await?)
+        } else {
+            None
+        };
+
+        // Update track metadata
+        soul_storage::tracks::update_file_metadata(
+            self.pool,
+            track_id,
+            raw.title.as_deref(),
+            raw.track_number,
+            raw.disc_number,
+            raw.year,
+            raw.duration_seconds,
+            raw.bitrate,
+            raw.sample_rate,
+            raw.channels,
+            &raw.file_format,
+            file_size,
+            file_mtime,
+            content_hash.as_deref(),
+        )
+        .await?;
+
+        // Update artist/album relationships
+        if artist_id.is_some() || album_id.is_some() {
+            soul_storage::tracks::update_artist_album(self.pool, track_id, artist_id, album_id)
+                .await?;
+        }
+
+        // Discover folder artwork
+        if let Some(album_id) = album_id {
+            if let Some(folder_path) = file_path.parent() {
+                let folder_path_buf = folder_path.to_path_buf();
+                let artwork_path = tokio::task::spawn_blocking(move || {
+                    artwork_discovery::discover_folder_artwork(&folder_path_buf)
+                })
+                .await
+                .unwrap_or(None);
+
+                if let Some(artwork_path) = artwork_path {
+                    soul_storage::albums::set_artwork_source(
+                        self.pool,
+                        album_id,
+                        "folder",
+                        &artwork_path.to_string_lossy(),
+                    )
+                    .await
+                    .ok();
+                }
+            }
+        }
+
+        tracing::info!(
+            "[UPDATE] Successfully updated (parallel) track {}: {}",
             track_id,
             file_path.display()
         );
