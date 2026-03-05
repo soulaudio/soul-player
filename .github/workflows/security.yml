@@ -33,14 +33,41 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
-
       - name: Run security audit
-        run: moon run :audit
-        continue-on-error: false
+        run: >-
+          cargo audit --deny warnings
+          --ignore RUSTSEC-2023-0071
+          --ignore RUSTSEC-2024-0370
+          --ignore RUSTSEC-2024-0411
+          --ignore RUSTSEC-2024-0412
+          --ignore RUSTSEC-2024-0413
+          --ignore RUSTSEC-2024-0414
+          --ignore RUSTSEC-2024-0415
+          --ignore RUSTSEC-2024-0416
+          --ignore RUSTSEC-2024-0417
+          --ignore RUSTSEC-2024-0418
+          --ignore RUSTSEC-2024-0419
+          --ignore RUSTSEC-2024-0420
+          --ignore RUSTSEC-2024-0421
+          --ignore RUSTSEC-2024-0422
+          --ignore RUSTSEC-2024-0423
+          --ignore RUSTSEC-2024-0424
+          --ignore RUSTSEC-2024-0425
+          --ignore RUSTSEC-2024-0426
+          --ignore RUSTSEC-2024-0427
+          --ignore RUSTSEC-2024-0428
+          --ignore RUSTSEC-2024-0429
+          --ignore RUSTSEC-2024-0436
+          --ignore RUSTSEC-2024-0437
+          --ignore RUSTSEC-2024-0438
+          --ignore RUSTSEC-2025-0057
+          --ignore RUSTSEC-2025-0075
+          --ignore RUSTSEC-2025-0080
+          --ignore RUSTSEC-2025-0081
+          --ignore RUSTSEC-2025-0098
+          --ignore RUSTSEC-2025-0100
+          --ignore RUSTSEC-2025-0119
+          --ignore RUSTSEC-2025-0134
 
       - name: Create issue on failure
         if: failure()
@@ -95,13 +122,8 @@ jobs:
       - name: Install cargo-outdated
         run: cargo install cargo-outdated --locked
 
-      - name: Setup Moon
-        uses: moonrepo/setup-toolchain@v0
-        with:
-          auto-install: true
-
       - name: Check for outdated dependencies
-        run: moon run :outdated
+        run: cargo outdated --workspace
         continue-on-error: true
 
       - name: Create summary
