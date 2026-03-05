@@ -19,7 +19,7 @@ dependsOn:
 tasks:
   dev:
     command: 'next dev -p 3001'
-    local: true
+    preset: 'local'
     options:
       runInCI: false
 
@@ -55,13 +55,13 @@ tasks:
 
   docker-build:
     command: 'cd ../.. && docker build -f applications/marketing/Dockerfile -t soul-player-marketing .'
-    local: true
+    preset: 'local'
     options:
       runInCI: false
 
   deploy:
     command: 'fly deploy'
-    local: true
+    preset: 'local'
     deps:
       - 'type-check'
       - 'lint'
