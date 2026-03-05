@@ -53,7 +53,7 @@ tasks:
       - 'tsconfig.json'
 
   docker-build:
-    command: 'cd ../.. && docker build -f applications/marketing/Dockerfile -t soul-player-marketing .'
+    script: 'cd ../.. && docker build -f applications/marketing/Dockerfile -t soul-player-marketing .'
     options:
       runInCI: false
 
