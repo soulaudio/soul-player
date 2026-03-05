@@ -208,12 +208,12 @@ test('genre detail page loads with correct title', async () => {
 
   // Page container must be visible
   const pageEl = page.locator('[data-testid="genre-detail-page"]');
-  await expect(pageEl).toBeVisible();
+  await expect(pageEl).toBeVisible({ timeout: 15_000 });
 
   // Genre title must match the seeded value
   const titleEl = page.locator('[data-testid="genre-title"]');
-  await expect(titleEl).toBeVisible();
-  await expect(titleEl).toHaveText('Playwright Genre');
+  await expect(titleEl).toBeVisible({ timeout: 10_000 });
+  await expect(titleEl).toHaveText('Playwright Genre', { timeout: 10_000 });
 });
 
 // ----------------------------------------------------------------

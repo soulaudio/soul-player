@@ -123,6 +123,12 @@ async function startPlayback(p) {
     },
     { timeout: 15_000 }
   );
+
+  // Seek to 0 to prevent the 2s track from auto-advancing before test assertions
+  await p.evaluate(async () => {
+    try { await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 0.0 }); } catch {}
+  });
+  await p.waitForTimeout(150);
 }
 
 // ----------------------------------------------------------------
@@ -302,6 +308,11 @@ test('sequential skipToQueueIndex calls all reach Playing state', async () => {
       },
       { timeout: 15_000 }
     );
+
+    // Seek to 0 to freeze the 2s track so it doesn't auto-advance before the next skip
+    await page.evaluate(async () => {
+      try { await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 0.0 }); } catch {}
+    });
 
     const after = await getNowPlayingTitle(page);
     expect(after).not.toBe(before);

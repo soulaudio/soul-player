@@ -70,22 +70,39 @@ test.afterEach(async () => {
 // ---- Helper ----
 
 /**
- * Start playback of album 2001 and wait until the player reports Playing.
+ * Start playback of album 2001 via direct play_queue IPC (bypasses MediaCard
+ * branching which is unreliable in the full suite). Seeks to position 0 after
+ * confirming Playing to ensure the full 2s track is available for assertions.
  */
 async function startPlayback(pg) {
-  const card = pg.locator('[data-testid="media-card-album-2001"]');
-  await card.waitFor({ state: 'visible' });
-  await card.hover();
-  await card.locator('[data-testid="media-card-play-button"]').click();
+  await pg.evaluate(async () => {
+    const tracks = await window.__TAURI_INTERNALS__.invoke('get_album_tracks', { albumId: 2001 });
+    tracks.sort((a, b) => (a.track_number || 0) - (b.track_number || 0));
+    const queue = tracks.map(t => ({
+      trackId: String(t.id),
+      title: t.title,
+      artist: t.artist_name || 'Unknown Artist',
+      album: t.album_title || null,
+      albumId: t.album_id || null,
+      filePath: t.file_path || '',
+      durationSeconds: t.duration_seconds || null,
+      trackNumber: t.track_number || null,
+      coverArtPath: null,
+    }));
+    await window.__TAURI_INTERNALS__.invoke('play_queue', { queue, startIndex: 0 });
+  });
   await pg.waitForSelector('[data-testid="now-playing-title"]', { timeout: 15_000 });
   await pg.waitForFunction(
     async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Playing',
     { timeout: 15_000 }
   );
-  // Blur the play button so subsequent keyboard shortcuts (Ctrl+Space) reach the shortcut
-  // handler rather than clicking the focused button.
+  // Seek to 0 to ensure the full 2s track is available (prevents auto-advance race)
+  await pg.evaluate(async () => {
+    try { await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 0.0 }); } catch {}
+  });
+  // Blur so keyboard shortcuts reach the window handler, not a focused button
   await pg.evaluate(() => { document.activeElement?.blur(); document.body.focus(); });
-  await pg.waitForTimeout(100);
+  await pg.waitForTimeout(150);
 }
 
 // ================================================================
@@ -101,12 +118,14 @@ test('Ctrl+Space toggles play/pause while a track is loaded', async () => {
   expect(stateAfterStart).toBe('Playing');
 
   // 2. Ctrl+Space → should pause
-  // Note: we use waitForTimeout instead of waitForFunction here because rapid
-  // IPC polling from waitForFunction competes with the shortcut handler's own
-  // invoke() calls (getPlaybackState + pausePlayback), causing contention on
-  // the shared Tauri IPC channel. A flat wait avoids this interference.
+  // Small initial delay lets the shortcut handler's own IPC calls settle,
+  // then poll for the expected state change.
   await page.keyboard.press('Control+Space');
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(500);
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Paused',
+    { timeout: 5_000 }
+  );
   const stateAfterFirstPress = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_playback_state')
   );
@@ -114,7 +133,11 @@ test('Ctrl+Space toggles play/pause while a track is loaded', async () => {
 
   // 3. Ctrl+Space again → should resume
   await page.keyboard.press('Control+Space');
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(500);
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Playing',
+    { timeout: 5_000 }
+  );
   const stateAfterSecondPress = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_playback_state')
   );
@@ -188,9 +211,12 @@ test('BUG-11 regression: Ctrl+Space causes exactly one toggle per press', async 
   // Ctrl+Space press toggles playback exactly once.
 
   // Press 1: Playing → Paused
-  // Note: flat wait avoids IPC contention with shortcut handler (see test 1 comment).
   await page.keyboard.press('Control+Space');
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(500);
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Paused',
+    { timeout: 5_000 }
+  );
   const stateAfterFirst = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_playback_state')
   );
@@ -198,7 +224,11 @@ test('BUG-11 regression: Ctrl+Space causes exactly one toggle per press', async 
 
   // Press 2: Paused → Playing  (confirms toggle, not a one-way switch)
   await page.keyboard.press('Control+Space');
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(500);
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Playing',
+    { timeout: 5_000 }
+  );
   const stateAfterSecond = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_playback_state')
   );

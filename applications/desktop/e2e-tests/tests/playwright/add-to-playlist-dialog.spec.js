@@ -97,14 +97,15 @@ async function openDialogFromTrackOne() {
   const firstRow = trackList.locator('[data-testid="track-row"]').first();
   await firstRow.waitFor({ state: 'visible' });
 
-  // Hover the row so the options button appears
+  // Scroll row into view and hover to reveal the options button
+  await firstRow.scrollIntoViewIfNeeded();
   await firstRow.hover();
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(300);
 
   const menuBtn = firstRow.getByRole('button', { name: /track options/i });
   await menuBtn.waitFor({ state: 'visible', timeout: 5_000 });
-  await menuBtn.click();
-  await page.waitForTimeout(300);
+  await menuBtn.click({ force: true });
+  await page.waitForTimeout(400);
 
   const addToPlaylistItem = page.getByRole('menuitem', { name: /add to playlist/i });
   await addToPlaylistItem.waitFor({ state: 'visible', timeout: 5_000 });

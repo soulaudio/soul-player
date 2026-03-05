@@ -46,7 +46,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-soul-audio-desktop = { workspace = true, features = ["effects", "asio"] }
+soul-audio-desktop = { workspace = true, features = ["effects", "asio", "native-device-monitor"] }
 
 [target.'cfg(not(windows))'.dependencies]
 soul-audio-desktop = { workspace = true, features = ["effects"] }

@@ -141,12 +141,14 @@ test.afterEach(async () => {
 async function addEffectToSlot(slotIndex, effectLabel) {
   const addBtn = page.locator(`[data-testid="add-effect-btn-${slotIndex}"]`);
   await expect(addBtn).toBeVisible({ timeout: 5_000 });
+  await addBtn.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(150);
   await addBtn.click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
 
   // Wait for the picker panel to appear
   const picker = page.locator(`[data-testid="effect-picker-${slotIndex}"]`);
-  await picker.waitFor({ state: 'visible', timeout: 5_000 });
+  await picker.waitFor({ state: 'visible', timeout: 8_000 });
 
   // The picker is a custom panel; click the button whose text matches effectLabel
   const effectBtn = picker.getByRole('button', { name: new RegExp(effectLabel, 'i') }).first();

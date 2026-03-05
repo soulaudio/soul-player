@@ -132,13 +132,14 @@ export function ArtistPage() {
   )
 
   // Build queue callback for TrackList
+  // Must use topTracks (the displayed list) so the queue order matches display order.
+  // TrackList passes clickedIndex from the displayed list to playQueue(), so the
+  // queue and the index must be aligned on the same array.
   const buildQueue = useCallback(
     (_allTracks: Track[], _clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
-      // Return the full queue in original order
-      // The startIndex passed to playQueue() will determine which track plays first
-      return buildQueueFromTracks(tracks)
+      return buildQueueFromTracks(topTracks)
     },
-    [buildQueueFromTracks, tracks]
+    [buildQueueFromTracks, topTracks]
   )
 
   // Convert BackendTrack to QueueTrack

@@ -528,7 +528,11 @@ pub fn find_device_by_name(
         .output_devices()
         .map_err(|e| DeviceError::EnumerationFailed(e.to_string()))?;
 
+    // Prefix for WinRT-style short names: "Speakers" should match "Speakers (Realtek(R) Audio)"
+    let prefix = format!("{} (", device_name);
+    let mut prefix_match: Option<cpal::Device> = None;
     let mut search_count = 0;
+
     for device in devices {
         search_count += 1;
         if let Some(name) = device
@@ -543,11 +547,27 @@ pub fn find_device_by_name(
                     device_name,
                     devices_searched = search_count,
                     duration_ms = duration.as_millis(),
-                    "[Device] Device found"
+                    "[Device] Device found (exact match)"
                 );
                 return Ok(device);
             }
+            // Remember first prefix match as WinRT short-name fallback
+            if prefix_match.is_none() && name.starts_with(&prefix) {
+                prefix_match = Some(device);
+            }
         }
+    }
+
+    if let Some(device) = prefix_match {
+        let duration = start.elapsed();
+        tracing::info!(
+            backend = ?backend,
+            device_name,
+            devices_searched = search_count,
+            duration_ms = duration.as_millis(),
+            "[Device] Device found (prefix match)"
+        );
+        return Ok(device);
     }
 
     let duration = start.elapsed();

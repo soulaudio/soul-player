@@ -177,13 +177,14 @@ export function DeviceSelector({
     <DropdownMenu onOpenChange={(open) => { if (open) onLoadDevices(); }}>
       <DropdownMenuTrigger asChild>
         <button
+          data-testid="device-selector-button"
           className="p-1 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity ml-1"
           title={currentDevice?.name || t('audio.selectDevice', 'Select audio device')}
         >
           <Speaker className={cn('w-4 h-4', currentDevice?.isRunning && 'text-primary')} />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[280px] max-h-[300px] overflow-y-auto">
+      <DropdownMenuContent data-testid="device-selector-content" align="end" className="w-[280px] max-h-[300px] overflow-y-auto">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>{t('audio.output', 'Audio Output')}</span>
           {currentDevice?.sampleRate && (
@@ -204,6 +205,7 @@ export function DeviceSelector({
               {mockBackend.devices.map((device, deviceIndex) => (
                 <DropdownMenuItem
                   key={`${mockBackend.backend}-${device.name}-${deviceIndex}`}
+                  data-testid={`device-dropdown-item-${device.name.replace(/\s+/g, '-').toLowerCase()}`}
                   onClick={() => onSwitchDevice(device.backend, device.name)}
                   className="flex items-center justify-between cursor-pointer"
                 >
@@ -241,6 +243,7 @@ export function DeviceSelector({
                   backendDevices.map((device, deviceIndex) => (
                     <DropdownMenuItem
                       key={`${backend.backend}-${device.name}-${deviceIndex}`}
+                      data-testid={`device-dropdown-item-${device.name.replace(/\s+/g, '-').toLowerCase()}`}
                       onClick={() => onSwitchDevice(backend.backend, device.name)}
                       className="flex items-center justify-between cursor-pointer"
                     >

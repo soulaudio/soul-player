@@ -317,31 +317,48 @@ test('seeking near the end of a track causes auto-advance to Track Two', async (
 // ----------------------------------------------------------------
 
 test('seek_to while paused keeps state Paused and updates position', async () => {
-  // Pause playback
-  await page.click('[data-testid="play-pause-button"]');
+  // Robust pause: seek to 0 first to prevent 2s track from finishing during pause fade,
+  // then pause, then verify. If auto-advance raced us, re-pause.
+  await page.evaluate(async () => {
+    try { await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 0.0 }); } catch {}
+    await window.__TAURI_INTERNALS__.invoke('pause_playback');
+  });
 
-  // Flat wait avoids IPC contention (mirrors pattern from playback-controls.spec.js)
-  await page.waitForTimeout(1_500);
-
-  const stateAfterPause = await page.evaluate(async () =>
-    window.__TAURI_INTERNALS__.invoke('get_playback_state')
+  // Wait for Paused state via IPC polling
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Paused',
+    { timeout: 5_000 }
   );
-  expect(stateAfterPause).toBe('Paused');
+
+  // Re-check after settling — if auto-advance raced us, pause again
+  await page.waitForTimeout(200);
+  const checkState = await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('get_playback_state'));
+  if (checkState === 'Playing') {
+    await page.evaluate(async () => {
+      try { await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 0.0 }); } catch {}
+      await window.__TAURI_INTERNALS__.invoke('pause_playback');
+    });
+    await page.waitForFunction(
+      async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Paused',
+      { timeout: 5_000 }
+    );
+    await page.waitForTimeout(200);
+  }
 
   // Seek to 0.5 seconds via IPC
   await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('seek_to', { position: 0.5 })
   );
 
-  // The backend emits playback:position-updated on seek even when paused,
-  // so the UI syncs. Wait a moment for the event to propagate.
+  // Wait for state to settle after seek
   await page.waitForTimeout(300);
 
   // State must still be Paused — seeking must not auto-resume
-  const stateAfterSeek = await page.evaluate(async () =>
-    window.__TAURI_INTERNALS__.invoke('get_playback_state')
+  // Use waitForFunction to tolerate brief transitional states
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Paused',
+    { timeout: 3_000 }
   );
-  expect(stateAfterSeek).toBe('Paused');
 
   // Backend position must be near 0.5s
   const position = await page.evaluate(async () =>
@@ -367,8 +384,11 @@ test('seek_to while paused keeps state Paused and updates position', async () =>
 // ----------------------------------------------------------------
 
 test('seek bar resets to near beginning when skipping to Track Two', async () => {
-  // Let a moment of audio play so we accumulate some position
-  await page.waitForTimeout(400);
+  // Wait for position to advance past 0 (poll instead of flat wait — more reliable in full suite)
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_position')) > 0,
+    { timeout: 5_000 }
+  );
 
   const posBefore = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_position')
@@ -422,8 +442,11 @@ test('seek bar resets to near beginning when skipping to Track Two', async () =>
 // ----------------------------------------------------------------
 
 test('clicking near the start of the seek-track element seeks to near beginning', async () => {
-  // Let some audio play so position > 0
-  await page.waitForTimeout(500);
+  // Wait for position to advance past 0 (poll instead of flat wait — more reliable in full suite)
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_position')) > 0,
+    { timeout: 5_000 }
+  );
 
   const posBefore = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_position')

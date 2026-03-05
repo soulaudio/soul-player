@@ -274,9 +274,10 @@ export function PlaylistPage() {
               channels: t.channels,
             }))}
             showTrackNumber={true}
-            buildQueue={(_allTracks, clickedTrack, _clickedIndex) => {
-              // Build queue from all tracks, starting at clicked position
-              const queue = tracks
+            buildQueue={(_allTracks, _clickedTrack, _clickedIndex) => {
+              // Return tracks in original order — TrackList passes clickedIndex
+              // to playQueue() so the correct track plays without reordering.
+              return tracks
                 .filter((t) => t.file_path)
                 .map((t) => ({
                   trackId: String(t.id),
@@ -288,13 +289,6 @@ export function PlaylistPage() {
                   durationSeconds: t.duration_seconds || null,
                   trackNumber: t.track_number || null,
                 }))
-
-              // Reorder so clicked track is first
-              const clickedTrackIdx = queue.findIndex((t) => t.trackId === String(clickedTrack.id))
-              if (clickedTrackIdx > 0) {
-                return [...queue.slice(clickedTrackIdx), ...queue.slice(0, clickedTrackIdx)]
-              }
-              return queue
             }}
             virtualized={tracks.length > 50}
             virtualItemSize={56}

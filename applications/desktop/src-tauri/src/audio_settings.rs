@@ -4,6 +4,8 @@
 //! integrating with the soul-audio-desktop backend/device system.
 
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "windows")]
+use soul_audio_desktop::create_async_device_monitor;
 use soul_audio_desktop::{
     backend, device, AudioBackend, AudioDeviceInfo, BackendInfo, DeviceCapabilities,
     ExclusiveConfig, LatencyInfo, SupportedBitDepth,
@@ -234,43 +236,105 @@ pub async fn get_audio_devices(backend_str: String) -> Result<Vec<FrontendDevice
         "[audio_settings] Getting devices for backend"
     );
 
-    let backend = parse_backend(&backend_str)?;
-
-    // Use async timeout wrapper to prevent indefinite hangs if audio service is unresponsive.
-    // Return empty list on failure rather than an error — some backends (e.g. ASIO) can fail to
-    // enumerate if the driver was already initialized by get_audio_backends(), and we don't want
-    // that to prevent other backends from appearing in the frontend.
-    let devices = match device::list_devices_async(backend).await {
-        Ok(devs) => devs,
-        Err(e) => {
-            tracing::warn!(
+    // On Windows, CPAL's ASIO host (cpal::host_from_id(HostId::Asio)) can trigger
+    // Windows SEH exceptions that bypass Rust panic handling and kill the process.
+    // is_available() is now safe (uses cpal::available_hosts() — no driver init), but
+    // list_devices_async(Asio) still calls to_cpal_host() directly and can crash.
+    //
+    // Strategy:
+    //   "default" (WASAPI) with native-device-monitor → WinRT (fast, non-interfering)
+    //   "default" (WASAPI) without native-device-monitor → CPAL (safe for WASAPI)
+    //   "asio" / others → return empty immediately (no CPAL ASIO init)
+    #[cfg(target_os = "windows")]
+    {
+        if backend_str != "default" {
+            tracing::info!(
                 backend = %backend_str,
-                error = %e,
-                "[audio_settings] Device enumeration failed, returning empty list"
+                "[audio_settings] Non-default backend device listing skipped on Windows \
+                 (CPAL ASIO init can trigger unhandled SEH exceptions)"
             );
-            vec![]
+            return Ok(vec![]);
         }
-    };
 
-    let frontend_devices: Vec<FrontendDeviceInfo> =
-        devices.into_iter().map(FrontendDeviceInfo::from).collect();
+        // Use WinRT native monitor — avoids CPAL WASAPI host creation
+        // which can interfere with ASIO drivers (Focusrite, RME, etc.) installed on the system.
+        // The desktop app always compiles soul-audio-desktop with native-device-monitor on Windows,
+        // so create_async_device_monitor() returns WindowsDeviceMonitor (WinRT-based).
+        tracing::debug!("[audio_settings] Using WinRT native monitor for Windows device listing");
+        let monitor = create_async_device_monitor();
+        let winrt_devices = match monitor.enumerate_devices().await {
+            Ok(devs) => devs,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "[audio_settings] WinRT device enumeration failed, returning empty list"
+                );
+                return Ok(vec![]);
+            }
+        };
 
-    tracing::info!(
-        device_count = frontend_devices.len(),
-        backend = %backend_str,
-        "[audio_settings] Found devices"
-    );
-    for d in &frontend_devices {
-        tracing::debug!(
-            device_name = %d.name,
-            sample_rate_hz = d.sample_rate,
-            channels = d.channels,
-            is_default = d.is_default,
-            "[audio_settings] Device details"
+        let frontend_devices: Vec<FrontendDeviceInfo> = winrt_devices
+            .into_iter()
+            .map(|wd| FrontendDeviceInfo {
+                name: wd.name,
+                backend: "default".to_string(),
+                is_default: wd.is_default,
+                sample_rate: wd.sample_rate,
+                channels: wd.channels,
+                sample_rate_range: None,
+                is_running: false,
+                capabilities: None,
+            })
+            .collect();
+
+        tracing::info!(
+            device_count = frontend_devices.len(),
+            backend = %backend_str,
+            "[audio_settings] Found devices (WinRT)"
         );
+        return Ok(frontend_devices);
     }
 
-    Ok(frontend_devices)
+    // CPAL enumeration — non-Windows platforms only.
+    // On Windows the cfg block above always returns early via the WinRT path.
+    #[cfg(not(target_os = "windows"))]
+    {
+        let backend = parse_backend(&backend_str)?;
+        let devices = match device::list_devices_async(backend).await {
+            Ok(devs) => devs,
+            Err(e) => {
+                tracing::warn!(
+                    backend = %backend_str,
+                    error = %e,
+                    "[audio_settings] Device enumeration failed, returning empty list"
+                );
+                vec![]
+            }
+        };
+
+        let frontend_devices: Vec<FrontendDeviceInfo> =
+            devices.into_iter().map(FrontendDeviceInfo::from).collect();
+
+        tracing::info!(
+            device_count = frontend_devices.len(),
+            backend = %backend_str,
+            "[audio_settings] Found devices"
+        );
+        for d in &frontend_devices {
+            tracing::debug!(
+                device_name = %d.name,
+                sample_rate_hz = d.sample_rate,
+                channels = d.channels,
+                is_default = d.is_default,
+                "[audio_settings] Device details"
+            );
+        }
+
+        return Ok(frontend_devices);
+    }
+
+    #[allow(unreachable_code)]
+    Ok(vec![])
 }
 
 /// Set the audio output device
@@ -488,9 +552,59 @@ pub async fn initialize_audio_device(
             "[audio_settings] Restoring saved device"
         );
 
-        // Verify device exists before switching (use async timeout wrapper)
+        // Verify device exists before switching.
+        //
+        // On Windows: use WinRT to avoid CPAL WASAPI host creation and device enumeration.
+        // Both `cpal::default_host()` and `host.output_devices()` can trigger unhandled Windows SEH
+        // exceptions when ASIO drivers are installed, even inside spawn_blocking tasks. The SEH
+        // exception bypasses Rust's panic machinery and kills the entire process — potentially
+        // ~50 seconds after the call, when the ASIO DLL's internal timeout fires.
+        //
+        // On non-Windows: use the existing CPAL find_device_by_name_async with timeout.
         if let Some(ref name) = device_name_opt {
-            let device_check = device::find_device_by_name_async(backend, name.clone()).await;
+            #[cfg(target_os = "windows")]
+            let device_check: Result<(), String> = {
+                if matches!(backend, AudioBackend::Default) {
+                    // Use WinRT to enumerate devices — fast, non-blocking, SEH-safe.
+                    let monitor = create_async_device_monitor();
+                    let prefix = format!("{} (", name);
+                    match monitor.enumerate_devices().await {
+                        Ok(devs) => {
+                            let found = devs.iter().any(|d| {
+                                d.name == *name
+                                    || d.name.starts_with(&prefix)
+                                    || name.starts_with(&format!("{} (", d.name))
+                            });
+                            if found {
+                                Ok(())
+                            } else {
+                                Err(format!("Device '{}' not found in WinRT enumeration", name))
+                            }
+                        }
+                        Err(e) => {
+                            // WinRT unavailable — optimistically try the switch rather than
+                            // silently dropping the saved device preference.
+                            tracing::warn!(
+                                error = %e,
+                                "[audio_settings] WinRT device check failed during init, \
+                                 proceeding with saved device anyway"
+                            );
+                            Ok(())
+                        }
+                    }
+                } else {
+                    // ASIO / JACK on Windows: skip CPAL device verification (SEH-prone).
+                    // Let switch_device() handle failures gracefully.
+                    Ok(())
+                }
+            };
+
+            #[cfg(not(target_os = "windows"))]
+            let device_check: Result<(), String> =
+                device::find_device_by_name_async(backend, name.clone())
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| e.to_string());
 
             if let Err(e) = device_check {
                 tracing::warn!(
@@ -603,15 +717,50 @@ pub async fn get_current_audio_device(
         _ => "default",
     };
 
-    // Try to get device info by listing all devices and finding the matching one
-    // Use async timeout wrapper to prevent hangs
-    let (channels, is_default) = match device::list_devices_async(backend).await {
-        Ok(devices) => devices
-            .into_iter()
-            .find(|d| d.name == device_name)
-            .map(|d| (Some(d.channels), d.is_default))
-            .unwrap_or((None, false)),
-        Err(_) => (None, false),
+    // Look up the current device to get channels and is_default.
+    // On Windows: use WinRT (avoids CPAL WASAPI enumeration which can interfere with ASIO drivers).
+    // On other platforms: use CPAL.
+    #[cfg(target_os = "windows")]
+    let (channels, is_default, winrt_name) = if matches!(backend, AudioBackend::Default) {
+        let monitor = create_async_device_monitor();
+        match monitor.enumerate_devices().await {
+            Ok(winrt_devices) => {
+                // Match using prefix logic: "Speakers (Realtek(R) Audio)" starts with "Speakers ("
+                // and "Speakers" starts with "Speakers (" prefix of longer CPAL names.
+                let prefix_of_cpal = format!("{} (", device_name); // e.g. "Speakers ("
+                let found = winrt_devices.into_iter().find(|wd| {
+                    wd.name == device_name
+                        || device_name.starts_with(&format!("{} (", wd.name))
+                        || wd.name.starts_with(&prefix_of_cpal)
+                });
+                match found {
+                    Some(wd) => (None::<u16>, wd.is_default, Some(wd.name)),
+                    None => (None, false, None),
+                }
+            }
+            Err(_) => (None, false, None),
+        }
+    } else {
+        (None, false, None)
+    };
+
+    // Normalize device_name to WinRT short name when available (for consistent naming
+    // between get_current_audio_device and get_audio_devices which also uses WinRT).
+    #[cfg(target_os = "windows")]
+    let device_name = winrt_name.unwrap_or(device_name);
+
+    #[cfg(not(target_os = "windows"))]
+    let (channels, is_default) = if matches!(backend, AudioBackend::Default) {
+        match device::list_devices_async(backend).await {
+            Ok(devices) => devices
+                .into_iter()
+                .find(|d| d.name == device_name)
+                .map(|d| (Some(d.channels), d.is_default))
+                .unwrap_or((None, false)),
+            Err(_) => (None, false),
+        }
+    } else {
+        (None, false)
     };
 
     tracing::debug!(

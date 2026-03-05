@@ -65,9 +65,10 @@ export interface DropdownMenuContentProps {
   children: React.ReactNode;
   align?: 'start' | 'center' | 'end';
   className?: string;
+  'data-testid'?: string;
 }
 
-export function DropdownMenuContent({ children, align = 'center', className }: DropdownMenuContentProps) {
+export function DropdownMenuContent({ children, align = 'center', className, 'data-testid': dataTestId }: DropdownMenuContentProps) {
   const context = React.useContext(DropdownMenuContext);
   const ref = React.useRef<HTMLDivElement>(null);
   const [position, setPosition] = React.useState({ top: 0, left: 0 });
@@ -161,6 +162,7 @@ export function DropdownMenuContent({ children, align = 'center', className }: D
       )}
       style={{ top: position.top, left: position.left }}
       data-dropdown-menu
+      data-testid={dataTestId}
     >
       {children}
     </div>
@@ -181,9 +183,10 @@ export interface DropdownMenuItemProps {
   onMouseLeave?: () => void;
   disabled?: boolean;
   className?: string;
+  'data-testid'?: string;
 }
 
-export function DropdownMenuItem({ children, onClick, onMouseEnter, onMouseLeave, disabled, className }: DropdownMenuItemProps) {
+export function DropdownMenuItem({ children, onClick, onMouseEnter, onMouseLeave, disabled, className, 'data-testid': dataTestId }: DropdownMenuItemProps) {
   const context = React.useContext(DropdownMenuContext);
 
   const handleClick = () => {
@@ -194,6 +197,9 @@ export function DropdownMenuItem({ children, onClick, onMouseEnter, onMouseLeave
 
   return (
     <div
+      role="menuitem"
+      aria-disabled={disabled}
+      data-testid={dataTestId}
       className={cn(
         'relative flex cursor-pointer select-none items-center rounded-md px-2 py-1.5 text-sm outline-none',
         'transition-colors duration-[var(--transition-duration)]',

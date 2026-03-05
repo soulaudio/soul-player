@@ -62,7 +62,7 @@ cpal = { version = "0.17", default-features = true } # Desktop audio I/O - 0.17 
 # Platform-specific device monitoring (for async device enumeration)
 coreaudio-rs = { version = "0.11" } # macOS CoreAudio async device monitoring
 pipewire = { version = "0.8" } # Linux PipeWire async device monitoring
-windows = { version = "0.58", features = ["Media_Devices", "Foundation", "Foundation_Collections"] } # Windows WinRT async device monitoring
+windows = { version = "0.58", features = ["Media_Devices", "Foundation", "Foundation_Collections", "Devices_Enumeration"] } # Windows WinRT async device monitoring
 
 # Audio - DSP & Effects
 dasp = "0.11" # Digital Audio Signal Processing primitives
