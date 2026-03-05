@@ -37,6 +37,11 @@ impl MetadataExtractor {
         }
     }
 
+    /// Get a reference to the underlying fuzzy matcher
+    pub fn fuzzy_matcher(&self) -> &FuzzyMatcher {
+        &self.fuzzy_matcher
+    }
+
     /// Extract metadata from a file with timeout protection
     ///
     /// # Arguments
