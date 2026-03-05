@@ -262,6 +262,38 @@ pub async fn increment_errors(pool: &SqlitePool, id: i64, count: i64) -> Result<
     Ok(())
 }
 
+/// Update all scan progress counters in a single query (additive).
+/// Replaces per-field increment calls for batched scanning.
+pub async fn update_counts(
+    pool: &SqlitePool,
+    id: i64,
+    processed: i64,
+    new_files: i64,
+    updated: i64,
+    removed: i64,
+    errors: i64,
+) -> Result<()> {
+    sqlx::query(
+        r#"UPDATE scan_progress SET
+            processed_files = processed_files + ?,
+            new_files = new_files + ?,
+            updated_files = updated_files + ?,
+            removed_files = removed_files + ?,
+            errors = errors + ?
+        WHERE id = ?"#,
+    )
+    .bind(processed)
+    .bind(new_files)
+    .bind(updated)
+    .bind(removed)
+    .bind(errors)
+    .bind(id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 /// Mark a scan as completed
 pub async fn complete(pool: &SqlitePool, id: i64) -> Result<()> {
     let now = now_timestamp();
