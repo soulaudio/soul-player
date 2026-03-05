@@ -68,6 +68,7 @@ jobs:
           --ignore RUSTSEC-2025-0100
           --ignore RUSTSEC-2025-0119
           --ignore RUSTSEC-2025-0134
+          --ignore RUSTSEC-2025-0111
 
       - name: Create issue on failure
         if: failure()

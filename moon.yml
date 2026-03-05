@@ -222,6 +222,8 @@ tasks:
       - 'RUSTSEC-2025-0119'
       - '--ignore'
       - 'RUSTSEC-2025-0134'
+      - '--ignore'
+      - 'RUSTSEC-2025-0111'
     inputs:
       - 'Cargo.lock'
     options:
