@@ -955,7 +955,23 @@ mod tests {
     #[tokio::test]
     async fn test_get_devices_invalid_backend() {
         let result = get_audio_devices("invalid".to_string()).await;
-        assert!(result.is_err(), "Should fail with invalid backend");
+        // On Windows, non-default backends return Ok(empty) to avoid CPAL ASIO crashes.
+        // On other platforms, CPAL returns an error for unknown backends.
+        #[cfg(target_os = "windows")]
+        {
+            assert!(
+                result.is_ok(),
+                "Windows should return Ok(empty) for non-default backends"
+            );
+            assert!(
+                result.unwrap().is_empty(),
+                "Should return empty device list"
+            );
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(result.is_err(), "Should fail with invalid backend");
+        }
     }
 
     // Note: test_get_current_device requires PlaybackManager state which isn't available in unit tests
