@@ -262,13 +262,12 @@ test('clicking next button from now playing page advances to Track Two', async (
   // The now-playing page should still be visible after the track change
   await expect(page.locator('[data-testid="now-playing-page"]')).toBeVisible();
 
-  // Track Two should now be highlighted in the list (index 1)
+  // Track Two should now show the playing indicator (animated pulse bars)
   await page.waitForFunction(
     () => {
       const item = document.querySelector('[data-testid="now-playing-queue-item-1"]');
       if (!item) return false;
-      // The current track item has bg-primary/10 styling applied
-      return item.className.includes('bg-primary') || item.className.includes('border-primary');
+      return item.querySelectorAll('.animate-pulse').length > 0;
     },
     { timeout: 10_000 }
   );
@@ -360,6 +359,8 @@ test('play-pause button toggles between Playing and Paused states', async () => 
   // finish immediately on resume and auto-advance to Track Two. During that
   // transition the state briefly shows as non-Playing while the new track loads.
   // Polling with a generous timeout catches it once Track Two starts playing.
+  // Note: don't re-check state after the poll — the 2-second track can finish
+  // between the poll succeeding and a subsequent evaluate() call.
   await page.waitForFunction(
     async () => {
       const state = await window.__TAURI_INTERNALS__.invoke('get_playback_state');
@@ -367,11 +368,6 @@ test('play-pause button toggles between Playing and Paused states', async () => 
     },
     { timeout: 8_000 }
   );
-
-  const state3 = await page.evaluate(async () =>
-    window.__TAURI_INTERNALS__.invoke('get_playback_state')
-  );
-  expect(state3).toBe('Playing');
 });
 
 // ----------------------------------------------------------------
@@ -392,4 +388,116 @@ test('now playing page: progress/seek bar is visible in sidebar', async () => {
   // It should display time information (non-empty text)
   const text = await progressBar.textContent();
   expect(text.trim().length).toBeGreaterThan(0);
+});
+
+// ----------------------------------------------------------------
+// Test 9: Clicking a track does NOT remount the artwork (no full-page rerender)
+// ----------------------------------------------------------------
+
+test('clicking a track in the queue does not remount the artwork element', async () => {
+  // Mark the artwork DOM node with a custom attribute so we can detect remounts.
+  // If the artwork component rerenders completely (remount), this attribute will be lost.
+  await page.evaluate(() => {
+    const artwork = document.querySelector('[data-testid="now-playing-artwork"]');
+    if (artwork) artwork.setAttribute('data-stable-marker', 'true');
+  });
+
+  // Verify marker is set
+  const markerBefore = await page.evaluate(() =>
+    document.querySelector('[data-testid="now-playing-artwork"]')?.getAttribute('data-stable-marker')
+  );
+  expect(markerBefore).toBe('true');
+
+  // Click Track Three (index 2)
+  const trackThreeItem = page.locator('[data-testid="now-playing-queue-item-2"]');
+  await expect(trackThreeItem).toBeVisible({ timeout: 5_000 });
+  await trackThreeItem.click();
+
+  // Wait for the sidebar to update to Track Three
+  await waitForSidebarTitle(page, 'Track Three');
+
+  // The artwork DOM node should still have our marker — it was NOT remounted
+  const markerAfter = await page.evaluate(() =>
+    document.querySelector('[data-testid="now-playing-artwork"]')?.getAttribute('data-stable-marker')
+  );
+  expect(markerAfter).toBe('true');
+
+  // The now-playing page should still be visible (no route change or unmount)
+  await expect(page.locator('[data-testid="now-playing-page"]')).toBeVisible();
+});
+
+// ----------------------------------------------------------------
+// Test 10: Clicking a track does NOT remount the queue list (stable DOM)
+// ----------------------------------------------------------------
+
+test('clicking a track in the queue does not remount the queue list', async () => {
+  // Mark the queue list DOM node
+  await page.evaluate(() => {
+    const list = document.querySelector('[data-testid="now-playing-queue-list"]');
+    if (list) list.setAttribute('data-stable-marker', 'true');
+  });
+
+  // Click Track Two (index 1)
+  const trackTwoItem = page.locator('[data-testid="now-playing-queue-item-1"]');
+  await expect(trackTwoItem).toBeVisible({ timeout: 5_000 });
+  await trackTwoItem.click();
+
+  // Wait for sidebar to update
+  await waitForSidebarTitle(page, 'Track Two');
+
+  // Queue list should still have our marker — no remount
+  const markerAfter = await page.evaluate(() =>
+    document.querySelector('[data-testid="now-playing-queue-list"]')?.getAttribute('data-stable-marker')
+  );
+  expect(markerAfter).toBe('true');
+
+  // All 5 tracks should still be listed
+  const count = await page.locator('[data-testid^="now-playing-queue-item-"]').count();
+  expect(count).toBe(5);
+});
+
+// ----------------------------------------------------------------
+// Test 11: Current track indicator updates correctly after clicking a track
+// ----------------------------------------------------------------
+
+test('clicking a track updates the playing indicator to the new track', async () => {
+  // Track One (index 0) should be the current track initially
+  // It should have the animated playing bars (primary-colored bars)
+  const hasPlayingBarsAt0 = await page.evaluate(() => {
+    const item = document.querySelector('[data-testid="now-playing-queue-item-0"]');
+    if (!item) return false;
+    // Playing indicator: look for animate-pulse spans (the playing bars)
+    return item.querySelectorAll('.animate-pulse').length > 0;
+  });
+  expect(hasPlayingBarsAt0).toBe(true);
+
+  // Track Five (index 4) should NOT have playing bars
+  const hasPlayingBarsAt4Before = await page.evaluate(() => {
+    const item = document.querySelector('[data-testid="now-playing-queue-item-4"]');
+    if (!item) return false;
+    return item.querySelectorAll('.animate-pulse').length > 0;
+  });
+  expect(hasPlayingBarsAt4Before).toBe(false);
+
+  // Click Track Five
+  await page.locator('[data-testid="now-playing-queue-item-4"]').click();
+  await waitForSidebarTitle(page, 'Track Five');
+
+  // Now Track Five (index 4) should have the playing bars
+  await page.waitForFunction(
+    () => {
+      const item = document.querySelector('[data-testid="now-playing-queue-item-4"]');
+      if (!item) return false;
+      return item.querySelectorAll('.animate-pulse').length > 0;
+    },
+    { timeout: 10_000 }
+  );
+
+  // And Track One (index 0) should no longer have them
+  const hasPlayingBarsAt0After = await page.evaluate(() => {
+    const item = document.querySelector('[data-testid="now-playing-queue-item-0"]');
+    if (!item) return false;
+    return item.querySelectorAll('.animate-pulse').length > 0;
+  });
+  expect(hasPlayingBarsAt0After).toBe(false);
 });

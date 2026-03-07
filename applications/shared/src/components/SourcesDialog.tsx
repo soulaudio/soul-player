@@ -71,7 +71,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
                     className="p-4 border rounded-lg flex items-center justify-between hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
                   >
                     <div className="flex items-center gap-4">
-                      <div className={`w-2 h-2 rounded-full ${source.isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      <div className={`w-2 h-2 rounded-full ${source.isOnline ? 'bg-green-500' : 'bg-muted-foreground'}`} />
                       <div>
                         <div className="font-medium">{source.name}</div>
                         <div className="text-sm text-muted-foreground">
@@ -89,7 +89,7 @@ export function SourcesDialog({ open, onClose }: SourcesDialogProps) {
                       <div className={`text-xs px-2 py-1 rounded ${
                         source.isOnline
                           ? 'bg-green-500/10 text-green-500'
-                          : 'bg-gray-500/10 text-gray-500'
+                          : 'bg-muted text-muted-foreground'
                       }`}>
                         {source.isOnline ? t('sourcesDialog.online') : t('sourcesDialog.offline')}
                       </div>

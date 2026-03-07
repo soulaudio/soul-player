@@ -6,7 +6,7 @@
 
 import { memo, useRef, useState, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Play, Pause, Disc3, Users, ListMusic, ListPlus } from 'lucide-react'
+import { Play, Pause, Disc3, Users, ListMusic, ListPlus, ImagePlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArtworkImage } from './ArtworkImage'
@@ -236,6 +236,7 @@ const MediaCardComponent = ({
           fallbackIcon={type === 'artist' ? 'users' : type === 'playlist' ? 'playlist' : 'music'}
           shape={isCircle ? 'circular' : 'rounded'}
           priority={priority}
+          blurredAlbumFallback={type === 'artist'}
         />
       )
     }
@@ -336,12 +337,12 @@ const MediaCardComponent = ({
           <div
             role="menu"
             style={{ position: 'fixed', left: contextMenuPos.x, top: contextMenuPos.y }}
-            className="min-w-[180px] bg-background border rounded-lg shadow-lg py-1 z-50"
+            className="min-w-[180px] bg-popover text-popover-foreground border rounded-lg shadow-lg py-1 z-50"
           >
             {onAddToPlaylist && (
               <button
                 role="menuitem"
-                className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-[var(--disabled-opacity)]"
+                className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] disabled:pointer-events-none disabled:opacity-[var(--disabled-opacity)]"
                 onClick={() => { setContextMenuPos(null); onAddToPlaylist() }}
                 disabled={!features.canCreatePlaylists}
               >
@@ -353,9 +354,10 @@ const MediaCardComponent = ({
               <button
                 role="menuitem"
                 data-testid="context-menu-edit-artwork"
-                className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground"
+                className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)]"
                 onClick={() => { setContextMenuPos(null); onEditArtwork() }}
               >
+                <ImagePlus className="w-4 h-4" />
                 <span>{t('artwork.editArtwork', 'Edit Artwork')}</span>
               </button>
             )}

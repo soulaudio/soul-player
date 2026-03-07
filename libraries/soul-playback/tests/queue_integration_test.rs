@@ -525,12 +525,14 @@ fn test_skip_to_last_track_in_queue() {
     let queue = manager.get_queue();
     assert_eq!(queue.len(), 0, "Remaining queue should be empty");
 
-    // With Bug 7 fix: skip does NOT add skipped tracks to history
-    // Only the current playing track (none in this case) is added
-    // Since no track was playing before skip, history should be empty
+    // After skipping to track 4 (source_index=5), has_previous() returns true
+    // because source_index >= 2, meaning the user can navigate backward through
+    // the source queue to tracks 3, 2, 1, 0 — even though no track was actively
+    // playing before the skip. This is the correct behavior: pressing previous
+    // after jumping to the last track should go to the second-to-last track.
     assert!(
-        !manager.has_previous(),
-        "Should not have history when no track was playing"
+        manager.has_previous(),
+        "Should be able to go back to previous tracks in source queue"
     );
 
     // Note: has_next() checks if source queue array is empty, not if we've reached end

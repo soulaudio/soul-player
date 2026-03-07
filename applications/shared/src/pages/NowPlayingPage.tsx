@@ -3,7 +3,7 @@
  * Shows current track artwork with tracklist from playback context
  */
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef, useLayoutEffect, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { usePlayerPlayback } from '../stores/player'
@@ -16,11 +16,6 @@ import { groupTracks } from '../utils/trackGrouping'
 import type { TrackForGrouping, GroupedTrack } from '../utils/trackGrouping'
 import {
   Music,
-  Library,
-  Disc3,
-  ListMusic,
-  Users,
-  Guitar,
   ChevronDown,
 } from 'lucide-react'
 import { debug } from '../utils/debug'
@@ -130,6 +125,216 @@ function FormatDropdown({
   )
 }
 
+/** Bullet indicator — rendered in the outer non-scrolling container */
+function TrackListBullet({
+  groupedTracks,
+  currentTrackId,
+  containerRef,
+  scrollRef,
+}: {
+  groupedTracks: GroupedTrack<TrackForGrouping>[]
+  currentTrackId: string | number
+  containerRef: React.RefObject<HTMLDivElement | null>
+  scrollRef: React.RefObject<HTMLDivElement | null>
+}) {
+  const [bulletTop, setBulletTop] = useState<number | null>(null)
+
+  const currentIndex = groupedTracks.findIndex((g) =>
+    g.versions.some((v) => v.id === currentTrackId)
+  )
+
+  const updatePosition = useCallback(() => {
+    if (currentIndex < 0 || !containerRef.current || !scrollRef.current) {
+      setBulletTop(null)
+      return
+    }
+    const el = scrollRef.current.querySelector(`[data-testid="now-playing-queue-item-${currentIndex}"]`)
+    if (!el) return
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const scrollRect = scrollRef.current.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const top = elRect.top - containerRect.top + elRect.height / 2 - 4
+    // Hide if scrolled out of the scroll viewport
+    if (elRect.top < scrollRect.top - 10 || elRect.bottom > scrollRect.bottom + 10) {
+      setBulletTop(null)
+    } else {
+      setBulletTop(top)
+    }
+  }, [currentIndex, containerRef, scrollRef])
+
+  useLayoutEffect(() => {
+    updatePosition()
+  }, [updatePosition, groupedTracks])
+
+  useEffect(() => {
+    const scrollEl = scrollRef.current
+    if (!scrollEl) return
+    scrollEl.addEventListener('scroll', updatePosition, { passive: true })
+    return () => scrollEl.removeEventListener('scroll', updatePosition)
+  }, [scrollRef, updatePosition])
+
+  if (bulletTop === null) return null
+
+  return (
+    <div
+      className="absolute left-0 w-2 h-2 rounded-full bg-primary z-10 transition-all duration-300 ease-out"
+      style={{ top: bulletTop, transform: 'translateX(-100%)' }}
+    />
+  )
+}
+
+/** Single track item — memoized so only current/previous track re-renders on track change */
+const TrackItem = memo(function TrackItem({
+  group,
+  index,
+  isCurrent,
+  isCurrentlyPlaying,
+  activeVersion,
+  fallbackArtist,
+  onTrackClick,
+  onFormatSelect,
+  formatTime,
+}: {
+  group: GroupedTrack<TrackForGrouping>
+  index: number
+  isCurrent: boolean
+  isCurrentlyPlaying: boolean
+  activeVersion: TrackForGrouping
+  fallbackArtist: string
+  onTrackClick: (group: GroupedTrack<TrackForGrouping>, index: number) => void
+  onFormatSelect: (groupKey: string, track: TrackForGrouping) => void
+  formatTime: (seconds: number | undefined) => string
+}) {
+  const handleClick = useCallback(() => onTrackClick(group, index), [onTrackClick, group, index])
+  const handleFormatSelect = useCallback(
+    (track: TrackForGrouping) => onFormatSelect(group.groupKey, track),
+    [onFormatSelect, group.groupKey]
+  )
+
+  return (
+    <div
+      data-testid={`now-playing-queue-item-${index}`}
+      onClick={handleClick}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+    >
+      {/* Track Number or Playing Indicator */}
+      <div className="w-6 text-center flex-shrink-0">
+        {isCurrent && isCurrentlyPlaying ? (
+          <div className="flex items-center justify-center gap-0.5">
+            <span className="w-0.5 h-3 bg-primary rounded-full animate-pulse" />
+            <span className="w-0.5 h-4 bg-primary rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </div>
+        ) : isCurrent ? (
+          <div className="flex items-center justify-center gap-0.5">
+            <span className="w-0.5 h-2 bg-primary/60 rounded-full" />
+            <span className="w-0.5 h-3 bg-primary/60 rounded-full" />
+            <span className="w-0.5 h-2 bg-primary/60 rounded-full" />
+          </div>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {activeVersion.track_number || index + 1}
+          </span>
+        )}
+      </div>
+
+      {/* Track Info */}
+      <div className="flex-1 min-w-0">
+        <p className={`truncate text-sm ${isCurrent ? 'font-semibold' : 'text-muted-foreground'}`}>
+          {activeVersion.title}
+        </p>
+        <div className="text-xs truncate text-muted-foreground">
+          <ArtistLink
+            artistId={activeVersion.artist_id}
+            artistName={activeVersion.artist_name || fallbackArtist}
+            className="text-xs text-muted-foreground hover:underline"
+          />
+        </div>
+      </div>
+
+      {/* Format dropdown */}
+      <FormatDropdown
+        versions={group.versions}
+        activeVersion={activeVersion}
+        onSelect={handleFormatSelect}
+      />
+
+      {/* Duration */}
+      <span className="text-xs flex-shrink-0 w-12 text-right text-muted-foreground">
+        {formatTime(activeVersion.duration_seconds)}
+      </span>
+    </div>
+  )
+})
+
+/** Track list — memoized to avoid full re-render on parent state changes */
+const TrackListWithBullet = memo(function TrackListWithBullet({
+  groupedTracks,
+  currentTrackId,
+  currentTrackArtist,
+  isCurrentlyPlaying,
+  getActiveVersion,
+  onTrackClick,
+  onFormatSelect,
+  formatTime,
+}: {
+  groupedTracks: GroupedTrack<TrackForGrouping>[]
+  currentTrackId: string | number
+  currentTrackArtist: string
+  isCurrentlyPlaying: boolean
+  getActiveVersion: (group: GroupedTrack<TrackForGrouping>) => TrackForGrouping
+  onTrackClick: (group: GroupedTrack<TrackForGrouping>, index: number) => void
+  onFormatSelect: (groupKey: string, track: TrackForGrouping) => void
+  formatTime: (seconds: number | undefined) => string
+}) {
+  return (
+    <div data-testid="now-playing-queue-list" className="space-y-0.5">
+      {groupedTracks.map((group, idx) => {
+        const activeVersion = getActiveVersion(group)
+        const isCurrent = group.versions.some((v) => v.id === currentTrackId)
+
+        return (
+          <TrackItem
+            key={group.groupKey}
+            group={group}
+            index={idx}
+            isCurrent={isCurrent}
+            isCurrentlyPlaying={isCurrentlyPlaying}
+            activeVersion={activeVersion}
+            fallbackArtist={currentTrackArtist}
+            onTrackClick={onTrackClick}
+            onFormatSelect={onFormatSelect}
+            formatTime={formatTime}
+          />
+        )
+      })}
+    </div>
+  )
+})
+
+/** Memoized artwork — only re-renders when the cover art actually changes */
+const NowPlayingArtwork = memo(function NowPlayingArtwork({
+  trackId,
+  coverArtPath,
+  alt,
+}: {
+  trackId: string | number
+  coverArtPath?: string | null
+  alt: string
+}) {
+  return (
+    <div data-testid="now-playing-artwork" className="aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-muted">
+      <ArtworkImage
+        trackId={trackId}
+        coverArtPath={coverArtPath ?? undefined}
+        alt={alt}
+        className="w-full h-full object-cover"
+        fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
+      />
+    </div>
+  )
+})
+
 export function NowPlayingPage() {
   const { t } = useTranslation()
   const { navigate } = useNavigateWithHistory()
@@ -138,6 +343,9 @@ export function NowPlayingPage() {
   const commands = usePlayerCommands()
   const events = usePlaybackEvents()
   const backend = useBackend()
+
+  const tracklistContainerRef = useRef<HTMLDivElement>(null)
+  const tracklistScrollRef = useRef<HTMLDivElement>(null)
 
   const [tracks, setTracks] = useState<TrackForGrouping[]>([])
   const [selectedVersions, setSelectedVersions] = useState<Map<string, TrackForGrouping>>(new Map())
@@ -181,7 +389,10 @@ export function NowPlayingPage() {
         return
       }
 
-      setLoading(true)
+      // Only show loading spinner on first load — skip it when we already have
+      // tracks (e.g. switching tracks within the same album). This prevents the
+      // track list from unmounting/remounting on every track click.
+      if (tracks.length === 0) setLoading(true)
       try {
         let fetchedTracks: TrackForGrouping[] = []
 
@@ -311,12 +522,12 @@ export function NowPlayingPage() {
   const groupedTracks = useMemo(() => groupTracks(tracks), [tracks])
 
   // Get active version for a group
-  const getActiveVersion = (group: GroupedTrack<TrackForGrouping>): TrackForGrouping => {
+  const getActiveVersion = useCallback((group: GroupedTrack<TrackForGrouping>): TrackForGrouping => {
     return selectedVersions.get(group.groupKey) || group.bestVersion
-  }
+  }, [selectedVersions])
 
   // Handle format selection - plays the selected format
-  const handleFormatSelect = async (groupKey: string, track: TrackForGrouping) => {
+  const handleFormatSelect = useCallback(async (groupKey: string, track: TrackForGrouping) => {
     setSelectedVersions((prev) => new Map(prev).set(groupKey, track))
 
     // If this is the currently playing track group, switch to this format
@@ -330,10 +541,10 @@ export function NowPlayingPage() {
         debug.error('Failed to switch format:', err)
       }
     }
-  }
+  }, [groupedTracks, currentTrack?.id, commands])
 
   // Handle track click — build full queue so playback context is preserved
-  const handleTrackClick = async (_group: GroupedTrack<TrackForGrouping>, groupIndex: number) => {
+  const handleTrackClick = useCallback(async (_group: GroupedTrack<TrackForGrouping>, groupIndex: number) => {
     try {
       const queue: QueueTrack[] = groupedTracks.map((g) => {
         const v = getActiveVersion(g)
@@ -351,14 +562,14 @@ export function NowPlayingPage() {
     } catch (err) {
       debug.error('Failed to play track:', err)
     }
-  }
+  }, [groupedTracks, getActiveVersion, commands])
 
-  const formatTime = (seconds: number | undefined) => {
+  const formatTime = useCallback((seconds: number | undefined) => {
     if (!seconds || !isFinite(seconds)) return '--:--'
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
+  }, [])
 
   // Empty state
   if (!currentTrack) {
@@ -384,21 +595,6 @@ export function NowPlayingPage() {
   }
 
   // Context helpers
-  const getContextIcon = (contextType: ContextType | undefined) => {
-    switch (contextType) {
-      case 'album':
-        return <Disc3 className="w-4 h-4 text-muted-foreground" />
-      case 'playlist':
-        return <ListMusic className="w-4 h-4 text-muted-foreground" />
-      case 'artist':
-        return <Users className="w-4 h-4 text-muted-foreground" />
-      case 'genre':
-        return <Guitar className="w-4 h-4 text-muted-foreground" />
-      default:
-        return <Library className="w-4 h-4 text-muted-foreground" />
-    }
-  }
-
   const getContextLabel = (contextType: ContextType | undefined): string => {
     switch (contextType) {
       case 'album':
@@ -417,7 +613,6 @@ export function NowPlayingPage() {
   const headerTitle =
     playbackContext?.contextName || currentTrack.album || t('nowPlaying.fromLibrary', 'From Library')
   const headerSubtitle = getContextLabel(playbackContext?.contextType)
-  const headerIcon = getContextIcon(playbackContext?.contextType)
 
   // Handle context navigation
   const handleContextClick = () => {
@@ -440,22 +635,25 @@ export function NowPlayingPage() {
       <div className="flex gap-12 w-full max-w-[2000px] items-center">
         {/* Left Side - Artwork (2 parts) */}
         <div className="basis-2/5 flex-shrink-0">
-          <div data-testid="now-playing-artwork" className="aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-muted">
-            <ArtworkImage
-              trackId={currentTrack.id}
-              coverArtPath={currentTrack.coverArtPath}
-              alt={currentTrack.album || currentTrack.title}
-              className="w-full h-full object-cover"
-              fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
-            />
-          </div>
+          <NowPlayingArtwork
+            trackId={currentTrack.id}
+            coverArtPath={currentTrack.coverArtPath}
+            alt={currentTrack.album || currentTrack.title}
+          />
         </div>
 
         {/* Right Side - Tracklist (3 parts) */}
-        <div className="basis-3/5 flex flex-col min-w-0 max-h-[800px] overflow-hidden">
+        <div ref={tracklistContainerRef} className="basis-3/5 flex flex-col min-w-0 max-h-[800px] relative">
+          {/* Animated bullet — lives in the non-scrolling container so it's never clipped */}
+          <TrackListBullet
+            groupedTracks={groupedTracks}
+            currentTrackId={currentTrack.id}
+            containerRef={tracklistContainerRef}
+            scrollRef={tracklistScrollRef}
+          />
+
           <div className="mb-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide mb-1">
-              {headerIcon}
+            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
               <span data-testid="now-playing-artist">{headerSubtitle}</span>
             </div>
             <h2
@@ -466,11 +664,11 @@ export function NowPlayingPage() {
               {headerTitle}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {groupedTracks.length} {t('library.tracks', 'tracks')}
+              {t('library.tracks', { count: groupedTracks.length })}
             </p>
           </div>
 
-          <div className="flex-1 overflow-y-auto -mx-2">
+          <div ref={tracklistScrollRef} className="flex-1 overflow-y-auto -mr-2">
             {loading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
@@ -481,84 +679,16 @@ export function NowPlayingPage() {
                 <p>{t('nowPlaying.emptyQueue', 'Queue is empty')}</p>
               </div>
             ) : (
-              <div data-testid="now-playing-queue-list" className="space-y-0.5">
-                {groupedTracks.map((group, idx) => {
-                  const activeVersion = getActiveVersion(group)
-                  const isCurrentTrack = group.versions.some((v) => v.id === currentTrack.id)
-
-                  return (
-                    <div
-                      key={group.groupKey}
-                      data-testid={`now-playing-queue-item-${idx}`}
-                      onClick={() => handleTrackClick(group, idx)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
-                        isCurrentTrack
-                          ? 'bg-primary/10 border border-primary/20'
-                          : 'hover:bg-foreground/[var(--hover-bg-opacity)]'
-                      }`}
-                    >
-                      {/* Track Number or Playing Indicator */}
-                      <div className="w-6 text-center flex-shrink-0">
-                        {isCurrentTrack && isPlaying ? (
-                          <div className="flex items-center justify-center gap-0.5">
-                            <span className="w-0.5 h-3 bg-primary rounded-full animate-pulse" />
-                            <span
-                              className="w-0.5 h-4 bg-primary rounded-full animate-pulse"
-                              style={{ animationDelay: '0.2s' }}
-                            />
-                            <span
-                              className="w-0.5 h-2 bg-primary rounded-full animate-pulse"
-                              style={{ animationDelay: '0.4s' }}
-                            />
-                          </div>
-                        ) : isCurrentTrack ? (
-                          <div className="flex items-center justify-center gap-0.5">
-                            <span className="w-0.5 h-2 bg-primary/60 rounded-full" />
-                            <span className="w-0.5 h-3 bg-primary/60 rounded-full" />
-                            <span className="w-0.5 h-2 bg-primary/60 rounded-full" />
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            {activeVersion.track_number || idx + 1}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Track Info */}
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`truncate ${isCurrentTrack ? 'text-primary font-semibold' : 'text-sm'}`}
-                        >
-                          {activeVersion.title}
-                        </p>
-                        <div
-                          className={`text-xs truncate ${isCurrentTrack ? 'text-primary/70' : 'text-muted-foreground'}`}
-                        >
-                          <ArtistLink
-                            artistId={activeVersion.artist_id}
-                            artistName={activeVersion.artist_name || currentTrack.artist}
-                            className={`text-xs ${isCurrentTrack ? 'text-primary/70' : 'text-muted-foreground'} hover:underline`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Format dropdown */}
-                      <FormatDropdown
-                        versions={group.versions}
-                        activeVersion={activeVersion}
-                        onSelect={(track) => handleFormatSelect(group.groupKey, track)}
-                      />
-
-                      {/* Duration */}
-                      <span
-                        className={`text-xs flex-shrink-0 w-12 text-right ${isCurrentTrack ? 'text-primary/70' : 'text-muted-foreground'}`}
-                      >
-                        {formatTime(activeVersion.duration_seconds)}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
+              <TrackListWithBullet
+                groupedTracks={groupedTracks}
+                currentTrackId={currentTrack.id}
+                currentTrackArtist={currentTrack.artist}
+                isCurrentlyPlaying={isPlaying}
+                getActiveVersion={getActiveVersion}
+                onTrackClick={handleTrackClick}
+                onFormatSelect={handleFormatSelect}
+                formatTime={formatTime}
+              />
             )}
           </div>
         </div>

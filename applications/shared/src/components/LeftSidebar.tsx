@@ -209,7 +209,6 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         volume={volume}
         shuffleMode={shuffleMode}
         repeatMode={repeatMode}
-        hasRealDevices={features.hasRealAudioDevices}
         canCreatePlaylists={features.canCreatePlaylists}
         onTrackClick={() => navigate('/now-playing')}
         onAddToPlaylist={onAddToPlaylist}

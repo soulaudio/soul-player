@@ -18,6 +18,8 @@ interface ArtworkImageProps {
   shape?: 'rounded' | 'circular';
   /** Priority: if true, loads immediately without waiting for viewport. Use for above-the-fold items (first ~20-30 items) */
   priority?: boolean;
+  /** When true and artist artwork fails, show blurred album cover + icon overlay instead of plain icon */
+  blurredAlbumFallback?: boolean;
 }
 
 // Cache for artwork data URLs
@@ -51,13 +53,16 @@ export function clearAllArtworkCache(): void {
   notifyListeners('*');
 }
 
-export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtPath, alt, className, fallbackClassName, fallbackIcon, shape = 'rounded', priority = false }: ArtworkImageProps) {
+export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtPath, alt, className, fallbackClassName, fallbackIcon, shape = 'rounded', priority = false, blurredAlbumFallback = false }: ArtworkImageProps) {
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [isInViewport, setIsInViewport] = useState(priority); // Priority items start as visible
   const containerRef = useRef<HTMLDivElement>(null);
+  // For artist blurred album fallback
+  const [fallbackAlbumUrl, setFallbackAlbumUrl] = useState<string | null>(null);
+  const [fallbackAttempted, setFallbackAttempted] = useState(false);
 
   // Determine the cache key for this component
   const getCacheKey = useCallback((): string | null => {
@@ -239,6 +244,46 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
     };
   }, [trackId, albumId, artistId, playlistId, coverArtPath, loading, refreshCounter, isInViewport, getCacheKey]);
 
+  // Artist blurred album fallback: when artist has no custom artwork, load their first album's artwork
+  useEffect(() => {
+    if (!blurredAlbumFallback || !artistId || !error || fallbackAttempted) return;
+    setFallbackAttempted(true);
+
+    let cancelled = false;
+    async function loadFallback() {
+      try {
+        if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+          const { invoke } = await import('@tauri-apps/api/core');
+          // Get artist's albums, then load the first album's artwork
+          const albums = await invoke<Array<{ id: number }>>('get_artist_albums', { artistId });
+          if (cancelled || !albums || albums.length === 0) return;
+          const firstAlbumId = albums[0].id;
+          const cacheKey = `album:${firstAlbumId}`;
+          if (artworkCache.has(cacheKey)) {
+            if (!cancelled) setFallbackAlbumUrl(artworkCache.get(cacheKey)!);
+            return;
+          }
+          const dataUrl = await invoke<string | null>('get_album_artwork', { albumId: firstAlbumId });
+          if (cancelled) return;
+          if (dataUrl) {
+            artworkCache.set(cacheKey, dataUrl);
+            setFallbackAlbumUrl(dataUrl);
+          }
+        }
+      } catch {
+        // Silently fail — plain icon fallback is fine
+      }
+    }
+    loadFallback();
+    return () => { cancelled = true; };
+  }, [blurredAlbumFallback, artistId, error, fallbackAttempted]);
+
+  // Reset fallback state when artist changes
+  useEffect(() => {
+    setFallbackAlbumUrl(null);
+    setFallbackAttempted(false);
+  }, [artistId]);
+
   // Determine which icon to use for fallback
   const getFallbackIcon = () => {
     const iconType = fallbackIcon || (artistId ? 'users' : playlistId ? 'playlist' : 'music');
@@ -253,6 +298,21 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
   };
 
   if (error || (!loading && !artworkUrl)) {
+    // Artist blurred album fallback
+    if (blurredAlbumFallback && fallbackAlbumUrl) {
+      return (
+        <div ref={containerRef} className="w-full h-full relative overflow-hidden">
+          <img
+            src={fallbackAlbumUrl}
+            alt={alt || ''}
+            className="w-full h-full object-cover blur-xl scale-125 brightness-50"
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Users className="w-1/3 h-1/3 text-white/70 drop-shadow-lg" />
+          </div>
+        </div>
+      );
+    }
     return (
       <div ref={containerRef} className={fallbackClassName || 'flex items-center justify-center'}>
         {getFallbackIcon()}

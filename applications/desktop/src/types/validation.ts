@@ -139,12 +139,6 @@ export const EffectSlotSchema = z.object({
   enabled: z.boolean(),
 });
 
-export const HeadroomSettingsSchema = z.object({
-  mode: z.string(),
-  manual_db: z.number().optional(),
-  enabled: z.boolean(),
-});
-
 export const LatencyInfoSchema = z.object({
   buffer_size: z.number(),
   sample_rate: z.number(),

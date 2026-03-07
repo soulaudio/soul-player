@@ -14,7 +14,6 @@ export { DspConfig } from './audio/DspConfig';
 export { UpsamplingSettings } from './audio/UpsamplingSettings';
 export { VolumeLevelingSettings } from './audio/VolumeLevelingSettings';
 export { BufferSettings } from './audio/BufferSettings';
-export { LatencyMonitor } from './audio/LatencyMonitor';
 
 // DSP Effect Editors
 export { LimiterEditor } from './audio/effects/LimiterEditor';
@@ -27,7 +26,6 @@ export { CompressorEditor } from './audio/effects/CompressorEditor';
 // Types
 export type { AudioSettings } from './AudioSettingsPage';
 export type { CrossfadeSettings, CrossfadeCurve } from './audio/BufferSettings';
-export type { BufferSizeOption } from './audio/LatencyMonitor';
 export type { EffectType, EffectSlot, CrossfeedSettings as DspCrossfeedSettings, StereoSettings, GraphicEqSettings } from './audio/DspConfig';
 export type { LimiterSettings, LimiterEditorProps } from './audio/effects/LimiterEditor';
 export type { CrossfeedSettings as CrossfeedEditorSettings, CrossfeedEditorProps } from './audio/effects/CrossfeedEditor';

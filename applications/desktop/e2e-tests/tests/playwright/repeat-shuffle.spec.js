@@ -62,12 +62,17 @@ test.afterAll(async () => {
   await browser.close();
 });
 
-// Before each test: stop any active playback, dismiss open overlays, navigate to Albums.
+// Before each test: stop any active playback, reset repeat/shuffle to Off,
+// dismiss open overlays, navigate to Albums.
 test.beforeEach(async () => {
   await page.evaluate(async () => {
     try { await window.__TAURI_INTERNALS__.invoke('stop_playback'); } catch {}
+    try { await window.__TAURI_INTERNALS__.invoke('set_repeat', { mode: 'off' }); } catch {}
+    try { await window.__TAURI_INTERNALS__.invoke('set_shuffle', { mode: 'off' }); } catch {}
   }).catch(() => {});
-  await page.waitForTimeout(200);
+
+  // Brief delay for the async command channel to process the reset
+  await page.waitForTimeout(500);
 
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
@@ -155,6 +160,41 @@ async function startPlayback(p) {
     },
     { timeout: 5_000 }
   );
+
+  // Force-sync repeat/shuffle UI to match backend state.
+  // The beforeEach IPC reset changes the backend to "off", but the Zustand store
+  // doesn't receive an event for set_repeat/set_shuffle — so DOM buttons can show
+  // stale state from a prior test. We click the buttons to cycle them to "off".
+  // Each click triggers an optimistic UI update + IPC call, keeping UI and backend in sync.
+  const repeatBtn = p.locator('[data-testid="repeat-button"]');
+  const shuffleBtn = p.locator('[data-testid="shuffle-button"]');
+
+  // Cycle repeat to "off" if stale
+  for (let i = 0; i < 3; i++) {
+    const rs = await repeatBtn.getAttribute('data-state').catch(() => 'off');
+    if (rs === 'off') break;
+    await repeatBtn.click();
+    await p.waitForTimeout(200);
+  }
+
+  // Cycle shuffle to "off" if stale
+  for (let i = 0; i < 3; i++) {
+    const ss = await shuffleBtn.getAttribute('data-state').catch(() => 'off');
+    if (ss === 'off') break;
+    await shuffleBtn.click();
+    await p.waitForTimeout(200);
+  }
+
+  // Confirm backend is also "off" after any UI cycling
+  await p.waitForFunction(
+    async () => {
+      const r = await window.__TAURI_INTERNALS__.invoke('get_repeat');
+      const s = await window.__TAURI_INTERNALS__.invoke('get_shuffle');
+      return r === 'off' && s === 'off';
+    },
+    { timeout: 3_000 }
+  ).catch(() => {});
+
   await p.waitForTimeout(150);
 }
 
@@ -479,29 +519,31 @@ test('RepeatAll: playback restarts from the beginning after the last track ends'
 test('repeat and shuffle state persists across page navigation', async () => {
   await startPlayback(page);
 
-  // Enable shuffle (Random) and repeat (All) via IPC
+  // Enable shuffle (Random) and repeat (All) via IPC.
+  // Set them one at a time with polling to ensure each takes effect
+  // before setting the next.
   await page.evaluate(async () => {
     await window.__TAURI_INTERNALS__.invoke('set_shuffle', { mode: 'random' });
-    await window.__TAURI_INTERNALS__.invoke('set_repeat', { mode: 'all' });
   });
-
-  // set_shuffle and set_repeat use the async command channel — the IPC call
-  // returns as soon as the command is sent, before the audio thread processes it.
-  // Poll via get_shuffle / get_repeat until both modes are confirmed, rather
-  // than checking immediately (which would see the old value).
   await page.waitForFunction(
     async () => (await window.__TAURI_INTERNALS__.invoke('get_shuffle')) === 'random',
     { timeout: 5_000 }
   );
+
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_repeat', { mode: 'all' });
+  });
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_repeat')) === 'all',
+    { timeout: 5_000 }
+  );
+
+  // Verify both are now set
   const shuffleMode = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_shuffle')
   );
   expect(shuffleMode).toBe('random');
 
-  await page.waitForFunction(
-    async () => (await window.__TAURI_INTERNALS__.invoke('get_repeat')) === 'all',
-    { timeout: 5_000 }
-  );
   const repeatMode = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_repeat')
   );

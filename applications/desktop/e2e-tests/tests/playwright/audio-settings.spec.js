@@ -74,17 +74,17 @@ test.afterEach(async () => {
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
-test('audio settings page loads with all pipeline stage sections', async () => {
+test('audio settings page loads with pipeline stages and output section', async () => {
   // The top-level audio settings container
   const audioPage = page.locator('[data-testid="audio-settings-page"]');
   await expect(audioPage).toBeVisible();
 
-  // Each of the six pipeline stages must be present
+  // Three pipeline stages
   await expect(page.locator('[data-testid="audio-stage-resampling"]')).toBeVisible();
   await expect(page.locator('[data-testid="audio-stage-dsp"]')).toBeVisible();
   await expect(page.locator('[data-testid="audio-stage-volume-leveling"]')).toBeVisible();
-  await expect(page.locator('[data-testid="audio-stage-headroom"]')).toBeVisible();
-  await expect(page.locator('[data-testid="audio-stage-buffer"]')).toBeVisible();
+
+  // Standalone output section (not a pipeline stage)
   await expect(page.locator('[data-testid="audio-stage-output"]')).toBeVisible();
 
   await page.screenshot({ path: 'screenshots/audio-settings-page.png' });
@@ -95,10 +95,10 @@ test('pipeline overview navigation bar is visible', async () => {
   const overview = page.locator('[data-testid="audio-pipeline-overview"]');
   await expect(overview).toBeVisible();
 
-  // Overview must contain at least the Resample, DSP, and Output labels
+  // Overview must contain the three pipeline stage labels
   await expect(overview.getByText(/resample/i)).toBeVisible();
   await expect(overview.getByText(/dsp/i)).toBeVisible();
-  await expect(overview.getByText(/output/i)).toBeVisible();
+  await expect(overview.getByText(/leveling/i)).toBeVisible();
 
   await page.screenshot({ path: 'screenshots/audio-pipeline-overview.png' });
 });

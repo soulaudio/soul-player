@@ -48,8 +48,15 @@ export function ProgressiveImage({
       return
     }
 
-    setIsLoaded(false)
     setHasError(false)
+
+    // Data URLs are already in memory — skip preloading entirely
+    if (src.startsWith('data:')) {
+      setIsLoaded(true)
+      return
+    }
+
+    setIsLoaded(false)
 
     // Create a new image to preload
     const img = new Image()

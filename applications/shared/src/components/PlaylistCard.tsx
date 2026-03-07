@@ -24,7 +24,7 @@ export function PlaylistCard({ playlist, className = 'w-full', priority = false,
       type="playlist"
       id={playlist.id}
       title={playlist.name}
-      subtitle={`${playlist.track_count} ${t('library.tracks')}`}
+      subtitle={t('library.tracks', { count: playlist.track_count })}
       coverUrl={playlist.cover_art_path ?? undefined}
       className={className}
       priority={priority}

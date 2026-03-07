@@ -2,7 +2,7 @@
  * AlbumsPage - displays all albums with search and grid scaling
  */
 
-import { useState, useMemo, useDeferredValue, useEffect } from 'react'
+import { useState, useMemo, useDeferredValue, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Disc3, SlidersHorizontal, X } from 'lucide-react'
 import { AlbumCard } from '../components/AlbumCard'
@@ -156,8 +156,14 @@ export function AlbumsPage() {
     }
   }, [scale])
 
-  // Use virtualization for large collections (>100 items)
-  const shouldVirtualize = filteredAlbums.length > 100
+  // Stable callbacks for AlbumCard (prevents breaking memo)
+  const handleAddToPlaylist = useCallback((id: number, title: string) => {
+    setEntityForPlaylist({ id, name: title })
+  }, [])
+
+  const handleEditArtwork = useCallback((id: number, title: string) => {
+    setAlbumForArtwork({ id, name: title })
+  }, [])
 
   // Show error if present
   const errorContent = isError ? (
@@ -187,7 +193,6 @@ export function AlbumsPage() {
       pageTestId="albums-page"
     >
       {errorContent || (filteredAlbums.length > 0 ? (
-        shouldVirtualize ? (
           <VirtualizedGrid
             items={filteredAlbums}
             totalCount={filteredAlbums.length}
@@ -199,25 +204,11 @@ export function AlbumsPage() {
                 album={album}
                 showArtist={true}
                 priority={index < 24}
-                onAddToPlaylist={() => setEntityForPlaylist({ id: album.id, name: album.title })}
-                onEditArtwork={() => setAlbumForArtwork({ id: album.id, name: album.title })}
+                onAddToPlaylist={() => handleAddToPlaylist(album.id, album.title)}
+                onEditArtwork={() => handleEditArtwork(album.id, album.title)}
               />
             )}
           />
-        ) : (
-          <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
-            {filteredAlbums.map((album, index) => (
-              <AlbumCard
-                key={album.id}
-                album={album}
-                showArtist={true}
-                priority={index < 24}
-                onAddToPlaylist={() => setEntityForPlaylist({ id: album.id, name: album.title })}
-                onEditArtwork={() => setAlbumForArtwork({ id: album.id, name: album.title })}
-              />
-            ))}
-          </div>
-        )
       ) : (
         <div data-testid="empty-state" className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Disc3 className="w-12 h-12 mb-4 opacity-50" />

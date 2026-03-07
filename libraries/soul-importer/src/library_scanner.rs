@@ -197,56 +197,84 @@ impl LibraryScanner {
 
         // ── Phase 1: Filter unchanged files (cheap stat-only pass) ──
         // Separate files into unchanged (skip) and needs-processing buckets.
-        let mut files_to_process: Vec<(PathBuf, i64, i64, Option<ExistingTrack>)> = Vec::new();
-        let mut skipped_count: i64 = 0;
+        // Wrapped in spawn_blocking to avoid blocking the Tokio runtime with
+        // synchronous fs::metadata calls on potentially thousands of files.
+        let force_refresh = self.force_metadata_refresh;
+        let phase1_result = tokio::task::spawn_blocking(move || {
+            let mut files_to_process: Vec<(PathBuf, i64, i64, Option<ExistingTrack>)> = Vec::new();
+            let mut skipped_count: i64 = 0;
+            let mut error_count: i64 = 0;
+            let mut processed_count: i64 = 0;
 
-        for file_path in &files {
-            let path_str = file_path.display().to_string();
-            seen_paths.insert(path_str.clone(), true);
+            for file_path in &files {
+                let path_str = file_path.display().to_string();
+                seen_paths.insert(path_str.clone(), true);
 
-            // Get file metadata (mtime + size) for change detection
-            let fs_meta = match std::fs::metadata(file_path) {
-                Ok(m) => m,
-                Err(e) => {
-                    tracing::warn!("Failed to stat file {:?}: {}", file_path, e);
-                    stats.errors += 1;
-                    stats.processed += 1;
-                    skipped_count += 1;
-                    continue;
+                // Get file metadata (mtime + size) for change detection
+                let fs_meta = match std::fs::metadata(file_path) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        tracing::warn!("Failed to stat file {:?}: {}", file_path, e);
+                        error_count += 1;
+                        processed_count += 1;
+                        skipped_count += 1;
+                        continue;
+                    }
+                };
+                let file_size = fs_meta.len() as i64;
+                let file_mtime = fs_meta
+                    .modified()
+                    .map(|t| {
+                        t.duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0)
+                    })
+                    .unwrap_or(0);
+
+                if let Some(existing) = existing_tracks.get(&path_str) {
+                    let unchanged = existing.file_size == Some(file_size)
+                        && existing.file_mtime == Some(file_mtime);
+
+                    if unchanged && !force_refresh {
+                        // Unchanged — skip
+                        processed_count += 1;
+                        skipped_count += 1;
+                        continue;
+                    }
+                    // Changed or force-refresh — need to reprocess
+                    files_to_process.push((
+                        file_path.clone(),
+                        file_size,
+                        file_mtime,
+                        Some(existing.clone()),
+                    ));
+                } else {
+                    // New file
+                    files_to_process.push((file_path.clone(), file_size, file_mtime, None));
                 }
-            };
-            let file_size = fs_meta.len() as i64;
-            let file_mtime = fs_meta
-                .modified()
-                .map(|t| {
-                    t.duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs() as i64)
-                        .unwrap_or(0)
-                })
-                .unwrap_or(0);
-
-            if let Some(existing) = existing_tracks.get(&path_str) {
-                let unchanged = existing.file_size == Some(file_size)
-                    && existing.file_mtime == Some(file_mtime);
-
-                if unchanged && !self.force_metadata_refresh {
-                    // Unchanged — skip
-                    stats.processed += 1;
-                    skipped_count += 1;
-                    continue;
-                }
-                // Changed or force-refresh — need to reprocess
-                files_to_process.push((
-                    file_path.clone(),
-                    file_size,
-                    file_mtime,
-                    Some(existing.clone()),
-                ));
-            } else {
-                // New file
-                files_to_process.push((file_path.clone(), file_size, file_mtime, None));
             }
-        }
+            (
+                files_to_process,
+                seen_paths,
+                existing_tracks,
+                skipped_count,
+                error_count,
+                processed_count,
+            )
+        })
+        .await
+        .map_err(|e| ImportError::Unknown(format!("Phase 1 filter task panicked: {}", e)))?;
+
+        let (
+            files_to_process,
+            seen_paths,
+            existing_tracks,
+            skipped_count,
+            phase1_errors,
+            phase1_processed,
+        ) = phase1_result;
+        stats.errors += phase1_errors;
+        stats.processed += phase1_processed;
 
         // Flush progress for all skipped files in one batch
         if skipped_count > 0 {
@@ -310,8 +338,8 @@ impl LibraryScanner {
 
                     total_phase2_processed += 1;
 
-                    // Flush progress every 100 files
-                    if total_phase2_processed % 100 == 0 {
+                    // Flush progress every 10 files
+                    if total_phase2_processed % 10 == 0 {
                         self.flush_progress(
                             progress.id,
                             &mut batch_processed,
@@ -342,7 +370,7 @@ impl LibraryScanner {
 
             total_phase2_processed += 1;
 
-            if total_phase2_processed % 100 == 0 && total_phase2_processed < files_to_process_len {
+            if total_phase2_processed % 10 == 0 && total_phase2_processed < files_to_process_len {
                 self.flush_progress(
                     progress.id,
                     &mut batch_processed,

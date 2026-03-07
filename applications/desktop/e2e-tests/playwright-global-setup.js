@@ -69,6 +69,13 @@ function seedDatabase() {
   const wavPath = join(audioDir, 'test-track.wav');
   writeFileSync(wavPath, createSilentWavBuffer(10));
 
+  // Longer WAV files for endurance/long-running tests
+  const longWavPath = join(audioDir, 'test-track-long.wav');
+  writeFileSync(longWavPath, createSilentWavBuffer(30));
+
+  const medWavPath = join(audioDir, 'test-track-med.wav');
+  writeFileSync(medWavPath, createSilentWavBuffer(15));
+
   // Create a separate folder with 3 WAV files that are NOT pre-loaded into the DB.
   // These are used by import-and-scan.spec.js to exercise the real import pipeline.
   // The folder is exposed via process.env.PLAYWRIGHT_IMPORT_DIR.
@@ -135,6 +142,42 @@ function seedDatabase() {
       `).run(tid, 1, 'available', wavPath);
     });
 
+    // Separate artist for endurance albums so Artist context tests are not affected
+    db.prepare('INSERT INTO artists (id, name) VALUES (?, ?)').run(2002, 'Endurance Artist');
+
+    // Album 2002 — "Long Album" — 5 tracks × 30-second WAV files
+    // Used by long-running / endurance stress tests
+    db.prepare('INSERT INTO albums (id, title, artist_id, year) VALUES (?, ?, ?, ?)').run(2002, 'Long Album', 2002, 2024);
+    const longTitles = ['Long One', 'Long Two', 'Long Three', 'Long Four', 'Long Five'];
+    longTitles.forEach((title, i) => {
+      const tid = 3001 + i;
+      db.prepare(`
+        INSERT INTO tracks (id, title, artist_id, album_id, track_number, disc_number, duration_seconds, file_format)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(tid, title, 2002, 2002, i + 1, 1, 30.0, 'wav');
+      db.prepare(`
+        INSERT INTO track_sources (track_id, source_id, status, local_file_path)
+        VALUES (?, ?, ?, ?)
+      `).run(tid, 1, 'available', longWavPath);
+    });
+
+    // Album 2003 — "Marathon Album" — 10 tracks × 15-second WAV files
+    // Used by extended queue endurance tests
+    db.prepare('INSERT INTO albums (id, title, artist_id, year) VALUES (?, ?, ?, ?)').run(2003, 'Marathon Album', 2002, 2024);
+    const marathonTitles = ['Marathon 01', 'Marathon 02', 'Marathon 03', 'Marathon 04', 'Marathon 05',
+                            'Marathon 06', 'Marathon 07', 'Marathon 08', 'Marathon 09', 'Marathon 10'];
+    marathonTitles.forEach((title, i) => {
+      const tid = 4001 + i;
+      db.prepare(`
+        INSERT INTO tracks (id, title, artist_id, album_id, track_number, disc_number, duration_seconds, file_format)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(tid, title, 2002, 2003, i + 1, 1, 15.0, 'wav');
+      db.prepare(`
+        INSERT INTO track_sources (track_id, source_id, status, local_file_path)
+        VALUES (?, ?, ?, ?)
+      `).run(tid, 1, 'available', medWavPath);
+    });
+
     // Seed one playlist
     db.prepare(`
       INSERT INTO playlists (id, name, owner_id, created_at, updated_at)
@@ -150,11 +193,12 @@ function seedDatabase() {
     `).run(4001, 'Playwright Genre', 'playwright genre');
 
     // track_genres uses INTEGER track_id (after migration 20250106000009)
-    const trackIds = [2001, 2002, 2003, 2004, 2005];
+    // Only link Album 2001 tracks to the genre so existing genre tests aren't affected
+    const genreTrackIds = [2001, 2002, 2003, 2004, 2005];
     const insertTrackGenre = db.prepare(
       'INSERT OR IGNORE INTO track_genres (track_id, genre_id) VALUES (?, ?)'
     );
-    for (const tid of trackIds) {
+    for (const tid of genreTrackIds) {
       insertTrackGenre.run(tid, 4001);
     }
 

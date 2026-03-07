@@ -20,7 +20,17 @@
     "recentlyAdded": "Recently Added",
     "recentlyAddedSubtitle": "Fresh arrivals to your library",
     "discoverArtists": "Discover Artists",
-    "emptyAlbum": "Empty Album"
+    "emptyAlbum": "Empty Album",
+    "onRepeat": "On repeat",
+    "yourTopPicks": "Your top picks",
+    "discoverNewMusic": "Discover new music",
+    "fanFavorites": "Fan favorites",
+    "hiddenGems": "Hidden gems",
+    "trendingNow": "Trending now",
+    "forYou": "For you",
+    "freshFinds": "Fresh finds",
+    "popularThisWeek": "Popular this week",
+    "classicAlbums": "Classic albums"
   },
   "nav": {
     "home": "Home",
@@ -77,7 +87,11 @@
   },
   "library": {
     "tracks": "tracks",
+    "tracks_one": "{{count}} track",
+    "tracks_other": "{{count}} tracks",
     "albums": "albums",
+    "albums_one": "{{count}} album",
+    "albums_other": "{{count}} albums",
     "album": "Album",
     "artist": "Artist",
     "artists": "artists",
@@ -111,13 +125,20 @@
     },
     "search": {
       "albums": "Search albums...",
-      "albumsWithCount": "Search {{count}} albums...",
+      "albumsWithCount_one": "Search {{count}} album...",
+      "albumsWithCount_other": "Search {{count}} albums...",
       "playlists": "Search playlists...",
-      "playlistsWithCount": "Search {{count}} playlists...",
+      "playlistsWithCount_one": "Search {{count}} playlist...",
+      "playlistsWithCount_other": "Search {{count}} playlists...",
       "artists": "Search artists...",
-      "artistsWithCount": "Search {{count}} artists...",
+      "artistsWithCount_one": "Search {{count}} artist...",
+      "artistsWithCount_other": "Search {{count}} artists...",
       "tracks": "Search tracks...",
-      "tracksWithCount": "Search {{count}} tracks..."
+      "tracksWithCount_one": "Search {{count}} track...",
+      "tracksWithCount_other": "Search {{count}} tracks...",
+      "genres": "Search genres...",
+      "genresWithCount_one": "Search {{count}} genre...",
+      "genresWithCount_other": "Search {{count}} genres..."
     }
   },
   "settings": {
@@ -209,6 +230,10 @@
       "deviceSwitched": "Switched to audio device: {{name}}",
       "deviceSwitchFailed": "Failed to switch audio device: {{error}}",
       "crossfadeApplyFailed": "Failed to apply crossfade settings",
+      "crossfade": {
+        "title": "Crossfade",
+        "description": "Blend track transitions instead of gapless playback"
+      },
       "resamplingQualityFailed": "Failed to apply resampling quality",
       "resamplingTargetRateFailed": "Failed to apply resampling target rate",
       "resamplingBackendFailed": "Failed to apply resampling backend",
@@ -242,10 +267,6 @@
         "asioJack": {
           "title": "ASIO & JACK Support",
           "description": "Low-latency audio output on Windows and Linux"
-        },
-        "headroom": {
-          "title": "Headroom Management",
-          "description": "Automatic clipping prevention during DSP processing"
         }
       },
       "stages": {
@@ -262,11 +283,6 @@
         "volumeLeveling": {
           "title": "Volume Leveling",
           "description": "Automatic loudness normalization using ReplayGain or EBU R128"
-        },
-        "headroom": {
-          "title": "Headroom Management",
-          "description": "Prevents clipping by attenuating signal before DSP processing",
-          "active": "Active"
         },
         "buffer": {
           "title": "Buffer & Performance",
@@ -433,7 +449,9 @@
     "syncDeletes": "Remove tracks when files are deleted",
     "lastScanned": "Last scanned",
     "rescan": "Rescan",
+    "rescanDescription": "Scan for new and changed files in this folder.",
     "rescanAll": "Rescan All",
+    "rescanAllDescription": "Scan all watched folders for new and changed files.",
     "forceRefresh": "Force Re-import",
     "forceRefreshDescription": "Re-extract metadata for all files, even unchanged ones. Use this to fix missing artist/album info.",
     "managedLibrary": "Managed Library",
@@ -546,7 +564,8 @@
     "backToGenres": "Back to Genres",
     "noGenres": "No genres found",
     "noGenresHint": "Genre information is extracted from your music files",
-    "trackCount": "{{count}} tracks"
+    "trackCount_one": "{{count}} track",
+    "trackCount_other": "{{count}} tracks"
   },
   "playlist": {
     "create": "Create Playlist",

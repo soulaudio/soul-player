@@ -24,7 +24,7 @@ export function ArtistCard({ artist, className = 'w-full', priority = false, onA
       type="artist"
       id={artist.id}
       title={artist.name}
-      subtitle={`${artist.album_count} ${t('library.albums')} • ${artist.track_count} ${t('library.tracks')}`}
+      subtitle={`${t('library.albums', { count: artist.album_count })} • ${t('library.tracks', { count: artist.track_count })}`}
       coverUrl={artist.cover_art_path ?? undefined}
       className={className}
       priority={priority}

@@ -4,9 +4,10 @@
  * Also handles event-to-store updates and keyboard shortcuts
  */
 
-import { ReactNode, useMemo, useEffect, useCallback } from 'react';
+import { ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { toast } from 'sonner';
 import debounce from 'lodash.debounce';
 import {
@@ -32,6 +33,29 @@ import {
 // Production players (VLC, Clementine, Audacious) don't use this pattern
 // Optimistic UI updates provide instant feedback without race conditions
 
+// Lightweight callback registry — avoids duplicate Tauri listen() calls.
+// The provider's setupListeners() is the ONLY source of Tauri IPC listeners.
+// Components subscribe via events.onXxx(cb) which just adds to a Set.
+type EventCallbackSets = {
+  stateChange: Set<(isPlaying: boolean) => void>;
+  trackChange: Set<(track: any) => void>;
+  positionUpdate: Set<(position: number) => void>;
+  volumeChange: Set<(volume: number) => void>;
+  queueUpdate: Set<() => void>;
+  error: Set<(error: string) => void>;
+};
+
+function createEventRegistry(): EventCallbackSets {
+  return {
+    stateChange: new Set(),
+    trackChange: new Set(),
+    positionUpdate: new Set(),
+    volumeChange: new Set(),
+    queueUpdate: new Set(),
+    error: new Set(),
+  };
+}
+
 // Separate component to initialize keyboard shortcuts AFTER context is provided
 function KeyboardShortcutsInitializer() {
   useKeyboardShortcuts();
@@ -41,6 +65,8 @@ function KeyboardShortcutsInitializer() {
 export function TauriPlayerCommandsProvider({ children }: { children: ReactNode }) {
   const { updateSession, session } = usePlaybackSession();
   const backend = useBackend();
+  // Single callback registry — components subscribe here, not via Tauri listen()
+  const eventCallbacksRef = useRef<EventCallbackSets>(createEventRegistry());
   // REMOVED: ignoringPositionUpdatesRef and ignoreTimerRef (ignore window pattern)
   // Simplified to match production player patterns (VLC, Clementine, etc.)
 
@@ -94,12 +120,27 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
     [savePlaybackSession]
   );
 
-  // Cleanup debounced function on unmount
+  // Flush pending saves on app close / unmount
   useEffect(() => {
+    const handleBeforeUnload = () => {
+      debouncedSave.flush();
+      savePlaybackSession();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Also listen to Tauri window close event (more reliable than beforeunload in WebView2)
+    let unlistenClose: (() => void) | null = null;
+    getCurrentWindow().onCloseRequested(async () => {
+      debouncedSave.flush();
+      await savePlaybackSession();
+    }).then(fn => { unlistenClose = fn; });
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      unlistenClose?.();
       debouncedSave.cancel();
     };
-  }, [debouncedSave]);
+  }, [debouncedSave, savePlaybackSession]);
 
   // Set up event listeners to update store (similar to old usePlaybackEvents hook)
   useEffect(() => {
@@ -161,11 +202,12 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           return;
         }
 
-        // Adjust queue index if current track is missing
-        let queueIndex = session.queueIndex;
-        if (!validTracks[queueIndex]) {
-          queueIndex = 0;
-          debug.warn('[PERSISTENCE] Current track missing - starting from first valid track');
+        // Find the current track by ID (more reliable than saved queueIndex which may be stale)
+        let queueIndex = validTracks.findIndex(t => t.id === session.currentTrackId);
+        if (queueIndex < 0) {
+          // Current track not in queue — fall back to saved index, then 0
+          queueIndex = session.queueIndex < validTracks.length ? session.queueIndex : 0;
+          debug.warn('[PERSISTENCE] Current track not found by ID - using fallback index:', queueIndex);
         }
 
         if (!isMounted) return;
@@ -366,23 +408,23 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
     const setupListeners = async () => {
       try {
+        const cbs = eventCallbacksRef.current;
+
         // Listen for playback state changes
         const unlistenStateChanged = await listen<string>('playback:state-changed', (event) => {
           const isPlaying = event.payload === 'Playing';
           usePlayerStore.setState({ isPlaying });
-          // Session's isPlaying is derived from Zustand store - no need to update
+          cbs.stateChange.forEach(cb => cb(isPlaying));
         });
         unlistenFunctions.push(unlistenStateChanged);
 
-        // Listen for position updates (with ignore window check)
+        // Listen for position updates
         const unlistenPositionUpdated = await listen<number>('playback:position-updated', (event) => {
-          // SIMPLIFIED: No ignore window check needed
-          // Optimistic updates in useSeekBar provide instant feedback
-          // Backend position updates naturally sync after seek completes
           const positionInSeconds = event.payload;
           const { duration } = usePlayerStore.getState();
           const progressPercentage = duration > 0 ? Math.min(100, (positionInSeconds / duration) * 100) : 0;
           usePlayerStore.setState({ progress: progressPercentage });
+          cbs.positionUpdate.forEach(cb => cb(positionInSeconds));
         });
         unlistenFunctions.push(unlistenPositionUpdated);
 
@@ -390,19 +432,19 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         const unlistenTrackChanged = await listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string } | null>('playback:track-changed', async (event) => {
           const trackPayload = event.payload;
           if (trackPayload && trackPayload.id) {
-            // Convert id from string to number to match Track type
             const track = {
               ...trackPayload,
               id: parseInt(trackPayload.id, 10),
             };
+            const { queue } = usePlayerStore.getState();
+            const newIndex = queue.findIndex(t => t.id === track.id);
             usePlayerStore.setState({
               currentTrack: track,
               duration: track.duration || 0,
-              progress: 0
+              progress: 0,
+              ...(newIndex >= 0 ? { queueIndex: newIndex } : {}),
             });
 
-            // Update session with latest context from backend
-            // Note: currentTrack is derived from Zustand store, don't pass to updateSession
             try {
               const context = await invokeValidated('get_current_playback_context', PlaybackContextSchema.nullable());
               if (context) {
@@ -416,8 +458,6 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
               debug.error('[TauriPlayerCommandsProvider] Failed to get context:', error);
             }
           } else {
-            // Null track means the queue has ended. Clear the current track and
-            // reset isPlaying so the play/pause button reflects the stopped state.
             usePlayerStore.setState({
               currentTrack: null,
               isPlaying: false,
@@ -425,24 +465,26 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
               progress: 0,
             });
           }
+          cbs.trackChange.forEach(cb => cb(trackPayload));
         });
         unlistenFunctions.push(unlistenTrackChanged);
 
         // Listen for volume changes (0-100 from backend)
         const unlistenVolumeChanged = await listen<number>('playback:volume-changed', (event) => {
-          usePlayerStore.setState({ volume: event.payload / 100 }); // Convert to 0-1
+          usePlayerStore.setState({ volume: event.payload / 100 });
+          cbs.volumeChange.forEach(cb => cb(event.payload));
         });
         unlistenFunctions.push(unlistenVolumeChanged);
 
         // Listen for queue updates (shuffle changes emit this event)
         const unlistenQueueUpdated = await listen('playback:queue-updated', async () => {
-          // Query and update shuffle mode when queue changes
           try {
             const shuffleMode = await invoke<string>('get_shuffle');
             usePlayerStore.setState({ shuffleMode: shuffleMode as 'off' | 'random' | 'smart' });
           } catch (error) {
             debug.error('[TauriPlayerCommandsProvider] Failed to get shuffle mode:', error);
           }
+          cbs.queueUpdate.forEach(cb => cb());
         });
         unlistenFunctions.push(unlistenQueueUpdated);
 
@@ -451,6 +493,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           const message = event.payload ?? 'Playback error';
           debug.error('[TauriPlayerCommandsProvider] Playback error:', message);
           toast.error(message, { duration: 4000 });
+          cbs.error.forEach(cb => cb(message));
           // Auto-skip: if queue has more tracks they will load; if not, playback stops naturally
           invoke('next_track').catch(() => {
             // Queue exhausted — ignore
@@ -684,63 +727,33 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
     };
 
-    // Events implementation using Tauri event listeners
+    // Events interface — delegates to the in-memory callback registry.
+    // NO new Tauri listen() calls here. The provider's setupListeners() is the single source.
+    const cbs = eventCallbacksRef.current;
     const events: PlaybackEventsInterface = {
       onStateChange(callback) {
-        // The backend emits a string ("Playing" | "Paused" | "Stopped"), not a boolean.
-        // Typed as string here so the conversion to boolean is explicit.
-        const unlisten = listen<string>('playback:state-changed', (event) => {
-          callback(event.payload === 'Playing');
-        });
-        return () => {
-          unlisten.then((fn) => fn());
-        };
+        cbs.stateChange.add(callback);
+        return () => { cbs.stateChange.delete(callback); };
       },
-
       onTrackChange(callback) {
-        const unlisten = listen('playback:track-changed', (event) => {
-          callback(event.payload);
-        });
-        return () => {
-          unlisten.then((fn) => fn());
-        };
+        cbs.trackChange.add(callback);
+        return () => { cbs.trackChange.delete(callback); };
       },
-
       onPositionUpdate(callback) {
-        const unlisten = listen<number>('playback:position-updated', (event) => {
-          callback(event.payload);
-        });
-        return () => {
-          unlisten.then((fn) => fn());
-        };
+        cbs.positionUpdate.add(callback);
+        return () => { cbs.positionUpdate.delete(callback); };
       },
-
       onVolumeChange(callback) {
-        const unlisten = listen<number>('playback:volume-changed', (event) => {
-          // Backend sends 0-100, convert to 0-1
-          callback(event.payload);
-        });
-        return () => {
-          unlisten.then((fn) => fn());
-        };
+        cbs.volumeChange.add(callback);
+        return () => { cbs.volumeChange.delete(callback); };
       },
-
       onQueueUpdate(callback) {
-        const unlisten = listen('playback:queue-updated', () => {
-          callback();
-        });
-        return () => {
-          unlisten.then((fn) => fn());
-        };
+        cbs.queueUpdate.add(callback);
+        return () => { cbs.queueUpdate.delete(callback); };
       },
-
       onError(callback) {
-        const unlisten = listen<string>('playback:error', (event) => {
-          callback(event.payload);
-        });
-        return () => {
-          unlisten.then((fn) => fn());
-        };
+        cbs.error.add(callback);
+        return () => { cbs.error.delete(callback); };
       },
     };
 

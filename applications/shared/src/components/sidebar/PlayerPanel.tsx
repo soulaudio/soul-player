@@ -7,8 +7,6 @@ import { NowPlayingPanel, type CurrentTrackInfo } from './NowPlayingPanel';
 import { ProgressBar } from '../player/ProgressBar';
 import { PlaybackControls, type ShuffleMode, type RepeatMode } from './PlaybackControls';
 import { VolumeControl } from './VolumeControl';
-import { DeviceSelector } from './DeviceSelector';
-import { useAudioDevice } from '../../hooks/useAudioDevice';
 import { debug } from '../../utils/debug';
 
 export interface PlayerPanelProps {
@@ -17,7 +15,6 @@ export interface PlayerPanelProps {
   volume: number;
   shuffleMode: ShuffleMode;
   repeatMode: RepeatMode;
-  hasRealDevices: boolean;
   canCreatePlaylists: boolean;
   onTrackClick?: () => void;
   onAddToPlaylist?: () => void;
@@ -31,7 +28,6 @@ export function PlayerPanel({
   volume,
   shuffleMode,
   repeatMode,
-  hasRealDevices,
   canCreatePlaylists,
   onTrackClick,
   onAddToPlaylist,
@@ -39,14 +35,6 @@ export function PlayerPanel({
   onRepeatModeChange,
 }: PlayerPanelProps) {
   const commands = usePlayerCommands();
-  const {
-    backends,
-    devices,
-    currentDevice,
-    isLoading: isLoadingDevices,
-    switchDevice,
-    loadAll,
-  } = useAudioDevice(hasRealDevices);
   const [isMuted, setIsMuted] = useState(false);
   const [volumeBeforeMute, setVolumeBeforeMute] = useState(volume);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,24 +184,13 @@ export function PlayerPanel({
           onRepeatToggle={handleRepeatToggle}
         />
 
-        <div className="flex items-center gap-2">
-          <VolumeControl
-            volume={volume}
-            isMuted={isMuted}
-            onVolumeChange={handleVolumeChange}
-            onMuteToggle={handleMuteToggle}
-            onWheel={handleVolumeWheel}
-          />
-          <DeviceSelector
-            currentDevice={currentDevice}
-            backends={backends}
-            devices={devices}
-            isLoadingDevices={isLoadingDevices}
-            hasRealDevices={hasRealDevices}
-            onLoadDevices={loadAll}
-            onSwitchDevice={switchDevice}
-          />
-        </div>
+        <VolumeControl
+          volume={volume}
+          isMuted={isMuted}
+          onVolumeChange={handleVolumeChange}
+          onMuteToggle={handleMuteToggle}
+          onWheel={handleVolumeWheel}
+        />
       </div>
     </div>
   );

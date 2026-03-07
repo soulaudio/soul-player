@@ -15,7 +15,6 @@ import type {
   DatabaseHealth,
   PlaybackContext,
   EffectType,
-  HeadroomSettings,
   LatencyInfo,
   ExclusiveConfig,
   AnalysisQueueStats,
@@ -611,24 +610,6 @@ export function MockBackendProvider({ storage, children, version: versionProp }:
 
     async updateEffectParameters(_slotIndex: number, _effect: EffectType) {
       debug.log('[MockBackend] DSP effects not supported in demo mode')
-    },
-
-    // Audio Settings - Headroom Management (mock/stub implementations)
-    async getHeadroomSettings(): Promise<HeadroomSettings> {
-      return {
-        enabled: true,
-        mode: { mode: 'auto', manualDb: null },
-        totalGainDb: 0,
-        attenuationDb: 0,
-      }
-    },
-
-    async setHeadroomMode(_mode: string, _manualDb?: number) {
-      debug.log('[MockBackend] Headroom settings not supported in demo mode')
-    },
-
-    async setHeadroomEnabled(_enabled: boolean) {
-      debug.log('[MockBackend] Headroom settings not supported in demo mode')
     },
 
     // Audio Settings - Latency & Exclusive Mode (mock/stub implementations)

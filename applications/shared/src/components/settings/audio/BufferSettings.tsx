@@ -18,6 +18,8 @@ interface BufferSettingsProps {
   onBufferSizeChange: (size: 'auto' | number) => void;
   onPreloadChange: (enabled: boolean) => void;
   onCrossfadeChange?: (settings: CrossfadeSettings) => void;
+  /** When false, only show crossfade settings (hide buffer size & preloading) */
+  showBufferControls?: boolean;
 }
 
 const bufferSizes = [
@@ -53,6 +55,7 @@ export function BufferSettings({
   onBufferSizeChange,
   onPreloadChange,
   onCrossfadeChange,
+  showBufferControls = true,
 }: BufferSettingsProps) {
   const handleCrossfadeEnabledChange = (enabled: boolean) => {
     onCrossfadeChange?.({ ...crossfade, enabled });
@@ -68,82 +71,86 @@ export function BufferSettings({
 
   return (
     <div className="space-y-6">
-      {/* Buffer Size */}
-      <div className="space-y-3">
-        <label className="text-sm font-medium flex items-center gap-2">
-          Buffer Size
-          <span title="Audio buffer size affects latency vs stability trade-off">
-            <Info className="w-3 h-3 text-muted-foreground" />
-          </span>
-        </label>
+      {showBufferControls && (
+        <>
+          {/* Buffer Size */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium flex items-center gap-2">
+              Buffer Size
+              <span title="Audio buffer size affects latency vs stability trade-off">
+                <Info className="w-3 h-3 text-muted-foreground" />
+              </span>
+            </label>
 
-        <Select
-          value={String(bufferSize)}
-          onChange={(val) => onBufferSizeChange(val === 'auto' ? 'auto' : parseInt(val))}
-          options={bufferSizes.map(s => ({ value: String(s.value), label: `${s.label} - ${s.description} (${s.latency})` }))}
-          className="w-full"
-        />
-
-        <p className="text-xs text-muted-foreground">
-          Smaller buffers reduce latency but may cause audio glitches on slower systems.
-          Larger buffers are more stable but have higher latency.
-        </p>
-      </div>
-
-      {/* Pre-loading */}
-      <div className="space-y-3">
-        <div>
-          <label className="text-sm font-medium flex items-center gap-2 mb-2">
-            Track Pre-loading
-            <span title="Load entire track to memory before playback">
-              <Info className="w-3 h-3 text-muted-foreground" />
-            </span>
-          </label>
-
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
-            <input
-              type="checkbox"
-              checked={preloadEnabled}
-              onChange={(e) => onPreloadChange(e.target.checked)}
-              className="w-4 h-4 mt-0.5"
+            <Select
+              value={String(bufferSize)}
+              onChange={(val) => onBufferSizeChange(val === 'auto' ? 'auto' : parseInt(val))}
+              options={bufferSizes.map(s => ({ value: String(s.value), label: `${s.label} - ${s.description} (${s.latency})` }))}
+              className="w-full"
             />
-            <div className="flex-1">
-              <div className="font-medium text-sm">Enable pre-loading for local files</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Pre-load entire track into memory before playback starts.
-                Reduces disk activity and eliminates jitter during playback.
-              </p>
-            </div>
-          </label>
-        </div>
 
-        {/* Pre-loading details */}
-        {preloadEnabled && (
-          <div className="pl-7 space-y-2">
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p><strong>Pros:</strong></p>
-              <ul className="list-disc list-inside space-y-0.5 ml-2">
-                <li>Eliminates disk I/O jitter during playback</li>
-                <li>More stable playback timing</li>
-                <li>Protects from interference (Audirvana-style)</li>
-              </ul>
-            </div>
-
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p><strong>Cons:</strong></p>
-              <ul className="list-disc list-inside space-y-0.5 ml-2">
-                <li>Higher memory usage (~30-60 MB per track)</li>
-                <li>Slight delay before playback starts (~100-500ms)</li>
-                <li>Not suitable for streaming sources</li>
-              </ul>
-            </div>
-
-            <div className="text-xs bg-muted/50 rounded p-2 mt-2">
-              <strong>Memory estimate:</strong> A 3-minute 44.1kHz stereo FLAC file uses ~31 MB when pre-loaded
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Smaller buffers reduce latency but may cause audio glitches on slower systems.
+              Larger buffers are more stable but have higher latency.
+            </p>
           </div>
-        )}
-      </div>
+
+          {/* Pre-loading */}
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium flex items-center gap-2 mb-2">
+                Track Pre-loading
+                <span title="Load entire track to memory before playback">
+                  <Info className="w-3 h-3 text-muted-foreground" />
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]">
+                <input
+                  type="checkbox"
+                  checked={preloadEnabled}
+                  onChange={(e) => onPreloadChange(e.target.checked)}
+                  className="w-4 h-4 mt-0.5"
+                />
+                <div className="flex-1">
+                  <div className="font-medium text-sm">Enable pre-loading for local files</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pre-load entire track into memory before playback starts.
+                    Reduces disk activity and eliminates jitter during playback.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Pre-loading details */}
+            {preloadEnabled && (
+              <div className="pl-7 space-y-2">
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p><strong>Pros:</strong></p>
+                  <ul className="list-disc list-inside space-y-0.5 ml-2">
+                    <li>Eliminates disk I/O jitter during playback</li>
+                    <li>More stable playback timing</li>
+                    <li>Protects from interference (Audirvana-style)</li>
+                  </ul>
+                </div>
+
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p><strong>Cons:</strong></p>
+                  <ul className="list-disc list-inside space-y-0.5 ml-2">
+                    <li>Higher memory usage (~30-60 MB per track)</li>
+                    <li>Slight delay before playback starts (~100-500ms)</li>
+                    <li>Not suitable for streaming sources</li>
+                  </ul>
+                </div>
+
+                <div className="text-xs bg-muted/50 rounded p-2 mt-2">
+                  <strong>Memory estimate:</strong> A 3-minute 44.1kHz stereo FLAC file uses ~31 MB when pre-loaded
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Crossfade Settings */}
       {onCrossfadeChange && (
@@ -215,23 +222,27 @@ export function BufferSettings({
         </div>
       )}
 
-      {/* Performance Info */}
-      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex gap-3">
-        <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-        <div className="text-sm">
-          <p className="font-medium mb-1">Audiophile Playback</p>
-          <p className="text-muted-foreground text-xs">
-            For the highest quality playback, enable pre-loading and use a buffer size of 1024 or higher.
-            This minimizes CPU activity during playback and ensures bit-perfect output.
-          </p>
-        </div>
-      </div>
+      {showBufferControls && (
+        <>
+          {/* Performance Info */}
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex gap-3">
+            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium mb-1">Audiophile Playback</p>
+              <p className="text-muted-foreground text-xs">
+                For the highest quality playback, enable pre-loading and use a buffer size of 1024 or higher.
+                This minimizes CPU activity during playback and ensures bit-perfect output.
+              </p>
+            </div>
+          </div>
 
-      {/* ASIO note */}
-      <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded">
-        <strong>Note:</strong> When using ASIO backend, buffer size may be controlled by your ASIO driver settings.
-        Check your audio interface control panel for buffer configuration.
-      </div>
+          {/* ASIO note */}
+          <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded">
+            <strong>Note:</strong> When using ASIO backend, buffer size may be controlled by your ASIO driver settings.
+            Check your audio interface control panel for buffer configuration.
+          </div>
+        </>
+      )}
     </div>
   );
 }

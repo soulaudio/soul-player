@@ -453,7 +453,16 @@ impl PlaybackManager {
     /// Go to previous track
     ///
     /// If >3 seconds into current track, restarts current track.
-    /// Otherwise, uses index-based navigation to go back without reordering the queue.
+    /// Otherwise, navigates backward in the source queue. This ensures that
+    /// after skip_to_queue_index (jumping forward in the queue), pressing
+    /// previous walks backward through the source order (T5→T4→T3→...) rather
+    /// than jumping to the last-played track from history.
+    ///
+    /// Navigation uses source_index:
+    ///   - The current track was popped at source[index-1]
+    ///   - The previous track is at source[index-2]
+    ///   - go_back() twice + pop gives us the previous track and leaves
+    ///     source_index pointing so the current track becomes "next up"
     pub fn previous(&mut self) -> Result<()> {
         self.stop_fade.reset();
 
@@ -469,23 +478,57 @@ impl PlaybackManager {
             }
         }
 
-        // Go to previous track from history
+        // Navigate backward via source queue index.
+        // source_index >= 2 means there is a track before the current one in the source.
+        // go_back() twice: first puts the current track back, second steps to the previous.
+        // Then pop_next_skip_play_next() loads the previous track and advances index by 1,
+        // leaving the current track as the next-up in the queue.
+        if self.queue.current_source_index() >= 2 {
+            self.queue.go_back(); // undo current track's pop (current back in queue)
+            self.queue.go_back(); // step to previous track position
+
+            // Consume the most recent history entry to keep history in sync.
+            // Without this, history accumulates stale entries from next()/skip
+            // that would be replayed on a subsequent previous() after we reach
+            // the beginning of the source queue.
+            self.history.pop();
+
+            // Clear current source and transition to Stopped
+            self.sources = SourceState::Empty;
+            self.state = PlaybackState::Stopped;
+            self.emit_state_changed(PlaybackState::Stopped);
+
+            if let Some(prev_track) = self.queue.pop_next_skip_play_next() {
+                tracing::info!(
+                    "[previous] Navigating to previous track via source queue: {}",
+                    prev_track.id
+                );
+                self.pending_events
+                    .push(PlaybackEvent::LoadNext(prev_track.clone()));
+                self.pending_load_track = Some(prev_track);
+                self.loading = true;
+            }
+
+            return Ok(());
+        }
+
+        // Fallback: use history when at the beginning of the source queue
+        // (source_index < 2, meaning no prior track in source to go back to).
         if let Some(prev_track) = self.history.pop() {
             // Decrement source index to restore queue position
             if self.sources.current_track().is_some() && self.queue.can_go_back() {
                 self.queue.go_back();
             }
 
-            // Clear current source and transition to Stopped, same as play_next_in_queue().
-            // We emit StateChanged(Stopped) first so the UI stops the progress timer
-            // while the previous track is being loaded.
+            // Clear current source and transition to Stopped
             self.sources = SourceState::Empty;
             self.state = PlaybackState::Stopped;
             self.emit_state_changed(PlaybackState::Stopped);
 
-            // Request the platform layer to load and activate the previous track,
-            // exactly like play_next_in_queue() does for forward navigation.
-            tracing::info!("[previous] Navigating to previous track: {}", prev_track.id);
+            tracing::info!(
+                "[previous] Navigating to previous track from history: {}",
+                prev_track.id
+            );
             self.pending_events
                 .push(PlaybackEvent::LoadNext(prev_track.clone()));
             self.pending_load_track = Some(prev_track);
@@ -493,7 +536,7 @@ impl PlaybackManager {
 
             Ok(())
         } else {
-            // No history, restart current track
+            // No history and at beginning of source, restart current track
             if let Some(src) = self.sources.current_source_mut() {
                 src.reset()?;
                 self.start_fade.start();
@@ -1112,7 +1155,9 @@ impl PlaybackManager {
 
     /// Check if there is a previous track
     pub fn has_previous(&self) -> bool {
-        !self.history.get_all().is_empty() || self.repeat == RepeatMode::One
+        self.queue.current_source_index() >= 2
+            || !self.history.get_all().is_empty()
+            || self.repeat == RepeatMode::One
     }
 
     /// Peek at the next track in queue without advancing

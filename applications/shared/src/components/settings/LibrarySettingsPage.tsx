@@ -22,6 +22,7 @@ import {
   Download,
 } from 'lucide-react';
 import { Select } from '../ui/select';
+import { Tooltip } from '../ui/Tooltip';
 
 // Types matching the Tauri backend
 interface LibrarySource {
@@ -512,14 +513,15 @@ export function LibrarySettingsPage() {
                       {source.scanStatus === 'scanning' || scanningSourceId === source.id ? (
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
                       ) : (
-                        <button
-                          data-testid={`rescan-button-${source.id}`}
-                          onClick={() => handleRescanSource(source.id)}
-                          className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-lg transition-colors duration-[var(--transition-duration)]"
-                          title={t('librarySettings.rescan')}
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
+                        <Tooltip content={t('librarySettings.rescanDescription')} position="top">
+                          <button
+                            data-testid={`rescan-button-${source.id}`}
+                            onClick={() => handleRescanSource(source.id)}
+                            className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-lg transition-colors duration-[var(--transition-duration)]"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
                       )}
                       <button
                         onClick={() => handleRemoveSource(source.id)}
@@ -607,32 +609,35 @@ export function LibrarySettingsPage() {
                 </button>
                 {sources.length > 0 && (
                   <>
-                    <button
-                      data-testid="rescan-all-button"
-                      onClick={() => handleRescanAll(false)}
-                      disabled={scanningSourceId !== null}
-                      className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
-                    >
-                      {scanningSourceId === -1 ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4" />
-                      )}
-                      {t('librarySettings.rescanAll')}
-                    </button>
-                    <button
-                      onClick={() => handleRescanAll(true)}
-                      disabled={scanningSourceId !== null}
-                      className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-500/30 disabled:opacity-[var(--disabled-opacity)]"
-                      title={t('librarySettings.forceRefreshDescription')}
-                    >
-                      {scanningSourceId === -1 ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4" />
-                      )}
-                      {t('librarySettings.forceRefresh')}
-                    </button>
+                    <Tooltip content={t('librarySettings.rescanAllDescription')} position="top">
+                      <button
+                        data-testid="rescan-all-button"
+                        onClick={() => handleRescanAll(false)}
+                        disabled={scanningSourceId !== null}
+                        className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
+                      >
+                        {scanningSourceId === -1 ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4" />
+                        )}
+                        {t('librarySettings.rescanAll')}
+                      </button>
+                    </Tooltip>
+                    <Tooltip content={t('librarySettings.forceRefreshDescription')} position="top">
+                      <button
+                        onClick={() => handleRescanAll(true)}
+                        disabled={scanningSourceId !== null}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-500/30 disabled:opacity-[var(--disabled-opacity)]"
+                      >
+                        {scanningSourceId === -1 ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4" />
+                        )}
+                        {t('librarySettings.forceRefresh')}
+                      </button>
+                    </Tooltip>
                   </>
                 )}
               </div>

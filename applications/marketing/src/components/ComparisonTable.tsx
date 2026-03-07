@@ -202,7 +202,7 @@ const FEATURES: Feature[] = [
     },
     roon: {
       value: true,
-      tooltip: 'DSP engine with headroom management, crossfeed, speaker setup, convolution',
+      tooltip: 'DSP engine with crossfeed, speaker setup, convolution',
     },
     navidrome: {
       value: false,

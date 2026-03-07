@@ -43,11 +43,11 @@ function ArtistAlbumCard({
 
   return (
     <div
-      className="group cursor-pointer border rounded-lg p-4 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors"
+      className="group cursor-pointer pb-2 transition-opacity"
       onClick={onClick}
       data-testid={`artist-album-card-${album.id}`}
     >
-      <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+      <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center overflow-hidden shadow group-hover:shadow-md transition-shadow">
         {hasDesktopArtwork ? (
           <ArtworkImage
             albumId={album.id}
@@ -65,10 +65,10 @@ function ArtistAlbumCard({
           <Disc3 className="w-12 h-12 text-muted-foreground" />
         )}
       </div>
-      <h3 className="font-medium truncate">{album.title}</h3>
-      <p className="text-xs text-muted-foreground mt-1">
+      <p className="font-medium truncate group-hover:opacity-[var(--hover-text-opacity)] transition-opacity">{album.title}</p>
+      <p className="text-sm text-muted-foreground truncate">
         {album.year && `${album.year} • `}
-        {album.track_count || 0} {t('library.tracks')}
+        {t('library.tracks', { count: album.track_count || 0 })}
       </p>
     </div>
   )
@@ -259,6 +259,19 @@ export function ArtistPage() {
                   alt={artist.name}
                   className="w-full h-full object-cover"
                 />
+              ) : albums.length > 0 && isDesktop ? (
+                <>
+                  <ArtworkImage
+                    albumId={albums[0].id}
+                    alt={artist.name}
+                    className="w-full h-full object-cover blur-xl scale-125 brightness-50"
+                    fallbackClassName="w-full h-full bg-muted"
+                    priority
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Users className="w-12 h-12 text-white/80 drop-shadow-lg" />
+                  </div>
+                </>
               ) : (
                 <Users className="w-16 h-16 text-muted-foreground" />
               )}
@@ -280,7 +293,7 @@ export function ArtistPage() {
               </p>
               <h1 className="text-4xl font-bold mb-2" data-testid="artist-name">{artist.name}</h1>
               <p className="text-muted-foreground mb-4" data-testid="artist-stats">
-                {artist.album_count} {t('library.albums')} • {artist.track_count} {t('library.tracks')}
+                {t('library.albums', { count: artist.album_count })} • {t('library.tracks', { count: artist.track_count })}
               </p>
 
               <button

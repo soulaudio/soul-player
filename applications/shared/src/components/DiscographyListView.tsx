@@ -58,7 +58,7 @@ export function DiscographyListView({ albums, onAlbumClick }: DiscographyListVie
 
   if (albums.length === 0) {
     return (
-      <div className="text-center py-12 text-neutral-400">
+      <div className="text-center py-12 text-muted-foreground">
         {t('library.noAlbums')}
       </div>
     )
@@ -69,7 +69,7 @@ export function DiscographyListView({ albums, onAlbumClick }: DiscographyListVie
   return (
     <div className="space-y-6">
       {isLoading ? (
-        <div className="p-8 text-center text-neutral-400">
+        <div className="p-8 text-center text-muted-foreground">
           {t('common.loading')}...
         </div>
       ) : (
@@ -86,7 +86,7 @@ export function DiscographyListView({ albums, onAlbumClick }: DiscographyListVie
               >
                 {/* Album Artwork */}
                 <div data-album-info className="flex-shrink-0">
-                  <div className="w-16 h-16 rounded overflow-hidden bg-neutral-800">
+                  <div className="w-16 h-16 rounded overflow-hidden bg-muted">
                     <ArtworkImage
                       albumId={album.id}
                       alt={album.title}
@@ -97,12 +97,12 @@ export function DiscographyListView({ albums, onAlbumClick }: DiscographyListVie
 
                 {/* Album Info */}
                 <div data-album-info className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-white truncate hover:underline">
+                  <h3 className="font-semibold text-foreground truncate hover:underline">
                     {album.title}
                   </h3>
-                  <p className="text-sm text-neutral-400 truncate">
+                  <p className="text-sm text-muted-foreground truncate">
                     {album.year && `${album.year} • `}
-                    {trackCount} {trackCount === 1 ? t('common.track') : t('common.tracks')}
+                    {t('library.tracks', { count: trackCount })}
                   </p>
                 </div>
               </div>
@@ -133,7 +133,7 @@ export function DiscographyListView({ albums, onAlbumClick }: DiscographyListVie
                   />
                 </div>
               ) : (
-                <div className="p-4 text-center text-neutral-400 text-sm">
+                <div className="p-4 text-center text-muted-foreground text-sm">
                   {t('library.noTracks')}
                 </div>
               )}

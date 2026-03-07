@@ -1286,6 +1286,7 @@ dependencies = [
  "ciborium",
  "clap",
  "criterion-plot",
+ "futures",
  "is-terminal",
  "itertools 0.10.5",
  "num-traits",
@@ -1298,6 +1299,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "tinytemplate",
+ "tokio",
  "walkdir",
 ]
 
@@ -6733,7 +6735,7 @@ dependencies = [
 
 [[package]]
 name = "soul-artwork"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "base64 0.22.1",
  "lofty",
@@ -6746,7 +6748,7 @@ dependencies = [
 
 [[package]]
 name = "soul-audio"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "cpal",
  "criterion",
@@ -6767,7 +6769,7 @@ dependencies = [
 
 [[package]]
 name = "soul-audio-desktop"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "async-trait",
  "audio_thread_priority",
@@ -6808,11 +6810,11 @@ dependencies = [
 
 [[package]]
 name = "soul-audio-mobile"
-version = "0.1.12"
+version = "0.1.13"
 
 [[package]]
 name = "soul-core"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6825,7 +6827,7 @@ dependencies = [
 
 [[package]]
 name = "soul-discovery"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "reqwest 0.11.27",
  "serde",
@@ -6835,11 +6837,12 @@ dependencies = [
 
 [[package]]
 name = "soul-importer"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "criterion",
  "hex",
  "lofty",
  "notify 7.0.0",
@@ -6864,7 +6867,7 @@ dependencies = [
 
 [[package]]
 name = "soul-loudness"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "ebur128",
  "lofty",
@@ -6878,7 +6881,7 @@ dependencies = [
 
 [[package]]
 name = "soul-metadata"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "lofty",
  "num_cpus",
@@ -6892,7 +6895,7 @@ dependencies = [
 
 [[package]]
 name = "soul-playback"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.2.17",
@@ -6912,7 +6915,7 @@ dependencies = [
 
 [[package]]
 name = "soul-player-desktop"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -6955,7 +6958,7 @@ dependencies = [
 
 [[package]]
 name = "soul-server"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "axum",
@@ -6992,7 +6995,7 @@ dependencies = [
 
 [[package]]
 name = "soul-server-client"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7013,7 +7016,7 @@ dependencies = [
 
 [[package]]
 name = "soul-storage"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7031,7 +7034,7 @@ dependencies = [
 
 [[package]]
 name = "soul-sync"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "chrono",
  "reqwest 0.11.27",

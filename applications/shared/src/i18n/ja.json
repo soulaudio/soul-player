@@ -20,7 +20,17 @@
     "recentlyAdded": "最近追加された曲",
     "recentlyAddedSubtitle": "ライブラリへの新着",
     "discoverArtists": "アーティストを発見",
-    "emptyAlbum": "空のアルバム"
+    "emptyAlbum": "空のアルバム",
+    "onRepeat": "リピート中",
+    "yourTopPicks": "おすすめ",
+    "discoverNewMusic": "新しい音楽を発見",
+    "fanFavorites": "人気の曲",
+    "hiddenGems": "隠れた名曲",
+    "trendingNow": "トレンド",
+    "forYou": "あなたへ",
+    "freshFinds": "新着ピックアップ",
+    "popularThisWeek": "今週の人気",
+    "classicAlbums": "クラシックアルバム"
   },
   "nav": {
     "home": "ホーム",
@@ -77,7 +87,11 @@
   },
   "library": {
     "tracks": "トラック",
+    "tracks_one": "{{count}}曲",
+    "tracks_other": "{{count}}曲",
     "albums": "アルバム",
+    "albums_one": "{{count}}アルバム",
+    "albums_other": "{{count}}アルバム",
     "album": "アルバム",
     "artist": "アーティスト",
     "artists": "アーティスト",
@@ -111,13 +125,20 @@
     },
     "search": {
       "albums": "アルバムを検索...",
-      "albumsWithCount": "{{count}}枚のアルバムを検索...",
+      "albumsWithCount_one": "{{count}}枚のアルバムを検索...",
+      "albumsWithCount_other": "{{count}}枚のアルバムを検索...",
       "playlists": "プレイリストを検索...",
-      "playlistsWithCount": "{{count}}件のプレイリストを検索...",
+      "playlistsWithCount_one": "{{count}}件のプレイリストを検索...",
+      "playlistsWithCount_other": "{{count}}件のプレイリストを検索...",
       "artists": "アーティストを検索...",
-      "artistsWithCount": "{{count}}人のアーティストを検索...",
+      "artistsWithCount_one": "{{count}}人のアーティストを検索...",
+      "artistsWithCount_other": "{{count}}人のアーティストを検索...",
       "tracks": "トラックを検索...",
-      "tracksWithCount": "{{count}}曲のトラックを検索..."
+      "tracksWithCount_one": "{{count}}曲のトラックを検索...",
+      "tracksWithCount_other": "{{count}}曲のトラックを検索...",
+      "genres": "ジャンルを検索...",
+      "genresWithCount_one": "{{count}}件のジャンルを検索...",
+      "genresWithCount_other": "{{count}}件のジャンルを検索..."
     }
   },
   "settings": {
@@ -210,6 +231,10 @@
       "deviceSwitched": "オーディオデバイスを切り替えました：{{name}}",
       "deviceSwitchFailed": "オーディオデバイスの切り替えに失敗しました：{{error}}",
       "crossfadeApplyFailed": "クロスフェード設定の適用に失敗しました",
+      "crossfade": {
+        "title": "クロスフェード",
+        "description": "ギャップレス再生の代わりにトラック間をブレンド"
+      },
       "resamplingQualityFailed": "リサンプリング品質の適用に失敗しました",
       "resamplingTargetRateFailed": "リサンプリング目標レートの適用に失敗しました",
       "resamplingBackendFailed": "リサンプリングバックエンドの適用に失敗しました",
@@ -243,10 +268,6 @@
         "asioJack": {
           "title": "ASIO & JACKサポート",
           "description": "WindowsおよびLinuxでの低レイテンシーオーディオ出力"
-        },
-        "headroom": {
-          "title": "ヘッドルーム管理",
-          "description": "DSP処理中の自動クリッピング防止"
         }
       },
       "stages": {
@@ -263,11 +284,6 @@
         "volumeLeveling": {
           "title": "音量レベリング",
           "description": "ReplayGainまたはEBU R128による自動ラウドネス正規化"
-        },
-        "headroom": {
-          "title": "ヘッドルーム管理",
-          "description": "DSP処理前にシグナルを減衰させてクリッピングを防止",
-          "active": "有効"
         },
         "buffer": {
           "title": "バッファー & パフォーマンス",
@@ -433,7 +449,9 @@
     "syncDeletes": "ファイルが削除されたときにトラックを削除",
     "lastScanned": "最終スキャン",
     "rescan": "再スキャン",
+    "rescanDescription": "このフォルダの新しいファイルと変更されたファイルをスキャンします。",
     "rescanAll": "すべて再スキャン",
+    "rescanAllDescription": "すべての監視フォルダの新しいファイルと変更されたファイルをスキャンします。",
     "forceRefresh": "強制再インポート",
     "forceRefreshDescription": "変更がないファイルも含め、すべてのファイルのメタデータを再抽出します。アーティスト/アルバム情報が欠けている場合に使用してください。",
     "managedLibrary": "管理ライブラリ",
@@ -545,7 +563,9 @@
     "notFound": "ジャンルが見つかりません",
     "backToGenres": "ジャンル一覧に戻る",
     "noGenres": "ジャンルが見つかりません",
-    "noGenresHint": "ジャンル情報は音楽ファイルから抽出されます"
+    "noGenresHint": "ジャンル情報は音楽ファイルから抽出されます",
+    "trackCount_one": "{{count}}曲",
+    "trackCount_other": "{{count}}曲"
   },
   "playlist": {
     "create": "プレイリストを作成",

@@ -65,7 +65,7 @@ export function TrackMenu({
 
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className="min-w-[180px] bg-background border rounded-lg shadow-lg py-1 z-50
+          className="min-w-[180px] bg-popover text-popover-foreground border rounded-lg shadow-lg py-1 z-50
             data-[state=open]:animate-fade-in data-[state=open]:animate-zoom-in
             data-[side=bottom]:animate-slide-in-from-top
             data-[side=top]:animate-slide-in-from-bottom
@@ -77,7 +77,7 @@ export function TrackMenu({
           {/* Play Next */}
           {onPlayNext && (
             <DropdownMenu.Item
-              className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+              className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
               onSelect={onPlayNext}
               disabled={!features.hasPlaybackContext}
             >
@@ -89,7 +89,7 @@ export function TrackMenu({
           {/* Add to Queue */}
           {onAddToQueue && (
             <DropdownMenu.Item
-              className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+              className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
               onSelect={onAddToQueue}
               disabled={!features.hasPlaybackContext}
             >
@@ -102,7 +102,7 @@ export function TrackMenu({
 
           {/* Add to Playlist */}
           <DropdownMenu.Item
-            className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors duration-[var(--transition-duration)] hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-[var(--disabled-opacity)]"
+            className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors duration-[var(--transition-duration)] hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] data-[disabled]:pointer-events-none data-[disabled]:opacity-[var(--disabled-opacity)]"
             onSelect={onAddToPlaylist}
             disabled={!features.canCreatePlaylists}
           >
@@ -113,7 +113,7 @@ export function TrackMenu({
           {/* Show in File Explorer */}
           {track.file_path && (
             <DropdownMenu.Item
-              className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+              className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
               onSelect={handleShowInExplorer}
               disabled={!isDesktop}
             >
@@ -127,7 +127,7 @@ export function TrackMenu({
             <>
               <DropdownMenu.Separator className="h-px bg-border my-1" />
               <DropdownMenu.Item
-                className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-red-600"
+                className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-4 py-2 text-sm outline-none transition-colors hover:bg-foreground/[var(--hover-bg-opacity)] focus:bg-foreground/[var(--hover-bg-opacity)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-red-600"
                 onSelect={handleDelete}
                 disabled={!features.canDeleteTracks}
               >

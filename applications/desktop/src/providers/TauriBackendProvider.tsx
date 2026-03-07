@@ -19,7 +19,6 @@ import {
   type SetArtworkParams,
   type EffectSlot,
   type EffectType,
-  type HeadroomSettings,
   type LatencyInfo,
   type ExclusiveConfig,
   type AnalysisQueueStats,
@@ -232,19 +231,6 @@ export function TauriBackendProvider({ children }: TauriBackendProviderProps) {
 
     async updateEffectParameters(slotIndex: number, effect: EffectType) {
       await invoke('update_effect_parameters', { slotIndex, effect })
-    },
-
-    // Audio Settings - Headroom Management
-    async getHeadroomSettings() {
-      return invoke<HeadroomSettings>('get_headroom_settings')
-    },
-
-    async setHeadroomMode(mode: string, manualDb?: number) {
-      await invoke('set_headroom_mode', { mode, manualDb })
-    },
-
-    async setHeadroomEnabled(enabled: boolean) {
-      await invoke('set_headroom_enabled', { enabled })
     },
 
     // Audio Settings - Latency & Exclusive Mode

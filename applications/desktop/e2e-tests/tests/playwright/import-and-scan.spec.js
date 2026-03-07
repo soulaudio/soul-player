@@ -303,3 +303,79 @@ test('rescan-all button in settings triggers scan-progress-indicator', async () 
     })
     .catch(() => {});
 });
+
+// ================================================================
+// Test 5: Force-rescan completes and processes all files
+//
+// TDD target: after triggering a force-rescan on the watched folder,
+// get_latest_scan must return a completed scan with processedFiles
+// matching totalFiles (all files were actually processed).
+//
+// This catches the "stuck at 0/x" bug where progress is never
+// flushed to the DB or the scan hangs without completing.
+// ================================================================
+
+test('force-rescan processes all files and completes', async () => {
+  test.setTimeout(45_000);
+
+  // Get the source ID for the seeded watched folder.
+  const sources = await page.evaluate(async () =>
+    window.__TAURI_INTERNALS__.invoke('get_library_sources'),
+  );
+  expect(sources.length).toBeGreaterThan(0);
+  const sourceId = sources[0].id;
+
+  // Force-refresh rescan so all files are re-processed (not skipped as unchanged).
+  await page.evaluate(async (sid) => {
+    await window.__TAURI_INTERNALS__.invoke('rescan_library_source', {
+      sourceId: sid,
+      forceRefresh: true,
+    });
+  }, sourceId);
+
+  // After rescan completes, check the latest scan record.
+  const latestScan = await page.evaluate(async (sid) =>
+    window.__TAURI_INTERNALS__.invoke('get_latest_scan', { sourceId: sid }),
+  sourceId);
+
+  expect(latestScan).not.toBeNull();
+  expect(latestScan.status).toBe('completed');
+  expect(latestScan.totalFiles).toBeGreaterThanOrEqual(3);
+  // All files must have been processed (not stuck at 0).
+  expect(latestScan.processedFiles).toBe(latestScan.totalFiles);
+});
+
+// ================================================================
+// Test 6: Second rescan skips unchanged files (mtime optimization)
+//
+// After a force-rescan, a normal rescan should skip all files because
+// mtime+size haven't changed. This verifies the fast path works.
+// ================================================================
+
+test('second rescan skips unchanged files via mtime check', async () => {
+  test.setTimeout(45_000);
+
+  const sources = await page.evaluate(async () =>
+    window.__TAURI_INTERNALS__.invoke('get_library_sources'),
+  );
+  expect(sources.length).toBeGreaterThan(0);
+  const sourceId = sources[0].id;
+
+  // Normal rescan (no force-refresh) — files should be unchanged from test 5.
+  await page.evaluate(async (sid) => {
+    await window.__TAURI_INTERNALS__.invoke('rescan_library_source', {
+      sourceId: sid,
+    });
+  }, sourceId);
+
+  const latestScan = await page.evaluate(async (sid) =>
+    window.__TAURI_INTERNALS__.invoke('get_latest_scan', { sourceId: sid }),
+  sourceId);
+
+  expect(latestScan).not.toBeNull();
+  expect(latestScan.status).toBe('completed');
+  // All files skipped as unchanged — processedFiles = totalFiles (skipped counted as processed).
+  expect(latestScan.processedFiles).toBe(latestScan.totalFiles);
+  // No new files — they were all already imported in test 5.
+  expect(latestScan.newFiles).toBe(0);
+});

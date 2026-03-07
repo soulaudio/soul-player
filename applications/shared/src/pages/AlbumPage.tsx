@@ -13,6 +13,7 @@ import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { Dialog } from '../components/ui/Dialog'
 import { ArtistLink } from '../components/ArtistLink'
 import { SkeletonDetailPage } from '../components/SkeletonDetailPage'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
@@ -38,6 +39,7 @@ export function AlbumPage() {
 
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
   const [artworkVersion, setArtworkVersion] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   // Add to playlist dialog state
   const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<{
@@ -206,7 +208,13 @@ export function AlbumPage() {
 
         <div className="flex items-start gap-6">
           {/* Album Cover */}
-          <div className="group relative w-48 h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center">
+          <div
+            className="group relative w-48 h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center cursor-pointer"
+            onClick={() => setLightboxOpen(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && setLightboxOpen(true)}
+          >
             {hasDesktopArtwork ? (
               <ArtworkImage
                 key={artworkVersion}
@@ -224,15 +232,8 @@ export function AlbumPage() {
             ) : (
               <Disc3 className="w-16 h-16 text-muted-foreground" />
             )}
-            {/* Edit button overlay */}
-            {isDesktop && (
-              <button
-                onClick={() => setEditArtworkOpen(true)}
-                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Pencil className="w-8 h-8 text-white" />
-              </button>
-            )}
+            {/* Hover overlay hint */}
+            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
 
           {/* Album Info */}
@@ -253,7 +254,7 @@ export function AlbumPage() {
             </p>
             <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4" data-testid="album-track-count">
               <Clock className="w-4 h-4" />
-              {tracks.length} {t('library.tracks')} • {formatDuration(totalDuration)}
+              {t('library.tracks', { count: tracks.length })} • {formatDuration(totalDuration)}
             </p>
 
             <div className="flex items-center gap-3">
@@ -328,6 +329,43 @@ export function AlbumPage() {
           }}
         />
       </div>
+
+      {/* Artwork Lightbox */}
+      <Dialog open={lightboxOpen} onClose={() => setLightboxOpen(false)}>
+        <div onClick={(e) => e.stopPropagation()} className="flex flex-col items-start gap-3">
+          <div className="rounded-xl overflow-hidden shadow-2xl bg-muted" style={{ width: '85vh', maxWidth: '85vw', maxHeight: '85vh' }}>
+            {hasDesktopArtwork ? (
+              <ArtworkImage
+                key={artworkVersion}
+                albumId={album.id}
+                alt={album.title}
+                className="w-full h-full object-contain"
+                fallbackClassName="w-96 h-96 flex items-center justify-center"
+                priority
+              />
+            ) : coverUrl ? (
+              <img
+                src={coverUrl}
+                alt={album.title}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="w-96 h-96 flex items-center justify-center">
+                <Disc3 className="w-24 h-24 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+          {isDesktop && (
+            <button
+              onClick={() => { setLightboxOpen(false); setEditArtworkOpen(true) }}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Pencil className="w-4 h-4" />
+              <span>{t('artwork.editArtwork', 'Edit Artwork')}</span>
+            </button>
+          )}
+        </div>
+      </Dialog>
 
       {/* Edit Artwork Dialog */}
       <EditArtworkDialog

@@ -83,7 +83,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
           {/* Window controls - auto-hide on scroll (if setting enabled), positioned over drag region */}
           <div
             className={`absolute top-0 right-0 z-50 flex items-center transition-all duration-300 pointer-events-none ${
-              hideWindowControls ? (showHeader ? 'translate-y-0' : '-translate-y-full') : 'translate-y-0'
+              showHeader ? 'translate-y-0 opacity-100' : hideWindowControls ? '-translate-y-full' : 'opacity-30'
             }`}
           >
             {/* Small drag region next to buttons (visible state) */}

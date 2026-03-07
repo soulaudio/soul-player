@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef, useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { BackendAlbum } from '../contexts/BackendContext'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
 import { AlbumCard } from '../components/AlbumCard'
@@ -30,6 +31,7 @@ export function HomePage() {
   // Toggle to show/hide debug grid lines
   const SHOW_DEBUG_GRID = false
 
+  const { t } = useTranslation()
   const { setShowHeader } = useScrollVisibility()
   const containerRef = useRef<HTMLDivElement>(null)
   const [gridDimensions, setGridDimensions] = useState({ rows: 0, cols: 0 })
@@ -726,6 +728,26 @@ export function HomePage() {
     )
   }
 
+  // Map section title keys to i18n
+  const sectionTitleMap: Record<string, string> = {
+    'Jump back into': t('home.jumpBackInto'),
+    'Do some crate digging': t('home.crateDigging'),
+    'On repeat': t('home.onRepeat'),
+    'Time capsule': t('home.timeCapsule'),
+    "Don't forget about": t('home.dontForget'),
+    'Recently played': t('home.recentlyPlayed'),
+    'Your top picks': t('home.yourTopPicks'),
+    'Discover new music': t('home.discoverNewMusic'),
+    'Fan favorites': t('home.fanFavorites'),
+    'Hidden gems': t('home.hiddenGems'),
+    'Trending now': t('home.trendingNow'),
+    'For you': t('home.forYou'),
+    'Fresh finds': t('home.freshFinds'),
+    'Popular this week': t('home.popularThisWeek'),
+    'Classic albums': t('home.classicAlbums'),
+  }
+  const sectionTitle = (section: BentoSection) => sectionTitleMap[section.title] || section.title
+
   return (
     <div data-testid="home-page" className="h-full w-full overflow-hidden">
       <style>{`
@@ -819,12 +841,6 @@ export function HomePage() {
         .bento-album-card {
           background: hsl(var(--muted));
           border-radius: 0.375rem;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 11px;
-          color: hsl(var(--muted-foreground));
-          cursor: pointer;
           overflow: hidden;
           width: 100%;
           height: 100%;
@@ -937,7 +953,7 @@ export function HomePage() {
                       gridRow: '1 / 2',
                     }}
                   >
-                    {section.title}
+                    {sectionTitle(section)}
                   </div>
 
                   {/* Albums - each occupies albumSize × albumSize cells */}
@@ -1099,7 +1115,7 @@ export function HomePage() {
                       )
                     }
 
-                    // For other sections, show placeholder
+                    // For other sections, show empty placeholder card
                     return (
                       <div
                         key={i}
@@ -1108,9 +1124,7 @@ export function HomePage() {
                           gridColumn: `${startCol} / ${startCol + section.albumSize}`,
                           gridRow: `${startRow} / ${startRow + section.albumSize}`,
                         }}
-                      >
-                        <span>Album {i + 1}</span>
-                      </div>
+                      />
                     )
                   })}
                 </div>

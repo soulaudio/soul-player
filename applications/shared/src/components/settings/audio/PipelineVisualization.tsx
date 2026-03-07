@@ -1,11 +1,9 @@
 // Pipeline overview with navigation - click stages to scroll to settings
-// Correct audio pipeline order: Source → Decode → Resample → DSP → Leveling → Output
+// Signal processing pipeline: Resample → DSP → Leveling
 
-import { ArrowRight, Activity, Volume2, Speaker, Zap, Settings2 } from 'lucide-react';
+import { ArrowRight, Activity, Volume2, Zap } from 'lucide-react';
 
 interface PipelineVisualizationProps {
-  backend?: string;
-  deviceName?: string | null;
   dspEnabled: boolean;
   dspEffectCount?: number;
   upsamplingEnabled: boolean;
@@ -40,8 +38,6 @@ function PipelineStageSkeleton() {
 }
 
 export function PipelineVisualization({
-  backend = 'Default',
-  deviceName,
   dspEnabled,
   dspEffectCount = 0,
   upsamplingEnabled,
@@ -54,10 +50,10 @@ export function PipelineVisualization({
     return (
       <div className="w-full">
         <div className="flex items-center w-full gap-2">
-          {[1, 2, 3, 4, 5].map((i) => (
+          {[1, 2, 3].map((i) => (
             <div key={i} className="flex items-center flex-1 min-w-0">
               <PipelineStageSkeleton />
-              {i < 5 && (
+              {i < 3 && (
                 <div className="flex-shrink-0 mx-2">
                   <ArrowRight className="w-5 h-5 text-muted-foreground/40" />
                 </div>
@@ -68,7 +64,7 @@ export function PipelineVisualization({
       </div>
     );
   }
-  // Correct pipeline order: Resample → DSP → Leveling → Buffer → Output
+
   const stages: PipelineStageInfo[] = [
     {
       id: 'resample',
@@ -96,22 +92,6 @@ export function PipelineVisualization({
       optional: true,
       navigateTo: 'audio-stage-3',
     },
-    {
-      id: 'buffer',
-      icon: <Settings2 className="w-6 h-6" />,
-      label: 'Buffer',
-      sublabel: 'Performance',
-      active: true,
-      navigateTo: 'audio-stage-4',
-    },
-    {
-      id: 'output',
-      icon: <Speaker className="w-6 h-6" />,
-      label: 'Output',
-      sublabel: deviceName || backend,
-      active: true,
-      navigateTo: 'audio-stage-5',
-    },
   ];
 
   const handleStageClick = (navigateTo?: string) => {
@@ -124,7 +104,7 @@ export function PipelineVisualization({
 
   return (
     <div className="w-full">
-      {/* Pipeline Flow - Full width navigation */}
+      {/* Pipeline Flow */}
       <div className="flex items-center w-full gap-2">
         {stages.map((stage, index) => (
           <div key={stage.id} className="flex items-center flex-1 min-w-0">
@@ -171,7 +151,7 @@ export function PipelineVisualization({
               )}
             </button>
 
-            {/* Arrow between stages - More visible */}
+            {/* Arrow between stages */}
             {index < stages.length - 1 && (
               <div className="flex-shrink-0 mx-2">
                 <ArrowRight

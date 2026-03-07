@@ -323,24 +323,6 @@ export function ServerBackendProvider({ apiBase, authToken, children }: ServerBa
       debug.log('[ServerBackend] DSP chain not supported on server')
     },
 
-    // Audio Settings - Headroom Management (not supported on server)
-    async getHeadroomSettings() {
-      return {
-        enabled: false,
-        mode: { mode: 'auto', manualDb: null },
-        totalGainDb: 0,
-        attenuationDb: 0,
-      }
-    },
-
-    async setHeadroomMode(_mode: string, _manualDb?: number) {
-      debug.log('[ServerBackend] Headroom settings not supported on server')
-    },
-
-    async setHeadroomEnabled(_enabled: boolean) {
-      debug.log('[ServerBackend] Headroom settings not supported on server')
-    },
-
     // Audio Settings - Latency & Exclusive Mode (not supported on server)
     async getLatencyInfo() {
       return {

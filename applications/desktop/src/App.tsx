@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { useBackend, clearArtworkCache, ScanProgressToast, debug } from '@soul-player/shared';
+import { useBackend, clearArtworkCache, useScanCompletionInvalidation, debug } from '@soul-player/shared';
 import { MainLayout } from './layouts/MainLayout';
 // Use shared pages for cross-platform parity
 import {
@@ -71,6 +71,9 @@ function HomeRoute() {
 function App() {
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const backend = useBackend();
+
+  // Cache invalidation on scan/import completion (replaces ScanProgressToast)
+  useScanCompletionInvalidation();
 
   useEffect(() => {
     // Check if onboarding is needed
@@ -192,8 +195,6 @@ function App() {
           <Route path="/settings/*" element={<SettingsRouter />} />
         </Routes>
       </MainLayout>
-      {/* Scan progress toast with automatic cache invalidation */}
-      <ScanProgressToast />
       <Toaster richColors position="bottom-right" />
     </FileDropHandler>
   );

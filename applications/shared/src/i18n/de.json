@@ -20,7 +20,17 @@
     "recentlyAdded": "Kürzlich hinzugefügt",
     "recentlyAddedSubtitle": "Neue Zugänge in Ihrer Bibliothek",
     "discoverArtists": "Künstler entdecken",
-    "emptyAlbum": "Leeres Album"
+    "emptyAlbum": "Leeres Album",
+    "onRepeat": "In Dauerschleife",
+    "yourTopPicks": "Ihre Top-Auswahl",
+    "discoverNewMusic": "Neue Musik entdecken",
+    "fanFavorites": "Lieblinge der Fans",
+    "hiddenGems": "Verborgene Schätze",
+    "trendingNow": "Gerade angesagt",
+    "forYou": "Für Sie",
+    "freshFinds": "Frische Entdeckungen",
+    "popularThisWeek": "Beliebt diese Woche",
+    "classicAlbums": "Klassische Alben"
   },
   "nav": {
     "home": "Startseite",
@@ -77,7 +87,11 @@
   },
   "library": {
     "tracks": "Titel",
+    "tracks_one": "{{count}} Titel",
+    "tracks_other": "{{count}} Titel",
     "albums": "Alben",
+    "albums_one": "{{count}} Album",
+    "albums_other": "{{count}} Alben",
     "album": "Album",
     "artist": "Künstler",
     "artists": "Künstler",
@@ -111,10 +125,17 @@
       "playlists": "Playlists suchen...",
       "artists": "Künstler suchen...",
       "tracks": "Titel suchen...",
-      "albumsWithCount": "{{count}} Alben suchen...",
-      "playlistsWithCount": "{{count}} Playlists suchen...",
-      "artistsWithCount": "{{count}} Künstler suchen...",
-      "tracksWithCount": "{{count}} Titel suchen..."
+      "albumsWithCount_one": "{{count}} Album suchen...",
+      "albumsWithCount_other": "{{count}} Alben suchen...",
+      "playlistsWithCount_one": "{{count}} Playlist suchen...",
+      "playlistsWithCount_other": "{{count}} Playlists suchen...",
+      "artistsWithCount_one": "{{count}} Künstler suchen...",
+      "artistsWithCount_other": "{{count}} Künstler suchen...",
+      "tracksWithCount_one": "{{count}} Titel suchen...",
+      "tracksWithCount_other": "{{count}} Titel suchen...",
+      "genres": "Genres suchen...",
+      "genresWithCount_one": "{{count}} Genre suchen...",
+      "genresWithCount_other": "{{count}} Genres suchen..."
     },
     "scanning": "Bibliothek wird durchsucht",
     "scanningLibrary": "Ihre Musikdateien werden durchsucht",
@@ -202,6 +223,10 @@
       "deviceSwitched": "Audiogerät gewechselt: {{name}}",
       "deviceSwitchFailed": "Audiogerät konnte nicht gewechselt werden: {{error}}",
       "crossfadeApplyFailed": "Crossfade-Einstellungen konnten nicht übernommen werden",
+      "crossfade": {
+        "title": "Crossfade",
+        "description": "Überblendung zwischen Tracks statt lückenloser Wiedergabe"
+      },
       "resamplingQualityFailed": "Resampling-Qualität konnte nicht übernommen werden",
       "resamplingTargetRateFailed": "Resampling-Zielrate konnte nicht übernommen werden",
       "resamplingBackendFailed": "Resampling-Backend konnte nicht übernommen werden",
@@ -235,10 +260,6 @@
         "asioJack": {
           "title": "ASIO & JACK-Unterstützung",
           "description": "Audioausgabe mit niedriger Latenz unter Windows und Linux"
-        },
-        "headroom": {
-          "title": "Headroom-Verwaltung",
-          "description": "Automatische Clipping-Prävention während der DSP-Verarbeitung"
         }
       },
       "stages": {
@@ -255,11 +276,6 @@
         "volumeLeveling": {
           "title": "Lautstärkeausgleich",
           "description": "Automatische Lautheitsanpassung mit ReplayGain oder EBU R128"
-        },
-        "headroom": {
-          "title": "Headroom-Verwaltung",
-          "description": "Verhindert Clipping durch Pegelabsenkung vor der DSP-Verarbeitung",
-          "active": "Aktiv"
         },
         "buffer": {
           "title": "Puffer & Leistung",
@@ -473,7 +489,9 @@
     "syncDeletes": "Titel entfernen, wenn Dateien gelöscht werden",
     "lastScanned": "Zuletzt durchsucht",
     "rescan": "Erneut durchsuchen",
+    "rescanDescription": "Diesen Ordner nach neuen und geänderten Dateien durchsuchen.",
     "rescanAll": "Alle erneut durchsuchen",
+    "rescanAllDescription": "Alle überwachten Ordner nach neuen und geänderten Dateien durchsuchen.",
     "forceRefresh": "Erneut importieren",
     "forceRefreshDescription": "Metadaten für alle Dateien neu extrahieren, auch unveränderte. Verwenden Sie dies, um fehlende Künstler-/Albuminformationen zu beheben.",
     "managedLibrary": "Verwaltete Bibliothek",
@@ -664,7 +682,9 @@
     "notFound": "Genre nicht gefunden",
     "backToGenres": "Zurück zu Genres",
     "noGenres": "Keine Genres gefunden",
-    "noGenresHint": "Genre-Informationen werden aus Ihren Musikdateien extrahiert"
+    "noGenresHint": "Genre-Informationen werden aus Ihren Musikdateien extrahiert",
+    "trackCount_one": "{{count}} Titel",
+    "trackCount_other": "{{count}} Titel"
   },
   "upload": {
     "title": "Auf Server hochladen",

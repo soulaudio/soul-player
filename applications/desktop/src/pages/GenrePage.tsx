@@ -198,7 +198,7 @@ export function GenrePage() {
                 <h1 data-testid="genre-title" className="text-4xl font-bold mb-2">{genre.name}</h1>
                 <p data-testid="genre-track-count" className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
                   <Clock className="w-4 h-4" />
-                  {genre.track_count} {t('library.tracks', 'tracks')} • {formatDuration(totalDuration)}
+                  {t('library.tracks', { count: genre.track_count })} • {formatDuration(totalDuration)}
                 </p>
 
                 <button

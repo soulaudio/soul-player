@@ -1,5 +1,6 @@
 // Audio Settings Page with Pipeline-based Layout
-// Each stage shows description, current config, settings, and arrow to next stage
+// Simplified pipeline: Resample → DSP → Leveling
+// Separate sections for Crossfade and Output below the pipeline
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -20,7 +21,6 @@ import { DeviceSelector } from '../sidebar/DeviceSelector';
 import { DspConfig } from './audio/DspConfig';
 import { UpsamplingSettings } from './audio/UpsamplingSettings';
 import { VolumeLevelingSettings } from './audio/VolumeLevelingSettings';
-import { HeadroomSettings } from './audio/HeadroomSettings';
 import { BufferSettings } from './audio/BufferSettings';
 import { debug } from '../../utils/debug';
 
@@ -97,14 +97,6 @@ function AudioSettingsDemoView() {
             <FeatureCard
               title={t('settings.audio.features.gaplessPlayback.title')}
               description={t('settings.audio.features.gaplessPlayback.description')}
-            />
-            <FeatureCard
-              title={t('settings.audio.features.asioJack.title')}
-              description={t('settings.audio.features.asioJack.description')}
-            />
-            <FeatureCard
-              title={t('settings.audio.features.headroom.title')}
-              description={t('settings.audio.features.headroom.description')}
             />
           </div>
         </div>
@@ -266,7 +258,6 @@ function AudioSettingsDesktop() {
   };
 
   const handleDspChainChange = () => {
-    // Reload DSP chain count
     loadDspChainCount();
   };
 
@@ -307,18 +298,11 @@ function AudioSettingsDesktop() {
       await backend.setVolumeLevelingMode('disabled');
       await backend.setVolumeLevelingPreamp(0);
       await backend.setVolumeLevelingPreventClipping(true);
-      // Reset crossfade settings to defaults
       await backend.setCrossfadeSettings(false, 3000, 'equal_power');
     } catch (error) {
       debug.error('Failed to reset audio settings:', error);
     }
     setShowResetDialog(false);
-  };
-
-  // Get backend display name
-  const getBackendName = () => {
-    const backend = backends.find(b => b.backend === settings.backend);
-    return backend?.name || settings.backend;
   };
 
   // Get volume leveling mode display
@@ -357,19 +341,16 @@ function AudioSettingsDesktop() {
     durationMs: number;
     curve: 'linear' | 'logarithmic' | 's_curve' | 'equal_power';
   }) => {
-    // Update local state and persist to JSON settings
     updateSettings({
       crossfade_enabled: crossfade.enabled,
       crossfade_duration_ms: crossfade.durationMs,
       crossfade_curve: crossfade.curve,
     });
 
-    // Apply settings to audio engine immediately (no restart required)
     try {
-      // Map frontend curve names to backend curve names
       const curveMapping: Record<string, string> = {
         'linear': 'linear',
-        'logarithmic': 'square_root', // Backend uses square_root for this
+        'logarithmic': 'square_root',
         's_curve': 's_curve',
         'equal_power': 'equal_power',
       };
@@ -387,10 +368,8 @@ function AudioSettingsDesktop() {
 
   // Handle resampling quality change
   const handleResamplingQualityChange = async (quality: 'fast' | 'balanced' | 'high' | 'maximum') => {
-    // Update local state and persist to JSON
     updateSettings({ resampling_quality: quality });
 
-    // Apply to audio engine (takes effect on next track)
     try {
       await backend.setResamplingQuality(quality);
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
@@ -402,12 +381,9 @@ function AudioSettingsDesktop() {
 
   // Handle resampling target rate change
   const handleResamplingTargetRateChange = async (rate: 'auto' | number) => {
-    // Update local state and persist to JSON
     updateSettings({ resampling_target_rate: rate });
 
-    // Apply to audio engine (takes effect on next track)
     try {
-      // Convert 'auto' to 0 for backend
       const targetRate = rate === 'auto' ? 0 : rate;
       await backend.setResamplingTargetRate(targetRate);
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
@@ -419,10 +395,8 @@ function AudioSettingsDesktop() {
 
   // Handle resampling backend change
   const handleResamplingBackendChange = async (resamplingBackend: 'auto' | 'rubato' | 'r8brain') => {
-    // Update local state and persist to JSON
     updateSettings({ resampling_backend: resamplingBackend });
 
-    // Apply to audio engine (takes effect on next track)
     try {
       await backend.setResamplingBackend(resamplingBackend);
       showNotification('success', t('settings.audio.resampling.applyOnNextTrack', 'Resampling settings will apply on next track'));
@@ -455,21 +429,6 @@ function AudioSettingsDesktop() {
         </div>
       )}
 
-      {/* Warning Banner */}
-      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-1">
-              {t('settings.audio.warning.title')}
-            </h3>
-            <p className="text-sm text-amber-800 dark:text-amber-300">
-              {t('settings.audio.warning.description')}
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -501,11 +460,9 @@ function AudioSettingsDesktop() {
         variant="destructive"
       />
 
-      {/* Pipeline Overview */}
+      {/* Pipeline Overview — Signal processing stages only */}
       <div data-testid="audio-pipeline-overview">
       <PipelineVisualization
-        backend={getBackendName()}
-        deviceName={settings.device_name}
         dspEnabled={settings.dsp_enabled}
         dspEffectCount={dspEffectCount}
         upsamplingEnabled={true}
@@ -516,7 +473,7 @@ function AudioSettingsDesktop() {
       />
       </div>
 
-      {/* Pipeline Stages - Order matches overview: Resample → DSP → Leveling → Buffer → Output */}
+      {/* Pipeline Stages — Signal processing: Resample → DSP → Leveling */}
       <div>
         {/* Stage 1: Resampling */}
         <PipelineStage
@@ -561,6 +518,7 @@ function AudioSettingsDesktop() {
           description={t('settings.audio.stages.volumeLeveling.description')}
           isActive={settings.volume_leveling_mode !== 'disabled'}
           isOptional={true}
+          isLast={true}
           currentConfig={getVolumeLevelingDisplay()}
           statusText={settings.volume_leveling_mode !== 'disabled' ? t('common.enabled') : t('common.disabled')}
         >
@@ -569,86 +527,60 @@ function AudioSettingsDesktop() {
             preampDb={settings.volume_leveling_preamp_db}
             preventClipping={settings.volume_leveling_prevent_clipping}
             onModeChange={async (mode) => {
-              // First apply to audio engine immediately
               try {
                 await backend.setVolumeLevelingMode(mode);
               } catch (error) {
                 debug.error('Failed to set volume leveling mode:', error);
               }
-              // Then persist to settings
               updateSettings({ volume_leveling_mode: mode });
             }}
             onPreampChange={handlePreampChange}
             onPreventClippingChange={handlePreventClippingChange}
           />
         </PipelineStage>
+      </div>
 
-        {/* Stage 4: Headroom Management */}
-        <PipelineStage
-          id="audio-stage-4"
-          data-testid="audio-stage-headroom"
-          title={t('settings.audio.stages.headroom.title')}
-          description={t('settings.audio.stages.headroom.description')}
-          isActive={true}
-          isOptional={true}
-          currentConfig={t('settings.audio.auto')}
-          statusText={t('settings.audio.stages.headroom.active')}
-        >
-          <HeadroomSettings />
-        </PipelineStage>
+      {/* Crossfade — standalone section below pipeline */}
+      <div data-testid="audio-crossfade-section" className="pt-2">
+        <h2 className="text-lg font-semibold mb-1">{t('settings.audio.crossfade.title', 'Crossfade')}</h2>
+        <p className="text-sm text-muted-foreground mb-5">{t('settings.audio.crossfade.description', 'Blend track transitions instead of gapless playback')}</p>
+        <BufferSettings
+          bufferSize={settings.buffer_size}
+          preloadEnabled={settings.preload_enabled}
+          crossfade={{
+            enabled: settings.crossfade_enabled,
+            durationMs: settings.crossfade_duration_ms,
+            curve: settings.crossfade_curve,
+          }}
+          onBufferSizeChange={(size) => updateSettings({ buffer_size: size })}
+          onPreloadChange={(enabled) => updateSettings({ preload_enabled: enabled })}
+          onCrossfadeChange={handleCrossfadeChange}
+          showBufferControls={false}
+        />
+      </div>
 
-        {/* Stage 5: Buffer Settings */}
-        <PipelineStage
-          id="audio-stage-5"
-          data-testid="audio-stage-buffer"
-          title={t('settings.audio.stages.buffer.title')}
-          description={t('settings.audio.stages.buffer.description')}
-          isActive={true}
-          currentConfig={settings.buffer_size === 'auto' ? t('settings.audio.auto') : t('settings.audio.stages.buffer.samples', { count: settings.buffer_size })}
-          statusText={settings.preload_enabled ? t('settings.audio.stages.buffer.preloadOn') : t('settings.audio.stages.buffer.streaming')}
-        >
-          <BufferSettings
-            bufferSize={settings.buffer_size}
-            preloadEnabled={settings.preload_enabled}
-            crossfade={{
-              enabled: settings.crossfade_enabled,
-              durationMs: settings.crossfade_duration_ms,
-              curve: settings.crossfade_curve,
-            }}
-            onBufferSizeChange={(size) => updateSettings({ buffer_size: size })}
-            onPreloadChange={(enabled) => updateSettings({ preload_enabled: enabled })}
-            onCrossfadeChange={handleCrossfadeChange}
+      {/* Audio Output — standalone section below pipeline */}
+      <div data-testid="audio-stage-output" className="pt-2">
+        <h2 className="text-lg font-semibold mb-1">{t('settings.audio.stages.output.title')}</h2>
+        <p className="text-sm text-muted-foreground mb-5">{t('settings.audio.stages.output.description')}</p>
+        <div className="space-y-6">
+          <BackendSelector
+            backends={backends}
+            currentBackend={settings.backend}
+            onBackendChange={handleBackendChange}
+            loading={loading}
           />
-        </PipelineStage>
-
-        {/* Stage 6: Audio Output (Backend & Device) */}
-        <PipelineStage
-          id="audio-stage-6"
-          data-testid="audio-stage-output"
-          title={t('settings.audio.stages.output.title')}
-          description={t('settings.audio.stages.output.description')}
-          isActive={true}
-          isLast={true}
-        >
-          <div className="space-y-6">
-            <BackendSelector
-              backends={backends}
-              currentBackend={settings.backend}
-              onBackendChange={handleBackendChange}
-              loading={loading}
-            />
-            <DeviceSelector
-              currentDevice={activeDevice}
-              backends={backends}
-              devices={devices}
-              isLoadingDevices={isLoadingDevices}
-              hasRealDevices={true}
-              onLoadDevices={() => {}}
-              onSwitchDevice={handleSwitchDevice}
-              variant="list"
-            />
-          </div>
-        </PipelineStage>
+          <DeviceSelector
+            currentDevice={activeDevice}
+            backends={backends}
+            devices={devices}
+            isLoadingDevices={isLoadingDevices}
+            hasRealDevices={true}
+            onLoadDevices={() => {}}
+            onSwitchDevice={handleSwitchDevice}
+            variant="list"
+          />
+        </div>
       </div>
     </div>
   );

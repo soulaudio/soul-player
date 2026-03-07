@@ -11,13 +11,13 @@ export function ViewToggle({ view, onViewChange, className = '' }: ViewTogglePro
   const { t } = useTranslation()
 
   return (
-    <div className={`flex gap-1 rounded-lg bg-neutral-800 p-1 ${className}`}>
+    <div className={`flex gap-1 rounded-lg bg-muted p-1 ${className}`}>
       <button
         onClick={() => onViewChange('grid')}
         className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
           view === 'grid'
-            ? 'bg-neutral-700 text-white'
-            : 'text-neutral-400 hover:text-white hover:bg-foreground/[var(--hover-bg-opacity)]'
+            ? 'bg-accent text-foreground'
+            : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[var(--hover-bg-opacity)]'
         }`}
         aria-label={t('artist.viewGrid')}
         aria-pressed={view === 'grid'}
@@ -29,8 +29,8 @@ export function ViewToggle({ view, onViewChange, className = '' }: ViewTogglePro
         onClick={() => onViewChange('list')}
         className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
           view === 'list'
-            ? 'bg-neutral-700 text-white'
-            : 'text-neutral-400 hover:text-white hover:bg-foreground/[var(--hover-bg-opacity)]'
+            ? 'bg-accent text-foreground'
+            : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[var(--hover-bg-opacity)]'
         }`}
         aria-label={t('artist.viewList')}
         aria-pressed={view === 'list'}

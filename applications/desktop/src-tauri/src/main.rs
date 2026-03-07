@@ -3144,12 +3144,6 @@ fn main() {
             audio_settings::get_resampling_backend,
             audio_settings::set_resampling_settings,
             audio_settings::get_resampling_settings,
-            // Headroom management
-            audio_settings::get_headroom_settings,
-            audio_settings::set_headroom_mode,
-            audio_settings::set_headroom_enabled,
-            audio_settings::set_headroom_eq_boost,
-            audio_settings::set_headroom_preamp,
             // Device monitoring metrics
             audio_settings::get_device_metrics,
             // DSP effects chain

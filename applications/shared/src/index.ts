@@ -60,7 +60,6 @@ export type {
   StereoSettings,
   GraphicEqSettings,
   ConvolutionSettings,
-  HeadroomSettings,
   LatencyInfo,
   ExclusiveConfig,
   AnalysisQueueStats,
@@ -116,9 +115,6 @@ export { TrackInfo } from './components/player/TrackInfo';
 export { ProgressBar } from './components/player/ProgressBar';
 // export { VolumeControl } from './components/player/VolumeControl'; // DELETED - dead code
 export { ShuffleRepeatControls } from './components/player/ShuffleRepeatControls';
-export { DeviceSelector } from './components/sidebar/DeviceSelector';
-export type { AudioDevice, AudioBackend, DeviceSelectorProps } from './components/sidebar/DeviceSelector';
-
 // Other components
 export { QueueSidebar } from './components/QueueSidebar';
 export { TrackList } from './components/TrackList';
@@ -195,6 +191,7 @@ export { useInfiniteLibrary } from './hooks/useInfiniteLibrary';
 export { useNavigateWithHistory } from './hooks/useNavigateWithHistory';
 export { useAudioDevice } from './hooks/useAudioDevice';
 export type { UseAudioDeviceResult } from './hooks/useAudioDevice';
+export { useScanCompletionInvalidation } from './hooks/useScanCompletionInvalidation';
 
 // TanStack Query exports
 export { QueryClient, QueryClientProvider } from '@tanstack/react-query';

@@ -171,16 +171,6 @@ export interface ConvolutionSettings {
   decay: number
 }
 
-export interface HeadroomSettings {
-  enabled: boolean
-  mode: {
-    mode: string // 'auto' | 'manual' | 'disabled'
-    manualDb: number | null
-  }
-  totalGainDb: number
-  attenuationDb: number
-}
-
 export interface LatencyInfo {
   bufferSamples: number
   bufferMs: number
@@ -309,11 +299,6 @@ export interface BackendInterface {
   toggleEffect: (slotIndex: number, enabled: boolean) => Promise<void>
   clearDspChain: () => Promise<void>
   updateEffectParameters: (slotIndex: number, effect: EffectType) => Promise<void>
-
-  // Audio Settings - Headroom Management
-  getHeadroomSettings: () => Promise<HeadroomSettings>
-  setHeadroomMode: (mode: string, manualDb?: number) => Promise<void>
-  setHeadroomEnabled: (enabled: boolean) => Promise<void>
 
   // Audio Settings - Latency & Exclusive Mode
   getLatencyInfo: () => Promise<LatencyInfo>
