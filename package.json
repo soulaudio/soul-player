@@ -37,7 +37,7 @@
     "test:e2e:ci": "cd applications/desktop/e2e-tests && yarn test:ci",
     "type-check": "yarn workspaces foreach run type-check"
   },
-  "version": "0.1.13",
+  "version": "0.1.14",
   "workspaces": [
     "applications/shared",
     "applications/desktop",

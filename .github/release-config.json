@@ -109,5 +109,5 @@
   "downloadBaseUrl": "https://github.com/{repository}/releases/download/{tag}/{filename}",
   "latestReleaseUrl": "https://api.github.com/repos/{repository}/releases/latest",
   "repository": "soulaudio/soul-player",
-  "version": "0.1.13"
+  "version": "0.1.14"
 }
