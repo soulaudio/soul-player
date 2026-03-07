@@ -71,7 +71,7 @@ test.afterEach(async () => {
   // NOTE: Tauri snake_case params — use no_update / delay_ms, NOT camelCase
   await page.evaluate(async () => {
     await window.__TAURI_INTERNALS__.invoke('set_test_update_response', { response: null, no_update: false });
-    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 0 });
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 0, shouldFail: false });
   });
 });
 

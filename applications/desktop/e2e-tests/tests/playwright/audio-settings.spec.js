@@ -7,9 +7,7 @@
  *   3. Volume leveling mode defaults to "Disabled"
  *   4. Volume leveling mode can be changed and the change is reflected in the UI
  *   5. Preamp slider is visible when a leveling mode is active
- *   6. Audio device section is visible and shows at least one device
- *   7. Audio backend section is visible and shows the default backend
- *   8. Reset to defaults button opens a confirmation dialog
+ *   6. Reset to defaults button opens a confirmation dialog
  *
  * Navigation pattern
  * ──────────────────
@@ -83,9 +81,6 @@ test('audio settings page loads with pipeline stages and output section', async 
   await expect(page.locator('[data-testid="audio-stage-resampling"]')).toBeVisible();
   await expect(page.locator('[data-testid="audio-stage-dsp"]')).toBeVisible();
   await expect(page.locator('[data-testid="audio-stage-volume-leveling"]')).toBeVisible();
-
-  // Standalone output section (not a pipeline stage)
-  await expect(page.locator('[data-testid="audio-stage-output"]')).toBeVisible();
 
   await page.screenshot({ path: 'screenshots/audio-settings-page.png' });
 });
@@ -168,40 +163,6 @@ test('preamp slider is only shown when a leveling mode is active', async () => {
 
   // Cleanup
   await page.locator('[data-testid="volume-leveling-mode-disabled"]').click();
-});
-
-test('audio device section shows at least one output device', async () => {
-  await page.locator('[data-testid="audio-stage-output"]').scrollIntoViewIfNeeded();
-
-  // The device section container must be visible
-  const deviceSection = page.locator('[data-testid="audio-device-section"]');
-  await expect(deviceSection).toBeVisible();
-
-  // The device list must have at least one device button.
-  // On any Windows machine there is always a "System Default" device.
-  const deviceList = page.locator('[data-testid="audio-device-list"]');
-  await expect(deviceList).toBeVisible();
-
-  const deviceButtons = deviceList.locator('button');
-  const count = await deviceButtons.count();
-  expect(count).toBeGreaterThanOrEqual(1);
-
-  await page.screenshot({ path: 'screenshots/audio-device-list.png' });
-});
-
-test('audio backend section is visible and shows the default backend', async () => {
-  await page.locator('[data-testid="audio-stage-output"]').scrollIntoViewIfNeeded();
-
-  // The backend section container must be visible
-  const backendSection = page.locator('[data-testid="audio-backend-section"]');
-  await expect(backendSection).toBeVisible();
-
-  // The Default backend button must be present.
-  // On Windows this is always available as the built-in WASAPI backend.
-  const defaultBackendBtn = page.locator('[data-testid="audio-backend-default"]');
-  await expect(defaultBackendBtn).toBeVisible();
-
-  await page.screenshot({ path: 'screenshots/audio-backend-section.png' });
 });
 
 test('reset-to-defaults button opens a confirmation dialog', async () => {

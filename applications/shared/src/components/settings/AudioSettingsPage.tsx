@@ -1,6 +1,7 @@
 // Audio Settings Page with Pipeline-based Layout
 // Simplified pipeline: Resample → DSP → Leveling
-// Separate sections for Crossfade and Output below the pipeline
+// Crossfade section below the pipeline
+// Audio output always uses the OS-selected default device (no manual picker)
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -12,12 +13,9 @@ import {
 } from 'lucide-react';
 import { usePlatform } from '../../contexts/PlatformContext';
 import { useBackend } from '../../contexts/BackendContext';
-import { useAudioDevice } from '../../hooks/useAudioDevice';
 import { ConfirmDialog } from '../ui/Dialog';
 import { PipelineVisualization } from './audio/PipelineVisualization';
 import { PipelineStage } from './audio/PipelineStage';
-import { BackendSelector } from './audio/BackendSelector';
-import { DeviceSelector } from '../sidebar/DeviceSelector';
 import { DspConfig } from './audio/DspConfig';
 import { UpsamplingSettings } from './audio/UpsamplingSettings';
 import { VolumeLevelingSettings } from './audio/VolumeLevelingSettings';
@@ -119,15 +117,6 @@ function AudioSettingsDesktop() {
   const { t } = useTranslation();
   const backend = useBackend();
 
-  const {
-    backends,
-    devices,
-    currentDevice: activeDevice,
-    isLoading: isLoadingDevices,
-    switchDevice: switchAudioDevice,
-    loadBackend,
-  } = useAudioDevice(true)
-
   const [settings, setSettings] = useState<AudioSettings>({
     backend: 'default',
     device_name: null,
@@ -154,16 +143,6 @@ function AudioSettingsDesktop() {
   useEffect(() => {
     loadAudioSettings();
   }, []);
-
-  // Sync the backend picker display with the actually playing device on first load
-  useEffect(() => {
-    if (activeDevice?.backend && !loading) {
-      setSettings(prev => ({
-        ...prev,
-        backend: activeDevice.backend as 'default' | 'asio' | 'jack',
-      }))
-    }
-  }, [activeDevice?.backend, loading])
 
   // Auto-hide notification after 3 seconds
   useEffect(() => {
@@ -238,22 +217,6 @@ function AudioSettingsDesktop() {
       await backend.setUserSetting('audio.pipeline', JSON.stringify(newSettings));
     } catch (error) {
       debug.error('Failed to save audio settings:', error);
-    }
-  };
-
-  const handleBackendChange = async (selectedBackend: 'default' | 'asio' | 'jack') => {
-    updateSettings({ backend: selectedBackend })
-    await loadBackend(selectedBackend)
-  };
-
-  const handleSwitchDevice = async (backendStr: string, deviceName: string) => {
-    updateSettings({ backend: backendStr as 'default' | 'asio' | 'jack', device_name: deviceName })
-    try {
-      await switchAudioDevice(backendStr, deviceName)
-      showNotification('success', t('settings.audio.deviceSwitched', { name: deviceName }))
-    } catch (error) {
-      debug.error('Failed to set audio device:', error)
-      showNotification('error', t('settings.audio.deviceSwitchFailed', { error: String(error) }))
     }
   };
 
@@ -559,29 +522,6 @@ function AudioSettingsDesktop() {
         />
       </div>
 
-      {/* Audio Output — standalone section below pipeline */}
-      <div data-testid="audio-stage-output" className="pt-2">
-        <h2 className="text-lg font-semibold mb-1">{t('settings.audio.stages.output.title')}</h2>
-        <p className="text-sm text-muted-foreground mb-5">{t('settings.audio.stages.output.description')}</p>
-        <div className="space-y-6">
-          <BackendSelector
-            backends={backends}
-            currentBackend={settings.backend}
-            onBackendChange={handleBackendChange}
-            loading={loading}
-          />
-          <DeviceSelector
-            currentDevice={activeDevice}
-            backends={backends}
-            devices={devices}
-            isLoadingDevices={isLoadingDevices}
-            hasRealDevices={true}
-            onLoadDevices={() => {}}
-            onSwitchDevice={handleSwitchDevice}
-            variant="list"
-          />
-        </div>
-      </div>
     </div>
   );
 }

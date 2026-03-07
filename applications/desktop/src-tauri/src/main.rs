@@ -3057,17 +3057,17 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Save window state on close (spawn async task to avoid blocking)
+                // Save window state on close, then exit the process.
+                // Without explicit exit, background tasks (updater, device monitor,
+                // event emission thread) keep the tokio runtime alive indefinitely.
                 let app = window.app_handle().clone();
-                let save_handle = tauri::async_runtime::spawn(async move {
-                    let _ = window_state_manager::save_window_state(&app).await;
-                });
-
-                // Log errors from window state save
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = save_handle.await {
-                        tracing::error!("[WindowEvent] Window state save task panicked: {:?}", e);
+                    // Best-effort save — don't let failures block exit
+                    if let Err(e) = window_state_manager::save_window_state(&app).await {
+                        tracing::warn!("[WindowEvent] Failed to save window state: {:?}", e);
                     }
+                    tracing::info!("[WindowEvent] Window state saved, exiting application");
+                    app.exit(0);
                 });
             }
         })

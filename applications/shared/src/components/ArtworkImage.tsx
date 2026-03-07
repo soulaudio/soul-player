@@ -254,24 +254,27 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
       try {
         if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
           const { invoke } = await import('@tauri-apps/api/core');
-          // Get artist's albums, then load the first album's artwork
+          // Get artist's albums, then try each album's artwork until one has it
           const albums = await invoke<Array<{ id: number }>>('get_artist_albums', { artistId });
           if (cancelled || !albums || albums.length === 0) return;
-          const firstAlbumId = albums[0].id;
-          const cacheKey = `album:${firstAlbumId}`;
-          if (artworkCache.has(cacheKey)) {
-            if (!cancelled) setFallbackAlbumUrl(artworkCache.get(cacheKey)!);
-            return;
-          }
-          const dataUrl = await invoke<string | null>('get_album_artwork', { albumId: firstAlbumId });
-          if (cancelled) return;
-          if (dataUrl) {
-            artworkCache.set(cacheKey, dataUrl);
-            setFallbackAlbumUrl(dataUrl);
+          for (const album of albums) {
+            if (cancelled) return;
+            const cacheKey = `album:${album.id}`;
+            if (artworkCache.has(cacheKey)) {
+              setFallbackAlbumUrl(artworkCache.get(cacheKey)!);
+              return;
+            }
+            const dataUrl = await invoke<string | null>('get_album_artwork', { albumId: album.id });
+            if (cancelled) return;
+            if (dataUrl) {
+              artworkCache.set(cacheKey, dataUrl);
+              setFallbackAlbumUrl(dataUrl);
+              return;
+            }
           }
         }
-      } catch {
-        // Silently fail — plain icon fallback is fine
+      } catch (err) {
+        debug.warn('[ArtworkImage] Blurred album fallback failed for artist', artistId, err);
       }
     }
     loadFallback();

@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
@@ -17,6 +18,9 @@ static TEST_UPDATE_RESPONSE: Mutex<Option<Option<serde_json::Value>>> = Mutex::n
 /// instead of running the real installer.  Lets tests observe the progress-bar
 /// state before the operation completes.  0 = no delay (default).
 static TEST_INSTALL_DELAY_MS: Mutex<u64> = Mutex::new(0);
+
+/// When true, install_update returns Err in test mode (simulates install failure).
+static TEST_INSTALL_SHOULD_FAIL: Mutex<bool> = Mutex::new(false);
 
 /// Extract a boolean value from an optional JSON setting, returning `default_value` when the
 /// setting is missing, null, or non-boolean.
@@ -106,9 +110,13 @@ async fn check_and_handle_updates(app: &AppHandle) {
 
                 if silent_mode {
                     tracing::info!("[UPDATER] Starting silent install");
-                    // Silent install
                     match update
-                        .download_and_install(|_chunk_length, _content_length| {}, || {})
+                        .download_and_install(
+                            |_chunk_len, _content_len| {},
+                            || {
+                                tracing::info!("[UPDATER] Silent download finished");
+                            },
+                        )
                         .await
                     {
                         Ok(()) => {
@@ -202,15 +210,20 @@ pub async fn set_test_update_response(
 /// Tauri command used by E2E tests to control install_update behavior.
 /// Pass `delay_ms = n` (n > 0) to make install_update sleep for n ms then return Ok.
 /// Pass `delay_ms = 0` to clear (instant Ok in test mode).
+/// Pass `should_fail = true` to make install_update return Err.
 /// Only available when PLAYWRIGHT_TEST_DIR env var is set.
 #[tauri::command]
-pub async fn set_test_install_delay(delay_ms: u64) -> Result<(), String> {
+pub async fn set_test_install_delay(
+    delay_ms: u64,
+    should_fail: Option<bool>,
+) -> Result<(), String> {
     if std::env::var("PLAYWRIGHT_TEST_DIR").is_err() {
         return Err(
             "Only available in E2E test mode (PLAYWRIGHT_TEST_DIR must be set)".to_string(),
         );
     }
     *TEST_INSTALL_DELAY_MS.lock().unwrap() = delay_ms;
+    *TEST_INSTALL_SHOULD_FAIL.lock().unwrap() = should_fail.unwrap_or(false);
     Ok(())
 }
 
@@ -235,53 +248,77 @@ pub async fn emit_test_update_available(app: AppHandle) -> Result<(), String> {
 /// Tauri command to install an available update
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
-    // In E2E test mode: simulate a successful install with an optional delay so
-    // tests can observe the progress-bar state before the operation completes.
+    // In E2E test mode: simulate install with optional delay and failure
     if std::env::var("PLAYWRIGHT_TEST_DIR").is_ok() {
+        let should_fail = *TEST_INSTALL_SHOULD_FAIL.lock().unwrap();
         let delay_ms = *TEST_INSTALL_DELAY_MS.lock().unwrap();
+
+        // Emit progress events during delay to test progress UI
         if delay_ms > 0 {
-            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            let steps = 5u64;
+            let step_delay = delay_ms / steps;
+            for i in 1..=steps {
+                tokio::time::sleep(Duration::from_millis(step_delay)).await;
+                let progress = ((i as f64 / steps as f64) * 100.0) as u8;
+                let _ = app.emit("update-progress", progress);
+            }
+        }
+
+        if should_fail {
+            return Err("Simulated install failure for E2E test".to_string());
         }
         return Ok(());
     }
 
-    // NOTE: The install_update command re-checks for updates before installing.
-    // If the update server becomes unavailable between check_for_updates and install_update,
-    // the Ok(None) branch is reached gracefully and the function returns Ok(()) without
-    // panicking. Network failures are converted to Err(String) via map_err.
     let updater = app
         .updater()
         .map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
 
-    if let Some(update) = updater
+    // Check for available update. The user already saw the dialog, but we need
+    // the Update object to call download_and_install on it. This is a lightweight
+    // HTTP request to the update endpoint.
+    let update = updater
         .check()
         .await
-        .map_err(|e: tauri_plugin_updater::Error| e.to_string())?
-    {
-        let app_clone = app.clone();
-        let restart_app = app.clone();
-        update
-            .download_and_install(
-                move |chunk, total| {
-                    let progress = if let Some(t) = total {
-                        (chunk as f64 / t as f64 * 100.0) as u8
-                    } else {
-                        0
-                    };
-                    if let Err(e) = app_clone.emit("update-progress", progress) {
-                        tracing::warn!(error = %e, event = "update-progress", "Failed to emit event to frontend");
-                    }
-                },
-                || {},
-            )
-            .await
-            .map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
+        .map_err(|e| format!("Failed to check for update: {}", e))?
+        .ok_or_else(|| "No update available. The update may have been withdrawn.".to_string())?;
 
-        tracing::info!("[UPDATER] Manual install completed, restarting app");
-        // Restart the app to apply the update (this will exit the process)
-        restart_app.restart();
-    }
+    tracing::info!(
+        version = %update.version,
+        "[UPDATER] Starting download and install"
+    );
 
+    // Track cumulative downloaded bytes for accurate progress reporting.
+    // The callback receives individual chunk sizes, NOT cumulative totals.
+    let downloaded = AtomicUsize::new(0);
+    let app_clone = app.clone();
+
+    update
+        .download_and_install(
+            move |chunk_len, content_len| {
+                let total_downloaded =
+                    downloaded.fetch_add(chunk_len, Ordering::Relaxed) + chunk_len;
+                let progress = if let Some(total) = content_len {
+                    ((total_downloaded as f64 / total as f64) * 100.0).min(100.0) as u8
+                } else {
+                    0
+                };
+                if let Err(e) = app_clone.emit("update-progress", progress) {
+                    tracing::warn!(error = %e, "[UPDATER] Failed to emit progress event");
+                }
+            },
+            || {
+                tracing::info!("[UPDATER] Download finished, starting installation");
+            },
+        )
+        .await
+        .map_err(|e| format!("Failed to install update: {}", e))?;
+
+    tracing::info!("[UPDATER] Install completed, restarting app");
+    app.restart();
+
+    // Unreachable — restart() exits the process
+    #[allow(unreachable_code)]
     Ok(())
 }
 
