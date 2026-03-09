@@ -46,12 +46,19 @@ export function QueueSidebar({ isOpen, onClose }: QueueSidebarProps) {
   useEffect(() => {
     if (isOpen) {
       loadQueue();
-      const unsubscribe = events.onQueueUpdate(() => {
-        loadQueue();
-      });
-      return unsubscribe;
+      const unsubQ = events.onQueueUpdate(() => loadQueue());
+      return unsubQ;
     }
   }, [isOpen, commands, events]);
+
+  // Clear stale queue when playback stops — stop_playback() emits StateChanged(Stopped)
+  // but NOT QueueUpdated, so the above effect never runs. Without this, the sidebar
+  // keeps showing the previous queue even though nothing is playing.
+  useEffect(() => {
+    if (!currentTrack) {
+      setFullQueue([]);
+    }
+  }, [currentTrack]);
 
   const loadQueue = async () => {
     try {

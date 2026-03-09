@@ -160,7 +160,11 @@ pub async fn save_window_state_from_geometry(
     };
     tracing::info!(
         "[window_state] Saving geometry: {}x{} at ({:?}, {:?}), maximized={}",
-        ws.width, ws.height, ws.x, ws.y, ws.maximized
+        ws.width,
+        ws.height,
+        ws.x,
+        ws.y,
+        ws.maximized
     );
     window_state::save_window_state(&state.pool, &state.user_id, &ws)
         .await

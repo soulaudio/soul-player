@@ -18,8 +18,11 @@ export function QueueSection({ queue, currentTrackId, scrollRef, onTrackClick }:
   const actualScrollRef = scrollRef || defaultScrollRef;
 
   // Filter out current track from queue, reverse so items closest to now playing are at bottom
-  // Preserve original indices to handle duplicate tracks correctly
+  // Preserve original indices to handle duplicate tracks correctly.
+  // Guard: return [] when nothing is playing — String(undefined)="undefined" would match
+  // no real trackId, causing ALL queued tracks to appear in the sidebar when stopped.
   const displayQueue = useMemo(() => {
+    if (!currentTrackId) return [];
     return queue
       .map((track, index) => ({ track, originalIndex: index }))
       .filter(({ track }) => String(track.trackId) !== String(currentTrackId))

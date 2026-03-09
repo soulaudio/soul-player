@@ -293,7 +293,85 @@ test('Clicking the next-up queue item (Track Two) skips to Track Two', async () 
 });
 
 // ================================================================
-// Test 5: Queue sidebar updates after advancing to the next track
+// Test 5: Queue sidebar is hidden (no items) after stop_playback
+//
+// Regression guard for the String(undefined) = "undefined" bug:
+//   When stopped, currentTrackId is undefined. String(undefined) = "undefined"
+//   which never matches a real trackId like "2001", so ALL queue items pass
+//   the filter and appear in the sidebar — wrong.
+//
+// After this fix, QueueSection returns [] when currentTrackId is falsy.
+// ================================================================
+
+test('Queue sidebar shows 0 items after stop_playback', async () => {
+  // Verify queue is visible while playing
+  await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
+  const initialCount = await page.locator('[data-testid="queue-item"]').count();
+  expect(initialCount).toBe(4);
+
+  // Stop playback
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('stop_playback');
+  });
+
+  // Wait for the UI to reflect stopped state (NowPlayingPanel disappears or stops showing track)
+  await page.waitForFunction(
+    async () => {
+      const state = await window.__TAURI_INTERNALS__.invoke('get_playback_state');
+      return state === 'Stopped';
+    },
+    { timeout: 5_000 }
+  );
+
+  // Allow React state propagation
+  await page.waitForTimeout(500);
+
+  // Queue sidebar must show NO items when stopped — the stale queue must be cleared
+  const items = page.locator('[data-testid="queue-item"]');
+  const stoppedCount = await items.count();
+  expect(stoppedCount).toBe(0);
+});
+
+// ================================================================
+// Test 5b: Queue repopulates correctly after restarting playback
+//
+// After stop → restart, the queue should show 4 upcoming tracks again.
+// This ensures the "clear on stop + repopulate on play" cycle works.
+// ================================================================
+
+test('Queue repopulates after stop then restart playback', async () => {
+  // Verify 4 items while playing
+  await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
+  expect(await page.locator('[data-testid="queue-item"]').count()).toBe(4);
+
+  // Stop playback
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('stop_playback');
+  });
+  await page.waitForFunction(
+    async () => {
+      const state = await window.__TAURI_INTERNALS__.invoke('get_playback_state');
+      return state === 'Stopped';
+    },
+    { timeout: 5_000 }
+  );
+  await page.waitForTimeout(400);
+
+  // Confirm queue is now empty
+  expect(await page.locator('[data-testid="queue-item"]').count()).toBe(0);
+
+  // Restart playback from Track One
+  await startPlayback(page);
+
+  // Queue must show 4 items again
+  await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
+  await page.waitForTimeout(300);
+  const afterRestartCount = await page.locator('[data-testid="queue-item"]').count();
+  expect(afterRestartCount).toBe(4);
+});
+
+// ================================================================
+// Test 6: Queue sidebar updates after advancing to the next track
 //
 // When Track One finishes and Track Two begins playing:
 //  - Track Two disappears from the queue list (now the current track)
