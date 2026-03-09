@@ -333,6 +333,142 @@ test('auto-advance fires after seeking to near end of track', async () => {
   expect(state).toBe('Playing');
 });
 
+// ================================================================
+// Test 5: Queue sidebar shows correct tracks after auto-advance
+//
+// Regression guard for the "ghost track" bug:
+//   play_queue() emits QueueUpdated with [T1..T5] (source_index=0).
+//   play() then pops T1 (source_index→1) with NO QueueUpdated, so React
+//   queue stays stale at [T1,T2,T3,T4,T5].
+//   When T1 auto-advances to T2, ActivateSource fires with NO QueueUpdated
+//   either, leaving React queue at [T1,T2,T3,T4,T5].
+//   QueueSection filter removes the current track (T2) but NOT the stale T1,
+//   making T1 reappear in the queue as if it were upcoming — the ghost track.
+//
+// Fix: ActivateSource handler must emit QueueUpdated so React refreshes.
+// After the refresh get_queue() returns [T3,T4,T5] and the ghost is gone.
+// ================================================================
+
+test('queue shows correct tracks after auto-advance: no ghost of previously-played track', async () => {
+  test.setTimeout(30_000);
+
+  // Use play_queue WITHOUT clear_add_to_queue so the React queue stays stale
+  // — this reproduces the exact real-world scenario where the ghost appears.
+  await page.evaluate(async () => {
+    const tracks = await window.__TAURI_INTERNALS__.invoke('get_album_tracks', { albumId: 2001 });
+    tracks.sort((a, b) => (a.track_number || 0) - (b.track_number || 0));
+    const queue = tracks.map(t => ({
+      trackId: String(t.id),
+      title: t.title,
+      artist: t.artist_name || 'Unknown Artist',
+      album: t.album_title || null,
+      albumId: t.album_id || null,
+      filePath: t.file_path || '',
+      durationSeconds: t.duration_seconds || null,
+      trackNumber: t.track_number || null,
+      coverArtPath: null,
+    }));
+    await window.__TAURI_INTERNALS__.invoke('play_queue', { queue, startIndex: 0 });
+  });
+
+  await page.waitForSelector('[data-testid="now-playing-title"]', { timeout: 15_000 });
+  await page.waitForFunction(
+    async () => {
+      const state = await window.__TAURI_INTERNALS__.invoke('get_playback_state');
+      return state === 'Playing';
+    },
+    { timeout: 15_000 },
+  );
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('[data-testid="now-playing-title"] .text-sm');
+      return el && el.textContent.trim() === 'Track One';
+    },
+    { timeout: 10_000 },
+  );
+
+  // Verify initial queue shows 4 items (T2-T5) while T1 is current.
+  // The stale queue has T1 in it but the filter correctly hides it.
+  await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
+  await page.waitForTimeout(300);
+  const initialCount = await page.locator('[data-testid="queue-item"]').count();
+  expect(initialCount).toBe(4); // T2, T3, T4, T5
+
+  // Seek to near the end of T1 to trigger auto-advance fast.
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 9.5 });
+  });
+
+  // Wait for T2 to become the now-playing track.
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('[data-testid="now-playing-title"] .text-sm');
+      return el && el.textContent.trim() === 'Track Two';
+    },
+    { timeout: 15_000 },
+  );
+
+  // Allow time for QueueUpdated → loadQueue() → React re-render.
+  await page.waitForTimeout(600);
+
+  // Queue must show exactly 3 items: T3, T4, T5.
+  // Without the fix: shows [T1, T3, T4, T5] — 4 items (T1 ghost).
+  const afterCount = await page.locator('[data-testid="queue-item"]').count();
+  expect(afterCount).toBe(3);
+
+  const texts = await page.locator('[data-testid="queue-item"]').allTextContents();
+  const combined = texts.join(' ');
+  // Ghost: T1 must NOT appear (it was played — not upcoming)
+  expect(combined).not.toContain('Track One');
+  // Current track must NOT appear in the queue list
+  expect(combined).not.toContain('Track Two');
+  // Upcoming tracks must all be present
+  expect(combined).toContain('Track Three');
+  expect(combined).toContain('Track Four');
+  expect(combined).toContain('Track Five');
+});
+
+// ================================================================
+// Test 6: Queue count stays accurate after two consecutive auto-advances
+//
+// After T1→T2→T3 via two natural auto-advances (using seek to rush them),
+// the queue must contain exactly 2 upcoming tracks (T4, T5).
+// Formerly-played T1 and T2 must not reappear.
+// ================================================================
+
+test('queue count stays accurate after two consecutive auto-advances', async () => {
+  test.setTimeout(40_000);
+
+  await startPlayback(page);
+
+  // First auto-advance: seek T1 to near end → T2 starts
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 9.5 });
+  });
+  await waitForTitle(page, 'Track Two', 15_000);
+  await page.waitForTimeout(400);
+
+  // Second auto-advance: seek T2 to near end → T3 starts
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('seek_to', { position: 9.5 });
+  });
+  await waitForTitle(page, 'Track Three', 15_000);
+  await page.waitForTimeout(600);
+
+  // Queue must show exactly 2 items: T4, T5
+  const queueItems = page.locator('[data-testid="queue-item"]');
+  const count = await queueItems.count();
+  expect(count).toBe(2);
+
+  const texts = await queueItems.allTextContents();
+  const combined = texts.join(' ');
+  expect(combined).not.toContain('Track One');    // played — must be gone
+  expect(combined).not.toContain('Track Two');    // played — must be gone
+  expect(combined).not.toContain('Track Three');  // current — not in queue
+  expect(combined).toContain('Track Four');
+  expect(combined).toContain('Track Five');
+});
+
 test('auto-advance fires after a pause/resume cycle', async () => {
   test.setTimeout(35_000);
 

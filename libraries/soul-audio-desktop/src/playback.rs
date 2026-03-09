@@ -2031,6 +2031,15 @@ impl DesktopPlayback {
                     let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
                         mgr.get_current_track().cloned(),
                     ));
+                    // Emit QueueUpdated so the frontend refreshes its queue state.
+                    //
+                    // Without this, the React queue stays stale after auto-advance:
+                    // play_queue() emits QueueUpdated at LoadPlaylist time (source_index=0),
+                    // then play() pops T1 with no QueueUpdated, then each auto-advance pops
+                    // the next track with no QueueUpdated — so React's queue still contains
+                    // previously-played tracks. The filter removes only the *current* track,
+                    // causing played tracks to reappear as "upcoming" (ghost track bug).
+                    let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
                 }
             }
             PlaybackCommand::Pause => {
@@ -3567,6 +3576,120 @@ mod tests {
              Dropping events causes previous() navigation to silently lose the \
              LoadNext event that triggers audio loading.",
             forwarded.len()
+        );
+    }
+
+    /// Regression test: ActivateSource must emit QueueUpdated so React refreshes the queue.
+    ///
+    /// Without QueueUpdated after ActivateSource, the React queue stays stale:
+    /// - play_queue() emits QueueUpdated with [T1..T5] (source_index=0)
+    /// - play() pops T1 with NO QueueUpdated → React queue still [T1..T5]
+    /// - Each auto-advance pops the next track with NO QueueUpdated
+    /// - React filter removes only the current track, making played tracks ghost as "upcoming"
+    ///
+    /// Fix: emit QueueUpdated in the ActivateSource handler so the queue is refreshed
+    /// after every track load (including auto-advance).
+    #[test]
+    fn test_activate_source_emits_queue_updated() {
+        use soul_playback::{
+            AudioSource, PlaybackConfig, PlaybackManager, QueueTrack, TrackSource,
+        };
+        use std::time::Duration;
+
+        // Minimal mock audio source for testing — always silent, finite duration
+        struct SilentSource {
+            samples_left: usize,
+            position: Duration,
+        }
+        impl SilentSource {
+            fn new(samples: usize) -> Self {
+                Self {
+                    samples_left: samples,
+                    position: Duration::ZERO,
+                }
+            }
+        }
+        impl AudioSource for SilentSource {
+            fn read_samples(&mut self, buf: &mut [f32]) -> soul_playback::Result<usize> {
+                let n = buf.len().min(self.samples_left);
+                buf[..n].fill(0.0);
+                self.samples_left -= n;
+                self.position += Duration::from_secs_f64(n as f64 / (44100.0 * 2.0));
+                Ok(n)
+            }
+            fn seek(&mut self, pos: Duration) -> soul_playback::Result<()> {
+                self.position = pos;
+                Ok(())
+            }
+            fn position(&self) -> Duration {
+                self.position
+            }
+            fn duration(&self) -> Duration {
+                Duration::from_secs(10)
+            }
+            fn sample_rate(&self) -> Option<u32> {
+                Some(44100)
+            }
+            fn is_finished(&self) -> bool {
+                self.samples_left == 0
+            }
+        }
+
+        let (event_tx, event_rx) = bounded(100);
+        let (command_tx, _command_rx) = bounded(100);
+
+        let mut mgr = PlaybackManager::new(PlaybackConfig::default());
+
+        let make_track = |id: &str, title: &str| QueueTrack {
+            id: id.to_string(),
+            path: "fake.wav".into(),
+            title: title.to_string(),
+            artist: "Artist".to_string(),
+            album: None,
+            duration: Duration::from_secs(10),
+            track_number: None,
+            source: TrackSource::Album {
+                id: "a1".to_string(),
+                name: "Album".to_string(),
+            },
+        };
+
+        let t1 = make_track("t1", "Track One");
+        let t2 = make_track("t2", "Track Two");
+        mgr.load_playlist(vec![t1.clone(), t2.clone()], 0);
+        mgr.drain_events(); // discard LoadPlaylist events
+        let _ = mgr.play();
+        mgr.drain_events(); // discard LoadNext
+
+        // Simulate ActivateSource (what the background loader thread sends back)
+        let source = Box::new(SilentSource::new(44100 * 2 * 10));
+        let command = PlaybackCommand::ActivateSource { source, track: t1 };
+
+        let mut load_requested = true;
+        DesktopPlayback::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
+
+        // Also drain manager's pending_events (activate_source puts StateChanged+TrackChanged there)
+        DesktopPlayback::forward_manager_events(
+            &mut mgr,
+            &event_tx,
+            &command_tx,
+            &mut load_requested,
+        );
+
+        let events: Vec<_> = event_rx.try_iter().collect();
+
+        let has_queue_updated = events
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::QueueUpdated));
+        assert!(
+            has_queue_updated,
+            "ActivateSource must emit QueueUpdated so React refreshes the queue. \
+             Without this, previously-played tracks reappear in the sidebar as 'upcoming' \
+             (ghost track bug). Events emitted: {:?}",
+            events
+                .iter()
+                .map(|e| format!("{:?}", e))
+                .collect::<Vec<_>>()
         );
     }
 
