@@ -1008,6 +1008,9 @@ impl PlaybackManager {
             tracing::info!("[DEVICE_MONITOR] Event processing task terminated");
         });
 
+        // Clone sender for the polling fallback (callback moves the original below)
+        let event_tx_poll = event_tx.clone();
+
         // Create callback that sends events to the channel
         let callback = Box::new(move |event: DeviceEvent| {
             // Send event to channel for ordered processing
@@ -1051,11 +1054,56 @@ impl PlaybackManager {
                 }
             }
             Err(e) => {
-                tracing::error!(
+                // Native watch_for_changes unavailable (e.g. WinRT DeviceWatcher on Windows).
+                // Fall back to polling enumerate_devices() every 2 seconds so that OS-level
+                // default device changes (e.g. switching output in Sound Settings) are detected.
+                tracing::warn!(
                     error = %e,
                     platform = monitor.platform_name(),
-                    "[DEVICE_MONITOR] Failed to start device monitoring - falling back to polling"
+                    "[DEVICE_MONITOR] Native watch unavailable — starting 2-second polling fallback"
                 );
+
+                let mut previous: Vec<soul_audio_desktop::AsyncDeviceInfo> = Vec::new();
+                let mut poll_interval = tokio::time::interval(Duration::from_secs(2));
+                poll_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+                // Capture initial state so we don't fire spurious events on first tick
+                if let Ok(devices) = monitor.enumerate_devices().await {
+                    previous = devices;
+                }
+
+                loop {
+                    tokio::select! {
+                        _ = cancel_token.cancelled() => {
+                            tracing::info!(
+                                "[DEVICE_MONITOR] Cancellation signal received — stopping polling fallback"
+                            );
+                            metrics.log_summary();
+                            break;
+                        }
+                        _ = poll_interval.tick() => {
+                            match monitor.enumerate_devices().await {
+                                Ok(current) => {
+                                    for event in soul_audio_desktop::detect_device_changes(&previous, &current) {
+                                        if let Err(send_err) = event_tx_poll.try_send(event) {
+                                            tracing::warn!(
+                                                error = %send_err,
+                                                "[DEVICE_MONITOR] Polling: event channel full, dropping event"
+                                            );
+                                        }
+                                    }
+                                    previous = current;
+                                }
+                                Err(poll_err) => {
+                                    tracing::debug!(
+                                        error = %poll_err,
+                                        "[DEVICE_MONITOR] Polling: enumerate_devices failed, will retry"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

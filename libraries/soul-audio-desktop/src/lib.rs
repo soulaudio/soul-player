@@ -68,7 +68,7 @@ pub mod device;
 pub mod device_check_timeout;
 pub mod device_manager;
 pub mod device_monitor_async;
-mod device_monitor_cpal_fallback;
+pub mod device_monitor_cpal_fallback;
 #[cfg(all(target_os = "linux", feature = "native-device-monitor"))]
 mod device_monitor_linux;
 #[cfg(all(target_os = "macos", feature = "native-device-monitor"))]
@@ -262,6 +262,7 @@ pub use device_monitor_async::{
     create_async_device_monitor, AsyncDeviceInfo, AsyncDeviceMonitor, DeviceChangeCallback,
     DeviceEvent, DeviceMonitorError, WatchHandle,
 };
+pub use device_monitor_cpal_fallback::detect_device_changes;
 pub use error::{AudioError, AudioOutputError, Result};
 pub use exclusive::{AudioData, ExclusiveConfig, ExclusiveOutput, LatencyInfo};
 pub use output::{CpalOutput, ResamplingQuality};

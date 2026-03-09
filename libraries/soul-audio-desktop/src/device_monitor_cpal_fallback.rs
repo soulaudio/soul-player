@@ -27,12 +27,58 @@ use async_trait::async_trait;
 use cpal::traits::{DeviceTrait, HostTrait};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use crate::device_monitor_async::{
     AsyncDeviceInfo, AsyncDeviceMonitor, DeviceChangeCallback, DeviceEvent, DeviceMonitorError,
     WatchHandle,
 };
+
+/// Compare two device snapshots and return the change events between them.
+///
+/// Called on every polling tick to detect:
+/// - Default device changes (user switches output in OS settings)
+/// - Device additions (plug in headphones / USB audio)
+/// - Device removals (unplug device)
+///
+/// This is a pure function so it can be unit-tested without real hardware.
+pub fn detect_device_changes(
+    previous: &[AsyncDeviceInfo],
+    current: &[AsyncDeviceInfo],
+) -> Vec<DeviceEvent> {
+    let mut events = Vec::new();
+
+    // Detect default device change
+    let prev_default = previous.iter().find(|d| d.is_default);
+    let curr_default = current.iter().find(|d| d.is_default);
+    if let Some(new_def) = curr_default {
+        let changed = prev_default.is_none_or(|p| p.id != new_def.id);
+        if changed {
+            events.push(DeviceEvent::DefaultDeviceChanged {
+                id: new_def.id.clone(),
+                name: new_def.name.clone(),
+            });
+        }
+    }
+
+    // Detect added devices
+    for dev in current {
+        if !previous.iter().any(|p| p.id == dev.id) {
+            events.push(DeviceEvent::DeviceAdded {
+                id: dev.id.clone(),
+                name: dev.name.clone(),
+            });
+        }
+    }
+
+    // Detect removed devices
+    for dev in previous {
+        if !current.iter().any(|c| c.id == dev.id) {
+            events.push(DeviceEvent::DeviceRemoved { id: dev.id.clone() });
+        }
+    }
+
+    events
+}
 
 /// CPAL-based fallback device monitor
 ///
@@ -209,20 +255,20 @@ impl AsyncDeviceMonitor for CpalFallbackMonitor {
             "[DEVICE_MONITOR] Starting device change watcher (CPAL fallback - polling mode)"
         );
 
-        // CPAL doesn't support hotplug notifications, so we poll
-        // This is a limitation that will be fixed by native implementations
+        // CPAL doesn't support hotplug notifications, so we poll every 2s.
+        // detect_device_changes() compares snapshots and produces DeviceAdded,
+        // DeviceRemoved, AND DefaultDeviceChanged events — the last one is critical
+        // for detecting when the user switches default audio output in OS settings.
         let running = Arc::new(AtomicBool::new(true));
         let running_clone = running.clone();
-        let previous_devices = Arc::new(Mutex::new(Vec::<(String, cpal::Device)>::new()));
 
         // Create bounded channel for device events (capacity 8 for backpressure)
-        // This prevents unbounded memory growth if callback processing is slow
         let (device_event_tx, mut device_event_rx) = tokio::sync::mpsc::channel::<DeviceEvent>(8);
 
         // Wrap callback in Arc for cloning across spawn_blocking calls
         let callback = Arc::new(callback);
 
-        // Spawn event processing task with proper error handling
+        // Spawn event processing task
         let callback_clone = callback.clone();
         tokio::spawn(async move {
             while let Some(event) = device_event_rx.recv().await {
@@ -246,65 +292,82 @@ impl AsyncDeviceMonitor for CpalFallbackMonitor {
             tracing::debug!("[DEVICE_MONITOR] Device event processing task stopped");
         });
 
-        // Spawn a background task that polls for device changes
+        // Spawn background polling task using detect_device_changes
         tokio::spawn(async move {
+            let mut previous: Vec<AsyncDeviceInfo> = Vec::new();
+
             while running_clone.load(Ordering::Relaxed) {
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-                // Recreate host for each poll (cheap operation)
-                let host = cpal::default_host();
+                // Enumerate all devices including default flag via spawn_blocking
+                let current = match tokio::task::spawn_blocking(|| {
+                    let host = cpal::default_host();
+                    let default_name = host
+                        .default_output_device()
+                        .and_then(|d| d.description().ok())
+                        .map(|desc| desc.name().to_string());
 
-                // Enumerate devices
-                let current_devices = match host.output_devices() {
-                    Ok(devices) => devices
-                        .filter_map(|d| {
-                            d.description()
-                                .ok()
-                                .map(|desc| (desc.name().to_string(), d.clone()))
+                    host.output_devices()
+                        .map(|iter| {
+                            iter.filter_map(|d| {
+                                let desc = d.description().ok()?;
+                                let name = desc.name().to_string();
+                                let is_default = default_name.as_deref() == Some(&name);
+                                let (sample_rate, channels) = d
+                                    .default_output_config()
+                                    .ok()
+                                    .map(|c| (Some(c.sample_rate()), Some(c.channels())))
+                                    .unwrap_or((None, None));
+                                Some(AsyncDeviceInfo {
+                                    id: name.clone(),
+                                    name,
+                                    is_default,
+                                    is_available: true,
+                                    sample_rate,
+                                    channels,
+                                })
+                            })
+                            .collect::<Vec<_>>()
                         })
-                        .collect::<Vec<_>>(),
+                        .unwrap_or_default()
+                })
+                .await
+                {
+                    Ok(devices) => devices,
                     Err(e) => {
-                        tracing::debug!(error = %e, "[DEVICE_MONITOR] Poll enumeration failed, will retry");
+                        tracing::debug!(
+                            error = %e,
+                            "[DEVICE_MONITOR] Poll enumeration failed, will retry"
+                        );
                         continue;
                     }
                 };
 
-                let mut prev = previous_devices.lock().await;
-
-                // Check for new devices
-                for (name, _device) in &current_devices {
-                    if !prev.iter().any(|(n, _)| n == name) {
-                        tracing::info!(device_name = %name, "[DEVICE_MONITOR] Device added");
-                        let event = DeviceEvent::DeviceAdded {
-                            id: name.clone(),
-                            name: name.clone(),
-                        };
-                        if let Err(e) = device_event_tx.try_send(event) {
-                            tracing::warn!(
-                                error = %e,
+                for event in detect_device_changes(&previous, &current) {
+                    match &event {
+                        DeviceEvent::DeviceAdded { name, .. } => {
+                            tracing::info!(device_name = %name, "[DEVICE_MONITOR] Device added");
+                        }
+                        DeviceEvent::DeviceRemoved { id } => {
+                            tracing::info!(device_id = %id, "[DEVICE_MONITOR] Device removed");
+                        }
+                        DeviceEvent::DefaultDeviceChanged { name, .. } => {
+                            tracing::info!(
                                 device_name = %name,
-                                "[DEVICE_MONITOR] Device event channel full, dropping DeviceAdded event"
+                                "[DEVICE_MONITOR] Default device changed"
                             );
                         }
+                        _ => {}
+                    }
+                    if let Err(e) = device_event_tx.try_send(event) {
+                        tracing::warn!(
+                            error = %e,
+                            "[DEVICE_MONITOR] Device event channel full, dropping event"
+                        );
                     }
                 }
 
-                // Check for removed devices
-                for (name, _device) in prev.iter() {
-                    if !current_devices.iter().any(|(n, _)| n == name) {
-                        tracing::info!(device_name = %name, "[DEVICE_MONITOR] Device removed");
-                        let event = DeviceEvent::DeviceRemoved { id: name.clone() };
-                        if let Err(e) = device_event_tx.try_send(event) {
-                            tracing::warn!(
-                                error = %e,
-                                device_name = %name,
-                                "[DEVICE_MONITOR] Device event channel full, dropping DeviceRemoved event"
-                            );
-                        }
-                    }
-                }
-
-                *prev = current_devices;
+                previous = current;
             }
             tracing::debug!("[DEVICE_MONITOR] Device polling task stopped");
         });
@@ -368,6 +431,110 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+
+    fn make_device(id: &str, is_default: bool) -> AsyncDeviceInfo {
+        AsyncDeviceInfo {
+            id: id.to_string(),
+            name: id.to_string(),
+            is_default,
+            is_available: true,
+            sample_rate: None,
+            channels: None,
+        }
+    }
+
+    // ---- RED: detect_device_changes tests (function does not exist yet) ----
+
+    #[test]
+    fn detect_default_changed_when_default_switches() {
+        let prev = vec![
+            make_device("speakers", true),
+            make_device("headphones", false),
+        ];
+        let curr = vec![
+            make_device("speakers", false),
+            make_device("headphones", true),
+        ];
+
+        let events = detect_device_changes(&prev, &curr);
+
+        let found = events.iter().any(
+            |e| matches!(e, DeviceEvent::DefaultDeviceChanged { id, .. } if id == "headphones"),
+        );
+        assert!(
+            found,
+            "Must emit DefaultDeviceChanged when OS default switches"
+        );
+    }
+
+    #[test]
+    fn detect_no_event_when_default_is_unchanged() {
+        let prev = vec![
+            make_device("speakers", true),
+            make_device("headphones", false),
+        ];
+        let curr = vec![
+            make_device("speakers", true),
+            make_device("headphones", false),
+        ];
+
+        let events = detect_device_changes(&prev, &curr);
+
+        let has_default = events
+            .iter()
+            .any(|e| matches!(e, DeviceEvent::DefaultDeviceChanged { .. }));
+        assert!(
+            !has_default,
+            "Must NOT emit DefaultDeviceChanged when default unchanged"
+        );
+    }
+
+    #[test]
+    fn detect_device_added() {
+        let prev = vec![make_device("speakers", true)];
+        let curr = vec![
+            make_device("speakers", true),
+            make_device("headphones", false),
+        ];
+
+        let events = detect_device_changes(&prev, &curr);
+
+        let found = events
+            .iter()
+            .any(|e| matches!(e, DeviceEvent::DeviceAdded { id, .. } if id == "headphones"));
+        assert!(found, "Must emit DeviceAdded for new device");
+    }
+
+    #[test]
+    fn detect_device_removed() {
+        let prev = vec![
+            make_device("speakers", true),
+            make_device("headphones", false),
+        ];
+        let curr = vec![make_device("speakers", true)];
+
+        let events = detect_device_changes(&prev, &curr);
+
+        let found = events
+            .iter()
+            .any(|e| matches!(e, DeviceEvent::DeviceRemoved { id } if id == "headphones"));
+        assert!(found, "Must emit DeviceRemoved for disconnected device");
+    }
+
+    #[test]
+    fn detect_no_events_when_nothing_changes() {
+        let devices = vec![
+            make_device("speakers", true),
+            make_device("headphones", false),
+        ];
+
+        let events = detect_device_changes(&devices, &devices.clone());
+
+        assert!(
+            events.is_empty(),
+            "Must emit no events when nothing changed"
+        );
+    }
 
     #[tokio::test]
     async fn test_enumerate_devices() {
