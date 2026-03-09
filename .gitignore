@@ -102,6 +102,23 @@ test_*.txt
 test-*.ps1
 test-*.mjs
 
+# Debug/analysis text files in root
+SEEK_*.txt
+IMPLEMENTATION_COMPLETE.txt
+*_ANALYSIS_*.txt
+*_SUMMARY.txt
+*_LOGGING_*.txt
+
+# Loose screenshots/images in root
+/*.jpg
+/*.jpeg
+/*.png
+/*.gif
+/*.webp
+
+# E2E test screenshots
+applications/desktop/e2e-tests/screenshots/
+
 # Flatpak vendored dependencies
 # cargo-sources.json and cargo-config.toml are committed (Flatpak standard)
 # Only the vendor/ directory and tarball are ignored

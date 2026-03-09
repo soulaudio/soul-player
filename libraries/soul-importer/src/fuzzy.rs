@@ -258,37 +258,8 @@ impl FuzzyMatcher {
             }
         }
 
-        // Try fuzzy match
-        let mut best_match: Option<(Album, f64)> = None;
-
-        for album in &albums {
-            // Only match albums with same artist
-            if album.artist_id != artist_id {
-                continue;
-            }
-
-            let similarity =
-                normalized_levenshtein(&normalized_title, &normalize_string(&album.title));
-
-            if similarity >= (self.fuzzy_threshold as f64 / 100.0) {
-                if let Some((_, best_similarity)) = &best_match {
-                    if similarity > *best_similarity {
-                        best_match = Some((album.clone(), similarity));
-                    }
-                } else {
-                    best_match = Some((album.clone(), similarity));
-                }
-            }
-        }
-
-        if let Some((album, similarity)) = best_match {
-            let confidence = (similarity * 100.0).round() as u8;
-            return Ok(FuzzyMatch {
-                entity: album,
-                confidence,
-                match_type: MatchType::Fuzzy,
-            });
-        }
+        // No fuzzy (Levenshtein) matching for albums: album titles like "Vol I" vs "Vol II"
+        // are intentionally distinct and must not be merged. Only exact/normalized matches apply.
 
         // No match found - create new album
         let new_album = soul_storage::albums::create(
@@ -430,35 +401,8 @@ impl FuzzyMatcher {
             });
         }
 
-        // Levenshtein fallback on cache entries for this artist
-        let mut best_match: Option<(AlbumId, f64)> = None;
-
-        for (norm, id, _original) in cache.album_entries_for_artist(artist_id) {
-            let similarity = normalized_levenshtein(&normalized_title, norm);
-            if similarity >= (self.fuzzy_threshold as f64 / 100.0) {
-                if let Some((_, best_sim)) = &best_match {
-                    if similarity > *best_sim {
-                        best_match = Some((id, similarity));
-                    }
-                } else {
-                    best_match = Some((id, similarity));
-                }
-            }
-        }
-
-        if let Some((id, similarity)) = best_match {
-            let album = soul_storage::albums::get_by_id(pool, id)
-                .await?
-                .ok_or_else(|| {
-                    crate::ImportError::Metadata(format!("Cached album id {} not found in DB", id))
-                })?;
-            let confidence = (similarity * 100.0).round() as u8;
-            return Ok(FuzzyMatch {
-                entity: album,
-                confidence,
-                match_type: MatchType::Fuzzy,
-            });
-        }
+        // No fuzzy (Levenshtein) matching for albums: album titles like "Vol I" vs "Vol II"
+        // are intentionally distinct and must not be merged. Only exact/normalized matches apply.
 
         // No match - create new album
         let new_album = soul_storage::albums::create(

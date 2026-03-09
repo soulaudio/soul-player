@@ -1,5 +1,5 @@
-use soul_core::types::CreateArtist;
-use soul_importer::fuzzy::FuzzyMatcher;
+use soul_core::types::{CreateAlbum, CreateArtist};
+use soul_importer::fuzzy::{EntityCache, FuzzyMatcher};
 use soul_importer::MatchType;
 
 mod test_helpers;
@@ -302,4 +302,94 @@ async fn test_genre_creates_with_title_case() {
 
     assert_eq!(result.entity.canonical_name, "Progressive Metal");
     assert_eq!(result.match_type, MatchType::Created);
+}
+
+/// Albums with incremental volume names (Vol I / Vol II) must NOT be merged.
+/// Levenshtein similarity between "alex vol i" and "alex vol ii" is ~91%, which
+/// previously caused them to be incorrectly matched as the same album.
+#[tokio::test]
+async fn test_album_incremental_names_not_merged() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+
+    let artist = soul_storage::artists::create(
+        &pool,
+        CreateArtist {
+            name: "Alex".to_string(),
+            sort_name: Some("Alex".to_string()),
+            musicbrainz_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Create "Alex Vol I"
+    soul_storage::albums::create(
+        &pool,
+        CreateAlbum {
+            title: "Alex Vol I".to_string(),
+            artist_id: Some(artist.id),
+            year: None,
+            musicbrainz_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Look up "Alex Vol II" — must be created as a NEW album, not matched to Vol I
+    let result = matcher
+        .find_or_create_album(&pool, "Alex Vol II", Some(artist.id))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.match_type,
+        MatchType::Created,
+        "\"Alex Vol II\" must be a distinct album, not fuzzy-matched to \"Alex Vol I\""
+    );
+    assert_eq!(result.entity.title, "Alex Vol II");
+}
+
+/// Same test using the cached variant used by the parallel scanner.
+#[tokio::test]
+async fn test_album_incremental_names_not_merged_cached() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+
+    let artist = soul_storage::artists::create(
+        &pool,
+        CreateArtist {
+            name: "Alex".to_string(),
+            sort_name: Some("Alex".to_string()),
+            musicbrainz_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    soul_storage::albums::create(
+        &pool,
+        CreateAlbum {
+            title: "Alex Vol I".to_string(),
+            artist_id: Some(artist.id),
+            year: None,
+            musicbrainz_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    let result = matcher
+        .find_or_create_album_cached(&pool, "Alex Vol II", Some(artist.id), &mut cache)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.match_type,
+        MatchType::Created,
+        "\"Alex Vol II\" must be a distinct album, not fuzzy-matched to \"Alex Vol I\""
+    );
+    assert_eq!(result.entity.title, "Alex Vol II");
 }
