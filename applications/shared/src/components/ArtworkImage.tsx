@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, memo, useRef } from 'react';
-import { Music, Users, ListMusic } from 'lucide-react';
+import { Music, User, ListMusic } from 'lucide-react';
 import { ProgressiveImage } from './ProgressiveImage';
 import { debug } from '../utils/debug';
 
@@ -246,40 +246,54 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
 
   // Artist blurred album fallback: when artist has no custom artwork, load their first album's artwork
   useEffect(() => {
-    if (!blurredAlbumFallback || !artistId || !error || fallbackAttempted) return;
-    setFallbackAttempted(true);
+    if (!blurredAlbumFallback || !artistId || !error) return;
+    // Only attempt once per artistId — use ref to avoid re-render loop
+    if (fallbackAttempted) return;
 
     let cancelled = false;
     async function loadFallback() {
       try {
         if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
           const { invoke } = await import('@tauri-apps/api/core');
-          // Get artist's albums, then try each album's artwork until one has it
           const albums = await invoke<Array<{ id: number }>>('get_artist_albums', { artistId });
-          if (cancelled || !albums || albums.length === 0) return;
+          debug.log('[ArtworkImage] Artist', artistId, 'albums for fallback:', albums?.length ?? 0);
+          if (cancelled || !albums || albums.length === 0) {
+            if (!cancelled) setFallbackAttempted(true);
+            return;
+          }
           for (const album of albums) {
             if (cancelled) return;
             const cacheKey = `album:${album.id}`;
             if (artworkCache.has(cacheKey)) {
-              setFallbackAlbumUrl(artworkCache.get(cacheKey)!);
+              if (!cancelled) {
+                setFallbackAlbumUrl(artworkCache.get(cacheKey)!);
+                setFallbackAttempted(true);
+              }
               return;
             }
             const dataUrl = await invoke<string | null>('get_album_artwork', { albumId: album.id });
             if (cancelled) return;
             if (dataUrl) {
               artworkCache.set(cacheKey, dataUrl);
-              setFallbackAlbumUrl(dataUrl);
+              if (!cancelled) {
+                setFallbackAlbumUrl(dataUrl);
+                setFallbackAttempted(true);
+              }
               return;
             }
           }
+          // None of the albums had artwork
+          if (!cancelled) setFallbackAttempted(true);
         }
       } catch (err) {
         debug.warn('[ArtworkImage] Blurred album fallback failed for artist', artistId, err);
+        if (!cancelled) setFallbackAttempted(true);
       }
     }
     loadFallback();
     return () => { cancelled = true; };
-  }, [blurredAlbumFallback, artistId, error, fallbackAttempted]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blurredAlbumFallback, artistId, error]);
 
   // Reset fallback state when artist changes
   useEffect(() => {
@@ -292,11 +306,11 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
     const iconType = fallbackIcon || (artistId ? 'users' : playlistId ? 'playlist' : 'music');
     switch (iconType) {
       case 'users':
-        return <Users className="w-6 h-6 text-muted-foreground" />;
+        return <User className="w-12 h-12 text-muted-foreground" />;
       case 'playlist':
-        return <ListMusic className="w-6 h-6 text-muted-foreground" />;
+        return <ListMusic className="w-12 h-12 text-muted-foreground" />;
       default:
-        return <Music className="w-6 h-6 text-muted-foreground" />;
+        return <Music className="w-12 h-12 text-muted-foreground" />;
     }
   };
 
@@ -308,11 +322,19 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
           <img
             src={fallbackAlbumUrl}
             alt={alt || ''}
-            className="w-full h-full object-cover blur-xl scale-125 brightness-50"
+            className="w-full h-full object-cover blur-sm scale-105 brightness-50"
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <Users className="w-1/3 h-1/3 text-white/70 drop-shadow-lg" />
+            <User className="w-12 h-12 text-white/70 drop-shadow-lg" />
           </div>
+        </div>
+      );
+    }
+    // Still loading the blurred album fallback — show placeholder instead of plain icon
+    if (blurredAlbumFallback && artistId && !fallbackAttempted) {
+      return (
+        <div ref={containerRef} className={fallbackClassName || 'flex items-center justify-center animate-pulse bg-muted'}>
+          <span className="opacity-50">{getFallbackIcon()}</span>
         </div>
       );
     }

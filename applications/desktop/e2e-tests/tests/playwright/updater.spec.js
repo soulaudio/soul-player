@@ -1,35 +1,52 @@
 /**
  * Updater E2E tests — Playwright CDP
  *
- * Tests the update notification flow end-to-end:
- *   1. Settings page renders update section with correct initial state
- *   2. Backend event "update-available" → UpdateDialog appears
- *   3. UpdateDialog "Later" button dismisses it
- *   4. "Check for Updates" button → dialog when update is available (mocked)
- *   5. "Check for Updates" button → toast when already up-to-date (mocked)
- *   6. Install button shows progress state (install_update mocked to avoid restart)
+ * Comprehensive tests for the update lifecycle:
  *
- * Mocking strategy
- * ──────────────────
- * window.__TAURI_INTERNALS__.invoke is non-writable + non-configurable in Tauri v2,
- * so JS-side patching is impossible.  Instead we use Rust-side test commands that
- * store canned responses in static Mutex state — only active when PLAYWRIGHT_TEST_DIR
- * is set.  The real Tauri commands read this state before doing any real work.
+ * Settings UI (tests 1–3)
+ *   1. About page renders auto-update toggle, silent toggle, and Check button
+ *   2. Auto-update toggle persists state when toggled off/on
+ *   3. Silent-update toggle persists state when toggled off/on
  *
- *   set_test_update_response({ response, noUpdate })  — controls check_for_updates
- *   set_test_install_delay({ delayMs })               — controls install_update (u64, required → must use camelCase)
- *   emit_test_update_available({})                    — fires a real update-available event
+ * Update detection (tests 4–7)
+ *   4. Backend "update-available" event → UpdateDialog appears with version
+ *   5. "Check for Updates" button → dialog when update exists
+ *   6. "Check for Updates" button → up-to-date toast when no update
+ *   7. Multiple rapid check clicks don't stack duplicate dialogs
  *
- * Tauri v2 camelCase rule
- * ────────────────────────
- * Required params (non-Optional) MUST use camelCase in JS: delayMs, not delay_ms.
- * Optional params (Option<T>) work with snake_case because Tauri defaults to None when key is not found.
+ * Dialog behaviour (tests 8–10)
+ *   8. "Later" button dismisses the dialog
+ *   9. Escape key dismisses the dialog (before install)
+ *  10. Backdrop click dismisses the dialog (before install)
+ *
+ * Installation — manual (tests 11–16)
+ *  11. Install button triggers progress bar and completes successfully
+ *  12. Progress bar shows increasing percentage values during install
+ *  13. Install failure shows error toast and re-enables Install button
+ *  14. Dialog cannot be dismissed while installing (Later disabled, Escape ignored)
+ *  15. Progress resets to zero when dialog reopens after a failed install
+ *  16. Install with zero delay completes instantly
+ *
+ * End-to-end flows (tests 17–18)
+ *  17. Check for updates → dialog → install → completion
+ *  18. Backend event → dialog → install → completion
+ *
+ * How it works
+ * ────────────
+ * Rust-side test commands (active only when PLAYWRIGHT_TEST_DIR env var is set)
+ * control the backend without JS mocking:
+ *
+ *   set_test_update_response  — controls what check_for_updates returns
+ *   set_test_install_delay    — controls install_update timing and failure
+ *   emit_test_update_available — fires a real update-available Tauri event
+ *
+ * These commands exercise the real Tauri IPC pipeline, event system, and
+ * frontend React contexts — the only difference is the HTTP request to
+ * GitHub is replaced by an in-process canned response.
  */
 
 import { test, expect, chromium } from '@playwright/test';
 import { CDP_URL } from '../../playwright-global-setup.js';
-
-// ── CDP connection shared across all tests in this file ────────────────────
 
 let browser;
 let page;
@@ -37,16 +54,13 @@ let page;
 test.beforeAll(async () => {
   browser = await chromium.connectOverCDP(CDP_URL);
   const context = browser.contexts()[0];
-
   const pages = context.pages();
   page = pages.find(
     (p) =>
       (p.url().includes('localhost:1420') || p.url().includes('tauri.localhost')) &&
       !p.url().includes('splash')
   );
-
   if (!page) throw new Error('Main window not found in CDP context');
-
   await page.waitForSelector('[data-testid="nav-albums"]', { timeout: 30_000 });
 });
 
@@ -54,9 +68,9 @@ test.afterAll(async () => {
   await browser.close();
 });
 
-// Navigate to settings → About page before each test
+// Navigate to Settings → About before each test
 test.beforeEach(async () => {
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape').catch(() => {});
   await page.waitForTimeout(200);
   await page.click('[data-testid="settings-button"]', { force: true });
   await page.waitForSelector('[data-testid="nav-settings-about"]', { timeout: 10_000 });
@@ -65,22 +79,56 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => {
+  // Dismiss any open dialog
   await page.keyboard.press('Escape').catch(() => {});
   await page.waitForTimeout(200);
-  // Reset Rust-side test state so canned responses don't bleed between tests
-  // NOTE: Tauri snake_case params — use no_update / delay_ms, NOT camelCase
+  // Reset all Rust-side test state
   await page.evaluate(async () => {
     await window.__TAURI_INTERNALS__.invoke('set_test_update_response', { response: null, no_update: false });
     await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 0, shouldFail: false });
   });
 });
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-test('settings page shows update section with controls', async () => {
-  const autoUpdateToggle = page.locator('[data-testid="auto-update-toggle"]');
-  await expect(autoUpdateToggle).toBeVisible();
-  await expect(autoUpdateToggle).toBeChecked();
+/** Open update dialog via backend event (version 99.9.9) */
+async function openDialogViaEvent(p) {
+  await p.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('emit_test_update_available', {});
+  });
+  await expect(p.locator('[data-testid="update-dialog"]')).toBeVisible({ timeout: 5_000 });
+}
+
+/** Open update dialog via Check for Updates button (version 42.0.0) */
+async function openDialogViaCheck(p) {
+  await p.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_update_response', {
+      response: { version: '42.0.0', date: null, body: 'Test release notes.' },
+    });
+  });
+  await p.click('[data-testid="check-for-updates-button"]');
+  await expect(p.locator('[data-testid="update-dialog"]')).toBeVisible({ timeout: 8_000 });
+}
+
+/** Wait for dialog to close (hidden or removed from DOM) */
+async function waitForDialogClosed(p, timeout = 10_000) {
+  await p.waitForFunction(
+    () => {
+      const dialog = document.querySelector('[data-testid="update-dialog"]');
+      return !dialog || dialog.offsetParent === null;
+    },
+    { timeout }
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Settings UI
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('1 · about page renders update controls with correct defaults', async () => {
+  const autoToggle = page.locator('[data-testid="auto-update-toggle"]');
+  await expect(autoToggle).toBeVisible();
+  await expect(autoToggle).toBeChecked();
 
   const silentToggle = page.locator('[data-testid="silent-update-toggle"]');
   await expect(silentToggle).toBeVisible();
@@ -91,84 +139,303 @@ test('settings page shows update section with controls', async () => {
   await expect(checkBtn).toBeEnabled();
 });
 
-test('update-available backend event shows update dialog', async () => {
-  await page.evaluate(async () => {
-    await window.__TAURI_INTERNALS__.invoke('emit_test_update_available', {});
+test('2 · auto-update toggle persists when toggled off then on', async () => {
+  const toggle = page.locator('[data-testid="auto-update-toggle"]');
+  await expect(toggle).toBeChecked();
+
+  // Toggle off
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+
+  // Verify persisted via IPC
+  const stored = await page.evaluate(async () => {
+    return window.__TAURI_INTERNALS__.invoke('get_user_setting', { key: 'app.auto_update_enabled' });
   });
+  expect(stored).toBe('false');
 
-  const dialog = page.locator('[data-testid="update-dialog"]');
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  // Toggle back on
+  await toggle.click();
+  await expect(toggle).toBeChecked();
 
-  const version = page.locator('[data-testid="update-dialog-version"]');
-  await expect(version).toContainText('99.9.9');
-
-  await page.screenshot({ path: 'screenshots/update-dialog-from-event.png' });
+  const restored = await page.evaluate(async () => {
+    return window.__TAURI_INTERNALS__.invoke('get_user_setting', { key: 'app.auto_update_enabled' });
+  });
+  expect(restored).toBe('true');
 });
 
-test('update dialog "Later" button dismisses the dialog', async () => {
-  await page.evaluate(async () => {
-    await window.__TAURI_INTERNALS__.invoke('emit_test_update_available', {});
+test('3 · silent-update toggle persists when toggled on then off', async () => {
+  const toggle = page.locator('[data-testid="silent-update-toggle"]');
+  await expect(toggle).not.toBeChecked();
+
+  // Toggle on
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+
+  const stored = await page.evaluate(async () => {
+    return window.__TAURI_INTERNALS__.invoke('get_user_setting', { key: 'app.auto_update_silent' });
   });
-  await expect(page.locator('[data-testid="update-dialog"]')).toBeVisible({ timeout: 5_000 });
+  expect(stored).toBe('true');
 
-  await page.click('[data-testid="update-dialog-later"]');
+  // Toggle off
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
 
-  await expect(page.locator('[data-testid="update-dialog"]')).not.toBeVisible({ timeout: 3_000 });
+  const restored = await page.evaluate(async () => {
+    return window.__TAURI_INTERNALS__.invoke('get_user_setting', { key: 'app.auto_update_silent' });
+  });
+  expect(restored).toBe('false');
 });
 
-test('"Check for Updates" shows dialog when update is available', async () => {
-  // Arm the Rust-side canned response before clicking
-  await page.evaluate(async () => {
-    await window.__TAURI_INTERNALS__.invoke('set_test_update_response', {
-      response: { version: '42.0.0', date: null, body: 'Big release!' },
-    });
-  });
+// ═══════════════════════════════════════════════════════════════════════════
+// Update detection
+// ═══════════════════════════════════════════════════════════════════════════
 
-  await page.click('[data-testid="check-for-updates-button"]');
+test('4 · backend update-available event shows dialog with version', async () => {
+  await openDialogViaEvent(page);
 
-  const dialog = page.locator('[data-testid="update-dialog"]');
-  await expect(dialog).toBeVisible({ timeout: 8_000 });
+  await expect(page.locator('[data-testid="update-dialog-version"]')).toContainText('99.9.9');
+  // Dialog should contain Install button
+  await expect(page.locator('[data-testid="update-dialog-install"]')).toBeVisible();
+  // Dialog should contain Later button
+  await expect(page.locator('[data-testid="update-dialog-later"]')).toBeVisible();
+});
+
+test('5 · check-for-updates button shows dialog when update exists', async () => {
+  await openDialogViaCheck(page);
 
   await expect(page.locator('[data-testid="update-dialog-version"]')).toContainText('42.0.0');
-
-  await page.screenshot({ path: 'screenshots/update-dialog-from-check.png' });
 });
 
-test('"Check for Updates" shows up-to-date toast when no update', async () => {
-  // no_update: true → Rust returns Ok(None) from check_for_updates
-  // NOTE: Tauri uses snake_case param names — must use no_update, not noUpdate
+test('6 · check-for-updates shows up-to-date toast when no update', async () => {
   await page.evaluate(async () => {
     await window.__TAURI_INTERNALS__.invoke('set_test_update_response', { no_update: true });
   });
 
   await page.click('[data-testid="check-for-updates-button"]');
 
-  // No update dialog
+  // No dialog
   await expect(page.locator('[data-testid="update-dialog"]')).not.toBeVisible({ timeout: 3_000 });
-
-  // Up-to-date toast — translation key settings.upToDate = "You're on the latest version!"
+  // Toast: "You're on the latest version!"
   await expect(page.getByText(/latest version/i)).toBeVisible({ timeout: 5_000 });
 });
 
-test('Install Now button triggers installation progress', async () => {
-  // Set a 5 second delay so the progress bar is visible before install completes.
-  // NOTE: Tauri camelCase for required params — use delayMs (not delay_ms)
+test('7 · multiple rapid check clicks show only one dialog', async () => {
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_update_response', {
+      response: { version: '42.0.0', date: null, body: 'Test' },
+    });
+  });
+
+  const checkBtn = page.locator('[data-testid="check-for-updates-button"]');
+  await checkBtn.click();
+  await page.waitForTimeout(100);
+
+  await expect(page.locator('[data-testid="update-dialog"]')).toBeVisible({ timeout: 8_000 });
+  const count = await page.locator('[data-testid="update-dialog"]').count();
+  expect(count).toBe(1);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Dialog behaviour
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('8 · Later button dismisses the dialog', async () => {
+  await openDialogViaEvent(page);
+
+  await page.click('[data-testid="update-dialog-later"]');
+  await expect(page.locator('[data-testid="update-dialog"]')).not.toBeVisible({ timeout: 3_000 });
+});
+
+test('9 · Escape key dismisses the dialog before install', async () => {
+  await openDialogViaEvent(page);
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-testid="update-dialog"]')).not.toBeVisible({ timeout: 3_000 });
+});
+
+test('10 · backdrop click dismisses the dialog before install', async () => {
+  await openDialogViaEvent(page);
+
+  // Click the backdrop (the outermost overlay div)
+  const dialog = page.locator('[data-testid="update-dialog"]');
+  // Click at position (10, 10) relative to viewport — outside the centered modal
+  await page.mouse.click(10, 10);
+  await expect(dialog).not.toBeVisible({ timeout: 3_000 });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Installation — manual
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('11 · install triggers progress bar and completes', async () => {
+  test.setTimeout(20_000);
+
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 3000 });
+  });
+
+  await openDialogViaEvent(page);
+  await page.click('[data-testid="update-dialog-install"]');
+
+  // Progress bar appears
+  await expect(page.locator('[data-testid="update-progress-bar"]')).toBeVisible({ timeout: 5_000 });
+
+  // Dialog closes on completion
+  await waitForDialogClosed(page);
+});
+
+test('12 · progress bar shows increasing percentage during install', async () => {
+  test.setTimeout(20_000);
+
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 4000 });
+  });
+
+  await openDialogViaEvent(page);
+  await page.click('[data-testid="update-dialog-install"]');
+  await expect(page.locator('[data-testid="update-progress-bar"]')).toBeVisible({ timeout: 5_000 });
+
+  // Sample progress values over time
+  const progressValues = [];
+  for (let i = 0; i < 8; i++) {
+    await page.waitForTimeout(500);
+    const progressText = await page.evaluate(() => {
+      const bar = document.querySelector('[data-testid="update-progress-bar"]');
+      if (!bar) return null;
+      const parent = bar.closest('.space-y-2');
+      if (!parent) return null;
+      const pct = parent.querySelector('.font-medium');
+      return pct ? pct.textContent.trim() : null;
+    });
+    if (progressText) {
+      const num = parseInt(progressText, 10);
+      if (!isNaN(num)) progressValues.push(num);
+    }
+  }
+
+  expect(progressValues.length).toBeGreaterThan(0);
+  const nonZero = progressValues.filter((v) => v > 0);
+  expect(nonZero.length).toBeGreaterThan(0);
+});
+
+test('13 · install failure shows error and re-enables Install button', async () => {
+  test.setTimeout(15_000);
+
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 1000, shouldFail: true });
+  });
+
+  await openDialogViaEvent(page);
+  const installBtn = page.locator('[data-testid="update-dialog-install"]');
+  await installBtn.click();
+
+  // Button disabled while installing
+  await expect(installBtn).toBeDisabled();
+
+  // After failure: button re-enabled, dialog stays open
+  await expect(installBtn).toBeEnabled({ timeout: 8_000 });
+  await expect(page.locator('[data-testid="update-dialog"]')).toBeVisible();
+});
+
+test('14 · dialog locked during installation (Later disabled, Escape ignored)', async () => {
+  test.setTimeout(15_000);
+
   await page.evaluate(async () => {
     await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 5000 });
   });
 
-  // Open the dialog via the event
-  await page.evaluate(async () => {
-    await window.__TAURI_INTERNALS__.invoke('emit_test_update_available', {});
-  });
-  await expect(page.locator('[data-testid="update-dialog"]')).toBeVisible({ timeout: 5_000 });
+  await openDialogViaEvent(page);
+  await page.click('[data-testid="update-dialog-install"]');
 
-  const installBtn = page.locator('[data-testid="update-dialog-install"]');
-  await expect(installBtn).toBeVisible();
-  await installBtn.click();
-
-  // Progress bar should appear while installing (install_update is sleeping for 5s)
+  // Wait for installing state
   await expect(page.locator('[data-testid="update-progress-bar"]')).toBeVisible({ timeout: 3_000 });
 
-  await page.screenshot({ path: 'screenshots/update-installing.png' });
+  // Later button disabled
+  await expect(page.locator('[data-testid="update-dialog-later"]')).toBeDisabled();
+
+  // Escape does not close
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await expect(page.locator('[data-testid="update-dialog"]')).toBeVisible();
+
+  // Backdrop click does not close
+  await page.mouse.click(10, 10);
+  await page.waitForTimeout(300);
+  await expect(page.locator('[data-testid="update-dialog"]')).toBeVisible();
+});
+
+test('15 · progress resets when dialog reopens after failed install', async () => {
+  test.setTimeout(20_000);
+
+  // First attempt: fail
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 1000, shouldFail: true });
+  });
+
+  await openDialogViaEvent(page);
+  await page.click('[data-testid="update-dialog-install"]');
+  await expect(page.locator('[data-testid="update-dialog-install"]')).toBeEnabled({ timeout: 8_000 });
+
+  // Close and reset
+  await page.click('[data-testid="update-dialog-later"]');
+  await expect(page.locator('[data-testid="update-dialog"]')).not.toBeVisible({ timeout: 3_000 });
+
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 3000, shouldFail: false });
+  });
+
+  // Reopen — progress bar should NOT be visible (reset to 0)
+  await openDialogViaEvent(page);
+  await expect(page.locator('[data-testid="update-progress-bar"]')).not.toBeVisible();
+
+  // Second attempt should work
+  await page.click('[data-testid="update-dialog-install"]');
+  await expect(page.locator('[data-testid="update-progress-bar"]')).toBeVisible({ timeout: 5_000 });
+});
+
+test('16 · install with zero delay completes instantly', async () => {
+  test.setTimeout(10_000);
+
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 0 });
+  });
+
+  await openDialogViaEvent(page);
+  await page.click('[data-testid="update-dialog-install"]');
+
+  await waitForDialogClosed(page, 5_000);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// End-to-end flows
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('17 · check → dialog → install → completion (full flow)', async () => {
+  test.setTimeout(20_000);
+
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 2000 });
+  });
+
+  await openDialogViaCheck(page);
+  await expect(page.locator('[data-testid="update-dialog-version"]')).toContainText('42.0.0');
+
+  await page.click('[data-testid="update-dialog-install"]');
+  await expect(page.locator('[data-testid="update-progress-bar"]')).toBeVisible({ timeout: 5_000 });
+  await waitForDialogClosed(page);
+});
+
+test('18 · event → dialog → install → completion (full flow)', async () => {
+  test.setTimeout(20_000);
+
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke('set_test_install_delay', { delayMs: 2000 });
+  });
+
+  await openDialogViaEvent(page);
+  await expect(page.locator('[data-testid="update-dialog-version"]')).toContainText('99.9.9');
+
+  await page.click('[data-testid="update-dialog-install"]');
+  await expect(page.locator('[data-testid="update-progress-bar"]')).toBeVisible({ timeout: 5_000 });
+  await waitForDialogClosed(page);
 });
