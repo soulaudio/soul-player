@@ -3057,17 +3057,43 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Save window state on close, then exit the process.
-                // Without explicit exit, background tasks (updater, device monitor,
-                // event emission thread) keep the tokio runtime alive indefinitely.
+                // Only exit when the main window is closed — ignore splash screen close.
+                if window.label() != "main" {
+                    return;
+                }
+
+                // Capture window geometry SYNCHRONOUSLY here, before the window tears down.
+                //
+                // Why: after CloseRequested returns (without prevent_default), Windows begins
+                // destroying the HWND. Calling geometry APIs (outer_position, outer_size) from
+                // the spawned async task dispatches WM_GETWINDOWRECT/WM_GETWINDOWPLACEMENT to
+                // a window whose message queue may no longer be active → deadlock, app hangs.
+                let position = window.outer_position().ok();
+                let size = window.outer_size().ok();
+                let maximized = window.is_maximized().unwrap_or(false);
+
                 let app = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    // Best-effort save — don't let failures block exit
-                    if let Err(e) = window_state_manager::save_window_state(&app).await {
-                        tracing::warn!("[WindowEvent] Failed to save window state: {:?}", e);
+                    // Timeout the DB write: a locked SQLite connection (e.g., active import)
+                    // must not block the exit path.
+                    let result = tokio::time::timeout(
+                        std::time::Duration::from_secs(2),
+                        window_state_manager::save_window_state_from_geometry(
+                            &app, position, size, maximized,
+                        ),
+                    )
+                    .await;
+                    match result {
+                        Ok(Ok(_)) => tracing::info!("[WindowEvent] Window state saved, exiting"),
+                        Ok(Err(e)) => tracing::warn!("[WindowEvent] Failed to save window state: {}", e),
+                        Err(_) => tracing::warn!("[WindowEvent] Window state save timed out, exiting"),
                     }
-                    tracing::info!("[WindowEvent] Window state saved, exiting application");
-                    app.exit(0);
+                    // std::process::exit terminates at the OS level immediately.
+                    // app.exit() sends a message to the Tauri event loop, which may already be
+                    // shutting down (last window closed) — unreliable. OS exit is the only
+                    // guaranteed path and kills all background threads (updater, device monitor,
+                    // event emission loop) regardless of their state.
+                    std::process::exit(0);
                 });
             }
         })

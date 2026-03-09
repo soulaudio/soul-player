@@ -136,6 +136,37 @@ pub async fn load_window_state(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Save window state from pre-captured geometry.
+///
+/// Use this when the window handle may already be destroyed (e.g., inside the
+/// CloseRequested async task). Calling `window.outer_position()` after window
+/// teardown on Windows dispatches to an HWND whose message queue is inactive,
+/// which can deadlock. Capture geometry synchronously in the event handler and
+/// pass it here instead.
+pub async fn save_window_state_from_geometry(
+    app: &AppHandle,
+    position: Option<tauri::PhysicalPosition<i32>>,
+    size: Option<tauri::PhysicalSize<u32>>,
+    maximized: bool,
+) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let ws = WindowState {
+        x: position.map(|p| p.x),
+        y: position.map(|p| p.y),
+        width: size.map(|s| s.width as i32).unwrap_or(1200),
+        height: size.map(|s| s.height as i32).unwrap_or(800),
+        maximized,
+        last_route: None,
+    };
+    tracing::info!(
+        "[window_state] Saving geometry: {}x{} at ({:?}, {:?}), maximized={}",
+        ws.width, ws.height, ws.x, ws.y, ws.maximized
+    );
+    window_state::save_window_state(&state.pool, &state.user_id, &ws)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// Save current window state to database
 pub async fn save_window_state(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
