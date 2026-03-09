@@ -3,7 +3,7 @@
  * with auto-hide header behavior on scroll
  */
 
-import { useEffect, useRef, ReactNode, useCallback, useState } from 'react'
+import { useEffect, useRef, ReactNode, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
@@ -34,8 +34,12 @@ export function DetailPageLayout({
   const idleTimerRef = useRef<number | null>(null)
   const hiddenByIdleRef = useRef(false)
   const showHeaderRef = useRef(showHeader)
-  const [isAtBottom, setIsAtBottom] = useState(false)
-  const [topGradientOpacity, setTopGradientOpacity] = useState(0)
+
+  // Refs for direct DOM gradient manipulation — avoids React re-renders on every scroll frame
+  const topGradientRef = useRef<HTMLDivElement>(null)
+  const bottomGradientRef = useRef<HTMLDivElement>(null)
+  // Throttle mousemove → idle timer resets (max once per 200ms)
+  const lastMouseMoveRef = useRef(0)
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -51,7 +55,7 @@ export function DetailPageLayout({
     if (hiddenByIdleRef.current) {
       setShowHeader(true)
       hiddenByIdleRef.current = false
-      setTopGradientOpacity(0)
+      if (topGradientRef.current) topGradientRef.current.style.opacity = '0'
     }
 
     idleTimerRef.current = window.setTimeout(() => {
@@ -69,6 +73,12 @@ export function DetailPageLayout({
 
       setShowHeader(false)
       hiddenByIdleRef.current = true
+
+      // Update gradient since header is now hidden and no scroll event is coming
+      if (topGradientRef.current && scrollContainerRef.current) {
+        const scrollTop = scrollContainerRef.current.scrollTop
+        if (scrollTop > 10) topGradientRef.current.style.opacity = '1'
+      }
     }, 3000)
   }, [setShowHeader])
 
@@ -76,7 +86,7 @@ export function DetailPageLayout({
   useEffect(() => {
     setShowHeader(true)
     hiddenByIdleRef.current = false
-    setTopGradientOpacity(0)
+    if (topGradientRef.current) topGradientRef.current.style.opacity = '0'
   }, [setShowHeader])
 
   // Hide/show header on scroll
@@ -95,15 +105,11 @@ export function DetailPageLayout({
           const clientHeight = scrollContainer.clientHeight
 
           const atBottom = scrollHeight - scrollTop - clientHeight < 10
-          setIsAtBottom(atBottom)
 
-          let calculatedOpacity = 0
-          if (!showHeaderRef.current && scrollTop > 10) {
-            calculatedOpacity = 1
-          } else {
-            calculatedOpacity = 0
-          }
-          setTopGradientOpacity(calculatedOpacity)
+          // Update gradients directly on the DOM — no React state update, no re-render
+          const gradientOpacity = !showHeaderRef.current && scrollTop > 10 ? '1' : '0'
+          if (topGradientRef.current) topGradientRef.current.style.opacity = gradientOpacity
+          if (bottomGradientRef.current) bottomGradientRef.current.style.opacity = atBottom ? '0' : '1'
 
           // Show and reset idle timer if scrolled to the very top
           if (scrollTop <= 10) {
@@ -157,14 +163,18 @@ export function DetailPageLayout({
       const rect = scrollContainer.getBoundingClientRect()
       const mouseY = e.clientY - rect.top
 
-      // If mouse is at the top of the scroll container and header is hidden, show it
       if (mouseY >= 0 && mouseY <= 100 && !showHeaderRef.current) {
         setShowHeader(true)
         hiddenByIdleRef.current = false
-        setTopGradientOpacity(0)
+        if (topGradientRef.current) topGradientRef.current.style.opacity = '0'
       }
 
-      resetIdleTimer()
+      // Throttle idle timer resets to max once per 200ms to avoid setTimeout churn
+      const now = Date.now()
+      if (now - lastMouseMoveRef.current > 200) {
+        lastMouseMoveRef.current = now
+        resetIdleTimer()
+      }
     }
 
     resetIdleTimer()
@@ -182,7 +192,7 @@ export function DetailPageLayout({
     <div className="h-full flex flex-col overflow-hidden relative">
       {/* Back button - auto-hide on scroll, absolutely positioned */}
       <div
-        className={`absolute top-0 left-0 right-0 bg-background z-10 transition-all duration-300 mr-6 pb-2 ${
+        className={`absolute top-0 left-0 right-0 bg-background z-10 transition-transform duration-300 mr-6 pb-2 ${
           showHeader ? 'translate-y-0' : '-translate-y-full'
         }`}
       >
@@ -195,10 +205,11 @@ export function DetailPageLayout({
         </button>
       </div>
 
-      {/* Scrollable Content - with dynamic padding for back button */}
+      {/* Scrollable Content — no transition on this container (padding-top transitions cause
+          layout reflow of all children on every header toggle; snap instantly instead) */}
       <div
         ref={scrollContainerRef}
-        className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom transition-all duration-300 ${
+        className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom ${
           showHeader ? 'pt-10' : 'pt-4'
         }`}
       >
@@ -211,22 +222,23 @@ export function DetailPageLayout({
         {children}
       </div>
 
-      {/* Top gradient overlay */}
+      {/* Top gradient overlay — opacity controlled directly via ref to avoid re-renders */}
       <div
+        ref={topGradientRef}
         className="absolute top-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300"
         style={{
           background: 'linear-gradient(to bottom, hsl(var(--background)) 0%, transparent 100%)',
-          opacity: topGradientOpacity
+          opacity: 0
         }}
       />
 
-      {/* Bottom gradient overlay */}
+      {/* Bottom gradient overlay — opacity controlled directly via ref to avoid re-renders */}
       <div
-        className={`absolute bottom-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300 ${
-          isAtBottom ? 'opacity-0' : 'opacity-100'
-        }`}
+        ref={bottomGradientRef}
+        className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300"
         style={{
-          background: 'linear-gradient(to top, hsl(var(--background) / 0.75) 0%, transparent 100%)'
+          background: 'linear-gradient(to top, hsl(var(--background) / 0.75) 0%, transparent 100%)',
+          opacity: 1
         }}
       />
     </div>

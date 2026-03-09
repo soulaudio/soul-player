@@ -101,12 +101,17 @@ export function LibraryPageLayout({
       window.removeEventListener('library-gradients-changed', gradientsHandler)
     }
   }, [backend, setShowSearchBar])
+
   const lastScrollTop = useRef(0)
   const idleTimerRef = useRef<number | null>(null)
-  const hiddenByIdleRef = useRef(false) // Track if hidden by idle timeout
-  const showSearchBarRef = useRef(showSearchBar) // Ref to track current visibility without re-running effects
-  const [isAtBottom, setIsAtBottom] = useState(false)
-  const [topGradientOpacity, setTopGradientOpacity] = useState(0) // Smooth gradient opacity based on scroll position
+  const hiddenByIdleRef = useRef(false)
+  const showSearchBarRef = useRef(showSearchBar)
+
+  // Refs for direct DOM gradient manipulation — avoids React re-renders on every scroll frame
+  const topGradientRef = useRef<HTMLDivElement>(null)
+  const bottomGradientRef = useRef<HTMLDivElement>(null)
+  // Throttle mousemove → idle timer resets (max once per 200ms)
+  const lastMouseMoveRef = useRef(0)
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -140,8 +145,7 @@ export function LibraryPageLayout({
     if (isLoading) {
       setShowSearchBar(true)
       hiddenByIdleRef.current = false
-      // Hide gradient when header is visible during loading
-      setTopGradientOpacity(0)
+      if (topGradientRef.current) topGradientRef.current.style.opacity = '0'
     }
   }, [isLoading, setShowSearchBar])
 
@@ -156,8 +160,7 @@ export function LibraryPageLayout({
     if (hiddenByIdleRef.current) {
       setShowSearchBar(true)
       hiddenByIdleRef.current = false
-      // Hide gradient when header appears
-      setTopGradientOpacity(0)
+      if (topGradientRef.current) topGradientRef.current.style.opacity = '0'
     }
 
     // Set new timer to hide after 3 seconds of inactivity (only when auto-hide is enabled)
@@ -173,7 +176,6 @@ export function LibraryPageLayout({
         const atBottom = scrollHeight - scrollTop - clientHeight < 10
 
         // Don't hide if at bottom (prevents infinite loop from padding changes)
-        // Next mouse movement will reset the timer
         if (atBottom) {
           return
         }
@@ -181,16 +183,21 @@ export function LibraryPageLayout({
 
       // Hide after idle timeout
       setShowSearchBar(false)
-      hiddenByIdleRef.current = true // Mark as hidden by idle
+      hiddenByIdleRef.current = true
+
+      // Update gradient since header is now hidden and no scroll event is coming
+      if (topGradientRef.current && scrollContainerRef.current) {
+        const scrollTop = scrollContainerRef.current.scrollTop
+        if (scrollTop > 10) topGradientRef.current.style.opacity = '1'
+      }
     }, 3000)
-  }, [setShowSearchBar])
+  }, [setShowSearchBar, scrollContainerRef])
 
   // Show header when component mounts (page/tab switch)
   useEffect(() => {
     setShowSearchBar(true)
     hiddenByIdleRef.current = false
-    // Set initial gradient opacity - hidden since header is visible on mount
-    setTopGradientOpacity(0)
+    if (topGradientRef.current) topGradientRef.current.style.opacity = '0'
   }, [setShowSearchBar])
 
   // Hide/show search bar on scroll
@@ -210,29 +217,16 @@ export function LibraryPageLayout({
 
           // Check if at bottom (within 10px threshold)
           const atBottom = scrollHeight - scrollTop - clientHeight < 10
-          setIsAtBottom(atBottom)
 
-          // Calculate top gradient opacity based on scroll position
-          // Gradient only visible when:
-          // 1. Header is hidden (showSearchBarRef.current is false)
-          // 2. User has scrolled down (scrollTop > 10)
-          let calculatedOpacity = 0
-
-          if (autoHideSearchRef.current && !showSearchBarRef.current && scrollTop > 10) {
-            // Auto-hide enabled, header is hidden and scrolled down - show gradient
-            calculatedOpacity = 1
-          } else {
-            // Header is visible OR at top OR auto-hide disabled - hide gradient
-            calculatedOpacity = 0
-          }
-
-          setTopGradientOpacity(calculatedOpacity)
+          // Update gradients directly on the DOM — no React state update, no re-render
+          const gradientOpacity = autoHideSearchRef.current && !showSearchBarRef.current && scrollTop > 10 ? '1' : '0'
+          if (topGradientRef.current) topGradientRef.current.style.opacity = gradientOpacity
+          if (bottomGradientRef.current) bottomGradientRef.current.style.opacity = atBottom ? '0' : '1'
 
           // Show and reset idle timer if scrolled to the very top
           if (scrollTop <= 10) {
             setShowSearchBar(true)
             hiddenByIdleRef.current = false
-            // Reset idle timer when at top
             resetIdleTimer()
             lastScrollTop.current = scrollTop
             ticking = false
@@ -248,8 +242,7 @@ export function LibraryPageLayout({
           // Hide when scrolling down past threshold (only when auto-hide is enabled)
           if (autoHideSearchRef.current && scrollDelta > 0 && scrollTop > 50 && !atBottom) {
             setShowSearchBar(false)
-            hiddenByIdleRef.current = false // Hidden by manual scroll, not idle
-            // Clear idle timer when manually hiding
+            hiddenByIdleRef.current = false
             if (idleTimerRef.current !== null) {
               window.clearTimeout(idleTimerRef.current)
               idleTimerRef.current = null
@@ -258,8 +251,7 @@ export function LibraryPageLayout({
           // Show when scrolling up (but not when at bottom to prevent padding change loop)
           else if (scrollDelta < 0 && !atBottom) {
             setShowSearchBar(true)
-            hiddenByIdleRef.current = false // Reset idle flag
-            // Reset idle timer on scroll up (only when auto-hide is enabled)
+            hiddenByIdleRef.current = false
             if (autoHideSearchRef.current) resetIdleTimer()
           }
 
@@ -272,7 +264,7 @@ export function LibraryPageLayout({
 
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
     return () => scrollContainer.removeEventListener('scroll', handleScroll)
-  }, [setShowSearchBar, resetIdleTimer])
+  }, [setShowSearchBar, resetIdleTimer, scrollContainerRef])
 
   // Mouse movement detection for idle timeout - only in main content area
   useEffect(() => {
@@ -289,12 +281,17 @@ export function LibraryPageLayout({
       if (mouseY >= 0 && mouseY <= 100 && !showSearchBarRef.current) {
         setShowSearchBar(true)
         hiddenByIdleRef.current = false
-        // Hide gradient when header appears on hover
-        setTopGradientOpacity(0)
+        if (topGradientRef.current) topGradientRef.current.style.opacity = '0'
       }
 
-      // Reset idle timer on mouse movement (only when auto-hide is enabled)
-      if (autoHideSearchRef.current) resetIdleTimer()
+      // Throttle idle timer resets to max once per 200ms to avoid setTimeout churn
+      if (autoHideSearchRef.current) {
+        const now = Date.now()
+        if (now - lastMouseMoveRef.current > 200) {
+          lastMouseMoveRef.current = now
+          resetIdleTimer()
+        }
+      }
     }
 
     // Start idle timer on mount (only when auto-hide is enabled)
@@ -309,7 +306,7 @@ export function LibraryPageLayout({
         window.clearTimeout(idleTimerRef.current)
       }
     }
-  }, [resetIdleTimer, setShowSearchBar])
+  }, [resetIdleTimer, setShowSearchBar, scrollContainerRef])
 
   return (
     <div className="h-full flex flex-col overflow-hidden relative" data-testid={pageTestId}>
@@ -336,7 +333,7 @@ export function LibraryPageLayout({
 
       {/* Search bar - auto-hide on scroll when enabled, absolutely positioned */}
       <div
-        className={`absolute top-0 left-0 right-0 bg-background z-10 transition-all duration-300 mr-6 pb-3 ${
+        className={`absolute top-0 left-0 right-0 bg-background z-10 transition-transform duration-300 mr-6 pb-3 ${
           showSearchBar ? 'translate-y-0' : '-translate-y-full'
         }`}
       >
@@ -370,10 +367,11 @@ export function LibraryPageLayout({
           {filterPanel}
         </div>
 
-      {/* Scrollable Content - with dynamic padding for search bar */}
+      {/* Scrollable Content — no transition on this container (padding-top transitions cause
+          layout reflow of all children on every header toggle; snap instantly instead) */}
       <div
         ref={scrollContainerRef}
-        className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom transition-all duration-300 ${
+        className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom ${
           showSearchBar ? (filterPanelVisible ? 'pt-28' : 'pt-14') : 'pt-6'
         }`}
       >
@@ -388,25 +386,26 @@ export function LibraryPageLayout({
         )}
       </div>
 
-      {/* Top gradient overlay - smoothly fades based on scroll position */}
+      {/* Top gradient overlay — opacity controlled directly via ref to avoid re-renders */}
       {showGradients && (
         <div
+          ref={topGradientRef}
           className="absolute top-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300"
           style={{
             background: 'linear-gradient(to bottom, hsl(var(--background)) 0%, transparent 100%)',
-            opacity: topGradientOpacity
+            opacity: 0
           }}
         />
       )}
 
-      {/* Bottom gradient overlay - subtle and disappears at bottom */}
+      {/* Bottom gradient overlay — opacity controlled directly via ref to avoid re-renders */}
       {showGradients && (
         <div
-          className={`absolute bottom-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300 ${
-            isAtBottom ? 'opacity-0' : 'opacity-100'
-          }`}
+          ref={bottomGradientRef}
+          className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none z-10 transition-opacity duration-300"
           style={{
-            background: 'linear-gradient(to top, hsl(var(--background) / 0.75) 0%, transparent 100%)'
+            background: 'linear-gradient(to top, hsl(var(--background) / 0.75) 0%, transparent 100%)',
+            opacity: 1
           }}
         />
       )}
