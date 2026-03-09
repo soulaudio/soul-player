@@ -3056,18 +3056,28 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Only exit when the main window is closed — ignore splash screen close.
                 if window.label() != "main" {
                     return;
                 }
 
-                // Capture window geometry SYNCHRONOUSLY here, before the window tears down.
+                // PREVENT the OS close so the HWND stays alive while the async task runs.
                 //
-                // Why: after CloseRequested returns (without prevent_default), Windows begins
-                // destroying the HWND. Calling geometry APIs (outer_position, outer_size) from
-                // the spawned async task dispatches WM_GETWINDOWRECT/WM_GETWINDOWPLACEMENT to
-                // a window whose message queue may no longer be active → deadlock, app hangs.
+                // Without prevent_default(), Tauri may start shutting down the tokio runtime
+                // as soon as the last window closes. In environments where background tasks are
+                // disabled (e.g., E2E tests disable the update checker and audio pre-warm), the
+                // runtime can die before our spawned task executes std::process::exit(0), leaving
+                // the process alive indefinitely.
+                //
+                // With prevent_default(): the window remains open (the tokio runtime is
+                // guaranteed alive) until std::process::exit(0) terminates the whole process
+                // (including the window). The user sees no visual difference — exit is
+                // milliseconds away.
+                api.prevent_close();
+
+                // Capture window geometry SYNCHRONOUSLY here, from the live window.
+                // Geometry is accurate now; after std::process::exit() the HWND is gone.
                 let position = window.outer_position().ok();
                 let size = window.outer_size().ok();
                 let maximized = window.is_maximized().unwrap_or(false);
@@ -3088,11 +3098,10 @@ fn main() {
                         Ok(Err(e)) => tracing::warn!("[WindowEvent] Failed to save window state: {}", e),
                         Err(_) => tracing::warn!("[WindowEvent] Window state save timed out, exiting"),
                     }
-                    // std::process::exit terminates at the OS level immediately.
-                    // app.exit() sends a message to the Tauri event loop, which may already be
-                    // shutting down (last window closed) — unreliable. OS exit is the only
-                    // guaranteed path and kills all background threads (updater, device monitor,
-                    // event emission loop) regardless of their state.
+                    // std::process::exit terminates at the OS level immediately, killing all
+                    // threads (updater loop, device monitor, CPAL event loop) and the window.
+                    // app.exit() is unreliable here: it sends a message to the Tauri event loop
+                    // which may ignore it if the loop is in a partial-shutdown state.
                     std::process::exit(0);
                 });
             }
