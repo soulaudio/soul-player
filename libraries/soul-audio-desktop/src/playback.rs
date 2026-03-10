@@ -2295,6 +2295,15 @@ impl DesktopPlayback {
         }
     }
 
+    pub fn get_history(&self) -> Vec<soul_playback::QueueTrack> {
+        if let Ok(mgr) = self.manager.lock() {
+            mgr.get_history().into_iter().cloned().collect()
+        } else {
+            tracing::error!("[DesktopPlayback] PlaybackManager mutex poisoned in get_history");
+            Vec::new()
+        }
+    }
+
     /// Check if there is a next track
     pub fn has_next(&self) -> bool {
         if let Ok(mgr) = self.manager.lock() {

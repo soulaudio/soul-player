@@ -74,6 +74,7 @@ struct FrontendTrack {
     duration_seconds: Option<f64>,
     file_path: Option<String>,
     track_number: Option<i32>,
+    disc_number: Option<i32>,
     year: Option<i32>,
     // Audio format metadata
     file_format: String,
@@ -114,6 +115,7 @@ impl From<soul_core::types::Track> for FrontendTrack {
             duration_seconds: track.duration_seconds,
             file_path,
             track_number: track.track_number,
+            disc_number: track.disc_number,
             year: track.year,
             file_format: track.file_format,
             bit_rate: track.bitrate,
@@ -153,6 +155,7 @@ struct FrontendAlbum {
     artist_id: Option<i64>,
     year: Option<i32>,
     cover_art_path: Option<String>,
+    track_count: Option<i32>,
 }
 
 impl From<soul_core::types::Album> for FrontendAlbum {
@@ -164,6 +167,7 @@ impl From<soul_core::types::Album> for FrontendAlbum {
             artist_id: album.artist_id,
             year: album.year,
             cover_art_path: album.cover_art_path,
+            track_count: None,
         }
     }
 }
@@ -785,6 +789,38 @@ async fn get_queue(playback: State<'_, LazyPlaybackManager>) -> Result<Vec<Track
         })
         .collect();
     Ok(queue_data)
+}
+
+/// Get history (previously played tracks, oldest first)
+#[tauri::command]
+async fn get_history(playback: State<'_, LazyPlaybackManager>) -> Result<Vec<TrackData>, String> {
+    use soul_playback::TrackSource;
+
+    let history = playback.get().await?.get_history();
+    let history_data = history
+        .iter()
+        .map(|track| {
+            let (album_id, cover_art_path) = match &track.source {
+                TrackSource::Album { id, .. } => {
+                    let album_id = id.parse::<i64>().ok();
+                    (album_id, Some(format!("artwork://album/{}", id)))
+                }
+                _ => (None, Some(format!("artwork://track/{}", track.id))),
+            };
+            TrackData {
+                track_id: track.id.clone(),
+                title: track.title.clone(),
+                artist: track.artist.clone(),
+                album: track.album.clone(),
+                album_id,
+                file_path: track.path.to_string_lossy().to_string(),
+                duration_seconds: Some(track.duration.as_secs_f64()),
+                track_number: track.track_number,
+                cover_art_path,
+            }
+        })
+        .collect();
+    Ok(history_data)
 }
 
 #[tauri::command]
@@ -1533,7 +1569,20 @@ async fn get_artist_albums(
     let albums = soul_storage::albums::get_by_artist(&state.pool, artist_id)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(albums.into_iter().map(FrontendAlbum::from).collect())
+
+    let track_counts = soul_storage::albums::get_track_counts(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(albums
+        .into_iter()
+        .map(|album| {
+            let count = track_counts.get(&album.id).copied();
+            let mut fa = FrontendAlbum::from(album);
+            fa.track_count = count;
+            fa
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -3134,6 +3183,7 @@ fn main() {
             get_repeat,
             cycle_repeat,
             get_queue,
+            get_history,
             skip_to_queue_index,
             get_playback_capabilities,
             get_playback_state,

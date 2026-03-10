@@ -7,8 +7,10 @@ import { useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
-import { ArrowLeft, Play, ListMusic, Clock, Trash2, Pencil } from 'lucide-react'
+import { useTrackNumberDisplay } from '../hooks/useTrackNumberDisplay'
+import { Play, ListMusic, Clock, Trash2, Pencil } from 'lucide-react'
 import { SkeletonDetailPage } from '../components/SkeletonDetailPage'
+import { DetailPageLayout } from '../components/DetailPageLayout'
 import { TrackList } from '../components/TrackList'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
@@ -25,7 +27,8 @@ import { debug } from '../utils/debug';
 export function PlaylistPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const { goBack, hasHistory } = useNavigateWithHistory()
+  const { goBack } = useNavigateWithHistory()
+  const trackNumberDisplay = useTrackNumberDisplay()
   const backend = useBackend()
   const commands = usePlayerCommands()
   const { features, isDesktop } = usePlatform()
@@ -171,84 +174,76 @@ export function PlaylistPage() {
   }
 
   return (
-    <div data-testid="playlist-detail-page" className="h-full flex flex-col overflow-hidden">
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto pr-6">
-        {/* Header */}
-        <div className="mb-6">
-        <button
-          onClick={() => goBack('/playlists')}
-          className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{hasHistory ? t('common.back', 'Back') : t('playlist.backToPlaylists', 'Back to Playlists')}</span>
-        </button>
-
-        <div className="flex items-start gap-6">
-          {/* Playlist Cover */}
-          <div className="group relative w-48 h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {playlistArtworkUrl ? (
-              <img
-                key={artworkVersion}
-                src={playlistArtworkUrl}
-                alt={playlist.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <ListMusic className="w-24 h-24 text-primary" />
-            )}
-            {/* Edit button overlay */}
-            {isDesktop && (
-              <button
-                onClick={() => setEditArtworkOpen(true)}
-                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Pencil className="w-8 h-8 text-white" />
-              </button>
-            )}
-          </div>
-
-          {/* Playlist Info */}
-          <div className="flex-1">
-            <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
-              {t('library.playlist', 'Playlist')}
-            </p>
-            <h1 data-testid="playlist-title" className="text-4xl font-bold mb-2">{playlist.name}</h1>
-            {playlist.description && (
-              <p className="text-muted-foreground mb-2">{playlist.description}</p>
-            )}
-            <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
-              <Clock className="w-4 h-4" />
-              {tracks.length} {t('library.tracks', 'tracks')} • {formatDuration(totalDuration)}
-            </p>
-
-            <div className="flex items-center gap-3">
-              <button
-                data-testid="playlist-play-all-button"
-                onClick={handlePlayAll}
-                onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
-                disabled={tracks.length === 0}
-                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
-              >
-                <Play className="w-5 h-5" fill="currentColor" />
-                <span>{t('common.playAll', 'Play All')}</span>
-              </button>
-
-              {features.canCreatePlaylists && (
+    <div data-testid="playlist-detail-page" className="h-full">
+      <DetailPageLayout
+        fallbackBackPath="/playlists"
+        backLabelKey="playlist.backToPlaylists"
+        header={
+          <div className="flex items-start gap-6">
+            {/* Playlist Cover */}
+            <div className="group relative w-48 h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {playlistArtworkUrl ? (
+                <img
+                  key={artworkVersion}
+                  src={playlistArtworkUrl}
+                  alt={playlist.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <ListMusic className="w-24 h-24 text-primary" />
+              )}
+              {/* Edit button overlay */}
+              {isDesktop && (
                 <button
-                  data-testid="delete-playlist-button"
-                  onClick={() => setDeleteConfirm({ type: 'playlist' })}
-                  className="p-3 rounded-full hover:bg-destructive/10 text-destructive"
-                  title={t('playlist.delete', 'Delete Playlist')}
+                  onClick={() => setEditArtworkOpen(true)}
+                  className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  <Trash2 className="w-5 h-5" />
+                  <Pencil className="w-8 h-8 text-white" />
                 </button>
               )}
             </div>
-          </div>
-        </div>
-        </div>
 
+            {/* Playlist Info */}
+            <div className="flex-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
+                {t('library.playlist', 'Playlist')}
+              </p>
+              <h1 data-testid="playlist-title" className="text-4xl font-bold mb-2">{playlist.name}</h1>
+              {playlist.description && (
+                <p className="text-muted-foreground mb-2">{playlist.description}</p>
+              )}
+              <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
+                <Clock className="w-4 h-4" />
+                {tracks.length} {t('library.tracks', 'tracks')} • {formatDuration(totalDuration)}
+              </p>
+
+              <div className="flex items-center gap-3">
+                <button
+                  data-testid="playlist-play-all-button"
+                  onClick={handlePlayAll}
+                  onMouseDown={(e) => e.preventDefault()}
+                  disabled={tracks.length === 0}
+                  className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+                >
+                  <Play className="w-5 h-5" fill="currentColor" />
+                  <span>{t('common.playAll', 'Play All')}</span>
+                </button>
+
+                {features.canCreatePlaylists && (
+                  <button
+                    data-testid="delete-playlist-button"
+                    onClick={() => setDeleteConfirm({ type: 'playlist' })}
+                    className="p-3 rounded-full hover:bg-destructive/10 text-destructive"
+                    title={t('playlist.delete', 'Delete Playlist')}
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        }
+      >
         {/* Track List */}
         {tracks.length === 0 ? (
           <div data-testid="playlist-empty-state" className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -273,10 +268,8 @@ export function PlaylistPage() {
               sampleRate: t.sample_rate,
               channels: t.channels,
             }))}
-            showTrackNumber={true}
+            showTrackNumber={trackNumberDisplay !== 'hide'}
             buildQueue={(_allTracks, _clickedTrack, _clickedIndex) => {
-              // Return tracks in original order — TrackList passes clickedIndex
-              // to playQueue() so the correct track plays without reordering.
               return tracks
                 .filter((t) => t.file_path)
                 .map((t) => ({
@@ -314,7 +307,7 @@ export function PlaylistPage() {
             }}
           />
         )}
-      </div>
+      </DetailPageLayout>
 
       {/* Delete confirmation dialogs */}
       <ConfirmDialog

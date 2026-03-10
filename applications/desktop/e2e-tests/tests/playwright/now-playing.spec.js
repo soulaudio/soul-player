@@ -457,6 +457,103 @@ test('clicking a track in the queue does not remount the queue list', async () =
 });
 
 // ----------------------------------------------------------------
+// Test 12: Clicking album artwork opens a lightbox modal
+// ----------------------------------------------------------------
+
+test('clicking now-playing artwork opens a lightbox modal', async () => {
+  // Before clicking, no lightbox should be open
+  const lightboxBefore = page.locator('[data-testid="artwork-lightbox"]');
+  await expect(lightboxBefore).not.toBeVisible();
+
+  // Click the artwork container
+  const artwork = page.locator('[data-testid="now-playing-artwork"]');
+  await expect(artwork).toBeVisible({ timeout: 10_000 });
+  await artwork.click();
+
+  // Lightbox should now be open and visible
+  await expect(page.locator('[data-testid="artwork-lightbox"]')).toBeVisible({ timeout: 5_000 });
+});
+
+// ----------------------------------------------------------------
+// Test 13: Lightbox does NOT show an edit artwork button
+// ----------------------------------------------------------------
+
+test('artwork lightbox does not show an edit button', async () => {
+  // Open the lightbox
+  await page.locator('[data-testid="now-playing-artwork"]').click();
+  await page.locator('[data-testid="artwork-lightbox"]').waitFor({ state: 'visible', timeout: 5_000 });
+
+  // No edit button should be present inside the lightbox
+  const editBtn = page.locator('[data-testid="artwork-lightbox"] [data-testid="edit-artwork-button"]');
+  await expect(editBtn).not.toBeVisible();
+});
+
+// ----------------------------------------------------------------
+// Test 14: Pressing Escape closes the artwork lightbox
+// ----------------------------------------------------------------
+
+test('pressing Escape closes the artwork lightbox', async () => {
+  // Open the lightbox
+  await page.locator('[data-testid="now-playing-artwork"]').click();
+  await page.locator('[data-testid="artwork-lightbox"]').waitFor({ state: 'visible', timeout: 5_000 });
+
+  // Press Escape
+  await page.keyboard.press('Escape');
+
+  // Lightbox should close
+  await expect(page.locator('[data-testid="artwork-lightbox"]')).not.toBeVisible({ timeout: 5_000 });
+
+  // Now-playing page should still be visible after closing lightbox
+  await expect(page.locator('[data-testid="now-playing-page"]')).toBeVisible();
+});
+
+// ----------------------------------------------------------------
+// Test 15: Clicking the backdrop closes the artwork lightbox
+// ----------------------------------------------------------------
+
+test('clicking the backdrop closes the artwork lightbox', async () => {
+  // Open the lightbox
+  await page.locator('[data-testid="now-playing-artwork"]').click();
+  await page.locator('[data-testid="artwork-lightbox"]').waitFor({ state: 'visible', timeout: 5_000 });
+
+  // Click on the backdrop overlay (the dialog backdrop, not the artwork itself).
+  // The backdrop is the outer dialog container — click at its top-left corner to avoid the artwork panel.
+  const lightbox = page.locator('[data-testid="artwork-lightbox"]');
+  const box = await lightbox.boundingBox();
+  // Click top-left corner of the backdrop (away from the centered content)
+  await page.mouse.click(box.x + 10, box.y + 10);
+
+  // Lightbox should close
+  await expect(page.locator('[data-testid="artwork-lightbox"]')).not.toBeVisible({ timeout: 5_000 });
+});
+
+// ----------------------------------------------------------------
+// Test 16: Artwork lightbox shows image content
+// ----------------------------------------------------------------
+
+test('artwork lightbox shows image content', async () => {
+  // Open the lightbox
+  await page.locator('[data-testid="now-playing-artwork"]').click();
+  const lightbox = page.locator('[data-testid="artwork-lightbox"]');
+  await lightbox.waitFor({ state: 'visible', timeout: 5_000 });
+
+  // The lightbox content area should have positive dimensions
+  const box = await lightbox.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box.width).toBeGreaterThan(100);
+  expect(box.height).toBeGreaterThan(100);
+
+  // Either an <img> with a data URL or a fallback icon should be inside
+  const hasContent = await page.evaluate(() => {
+    const lb = document.querySelector('[data-testid="artwork-lightbox"]');
+    if (!lb) return false;
+    // Either an img element (loaded artwork) or a lucide icon (fallback) should be present
+    return lb.querySelector('img') !== null || lb.querySelector('svg') !== null;
+  });
+  expect(hasContent).toBe(true);
+});
+
+// ----------------------------------------------------------------
 // Test 11: Current track indicator updates correctly after clicking a track
 // ----------------------------------------------------------------
 

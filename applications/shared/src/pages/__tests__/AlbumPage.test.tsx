@@ -87,6 +87,7 @@ const createMockPlayerCommands = (): PlayerContextValue => ({
     clearPlayNext: vi.fn().mockResolvedValue(undefined),
     clearAddToQueue: vi.fn().mockResolvedValue(undefined),
     getAllSources: vi.fn().mockResolvedValue([]),
+    getHistory: vi.fn().mockResolvedValue([]),
   },
   events: {
     onStateChange: vi.fn(() => () => {}),

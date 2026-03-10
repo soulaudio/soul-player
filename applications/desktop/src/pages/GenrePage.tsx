@@ -220,7 +220,9 @@ export function GenrePage() {
               id: t.id,
               title: String(t.title || 'Unknown'),
               artist: t.artist_name,
+              artistId: t.artist_id,
               album: t.album_title,
+              albumId: t.album_id,
               duration: t.duration_seconds,
               trackNumber: t.track_number,
               isAvailable: !!t.file_path,
@@ -230,6 +232,16 @@ export function GenrePage() {
               channels: t.channels,
             }))}
             buildQueue={buildQueue}
+            onBeforePlay={async () => {
+              if (genre) {
+                await backend.recordContext({
+                  contextType: 'genre',
+                  contextId: String(genre.id),
+                  contextName: genre.name,
+                  contextArtworkPath: null,
+                });
+              }
+            }}
             onTrackAction={() => {}}
             renderMenu={(track) => {
               const desktopTrack = filteredTracks.find(t => t.id === track.id);

@@ -158,6 +158,11 @@
     "hideLibrarySearchDescription": "Suchleiste beim Scrollen nach unten in Bibliotheksansichten automatisch ausblenden. Sie wird beim Hochscrollen oder Bewegen der Maus zum oberen Rand wieder angezeigt.",
     "showLibraryGradients": "Scroll-Verläufe in der Bibliothek anzeigen",
     "showLibraryGradientsDescription": "Verblassende Verläufe oben und unten in Bibliotheksansichten (Alben, Künstler, Titel, Playlists) anzeigen, um scrollbaren Inhalt anzuzeigen.",
+    "trackNumberDisplay": "Tracknummer-Anzeige",
+    "trackNumberDisplayDescription": "Wie Tracknummern in Album- und Playlist-Tracklisten angezeigt werden.",
+    "trackNumberDisplayHide": "Ausblenden",
+    "trackNumberDisplayShow": "Anzeigen",
+    "trackNumberDisplayVinyl": "Mit Vinyl-Seiten anzeigen (1A, 2A, 1B…)",
     "showShortcuts": "Tastenkombinationen anzeigen",
     "showShortcutsDescription": "Tastenkombinationen in Tooltips und UI-Elementen anzeigen. Zum Beispiel:",
     "audio": {

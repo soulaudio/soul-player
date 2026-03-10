@@ -66,7 +66,7 @@ export function VirtualizedGrid<T>({
     count: rowCount,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => rowHeight,
-    overscan: 5,
+    overscan: 8,
   })
 
   const virtualItems = virtualizer.getVirtualItems()

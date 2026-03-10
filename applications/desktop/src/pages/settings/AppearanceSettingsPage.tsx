@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
-import { ThemePicker, useBackend, debug, Select } from '@soul-player/shared';
+import { ThemePicker, useBackend, debug, Select, TRACK_NUMBER_DISPLAY_EVENT, TRACK_NUMBER_DISPLAY_KEY, TRACK_NUMBER_DISPLAY_DEFAULT, type TrackNumberDisplay } from '@soul-player/shared';
 import { useSettings } from '../../contexts/SettingsContext';
 
 const LANGUAGES = [
@@ -19,6 +19,7 @@ export function AppearanceSettingsPage() {
   const [hideLibrarySearch, setHideLibrarySearchState] = useState(true);
   const [showLibraryGradients, setShowLibraryGradientsState] = useState(true);
   const [language, setLanguageState] = useState(i18next.language || 'en-US');
+  const [trackNumberDisplay, setTrackNumberDisplayState] = useState<TrackNumberDisplay>(TRACK_NUMBER_DISPLAY_DEFAULT);
 
   useEffect(() => {
     Promise.all([
@@ -26,12 +27,16 @@ export function AppearanceSettingsPage() {
       backend.getUserSetting('ui.hide_library_search'),
       backend.getUserSetting('ui.show_library_gradients'),
       backend.getUserSetting('ui.language'),
+      backend.getUserSetting(TRACK_NUMBER_DISPLAY_KEY),
     ])
-      .then(([home, hideSearch, showGradients, lang]) => {
+      .then(([home, hideSearch, showGradients, lang, trackNumDisplay]) => {
         setHomeEnabledState(home ?? true);
         setHideLibrarySearchState(hideSearch ?? true);
         setShowLibraryGradientsState(showGradients ?? true);
         if (lang) setLanguageState(lang as string);
+        if (trackNumDisplay === 'hide' || trackNumDisplay === 'show' || trackNumDisplay === 'vinyl') {
+          setTrackNumberDisplayState(trackNumDisplay);
+        }
       })
       .catch(err => debug.error('Failed to load appearance settings:', err));
   }, [backend]);
@@ -68,6 +73,15 @@ export function AppearanceSettingsPage() {
         window.dispatchEvent(new CustomEvent('library-search-hidden-changed', { detail: { autoHide } }));
       })
       .catch(err => debug.error('Failed to save library search setting:', err));
+  }, [backend]);
+
+  const handleTrackNumberDisplayChange = useCallback((mode: TrackNumberDisplay) => {
+    setTrackNumberDisplayState(mode);
+    backend.setUserSetting(TRACK_NUMBER_DISPLAY_KEY, mode)
+      .then(() => {
+        window.dispatchEvent(new CustomEvent(TRACK_NUMBER_DISPLAY_EVENT, { detail: { mode } }));
+      })
+      .catch(err => debug.error('Failed to save track number display setting:', err));
   }, [backend]);
 
   return (
@@ -125,6 +139,28 @@ export function AppearanceSettingsPage() {
           <p className="text-xs text-muted-foreground mt-1">{t('settings.hideWindowControlsDescription')}</p>
         </div>
       </label>
+
+      <div>
+        <span className="text-sm font-medium block mb-1">{t('settings.trackNumberDisplay')}</span>
+        <p className="text-xs text-muted-foreground mb-3">{t('settings.trackNumberDisplayDescription')}</p>
+        <div className="flex flex-col gap-2">
+          {(['hide', 'show', 'vinyl'] as const).map(option => (
+            <label key={option} className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="track-number-display"
+                value={option}
+                checked={trackNumberDisplay === option}
+                onChange={() => handleTrackNumberDisplayChange(option)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm">
+                {t(`settings.trackNumberDisplay${option.charAt(0).toUpperCase() + option.slice(1)}` as any)}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
 
       <div>
         <h3 className="text-lg font-semibold mb-3">{t('settings.localization')}</h3>

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,\n                a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         WHERE a.artist_id = ?\n         ORDER BY a.year DESC, a.title",
+  "query": "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,\n                a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         ORDER BY a.title COLLATE NOCASE",
   "describe": {
     "columns": [
       {
@@ -60,13 +60,13 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       true,
       false,
       true,
-      false,
+      true,
       true,
       true,
       true,
@@ -76,5 +76,5 @@
       false
     ]
   },
-  "hash": "b43617a9cff0e8e373017c89fcc684ea1e7a3616639313509c0b16ed4393f41e"
+  "hash": "d200879a6d9212162de26f4cab7e48381cdee8123cfa99c283257c52468d6589"
 }

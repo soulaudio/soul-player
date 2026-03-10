@@ -624,6 +624,10 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         return await invoke('get_queue');
       },
 
+      async getHistory() {
+        return await invoke('get_history');
+      },
+
       async playQueue(queue, startIndex = 0, context) {
         // Lazy loading: If context provided and total count is large, use context-based loading
         const LAZY_LOADING_THRESHOLD = 100;

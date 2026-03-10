@@ -70,6 +70,7 @@ export interface PlayerCommandsInterface {
 
   // Queue management
   getQueue: () => Promise<QueueTrack[]>;
+  getHistory: () => Promise<QueueTrack[]>;
   playQueue: (queue: QueueTrack[], startIndex?: number, context?: QueueContext) => Promise<void>;
   playQueueWithContext: (
     context: QueueContext,

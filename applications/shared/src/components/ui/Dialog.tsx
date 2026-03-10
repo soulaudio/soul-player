@@ -7,9 +7,10 @@ interface DialogProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  'data-testid'?: string;
 }
 
-export function Dialog({ open, onClose, children }: DialogProps) {
+export function Dialog({ open, onClose, children, 'data-testid': testId }: DialogProps) {
   // Close on Escape key
   useEffect(() => {
     if (!open) return;
@@ -37,7 +38,7 @@ export function Dialog({ open, onClose, children }: DialogProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid={testId}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"

@@ -329,6 +329,14 @@ test('double-clicking Track Three row starts playback from Track Three', async (
 // Test 6: Back button navigates away from the genre page
 // ----------------------------------------------------------------
 
+// ----------------------------------------------------------------
+// Test 7: Artist name in track row is clickable and navigates to artist page
+//
+// This test will FAIL before the fix because GenrePage's TrackList mapping
+// omits artistId, causing ArtistLink to render as a plain non-clickable span.
+// After fix: artistId is included → ArtistLink renders [role="button"] → clickable.
+// ----------------------------------------------------------------
+
 test('back button navigates away from genre detail page', async () => {
   await navigateToGenrePage(page);
 
@@ -346,4 +354,95 @@ test('back button navigates away from genre detail page', async () => {
 
   // Verify we navigated away — genre-title should no longer be visible
   await expect(page.locator('[data-testid="genre-detail-page"]')).not.toBeVisible();
+});
+
+// ----------------------------------------------------------------
+// Test 7: Artist name in track row is clickable and navigates to artist page
+//
+// FAILS before fix: GenrePage's TrackList mapping omits artistId, causing
+// ArtistLink to render as a plain <span> without role="button".
+// PASSES after fix: artistId is included → ArtistLink is clickable.
+// ----------------------------------------------------------------
+
+test('artist name in genre track row is clickable and navigates to artist page', async () => {
+  await navigateToGenrePage(page);
+  await page.waitForSelector('[data-testid="track-list"]', { timeout: 10_000 });
+
+  // Get the first track row
+  const firstRow = page.locator('[data-testid="track-row"]').first();
+  await firstRow.waitFor({ state: 'visible', timeout: 10_000 });
+
+  // The artist cell should contain a clickable span (role="button") — not plain text.
+  // ArtistLink renders role="button" only when artistId is provided.
+  const artistLink = firstRow.locator('[role="button"]').filter({ hasText: 'Playwright Artist' });
+  await expect(artistLink).toBeVisible({ timeout: 5_000 });
+
+  // Click the artist link
+  await artistLink.click();
+
+  // Should navigate to the artist detail page
+  await page.waitForSelector('[data-testid="artist-detail-page"]', { timeout: 15_000 });
+  await expect(page.locator('[data-testid="artist-detail-page"]')).toBeVisible();
+});
+
+// ----------------------------------------------------------------
+// Test 8: Album name in track row is clickable and navigates to album page
+//
+// FAILS before fix: GenrePage's TrackList mapping omits albumId, causing
+// AlbumLink to render as a plain <span> without role="button".
+// PASSES after fix: albumId is included → AlbumLink is clickable.
+// ----------------------------------------------------------------
+
+test('album name in genre track row is clickable and navigates to album page', async () => {
+  await navigateToGenrePage(page);
+  await page.waitForSelector('[data-testid="track-list"]', { timeout: 10_000 });
+
+  const firstRow = page.locator('[data-testid="track-row"]').first();
+  await firstRow.waitFor({ state: 'visible', timeout: 10_000 });
+
+  // The album cell should contain a clickable span (role="button") — not plain text.
+  // AlbumLink renders role="button" only when albumId is provided.
+  const albumLink = firstRow.locator('[role="button"]').filter({ hasText: 'Playwright Album' });
+  await expect(albumLink).toBeVisible({ timeout: 5_000 });
+
+  // Click the album link — AlbumLink calls stopPropagation so it won't double-click the row
+  await albumLink.click();
+
+  // Should navigate to the album detail page
+  await page.waitForSelector('[data-testid="album-detail-page"]', { timeout: 15_000 });
+  await expect(page.locator('[data-testid="album-detail-page"]')).toBeVisible();
+});
+
+// ----------------------------------------------------------------
+// Test 9: Double-clicking a track in genre page records genre playback context
+//
+// FAILS before fix: TrackList.handlePlay calls commands.playQueue() without
+// calling backend.recordContext(), so the genre context is never stored.
+// PASSES after fix: onBeforePlay callback records genre context before playback.
+// ----------------------------------------------------------------
+
+test('double-clicking track in genre page records genre playback context', async () => {
+  await navigateToGenrePage(page);
+  await page.waitForSelector('[data-testid="track-list"]', { timeout: 10_000 });
+
+  // Double-click Track One to start playback
+  const firstRow = page.locator('[data-testid="track-row"]').filter({ hasText: 'Track One' });
+  await firstRow.waitFor({ state: 'visible', timeout: 10_000 });
+  await firstRow.dblclick();
+
+  // Wait for playback to start
+  await page.waitForSelector('[data-testid="now-playing-title"]', { timeout: 15_000 });
+  await page.waitForFunction(
+    async () => (await window.__TAURI_INTERNALS__.invoke('get_playback_state')) === 'Playing',
+    { timeout: 15_000 }
+  );
+
+  // Verify that the most recent playback context is for genre 4001
+  const contexts = await page.evaluate(async () => {
+    return window.__TAURI_INTERNALS__.invoke('get_recent_playback_contexts', { limit: 1 });
+  });
+
+  expect(contexts).toHaveLength(1);
+  expect(contexts[0].contextType).toBe('genre');
+  expect(contexts[0].contextId).toBe('4001');
 });

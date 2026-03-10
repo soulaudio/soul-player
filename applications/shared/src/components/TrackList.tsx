@@ -24,6 +24,7 @@ export interface Track {
   albumId?: number;
   duration?: number;
   trackNumber?: number;
+  discNumber?: number;
   /** Whether the track is available (file exists). Defaults to true. */
   isAvailable?: boolean;
   /** Audio file format (e.g., 'flac', 'mp3', 'aac') */
@@ -69,6 +70,10 @@ interface TrackListProps {
   virtualItemSize?: number;
   /** Whether to show track number column (default: false) */
   showTrackNumber?: boolean;
+  /** Use vinyl side labels (A1, B2) instead of plain numbers when disc_number is present */
+  vinylSides?: boolean;
+  /** Optional async callback invoked before playback starts, e.g. to record context */
+  onBeforePlay?: (clickedTrack: Track) => Promise<void>;
 }
 
 function formatDuration(seconds?: number): string {
@@ -76,6 +81,24 @@ function formatDuration(seconds?: number): string {
   const minutes = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+const VINYL_SIDES = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+/** Format track label: "1A", "3B" when vinylSides=true, else plain number */
+function formatTrackLabel(
+  trackNumber: number | undefined,
+  discNumber: number | undefined,
+  displayIndex: number,
+  vinylSides: boolean,
+): string {
+  if (vinylSides) {
+    // Default to disc 1 (Side A) when disc_number is not set
+    const disc = (discNumber != null && discNumber >= 1) ? discNumber : 1;
+    const side = VINYL_SIDES[(disc - 1) % VINYL_SIDES.length] ?? String(disc);
+    return `${trackNumber ?? displayIndex + 1}${side}`;
+  }
+  return String(trackNumber ?? displayIndex + 1);
 }
 
 /** Format quality score - higher is better */
@@ -305,6 +328,7 @@ interface TrackRowProps {
   onMouseLeave: () => void;
   renderMenu?: (track: Track) => React.ReactNode;
   showTrackNumber: boolean;
+  vinylSides: boolean;
   t: TFunction;
 }
 
@@ -322,6 +346,7 @@ const TrackRowComponent = ({
   onMouseLeave,
   renderMenu,
   showTrackNumber,
+  vinylSides,
   t,
 }: TrackRowProps) => {
   const activeVersion = getActiveVersion(group);
@@ -329,7 +354,7 @@ const TrackRowComponent = ({
   const isUnavailable = activeVersion.isAvailable === false;
 
   const gridCols = showTrackNumber
-    ? 'grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
+    ? 'grid-cols-[52px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
     : 'grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
 
   return (
@@ -366,7 +391,7 @@ const TrackRowComponent = ({
             </button>
           ) : (
             <div className="flex items-center text-muted-foreground text-sm">
-              {activeVersion.trackNumber || group.displayIndex + 1}
+              {formatTrackLabel(activeVersion.trackNumber, activeVersion.discNumber, group.displayIndex, vinylSides)}
             </div>
           )}
         </div>
@@ -473,6 +498,8 @@ export function TrackList({
   virtualized = false,
   virtualItemSize = 56,
   showTrackNumber = false,
+  vinylSides = false,
+  onBeforePlay,
 }: TrackListProps) {
   const { t } = useTranslation();
   const [hoveredGroupKey, setHoveredGroupKey] = useState<string | null>(null);
@@ -529,6 +556,9 @@ export function TrackList({
 
       debug.log('[TrackList] Playing queue with', queue.length, 'tracks, starting at index', clickedIndex);
 
+      // Record context before playback (e.g. genre, album, playlist)
+      await onBeforePlay?.(activeVersion);
+
       // CRITICAL: Pass clickedIndex as startIndex so the clicked track plays, not always the first track
       await commands.playQueue(queue, clickedIndex);
       onTrackAction?.(activeVersion);
@@ -537,7 +567,7 @@ export function TrackList({
     } finally {
       isPlayingRef.current = false;
     }
-  }, [groupedTracks, getActiveVersion, buildQueue, commands, onTrackAction]);
+  }, [groupedTracks, getActiveVersion, buildQueue, commands, onTrackAction, onBeforePlay]);
 
   const handlePause = useCallback(async () => {
     try {
@@ -558,7 +588,7 @@ export function TrackList({
   }
 
   const gridCols = showTrackNumber
-    ? 'grid-cols-[40px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
+    ? 'grid-cols-[52px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
     : 'grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
 
   // Virtualized rendering
@@ -635,6 +665,7 @@ export function TrackList({
                     onMouseLeave={() => setHoveredGroupKey(null)}
                     renderMenu={renderMenu}
                     showTrackNumber={showTrackNumber}
+                    vinylSides={vinylSides}
                     t={t}
                   />
                 </div>
@@ -698,6 +729,7 @@ export function TrackList({
               onMouseLeave={() => setHoveredGroupKey(null)}
               renderMenu={renderMenu}
               showTrackNumber={showTrackNumber}
+              vinylSides={vinylSides}
               t={t}
             />
           );

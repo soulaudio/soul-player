@@ -6,7 +6,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Artist>> {
         Artist,
         "SELECT id as 'id!', name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at
          FROM artists
-         ORDER BY sort_name, name"
+         ORDER BY sort_name COLLATE NOCASE, name COLLATE NOCASE"
     )
     .fetch_all(pool)
     .await?)

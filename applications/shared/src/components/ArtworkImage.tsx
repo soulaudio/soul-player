@@ -99,24 +99,39 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
     return unsubscribe;
   }, [getCacheKey]);
 
-  // Lazy loading with IntersectionObserver (only for non-priority items)
+  // Lazy loading with IntersectionObserver (only for non-priority items).
+  // rootMargin of 150px gives enough pre-load runway without triggering dozens
+  // of simultaneous IPC calls when the user flings through the list fast.
+  // The 150ms debounce inside ensures we only start loading artwork for items
+  // the user actually pauses on — items scrolled past cancel before IPC fires.
   useEffect(() => {
     if (priority || !containerRef.current) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            setIsInViewport(true);
-            // Once in viewport, we can stop observing
-            observer.disconnect();
+            // Debounce: only commit to loading after the item has been
+            // continuously visible for 150ms. Clears automatically if the
+            // observer fires again with isIntersecting=false before the timer
+            // fires (item scrolled past during fast scroll).
+            debounceTimer = setTimeout(() => {
+              setIsInViewport(true);
+              observer.disconnect();
+            }, 150);
+          } else {
+            if (debounceTimer !== null) {
+              clearTimeout(debounceTimer);
+              debounceTimer = null;
+            }
           }
         });
       },
       {
-        // Start loading slightly before entering viewport (500px margin)
-        rootMargin: '500px',
-        threshold: 0.01, // Trigger as soon as 1% is visible
+        rootMargin: '150px',
+        threshold: 0.01,
       }
     );
 
@@ -124,6 +139,7 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
 
     return () => {
       observer.disconnect();
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
     };
   }, [priority]);
 

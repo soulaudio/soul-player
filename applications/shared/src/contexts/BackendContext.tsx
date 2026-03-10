@@ -20,6 +20,7 @@ export interface BackendTrack {
   duration_seconds?: number
   file_path?: string
   track_number?: number
+  disc_number?: number
   year?: number
   file_format?: string
   bit_rate?: number

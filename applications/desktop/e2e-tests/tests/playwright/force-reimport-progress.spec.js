@@ -174,14 +174,14 @@ test('progress bar width is greater than 0 % after force re-import', async () =>
     () => {
       const bar = document.querySelector('[data-testid="scan-progress-bar"] > div');
       if (!bar) return false;
-      const w = parseFloat((bar as HTMLElement).style.width) || 0;
+      const w = parseFloat(bar.style.width) || 0;
       return w > 0;
     },
     { timeout: 15_000 },
   );
 
   const bar = page.locator('[data-testid="scan-progress-bar"] > div');
-  const width = await bar.evaluate(el => parseFloat((el as HTMLElement).style.width) || 0);
+  const width = await bar.evaluate(el => parseFloat(el.style.width) || 0);
   expect(width).toBeGreaterThan(0);
 });
 

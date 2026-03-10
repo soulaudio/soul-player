@@ -9,6 +9,7 @@ import { FeatureGate } from '../contexts/PlatformContext'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
 import { useBackend } from '../contexts/BackendContext'
 import { SkeletonCard } from './SkeletonCard'
+import { useScrollRestoration } from '../hooks/useScrollRestoration'
 
 interface LibraryPageLayoutProps {
   /** Current search query */
@@ -60,6 +61,7 @@ export function LibraryPageLayout({
   const { t } = useTranslation()
   const backend = useBackend()
   const { showHeader: showSearchBar, setShowHeader: setShowSearchBar, scrollContainerRef } = useScrollVisibility()
+  useScrollRestoration(scrollContainerRef)
   const autoHideSearchRef = useRef(true)
   const [showGradients, setShowGradients] = useState(true)
 
@@ -106,6 +108,10 @@ export function LibraryPageLayout({
   const idleTimerRef = useRef<number | null>(null)
   const hiddenByIdleRef = useRef(false)
   const showSearchBarRef = useRef(showSearchBar)
+  // Accumulates scroll delta in the current direction — only trigger show/hide
+  // once 50px of net directional scroll has built up, preventing flicker on
+  // fast up/down scrolling where individual frames alternate direction.
+  const scrollAccumulatorRef = useRef(0)
 
   // Refs for direct DOM gradient manipulation — avoids React re-renders on every scroll frame
   const topGradientRef = useRef<HTMLDivElement>(null)
@@ -195,6 +201,7 @@ export function LibraryPageLayout({
 
   // Show header when component mounts (page/tab switch)
   useEffect(() => {
+    scrollAccumulatorRef.current = 0
     setShowSearchBar(true)
     hiddenByIdleRef.current = false
     if (topGradientRef.current) topGradientRef.current.style.opacity = '0'
@@ -223,8 +230,9 @@ export function LibraryPageLayout({
           if (topGradientRef.current) topGradientRef.current.style.opacity = gradientOpacity
           if (bottomGradientRef.current) bottomGradientRef.current.style.opacity = atBottom ? '0' : '1'
 
-          // Show and reset idle timer if scrolled to the very top
+          // Show and reset idle timer if scrolled to the very top — immediate, no debounce
           if (scrollTop <= 10) {
+            scrollAccumulatorRef.current = 0
             setShowSearchBar(true)
             hiddenByIdleRef.current = false
             resetIdleTimer()
@@ -233,14 +241,20 @@ export function LibraryPageLayout({
             return
           }
 
-          // Require at least 5px scroll to prevent jitter
-          if (Math.abs(scrollDelta) < 5) {
-            ticking = false
-            return
+          // Accumulate scroll delta in the current direction.
+          // If direction reverses, reset accumulator so fast up/down thrashing
+          // doesn't trigger show/hide until the user commits to a direction.
+          const prev = scrollAccumulatorRef.current
+          if ((scrollDelta > 0 && prev < 0) || (scrollDelta < 0 && prev > 0)) {
+            scrollAccumulatorRef.current = scrollDelta
+          } else {
+            scrollAccumulatorRef.current += scrollDelta
           }
+          const accumulated = scrollAccumulatorRef.current
 
-          // Hide when scrolling down past threshold (only when auto-hide is enabled)
-          if (autoHideSearchRef.current && scrollDelta > 0 && scrollTop > 50 && !atBottom) {
+          // Hide when 50px of downward scroll has accumulated past threshold
+          if (autoHideSearchRef.current && accumulated > 50 && scrollTop > 50 && !atBottom) {
+            scrollAccumulatorRef.current = 0
             setShowSearchBar(false)
             hiddenByIdleRef.current = false
             if (idleTimerRef.current !== null) {
@@ -248,8 +262,9 @@ export function LibraryPageLayout({
               idleTimerRef.current = null
             }
           }
-          // Show when scrolling up (but not when at bottom to prevent padding change loop)
-          else if (scrollDelta < 0 && !atBottom) {
+          // Show when 50px of upward scroll has accumulated (not at bottom to prevent loop)
+          else if (accumulated < -50 && !atBottom) {
+            scrollAccumulatorRef.current = 0
             setShowSearchBar(true)
             hiddenByIdleRef.current = false
             if (autoHideSearchRef.current) resetIdleTimer()
@@ -371,6 +386,7 @@ export function LibraryPageLayout({
           layout reflow of all children on every header toggle; snap instantly instead) */}
       <div
         ref={scrollContainerRef}
+        data-testid="scroll-container"
         className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom ${
           showSearchBar ? (filterPanelVisible ? 'pt-28' : 'pt-14') : 'pt-6'
         }`}

@@ -7,7 +7,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
-import { ArrowLeft, Play, Users, Disc3, Pencil } from 'lucide-react'
+import { Play, Users, Disc3, Pencil } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
@@ -16,6 +16,7 @@ import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { ViewToggle } from '../components/ViewToggle'
 import { DiscographyListView } from '../components/DiscographyListView'
 import { SkeletonDetailPage } from '../components/SkeletonDetailPage'
+import { DetailPageLayout } from '../components/DetailPageLayout'
 import { useBackend, type BackendTrack, type BackendAlbum } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
@@ -77,7 +78,7 @@ function ArtistAlbumCard({
 export function ArtistPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const { navigate, goBack, hasHistory } = useNavigateWithHistory()
+  const { navigate, goBack } = useNavigateWithHistory()
   const { isDesktop, features } = usePlatform()
   const backend = useBackend()
   const commands = usePlayerCommands()
@@ -236,19 +237,11 @@ export function ArtistPage() {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden" data-testid="artist-detail-page">
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto pr-6">
-        {/* Header */}
-        <div className="mb-6">
-          <button
-            onClick={() => goBack('/artists')}
-            className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>{hasHistory ? t('common.back') : t('artist.backToArtists')}</span>
-          </button>
-
+    <div data-testid="artist-detail-page" className="h-full">
+      <DetailPageLayout
+        fallbackBackPath="/artists"
+        backLabelKey="artist.backToArtists"
+        header={
           <div className="flex items-start gap-6">
             {/* Artist Avatar */}
             <div className="group relative w-32 h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -298,7 +291,7 @@ export function ArtistPage() {
 
               <button
                 onClick={handlePlayAll}
-                onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
+                onMouseDown={(e) => e.preventDefault()}
                 disabled={tracks.filter(t => t.file_path).length === 0}
                 data-testid="artist-play-all-button"
                 className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
@@ -308,8 +301,8 @@ export function ArtistPage() {
               </button>
             </div>
           </div>
-        </div>
-
+        }
+      >
         {/* Top Songs Section */}
         {topTracks.length > 0 && (
           <div className="mb-8">
@@ -329,34 +322,34 @@ export function ArtistPage() {
                 sampleRate: t.sample_rate,
                 channels: t.channels,
               }))}
-            virtualized={false}
-            buildQueue={buildQueue}
-            renderMenu={(track) => {
-              const backendTrack = topTracks.find(t => t.id === track.id)
-              if (!backendTrack) return null
-              return (
-                <TrackMenu
-                  track={backendTrack}
-                  onPlayNext={() => handlePlayNext(backendTrack)}
-                  onAddToQueue={() => handleAddToQueue(backendTrack)}
-                  onAddToPlaylist={() => {
-                    setSelectedTrackForPlaylist({
-                      id: backendTrack.id,
-                      title: backendTrack.title,
-                    })
-                  }}
-                  onDelete={() => {
-                    deleteTrackMutation.mutate(backendTrack.id)
-                  }}
-                />
-              )
-            }}
-          />
-        </div>
-      )}
+              virtualized={false}
+              buildQueue={buildQueue}
+              renderMenu={(track) => {
+                const backendTrack = topTracks.find(t => t.id === track.id)
+                if (!backendTrack) return null
+                return (
+                  <TrackMenu
+                    track={backendTrack}
+                    onPlayNext={() => handlePlayNext(backendTrack)}
+                    onAddToQueue={() => handleAddToQueue(backendTrack)}
+                    onAddToPlaylist={() => {
+                      setSelectedTrackForPlaylist({
+                        id: backendTrack.id,
+                        title: backendTrack.title,
+                      })
+                    }}
+                    onDelete={() => {
+                      deleteTrackMutation.mutate(backendTrack.id)
+                    }}
+                  />
+                )
+              }}
+            />
+          </div>
+        )}
 
         {/* Discography Section */}
-        <div className="mb-8">
+        <div className="mb-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold">{t('artist.discography')}</h2>
             <ViewToggle view={discographyView} onViewChange={setDiscographyView} />
@@ -388,7 +381,7 @@ export function ArtistPage() {
             </div>
           )}
         </div>
-      </div>
+      </DetailPageLayout>
 
       {/* Edit Artwork Dialog */}
       <EditArtworkDialog

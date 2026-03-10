@@ -274,6 +274,10 @@ export function WebPlaybackProvider({ storage, children }: WebPlaybackProviderPr
           });
       },
 
+      async getHistory() {
+        return [];
+      },
+
       async playQueueWithContext(context, initialBatch, startIndex, enableShuffle) {
         debug.log('[WebPlaybackProvider] playQueueWithContext called:', {
           context,

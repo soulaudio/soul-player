@@ -291,8 +291,8 @@ export function EditArtworkDialog({
             </div>
 
             {/* Preview artwork */}
-            <div className="flex justify-center mb-6">
-              <div className={`relative w-32 h-32 bg-muted overflow-hidden ${entityType === 'artist' ? 'rounded-full' : 'rounded-lg'} shadow-lg`}>
+            <div className="mb-6">
+              <div className={`relative w-full aspect-square bg-muted overflow-hidden ${entityType === 'artist' ? 'rounded-full' : 'rounded-lg'} shadow-lg`}>
                 <img
                   src={previewUrl}
                   alt={entityName}
@@ -405,8 +405,8 @@ export function EditArtworkDialog({
           </div>
 
           {/* Current/Preview artwork */}
-          <div className="flex justify-center mb-6">
-            <div className={`relative w-40 h-40 bg-muted overflow-hidden ${entityType === 'artist' ? 'rounded-full' : 'rounded-lg'}`}>
+          <div className="mb-6">
+            <div className={`relative w-full aspect-square bg-muted overflow-hidden ${entityType === 'artist' ? 'rounded-full' : 'rounded-lg'}`}>
               {loadingArtwork ? (
                 <div className="w-full h-full flex items-center justify-center">
                   <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
@@ -419,7 +419,7 @@ export function EditArtworkDialog({
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <ImageIcon className="w-12 h-12 text-muted-foreground" />
+                  <ImageIcon className="w-16 h-16 text-muted-foreground opacity-40" />
                 </div>
               )}
             </div>

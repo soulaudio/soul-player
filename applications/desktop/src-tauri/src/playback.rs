@@ -1468,6 +1468,16 @@ impl PlaybackManager {
         playback.get_queue()
     }
 
+    pub fn get_history(&self) -> Vec<QueueTrack> {
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!(
+                "Playback mutex poisoned while getting history - audio thread may have crashed"
+            );
+            return Vec::new();
+        };
+        playback.get_history()
+    }
+
     /// Check if there is a next track
     pub fn has_next(&self) -> bool {
         let Ok(playback) = self.playback.lock() else {

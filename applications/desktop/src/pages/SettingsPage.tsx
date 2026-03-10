@@ -28,6 +28,7 @@ export function SettingsPage() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isInstalling, setIsInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState(0);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -123,13 +124,15 @@ export function SettingsPage() {
       const update = await invoke<UpdateInfo | null>('check_for_updates');
       if (update) {
         setUpdateInfo(update);
+        setInstallError(null);
         setShowUpdateDialog(true);
       } else {
         toast.success(t('settings.upToDate'));
       }
     } catch (error) {
-      debug.error('Failed to check for updates:', error);
-      toast.error(t('settings.checkFailed'));
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.error('[Updater] Failed to check for updates:', msg);
+      toast.error(`${t('settings.checkFailed')}: ${msg}`);
     } finally {
       setChecking(false);
     }
@@ -138,14 +141,16 @@ export function SettingsPage() {
   const handleInstallUpdate = useCallback(async () => {
     setIsInstalling(true);
     setInstallProgress(0);
+    setInstallError(null);
     try {
       await invoke('install_update');
       // If we reach here, restart failed - app should have restarted automatically
       toast.success(t('settings.updateInstalledRestarting'));
       setShowUpdateDialog(false);
     } catch (error) {
-      debug.error('Failed to install update:', error);
-      toast.error(t('settings.updateInstallFailed'));
+      const msg = error instanceof Error ? error.message : String(error);
+      debug.error('[Updater] install_update failed:', msg);
+      setInstallError(msg);
       setIsInstalling(false);
       setInstallProgress(0);
     }
@@ -156,6 +161,7 @@ export function SettingsPage() {
       setShowUpdateDialog(false);
       setUpdateInfo(null);
       setInstallProgress(0);
+      setInstallError(null);
     }
   }, [isInstalling]);
 
@@ -187,6 +193,7 @@ export function SettingsPage() {
         updateInfo={updateInfo}
         isInstalling={isInstalling}
         progress={installProgress}
+        installError={installError}
       />
     </>
   );

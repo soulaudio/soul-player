@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as 'id!', name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at\n         FROM artists\n         ORDER BY sort_name, name",
+  "query": "SELECT id as 'id!', name, sort_name, musicbrainz_id, cover_art_path, created_at, updated_at\n         FROM artists\n         ORDER BY sort_name COLLATE NOCASE, name COLLATE NOCASE",
   "describe": {
     "columns": [
       {
@@ -43,7 +43,7 @@
       "Right": 0
     },
     "nullable": [
-      true,
+      false,
       false,
       true,
       true,
@@ -52,5 +52,5 @@
       false
     ]
   },
-  "hash": "c9a83b5931499e3e08ab242b17719f4e0b51ec3fc6385608863a67e464720114"
+  "hash": "55a87a98345ec7d4a2e2a921bb5d2b0012553ed12d71985e47e87dca93556cb9"
 }

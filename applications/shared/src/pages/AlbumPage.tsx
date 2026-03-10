@@ -7,15 +7,16 @@ import { useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
-import { ArrowLeft, Play, Clock, Disc3, Pencil, ListPlus } from 'lucide-react'
+import { useTrackNumberDisplay } from '../hooks/useTrackNumberDisplay'
+import { Play, Clock, Disc3, ListPlus } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { ArtworkImage } from '../components/ArtworkImage'
-import { EditArtworkDialog } from '../components/EditArtworkDialog'
+import { ArtworkLightbox } from '../components/ArtworkLightbox'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
-import { Dialog } from '../components/ui/Dialog'
 import { ArtistLink } from '../components/ArtistLink'
 import { SkeletonDetailPage } from '../components/SkeletonDetailPage'
+import { DetailPageLayout } from '../components/DetailPageLayout'
 import { useBackend, type BackendTrack } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contexts/PlayerCommandsContext'
 import { usePlatform } from '../contexts/PlatformContext'
@@ -27,7 +28,7 @@ import { debug } from '../utils/debug';
 export function AlbumPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const { goBack, hasHistory } = useNavigateWithHistory()
+  const { goBack } = useNavigateWithHistory()
   const { isDesktop, features } = usePlatform()
   const backend = useBackend()
   const commands = usePlayerCommands()
@@ -37,7 +38,8 @@ export function AlbumPage() {
   const { album, tracks = [], isLoading, isError, error } = useAlbumWithTracks(albumId)
   const deleteTrackMutation = useDeleteTrack()
 
-  const [editArtworkOpen, setEditArtworkOpen] = useState(false)
+  const trackNumberDisplay = useTrackNumberDisplay()
+
   const [artworkVersion, setArtworkVersion] = useState(0)
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
@@ -193,100 +195,91 @@ export function AlbumPage() {
   const hasDesktopArtwork = isDesktop && typeof album.id === 'number'
 
   return (
-    <div className="h-full flex flex-col overflow-hidden" data-testid="album-detail-page">
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto pr-6">
-        {/* Header */}
-        <div className="mb-6">
-        <button
-          onClick={() => goBack('/albums')}
-          className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{hasHistory ? t('common.back') : t('album.backToAlbums')}</span>
-        </button>
-
-        <div className="flex items-start gap-6">
-          {/* Album Cover */}
-          <div
-            className="group relative w-48 h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center cursor-pointer"
-            onClick={() => setLightboxOpen(true)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setLightboxOpen(true)}
-          >
-            {hasDesktopArtwork ? (
-              <ArtworkImage
-                key={artworkVersion}
-                albumId={album.id}
-                alt={album.title}
-                className="w-full h-full object-cover"
-                fallbackClassName="w-full h-full flex items-center justify-center"
-              />
-            ) : coverUrl ? (
-              <img
-                src={coverUrl}
-                alt={album.title}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <Disc3 className="w-16 h-16 text-muted-foreground" />
-            )}
-            {/* Hover overlay hint */}
-            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-
-          {/* Album Info */}
-          <div className="flex-1">
-            <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
-              {t('library.album')}
-            </p>
-            <h1 className="text-4xl font-bold mb-2" data-testid="album-title">{album.title}</h1>
-            <p className="text-lg mb-2" data-testid="album-artist">
-              <ArtistLink
-                artistId={album.artist_id}
-                artistName={album.artist_name}
-                className="text-lg hover:text-primary"
-              />
-              {album.year && (
-                <span className="text-muted-foreground"> • {album.year}</span>
+    <div data-testid="album-detail-page" className="h-full">
+      <DetailPageLayout
+        fallbackBackPath="/albums"
+        backLabelKey="album.backToAlbums"
+        header={
+          <div className="flex items-start gap-6">
+            {/* Album Cover */}
+            <div
+              className="group relative w-48 h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center cursor-pointer"
+              onClick={() => setLightboxOpen(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && setLightboxOpen(true)}
+            >
+              {hasDesktopArtwork ? (
+                <ArtworkImage
+                  key={artworkVersion}
+                  albumId={album.id}
+                  alt={album.title}
+                  className="w-full h-full object-cover"
+                  fallbackClassName="w-full h-full flex items-center justify-center"
+                />
+              ) : coverUrl ? (
+                <img
+                  src={coverUrl}
+                  alt={album.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Disc3 className="w-16 h-16 text-muted-foreground" />
               )}
-            </p>
-            <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4" data-testid="album-track-count">
-              <Clock className="w-4 h-4" />
-              {t('library.tracks', { count: tracks.length })} • {formatDuration(totalDuration)}
-            </p>
+              {/* Hover overlay hint */}
+              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handlePlayAll}
-                onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
-                disabled={tracks.filter(t => t.file_path).length === 0}
-                data-testid="album-play-all-button"
-                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
-              >
-                <Play className="w-5 h-5" fill="currentColor" />
-                <span>{t('common.playAll')}</span>
-              </button>
+            {/* Album Info */}
+            <div className="flex-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
+                {t('library.album')}
+              </p>
+              <h1 className="text-4xl font-bold mb-2" data-testid="album-title">{album.title}</h1>
+              <p className="text-lg mb-2" data-testid="album-artist">
+                <ArtistLink
+                  artistId={album.artist_id}
+                  artistName={album.artist_name}
+                  className="text-lg hover:text-primary"
+                />
+                {album.year && (
+                  <span className="text-muted-foreground"> • {album.year}</span>
+                )}
+              </p>
+              <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4" data-testid="album-track-count">
+                <Clock className="w-4 h-4" />
+                {t('library.tracks', { count: tracks.length })} • {formatDuration(totalDuration)}
+              </p>
 
-              {features.canCreatePlaylists && (
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setAlbumForPlaylist(true)}
-                  onMouseDown={(e) => e.preventDefault()} // Prevent focus on click to avoid space key conflict
-                  data-testid="album-page-add-to-playlist"
-                  className="flex items-center px-4 py-3 rounded-full border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
-                  aria-label={t('playlist.addAlbumToPlaylist', 'Add Album to Playlist')}
-                  title={t('playlist.addAlbumToPlaylist', 'Add Album to Playlist')}
+                  onClick={handlePlayAll}
+                  onMouseDown={(e) => e.preventDefault()}
+                  disabled={tracks.filter(t => t.file_path).length === 0}
+                  data-testid="album-play-all-button"
+                  className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
                 >
-                  <ListPlus className="w-5 h-5" />
+                  <Play className="w-5 h-5" fill="currentColor" />
+                  <span>{t('common.playAll')}</span>
                 </button>
-              )}
+
+                {features.canCreatePlaylists && (
+                  <button
+                    onClick={() => setAlbumForPlaylist(true)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    data-testid="album-page-add-to-playlist"
+                    className="flex items-center px-4 py-3 rounded-full border border-border hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)]"
+                    aria-label={t('playlist.addAlbumToPlaylist', 'Add Album to Playlist')}
+                    title={t('playlist.addAlbumToPlaylist', 'Add Album to Playlist')}
+                  >
+                    <ListPlus className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-        </div>
-
-        {/* Track List */}
+        }
+      >
         <TrackList
           tracks={tracks.map(t => ({
             id: t.id,
@@ -297,6 +290,7 @@ export function AlbumPage() {
             albumId: t.album_id,
             duration: t.duration_seconds,
             trackNumber: t.track_number,
+            discNumber: t.disc_number,
             isAvailable: !!t.file_path,
             format: t.file_format,
             bitrate: t.bit_rate,
@@ -306,7 +300,8 @@ export function AlbumPage() {
           buildQueue={buildQueue}
           virtualized={tracks.length > 50}
           virtualItemSize={56}
-          showTrackNumber={true}
+          showTrackNumber={trackNumberDisplay !== 'hide'}
+          vinylSides={trackNumberDisplay === 'vinyl'}
           renderMenu={(track) => {
             const backendTrack = tracks.find(t => t.id === track.id)
             if (!backendTrack) return null
@@ -328,54 +323,23 @@ export function AlbumPage() {
             )
           }}
         />
-      </div>
+      </DetailPageLayout>
 
-      {/* Artwork Lightbox */}
-      <Dialog open={lightboxOpen} onClose={() => setLightboxOpen(false)}>
-        <div onClick={(e) => e.stopPropagation()} className="flex flex-col items-start gap-3">
-          <div className="rounded-xl overflow-hidden shadow-2xl bg-muted" style={{ width: '85vh', maxWidth: '85vw', maxHeight: '85vh' }}>
-            {hasDesktopArtwork ? (
-              <ArtworkImage
-                key={artworkVersion}
-                albumId={album.id}
-                alt={album.title}
-                className="w-full h-full object-contain"
-                fallbackClassName="w-96 h-96 flex items-center justify-center"
-                priority
-              />
-            ) : coverUrl ? (
-              <img
-                src={coverUrl}
-                alt={album.title}
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <div className="w-96 h-96 flex items-center justify-center">
-                <Disc3 className="w-24 h-24 text-muted-foreground" />
-              </div>
-            )}
-          </div>
-          {isDesktop && (
-            <button
-              onClick={() => { setLightboxOpen(false); setEditArtworkOpen(true) }}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Pencil className="w-4 h-4" />
-              <span>{t('artwork.editArtwork', 'Edit Artwork')}</span>
-            </button>
-          )}
-        </div>
-      </Dialog>
-
-      {/* Edit Artwork Dialog */}
-      <EditArtworkDialog
-        open={editArtworkOpen}
-        onClose={() => setEditArtworkOpen(false)}
-        entityType="album"
-        entityId={String(album.id)}
-        entityName={album.title}
-        currentArtworkUrl={coverUrl}
-        onArtworkChanged={() => setArtworkVersion(v => v + 1)}
+      {/* Artwork Lightbox (with Edit Artwork on desktop) */}
+      <ArtworkLightbox
+        open={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        albumId={hasDesktopArtwork ? album.id : undefined}
+        coverArtPath={!hasDesktopArtwork ? (coverUrl ?? undefined) : undefined}
+        alt={album.title}
+        cacheVersion={artworkVersion}
+        editArtwork={{
+          entityType: 'album',
+          entityId: String(album.id),
+          entityName: album.title,
+          currentArtworkUrl: coverUrl,
+          onArtworkChanged: () => setArtworkVersion(v => v + 1),
+        }}
       />
 
       {/* Add to Playlist Dialog (Desktop only) */}

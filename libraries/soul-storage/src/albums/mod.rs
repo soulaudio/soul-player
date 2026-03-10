@@ -9,7 +9,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Album>> {
                 a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
-         ORDER BY a.title"
+         ORDER BY a.title COLLATE NOCASE"
     )
     .fetch_all(pool)
     .await?;
@@ -302,7 +302,7 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          WHERE a.artist_id = ?
-         ORDER BY a.year DESC, a.title",
+         ORDER BY a.year DESC, a.title COLLATE NOCASE",
         artist_id
     )
     .fetch_all(pool)
@@ -387,6 +387,26 @@ pub async fn set_artwork_source(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Get track counts for all albums in a single query.
+/// Returns a HashMap of album_id → track_count.
+pub async fn get_track_counts(
+    pool: &SqlitePool,
+) -> Result<std::collections::HashMap<AlbumId, i32>> {
+    let rows: Vec<_> = sqlx::query!(
+        "SELECT album_id, COUNT(*) as count
+         FROM tracks
+         WHERE album_id IS NOT NULL
+         GROUP BY album_id"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| row.album_id.map(|album_id| (album_id, row.count as i32)))
+        .collect())
 }
 
 /// Get artwork source information for an album

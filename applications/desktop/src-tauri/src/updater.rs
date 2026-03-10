@@ -312,7 +312,10 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
             },
         )
         .await
-        .map_err(|e| format!("Failed to install update: {}", e))?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "[UPDATER] Download/install failed");
+            format!("Failed to install update: {}", e)
+        })?;
 
     tracing::info!("[UPDATER] Install completed, restarting app");
     app.restart();

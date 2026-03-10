@@ -25,6 +25,7 @@ interface UpdateDialogProps {
   updateInfo: UpdateInfo | null;
   isInstalling?: boolean;
   progress?: number;
+  installError?: string | null;
 }
 
 export function UpdateDialog({
@@ -34,6 +35,7 @@ export function UpdateDialog({
   updateInfo,
   isInstalling = false,
   progress = 0,
+  installError = null,
 }: UpdateDialogProps) {
   const { t } = useTranslation();
   const [installationInfo, setInstallationInfo] = useState<InstallationInfo | null>(null);
@@ -165,6 +167,16 @@ export function UpdateDialog({
                   className="bg-primary h-2 rounded-full transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
+              </div>
+            </div>
+          )}
+
+          {installError && (
+            <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg" data-testid="update-install-error">
+              <AlertCircle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-destructive">{t('updateDialog.installFailed', 'Installation failed')}</p>
+                <p className="text-xs text-destructive/80 mt-0.5 break-words">{installError}</p>
               </div>
             </div>
           )}

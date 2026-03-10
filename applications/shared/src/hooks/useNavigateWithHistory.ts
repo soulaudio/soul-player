@@ -61,11 +61,11 @@ export function useNavigateWithHistory(): NavigateWithHistoryReturn {
     const from = (location.state as any)?.from
 
     if (from && typeof from === 'string') {
-      // Navigate back to where we came from
-      reactRouterNavigate(from)
+      // Navigate back to where we came from, marking it as a back navigation
+      // so scroll restoration can differentiate from fresh forward navigation
+      reactRouterNavigate(from, { state: { isBack: true } })
     } else {
-      // Fall back to default path
-      reactRouterNavigate(defaultPath)
+      reactRouterNavigate(defaultPath, { state: { isBack: true } })
     }
   }, [location.state, reactRouterNavigate])
 

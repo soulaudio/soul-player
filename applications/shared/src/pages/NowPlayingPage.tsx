@@ -3,14 +3,15 @@
  * Shows current track artwork with tracklist from playback context
  */
 
-import { useEffect, useState, useMemo, useRef, useLayoutEffect, useCallback, memo } from 'react'
+import { useEffect, useState, useMemo, useRef, useLayoutEffect, useCallback, memo, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { usePlayerPlayback } from '../stores/player'
-import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext'
+import { usePlayerCommands, usePlaybackEvents } from '../contexts/PlayerCommandsContext'
 import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { ArtworkImage } from '../components/ArtworkImage'
+import { ArtworkLightbox } from '../components/ArtworkLightbox'
 import { ArtistLink } from '../components/ArtistLink'
 import { groupTracks } from '../utils/trackGrouping'
 import type { TrackForGrouping, GroupedTrack } from '../utils/trackGrouping'
@@ -188,6 +189,7 @@ const TrackItem = memo(function TrackItem({
   group,
   index,
   isCurrent,
+  isHistory,
   isCurrentlyPlaying,
   activeVersion,
   fallbackArtist,
@@ -198,6 +200,7 @@ const TrackItem = memo(function TrackItem({
   group: GroupedTrack<TrackForGrouping>
   index: number
   isCurrent: boolean
+  isHistory: boolean
   isCurrentlyPlaying: boolean
   activeVersion: TrackForGrouping
   fallbackArtist: string
@@ -215,7 +218,7 @@ const TrackItem = memo(function TrackItem({
     <div
       data-testid={`now-playing-queue-item-${index}`}
       onClick={handleClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:opacity-80 transition-opacity ${isHistory ? 'opacity-40' : ''}`}
     >
       {/* Track Number or Playing Indicator */}
       <div className="w-6 text-center flex-shrink-0">
@@ -273,6 +276,7 @@ const TrackListWithBullet = memo(function TrackListWithBullet({
   currentTrackId,
   currentTrackArtist,
   isCurrentlyPlaying,
+  historyLength,
   getActiveVersion,
   onTrackClick,
   onFormatSelect,
@@ -282,6 +286,7 @@ const TrackListWithBullet = memo(function TrackListWithBullet({
   currentTrackId: string | number
   currentTrackArtist: string
   isCurrentlyPlaying: boolean
+  historyLength: number
   getActiveVersion: (group: GroupedTrack<TrackForGrouping>) => TrackForGrouping
   onTrackClick: (group: GroupedTrack<TrackForGrouping>, index: number) => void
   onFormatSelect: (groupKey: string, track: TrackForGrouping) => void
@@ -292,20 +297,23 @@ const TrackListWithBullet = memo(function TrackListWithBullet({
       {groupedTracks.map((group, idx) => {
         const activeVersion = getActiveVersion(group)
         const isCurrent = group.versions.some((v) => v.id === currentTrackId)
+        const isHistory = idx < historyLength
 
         return (
-          <TrackItem
-            key={group.groupKey}
-            group={group}
-            index={idx}
-            isCurrent={isCurrent}
-            isCurrentlyPlaying={isCurrentlyPlaying}
-            activeVersion={activeVersion}
-            fallbackArtist={currentTrackArtist}
-            onTrackClick={onTrackClick}
-            onFormatSelect={onFormatSelect}
-            formatTime={formatTime}
-          />
+          <Fragment key={group.groupKey}>
+            <TrackItem
+              group={group}
+              index={idx}
+              isCurrent={isCurrent}
+              isHistory={isHistory}
+              isCurrentlyPlaying={isCurrentlyPlaying}
+              activeVersion={activeVersion}
+              fallbackArtist={currentTrackArtist}
+              onTrackClick={onTrackClick}
+              onFormatSelect={onFormatSelect}
+              formatTime={formatTime}
+            />
+          </Fragment>
         )
       })}
     </div>
@@ -317,13 +325,23 @@ const NowPlayingArtwork = memo(function NowPlayingArtwork({
   trackId,
   coverArtPath,
   alt,
+  onClick,
 }: {
   trackId: string | number
   coverArtPath?: string | null
   alt: string
+  onClick: () => void
 }) {
   return (
-    <div data-testid="now-playing-artwork" className="aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-muted">
+    <div
+      data-testid="now-playing-artwork"
+      className="group relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-muted cursor-pointer"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      aria-label="View full artwork"
+    >
       <ArtworkImage
         trackId={trackId}
         coverArtPath={coverArtPath ?? undefined}
@@ -331,6 +349,7 @@ const NowPlayingArtwork = memo(function NowPlayingArtwork({
         className="w-full h-full object-cover"
         fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
       />
+      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-2xl" />
     </div>
   )
 })
@@ -344,22 +363,23 @@ export function NowPlayingPage() {
   const events = usePlaybackEvents()
   const backend = useBackend()
 
+  const [artworkLightboxOpen, setArtworkLightboxOpen] = useState(false)
+
   const tracklistContainerRef = useRef<HTMLDivElement>(null)
   const tracklistScrollRef = useRef<HTMLDivElement>(null)
 
   const [tracks, setTracks] = useState<TrackForGrouping[]>([])
+  const [historyLength, setHistoryLength] = useState(0)
   const [selectedVersions, setSelectedVersions] = useState<Map<string, TrackForGrouping>>(new Map())
   const [playbackContext, setPlaybackContext] = useState<PlaybackContext | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Fetch current playback context (desktop only)
+  // Fetch current playback context (desktop only) — used for header display/navigation only
   useEffect(() => {
     if (!features.hasPlaybackContext || !currentTrack) {
       setPlaybackContext(null)
       return
     }
-
-    // Try to get context from recent contexts
     backend.getRecentContexts(1)
       .then((contexts) => {
         if (contexts.length > 0) {
@@ -381,130 +401,50 @@ export function NowPlayingPage() {
       .catch(() => setPlaybackContext(null))
   }, [currentTrack?.id, features.hasPlaybackContext, backend])
 
-  // Fetch tracks based on context
+  // Load tracks: history + current + upcoming queue — single source of truth
   useEffect(() => {
     const loadTracks = async () => {
       if (!currentTrack) {
         setTracks([])
+        setHistoryLength(0)
         return
       }
 
-      // Only show loading spinner on first load — skip it when we already have
-      // tracks (e.g. switching tracks within the same album). This prevents the
-      // track list from unmounting/remounting on every track click.
-      if (tracks.length === 0) setLoading(true)
+      setLoading(true)
       try {
-        let fetchedTracks: TrackForGrouping[] = []
+        const [history, queue] = await Promise.all([
+          commands.getHistory(),
+          commands.getQueue(),
+        ])
 
-        // Try to get tracks based on context
-        if (playbackContext?.contextType === 'album' && playbackContext.contextId) {
-          const albumTracks = await backend.getAlbumTracks(
-            typeof playbackContext.contextId === 'string'
-              ? parseInt(playbackContext.contextId)
-              : playbackContext.contextId
-          )
-          fetchedTracks = albumTracks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            artist_name: t.artist_name,
-            artist_id: t.artist_id,
-            album_title: t.album_title,
-            track_number: t.track_number,
-            duration_seconds: t.duration_seconds,
-            file_path: t.file_path,
-            file_format: t.file_format,
-            bit_rate: t.bit_rate,
-            sample_rate: t.sample_rate,
-          }))
-        } else if (playbackContext?.contextType === 'artist' && playbackContext.contextId) {
-          const artistTracks = await backend.getArtistTracks(
-            typeof playbackContext.contextId === 'string'
-              ? parseInt(playbackContext.contextId)
-              : playbackContext.contextId
-          )
-          fetchedTracks = artistTracks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            artist_name: t.artist_name,
-            artist_id: t.artist_id,
-            album_title: t.album_title,
-            track_number: t.track_number,
-            duration_seconds: t.duration_seconds,
-            file_path: t.file_path,
-            file_format: t.file_format,
-            bit_rate: t.bit_rate,
-            sample_rate: t.sample_rate,
-          }))
-        } else if (playbackContext?.contextType === 'genre' && playbackContext.contextId) {
-          const genreTracks = await backend.getGenreTracks(
-            typeof playbackContext.contextId === 'string'
-              ? parseInt(playbackContext.contextId)
-              : playbackContext.contextId
-          )
-          fetchedTracks = genreTracks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            artist_name: t.artist_name,
-            artist_id: t.artist_id,
-            album_title: t.album_title,
-            track_number: t.track_number,
-            duration_seconds: t.duration_seconds,
-            file_path: t.file_path,
-            file_format: t.file_format,
-            bit_rate: t.bit_rate,
-            sample_rate: t.sample_rate,
-          }))
-        } else if (playbackContext?.contextType === 'playlist' && playbackContext.contextId) {
-          const playlistTracks = await backend.getPlaylistTracks(String(playbackContext.contextId))
-          fetchedTracks = playlistTracks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            artist_name: t.artist_name,
-            artist_id: t.artist_id,
-            album_title: t.album_title,
-            track_number: t.track_number,
-            duration_seconds: t.duration_seconds,
-            file_path: t.file_path,
-            file_format: t.file_format,
-            bit_rate: t.bit_rate,
-            sample_rate: t.sample_rate,
-          }))
-        } else if (currentTrack.albumId) {
-          // Fallback to album if available
-          const albumTracks = await backend.getAlbumTracks(currentTrack.albumId)
-          fetchedTracks = albumTracks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            artist_name: t.artist_name,
-            artist_id: t.artist_id,
-            album_title: t.album_title,
-            track_number: t.track_number,
-            duration_seconds: t.duration_seconds,
-            file_path: t.file_path,
-            file_format: t.file_format,
-            bit_rate: t.bit_rate,
-            sample_rate: t.sample_rate,
-          }))
-        } else {
-          // Fallback: get queue and show those tracks
-          const queue = await commands.getQueue()
-          if (queue.length > 0) {
-            fetchedTracks = queue.map((q, idx) => ({
-              id: typeof q.trackId === 'string' ? parseInt(q.trackId) : (q.trackId as number),
-              title: q.title,
-              artist_name: q.artist,
-              album_title: q.album || undefined,
-              duration_seconds: q.durationSeconds || undefined,
-              track_number: idx + 1,
-              file_path: q.filePath,
-            }))
-          }
+        const toItem = (q: typeof history[0], idx: number): TrackForGrouping => ({
+          id: typeof q.trackId === 'string' ? parseInt(q.trackId) : (q.trackId as number),
+          title: q.title,
+          artist_name: q.artist,
+          album_title: q.album || undefined,
+          duration_seconds: q.durationSeconds || undefined,
+          track_number: q.trackNumber ?? idx + 1,
+          file_path: q.filePath,
+        })
+
+        const historyItems = history.map(toItem)
+        const currentItem: TrackForGrouping = {
+          id: currentTrack.id,
+          title: currentTrack.title,
+          artist_name: currentTrack.artist,
+          album_title: currentTrack.album || undefined,
+          duration_seconds: currentTrack.duration || undefined,
+          track_number: currentTrack.trackNumber,
+          file_path: currentTrack.filePath,
         }
+        const queueItems = queue.map(toItem)
 
-        setTracks(fetchedTracks)
+        setHistoryLength(historyItems.length)
+        setTracks([...historyItems, currentItem, ...queueItems])
       } catch (err) {
-        debug.error('Failed to load tracks:', err)
+        debug.error('Failed to load queue:', err)
         setTracks([])
+        setHistoryLength(0)
       } finally {
         setLoading(false)
       }
@@ -516,10 +456,17 @@ export function NowPlayingPage() {
       loadTracks()
     })
     return unsubscribe
-  }, [currentTrack?.id, currentTrack?.albumId, playbackContext, commands, events, backend])
+  }, [currentTrack?.id, commands, events])
 
   // Group tracks
   const groupedTracks = useMemo(() => groupTracks(tracks), [tracks])
+
+  // Scroll current track into view when the list first loads (or history length changes)
+  useEffect(() => {
+    if (!groupedTracks.length || !tracklistScrollRef.current) return
+    const el = tracklistScrollRef.current.querySelector(`[data-testid="now-playing-queue-item-${historyLength}"]`)
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [historyLength, groupedTracks.length > 0]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get active version for a group
   const getActiveVersion = useCallback((group: GroupedTrack<TrackForGrouping>): TrackForGrouping => {
@@ -543,26 +490,23 @@ export function NowPlayingPage() {
     }
   }, [groupedTracks, currentTrack?.id, commands])
 
-  // Handle track click — build full queue so playback context is preserved
+  // Handle track click — jump to that position in the combined list
   const handleTrackClick = useCallback(async (_group: GroupedTrack<TrackForGrouping>, groupIndex: number) => {
     try {
-      const queue: QueueTrack[] = groupedTracks.map((g) => {
-        const v = getActiveVersion(g)
-        return {
-          trackId: String(v.id),
-          title: v.title,
-          artist: v.artist_name || '',
-          album: v.album_title || null,
-          filePath: v.file_path ?? '',
-          durationSeconds: v.duration_seconds ?? null,
-          trackNumber: v.track_number ?? null,
-        }
-      })
-      await commands.playQueue(queue, groupIndex)
+      if (groupIndex < historyLength) {
+        // History track — play it directly (loses queue context)
+        const group = groupedTracks[groupIndex]
+        if (group) await commands.playTrack(group.bestVersion.id)
+      } else if (groupIndex === historyLength) {
+        // Current track — no-op (already playing)
+      } else {
+        // Upcoming queue track — skip to position in the queue
+        await commands.skipToQueueIndex(groupIndex - historyLength - 1)
+      }
     } catch (err) {
-      debug.error('Failed to play track:', err)
+      debug.error('Failed to skip to queue index:', err)
     }
-  }, [groupedTracks, getActiveVersion, commands])
+  }, [commands, historyLength, groupedTracks])
 
   const formatTime = useCallback((seconds: number | undefined) => {
     if (!seconds || !isFinite(seconds)) return '--:--'
@@ -639,8 +583,19 @@ export function NowPlayingPage() {
             trackId={currentTrack.id}
             coverArtPath={currentTrack.coverArtPath}
             alt={currentTrack.album || currentTrack.title}
+            onClick={() => setArtworkLightboxOpen(true)}
           />
         </div>
+
+        {/* Artwork Lightbox (view only — no edit button on now-playing page) */}
+        <ArtworkLightbox
+          open={artworkLightboxOpen}
+          onClose={() => setArtworkLightboxOpen(false)}
+          trackId={currentTrack.id}
+          coverArtPath={currentTrack.coverArtPath ?? undefined}
+          alt={currentTrack.album || currentTrack.title}
+          data-testid="artwork-lightbox"
+        />
 
         {/* Right Side - Tracklist (3 parts) */}
         <div ref={tracklistContainerRef} className="basis-3/5 flex flex-col min-w-0 max-h-[800px] relative">
@@ -684,6 +639,7 @@ export function NowPlayingPage() {
                 currentTrackId={currentTrack.id}
                 currentTrackArtist={currentTrack.artist}
                 isCurrentlyPlaying={isPlaying}
+                historyLength={historyLength}
                 getActiveVersion={getActiveVersion}
                 onTrackClick={handleTrackClick}
                 onFormatSelect={handleFormatSelect}

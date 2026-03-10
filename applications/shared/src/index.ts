@@ -192,6 +192,8 @@ export { useNavigateWithHistory } from './hooks/useNavigateWithHistory';
 export { useAudioDevice } from './hooks/useAudioDevice';
 export type { UseAudioDeviceResult } from './hooks/useAudioDevice';
 export { useScanCompletionInvalidation } from './hooks/useScanCompletionInvalidation';
+export { useTrackNumberDisplay, TRACK_NUMBER_DISPLAY_EVENT, TRACK_NUMBER_DISPLAY_KEY, TRACK_NUMBER_DISPLAY_DEFAULT } from './hooks/useTrackNumberDisplay';
+export type { TrackNumberDisplay } from './hooks/useTrackNumberDisplay';
 
 // TanStack Query exports
 export { QueryClient, QueryClientProvider } from '@tanstack/react-query';
