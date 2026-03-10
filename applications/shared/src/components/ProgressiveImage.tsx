@@ -8,7 +8,7 @@
  * @see https://kentcdodds.com/blog/building-an-awesome-image-loading-experience
  */
 
-import { useState, useEffect, useRef, ImgHTMLAttributes } from 'react'
+import { useState, useEffect, useRef, useMemo, ImgHTMLAttributes } from 'react'
 import { cn } from '../lib/utils'
 
 interface ProgressiveImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'onLoad' | 'src'> {
@@ -38,9 +38,14 @@ export function ProgressiveImage({
   shape = 'rounded',
   ...props
 }: ProgressiveImageProps) {
-  const [isLoaded, setIsLoaded] = useState(false)
+  // Data URLs are already in memory — synchronously treat as loaded to avoid
+  // a false-loading frame that would trigger the expensive blur/scale transition.
+  const isDataUrl = useMemo(() => Boolean(src?.startsWith('data:')), [src])
+
+  const [isLoaded, setIsLoaded] = useState(isDataUrl)
   const [hasError, setHasError] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
+  const prevSrcRef = useRef(src)
 
   useEffect(() => {
     if (!src) {
@@ -50,31 +55,27 @@ export function ProgressiveImage({
 
     setHasError(false)
 
-    // Data URLs are already in memory — skip preloading entirely
+    // Data URLs are already in memory — no async preload needed, mark as loaded.
     if (src.startsWith('data:')) {
       setIsLoaded(true)
       return
     }
 
-    setIsLoaded(false)
+    // New non-data src: reset to unloaded so the fade-in triggers.
+    if (src !== prevSrcRef.current) {
+      setIsLoaded(false)
+    }
+    prevSrcRef.current = src
 
-    // Create a new image to preload
+    // Preload HTTP/HTTPS image before displaying to avoid layout shift.
     const img = new Image()
 
-    img.onload = () => {
-      setIsLoaded(true)
-    }
-
-    img.onerror = () => {
-      setHasError(true)
-    }
-
+    img.onload = () => setIsLoaded(true)
+    img.onerror = () => setHasError(true)
     img.src = src
 
-    // If image is already cached, it will be loaded immediately
-    if (img.complete) {
-      setIsLoaded(true)
-    }
+    // Browser already cached it — mark immediately to skip the fade.
+    if (img.complete) setIsLoaded(true)
 
     return () => {
       img.onload = null
@@ -84,7 +85,6 @@ export function ProgressiveImage({
 
   const shapeClass = shape === 'circular' ? 'rounded-full' : 'rounded-lg'
 
-  // Show placeholder when no src, error, or loading
   if (!src || hasError) {
     return (
       <div
@@ -111,6 +111,22 @@ export function ProgressiveImage({
     )
   }
 
+  // Data URLs: render immediately — no fade, no blur, no layout cost.
+  // They are already decoded in RAM; the progressive effect adds only jank.
+  if (isDataUrl) {
+    return (
+      <div className={cn('relative overflow-hidden', shapeClass, className)}>
+        <img
+          ref={imgRef}
+          src={src}
+          alt={alt}
+          className={cn('w-full h-full object-cover', shapeClass)}
+          {...props}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className={cn('relative overflow-hidden', shapeClass, className)}>
       <img
@@ -118,12 +134,13 @@ export function ProgressiveImage({
         src={src}
         alt={alt}
         className={cn(
-          'w-full h-full object-cover transition-all duration-500 ease-out',
+          // opacity-only transition — always GPU-composited, never triggers paint.
+          // Avoids the filter:blur + transform:scale combo that caused scroll jank
+          // when multiple images loaded simultaneously during fast scrolling.
+          'w-full h-full object-cover transition-opacity duration-300 ease-out',
           shapeClass,
-          // Blur and scale up while loading (LQIP technique)
-          !isLoaded && 'blur-md scale-110 opacity-0',
-          // Sharp and normal scale when loaded
-          isLoaded && 'blur-0 scale-100 opacity-100'
+          !isLoaded && 'opacity-0',
+          isLoaded && 'opacity-100'
         )}
         loading="lazy"
         {...props}
