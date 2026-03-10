@@ -4,8 +4,8 @@
 //! No Levenshtein / fuzzy matching — each distinct spelling → distinct artist.
 //!
 //! Album matching: exact/normalized title + artist_id + folder_path.
-//! Two albums with identical title and artist but in different folders are always
-//! treated as distinct albums (strict folder isolation, no cross-folder merging).
+//! Two tracks with the same album title and artist but in different folders
+//! always belong to different albums (strict folder-based isolation).
 
 use crate::{FuzzyMatch, MatchType, Result};
 use soul_core::types::{
@@ -46,7 +46,7 @@ impl EntityCache {
         for album in all_albums {
             let normalized = normalize_string(&album.title);
             albums.insert(
-                (normalized, album.artist_id, album.folder_path),
+                (normalized, album.artist_id, album.folder_path.clone()),
                 (album.id, album.title),
             );
         }
@@ -72,6 +72,7 @@ impl EntityCache {
     }
 
     /// Find an album by normalized title, artist_id, and folder_path. Returns `(id, original_title)`.
+    /// All three must match — albums in different folders are always distinct.
     pub fn find_album_by_normalized(
         &self,
         normalized_title: &str,
@@ -79,7 +80,11 @@ impl EntityCache {
         folder_path: &str,
     ) -> Option<(AlbumId, &str)> {
         self.albums
-            .get(&(normalized_title.to_string(), artist_id, folder_path.to_string()))
+            .get(&(
+                normalized_title.to_string(),
+                artist_id,
+                folder_path.to_string(),
+            ))
             .map(|(id, title)| (*id, title.as_str()))
     }
 
@@ -116,7 +121,6 @@ impl EntityCache {
         let normalized = normalize_string(name);
         self.genres.insert(normalized, (id, name.to_string()));
     }
-
 }
 
 /// Entity matcher — exact and normalized matching only.
@@ -180,9 +184,8 @@ impl FuzzyMatcher {
         })
     }
 
-    /// Find or create an album — exact or normalized title match within the same
-    /// artist and folder only.  Two albums with the same title/artist but different
-    /// folders are always created as separate albums (strict folder isolation).
+    /// Find or create an album — exact or normalized title + artist + folder match.
+    /// Albums in different folders are always distinct (strict folder-based isolation).
     pub async fn find_or_create_album(
         &self,
         pool: &SqlitePool,
@@ -192,14 +195,13 @@ impl FuzzyMatcher {
     ) -> Result<FuzzyMatch<Album>> {
         let normalized_title = normalize_string(title);
 
-        // Get albums by artist (or all if no artist specified) and filter by folder
         let albums = if let Some(aid) = artist_id {
             soul_storage::albums::get_by_artist(pool, aid).await?
         } else {
             soul_storage::albums::get_all(pool).await?
         };
 
-        // Try exact match (title + artist + folder)
+        // Exact title + artist + folder match
         for album in &albums {
             if album.title == title
                 && album.artist_id == artist_id
@@ -213,7 +215,7 @@ impl FuzzyMatcher {
             }
         }
 
-        // Try normalized match (same folder required)
+        // Normalized title + artist + folder match
         for album in &albums {
             if normalize_string(&album.title) == normalized_title
                 && album.artist_id == artist_id
@@ -304,8 +306,8 @@ impl FuzzyMatcher {
     }
 
     /// Find or create an album using the in-memory cache for O(1) lookups.
-    /// Matches on (normalized_title, artist_id, folder_path) — two albums with the
-    /// same title and artist but different folders are always distinct.
+    /// Matches on (normalized_title, artist_id, folder_path) — albums in different
+    /// folders are always distinct (strict folder-based isolation).
     pub async fn find_or_create_album_cached(
         &self,
         pool: &SqlitePool,

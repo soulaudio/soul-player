@@ -48,6 +48,7 @@ export function DemoPlayerCommandsProvider({ children }: DemoPlayerCommandsProvi
 
       // Queue management
       async getQueue() { return []; },
+      async getHistory() { return []; },
       async playQueue() {},
       async playQueueWithContext() {},
       async skipToQueueIndex() {},

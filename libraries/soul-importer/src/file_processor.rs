@@ -297,7 +297,13 @@ impl<'a> FileProcessor<'a> {
         // Match album via cache (keyed by title + artist + folder for strict isolation)
         let album_id = if let Some(ref album_title) = raw.album {
             let m = fuzzy
-                .find_or_create_album_cached(self.pool, album_title, artist_id, &album_folder, cache)
+                .find_or_create_album_cached(
+                    self.pool,
+                    album_title,
+                    artist_id,
+                    &album_folder,
+                    cache,
+                )
                 .await?;
             Some(m.entity.id)
         } else {
@@ -443,7 +449,13 @@ impl<'a> FileProcessor<'a> {
         // Match album via cache (keyed by title + artist + folder for strict isolation)
         let album_id = if let Some(ref album_title) = raw.album {
             let m = fuzzy
-                .find_or_create_album_cached(self.pool, album_title, artist_id, &album_folder, cache)
+                .find_or_create_album_cached(
+                    self.pool,
+                    album_title,
+                    artist_id,
+                    &album_folder,
+                    cache,
+                )
                 .await?;
             Some(m.entity.id)
         } else {

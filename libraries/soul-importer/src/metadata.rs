@@ -7,7 +7,7 @@
 //! Both return the same `ExtractedMetadata` struct for compatibility.
 
 use crate::{ImportError, Result};
-use lofty::{Accessor, AudioFile, Probe, TaggedFile, TaggedFileExt};
+use lofty::{Accessor, AudioFile, Probe, TagType, TaggedFile, TaggedFileExt};
 use std::path::Path;
 
 /// Parsed folder name components
@@ -180,9 +180,18 @@ fn find_best_tag(file: &TaggedFile) -> Option<&lofty::Tag> {
         return None;
     }
 
-    // Score each tag by how much useful metadata it has
-    let score_tag = |tag: &lofty::Tag| -> usize {
-        let mut score = 0;
+    // Score each tag by how much useful metadata it has.
+    // ID3v1 is ASCII-only — non-Latin characters become '?' substitutions.
+    // Penalise ID3v1 so that ID3v2/Vorbis/APE tags win when both are present.
+    // Also penalise any tag whose important fields contain only '?' (corrupted).
+    let score_tag = |tag: &lofty::Tag| -> i32 {
+        // ID3v1 base penalty: prefer richer tag formats for non-ASCII support
+        let mut score: i32 = if tag.tag_type() == TagType::Id3v1 {
+            -10
+        } else {
+            0
+        };
+
         if tag.artist().is_some() {
             score += 3; // Artist is most important
         }
@@ -198,6 +207,19 @@ fn find_best_tag(file: &TaggedFile) -> Option<&lofty::Tag> {
         if tag.year().is_some() {
             score += 1;
         }
+
+        // Penalise '?' substitutions — indicates the encoding couldn't represent the chars
+        let has_question_marks = |s: std::borrow::Cow<'_, str>| s.contains('?');
+        if tag.artist().map(has_question_marks).unwrap_or(false) {
+            score -= 2;
+        }
+        if tag.album().map(has_question_marks).unwrap_or(false) {
+            score -= 1;
+        }
+        if tag.title().map(has_question_marks).unwrap_or(false) {
+            score -= 1;
+        }
+
         score
     };
 
@@ -205,7 +227,7 @@ fn find_best_tag(file: &TaggedFile) -> Option<&lofty::Tag> {
     let best = tags.iter().max_by_key(|t| score_tag(t));
 
     // If best tag has no data, try primary_tag as last resort
-    if best.map(score_tag).unwrap_or(0) == 0 {
+    if best.map(score_tag).unwrap_or(0) <= 0 {
         file.primary_tag()
     } else {
         best
@@ -285,15 +307,32 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     let title: Option<String> =
         title.or_else(|| path.file_stem().map(|s| s.to_string_lossy().into_owned()));
 
-    // Check if metadata contains corrupted characters (indicates wrong encoding in tags)
-    let has_corrupted_data = artist.as_ref().map(|s| s.contains('?')).unwrap_or(false)
-        || album.as_ref().map(|s| s.contains('?')).unwrap_or(false)
-        || title.as_ref().map(|s| s.contains('?')).unwrap_or(false);
+    // Attempt to fix mojibake: ID3v2 Latin-1-declared frames that actually contain
+    // UTF-8 bytes are read by lofty as Windows-1252, producing garbled characters.
+    // If all code points are ≤ U+00FF and the bytes form valid UTF-8, re-interpret.
+    let fix_mojibake = |s: String| -> String {
+        if s.chars().all(|c| (c as u32) <= 0xFF) && s.chars().any(|c| (c as u32) > 0x7F) {
+            let bytes: Vec<u8> = s.chars().map(|c| c as u8).collect();
+            if let Ok(fixed) = std::str::from_utf8(&bytes) {
+                if fixed != s {
+                    tracing::debug!(original = %s, fixed = %fixed, "[metadata] Mojibake corrected");
+                    return fixed.to_string();
+                }
+            }
+        }
+        s
+    };
 
-    // Fallback: Parse parent folder name for artist/album if:
-    // 1. Missing from tags, OR
-    // 2. Tags contain '?' (indicates encoding corruption from non-Latin characters)
-    let folder_meta = if artist.is_none() || album.is_none() || has_corrupted_data {
+    let title = title.map(&fix_mojibake);
+    let artist = artist.map(&fix_mojibake);
+    let album = album.map(&fix_mojibake);
+    let album_artist = album_artist.map(&fix_mojibake);
+    let genres: Vec<String> = genres.into_iter().map(&fix_mojibake).collect();
+
+    // Fallback: Parse parent folder name for artist/album only when tags are missing.
+    // Never override tag data with folder data — doing so caused duplicate albums on
+    // force-reimport when the folder-derived name differed from the tag-derived name.
+    let folder_meta = if artist.is_none() || album.is_none() {
         let parent = path.parent();
         let folder_name = parent
             .and_then(|p| p.file_name())
@@ -317,23 +356,13 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
                 }
             }
 
-            if has_corrupted_data {
-                tracing::warn!(
-                    file = ?path.file_name(),
-                    folder = %name,
-                    artist = ?parsed.artist,
-                    album = ?parsed.album,
-                    "[metadata] Corrupted encoding detected (contains '?'), using folder fallback"
-                );
-            } else {
-                tracing::debug!(
-                    file = ?path.file_name(),
-                    folder = %name,
-                    artist = ?parsed.artist,
-                    album = ?parsed.album,
-                    "[metadata] Folder fallback"
-                );
-            }
+            tracing::debug!(
+                file = ?path.file_name(),
+                folder = %name,
+                artist = ?parsed.artist,
+                album = ?parsed.album,
+                "[metadata] Folder fallback for missing tags"
+            );
             Some(parsed)
         } else {
             None
@@ -348,22 +377,9 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         None
     };
 
-    // Prefer folder metadata if we detected corrupted data, otherwise use tag data as fallback
-    let artist = if has_corrupted_data {
-        folder_meta
-            .as_ref()
-            .and_then(|m| m.artist.clone())
-            .or(artist)
-    } else {
-        artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()))
-    };
-
-    let album = if has_corrupted_data {
-        folder_meta.as_ref().and_then(|m| m.album.clone()).or(album)
-    } else {
-        album.or_else(|| folder_meta.as_ref().and_then(|m| m.album.clone()))
-    };
-
+    // Tag data takes priority; folder metadata only fills in missing values.
+    let artist = artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()));
+    let album = album.or_else(|| folder_meta.as_ref().and_then(|m| m.album.clone()));
     let year = year.or_else(|| folder_meta.as_ref().and_then(|m| m.year));
 
     // Get file format from extension

@@ -65,8 +65,8 @@ async fn test_progress_callback_called_for_small_library() {
     let calls: Arc<Mutex<Vec<ScanStats>>> = Arc::new(Mutex::new(Vec::new()));
     let calls_clone = Arc::clone(&calls);
 
-    let scanner = LibraryScanner::new(pool.clone(), "user1", "device1")
-        .on_progress(Box::new(move |stats| {
+    let scanner =
+        LibraryScanner::new(pool.clone(), "user1", "device1").on_progress(Box::new(move |stats| {
             calls_clone.lock().unwrap().push(stats.clone());
         }));
 
@@ -281,7 +281,10 @@ async fn test_progress_callback_with_force_refresh() {
     );
 
     let first = &captured[0];
-    assert_eq!(first.total_files, 4, "total_files must be 4 on force-refresh");
+    assert_eq!(
+        first.total_files, 4,
+        "total_files must be 4 on force-refresh"
+    );
     assert_eq!(first.processed, 0, "first callback shows processed = 0");
 
     let last = captured.last().unwrap();
