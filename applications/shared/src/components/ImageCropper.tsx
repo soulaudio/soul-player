@@ -179,77 +179,54 @@ export function ImageCropper({
     setIsDragging(false)
   }
 
+  // Max zoom: 8× the minimum zoom (relative so it stays sensible regardless of image size)
+  const MAX_ZOOM_FACTOR = 8
+  const getMaxScale = useCallback(() => getMinScale() * MAX_ZOOM_FACTOR, [getMinScale])
+
   // Zoom handlers with bounds clamping
   const updateScale = useCallback((newScale: number) => {
-    const minScale = getMinScale()
-    const clampedScale = Math.max(minScale, Math.min(5, newScale))
+    const clampedScale = Math.max(getMinScale(), Math.min(getMaxScale(), newScale))
     setScale(clampedScale)
-    // Re-clamp position when scale changes
     setPosition((pos) => clampPosition(pos, clampedScale))
-  }, [getMinScale, clampPosition])
+  }, [getMinScale, getMaxScale, clampPosition])
 
-  const handleZoomIn = () => {
-    updateScale(scale * 1.2)
-  }
-
-  const handleZoomOut = () => {
-    updateScale(scale / 1.2)
-  }
+  const handleZoomIn = () => updateScale(scale * 1.2)
+  const handleZoomOut = () => updateScale(scale / 1.2)
 
   const handleReset = () => {
-    const minScale = getMinScale()
-    setScale(minScale * 1.1)
+    setScale(getMinScale() * 1.1)
     setPosition({ x: 0, y: 0 })
   }
 
   // Wheel zoom
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    updateScale(scale * delta)
+    updateScale(scale * (e.deltaY > 0 ? 0.9 : 1.1))
   }
 
-  // Zoom slider handlers
-  const sliderRef = useRef<HTMLDivElement>(null)
-  const [isDraggingSlider, setIsDraggingSlider] = useState(false)
-
-  const handleSliderChange = useCallback((clientX: number) => {
-    const slider = sliderRef.current
-    if (!slider) return
-
-    const rect = slider.getBoundingClientRect()
-    const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+  // Logarithmic zoom slider — zoom feels exponential to humans, so log mapping
+  // gives a linear "feel": slider midpoint = √(min×max) = ~2.8× minimum zoom.
+  const getSliderValue = useCallback((): number => {
     const minScale = getMinScale()
-    const newScale = minScale + percent * (5 - minScale)
-    updateScale(newScale)
-  }, [getMinScale, updateScale])
+    const maxScale = getMaxScale()
+    const logMin = Math.log(minScale)
+    const logMax = Math.log(maxScale)
+    const logCurrent = Math.log(Math.max(minScale, scale))
+    return Math.round(((logCurrent - logMin) / (logMax - logMin)) * 100)
+  }, [scale, getMinScale, getMaxScale])
 
-  const handleSliderPointerDown = (e: React.PointerEvent) => {
-    setIsDraggingSlider(true)
-    e.currentTarget.setPointerCapture(e.pointerId)
-    handleSliderChange(e.clientX)
-  }
-
-  const handleSliderPointerMove = (e: React.PointerEvent) => {
-    if (!isDraggingSlider) return
-    handleSliderChange(e.clientX)
-  }
-
-  const handleSliderPointerUp = () => {
-    setIsDraggingSlider(false)
-  }
+  const handleSliderInput = useCallback((value: number) => {
+    const minScale = getMinScale()
+    const maxScale = getMaxScale()
+    const logMin = Math.log(minScale)
+    const logMax = Math.log(maxScale)
+    updateScale(Math.exp(logMin + (value / 100) * (logMax - logMin)))
+  }, [getMinScale, getMaxScale, updateScale])
 
   const handleSliderWheel = (e: React.WheelEvent) => {
     e.preventDefault()
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    updateScale(scale * delta)
+    updateScale(scale * (e.deltaY > 0 ? 0.9 : 1.1))
   }
-
-  // Calculate slider position based on current scale
-  const getSliderPercent = useCallback(() => {
-    const minScale = getMinScale()
-    return Math.min(100, ((scale - minScale) / (5 - minScale)) * 100)
-  }, [scale, getMinScale])
 
   // Generate cropped image
   const handleCrop = () => {
@@ -340,29 +317,18 @@ export function ImageCropper({
           <ZoomOut className="w-5 h-5" />
         </button>
 
-        {/* Interactive zoom slider */}
-        <div
-          ref={sliderRef}
-          className="relative w-32 h-6 flex items-center cursor-pointer touch-none select-none"
-          onPointerDown={handleSliderPointerDown}
-          onPointerMove={handleSliderPointerMove}
-          onPointerUp={handleSliderPointerUp}
-          onPointerLeave={handleSliderPointerUp}
+        {/* Native range input with logarithmic mapping for natural zoom feel */}
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={getSliderValue()}
+          onChange={(e) => handleSliderInput(Number(e.target.value))}
           onWheel={handleSliderWheel}
-        >
-          {/* Track background */}
-          <div className="absolute w-full h-2 bg-muted rounded-full" />
-          {/* Filled track */}
-          <div
-            className="absolute h-2 bg-primary rounded-full transition-[width]"
-            style={{ width: `${getSliderPercent()}%` }}
-          />
-          {/* Thumb */}
-          <div
-            className="absolute w-4 h-4 bg-primary rounded-full shadow-md transform -translate-x-1/2 transition-[left]"
-            style={{ left: `${getSliderPercent()}%` }}
-          />
-        </div>
+          className="w-32 accent-primary cursor-pointer"
+          title={t('artwork.edit.zoomIn')}
+        />
 
         <button
           type="button"
