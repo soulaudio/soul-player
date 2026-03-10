@@ -183,6 +183,7 @@ async fn test_create_and_get_album() {
             artist_id: Some(artist.id),
             year: Some(1971),
             musicbrainz_id: Some("test-mb-id".to_string()),
+            folder_path: "/music/led-zeppelin/iv".to_string(),
         },
     )
     .await
@@ -227,6 +228,7 @@ async fn test_get_albums_by_artist() {
             artist_id: Some(artist.id),
             year: Some(1972),
             musicbrainz_id: None,
+            folder_path: "/music/bowie/ziggy".to_string(),
         },
     )
     .await
@@ -239,6 +241,7 @@ async fn test_get_albums_by_artist() {
             artist_id: Some(artist.id),
             year: Some(1977),
             musicbrainz_id: None,
+            folder_path: "/music/bowie/heroes".to_string(),
         },
     )
     .await
@@ -251,6 +254,7 @@ async fn test_get_albums_by_artist() {
             artist_id: Some(artist.id),
             year: Some(1983),
             musicbrainz_id: None,
+            folder_path: "/music/bowie/lets-dance".to_string(),
         },
     )
     .await
@@ -292,6 +296,7 @@ async fn test_get_all_albums() {
             artist_id: Some(artist.id),
             year: None,
             musicbrainz_id: None,
+            folder_path: String::new(),
         },
     )
     .await
@@ -304,6 +309,7 @@ async fn test_get_all_albums() {
             artist_id: Some(artist.id),
             year: None,
             musicbrainz_id: None,
+            folder_path: String::new(),
         },
     )
     .await
@@ -332,6 +338,7 @@ async fn test_album_without_artist() {
             artist_id: None,
             year: Some(2000),
             musicbrainz_id: None,
+            folder_path: String::new(),
         },
     )
     .await
@@ -356,6 +363,7 @@ async fn test_artist_deletion_sets_album_artist_to_null() {
             artist_id: Some(artist),
             year: None,
             musicbrainz_id: None,
+            folder_path: String::new(),
         },
     )
     .await
@@ -393,6 +401,7 @@ async fn test_musicbrainz_id_uniqueness() {
             artist_id: Some(artist),
             year: None,
             musicbrainz_id: Some("unique-mb-id".to_string()),
+            folder_path: String::new(),
         },
     )
     .await
@@ -406,6 +415,7 @@ async fn test_musicbrainz_id_uniqueness() {
             artist_id: Some(artist),
             year: None,
             musicbrainz_id: Some("unique-mb-id".to_string()),
+            folder_path: String::new(),
         },
     )
     .await;

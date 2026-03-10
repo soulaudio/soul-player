@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT DISTINCT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         JOIN playback_contexts pc ON pc.context_type = 'album' AND CAST(pc.context_id AS INTEGER) = a.id\n         WHERE pc.user_id = ?\n           AND strftime('%m-%d', datetime(pc.last_played_at, 'unixepoch')) = strftime('%m-%d', 'now')\n           AND strftime('%Y', datetime(pc.last_played_at, 'unixepoch')) < strftime('%Y', 'now')\n         ORDER BY pc.last_played_at DESC\n         LIMIT ?",
+  "query": "SELECT DISTINCT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,\n                a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         JOIN tracks t ON t.album_id = a.id\n         JOIN track_genres tg ON tg.track_id = t.id\n         WHERE tg.genre_id = ?\n         ORDER BY RANDOM()\n         LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -44,13 +44,18 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "folder_path",
         "ordinal": 8,
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "created_at",
         "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 10,
         "type_info": "Text"
       }
     ],
@@ -67,8 +72,9 @@
       true,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "7bb820997578a3cf87d8c56697a3c81e3b1e805eae96388b5c18f9f18f0ed1e9"
+  "hash": "fd1566c8da3ec53a69c993657e46daa55cf3cd6680b54b595f4460c0fe91a5f5"
 }

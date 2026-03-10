@@ -145,6 +145,8 @@ async fn test_entity_cache_albums_scoped_by_artist() {
     .await
     .unwrap();
 
+    let folder = "/music/shared-folder";
+
     // Create album "Greatest Hits" for artist1
     soul_storage::albums::create(
         &pool,
@@ -153,6 +155,7 @@ async fn test_entity_cache_albums_scoped_by_artist() {
             artist_id: Some(artist1.id),
             year: None,
             musicbrainz_id: None,
+            folder_path: folder.to_string(),
         },
     )
     .await
@@ -162,7 +165,7 @@ async fn test_entity_cache_albums_scoped_by_artist() {
 
     // Find album for artist1 - should match existing
     let result1 = matcher
-        .find_or_create_album_cached(&pool, "Greatest Hits", Some(artist1.id), &mut cache)
+        .find_or_create_album_cached(&pool, "Greatest Hits", Some(artist1.id), folder, &mut cache)
         .await
         .unwrap();
     assert_eq!(result1.confidence, 100);
@@ -170,12 +173,69 @@ async fn test_entity_cache_albums_scoped_by_artist() {
 
     // Find same album title for artist2 - should create new (different artist scope)
     let result2 = matcher
-        .find_or_create_album_cached(&pool, "Greatest Hits", Some(artist2.id), &mut cache)
+        .find_or_create_album_cached(&pool, "Greatest Hits", Some(artist2.id), folder, &mut cache)
         .await
         .unwrap();
     assert_eq!(result2.match_type, MatchType::Created);
     assert_eq!(result2.entity.artist_id, Some(artist2.id));
 
     // The two albums should have different IDs
+    assert_ne!(result1.entity.id, result2.entity.id);
+}
+
+/// Same artist/title in different folders → distinct albums (strict folder isolation).
+#[tokio::test]
+async fn test_entity_cache_albums_scoped_by_folder() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+
+    let artist = soul_storage::artists::create(
+        &pool,
+        CreateArtist {
+            name: "The Artist".to_string(),
+            sort_name: Some("Artist".to_string()),
+            musicbrainz_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let folder1 = "/music/disc1";
+    let folder2 = "/music/disc2";
+
+    soul_storage::albums::create(
+        &pool,
+        CreateAlbum {
+            title: "Live Album".to_string(),
+            artist_id: Some(artist.id),
+            year: None,
+            musicbrainz_id: None,
+            folder_path: folder1.to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    // Same title + artist in folder1 → existing album
+    let result1 = matcher
+        .find_or_create_album_cached(&pool, "Live Album", Some(artist.id), folder1, &mut cache)
+        .await
+        .unwrap();
+    assert_eq!(result1.match_type, MatchType::Exact);
+
+    // Same title + artist in folder2 → new album
+    let result2 = matcher
+        .find_or_create_album_cached(&pool, "Live Album", Some(artist.id), folder2, &mut cache)
+        .await
+        .unwrap();
+    assert_eq!(
+        result2.match_type,
+        MatchType::Created,
+        "Same title/artist in a different folder must be a distinct album"
+    );
+    assert_eq!(result2.entity.folder_path, folder2);
+
     assert_ne!(result1.entity.id, result2.entity.id);
 }

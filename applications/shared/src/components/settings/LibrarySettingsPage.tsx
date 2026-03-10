@@ -626,6 +626,7 @@ export function LibrarySettingsPage() {
                     </Tooltip>
                     <Tooltip content={t('librarySettings.forceRefreshDescription')} position="top">
                       <button
+                        data-testid="force-reimport-button"
                         onClick={() => handleRescanAll(true)}
                         disabled={scanningSourceId !== null}
                         className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-500/30 disabled:opacity-[var(--disabled-opacity)]"

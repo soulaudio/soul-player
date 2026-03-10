@@ -278,6 +278,12 @@ impl<'a> FileProcessor<'a> {
 
         let fuzzy = self.metadata_extractor.fuzzy_matcher();
 
+        // Parent folder of this file — used as the album isolation key.
+        let album_folder = file_path
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+
         // Match artist via cache
         let artist_id = if let Some(ref artist_name) = raw.artist {
             let m = fuzzy
@@ -288,10 +294,10 @@ impl<'a> FileProcessor<'a> {
             None
         };
 
-        // Match album via cache
+        // Match album via cache (keyed by title + artist + folder for strict isolation)
         let album_id = if let Some(ref album_title) = raw.album {
             let m = fuzzy
-                .find_or_create_album_cached(self.pool, album_title, artist_id, cache)
+                .find_or_create_album_cached(self.pool, album_title, artist_id, &album_folder, cache)
                 .await?;
             Some(m.entity.id)
         } else {
@@ -418,6 +424,12 @@ impl<'a> FileProcessor<'a> {
 
         let fuzzy = self.metadata_extractor.fuzzy_matcher();
 
+        // Parent folder of this file — used as the album isolation key.
+        let album_folder = file_path
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+
         // Match artist via cache
         let artist_id = if let Some(ref artist_name) = raw.artist {
             let m = fuzzy
@@ -428,10 +440,10 @@ impl<'a> FileProcessor<'a> {
             None
         };
 
-        // Match album via cache
+        // Match album via cache (keyed by title + artist + folder for strict isolation)
         let album_id = if let Some(ref album_title) = raw.album {
             let m = fuzzy
-                .find_or_create_album_cached(self.pool, album_title, artist_id, cache)
+                .find_or_create_album_cached(self.pool, album_title, artist_id, &album_folder, cache)
                 .await?;
             Some(m.entity.id)
         } else {

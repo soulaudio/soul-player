@@ -61,8 +61,11 @@ async fn test_artist_normalized_match() {
     assert_eq!(result.entity.name, "The Beatles");
 }
 
+/// Levenshtein / fuzzy matching has been removed from the artist pipeline.
+/// A misspelled name ("Metalica" vs "Metallica") now creates a distinct new artist
+/// instead of being silently merged with the existing one.
 #[tokio::test]
-async fn test_artist_fuzzy_match() {
+async fn test_artist_typo_creates_distinct_artist() {
     let pool = setup_test_db().await;
     let matcher = FuzzyMatcher::new();
 
@@ -78,16 +81,14 @@ async fn test_artist_fuzzy_match() {
     .await
     .unwrap();
 
-    // Find with typo (should still match with high confidence)
+    // A typo — no longer merged via Levenshtein; creates a new distinct artist.
     let result = matcher
         .find_or_create_artist(&pool, "Metalica")
         .await
         .unwrap();
 
-    assert!(result.confidence >= 60);
-    assert!(result.confidence < 100);
-    assert_eq!(result.match_type, MatchType::Fuzzy);
-    assert_eq!(result.entity.name, "Metallica");
+    assert_eq!(result.match_type, MatchType::Created);
+    assert_eq!(result.entity.name, "Metalica");
 }
 
 #[tokio::test]
@@ -114,7 +115,6 @@ async fn test_album_exact_match() {
     let pool = setup_test_db().await;
     let matcher = FuzzyMatcher::new();
 
-    // Create artist first
     let artist = soul_storage::artists::create(
         &pool,
         CreateArtist {
@@ -126,7 +126,8 @@ async fn test_album_exact_match() {
     .await
     .unwrap();
 
-    // Create album
+    let folder = "/music/pink-floyd/dark-side";
+
     soul_storage::albums::create(
         &pool,
         soul_core::types::CreateAlbum {
@@ -134,14 +135,14 @@ async fn test_album_exact_match() {
             artist_id: Some(artist.id),
             year: Some(1973),
             musicbrainz_id: None,
+            folder_path: folder.to_string(),
         },
     )
     .await
     .unwrap();
 
-    // Find with exact match
     let result = matcher
-        .find_or_create_album(&pool, "Dark Side of the Moon", Some(artist.id))
+        .find_or_create_album(&pool, "Dark Side of the Moon", Some(artist.id), folder)
         .await
         .unwrap();
 
@@ -166,6 +167,8 @@ async fn test_album_normalized_match() {
     .await
     .unwrap();
 
+    let folder = "/music/radiohead/ok-computer";
+
     soul_storage::albums::create(
         &pool,
         soul_core::types::CreateAlbum {
@@ -173,14 +176,15 @@ async fn test_album_normalized_match() {
             artist_id: Some(artist.id),
             year: None,
             musicbrainz_id: None,
+            folder_path: folder.to_string(),
         },
     )
     .await
     .unwrap();
 
-    // Find with case variation
+    // Find with case variation — same folder
     let result = matcher
-        .find_or_create_album(&pool, "ok computer", Some(artist.id))
+        .find_or_create_album(&pool, "ok computer", Some(artist.id), folder)
         .await
         .unwrap();
 
@@ -216,6 +220,8 @@ async fn test_album_different_artists_no_match() {
     .await
     .unwrap();
 
+    let folder = "/music/shared";
+
     // Create album for artist1
     soul_storage::albums::create(
         &pool,
@@ -224,14 +230,15 @@ async fn test_album_different_artists_no_match() {
             artist_id: Some(artist1.id),
             year: None,
             musicbrainz_id: None,
+            folder_path: folder.to_string(),
         },
     )
     .await
     .unwrap();
 
-    // Try to find for artist2 - should create new
+    // Try to find for artist2 — should create new (different artist scope)
     let result = matcher
-        .find_or_create_album(&pool, "Album", Some(artist2.id))
+        .find_or_create_album(&pool, "Album", Some(artist2.id), folder)
         .await
         .unwrap();
 
@@ -239,12 +246,58 @@ async fn test_album_different_artists_no_match() {
     assert_eq!(result.entity.artist_id, Some(artist2.id));
 }
 
+/// Same artist/title but different folder → distinct albums (strict folder isolation).
+#[tokio::test]
+async fn test_album_different_folders_no_match() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+
+    let artist = soul_storage::artists::create(
+        &pool,
+        CreateArtist {
+            name: "The Artist".to_string(),
+            sort_name: Some("Artist".to_string()),
+            musicbrainz_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let folder1 = "/music/disc1";
+    let folder2 = "/music/disc2";
+
+    soul_storage::albums::create(
+        &pool,
+        soul_core::types::CreateAlbum {
+            title: "Greatest Hits".to_string(),
+            artist_id: Some(artist.id),
+            year: None,
+            musicbrainz_id: None,
+            folder_path: folder1.to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    // Same title + artist but different folder → new album
+    let result = matcher
+        .find_or_create_album(&pool, "Greatest Hits", Some(artist.id), folder2)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.match_type,
+        MatchType::Created,
+        "Same title/artist in a different folder must create a distinct album"
+    );
+    assert_eq!(result.entity.folder_path, folder2);
+}
+
 #[tokio::test]
 async fn test_genre_canonicalization() {
     let pool = setup_test_db().await;
     let matcher = FuzzyMatcher::new();
 
-    // Create genre with variant spelling
     let result1 = matcher
         .find_or_create_genre(&pool, "hip hop")
         .await
@@ -258,7 +311,6 @@ async fn test_genre_canonicalization() {
         .await
         .unwrap();
 
-    // Should find the same genre
     assert_eq!(result1.entity.id, result2.entity.id);
     assert_eq!(result2.entity.canonical_name, "Hip-Hop");
 }
@@ -268,7 +320,6 @@ async fn test_genre_various_canonicalizations() {
     let pool = setup_test_db().await;
     let matcher = FuzzyMatcher::new();
 
-    // Test various genre canonicalizations
     let test_cases = vec![
         ("r&b", "R&B"),
         ("rnb", "R&B"),
@@ -294,7 +345,6 @@ async fn test_genre_creates_with_title_case() {
     let pool = setup_test_db().await;
     let matcher = FuzzyMatcher::new();
 
-    // Create genre that doesn't have special canonicalization
     let result = matcher
         .find_or_create_genre(&pool, "progressive metal")
         .await
@@ -305,8 +355,6 @@ async fn test_genre_creates_with_title_case() {
 }
 
 /// Albums with incremental volume names (Vol I / Vol II) must NOT be merged.
-/// Levenshtein similarity between "alex vol i" and "alex vol ii" is ~91%, which
-/// previously caused them to be incorrectly matched as the same album.
 #[tokio::test]
 async fn test_album_incremental_names_not_merged() {
     let pool = setup_test_db().await;
@@ -323,6 +371,8 @@ async fn test_album_incremental_names_not_merged() {
     .await
     .unwrap();
 
+    let folder = "/music/alex";
+
     // Create "Alex Vol I"
     soul_storage::albums::create(
         &pool,
@@ -331,21 +381,22 @@ async fn test_album_incremental_names_not_merged() {
             artist_id: Some(artist.id),
             year: None,
             musicbrainz_id: None,
+            folder_path: folder.to_string(),
         },
     )
     .await
     .unwrap();
 
-    // Look up "Alex Vol II" — must be created as a NEW album, not matched to Vol I
+    // Look up "Alex Vol II" in the same folder — must be a NEW album
     let result = matcher
-        .find_or_create_album(&pool, "Alex Vol II", Some(artist.id))
+        .find_or_create_album(&pool, "Alex Vol II", Some(artist.id), folder)
         .await
         .unwrap();
 
     assert_eq!(
         result.match_type,
         MatchType::Created,
-        "\"Alex Vol II\" must be a distinct album, not fuzzy-matched to \"Alex Vol I\""
+        "\"Alex Vol II\" must be a distinct album, not matched to \"Alex Vol I\""
     );
     assert_eq!(result.entity.title, "Alex Vol II");
 }
@@ -367,6 +418,8 @@ async fn test_album_incremental_names_not_merged_cached() {
     .await
     .unwrap();
 
+    let folder = "/music/alex";
+
     soul_storage::albums::create(
         &pool,
         CreateAlbum {
@@ -374,6 +427,7 @@ async fn test_album_incremental_names_not_merged_cached() {
             artist_id: Some(artist.id),
             year: None,
             musicbrainz_id: None,
+            folder_path: folder.to_string(),
         },
     )
     .await
@@ -382,14 +436,14 @@ async fn test_album_incremental_names_not_merged_cached() {
     let mut cache = EntityCache::preload(&pool).await.unwrap();
 
     let result = matcher
-        .find_or_create_album_cached(&pool, "Alex Vol II", Some(artist.id), &mut cache)
+        .find_or_create_album_cached(&pool, "Alex Vol II", Some(artist.id), folder, &mut cache)
         .await
         .unwrap();
 
     assert_eq!(
         result.match_type,
         MatchType::Created,
-        "\"Alex Vol II\" must be a distinct album, not fuzzy-matched to \"Alex Vol I\""
+        "\"Alex Vol II\" must be a distinct album, not matched to \"Alex Vol I\""
     );
     assert_eq!(result.entity.title, "Alex Vol II");
 }

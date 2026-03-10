@@ -6856,7 +6856,6 @@ dependencies = [
  "soul-metadata",
  "soul-storage",
  "sqlx",
- "strsim",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",

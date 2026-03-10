@@ -1,4 +1,11 @@
-//! Fuzzy matching with confidence scoring for artists, albums, and genres
+//! Entity matching with confidence scoring for artists, albums, and genres.
+//!
+//! Artist matching: exact name or normalized (case-insensitive/whitespace) only.
+//! No Levenshtein / fuzzy matching — each distinct spelling → distinct artist.
+//!
+//! Album matching: exact/normalized title + artist_id + folder_path.
+//! Two albums with identical title and artist but in different folders are always
+//! treated as distinct albums (strict folder isolation, no cross-folder merging).
 
 use crate::{FuzzyMatch, MatchType, Result};
 use soul_core::types::{
@@ -6,7 +13,6 @@ use soul_core::types::{
 };
 use sqlx::SqlitePool;
 use std::collections::HashMap;
-use strsim::normalized_levenshtein;
 
 /// In-memory cache of entities for O(1) lookups during import scans.
 ///
@@ -17,8 +23,8 @@ use strsim::normalized_levenshtein;
 pub struct EntityCache {
     /// normalized_name -> (id, original_name)
     artists: HashMap<String, (ArtistId, String)>,
-    /// (normalized_title, artist_id) -> (id, original_title)
-    albums: HashMap<(String, Option<ArtistId>), (AlbumId, String)>,
+    /// (normalized_title, artist_id, folder_path) -> (id, original_title)
+    albums: HashMap<(String, Option<ArtistId>, String), (AlbumId, String)>,
     /// normalized_name -> (id, original_name)
     genres: HashMap<String, (GenreId, String)>,
 }
@@ -39,7 +45,10 @@ impl EntityCache {
         let mut albums = HashMap::with_capacity(all_albums.len());
         for album in all_albums {
             let normalized = normalize_string(&album.title);
-            albums.insert((normalized, album.artist_id), (album.id, album.title));
+            albums.insert(
+                (normalized, album.artist_id, album.folder_path),
+                (album.id, album.title),
+            );
         }
 
         let mut genres = HashMap::with_capacity(all_genres.len());
@@ -62,14 +71,15 @@ impl EntityCache {
             .map(|(id, name)| (*id, name.as_str()))
     }
 
-    /// Find an album by normalized title and artist_id. Returns `(id, original_title)`.
+    /// Find an album by normalized title, artist_id, and folder_path. Returns `(id, original_title)`.
     pub fn find_album_by_normalized(
         &self,
         normalized_title: &str,
         artist_id: Option<ArtistId>,
+        folder_path: &str,
     ) -> Option<(AlbumId, &str)> {
         self.albums
-            .get(&(normalized_title.to_string(), artist_id))
+            .get(&(normalized_title.to_string(), artist_id, folder_path.to_string()))
             .map(|(id, title)| (*id, title.as_str()))
     }
 
@@ -87,10 +97,18 @@ impl EntityCache {
     }
 
     /// Insert a new album into the cache after creating it in the DB.
-    pub fn insert_album(&mut self, id: AlbumId, title: &str, artist_id: Option<ArtistId>) {
+    pub fn insert_album(
+        &mut self,
+        id: AlbumId,
+        title: &str,
+        artist_id: Option<ArtistId>,
+        folder_path: &str,
+    ) {
         let normalized = normalize_string(title);
-        self.albums
-            .insert((normalized, artist_id), (id, title.to_string()));
+        self.albums.insert(
+            (normalized, artist_id, folder_path.to_string()),
+            (id, title.to_string()),
+        );
     }
 
     /// Insert a new genre into the cache after creating it in the DB.
@@ -99,48 +117,21 @@ impl EntityCache {
         self.genres.insert(normalized, (id, name.to_string()));
     }
 
-    /// Iterate over all artist entries for Levenshtein fallback.
-    /// Yields `(normalized_name, id, original_name)`.
-    pub fn artist_entries(&self) -> impl Iterator<Item = (&str, ArtistId, &str)> {
-        self.artists
-            .iter()
-            .map(|(norm, (id, name))| (norm.as_str(), *id, name.as_str()))
-    }
-
-    /// Iterate over album entries for a specific artist (Levenshtein fallback).
-    /// Yields `(normalized_title, id, original_title)`.
-    pub fn album_entries_for_artist(
-        &self,
-        artist_id: Option<ArtistId>,
-    ) -> impl Iterator<Item = (&str, AlbumId, &str)> {
-        self.albums
-            .iter()
-            .filter(move |((_, aid), _)| *aid == artist_id)
-            .map(|((norm, _), (id, title))| (norm.as_str(), *id, title.as_str()))
-    }
 }
 
-/// Fuzzy matcher for entity matching with confidence scoring
-pub struct FuzzyMatcher {
-    /// Confidence threshold for fuzzy matches (default: 60)
-    fuzzy_threshold: u8,
-}
-
-impl Default for FuzzyMatcher {
-    fn default() -> Self {
-        Self {
-            fuzzy_threshold: 60,
-        }
-    }
-}
+/// Entity matcher — exact and normalized matching only.
+/// No Levenshtein / fuzzy matching anywhere in the scan pipeline.
+#[derive(Default)]
+pub struct FuzzyMatcher;
 
 impl FuzzyMatcher {
-    /// Create a new fuzzy matcher with default thresholds
+    /// Create a new matcher.
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
-    /// Find or create an artist with fuzzy matching
+    /// Find or create an artist — exact or normalized match only.
+    /// Each distinct spelling is treated as a distinct artist; no fuzzy merging.
     pub async fn find_or_create_artist(
         &self,
         pool: &SqlitePool,
@@ -161,10 +152,7 @@ impl FuzzyMatcher {
         let all_artists = soul_storage::artists::get_all(pool).await?;
 
         for artist in &all_artists {
-            let artist_normalized = normalize_string(&artist.name);
-
-            // Check for normalized match
-            if artist_normalized == normalized_name {
+            if normalize_string(&artist.name) == normalized_name {
                 return Ok(FuzzyMatch {
                     entity: artist.clone(),
                     confidence: 95,
@@ -173,34 +161,7 @@ impl FuzzyMatcher {
             }
         }
 
-        // Try fuzzy match using Levenshtein distance
-        let mut best_match: Option<(Artist, f64)> = None;
-
-        for artist in &all_artists {
-            let similarity =
-                normalized_levenshtein(&normalized_name, &normalize_string(&artist.name));
-
-            if similarity >= (self.fuzzy_threshold as f64 / 100.0) {
-                if let Some((_, best_similarity)) = &best_match {
-                    if similarity > *best_similarity {
-                        best_match = Some((artist.clone(), similarity));
-                    }
-                } else {
-                    best_match = Some((artist.clone(), similarity));
-                }
-            }
-        }
-
-        if let Some((artist, similarity)) = best_match {
-            let confidence = (similarity * 100.0).round() as u8;
-            return Ok(FuzzyMatch {
-                entity: artist,
-                confidence,
-                match_type: MatchType::Fuzzy,
-            });
-        }
-
-        // No match found - create new artist
+        // No match — create new artist
         let sort_name = normalize_sort_name(name);
         let new_artist = soul_storage::artists::create(
             pool,
@@ -214,30 +175,36 @@ impl FuzzyMatcher {
 
         Ok(FuzzyMatch {
             entity: new_artist,
-            confidence: 100, // Always 100 for created entities
+            confidence: 100,
             match_type: MatchType::Created,
         })
     }
 
-    /// Find or create an album with fuzzy matching
+    /// Find or create an album — exact or normalized title match within the same
+    /// artist and folder only.  Two albums with the same title/artist but different
+    /// folders are always created as separate albums (strict folder isolation).
     pub async fn find_or_create_album(
         &self,
         pool: &SqlitePool,
         title: &str,
         artist_id: Option<ArtistId>,
+        folder_path: &str,
     ) -> Result<FuzzyMatch<Album>> {
         let normalized_title = normalize_string(title);
 
-        // Get albums by artist (or all if no artist specified)
+        // Get albums by artist (or all if no artist specified) and filter by folder
         let albums = if let Some(aid) = artist_id {
             soul_storage::albums::get_by_artist(pool, aid).await?
         } else {
             soul_storage::albums::get_all(pool).await?
         };
 
-        // Try exact match
+        // Try exact match (title + artist + folder)
         for album in &albums {
-            if album.title == title && album.artist_id == artist_id {
+            if album.title == title
+                && album.artist_id == artist_id
+                && album.folder_path == folder_path
+            {
                 return Ok(FuzzyMatch {
                     entity: album.clone(),
                     confidence: 100,
@@ -246,10 +213,12 @@ impl FuzzyMatcher {
             }
         }
 
-        // Try normalized match
+        // Try normalized match (same folder required)
         for album in &albums {
-            let album_normalized = normalize_string(&album.title);
-            if album_normalized == normalized_title && album.artist_id == artist_id {
+            if normalize_string(&album.title) == normalized_title
+                && album.artist_id == artist_id
+                && album.folder_path == folder_path
+            {
                 return Ok(FuzzyMatch {
                     entity: album.clone(),
                     confidence: 95,
@@ -258,10 +227,7 @@ impl FuzzyMatcher {
             }
         }
 
-        // No fuzzy (Levenshtein) matching for albums: album titles like "Vol I" vs "Vol II"
-        // are intentionally distinct and must not be merged. Only exact/normalized matches apply.
-
-        // No match found - create new album
+        // No match — create new album
         let new_album = soul_storage::albums::create(
             pool,
             CreateAlbum {
@@ -269,6 +235,7 @@ impl FuzzyMatcher {
                 artist_id,
                 year: None,
                 musicbrainz_id: None,
+                folder_path: folder_path.to_string(),
             },
         )
         .await?;
@@ -283,7 +250,7 @@ impl FuzzyMatcher {
     // --- Cached variants (use EntityCache instead of DB scans) ---
 
     /// Find or create an artist using the in-memory cache for O(1) lookups.
-    /// Falls back to Levenshtein on cache entries (not DB) if no exact/normalized match.
+    /// Exact or normalized match only — no fuzzy / Levenshtein.
     /// Creates in DB + updates cache if truly new.
     pub async fn find_or_create_artist_cached(
         &self,
@@ -293,8 +260,7 @@ impl FuzzyMatcher {
     ) -> Result<FuzzyMatch<Artist>> {
         let normalized_name = normalize_string(name);
 
-        // Check cache for exact original name match
-        // We look up by normalized; if the original name matches exactly, confidence=100
+        // O(1) cache lookup by normalized name
         if let Some((id, original_name)) = cache.find_artist_by_normalized(&normalized_name) {
             let artist = soul_storage::artists::get_by_id(pool, id)
                 .await?
@@ -316,37 +282,7 @@ impl FuzzyMatcher {
             });
         }
 
-        // Levenshtein fallback on cache entries
-        let mut best_match: Option<(ArtistId, f64)> = None;
-
-        for (norm, id, _original) in cache.artist_entries() {
-            let similarity = normalized_levenshtein(&normalized_name, norm);
-            if similarity >= (self.fuzzy_threshold as f64 / 100.0) {
-                if let Some((_, best_sim)) = &best_match {
-                    if similarity > *best_sim {
-                        best_match = Some((id, similarity));
-                    }
-                } else {
-                    best_match = Some((id, similarity));
-                }
-            }
-        }
-
-        if let Some((id, similarity)) = best_match {
-            let artist = soul_storage::artists::get_by_id(pool, id)
-                .await?
-                .ok_or_else(|| {
-                    crate::ImportError::Metadata(format!("Cached artist id {} not found in DB", id))
-                })?;
-            let confidence = (similarity * 100.0).round() as u8;
-            return Ok(FuzzyMatch {
-                entity: artist,
-                confidence,
-                match_type: MatchType::Fuzzy,
-            });
-        }
-
-        // No match - create new artist
+        // No match — create new artist
         let sort_name = normalize_sort_name(name);
         let new_artist = soul_storage::artists::create(
             pool,
@@ -368,18 +304,21 @@ impl FuzzyMatcher {
     }
 
     /// Find or create an album using the in-memory cache for O(1) lookups.
+    /// Matches on (normalized_title, artist_id, folder_path) — two albums with the
+    /// same title and artist but different folders are always distinct.
     pub async fn find_or_create_album_cached(
         &self,
         pool: &SqlitePool,
         title: &str,
         artist_id: Option<ArtistId>,
+        folder_path: &str,
         cache: &mut EntityCache,
     ) -> Result<FuzzyMatch<Album>> {
         let normalized_title = normalize_string(title);
 
-        // Check cache for exact/normalized match
+        // O(1) cache lookup keyed by (normalized_title, artist_id, folder_path)
         if let Some((id, original_title)) =
-            cache.find_album_by_normalized(&normalized_title, artist_id)
+            cache.find_album_by_normalized(&normalized_title, artist_id, folder_path)
         {
             let album = soul_storage::albums::get_by_id(pool, id)
                 .await?
@@ -401,10 +340,7 @@ impl FuzzyMatcher {
             });
         }
 
-        // No fuzzy (Levenshtein) matching for albums: album titles like "Vol I" vs "Vol II"
-        // are intentionally distinct and must not be merged. Only exact/normalized matches apply.
-
-        // No match - create new album
+        // No match — create new album
         let new_album = soul_storage::albums::create(
             pool,
             CreateAlbum {
@@ -412,11 +348,12 @@ impl FuzzyMatcher {
                 artist_id,
                 year: None,
                 musicbrainz_id: None,
+                folder_path: folder_path.to_string(),
             },
         )
         .await?;
 
-        cache.insert_album(new_album.id, &new_album.title, artist_id);
+        cache.insert_album(new_album.id, &new_album.title, artist_id, folder_path);
 
         Ok(FuzzyMatch {
             entity: new_album,

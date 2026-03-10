@@ -128,11 +128,17 @@ impl MetadataExtractor {
             None
         };
 
-        // Fuzzy match album (linked to artist if available)
+        // Derive folder path for strict album isolation
+        let album_folder = file_path
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+
+        // Match album (linked to artist + folder for strict isolation)
         let album_id = if let Some(ref album_title) = raw.album {
             let album_match = self
                 .fuzzy_matcher
-                .find_or_create_album(pool, album_title, artist_id)
+                .find_or_create_album(pool, album_title, artist_id, &album_folder)
                 .await?;
             Some(album_match.entity.id)
         } else {

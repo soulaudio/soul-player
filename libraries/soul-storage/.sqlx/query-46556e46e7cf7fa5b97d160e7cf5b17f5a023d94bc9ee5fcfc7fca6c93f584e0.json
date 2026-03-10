@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT DISTINCT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         JOIN tracks t ON t.album_id = a.id\n         JOIN track_genres tg ON tg.track_id = t.id\n         WHERE tg.genre_id = ?\n         ORDER BY RANDOM()\n         LIMIT ?",
+  "query": "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,\n                a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         ORDER BY RANDOM()\n         LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -44,31 +44,37 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "folder_path",
         "ordinal": 8,
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "created_at",
         "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 10,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
-      true,
+      false,
       false,
       true,
+      true,
+      true,
+      true,
+      true,
+      true,
       false,
-      true,
-      true,
-      true,
-      true,
       false,
       false
     ]
   },
-  "hash": "5be70e5584d50d2af7cdd71049c816048d7f9597cf0da8c41c568e55f164b078"
+  "hash": "46556e46e7cf7fa5b97d160e7cf5b17f5a023d94bc9ee5fcfc7fca6c93f584e0"
 }

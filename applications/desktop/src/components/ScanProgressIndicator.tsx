@@ -39,6 +39,11 @@ export function ScanProgressIndicator({
   // Keep the indicator visible for 2 s after scan-started fires, even if the scan
   // completes so fast that get_running_scans always returns empty (test datasets).
   const [isScanActive, setIsScanActive] = useState(false);
+  // Last known progress from scan-progress events — used as fallback when the
+  // scan completes so fast that get_running_scans returns empty before we render.
+  const [lastProgress, setLastProgress] = useState<{ processed: number; total: number } | null>(
+    null,
+  );
 
   // Poll for running scans
   useEffect(() => {
@@ -108,12 +113,17 @@ export function ScanProgressIndicator({
         });
         unlistenFunctions.push(unlistenStart);
 
-        const unlistenProgress = await listen<ScanProgress>('scan-progress', (event) => {
-          if (!isMounted) return;
-          setScans((prev) =>
-            prev.map((s) => (s.id === event.payload.id ? event.payload : s))
-          );
-        });
+        const unlistenProgress = await listen<{ processed: number; total: number }>(
+          'scan-progress',
+          (event) => {
+            if (!isMounted) return;
+            // Store the last known progress so we can display it even after the
+            // scan completes (get_running_scans returns empty for completed scans).
+            setLastProgress(event.payload);
+            // Use the event as a hint to refresh authoritative scan state.
+            invoke<ScanProgress[]>('get_running_scans').then(setScans).catch(debug.error);
+          },
+        );
         unlistenFunctions.push(unlistenProgress);
 
         const unlistenComplete = await listen<{ sourceId: number }>('scan-complete', () => {
@@ -148,10 +158,16 @@ export function ScanProgressIndicator({
   const totalProgress =
     scans.length > 0
       ? scans.reduce((sum, s) => sum + s.percentage, 0) / scans.length
-      : 0;
+      : lastProgress && lastProgress.total > 0
+        ? (lastProgress.processed / lastProgress.total) * 100
+        : 0;
 
-  const totalProcessed = scans.reduce((sum, s) => sum + s.processedFiles, 0);
-  const totalFiles = scans.reduce((sum, s) => sum + (s.totalFiles || 0), 0);
+  // Prefer live polling data; fall back to lastProgress from scan-progress events
+  // so fast scans (e.g. <10 files) still show meaningful numbers after completing.
+  const totalProcessed =
+    scans.reduce((sum, s) => sum + s.processedFiles, 0) || lastProgress?.processed || 0;
+  const totalFiles =
+    scans.reduce((sum, s) => sum + (s.totalFiles || 0), 0) || lastProgress?.total || 0;
 
   if (position === 'footer') {
     return (

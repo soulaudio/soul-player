@@ -191,6 +191,13 @@ impl LibraryScanner {
             ..Default::default()
         };
 
+        // Emit initial progress so the frontend knows the total immediately.
+        // Without this, libraries with < 10 files never emit any scan-progress
+        // events (flush_progress fires every 10 files), leaving the UI at 0/0.
+        if let Some(ref callback) = self.progress_callback {
+            callback(&stats);
+        }
+
         // Get existing tracks for this source to detect changes
         let existing_tracks = self.get_existing_tracks_map(source.id).await?;
         let mut seen_paths: HashMap<String, bool> = HashMap::new();
@@ -383,19 +390,19 @@ impl LibraryScanner {
             }
         }
 
-        // Final flush of remaining batch counters
-        if batch_processed > 0 || batch_errors > 0 {
-            soul_storage::scan_progress::update_counts(
-                &self.pool,
-                progress.id,
-                batch_processed,
-                batch_new,
-                batch_updated,
-                0,
-                batch_errors,
-            )
-            .await?;
-        }
+        // Final flush of remaining batch counters and emit final progress.
+        // Using flush_progress (instead of a bare update_counts) ensures the
+        // progress_callback fires with the final stats for every scan, including
+        // those with < 10 files that never hit the every-10-files flush above.
+        self.flush_progress(
+            progress.id,
+            &mut batch_processed,
+            &mut batch_new,
+            &mut batch_updated,
+            &mut batch_errors,
+            &stats,
+        )
+        .await?;
 
         // Handle missing files (soft delete)
         if source.sync_deletes {

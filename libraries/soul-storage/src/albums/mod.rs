@@ -5,7 +5,8 @@ use sqlx::SqlitePool;
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Album>> {
     let rows: Vec<_> = sqlx::query!(
         "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          ORDER BY a.title"
@@ -26,6 +27,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Album>> {
                 cover_art_path: row.cover_art_path,
                 artwork_source: row.artwork_source,
                 musicbrainz_id: row.musicbrainz_id,
+                folder_path: row.folder_path,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             })
@@ -36,7 +38,8 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Album>> {
 pub async fn get_random(pool: &SqlitePool, limit: i64) -> Result<Vec<Album>> {
     let rows: Vec<_> = sqlx::query!(
         "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          ORDER BY RANDOM()
@@ -57,6 +60,7 @@ pub async fn get_random(pool: &SqlitePool, limit: i64) -> Result<Vec<Album>> {
             cover_art_path: row.cover_art_path,
             artwork_source: row.artwork_source,
             musicbrainz_id: row.musicbrainz_id,
+            folder_path: row.folder_path,
             created_at: row.created_at,
             updated_at: row.updated_at,
         })
@@ -66,7 +70,8 @@ pub async fn get_random(pool: &SqlitePool, limit: i64) -> Result<Vec<Album>> {
 pub async fn get_recently_added(pool: &SqlitePool, limit: i64) -> Result<Vec<Album>> {
     let rows: Vec<_> = sqlx::query!(
         "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          ORDER BY a.created_at DESC
@@ -89,6 +94,7 @@ pub async fn get_recently_added(pool: &SqlitePool, limit: i64) -> Result<Vec<Alb
                 cover_art_path: row.cover_art_path,
                 artwork_source: row.artwork_source,
                 musicbrainz_id: row.musicbrainz_id,
+                folder_path: row.folder_path,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             })
@@ -103,7 +109,8 @@ pub async fn get_recently_added_within_days(
 ) -> Result<Vec<Album>> {
     let rows: Vec<_> = sqlx::query!(
         "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          WHERE datetime(a.created_at) >= datetime('now', '-' || ? || ' days')
@@ -128,6 +135,7 @@ pub async fn get_recently_added_within_days(
                 cover_art_path: row.cover_art_path,
                 artwork_source: row.artwork_source,
                 musicbrainz_id: row.musicbrainz_id,
+                folder_path: row.folder_path,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             })
@@ -139,7 +147,8 @@ pub async fn get_least_played(pool: &SqlitePool, limit: i64, user_id: i64) -> Re
     // Get albums with lowest play count for this user
     let rows: Vec<_> = sqlx::query!(
         "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at,
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at,
                 COALESCE(play_counts.count, 0) as play_count
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
@@ -169,6 +178,7 @@ pub async fn get_least_played(pool: &SqlitePool, limit: i64, user_id: i64) -> Re
             cover_art_path: row.cover_art_path,
             artwork_source: row.artwork_source,
             musicbrainz_id: row.musicbrainz_id,
+            folder_path: row.folder_path,
             created_at: row.created_at,
             updated_at: row.updated_at,
         })
@@ -179,7 +189,8 @@ pub async fn get_time_capsule(pool: &SqlitePool, limit: i64, user_id: i64) -> Re
     // Get albums played on this day in previous years
     let rows: Vec<_> = sqlx::query!(
         "SELECT DISTINCT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          JOIN playback_contexts pc ON pc.context_type = 'album' AND CAST(pc.context_id AS INTEGER) = a.id
@@ -207,6 +218,7 @@ pub async fn get_time_capsule(pool: &SqlitePool, limit: i64, user_id: i64) -> Re
                 cover_art_path: row.cover_art_path,
                 artwork_source: row.artwork_source,
                 musicbrainz_id: row.musicbrainz_id,
+                folder_path: row.folder_path,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             })
@@ -218,7 +230,8 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: i64, limit: i64) -> Resul
     // Get albums that have tracks with this genre
     let rows: Vec<_> = sqlx::query!(
         "SELECT DISTINCT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          JOIN tracks t ON t.album_id = a.id
@@ -245,6 +258,7 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: i64, limit: i64) -> Resul
                 cover_art_path: row.cover_art_path,
                 artwork_source: row.artwork_source,
                 musicbrainz_id: row.musicbrainz_id,
+                folder_path: row.folder_path,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             })
@@ -255,7 +269,8 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: i64, limit: i64) -> Resul
 pub async fn get_by_id(pool: &SqlitePool, id: AlbumId) -> Result<Option<Album>> {
     let row: Option<_> = sqlx::query!(
         "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          WHERE a.id = ?",
@@ -273,6 +288,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: AlbumId) -> Result<Option<Album>> 
         cover_art_path: row.cover_art_path,
         artwork_source: row.artwork_source,
         musicbrainz_id: row.musicbrainz_id,
+        folder_path: row.folder_path,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }))
@@ -281,7 +297,8 @@ pub async fn get_by_id(pool: &SqlitePool, id: AlbumId) -> Result<Option<Album>> 
 pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec<Album>> {
     let rows: Vec<_> = sqlx::query!(
         "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,
-                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at
+                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,
+                a.created_at, a.updated_at
          FROM albums a
          LEFT JOIN artists ar ON a.artist_id = ar.id
          WHERE a.artist_id = ?
@@ -304,6 +321,7 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
                 cover_art_path: row.cover_art_path,
                 artwork_source: row.artwork_source,
                 musicbrainz_id: row.musicbrainz_id,
+                folder_path: row.folder_path,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             })
@@ -313,12 +331,13 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
 
 pub async fn create(pool: &SqlitePool, album: CreateAlbum) -> Result<Album> {
     let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
-        "INSERT INTO albums (title, artist_id, year, musicbrainz_id)
-         VALUES (?, ?, ?, ?)",
+        "INSERT INTO albums (title, artist_id, year, musicbrainz_id, folder_path)
+         VALUES (?, ?, ?, ?, ?)",
         album.title,
         album.artist_id,
         album.year,
-        album.musicbrainz_id
+        album.musicbrainz_id,
+        album.folder_path
     )
     .execute(pool)
     .await?;

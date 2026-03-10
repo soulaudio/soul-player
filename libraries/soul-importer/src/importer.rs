@@ -301,12 +301,18 @@ impl MusicImporter {
             None
         };
 
-        // Fuzzy match album
+        // Derive folder path from the final file location for strict album isolation
+        let album_folder = library_path
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+
+        // Match album (linked to artist + folder for strict isolation)
         let album_match = if let Some(album_title) = &metadata.album {
             let artist_id = artist_match.as_ref().map(|m| m.entity.id);
             Some(
                 fuzzy_matcher
-                    .find_or_create_album(pool, album_title, artist_id)
+                    .find_or_create_album(pool, album_title, artist_id, &album_folder)
                     .await?,
             )
         } else {

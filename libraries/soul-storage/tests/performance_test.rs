@@ -42,6 +42,7 @@ async fn insert_test_data(pool: &sqlx::SqlitePool, num_tracks: usize) -> (i64, i
             artist_id: Some(artist_id),
             year: None,
             musicbrainz_id: None,
+            folder_path: String::new(),
         },
     )
     .await

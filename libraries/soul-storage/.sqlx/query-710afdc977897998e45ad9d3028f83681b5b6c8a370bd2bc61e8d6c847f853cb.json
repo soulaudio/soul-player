@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.created_at, a.updated_at\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         ORDER BY RANDOM()\n         LIMIT ?",
+  "query": "SELECT a.id, a.title, a.artist_id, ar.name as artist_name, a.year,\n                a.cover_art_path, a.artwork_source, a.musicbrainz_id, a.folder_path,\n                a.created_at, a.updated_at,\n                COALESCE(play_counts.count, 0) as play_count\n         FROM albums a\n         LEFT JOIN artists ar ON a.artist_id = ar.id\n         LEFT JOIN (\n             SELECT t.album_id, COUNT(*) as count\n             FROM tracks t\n             JOIN playback_contexts pc ON pc.context_type = 'album' AND CAST(pc.context_id AS INTEGER) = t.album_id\n             WHERE pc.user_id = ?\n             GROUP BY t.album_id\n         ) play_counts ON play_counts.album_id = a.id\n         ORDER BY play_count ASC, RANDOM()\n         LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -44,18 +44,28 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "folder_path",
         "ordinal": 8,
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "created_at",
         "ordinal": 9,
         "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "play_count",
+        "ordinal": 11,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false,
@@ -67,8 +77,10 @@
       true,
       true,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "16af3b714766b393fb84bf6ed7248977816ea57a687e622930a75118f6468360"
+  "hash": "710afdc977897998e45ad9d3028f83681b5b6c8a370bd2bc61e8d6c847f853cb"
 }
