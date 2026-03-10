@@ -239,3 +239,103 @@ async fn test_entity_cache_albums_scoped_by_folder() {
 
     assert_ne!(result1.entity.id, result2.entity.id);
 }
+
+/// Tracks with featuring artists ("Artist A feat. Artist B") must share the same album
+/// as tracks by the plain album artist ("Artist A"), when ALBUMARTIST tag matches.
+///
+/// This simulates importing two tracks from the same folder/album:
+///   - Track 1: artist="Artist A",                album_artist="Artist A" → normal track
+///   - Track 2: artist="Artist A feat. Artist B", album_artist="Artist A" → featuring track
+///
+/// Both should resolve to the SAME album row because album matching must use
+/// the album_artist (ALBUMARTIST tag), not the track artist (ARTIST tag).
+#[tokio::test]
+async fn test_featuring_artist_tracks_share_same_album() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+
+    // Pre-create the album artist
+    let album_artist = soul_storage::artists::create(
+        &pool,
+        CreateArtist {
+            name: "Artist A".to_string(),
+            sort_name: Some("Artist A".to_string()),
+            musicbrainz_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // The featuring artist (has its own artist row)
+    let feat_artist = soul_storage::artists::create(
+        &pool,
+        CreateArtist {
+            name: "Artist A feat. Artist B".to_string(),
+            sort_name: Some("Artist A feat. Artist B".to_string()),
+            musicbrainz_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let folder = "/music/artist-a/great-album";
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    // Track 1: plain artist, album_artist matches — creates the album
+    let result1 = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Great Album",
+            Some(album_artist.id), // album_artist_id used for matching
+            folder,
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    assert_eq!(result1.match_type, MatchType::Created);
+
+    // Track 2: featuring artist, but album_artist still "Artist A"
+    // Must find the SAME album, not create a new one.
+    // Callers must pass album_artist_id (not track artist_id) here.
+    let result2 = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Great Album",
+            Some(album_artist.id), // album_artist_id used for matching (not feat_artist.id)
+            folder,
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    assert_ne!(
+        result2.match_type,
+        MatchType::Created,
+        "Featuring-artist track must reuse the existing album, not create a duplicate. \
+         Album matching must use album_artist_id, not track artist_id."
+    );
+    assert_eq!(
+        result1.entity.id, result2.entity.id,
+        "Both tracks must share the same album ID"
+    );
+
+    // Verify: if we naively pass the featuring-artist's ID (the bug), a new album is created
+    let result_bug = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Great Album",
+            Some(feat_artist.id), // BUG: using track artist_id instead of album_artist_id
+            folder,
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        result_bug.match_type,
+        MatchType::Created,
+        "Passing the featuring-artist ID creates a duplicate album — this is what the bug does"
+    );
+    assert_ne!(
+        result1.entity.id, result_bug.entity.id,
+        "The duplicate album must be distinct from the correct one"
+    );
+}

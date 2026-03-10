@@ -294,23 +294,9 @@ impl<'a> FileProcessor<'a> {
             None
         };
 
-        // Match album via cache (keyed by title + artist + folder for strict isolation)
-        let album_id = if let Some(ref album_title) = raw.album {
-            let m = fuzzy
-                .find_or_create_album_cached(
-                    self.pool,
-                    album_title,
-                    artist_id,
-                    &album_folder,
-                    cache,
-                )
-                .await?;
-            Some(m.entity.id)
-        } else {
-            None
-        };
-
-        // Match album artist via cache (if different from track artist)
+        // Match album artist via cache (if different from track artist).
+        // Must be resolved before album matching so we can use album_artist_id
+        // as the album key — preventing feat. artist tracks from creating duplicates.
         let album_artist_id = if let Some(ref album_artist_name) = raw.album_artist {
             if raw.artist.as_ref() != Some(album_artist_name) {
                 let m = fuzzy
@@ -320,6 +306,25 @@ impl<'a> FileProcessor<'a> {
             } else {
                 artist_id
             }
+        } else {
+            None
+        };
+
+        // Match album via cache (keyed by title + album_artist + folder for strict isolation).
+        // Use album_artist_id when available so that "Artist A feat. Artist B" tracks still
+        // group under the same album as plain "Artist A" tracks (same ALBUMARTIST tag).
+        let album_key_artist = album_artist_id.or(artist_id);
+        let album_id = if let Some(ref album_title) = raw.album {
+            let m = fuzzy
+                .find_or_create_album_cached(
+                    self.pool,
+                    album_title,
+                    album_key_artist,
+                    &album_folder,
+                    cache,
+                )
+                .await?;
+            Some(m.entity.id)
         } else {
             None
         };
@@ -446,13 +451,30 @@ impl<'a> FileProcessor<'a> {
             None
         };
 
-        // Match album via cache (keyed by title + artist + folder for strict isolation)
+        // Resolve album artist before album matching so feat. artist tracks group correctly.
+        let album_artist_id_for_key = if let Some(ref album_artist_name) = raw.album_artist {
+            if raw.artist.as_ref() != Some(album_artist_name) {
+                let m = fuzzy
+                    .find_or_create_artist_cached(self.pool, album_artist_name, cache)
+                    .await?;
+                Some(m.entity.id)
+            } else {
+                artist_id
+            }
+        } else {
+            None
+        };
+
+        // Match album via cache (keyed by title + album_artist + folder for strict isolation).
+        // Use album_artist_id when available so that "Artist A feat. Artist B" tracks still
+        // group under the same album as plain "Artist A" tracks (same ALBUMARTIST tag).
+        let album_key_artist = album_artist_id_for_key.or(artist_id);
         let album_id = if let Some(ref album_title) = raw.album {
             let m = fuzzy
                 .find_or_create_album_cached(
                     self.pool,
                     album_title,
-                    artist_id,
+                    album_key_artist,
                     &album_folder,
                     cache,
                 )

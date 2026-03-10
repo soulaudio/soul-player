@@ -134,18 +134,9 @@ impl MetadataExtractor {
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
 
-        // Match album (linked to artist + folder for strict isolation)
-        let album_id = if let Some(ref album_title) = raw.album {
-            let album_match = self
-                .fuzzy_matcher
-                .find_or_create_album(pool, album_title, artist_id, &album_folder)
-                .await?;
-            Some(album_match.entity.id)
-        } else {
-            None
-        };
-
-        // Fuzzy match album artist (if different from track artist)
+        // Fuzzy match album artist (if different from track artist).
+        // Must be resolved before album matching so we can use album_artist_id
+        // as the album key — preventing feat. artist tracks from creating duplicates.
         let album_artist_id = if let Some(ref album_artist_name) = raw.album_artist {
             // Only create separate album artist if different from track artist
             if raw.artist.as_ref() != Some(album_artist_name) {
@@ -157,6 +148,20 @@ impl MetadataExtractor {
             } else {
                 artist_id
             }
+        } else {
+            None
+        };
+
+        // Match album (linked to album_artist + folder for strict isolation).
+        // Use album_artist_id when available so that "Artist A feat. Artist B" tracks still
+        // group under the same album as plain "Artist A" tracks (same ALBUMARTIST tag).
+        let album_key_artist = album_artist_id.or(artist_id);
+        let album_id = if let Some(ref album_title) = raw.album {
+            let album_match = self
+                .fuzzy_matcher
+                .find_or_create_album(pool, album_title, album_key_artist, &album_folder)
+                .await?;
+            Some(album_match.entity.id)
         } else {
             None
         };
