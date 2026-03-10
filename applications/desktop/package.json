@@ -56,5 +56,5 @@
     "type-check": "tsc --noEmit"
   },
   "type": "module",
-  "version": "0.1.15"
+  "version": "0.1.16"
 }
