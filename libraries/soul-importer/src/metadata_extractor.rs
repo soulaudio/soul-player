@@ -14,8 +14,8 @@ use std::path::Path;
 pub struct ProcessedMetadata {
     /// Raw metadata from the file
     pub raw: metadata::ExtractedMetadata,
-    /// Matched artist ID (if artist tag exists)
-    pub artist_id: Option<ArtistId>,
+    /// Resolved artist IDs for all artists (position = index; [0] = primary artist)
+    pub artist_ids: Vec<ArtistId>,
     /// Matched album ID (if album tag exists)
     pub album_id: Option<AlbumId>,
     /// Matched album artist ID (if album artist tag exists and differs from artist)
@@ -117,16 +117,17 @@ impl MetadataExtractor {
     ) -> Result<ProcessedMetadata> {
         let raw = self.extract_metadata(file_path).await?;
 
-        // Fuzzy match artist (use first artist for the primary artist_id; Task 6 will handle all)
-        let artist_id = if let Some(ref artist_name) = raw.artists.first().cloned() {
+        // Resolve all artists from the tag (may be multiple after splitting)
+        let mut artist_ids: Vec<ArtistId> = Vec::new();
+        for artist_name in &raw.artists {
             let artist_match = self
                 .fuzzy_matcher
                 .find_or_create_artist(pool, artist_name)
                 .await?;
-            Some(artist_match.entity.id)
-        } else {
-            None
-        };
+            artist_ids.push(artist_match.entity.id);
+        }
+        // Convenience: primary artist (position 0) for tracks.artist_id backward compat
+        let primary_artist_id = artist_ids.first().copied();
 
         // Derive folder path for strict album isolation
         let album_folder = file_path
@@ -138,15 +139,14 @@ impl MetadataExtractor {
         // Must be resolved before album matching so we can use album_artist_id
         // as the album key — preventing feat. artist tracks from creating duplicates.
         let album_artist_id = if let Some(ref album_artist_name) = raw.album_artist {
-            // Only create separate album artist if different from track artist
-            if raw.artists.first().map(|s| s.as_str()) != Some(album_artist_name.as_str()) {
+            if raw.artists.first().map(String::as_str) != Some(album_artist_name.as_str()) {
                 let artist_match = self
                     .fuzzy_matcher
                     .find_or_create_artist(pool, album_artist_name)
                     .await?;
                 Some(artist_match.entity.id)
             } else {
-                artist_id
+                primary_artist_id
             }
         } else {
             None
@@ -155,7 +155,7 @@ impl MetadataExtractor {
         // Match album (linked to album_artist + folder for strict isolation).
         // Use album_artist_id when available so that "Artist A feat. Artist B" tracks still
         // group under the same album as plain "Artist A" tracks (same ALBUMARTIST tag).
-        let album_key_artist = album_artist_id.or(artist_id);
+        let album_key_artist = album_artist_id.or(primary_artist_id);
         let album_id = if let Some(ref album_title) = raw.album {
             let album_match = self
                 .fuzzy_matcher
@@ -178,7 +178,7 @@ impl MetadataExtractor {
 
         Ok(ProcessedMetadata {
             raw,
-            artist_id,
+            artist_ids,
             album_id,
             album_artist_id,
             genre_ids,
@@ -204,6 +204,22 @@ impl MetadataExtractor {
     ) -> Result<()> {
         for genre_id in genre_ids {
             soul_storage::genres::add_to_track(pool, track_id.clone(), *genre_id).await?;
+        }
+        Ok(())
+    }
+
+    /// Write all artists to the track_artists junction table.
+    /// Clears existing associations first (idempotent for re-imports).
+    pub async fn add_artists_to_track(
+        &self,
+        pool: &SqlitePool,
+        track_id: &TrackId,
+        artist_ids: &[ArtistId],
+    ) -> Result<()> {
+        soul_storage::track_artists::clear_for_track(pool, track_id).await?;
+        for (position, &artist_id) in artist_ids.iter().enumerate() {
+            soul_storage::track_artists::add_to_track(pool, track_id, artist_id, position as i64)
+                .await?;
         }
         Ok(())
     }

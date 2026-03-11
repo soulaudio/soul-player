@@ -82,7 +82,7 @@ impl<'a> FileProcessor<'a> {
                     .map(|s| s.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "Unknown".to_string())
             }),
-            artist_id: processed.artist_id,
+            artist_id: processed.artist_ids.first().copied(),
             album_id: processed.album_id,
             album_artist_id: processed.album_artist_id,
             track_number: processed.raw.track_number.map(|n| n as i32),
@@ -212,11 +212,11 @@ impl<'a> FileProcessor<'a> {
         .await?;
 
         // Update artist/album relationships if we have them
-        if processed.artist_id.is_some() || processed.album_id.is_some() {
+        if processed.artist_ids.first().is_some() || processed.album_id.is_some() {
             soul_storage::tracks::update_artist_album(
                 self.pool,
                 track_id,
-                processed.artist_id,
+                processed.artist_ids.first().copied(),
                 processed.album_id,
             )
             .await?;
