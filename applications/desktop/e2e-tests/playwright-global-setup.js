@@ -202,6 +202,39 @@ function seedDatabase() {
       insertTrackGenre.run(tid, 4001);
     }
 
+    // Populate track_artists junction so get_by_artist queries work (they now join via junction).
+    const insertTrackArtist = db.prepare(
+      'INSERT OR IGNORE INTO track_artists (track_id, artist_id, position) VALUES (?, ?, ?)'
+    );
+    // Album 2001 tracks → Playwright Artist (2001)
+    for (const tid of [2001, 2002, 2003, 2004, 2005]) {
+      insertTrackArtist.run(tid, 2001, 0);
+    }
+    // Long Album tracks (3001-3005) → Endurance Artist (2002)
+    for (const tid of [3001, 3002, 3003, 3004, 3005]) {
+      insertTrackArtist.run(tid, 2002, 0);
+    }
+    // Marathon Album tracks (4001-4010) → Endurance Artist (2002)
+    for (let tid = 4001; tid <= 4010; tid++) {
+      insertTrackArtist.run(tid, 2002, 0);
+    }
+
+    // Multi-artist test data: "Featured Artist" appears only on the collab track
+    db.prepare('INSERT INTO artists (id, name) VALUES (?, ?)').run(2003, 'Featured Artist');
+
+    // "Collab Track" — track 2006, in Playwright Album, 2 artists in the junction
+    db.prepare(`
+      INSERT INTO tracks (id, title, artist_id, album_id, track_number, disc_number, duration_seconds, file_format)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(2006, 'Collab Track', 2001, 2001, 6, 1, 2.0, 'wav');
+    db.prepare(`
+      INSERT INTO track_sources (track_id, source_id, status, local_file_path)
+      VALUES (?, ?, ?, ?)
+    `).run(2006, 1, 'available', wavPath);
+    // Primary: Playwright Artist (position 0); Featured: Featured Artist (position 1)
+    insertTrackArtist.run(2006, 2001, 0);
+    insertTrackArtist.run(2006, 2003, 1);
+
     // Seed a library_sources record so the app skips the onboarding screen.
     // The desktop app uses device_id = 'desktop-local' (hardcoded in library_settings.rs).
     db.prepare(`

@@ -189,9 +189,9 @@ test('artist detail page shows correct album and track counts in stats', async (
   const statsEl = page.locator('[data-testid="artist-stats"]');
   await expect(statsEl).toBeVisible();
 
-  // Must contain the album count (1) and track count (5)
+  // Must contain the album count (1) and track count (6: Track One–Five + Collab Track)
   await expect(statsEl).toContainText('1');
-  await expect(statsEl).toContainText('5');
+  await expect(statsEl).toContainText('6');
 });
 
 // ----------------------------------------------------------------
