@@ -6,6 +6,13 @@ use super::ids::TrackId;
 use super::{AlbumId, ArtistId, SourceId};
 use serde::{Deserialize, Serialize};
 
+/// A single artist associated with a track (from the track_artists junction table)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackArtist {
+    pub id: ArtistId,
+    pub name: String,
+}
+
 /// Track with multi-source support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
@@ -13,6 +20,9 @@ pub struct Track {
     pub title: String,
     pub artist_id: Option<ArtistId>,
     pub artist_name: Option<String>, // Denormalized
+    /// All artists for this track (populated from track_artists junction; empty = not yet loaded)
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub artists: Vec<TrackArtist>,
     pub album_id: Option<AlbumId>,
     pub album_title: Option<String>, // Denormalized
     pub album_artist_id: Option<ArtistId>,
