@@ -10,6 +10,11 @@ import { createContext, useContext, ReactNode } from 'react'
 // Types - shared data structures
 // =============================================================================
 
+export interface TrackArtist {
+  id: number
+  name: string
+}
+
 export interface BackendTrack {
   id: number
   title: string
@@ -32,6 +37,7 @@ export interface BackendTrack {
   cover_art_path?: string
   // Whether the track is in the managed library (vs watched folder)
   is_in_managed_library?: boolean
+  artists?: TrackArtist[]
 }
 
 export interface BackendAlbum {

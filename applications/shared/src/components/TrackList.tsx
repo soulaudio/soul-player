@@ -20,6 +20,7 @@ export interface Track {
   title: string;
   artist?: string;
   artistId?: number;
+  artists?: Array<{ id: number; name: string }>;
   album?: string;
   albumId?: number;
   duration?: number;
