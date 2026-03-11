@@ -121,6 +121,12 @@ impl<'a> FileProcessor<'a> {
             .add_genres_to_track(self.pool, track_id_typed, &processed.genre_ids)
             .await?;
 
+        // Add all artists to track_artists junction
+        let track_id_typed = TrackId::new(track_id.to_string());
+        self.metadata_extractor
+            .add_artists_to_track(self.pool, &track_id_typed, &processed.artist_ids)
+            .await?;
+
         // Discover folder artwork if album exists (wrap in spawn_blocking to avoid blocking async runtime)
         if let Some(album_id) = processed.album_id {
             if let Some(folder_path) = file_path.parent() {
@@ -221,6 +227,12 @@ impl<'a> FileProcessor<'a> {
             )
             .await?;
         }
+
+        // Update artists in track_artists junction
+        let track_id_typed = TrackId::new(track_id.to_string());
+        self.metadata_extractor
+            .add_artists_to_track(self.pool, &track_id_typed, &processed.artist_ids)
+            .await?;
 
         // Discover folder artwork if album exists (same as on import, wrap in spawn_blocking to avoid blocking async runtime)
         if let Some(album_id) = processed.album_id {
@@ -338,6 +350,15 @@ impl<'a> FileProcessor<'a> {
             genre_ids.push(m.entity.id);
         }
 
+        // Match all artists via cache (for junction table)
+        let mut all_artist_ids = Vec::new();
+        for artist_name in &raw.artists {
+            let m = fuzzy
+                .find_or_create_artist_cached(self.pool, artist_name, cache)
+                .await?;
+            all_artist_ids.push(m.entity.id);
+        }
+
         // Create the track
         let create_track = CreateTrack {
             title: raw.title.clone().unwrap_or_else(|| {
@@ -381,6 +402,12 @@ impl<'a> FileProcessor<'a> {
         let track_id_typed = TrackId::new(track_id.to_string());
         self.metadata_extractor
             .add_genres_to_track(self.pool, track_id_typed, &genre_ids)
+            .await?;
+
+        // Add all artists to track_artists junction
+        let track_id_typed = TrackId::new(track_id.to_string());
+        self.metadata_extractor
+            .add_artists_to_track(self.pool, &track_id_typed, &all_artist_ids)
             .await?;
 
         // Discover folder artwork
@@ -515,6 +542,21 @@ impl<'a> FileProcessor<'a> {
             soul_storage::tracks::update_artist_album(self.pool, track_id, artist_id, album_id)
                 .await?;
         }
+
+        // Match all artists via cache (for junction table)
+        let mut all_artist_ids = Vec::new();
+        for artist_name in &raw.artists {
+            let m = fuzzy
+                .find_or_create_artist_cached(self.pool, artist_name, cache)
+                .await?;
+            all_artist_ids.push(m.entity.id);
+        }
+
+        // Update artists in track_artists junction
+        let track_id_typed = TrackId::new(track_id.to_string());
+        self.metadata_extractor
+            .add_artists_to_track(self.pool, &track_id_typed, &all_artist_ids)
+            .await?;
 
         // Discover folder artwork
         if let Some(album_id) = album_id {
