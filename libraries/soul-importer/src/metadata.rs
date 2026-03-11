@@ -113,13 +113,19 @@ fn parse_year(s: &str) -> Option<i32> {
 ///
 /// Handles common delimiters used in music metadata:
 /// - `,` and `;` — Vorbis/FLAC multi-value, ID3 separation
-/// - ` feat. `, ` feat `, ` ft. `, ` ft ` — featuring credits
+/// - ` feat. `, ` feat `, ` ft. `, ` ft ` — featuring credits (all case variants)
 /// - ` & ` — collaborative tracks
 /// - ` x ` — DJ/electronic collab notation (lowercase x with spaces)
 pub fn split_artists(raw: &str) -> Vec<String> {
-    // Delimiters ordered longest-first to avoid splitting "feat." inside longer token
+    // Delimiters ordered longest-first to avoid splitting "feat." inside longer token.
+    // Each delimiter is listed in lowercase, Title Case, and UPPERCASE to handle
+    // inconsistent tagging conventions.
     const DELIMITERS: &[&str] = &[
-        " feat. ", " feat ", " ft. ", " ft ", " & ", " x ",
+        " feat. ", " Feat. ", " FEAT. ",
+        " feat ", " Feat ", " FEAT ",
+        " ft. ", " Ft. ", " FT. ",
+        " ft ", " Ft ", " FT ",
+        " & ", " x ",
     ];
 
     // Start with the full string, then apply each delimiter
@@ -743,5 +749,13 @@ mod tests {
     fn test_split_artists_hyphen_not_split() {
         // Hyphens within names must NOT be split
         assert_eq!(split_artists("Wu-Tang Clan"), vec!["Wu-Tang Clan"]);
+    }
+
+    #[test]
+    fn test_split_artists_feat_capitalized() {
+        assert_eq!(
+            split_artists("Skinshape Feat. Wu-Lu"),
+            vec!["Skinshape", "Wu-Lu"]
+        );
     }
 }

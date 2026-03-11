@@ -97,6 +97,8 @@ export function ArtistLinks({
   artistName,
   className = '',
 }: ArtistLinksProps) {
+  const { t } = useTranslation()
+
   // Prefer junction-sourced list; fall back to single artist
   const list: Array<{ id?: number; name: string }> =
     artists && artists.length > 0
@@ -106,7 +108,7 @@ export function ArtistLinks({
         : []
 
   if (list.length === 0) {
-    return <span className={className}>Unknown Artist</span>
+    return <span className={className}>{t('common.unknownArtist', 'Unknown Artist')}</span>
   }
 
   return (

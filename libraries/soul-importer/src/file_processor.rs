@@ -296,15 +296,17 @@ impl<'a> FileProcessor<'a> {
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
 
-        // Match artist via cache (use first artist for primary artist_id; Task 6 handles all)
-        let artist_id = if let Some(ref artist_name) = raw.artists.first().cloned() {
+        // Match all artists via cache (for junction table)
+        let mut all_artist_ids = Vec::new();
+        for artist_name in &raw.artists {
             let m = fuzzy
                 .find_or_create_artist_cached(self.pool, artist_name, cache)
                 .await?;
-            Some(m.entity.id)
-        } else {
-            None
-        };
+            all_artist_ids.push(m.entity.id);
+        }
+
+        // Derive primary artist_id from the first resolved artist (avoids a duplicate lookup)
+        let artist_id = all_artist_ids.first().copied();
 
         // Match album artist via cache (if different from track artist).
         // Must be resolved before album matching so we can use album_artist_id
@@ -348,15 +350,6 @@ impl<'a> FileProcessor<'a> {
                 .find_or_create_genre_cached(self.pool, genre_name, cache)
                 .await?;
             genre_ids.push(m.entity.id);
-        }
-
-        // Match all artists via cache (for junction table)
-        let mut all_artist_ids = Vec::new();
-        for artist_name in &raw.artists {
-            let m = fuzzy
-                .find_or_create_artist_cached(self.pool, artist_name, cache)
-                .await?;
-            all_artist_ids.push(m.entity.id);
         }
 
         // Create the track
@@ -468,15 +461,17 @@ impl<'a> FileProcessor<'a> {
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
 
-        // Match artist via cache (use first artist for primary artist_id; Task 6 handles all)
-        let artist_id = if let Some(ref artist_name) = raw.artists.first().cloned() {
+        // Match all artists via cache (for junction table)
+        let mut all_artist_ids = Vec::new();
+        for artist_name in &raw.artists {
             let m = fuzzy
                 .find_or_create_artist_cached(self.pool, artist_name, cache)
                 .await?;
-            Some(m.entity.id)
-        } else {
-            None
-        };
+            all_artist_ids.push(m.entity.id);
+        }
+
+        // Derive primary artist_id from the first resolved artist (avoids a duplicate lookup)
+        let artist_id = all_artist_ids.first().copied();
 
         // Resolve album artist before album matching so feat. artist tracks group correctly.
         let album_artist_id_for_key = if let Some(ref album_artist_name) = raw.album_artist {
@@ -541,15 +536,6 @@ impl<'a> FileProcessor<'a> {
         if artist_id.is_some() || album_id.is_some() {
             soul_storage::tracks::update_artist_album(self.pool, track_id, artist_id, album_id)
                 .await?;
-        }
-
-        // Match all artists via cache (for junction table)
-        let mut all_artist_ids = Vec::new();
-        for artist_name in &raw.artists {
-            let m = fuzzy
-                .find_or_create_artist_cached(self.pool, artist_name, cache)
-                .await?;
-            all_artist_ids.push(m.entity.id);
         }
 
         // Update artists in track_artists junction

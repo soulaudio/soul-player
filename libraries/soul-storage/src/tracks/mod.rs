@@ -378,7 +378,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
             );
         }
 
-        Ok(Some(Track {
+        let mut track = Track {
             id: track_id,
             title: row.title,
             artist_id: row.artist_id,
@@ -406,7 +406,15 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
             artwork_source: row.album_artwork_source,
             artists: Vec::new(),
             availability,
-        }))
+        };
+
+        let ids = vec![track.id.clone()];
+        let mut map = crate::track_artists::get_for_tracks(pool, &ids).await?;
+        if let Some(artists) = map.remove(&track.id) {
+            track.artists = artists;
+        }
+
+        Ok(Some(track))
     } else {
         let total_duration = start.elapsed();
         tracing::debug!(
