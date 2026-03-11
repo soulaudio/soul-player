@@ -74,3 +74,51 @@ export function ArtistLink({
     </span>
   )
 }
+
+interface ArtistLinksProps {
+  /** Preferred: full artist list from Track.artists */
+  artists?: Array<{ id: number; name: string }>
+  /** Fallback: single artist (backward compat when artists[] not available) */
+  artistId?: number
+  artistName?: string
+  /** Additional CSS classes */
+  className?: string
+}
+
+/**
+ * ArtistLinks - Renders one or more artist names as clickable links.
+ *
+ * Uses `artists` array when available (from track_artists junction).
+ * Falls back to single `artistId`/`artistName` for backward compatibility.
+ */
+export function ArtistLinks({
+  artists,
+  artistId,
+  artistName,
+  className = '',
+}: ArtistLinksProps) {
+  // Prefer junction-sourced list; fall back to single artist
+  const list: Array<{ id?: number; name: string }> =
+    artists && artists.length > 0
+      ? artists
+      : artistId || artistName
+        ? [{ id: artistId, name: artistName ?? '' }]
+        : []
+
+  if (list.length === 0) {
+    return <span className={className}>Unknown Artist</span>
+  }
+
+  return (
+    <span className={className}>
+      {list.map((a, i) => (
+        <span key={a.id ?? a.name}>
+          <ArtistLink artistId={a.id} artistName={a.name} />
+          {i < list.length - 1 && (
+            <span className="text-muted-foreground">, </span>
+          )}
+        </span>
+      ))}
+    </span>
+  )
+}
