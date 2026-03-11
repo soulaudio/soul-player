@@ -24,6 +24,7 @@ export interface TrackForGrouping {
   duration?: number;
   track_number?: number;
   trackNumber?: number;
+  artists?: Array<{ id: number; name: string }>;
 }
 
 export interface GroupedTrack<T extends TrackForGrouping> {

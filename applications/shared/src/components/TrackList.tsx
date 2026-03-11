@@ -7,7 +7,7 @@ import { usePlayerPlayback } from '../stores/player';
 import { usePlayerCommands } from '../contexts/PlayerCommandsContext';
 import type { QueueTrack } from '../contexts/PlayerCommandsContext';
 import { Tooltip } from './ui/Tooltip';
-import { ArtistLink } from './ArtistLink';
+import { ArtistLinks } from './ArtistLink';
 import { AlbumLink } from './AlbumLink';
 import { debug } from '../utils/debug';
 import { useTranslation } from 'react-i18next';
@@ -442,7 +442,8 @@ const TrackRowComponent = ({
           e.stopPropagation()
         }}
       >
-        <ArtistLink
+        <ArtistLinks
+          artists={activeVersion.artists}
           artistId={activeVersion.artistId}
           artistName={activeVersion.artist}
           className="text-sm text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)]"

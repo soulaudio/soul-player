@@ -12,7 +12,7 @@ import { useBackend } from '../contexts/BackendContext'
 import { usePlatform } from '../contexts/PlatformContext'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { ArtworkLightbox } from '../components/ArtworkLightbox'
-import { ArtistLink } from '../components/ArtistLink'
+import { ArtistLinks } from '../components/ArtistLink'
 import { groupTracks } from '../utils/trackGrouping'
 import type { TrackForGrouping, GroupedTrack } from '../utils/trackGrouping'
 import {
@@ -247,7 +247,8 @@ const TrackItem = memo(function TrackItem({
           {activeVersion.title}
         </p>
         <div className="text-xs truncate text-muted-foreground">
-          <ArtistLink
+          <ArtistLinks
+            artists={activeVersion.artists}
             artistId={activeVersion.artist_id}
             artistName={activeVersion.artist_name || fallbackArtist}
             className="text-xs text-muted-foreground hover:underline"
