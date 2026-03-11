@@ -121,11 +121,8 @@ pub fn split_artists(raw: &str) -> Vec<String> {
     // Each delimiter is listed in lowercase, Title Case, and UPPERCASE to handle
     // inconsistent tagging conventions.
     const DELIMITERS: &[&str] = &[
-        " feat. ", " Feat. ", " FEAT. ",
-        " feat ", " Feat ", " FEAT ",
-        " ft. ", " Ft. ", " FT. ",
-        " ft ", " Ft ", " FT ",
-        " & ", " x ",
+        " feat. ", " Feat. ", " FEAT. ", " feat ", " Feat ", " FEAT ", " ft. ", " Ft. ", " FT. ",
+        " ft ", " Ft ", " FT ", " & ", " x ",
     ];
 
     // Start with the full string, then apply each delimiter
@@ -580,10 +577,7 @@ impl From<soul_audio::AudioMetadata> for ExtractedMetadata {
 
         let album_art = meta.album_art.map(|art| (art.data, art.mime_type));
 
-        let artists: Vec<String> = meta
-            .artist
-            .map(|a| split_artists(&a))
-            .unwrap_or_default();
+        let artists: Vec<String> = meta.artist.map(|a| split_artists(&a)).unwrap_or_default();
 
         Self {
             title: meta.title,

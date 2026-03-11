@@ -286,6 +286,7 @@ export function AlbumPage() {
             title: String(t.title || 'Unknown'),
             artist: t.artist_name,
             artistId: t.artist_id,
+            artists: t.artists,
             album: t.album_title,
             albumId: t.album_id,
             duration: t.duration_seconds,

@@ -29,12 +29,9 @@ pub async fn add_to_track(
 /// Remove all artist associations for a track (call before re-importing).
 pub async fn clear_for_track(pool: &SqlitePool, track_id: &TrackId) -> Result<()> {
     let track_id_str = track_id.as_str();
-    sqlx::query!(
-        "DELETE FROM track_artists WHERE track_id = ?",
-        track_id_str
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query!("DELETE FROM track_artists WHERE track_id = ?", track_id_str)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -51,11 +48,7 @@ pub async fn get_for_tracks(
         return Ok(HashMap::new());
     }
 
-    let placeholders = track_ids
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(", ");
+    let placeholders = track_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let sql = format!(
         "SELECT ta.track_id, ta.artist_id, ar.name
          FROM track_artists ta
@@ -86,7 +79,7 @@ pub async fn get_for_tracks(
 /// Populate the `artists` field on a collection of tracks from the junction table.
 pub async fn populate_for_tracks(
     pool: &SqlitePool,
-    tracks: &mut Vec<soul_core::types::Track>,
+    tracks: &mut [soul_core::types::Track],
 ) -> Result<()> {
     let ids: Vec<TrackId> = tracks.iter().map(|t| t.id.clone()).collect();
     let mut map = get_for_tracks(pool, &ids).await?;

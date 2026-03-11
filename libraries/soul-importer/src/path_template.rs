@@ -282,7 +282,11 @@ impl PathTemplate {
 
     /// Add artist to filename for compilation albums
     fn add_compilation_artist(&self, path: &str, metadata: &ExtractedMetadata) -> String {
-        let artist = metadata.artists.first().map(|s| s.as_str()).unwrap_or("Unknown Artist");
+        let artist = metadata
+            .artists
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("Unknown Artist");
 
         // Find the track number in the filename and insert artist after it
         if let Some(last_sep) = path.rfind('/') {

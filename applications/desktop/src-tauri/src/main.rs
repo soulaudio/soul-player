@@ -64,11 +64,20 @@ struct PlaybackSession {
 // Re-export types from soul-core for frontend
 // Note: We add file_path for convenience in the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct FrontendTrackArtist {
+    id: i64,
+    name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct FrontendTrack {
     id: i64,
     title: String,
     artist_name: Option<String>,
     artist_id: Option<i64>,
+    /// All artists from the track_artists junction table (multi-artist support).
+    /// Empty when no junction rows exist; frontend falls back to artist_id/artist_name.
+    artists: Vec<FrontendTrackArtist>,
     album_title: Option<String>,
     album_id: Option<i64>,
     duration_seconds: Option<f64>,
@@ -110,6 +119,14 @@ impl From<soul_core::types::Track> for FrontendTrack {
             title: track.title,
             artist_name: track.artist_name,
             artist_id: track.artist_id,
+            artists: track
+                .artists
+                .into_iter()
+                .map(|a| FrontendTrackArtist {
+                    id: a.id,
+                    name: a.name,
+                })
+                .collect(),
             album_title: track.album_title,
             album_id: track.album_id,
             duration_seconds: track.duration_seconds,

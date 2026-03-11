@@ -1406,10 +1406,11 @@ pub async fn get_top_tracks_by_artist(
             ar.name as artist_name,
             al.title as album_title
         FROM tracks t
+        JOIN track_artists ta ON ta.track_id = t.id
         LEFT JOIN track_stats ts ON t.id = ts.track_id AND ts.user_id = ?
         LEFT JOIN artists ar ON t.artist_id = ar.id
         LEFT JOIN albums al ON t.album_id = al.id
-        WHERE t.artist_id = ?
+        WHERE ta.artist_id = ?
         ORDER BY COALESCE(ts.play_count, 0) DESC, t.title ASC
         LIMIT ?
         "#,
@@ -1855,9 +1856,10 @@ pub async fn get_by_artist_paginated(
             ar.name as artist_name,
             al.title as album_title
         FROM tracks t
+        JOIN track_artists ta ON ta.track_id = t.id
         LEFT JOIN artists ar ON t.artist_id = ar.id
         LEFT JOIN albums al ON t.album_id = al.id
-        WHERE t.artist_id = ?
+        WHERE ta.artist_id = ?
         ORDER BY t.album_id, t.disc_number, t.track_number, t.title
         LIMIT ? OFFSET ?
         "#,

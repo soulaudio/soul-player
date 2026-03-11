@@ -52,7 +52,10 @@ pub fn generate_filename(source_path: &Path, metadata: &ExtractedMetadata) -> Re
         .ok_or_else(|| ImportError::InvalidPath("File has no extension".to_string()))?;
 
     // Get artist (prefer album_artist, fall back to first artist)
-    let artist = metadata.album_artist.as_deref().or_else(|| metadata.artists.first().map(|s| s.as_str()));
+    let artist = metadata
+        .album_artist
+        .as_deref()
+        .or_else(|| metadata.artists.first().map(|s| s.as_str()));
 
     // Get title
     let title = metadata.title.as_ref();

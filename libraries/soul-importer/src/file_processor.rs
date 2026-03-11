@@ -218,7 +218,7 @@ impl<'a> FileProcessor<'a> {
         .await?;
 
         // Update artist/album relationships if we have them
-        if processed.artist_ids.first().is_some() || processed.album_id.is_some() {
+        if !processed.artist_ids.is_empty() || processed.album_id.is_some() {
             soul_storage::tracks::update_artist_album(
                 self.pool,
                 track_id,
