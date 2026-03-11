@@ -284,8 +284,8 @@ impl<'a> FileProcessor<'a> {
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
 
-        // Match artist via cache
-        let artist_id = if let Some(ref artist_name) = raw.artist {
+        // Match artist via cache (use first artist for primary artist_id; Task 6 handles all)
+        let artist_id = if let Some(ref artist_name) = raw.artists.first().cloned() {
             let m = fuzzy
                 .find_or_create_artist_cached(self.pool, artist_name, cache)
                 .await?;
@@ -298,7 +298,7 @@ impl<'a> FileProcessor<'a> {
         // Must be resolved before album matching so we can use album_artist_id
         // as the album key — preventing feat. artist tracks from creating duplicates.
         let album_artist_id = if let Some(ref album_artist_name) = raw.album_artist {
-            if raw.artist.as_ref() != Some(album_artist_name) {
+            if raw.artists.first().map(|s| s.as_str()) != Some(album_artist_name.as_str()) {
                 let m = fuzzy
                     .find_or_create_artist_cached(self.pool, album_artist_name, cache)
                     .await?;
@@ -441,8 +441,8 @@ impl<'a> FileProcessor<'a> {
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
 
-        // Match artist via cache
-        let artist_id = if let Some(ref artist_name) = raw.artist {
+        // Match artist via cache (use first artist for primary artist_id; Task 6 handles all)
+        let artist_id = if let Some(ref artist_name) = raw.artists.first().cloned() {
             let m = fuzzy
                 .find_or_create_artist_cached(self.pool, artist_name, cache)
                 .await?;
@@ -453,7 +453,7 @@ impl<'a> FileProcessor<'a> {
 
         // Resolve album artist before album matching so feat. artist tracks group correctly.
         let album_artist_id_for_key = if let Some(ref album_artist_name) = raw.album_artist {
-            if raw.artist.as_ref() != Some(album_artist_name) {
+            if raw.artists.first().map(|s| s.as_str()) != Some(album_artist_name.as_str()) {
                 let m = fuzzy
                     .find_or_create_artist_cached(self.pool, album_artist_name, cache)
                     .await?;

@@ -86,7 +86,7 @@ impl MetadataExtractor {
         tracing::info!(
             "[METADATA] Extracted: file={}, artist={:?}, album={:?}",
             file_path.display(),
-            meta.artist,
+            meta.artists.first(),
             meta.album
         );
 
@@ -117,8 +117,8 @@ impl MetadataExtractor {
     ) -> Result<ProcessedMetadata> {
         let raw = self.extract_metadata(file_path).await?;
 
-        // Fuzzy match artist
-        let artist_id = if let Some(ref artist_name) = raw.artist {
+        // Fuzzy match artist (use first artist for the primary artist_id; Task 6 will handle all)
+        let artist_id = if let Some(ref artist_name) = raw.artists.first().cloned() {
             let artist_match = self
                 .fuzzy_matcher
                 .find_or_create_artist(pool, artist_name)
@@ -139,7 +139,7 @@ impl MetadataExtractor {
         // as the album key — preventing feat. artist tracks from creating duplicates.
         let album_artist_id = if let Some(ref album_artist_name) = raw.album_artist {
             // Only create separate album artist if different from track artist
-            if raw.artist.as_ref() != Some(album_artist_name) {
+            if raw.artists.first().map(|s| s.as_str()) != Some(album_artist_name.as_str()) {
                 let artist_match = self
                     .fuzzy_matcher
                     .find_or_create_artist(pool, album_artist_name)

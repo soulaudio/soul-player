@@ -151,9 +151,8 @@ impl PathTemplate {
     fn get_album_artist(&self, metadata: &ExtractedMetadata) -> String {
         metadata
             .album_artist
-            .as_ref()
-            .or(metadata.artist.as_ref())
-            .map(|s| s.as_str())
+            .as_deref()
+            .or_else(|| metadata.artists.first().map(|s| s.as_str()))
             .unwrap_or("Unknown Artist")
             .to_string()
     }
@@ -161,8 +160,9 @@ impl PathTemplate {
     /// Get the artist with fallback
     fn get_artist(&self, metadata: &ExtractedMetadata) -> String {
         metadata
-            .artist
-            .as_deref()
+            .artists
+            .first()
+            .map(|s| s.as_str())
             .unwrap_or("Unknown Artist")
             .to_string()
     }
@@ -232,7 +232,7 @@ impl PathTemplate {
     /// Check if this is a compilation/VA album
     fn is_compilation(&self, metadata: &ExtractedMetadata) -> bool {
         let album_artist = metadata.album_artist.as_deref().unwrap_or("");
-        let artist = metadata.artist.as_deref().unwrap_or("");
+        let artist = metadata.artists.first().map(|s| s.as_str()).unwrap_or("");
 
         // Check for common VA indicators
         let va_indicators = [
@@ -282,7 +282,7 @@ impl PathTemplate {
 
     /// Add artist to filename for compilation albums
     fn add_compilation_artist(&self, path: &str, metadata: &ExtractedMetadata) -> String {
-        let artist = metadata.artist.as_deref().unwrap_or("Unknown Artist");
+        let artist = metadata.artists.first().map(|s| s.as_str()).unwrap_or("Unknown Artist");
 
         // Find the track number in the filename and insert artist after it
         if let Some(last_sep) = path.rfind('/') {
@@ -391,7 +391,7 @@ mod tests {
     fn test_metadata() -> ExtractedMetadata {
         ExtractedMetadata {
             title: Some("Bohemian Rhapsody".to_string()),
-            artist: Some("Queen".to_string()),
+            artists: vec!["Queen".to_string()],
             album: Some("A Night at the Opera".to_string()),
             album_artist: Some("Queen".to_string()),
             track_number: Some(11),
@@ -456,7 +456,7 @@ mod tests {
         let template = PathTemplate::default();
         let metadata = ExtractedMetadata {
             title: None,
-            artist: None,
+            artists: Vec::new(),
             album: None,
             album_artist: None,
             track_number: None,
@@ -513,7 +513,7 @@ mod tests {
         let template = PathTemplate::default();
         let mut metadata = test_metadata();
         metadata.album_artist = Some("Various Artists".to_string());
-        metadata.artist = Some("Freddie Mercury".to_string());
+        metadata.artists = vec!["Freddie Mercury".to_string()];
         let source = Path::new("/path/to/song.flac");
 
         let path = template.resolve(&metadata, source);
@@ -580,7 +580,7 @@ mod tests {
         let template = PathTemplate::default().with_compilation_artist(false);
         let mut metadata = test_metadata();
         metadata.album_artist = Some("Various Artists".to_string());
-        metadata.artist = Some("Freddie Mercury".to_string());
+        metadata.artists = vec!["Freddie Mercury".to_string()];
         let source = Path::new("/path/to/song.flac");
 
         let path = template.resolve(&metadata, source);

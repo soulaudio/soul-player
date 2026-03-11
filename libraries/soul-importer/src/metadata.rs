@@ -109,14 +109,53 @@ fn parse_year(s: &str) -> Option<i32> {
         .filter(|&y| (1900..=2099).contains(&y))
 }
 
+/// Split a raw artist tag string into individual artist names.
+///
+/// Handles common delimiters used in music metadata:
+/// - `,` and `;` — Vorbis/FLAC multi-value, ID3 separation
+/// - ` feat. `, ` feat `, ` ft. `, ` ft ` — featuring credits
+/// - ` & ` — collaborative tracks
+/// - ` x ` — DJ/electronic collab notation (lowercase x with spaces)
+pub fn split_artists(raw: &str) -> Vec<String> {
+    // Delimiters ordered longest-first to avoid splitting "feat." inside longer token
+    const DELIMITERS: &[&str] = &[
+        " feat. ", " feat ", " ft. ", " ft ", " & ", " x ",
+    ];
+
+    // Start with the full string, then apply each delimiter
+    let mut results = vec![raw.to_string()];
+    for &delim in DELIMITERS {
+        results = results
+            .into_iter()
+            .flat_map(|s| {
+                s.split(delim)
+                    .map(|p| p.trim().to_string())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+    }
+
+    // Also split by comma and semicolon
+    results = results
+        .into_iter()
+        .flat_map(|s| {
+            s.split(&[',', ';'][..])
+                .map(|p| p.trim().to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
+    results.into_iter().filter(|s| !s.is_empty()).collect()
+}
+
 /// Extracted metadata from an audio file
 #[derive(Debug, Clone)]
 pub struct ExtractedMetadata {
     /// Track title
     pub title: Option<String>,
 
-    /// Artist name
-    pub artist: Option<String>,
+    /// Artist names (split from tag; may be multiple)
+    pub artists: Vec<String>,
 
     /// Album title
     pub album: Option<String>,
@@ -164,7 +203,7 @@ pub struct ExtractedMetadata {
 impl ExtractedMetadata {
     /// Check if metadata is mostly empty (only title or filename)
     pub fn is_sparse(&self) -> bool {
-        self.artist.is_none() && self.album.is_none() && self.genres.is_empty()
+        self.artists.is_empty() && self.album.is_none() && self.genres.is_empty()
     }
 }
 
@@ -266,10 +305,10 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     let channels = properties.channels();
 
     // Extract tag metadata
-    let (title, artist, album, album_artist, track_number, disc_number, year, genres) =
+    let (title, raw_artist, album, album_artist, track_number, disc_number, year, genres) =
         if let Some(tag) = tag {
             let title = tag.title().map(|s| s.to_string());
-            let artist = tag.artist().map(|s| s.to_string());
+            let raw_artist = tag.artist().map(|s| s.to_string());
             let album = tag.album().map(|s| s.to_string());
             let album_artist = tag
                 .get_string(&lofty::ItemKey::AlbumArtist)
@@ -291,7 +330,7 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
 
             (
                 title,
-                artist,
+                raw_artist,
                 album,
                 album_artist,
                 track_number,
@@ -324,7 +363,7 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     };
 
     let title = title.map(&fix_mojibake);
-    let artist = artist.map(&fix_mojibake);
+    let artist = raw_artist.map(&fix_mojibake);
     let album = album.map(&fix_mojibake);
     let album_artist = album_artist.map(&fix_mojibake);
     let genres: Vec<String> = genres.into_iter().map(&fix_mojibake).collect();
@@ -378,7 +417,10 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     };
 
     // Tag data takes priority; folder metadata only fills in missing values.
-    let artist = artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()));
+    let resolved_artist = artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()));
+    let artists: Vec<String> = resolved_artist
+        .map(|a| split_artists(&a))
+        .unwrap_or_default();
     let album = album.or_else(|| folder_meta.as_ref().and_then(|m| m.album.clone()));
     let year = year.or_else(|| folder_meta.as_ref().and_then(|m| m.year));
 
@@ -412,12 +454,12 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     });
 
     let total_duration = start.elapsed();
-    let _has_metadata = artist.is_some() || album.is_some();
+    let _has_metadata = !artists.is_empty() || album.is_some();
 
     tracing::info!(
         file_path = %path.display(),
         has_title = title.is_some(),
-        has_artist = artist.is_some(),
+        artist_count = artists.len(),
         has_album = album.is_some(),
         genre_count = genres.len(),
         tag_count,
@@ -436,7 +478,7 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
 
     Ok(ExtractedMetadata {
         title,
-        artist,
+        artists,
         album,
         album_artist,
         track_number,
@@ -532,9 +574,14 @@ impl From<soul_audio::AudioMetadata> for ExtractedMetadata {
 
         let album_art = meta.album_art.map(|art| (art.data, art.mime_type));
 
+        let artists: Vec<String> = meta
+            .artist
+            .map(|a| split_artists(&a))
+            .unwrap_or_default();
+
         Self {
             title: meta.title,
-            artist: meta.artist,
+            artists,
             album: meta.album,
             album_artist: meta.album_artist,
             track_number: meta.track_number,
@@ -561,7 +608,7 @@ mod tests {
     fn test_metadata_is_sparse() {
         let sparse = ExtractedMetadata {
             title: Some("Test".to_string()),
-            artist: None,
+            artists: Vec::new(),
             album: None,
             album_artist: None,
             track_number: None,
@@ -582,7 +629,7 @@ mod tests {
 
         let not_sparse = ExtractedMetadata {
             title: Some("Test".to_string()),
-            artist: Some("Artist".to_string()),
+            artists: vec!["Artist".to_string()],
             album: None,
             album_artist: None,
             track_number: None,
@@ -653,5 +700,48 @@ mod tests {
         assert_eq!(parse_year("2100"), None); // too new
         assert_eq!(parse_year("abc"), None);
         assert_eq!(parse_year(""), None);
+    }
+
+    #[test]
+    fn test_split_artists_single() {
+        assert_eq!(split_artists("Skinshape"), vec!["Skinshape"]);
+    }
+
+    #[test]
+    fn test_split_artists_feat_period() {
+        assert_eq!(
+            split_artists("Skinshape feat. Wu-Lu"),
+            vec!["Skinshape", "Wu-Lu"]
+        );
+    }
+
+    #[test]
+    fn test_split_artists_comma() {
+        assert_eq!(
+            split_artists("Artist A, Artist B, Artist C"),
+            vec!["Artist A", "Artist B", "Artist C"]
+        );
+    }
+
+    #[test]
+    fn test_split_artists_ampersand() {
+        assert_eq!(
+            split_artists("Bonobo & Erykah Badu"),
+            vec!["Bonobo", "Erykah Badu"]
+        );
+    }
+
+    #[test]
+    fn test_split_artists_mixed() {
+        assert_eq!(
+            split_artists("Madlib feat. Guilty Simpson & MED"),
+            vec!["Madlib", "Guilty Simpson", "MED"]
+        );
+    }
+
+    #[test]
+    fn test_split_artists_hyphen_not_split() {
+        // Hyphens within names must NOT be split
+        assert_eq!(split_artists("Wu-Tang Clan"), vec!["Wu-Tang Clan"]);
     }
 }

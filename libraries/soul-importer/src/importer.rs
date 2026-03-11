@@ -291,7 +291,7 @@ impl MusicImporter {
         tracing::debug!("[Importer] Fuzzy matching artist/album/genres");
         let fuzzy_start = std::time::Instant::now();
 
-        let artist_match = if let Some(artist_name) = &metadata.artist {
+        let artist_match = if let Some(artist_name) = metadata.artists.first() {
             Some(
                 fuzzy_matcher
                     .find_or_create_artist(pool, artist_name)

@@ -51,8 +51,8 @@ pub fn generate_filename(source_path: &Path, metadata: &ExtractedMetadata) -> Re
         .map(|ext| ext.to_string_lossy().into_owned())
         .ok_or_else(|| ImportError::InvalidPath("File has no extension".to_string()))?;
 
-    // Get artist (prefer album_artist, fall back to artist)
-    let artist = metadata.album_artist.as_ref().or(metadata.artist.as_ref());
+    // Get artist (prefer album_artist, fall back to first artist)
+    let artist = metadata.album_artist.as_deref().or_else(|| metadata.artists.first().map(|s| s.as_str()));
 
     // Get title
     let title = metadata.title.as_ref();
@@ -180,7 +180,7 @@ mod tests {
     fn test_generate_filename_with_metadata() {
         let metadata = ExtractedMetadata {
             title: Some("Bohemian Rhapsody".to_string()),
-            artist: Some("Queen".to_string()),
+            artists: vec!["Queen".to_string()],
             album: None,
             album_artist: None,
             track_number: None,
@@ -206,7 +206,7 @@ mod tests {
     fn test_generate_filename_no_artist() {
         let metadata = ExtractedMetadata {
             title: Some("Unknown Track".to_string()),
-            artist: None,
+            artists: Vec::new(),
             album: None,
             album_artist: None,
             track_number: None,
@@ -232,7 +232,7 @@ mod tests {
     fn test_generate_filename_fallback() {
         let metadata = ExtractedMetadata {
             title: None,
-            artist: None,
+            artists: Vec::new(),
             album: None,
             album_artist: None,
             track_number: None,
@@ -268,7 +268,7 @@ mod tests {
 
         let metadata = ExtractedMetadata {
             title: Some("Test Song".to_string()),
-            artist: Some("Test Artist".to_string()),
+            artists: vec!["Test Artist".to_string()],
             album: None,
             album_artist: None,
             track_number: None,

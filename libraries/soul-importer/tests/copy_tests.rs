@@ -21,7 +21,7 @@ fn test_sanitize_filename_part() {
 fn test_generate_filename_with_artist_and_title() {
     let metadata = ExtractedMetadata {
         title: Some("Bohemian Rhapsody".to_string()),
-        artist: Some("Queen".to_string()),
+        artists: vec!["Queen".to_string()],
         album: None,
         album_artist: None,
         track_number: None,
@@ -47,7 +47,7 @@ fn test_generate_filename_with_artist_and_title() {
 fn test_generate_filename_prefers_album_artist() {
     let metadata = ExtractedMetadata {
         title: Some("Song".to_string()),
-        artist: Some("Track Artist".to_string()),
+        artists: vec!["Track Artist".to_string()],
         album: None,
         album_artist: Some("Album Artist".to_string()),
         track_number: None,
@@ -73,7 +73,7 @@ fn test_generate_filename_prefers_album_artist() {
 fn test_generate_filename_no_artist() {
     let metadata = ExtractedMetadata {
         title: Some("Unknown Track".to_string()),
-        artist: None,
+        artists: Vec::new(),
         album: None,
         album_artist: None,
         track_number: None,
@@ -99,7 +99,7 @@ fn test_generate_filename_no_artist() {
 fn test_generate_filename_fallback_to_original() {
     let metadata = ExtractedMetadata {
         title: None,
-        artist: None,
+        artists: Vec::new(),
         album: None,
         album_artist: None,
         track_number: None,
@@ -125,7 +125,7 @@ fn test_generate_filename_fallback_to_original() {
 fn test_generate_filename_sanitizes_special_chars() {
     let metadata = ExtractedMetadata {
         title: Some("Song: Part 1".to_string()),
-        artist: Some("Artist/Band".to_string()),
+        artists: vec!["Artist/Band".to_string()],
         album: None,
         album_artist: None,
         track_number: None,
@@ -161,7 +161,7 @@ fn test_copy_to_library() {
 
     let metadata = ExtractedMetadata {
         title: Some("Test Song".to_string()),
-        artist: Some("Test Artist".to_string()),
+        artists: vec!["Test Artist".to_string()],
         album: None,
         album_artist: None,
         track_number: None,
@@ -202,7 +202,7 @@ fn test_copy_to_library_creates_directory() {
 
     let metadata = ExtractedMetadata {
         title: Some("Song".to_string()),
-        artist: Some("Artist".to_string()),
+        artists: vec!["Artist".to_string()],
         album: None,
         album_artist: None,
         track_number: None,
@@ -238,7 +238,7 @@ fn test_copy_to_library_handles_conflicts() {
 
     let metadata = ExtractedMetadata {
         title: Some("Song".to_string()),
-        artist: Some("Artist".to_string()),
+        artists: vec!["Artist".to_string()],
         album: None,
         album_artist: None,
         track_number: None,
@@ -283,7 +283,7 @@ fn test_copy_to_library_multiple_conflicts() {
 
     let metadata = ExtractedMetadata {
         title: Some("Song".to_string()),
-        artist: None,
+        artists: Vec::new(),
         album: None,
         album_artist: None,
         track_number: None,
