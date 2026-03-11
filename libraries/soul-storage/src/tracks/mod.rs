@@ -188,6 +188,7 @@ pub async fn get_all(
         "[DB] get_all completed (optimized)"
     );
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -266,7 +267,7 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -313,6 +314,7 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -620,6 +622,7 @@ pub async fn get_by_ids(pool: &SqlitePool, ids: &[TrackId]) -> Result<Vec<Track>
         );
     }
 
+    crate::track_artists::populate_for_tracks(pool, &mut all_tracks).await?;
     Ok(all_tracks)
 }
 
@@ -678,7 +681,7 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -719,6 +722,7 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -790,7 +794,7 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -850,6 +854,7 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
         );
     }
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -920,7 +925,7 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -980,6 +985,7 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
         );
     }
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -1435,7 +1441,7 @@ pub async fn get_top_tracks_by_artist(
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1476,6 +1482,7 @@ pub async fn get_top_tracks_by_artist(
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -1539,7 +1546,7 @@ pub async fn get_recently_played(
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1580,6 +1587,7 @@ pub async fn get_recently_played(
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -1776,7 +1784,7 @@ pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Re
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1817,6 +1825,7 @@ pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Re
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -1880,7 +1889,7 @@ pub async fn get_by_artist_paginated(
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -1921,6 +1930,7 @@ pub async fn get_by_artist_paginated(
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -1984,7 +1994,7 @@ pub async fn get_by_album_paginated(
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2025,6 +2035,7 @@ pub async fn get_by_album_paginated(
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -2089,7 +2100,7 @@ pub async fn get_by_playlist_paginated(
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2130,6 +2141,7 @@ pub async fn get_by_playlist_paginated(
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -2461,7 +2473,7 @@ pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Ve
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2502,6 +2514,7 @@ pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Ve
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -2570,7 +2583,7 @@ pub async fn get_with_fingerprints(
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2611,6 +2624,7 @@ pub async fn get_with_fingerprints(
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -2669,7 +2683,7 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2710,6 +2724,7 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 
@@ -2766,7 +2781,7 @@ pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Resu
     }
 
     // Build track objects with availability data
-    let tracks: Vec<_> = rows
+    let mut tracks: Vec<_> = rows
         .into_iter()
         .map(|row| {
             let track_id = TrackId::new(row.id.to_string());
@@ -2807,6 +2822,7 @@ pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Resu
         })
         .collect();
 
+    crate::track_artists::populate_for_tracks(pool, &mut tracks).await?;
     Ok(tracks)
 }
 

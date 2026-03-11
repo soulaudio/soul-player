@@ -45,10 +45,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(metadata) => {
             println!("  ✅ Metadata extracted successfully");
             println!("  Title: {:?}", metadata.title);
-            println!("  Artist: {:?}", metadata.artist);
+            println!("  Artists: {:?}", metadata.artists);
             println!("  Album: {:?}", metadata.album);
 
-            if let Some(ref artist) = metadata.artist {
+            if !metadata.artists.is_empty() {
+                let artist = metadata.artists.join(", ");
                 println!("  Artist bytes: {:?}", artist.as_bytes());
                 if artist.contains('기') || artist.contains("???") {
                     if artist.contains('기') {
@@ -71,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // If metadata doesn't have Korean, check folder fallback
-            if metadata.artist.is_none() || metadata.album.is_none() {
+            if metadata.artists.is_empty() || metadata.album.is_none() {
                 println!("\n  📝 Testing folder name fallback...");
                 if let Some(parent) = test_file.parent() {
                     if let Some(folder_name) = parent.file_name() {
