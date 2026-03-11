@@ -460,7 +460,7 @@ pub fn preview_path_template(template: String) -> String {
     // Create sample metadata for preview
     let metadata = ExtractedMetadata {
         title: Some("Pigs on the Wing (Part 1)".to_string()),
-        artist: Some("Pink Floyd".to_string()),
+        artists: vec!["Pink Floyd".to_string()],
         album: Some("Animals".to_string()),
         album_artist: Some("Pink Floyd".to_string()),
         track_number: Some(1),
