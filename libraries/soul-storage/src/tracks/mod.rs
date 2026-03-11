@@ -734,7 +734,7 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
     let query_start = std::time::Instant::now();
     let rows: Vec<_> = sqlx::query!(
         r#"
-        SELECT
+        SELECT DISTINCT
             t.id, t.title, t.artist_id, t.album_id, t.album_artist_id,
             t.track_number, t.disc_number, t.year, t.duration_seconds,
             t.bitrate, t.sample_rate, t.channels, t.file_format,
@@ -743,9 +743,10 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
             ar.name as artist_name,
             al.title as album_title
         FROM tracks t
+        JOIN track_artists ta ON ta.track_id = t.id
         LEFT JOIN artists ar ON t.artist_id = ar.id
         LEFT JOIN albums al ON t.album_id = al.id
-        WHERE t.artist_id = ?
+        WHERE ta.artist_id = ?
         ORDER BY t.album_id, t.disc_number, t.track_number, t.title
         "#,
         artist_id
