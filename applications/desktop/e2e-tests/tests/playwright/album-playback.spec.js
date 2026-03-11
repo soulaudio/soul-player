@@ -208,27 +208,28 @@ test('album detail page loads with correct title, artist, and track count', asyn
   await expect(artistEl).toBeVisible();
   await expect(artistEl).toContainText('Playwright Artist');
 
-  // Track count paragraph must be visible and show 5 tracks
+  // Track count paragraph must be visible and show 6 tracks (5 original + Collab Track)
   const trackCountEl = page.locator('[data-testid="album-track-count"]');
   await expect(trackCountEl).toBeVisible();
-  await expect(trackCountEl).toContainText('5');
+  await expect(trackCountEl).toContainText('6');
 });
 
 // ----------------------------------------------------------------
 // Test 2: Track list shows all 5 seeded tracks
 // ----------------------------------------------------------------
 
-test('track list shows all 5 tracks with correct titles', async () => {
+test('track list shows all 6 tracks with correct titles', async () => {
   await navigateToAlbumDetail(page);
 
   // Wait for the track list container
   await page.waitForSelector('[data-testid="track-list"]', { timeout: 10_000 });
 
   const trackRows = page.locator('[data-testid="track-row"]');
-  await expect(trackRows).toHaveCount(5, { timeout: 10_000 });
+  // 6 tracks: Track One–Five (5) + Collab Track (1, added for multi-artist testing)
+  await expect(trackRows).toHaveCount(6, { timeout: 10_000 });
 
-  // Verify each track title is visible somewhere on the page
-  const expectedTitles = ['Track One', 'Track Two', 'Track Three', 'Track Four', 'Track Five'];
+  // Verify each original track title is visible
+  const expectedTitles = ['Track One', 'Track Two', 'Track Three', 'Track Four', 'Track Five', 'Collab Track'];
   for (const title of expectedTitles) {
     // Each track row contains a span with the track title text
     const row = trackRows.filter({ hasText: title });
@@ -347,13 +348,13 @@ test('album detail page displays correct title and track count matching seed dat
   const titleEl = page.locator('[data-testid="album-title"]');
   await expect(titleEl).toHaveText('Playwright Album');
 
-  // The track count element must include the number 5
+  // The track count element must include the number 6 (5 original + Collab Track)
   const trackCountEl = page.locator('[data-testid="album-track-count"]');
-  await expect(trackCountEl).toContainText('5');
+  await expect(trackCountEl).toContainText('6');
 
-  // All 5 track rows must be present in the track list
+  // All 6 track rows must be present in the track list
   const trackRows = page.locator('[data-testid="track-row"]');
-  await expect(trackRows).toHaveCount(5, { timeout: 10_000 });
+  await expect(trackRows).toHaveCount(6, { timeout: 10_000 });
 
   // The album detail page container itself must be present
   await expect(page.locator('[data-testid="album-detail-page"]')).toBeVisible();
