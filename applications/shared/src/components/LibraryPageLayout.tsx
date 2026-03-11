@@ -382,13 +382,16 @@ export function LibraryPageLayout({
           {filterPanel}
         </div>
 
-      {/* Scrollable Content — no transition on this container (padding-top transitions cause
-          layout reflow of all children on every header toggle; snap instantly instead) */}
+      {/* Scrollable Content — padding-top is fixed to header height regardless of whether
+          the header is currently visible. Changing pt on scroll (pt-14 → pt-6) triggers a
+          full layout reflow of all absolute-positioned virtual rows every time the header
+          auto-hides, which causes the visible stutter. Keeping it constant eliminates that.
+          The 32px of extra space at the top when header is hidden is imperceptible. */}
       <div
         ref={scrollContainerRef}
         data-testid="scroll-container"
         className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom ${
-          showSearchBar ? (filterPanelVisible ? 'pt-28' : 'pt-14') : 'pt-6'
+          filterPanelVisible ? 'pt-28' : 'pt-14'
         }`}
       >
         {(isLoading || !scrollReady) ? (

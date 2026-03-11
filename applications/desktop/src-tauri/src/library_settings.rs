@@ -196,7 +196,8 @@ pub async fn rescan_library_source(
             "scan-progress",
             serde_json::json!({
                 "processed": stats.processed,
-                "total": stats.total_files
+                "total": stats.total_files,
+                "currentFile": stats.current_file
             }),
         ) {
             tracing::warn!(
@@ -259,7 +260,8 @@ pub async fn rescan_all_sources(
             "scan-progress",
             serde_json::json!({
                 "processed": stats.processed,
-                "total": stats.total_files
+                "total": stats.total_files,
+                "currentFile": stats.current_file
             }),
         ) {
             tracing::warn!(

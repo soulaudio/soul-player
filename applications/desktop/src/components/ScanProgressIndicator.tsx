@@ -40,8 +40,9 @@ export function ScanProgressIndicator({
   // completes so fast that get_running_scans always returns empty (test datasets).
   const [isScanActive, setIsScanActive] = useState(false);
   // Last known progress from scan-progress events — used as fallback when the
-  // scan completes so fast that get_running_scans returns empty before we render.
-  const [lastProgress, setLastProgress] = useState<{ processed: number; total: number } | null>(
+  // scan completes so fast that get_running_scans returns empty before we render,
+  // and as a real-time source for per-file counter updates (DB is batched every 10).
+  const [lastProgress, setLastProgress] = useState<{ processed: number; total: number; currentFile?: string | null } | null>(
     null,
   );
 
@@ -113,12 +114,11 @@ export function ScanProgressIndicator({
         });
         unlistenFunctions.push(unlistenStart);
 
-        const unlistenProgress = await listen<{ processed: number; total: number }>(
+        const unlistenProgress = await listen<{ processed: number; total: number; currentFile?: string | null }>(
           'scan-progress',
           (event) => {
             if (!isMounted) return;
-            // Store the last known progress so we can display it even after the
-            // scan completes (get_running_scans returns empty for completed scans).
+            // Store real-time progress (fires per file; DB is batched every 10).
             setLastProgress(event.payload);
             // Use the event as a hint to refresh authoritative scan state.
             invoke<ScanProgress[]>('get_running_scans').then(setScans).catch(debug.error);
@@ -162,12 +162,13 @@ export function ScanProgressIndicator({
         ? (lastProgress.processed / lastProgress.total) * 100
         : 0;
 
-  // Prefer live polling data; fall back to lastProgress from scan-progress events
-  // so fast scans (e.g. <10 files) still show meaningful numbers after completing.
-  const totalProcessed =
-    scans.reduce((sum, s) => sum + s.processedFiles, 0) || lastProgress?.processed || 0;
+  // Real-time per-file count from events; DB polling lags by up to 10 files.
+  // Math.max ensures we always show the highest count seen from either source.
+  const dbProcessed = scans.reduce((sum, s) => sum + s.processedFiles, 0);
+  const totalProcessed = Math.max(dbProcessed, lastProgress?.processed || 0);
   const totalFiles =
     scans.reduce((sum, s) => sum + (s.totalFiles || 0), 0) || lastProgress?.total || 0;
+  const currentFile = lastProgress?.currentFile ?? null;
 
   if (position === 'footer') {
     return (
@@ -190,12 +191,18 @@ export function ScanProgressIndicator({
                         ? t('scan.scanningSource', { name: scans[0].librarySourceName || 'Library' })
                         : t('scan.scanningSources', { count: scans.length })}
                   </span>
-                  <span className="text-muted-foreground ml-2">
+                  <span className="text-muted-foreground ml-2 tabular-nums">
                     {totalProcessed}/{totalFiles}
                   </span>
                 </div>
+                {/* Current file */}
+                {currentFile && (
+                  <div className="text-xs text-muted-foreground truncate mt-0.5">
+                    {currentFile}
+                  </div>
+                )}
                 {/* Progress bar */}
-                <div data-testid="scan-progress-bar" className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div data-testid="scan-progress-bar" className="mt-1.5 h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary transition-all duration-300"
                     style={{ width: `${totalProgress}%` }}

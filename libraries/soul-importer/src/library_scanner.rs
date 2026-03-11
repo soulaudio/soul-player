@@ -29,6 +29,8 @@ pub struct ScanStats {
     pub removed_files: i64,
     pub relocated_files: i64,
     pub errors: i64,
+    /// The most recently processed file path (display name only, for UI progress toast)
+    pub current_file: Option<String>,
 }
 
 /// Callback for scan progress updates
@@ -503,6 +505,9 @@ impl LibraryScanner {
                 }
                 stats.processed += 1;
                 *batch_processed += 1;
+                stats.current_file = file_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned());
             }
             Err((file_path, e)) => {
                 tracing::warn!("Metadata extraction failed for {:?}: {}", file_path, e);
@@ -510,10 +515,14 @@ impl LibraryScanner {
                 stats.processed += 1;
                 *batch_processed += 1;
                 *batch_errors += 1;
+                stats.current_file = file_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned());
             }
         }
 
-        // Call progress callback
+        // Call progress callback per file (lightweight — callback only emits an event,
+        // DB flush happens separately on a batched schedule)
         if let Some(ref callback) = self.progress_callback {
             callback(stats);
         }
