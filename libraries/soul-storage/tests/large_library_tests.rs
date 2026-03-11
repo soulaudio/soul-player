@@ -63,6 +63,18 @@ async fn batch_insert_tracks(
             let track_id = result.last_insert_rowid();
             track_ids.push(TrackId::new(track_id.to_string()));
 
+            // Populate track_artists junction so get_by_artist queries work
+            if let Some(aid) = artist_id {
+                sqlx::query(
+                    "INSERT OR IGNORE INTO track_artists (track_id, artist_id, position) VALUES (?, ?, 0)",
+                )
+                .bind(track_id)
+                .bind(aid)
+                .execute(pool)
+                .await
+                .expect("Failed to create track_artists entry");
+            }
+
             // Create track availability
             sqlx::query(
                 "INSERT INTO track_sources (track_id, source_id, status, local_file_path)
