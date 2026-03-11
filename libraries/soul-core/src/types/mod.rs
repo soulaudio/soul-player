@@ -39,6 +39,7 @@ pub use artist::{Artist, ArtistId, CreateArtist};
 pub use genre::{CreateGenre, Genre, GenreId};
 pub use multisource_playlist::{CreatePlaylist, Playlist, PlaylistTrack};
 pub use multisource_track::{
-    AvailabilityStatus, CreateTrack, MetadataSource, Track, TrackAvailability, UpdateTrack,
+    AvailabilityStatus, CreateTrack, MetadataSource, Track, TrackArtist, TrackAvailability,
+    UpdateTrack,
 };
 pub use source::{CreateSource, Source, SourceConfig, SourceId, SourceType};

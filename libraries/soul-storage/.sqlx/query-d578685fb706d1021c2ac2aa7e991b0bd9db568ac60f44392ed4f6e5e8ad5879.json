@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT artist_id, COUNT(*) as count\n         FROM tracks\n         WHERE artist_id IS NOT NULL\n         GROUP BY artist_id",
+  "query": "SELECT artist_id as 'artist_id!', COUNT(DISTINCT track_id) as count\n         FROM track_artists\n         GROUP BY artist_id",
   "describe": {
     "columns": [
       {
-        "name": "artist_id",
+        "name": "artist_id!",
         "ordinal": 0,
         "type_info": "Integer"
       },
@@ -18,9 +18,9 @@
       "Right": 0
     },
     "nullable": [
-      true,
+      false,
       false
     ]
   },
-  "hash": "cc75fc594f44aad6250e586348ebc8653971c2a7ed8b7a03d765423075652954"
+  "hash": "d578685fb706d1021c2ac2aa7e991b0bd9db568ac60f44392ed4f6e5e8ad5879"
 }

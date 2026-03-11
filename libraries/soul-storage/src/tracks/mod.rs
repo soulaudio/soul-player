@@ -158,6 +158,7 @@ pub async fn get_all(
             updated_at: row.updated_at.clone(),
             cover_art_path: row.album_cover_art_path.clone(),
             artwork_source: row.album_artwork_source.clone(),
+            artists: Vec::new(),
             availability: Vec::new(),
         });
 
@@ -306,6 +307,7 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<Track>> {
                 updated_at: row.updated_at,
                 cover_art_path: row.album_cover_art_path,
                 artwork_source: row.album_artwork_source,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -400,6 +402,7 @@ pub async fn get_by_id(pool: &SqlitePool, id: TrackId) -> Result<Option<Track>> 
             updated_at: row.updated_at,
             cover_art_path: row.album_cover_art_path,
             artwork_source: row.album_artwork_source,
+            artists: Vec::new(),
             availability,
         }))
     } else {
@@ -567,6 +570,7 @@ pub async fn get_by_ids(pool: &SqlitePool, ids: &[TrackId]) -> Result<Vec<Track>
                 updated_at: row.try_get("updated_at").unwrap_or_default(),
                 cover_art_path: row.try_get("album_cover_art_path").ok(),
                 artwork_source: row.try_get("album_artwork_source").ok(),
+                artists: Vec::new(),
                 availability: Vec::new(),
             });
 
@@ -709,6 +713,7 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: SourceId) -> Result<Vec
                 updated_at: row.updated_at,
                 cover_art_path: row.album_cover_art_path,
                 artwork_source: row.album_artwork_source,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -819,6 +824,7 @@ pub async fn get_by_artist(pool: &SqlitePool, artist_id: ArtistId) -> Result<Vec
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -948,6 +954,7 @@ pub async fn get_by_album(pool: &SqlitePool, album_id: AlbumId) -> Result<Vec<Tr
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -1462,6 +1469,7 @@ pub async fn get_top_tracks_by_artist(
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -1565,6 +1573,7 @@ pub async fn get_recently_played(
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -1674,6 +1683,7 @@ pub async fn find_by_hash(pool: &SqlitePool, file_hash: &str) -> Result<Option<T
             updated_at: row.updated_at,
             cover_art_path: None,
             artwork_source: None,
+            artists: Vec::new(),
             availability,
         }))
     } else {
@@ -1800,6 +1810,7 @@ pub async fn get_all_paginated(pool: &SqlitePool, offset: i64, limit: i64) -> Re
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -1903,6 +1914,7 @@ pub async fn get_by_artist_paginated(
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -2006,6 +2018,7 @@ pub async fn get_by_album_paginated(
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -2110,6 +2123,7 @@ pub async fn get_by_playlist_paginated(
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -2481,6 +2495,7 @@ pub async fn get_without_fingerprint(pool: &SqlitePool, limit: i32) -> Result<Ve
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -2589,6 +2604,7 @@ pub async fn get_with_fingerprints(
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -2687,6 +2703,7 @@ pub async fn get_by_genre(pool: &SqlitePool, genre_id: GenreId) -> Result<Vec<Tr
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })
@@ -2783,6 +2800,7 @@ pub async fn get_by_playlist(pool: &SqlitePool, playlist_id: PlaylistId) -> Resu
                 updated_at: row.updated_at,
                 cover_art_path: None,
                 artwork_source: None,
+                artists: Vec::new(),
                 availability,
             }
         })

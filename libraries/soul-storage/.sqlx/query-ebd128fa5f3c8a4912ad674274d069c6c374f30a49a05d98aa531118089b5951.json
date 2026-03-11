@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO track_artists (track_id, artist_id, position)\n         VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "ebd128fa5f3c8a4912ad674274d069c6c374f30a49a05d98aa531118089b5951"
+}

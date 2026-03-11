@@ -75,9 +75,8 @@ pub async fn get_track_counts(
     pool: &SqlitePool,
 ) -> Result<std::collections::HashMap<ArtistId, i32>> {
     let rows: Vec<_> = sqlx::query!(
-        "SELECT artist_id, COUNT(*) as count
-         FROM tracks
-         WHERE artist_id IS NOT NULL
+        "SELECT artist_id as 'artist_id!', COUNT(DISTINCT track_id) as count
+         FROM track_artists
          GROUP BY artist_id"
     )
     .fetch_all(pool)
@@ -85,11 +84,8 @@ pub async fn get_track_counts(
 
     Ok(rows
         .into_iter()
-        .filter_map(|row| {
-            // Filter out rows with missing artist_id
-            row.artist_id.map(|artist_id| (artist_id, row.count as i32))
-        })
-        .collect::<std::collections::HashMap<_, _>>())
+        .map(|row| (row.artist_id, row.count as i32))
+        .collect())
 }
 
 /// Get album counts for all artists in a single query

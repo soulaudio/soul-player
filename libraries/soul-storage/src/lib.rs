@@ -46,6 +46,7 @@ pub mod artists;
 pub mod genres;
 pub mod playlists;
 pub mod sources;
+pub mod track_artists;
 pub mod tracks;
 pub mod users;
 
