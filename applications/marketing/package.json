@@ -69,5 +69,5 @@
     "type-check": "node ../../scripts/build-wasm.mjs && tsc --noEmit"
   },
   "type": "module",
-  "version": "0.1.17"
+  "version": "0.1.18"
 }
