@@ -49,6 +49,10 @@
     "playingFromGenre": "ジャンルから再生中",
     "playingFromLibrary": "ライブラリから再生中"
   },
+  "floatingPlayer": {
+    "title": "再生中",
+    "noTrack": "再生中のトラックはありません"
+  },
   "sidebar": {
     "nowPlaying": "再生中",
     "queue": "キュー",
@@ -56,7 +60,8 @@
     "noTrackPlaying": "再生中のトラックはありません",
     "emptyQueue": "キューは空です",
     "tracksInQueue": "キューに{{count}}曲",
-    "resize": "サイドバーのサイズを変更"
+    "resize": "サイドバーのサイズを変更",
+    "expand": "サイドバーを展開"
   },
   "playback": {
     "play": "再生",

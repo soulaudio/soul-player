@@ -49,6 +49,10 @@
     "playingFromGenre": "Wiedergabe vom Genre",
     "playingFromLibrary": "Wiedergabe aus Bibliothek"
   },
+  "floatingPlayer": {
+    "title": "Jetzt läuft",
+    "noTrack": "Kein Titel läuft"
+  },
   "sidebar": {
     "nowPlaying": "Aktuelle Wiedergabe",
     "queue": "Warteschlange",
@@ -56,7 +60,8 @@
     "noTrackPlaying": "Kein Titel wird abgespielt",
     "emptyQueue": "Warteschlange ist leer",
     "tracksInQueue": "{{count}} Titel in der Warteschlange",
-    "resize": "Seitenleiste anpassen"
+    "resize": "Seitenleiste anpassen",
+    "expand": "Seitenleiste erweitern"
   },
   "playback": {
     "play": "Abspielen",

@@ -49,6 +49,10 @@
     "playingFromGenre": "Playing from genre",
     "playingFromLibrary": "Playing from library"
   },
+  "floatingPlayer": {
+    "title": "Now Playing",
+    "noTrack": "No track playing"
+  },
   "sidebar": {
     "nowPlaying": "Now Playing",
     "queue": "Queue",
@@ -56,7 +60,8 @@
     "noTrackPlaying": "No track playing",
     "emptyQueue": "Queue is empty",
     "tracksInQueue": "{{count}} tracks in queue",
-    "resize": "Resize sidebar"
+    "resize": "Resize sidebar",
+    "expand": "Expand sidebar"
   },
   "playback": {
     "play": "Play",
