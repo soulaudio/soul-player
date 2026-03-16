@@ -24,7 +24,7 @@
  *
  * Seed data (from playwright-global-setup.js):
  *   Album 2001 "Playwright Album" / Artist 2001 "Playwright Artist"
- *     5 tracks: IDs 2001–2005, titles "Track One"–"Track Five"
+ *     6 tracks: IDs 2001–2006, titles "Track One"–"Track Five" + "Collab Track"
  *     10-second WAV files, 2.0s duration in DB
  *   Genre 4001 "Playwright Genre" — linked to tracks 2001–2005
  *   Playlist 3001 "Favorites" — tracks added in beforeAll
@@ -33,7 +33,7 @@
 import { test, expect, chromium } from '@playwright/test';
 import { CDP_URL } from '../../playwright-global-setup.js';
 
-const TRACK_IDS = [2001, 2002, 2003, 2004, 2005];
+const TRACK_IDS = [2001, 2002, 2003, 2004, 2005, 2006];
 
 let browser;
 let page;

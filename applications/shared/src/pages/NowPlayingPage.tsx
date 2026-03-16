@@ -220,24 +220,32 @@ const TrackItem = memo(function TrackItem({
       onClick={handleClick}
       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:opacity-80 transition-opacity ${isHistory ? 'opacity-40' : ''}`}
     >
-      {/* Track Number or Playing Indicator */}
-      <div className="w-6 text-center flex-shrink-0">
-        {isCurrent && isCurrentlyPlaying ? (
-          <div className="flex items-center justify-center gap-0.5">
-            <span className="w-0.5 h-3 bg-primary rounded-full animate-pulse" />
-            <span className="w-0.5 h-4 bg-primary rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
-            <span className="w-0.5 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+      {/* Album Art Thumbnail */}
+      <div className="relative w-8 h-8 flex-shrink-0 rounded-lg overflow-hidden">
+        <ArtworkImage
+          albumId={activeVersion.album_id}
+          className="w-full h-full object-cover"
+          fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
+          fallbackIcon="music"
+          fallbackIconSize="sm"
+        />
+        {/* Playing indicator overlay */}
+        {isCurrent && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            {isCurrentlyPlaying ? (
+              <div className="flex items-center justify-center gap-0.5">
+                <span className="w-0.5 h-3 bg-white rounded-full animate-pulse" />
+                <span className="w-0.5 h-4 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+                <span className="w-0.5 h-2 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-0.5">
+                <span className="w-0.5 h-2 bg-white/70 rounded-full" />
+                <span className="w-0.5 h-3 bg-white/70 rounded-full" />
+                <span className="w-0.5 h-2 bg-white/70 rounded-full" />
+              </div>
+            )}
           </div>
-        ) : isCurrent ? (
-          <div className="flex items-center justify-center gap-0.5">
-            <span className="w-0.5 h-2 bg-primary/60 rounded-full" />
-            <span className="w-0.5 h-3 bg-primary/60 rounded-full" />
-            <span className="w-0.5 h-2 bg-primary/60 rounded-full" />
-          </div>
-        ) : (
-          <span className="text-sm text-muted-foreground">
-            {activeVersion.track_number || index + 1}
-          </span>
         )}
       </div>
 
@@ -422,6 +430,7 @@ export function NowPlayingPage() {
           id: typeof q.trackId === 'string' ? parseInt(q.trackId) : (q.trackId as number),
           title: q.title,
           artist_name: q.artist,
+          album_id: q.albumId,
           album_title: q.album || undefined,
           duration_seconds: q.durationSeconds || undefined,
           track_number: q.trackNumber ?? idx + 1,
@@ -433,6 +442,7 @@ export function NowPlayingPage() {
           id: currentTrack.id,
           title: currentTrack.title,
           artist_name: currentTrack.artist,
+          album_id: currentTrack.albumId,
           album_title: currentTrack.album || undefined,
           duration_seconds: currentTrack.duration || undefined,
           track_number: currentTrack.trackNumber,

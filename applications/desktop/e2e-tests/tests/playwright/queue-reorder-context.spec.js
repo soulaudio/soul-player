@@ -12,7 +12,7 @@
  *   8. Context recording persists through skip operations
  *
  * Seed data (from playwright-global-setup.js):
- *   Album 2001 — "Playwright Album" — 5 tracks × 2s WAV (IDs 2001–2005)
+ *   Album 2001 — "Playwright Album" — 6 tracks × 2s WAV (IDs 2001–2006)
  *   Album 2002 — "Long Album" — 5 tracks × 30s WAV (IDs 3001–3005)
  */
 
@@ -231,10 +231,10 @@ test('queue resets correctly after stop and new play_queue', async () => {
   );
   await page.waitForTimeout(300);
 
-  // Start album 2001 (5 short tracks)
+  // Start album 2001 (6 short tracks)
   await playAlbum(page, 2001);
   const size2 = await getQueueSize(page);
-  expect([4, 5]).toContain(size2); // Fresh queue from album 2001
+  expect([5, 6]).toContain(size2); // Fresh queue from album 2001
 
   const state = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_playback_state')

@@ -1,49 +1,52 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, FileText, AlertCircle } from 'lucide-react';
+import { ExternalLink, FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useBackend, SITE_URL, COMPANY_URL, GITHUB_URL } from '@soul-player/shared';
 import { invoke } from '@tauri-apps/api/core';
 import { debug } from '@soul-player/shared';
-import { getPlatform } from '../../utils/platform';
 import { useUpdateSettings } from '../../contexts/UpdateSettingsContext';
 
-const LOG_PATHS: Record<string, string> = {
-  windows: '%APPDATA%\\Soul Player\\logs\\soul-player.log.YYYY-MM-DD',
-  macos: '~/Library/Application Support/soul-player/logs/soul-player.log.YYYY-MM-DD',
-  linux: '~/.config/soul-player/logs/soul-player.log.YYYY-MM-DD',
-};
+interface LoggingStatus {
+  log_path_example: string;
+  active: boolean;
+}
 
 export function AboutSettingsPage() {
   const { t } = useTranslation();
   const backend = useBackend();
   const [version, setVersion] = useState<string>('...');
   const [loggingEnabled, setLoggingEnabled] = useState(false);
-  const [showRestartMessage, setShowRestartMessage] = useState(false);
+  const [loggingActive, setLoggingActive] = useState(false);
+  const [logPathExample, setLogPathExample] = useState<string>('');
   const { autoUpdate, silentUpdate, checking, onAutoUpdateChange, onSilentUpdateChange, checkForUpdates } = useUpdateSettings();
 
-  const platform = getPlatform();
-  const logPath = LOG_PATHS[platform];
+  // Restart is needed when the saved preference differs from what's active this session
+  const restartRequired = loggingEnabled !== loggingActive;
 
   useEffect(() => {
     backend.getVersion().then(setVersion).catch(() => setVersion('—'));
 
-    const loadLoggingSetting = async () => {
+    const loadLoggingState = async () => {
       try {
+        // Get the actual log path and whether logging is live in this session
+        const status = await invoke<LoggingStatus>('get_logging_status');
+        setLoggingActive(status.active);
+        setLogPathExample(status.log_path_example);
+
+        // Load the saved preference from the database
         const value = await invoke<string | null>('get_user_setting', { key: 'app.logging_enabled' });
         if (value !== null) setLoggingEnabled(JSON.parse(value));
       } catch (error) {
-        debug.error('Failed to load logging setting:', error);
+        debug.error('Failed to load logging state:', error);
       }
     };
-    loadLoggingSetting();
+    loadLoggingState();
   }, [backend]);
 
   const handleLoggingToggle = async (enabled: boolean) => {
     try {
       await invoke('set_logging_enabled', { enabled });
       setLoggingEnabled(enabled);
-      setShowRestartMessage(true);
-      setTimeout(() => setShowRestartMessage(false), 5000);
     } catch (error) {
       debug.error('Failed to save logging setting:', error);
     }
@@ -152,6 +155,7 @@ export function AboutSettingsPage() {
               type="checkbox"
               checked={loggingEnabled}
               onChange={(e) => handleLoggingToggle(e.target.checked)}
+              data-testid="logging-toggle"
               className="w-4 h-4 mt-0.5"
             />
             <div className="flex-1">
@@ -160,8 +164,8 @@ export function AboutSettingsPage() {
             </div>
           </label>
 
-          {showRestartMessage && (
-            <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+          {restartRequired && (
+            <div data-testid="logging-restart-banner" className="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-amber-700 dark:text-amber-400">
                 {t('settings.reportBugLoggingRestartRequired')}
@@ -169,8 +173,19 @@ export function AboutSettingsPage() {
             </div>
           )}
 
+          {loggingActive && (
+            <div data-testid="logging-active-banner" className="mb-3 p-3 bg-green-500/10 border border-green-500/20 rounded-lg flex items-start gap-2">
+              <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-green-700 dark:text-green-400">
+                {t('settings.reportBugLoggingActiveNow')}
+              </p>
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground mb-1">{t('settings.reportBugFindLogsHere')}</p>
-          <code className="text-xs bg-muted px-2 py-1 rounded break-all">{logPath}</code>
+          <code data-testid="logging-path" className="text-xs bg-muted px-2 py-1 rounded break-all">
+            {logPathExample || '…'}
+          </code>
         </div>
 
         {/* Helpful Resources */}

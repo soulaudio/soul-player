@@ -21,6 +21,7 @@ import { SettingsRouter } from './pages/SettingsRouter';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { GenrePage } from './pages/GenrePage';
 import { FileDropHandler } from './components/FileDropHandler';
+import { UpdateSettingsProvider } from './contexts/UpdateSettingsContext';
 
 function HomeRoute() {
   const backend = useBackend();
@@ -178,6 +179,7 @@ function App() {
 
   // Normal app with file drop handler
   return (
+    <UpdateSettingsProvider>
     <FileDropHandler>
       <MainLayout>
         <Routes>
@@ -197,6 +199,7 @@ function App() {
       </MainLayout>
       <Toaster richColors position="bottom-right" />
     </FileDropHandler>
+    </UpdateSettingsProvider>
   );
 }
 

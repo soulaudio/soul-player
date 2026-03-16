@@ -109,23 +109,22 @@ fn parse_year(s: &str) -> Option<i32> {
         .filter(|&y| (1900..=2099).contains(&y))
 }
 
-/// Split a raw artist tag string into individual artist names.
+/// Split a single artist tag string on featuring credits only.
 ///
-/// Handles common delimiters used in music metadata:
-/// - `,` and `;` — Vorbis/FLAC multi-value, ID3 separation
-/// - ` feat. `, ` feat `, ` ft. `, ` ft ` — featuring credits (all case variants)
-/// - ` & ` — collaborative tracks
-/// - ` x ` — DJ/electronic collab notation (lowercase x with spaces)
+/// Only splits on `feat.` / `ft.` variants — these unambiguously indicate a
+/// second artist credit in a single-value field (e.g. "Artist A feat. Artist B").
+///
+/// Deliberately does NOT split on `,`, `;`, `&`, or `x` because those characters
+/// legitimately appear in band names (e.g. "Earth, Wind & Fire", "Simon & Garfunkel").
+/// When metadata natively provides multiple ARTIST values (Vorbis multi-tag, ID3v2.4
+/// null-separated), those are used directly and this function is not needed.
 pub fn split_artists(raw: &str) -> Vec<String> {
-    // Delimiters ordered longest-first to avoid splitting "feat." inside longer token.
-    // Each delimiter is listed in lowercase, Title Case, and UPPERCASE to handle
-    // inconsistent tagging conventions.
+    // Only featuring credit delimiters — all case variants.
     const DELIMITERS: &[&str] = &[
         " feat. ", " Feat. ", " FEAT. ", " feat ", " Feat ", " FEAT ", " ft. ", " Ft. ", " FT. ",
-        " ft ", " Ft ", " FT ", " & ", " x ",
+        " ft ", " Ft ", " FT ",
     ];
 
-    // Start with the full string, then apply each delimiter
     let mut results = vec![raw.to_string()];
     for &delim in DELIMITERS {
         results = results
@@ -137,16 +136,6 @@ pub fn split_artists(raw: &str) -> Vec<String> {
             })
             .collect();
     }
-
-    // Also split by comma and semicolon
-    results = results
-        .into_iter()
-        .flat_map(|s| {
-            s.split(&[',', ';'][..])
-                .map(|p| p.trim().to_string())
-                .collect::<Vec<_>>()
-        })
-        .collect();
 
     results.into_iter().filter(|s| !s.is_empty()).collect()
 }
@@ -308,10 +297,26 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     let channels = properties.channels();
 
     // Extract tag metadata
-    let (title, raw_artist, album, album_artist, track_number, disc_number, year, genres) =
+    let (title, raw_artists_native, album, album_artist, track_number, disc_number, year, genres) =
         if let Some(tag) = tag {
             let title = tag.title().map(|s| s.to_string());
-            let raw_artist = tag.artist().map(|s| s.to_string());
+
+            // Native multi-value artist extraction.
+            // Vorbis Comments (FLAC/OGG) natively support multiple ARTIST= entries.
+            // ID3v2.4 may store multiple values in a single text frame separated by \0.
+            // Using get_items avoids relying on lofty's concatenated artist() helper.
+            let raw_artists_native: Vec<String> = tag
+                .items()
+                .filter(|item| item.key() == &lofty::ItemKey::TrackArtist)
+                .filter_map(|item| item.value().text().map(|s| s.to_string()))
+                .flat_map(|s| {
+                    // Split null-separated ID3v2.4 values into separate entries
+                    s.split('\0')
+                        .map(|p| p.trim().to_string())
+                        .collect::<Vec<_>>()
+                })
+                .filter(|s| !s.is_empty())
+                .collect();
             let album = tag.album().map(|s| s.to_string());
             let album_artist = tag
                 .get_string(&lofty::ItemKey::AlbumArtist)
@@ -333,7 +338,7 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
 
             (
                 title,
-                raw_artist,
+                raw_artists_native,
                 album,
                 album_artist,
                 track_number,
@@ -342,7 +347,7 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
                 genres,
             )
         } else {
-            (None, None, None, None, None, None, None, Vec::new())
+            (None, Vec::new(), None, None, None, None, None, Vec::new())
         };
 
     // Fallback: Use filename as title if no title in tags
@@ -366,7 +371,7 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     };
 
     let title = title.map(&fix_mojibake);
-    let artist = raw_artist.map(&fix_mojibake);
+    let native_artists: Vec<String> = raw_artists_native.into_iter().map(&fix_mojibake).collect();
     let album = album.map(&fix_mojibake);
     let album_artist = album_artist.map(&fix_mojibake);
     let genres: Vec<String> = genres.into_iter().map(&fix_mojibake).collect();
@@ -374,7 +379,7 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     // Fallback: Parse parent folder name for artist/album only when tags are missing.
     // Never override tag data with folder data — doing so caused duplicate albums on
     // force-reimport when the folder-derived name differed from the tag-derived name.
-    let folder_meta = if artist.is_none() || album.is_none() {
+    let folder_meta = if native_artists.is_empty() || album.is_none() {
         let parent = path.parent();
         let folder_name = parent
             .and_then(|p| p.file_name())
@@ -412,7 +417,7 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     } else {
         tracing::debug!(
             file = ?path.file_name(),
-            artist = ?artist,
+            artists = ?native_artists,
             album = ?album,
             "[metadata] Tags found"
         );
@@ -420,10 +425,16 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     };
 
     // Tag data takes priority; folder metadata only fills in missing values.
-    let resolved_artist = artist.or_else(|| folder_meta.as_ref().and_then(|m| m.artist.clone()));
-    let artists: Vec<String> = resolved_artist
-        .map(|a| split_artists(&a))
-        .unwrap_or_default();
+    let artists: Vec<String> = if !native_artists.is_empty() {
+        native_artists
+            .into_iter()
+            .flat_map(|a| split_artists(&a))
+            .collect()
+    } else if let Some(folder_artist) = folder_meta.as_ref().and_then(|m| m.artist.clone()) {
+        split_artists(&folder_artist)
+    } else {
+        Vec::new()
+    };
     let album = album.or_else(|| folder_meta.as_ref().and_then(|m| m.album.clone()));
     let year = year.or_else(|| folder_meta.as_ref().and_then(|m| m.year));
 
@@ -716,26 +727,38 @@ mod tests {
     }
 
     #[test]
-    fn test_split_artists_comma() {
+    fn test_split_artists_comma_not_split() {
+        // Commas are part of band names (e.g. "Earth, Wind & Fire") — do NOT split
         assert_eq!(
             split_artists("Artist A, Artist B, Artist C"),
-            vec!["Artist A", "Artist B", "Artist C"]
+            vec!["Artist A, Artist B, Artist C"]
         );
     }
 
     #[test]
-    fn test_split_artists_ampersand() {
+    fn test_split_artists_ampersand_not_split() {
+        // Ampersands in band names must NOT be split
         assert_eq!(
             split_artists("Bonobo & Erykah Badu"),
-            vec!["Bonobo", "Erykah Badu"]
+            vec!["Bonobo & Erykah Badu"]
+        );
+    }
+
+    #[test]
+    fn test_split_artists_earth_wind_fire() {
+        // Classic example: "Earth, Wind & Fire" must remain a single artist
+        assert_eq!(
+            split_artists("Earth, Wind & Fire"),
+            vec!["Earth, Wind & Fire"]
         );
     }
 
     #[test]
     fn test_split_artists_mixed() {
+        // feat. still splits; & after feat. stays with the featured artist name
         assert_eq!(
             split_artists("Madlib feat. Guilty Simpson & MED"),
-            vec!["Madlib", "Guilty Simpson", "MED"]
+            vec!["Madlib", "Guilty Simpson & MED"]
         );
     }
 

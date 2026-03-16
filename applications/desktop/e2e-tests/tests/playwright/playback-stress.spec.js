@@ -9,8 +9,8 @@
  *   - Common user flows (album playback, skip around, resume)
  *
  * Seed data (from playwright-global-setup.js):
- *   Album ID 2001 — "Playwright Album" / "Playwright Artist" — 5 tracks x 2-second WAV files
- *   Track IDs 2001–2005, titles: Track One … Track Five
+ *   Album ID 2001 — "Playwright Album" / "Playwright Artist" — 6 tracks x 2-second WAV files
+ *   Track IDs 2001–2006, titles: Track One … Track Five, Collab Track
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -274,9 +274,9 @@ test('queue stays consistent after skip-around operations', async () => {
   await page.click('[data-testid="now-playing-title"]', { force: true });
   await page.waitForSelector('[data-testid="now-playing-page"]', { timeout: 10_000 });
 
-  // Verify initial queue has 5 tracks
+  // Verify initial queue has 6 tracks
   let count = await page.locator('[data-testid^="now-playing-queue-item-"]').count();
-  expect(count).toBe(5);
+  expect(count).toBe(6);
 
   // Skip forward twice via sidebar controls
   await page.click('[data-testid="next-button"]');
@@ -288,9 +288,9 @@ test('queue stays consistent after skip-around operations', async () => {
   await page.click('[data-testid="previous-button"]');
   await waitForSidebarTitle(page, 'Track Two');
 
-  // Queue list should still show all 5 tracks (queue isn't consumed)
+  // Queue list should still show all 6 tracks (queue isn't consumed)
   count = await page.locator('[data-testid^="now-playing-queue-item-"]').count();
-  expect(count).toBe(5);
+  expect(count).toBe(6);
 });
 
 // ----------------------------------------------------------------
@@ -355,8 +355,8 @@ test('playback session is saved correctly after skip operations', async () => {
   // Tauri serializes Rust struct fields to camelCase
   // Current track should be Track Three (ID 2003)
   expect(session.currentTrackId).toBe(2003);
-  // Queue should have all 5 tracks
-  expect(session.queueTrackIds).toHaveLength(5);
+  // Queue should have all 6 tracks
+  expect(session.queueTrackIds).toHaveLength(6);
   // Queue index should point to Track Three (index 2)
   expect(session.queueIndex).toBe(2);
 });

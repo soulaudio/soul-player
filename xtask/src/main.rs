@@ -21,7 +21,8 @@ mod version;
 
 use cli::{
     AudioCommands, BuildCommands, CacheCommands, CheckCommands, CiCommands, CleanCommands, Cli,
-    Commands, DevCommands, ImportCommands, SetupCommands, TestCommands, VersionCommands,
+    Commands, DevCommands, ImportCommands, SetupCommands, StressCommands, TestCommands,
+    VersionCommands,
 };
 
 fn main() -> Result<()> {
@@ -100,6 +101,21 @@ fn main() -> Result<()> {
             TestCommands::Unit { package, args } => test::e2e::run_unit_tests(package, args),
             TestCommands::Integration => test::e2e::run_integration_tests(),
             TestCommands::E2e { suite } => test::e2e::run_e2e_tests(suite),
+
+            TestCommands::Stress(stress_cmd) => match stress_cmd {
+                StressCommands::Contention { verbose } => {
+                    test::stress::run_lock_contention_tests(verbose)
+                }
+                StressCommands::Endurance { duration, verbose } => {
+                    let dur = duration.map(|m| std::time::Duration::from_secs(m * 60));
+                    test::stress::run_endurance_tests(dur, verbose)
+                }
+                StressCommands::Corrupted { verbose } => {
+                    test::stress::run_corrupted_file_tests(verbose)
+                }
+                StressCommands::Bench { verbose } => test::stress::run_benchmarks(verbose),
+                StressCommands::All { verbose } => test::stress::run_all_stress_tests(verbose),
+            },
         },
 
         // ================================================================

@@ -11,11 +11,9 @@ import { AboutSettingsPage } from './settings/AboutSettingsPage';
 import { AppearanceSettingsPage } from './settings/AppearanceSettingsPage';
 import { MusicDataSettingsPage } from './settings/MusicDataSettingsPage';
 import { ShortcutsSettings } from '../components/ShortcutsSettings';
-import { UpdateSettingsProvider } from '../contexts/UpdateSettingsContext';
 
 export function SettingsRouter() {
   return (
-    <UpdateSettingsProvider>
     <SettingsLayout>
       <Routes>
         <Route index element={<Navigate to="/settings/appearance" replace />} />
@@ -35,6 +33,5 @@ export function SettingsRouter() {
         <Route path="*" element={<Navigate to="/settings/appearance" replace />} />
       </Routes>
     </SettingsLayout>
-    </UpdateSettingsProvider>
   );
 }

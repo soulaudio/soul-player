@@ -9,7 +9,7 @@
  *   5. Shuffle auto-advance chain: 3 consecutive auto-advances
  *
  * Seed data (from playwright-global-setup.js):
- *   Album 2001 — "Playwright Album" — 5 tracks × 10s WAV (IDs 2001–2005)
+ *   Album 2001 — "Playwright Album" — 6 tracks × 10s WAV (IDs 2001–2005 + 2006 "Collab Track")
  *   Album 2003 — "Marathon Album" — 10 tracks × 15s WAV (IDs 4001–4010)
  */
 
@@ -260,7 +260,7 @@ test('enable shuffle mid-playback: auto-advance still fires on track end', async
 test('shuffle + repeat all: auto-advance wraps around after last track', async () => {
   test.setTimeout(60_000);
 
-  // Use album 2001 (5 tracks × 10s)
+  // Use album 2001 (6 tracks × 10s)
   await startPlaybackWithShuffle(page, 2001);
 
   // Enable RepeatAll
@@ -270,10 +270,10 @@ test('shuffle + repeat all: auto-advance wraps around after last track', async (
 
   const firstTitle = await getNowPlayingTitle(page);
 
-  // Skip to the last track in queue (index 3 = 4th upcoming = 5th total)
-  // After play_queue, Track One is playing, queue has [T2,T3,T4,T5] (shuffled)
+  // Skip to the last track in queue (index 4 = 5th upcoming = 6th total)
+  // After play_queue, Track One is playing, queue has [T2,T3,T4,T5,Collab Track] (shuffled)
   await page.evaluate(async () =>
-    window.__TAURI_INTERNALS__.invoke('skip_to_queue_index', { index: 3 })
+    window.__TAURI_INTERNALS__.invoke('skip_to_queue_index', { index: 4 })
   );
   await page.waitForTimeout(500);
 
@@ -336,7 +336,7 @@ test('shuffle mode: 3 consecutive auto-advances via seek near end', async () => 
   expect(playedTitles.length).toBe(4);
 
   // All titles should be from the album
-  const validTitles = ['Track One', 'Track Two', 'Track Three', 'Track Four', 'Track Five'];
+  const validTitles = ['Track One', 'Track Two', 'Track Three', 'Track Four', 'Track Five', 'Collab Track'];
   for (const title of playedTitles) {
     expect(validTitles).toContain(title);
   }

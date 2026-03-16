@@ -22,8 +22,8 @@
  *   backward through the source queue. go_back() only decrements by 1.
  *
  * Seed data (from playwright-global-setup.js):
- *   Album ID 2001 — "Playwright Album" — 5 tracks x 2-second WAV files
- *   Track IDs 2001-2005, titles: Track One ... Track Five
+ *   Album ID 2001 — "Playwright Album" — 6 tracks x 2-second WAV files
+ *   Track IDs 2001-2006, titles: Track One ... Track Five, Collab Track
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -154,9 +154,9 @@ test('skip to Track Five then previous: should go to Track Four, not Track One',
   await startPlayback(page);
   expect(await getNowPlayingTitle(page)).toBe('Track One');
 
-  // Queue should be [T2, T3, T4, T5] — 4 tracks
+  // Queue should be [T2, T3, T4, T5, Collab Track] — 5 tracks
   const initialQueueSize = await getQueueSize(page);
-  expect(initialQueueSize).toBe(4);
+  expect(initialQueueSize).toBe(5);
 
   // Skip to Track Five (queue index 3)
   await page.evaluate(async () => {
@@ -249,9 +249,9 @@ test('skip to Track Five: queue should still contain skipped tracks', async () =
   await startPlayback(page);
   expect(await getNowPlayingTitle(page)).toBe('Track One');
 
-  // Before skip: queue = [T2, T3, T4, T5]
+  // Before skip: queue = [T2, T3, T4, T5, Collab Track]
   const beforeSize = await getQueueSize(page);
-  expect(beforeSize).toBe(4);
+  expect(beforeSize).toBe(5);
 
   // Skip to Track Five
   await page.evaluate(async () => {
@@ -265,17 +265,14 @@ test('skip to Track Five: queue should still contain skipped tracks', async () =
   // The key assertion: the queue size via get_queue after skip should reflect
   // that skipped tracks are NOT consumed
 
-  // Actually, T5 is now playing and source_index is past all tracks.
-  // The bug is visible when pressing previous:
-  // After previous → T4, the remaining queue should be [T5] (1 track).
-  // But due to the bug, after previous → T1 (history), queue shows [T5] only.
+  // T5 is now playing; Collab Track is still after T5 in the queue.
+  // The bug is visible when pressing previous and losing the ability to go
+  // through T4, T3, T2 in order.
 
   // Let's check the queue after skip (before pressing previous)
   const afterSkipSize = await getQueueSize(page);
-  // T5 is playing, everything after T5 is empty. This is 0, which is correct.
-  // The bug manifests when pressing previous and losing the ability to go
-  // through T4, T3, T2 in order.
-  expect(afterSkipSize).toBe(0);
+  // T5 is playing, Collab Track remains after T5 — 1 track.
+  expect(afterSkipSize).toBe(1);
 
   // Press previous — this is where the bug shows
   await page.evaluate(async () => {
@@ -286,11 +283,11 @@ test('skip to Track Five: queue should still contain skipped tracks', async () =
   await page.waitForTimeout(500);
 
   const afterPrevTitle = await getNowPlayingTitle(page);
-  // EXPECTED: Track Four, queue = [T5]
+  // EXPECTED: Track Four, queue = [T5, Collab Track]
   expect(afterPrevTitle).toBe('Track Four');
 
   const afterPrevQueueSize = await getQueueSize(page);
-  expect(afterPrevQueueSize).toBe(1); // [T5] remains
+  expect(afterPrevQueueSize).toBe(2); // [T5, Collab Track] remain
 });
 
 // ================================================================
@@ -396,8 +393,8 @@ test('skip to Track Four then navigate back and forward preserves queue', async 
   await waitForTitle(page, 'Track Three');
   expect(await getNowPlayingTitle(page)).toBe('Track Three');
 
-  // Queue after T3 should contain [T4, T5]
+  // Queue after T3 should contain [T4, T5, Collab Track]
   await page.waitForTimeout(300);
   const queueSize = await getQueueSize(page);
-  expect(queueSize).toBe(2);
+  expect(queueSize).toBe(3);
 });

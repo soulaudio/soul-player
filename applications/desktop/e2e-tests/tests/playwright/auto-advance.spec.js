@@ -13,7 +13,7 @@
  * pause/resume path.
  *
  * Seed data (from playwright-global-setup.js):
- *   Album ID 2001 — "Playwright Album" — 5 tracks, all backed by the same 10-second
+ *   Album ID 2001 — "Playwright Album" — 6 tracks, all backed by the same 10-second
  *   silent WAV file (test-track.wav).  Each track therefore plays for ~10 s.
  *
  *   Track IDs / titles:
@@ -22,6 +22,7 @@
  *     2003 → "Track Three" (queue index 2)
  *     2004 → "Track Four"  (queue index 3)
  *     2005 → "Track Five"  (queue index 4)
+ *     2006 → "Collab Track" (queue index 5)
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -245,13 +246,13 @@ test('natural queue exhaustion → state Stopped and now-playing-title disappear
   await startPlayback(page);
 
   // After play_queue + Play, Track One was consumed.
-  // Remaining queue: [T2, T3, T4, T5] → index 3 = Track Five.
+  // Remaining queue: [T2, T3, T4, T5, Collab Track] → index 4 = Collab Track.
   await page.evaluate(
     async idx => window.__TAURI_INTERNALS__.invoke('skip_to_queue_index', { index: idx }),
-    3,
+    4,
   );
 
-  await waitForTitle(page, 'Track Five');
+  await waitForTitle(page, 'Collab Track');
 
   const stateBeforeEnd = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_playback_state'),
@@ -387,12 +388,12 @@ test('queue shows correct tracks after auto-advance: no ghost of previously-play
     { timeout: 10_000 },
   );
 
-  // Verify initial queue shows 4 items (T2-T5) while T1 is current.
+  // Verify initial queue shows 5 items (T2-T5, Collab Track) while T1 is current.
   // The stale queue has T1 in it but the filter correctly hides it.
   await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
   await page.waitForTimeout(300);
   const initialCount = await page.locator('[data-testid="queue-item"]').count();
-  expect(initialCount).toBe(4); // T2, T3, T4, T5
+  expect(initialCount).toBe(5); // T2, T3, T4, T5, Collab Track
 
   // Seek to near the end of T1 to trigger auto-advance fast.
   await page.evaluate(async () => {
@@ -411,10 +412,10 @@ test('queue shows correct tracks after auto-advance: no ghost of previously-play
   // Allow time for QueueUpdated → loadQueue() → React re-render.
   await page.waitForTimeout(600);
 
-  // Queue must show exactly 3 items: T3, T4, T5.
-  // Without the fix: shows [T1, T3, T4, T5] — 4 items (T1 ghost).
+  // Queue must show exactly 4 items: T3, T4, T5, Collab Track.
+  // Without the fix: shows [T1, T3, T4, T5, Collab Track] — 5 items (T1 ghost).
   const afterCount = await page.locator('[data-testid="queue-item"]').count();
-  expect(afterCount).toBe(3);
+  expect(afterCount).toBe(4);
 
   const texts = await page.locator('[data-testid="queue-item"]').allTextContents();
   const combined = texts.join(' ');
@@ -426,6 +427,7 @@ test('queue shows correct tracks after auto-advance: no ghost of previously-play
   expect(combined).toContain('Track Three');
   expect(combined).toContain('Track Four');
   expect(combined).toContain('Track Five');
+  expect(combined).toContain('Collab Track');
 });
 
 // ================================================================
@@ -455,10 +457,10 @@ test('queue count stays accurate after two consecutive auto-advances', async () 
   await waitForTitle(page, 'Track Three', 15_000);
   await page.waitForTimeout(600);
 
-  // Queue must show exactly 2 items: T4, T5
+  // Queue must show exactly 3 items: T4, T5, Collab Track
   const queueItems = page.locator('[data-testid="queue-item"]');
   const count = await queueItems.count();
-  expect(count).toBe(2);
+  expect(count).toBe(3);
 
   const texts = await queueItems.allTextContents();
   const combined = texts.join(' ');
@@ -467,6 +469,7 @@ test('queue count stays accurate after two consecutive auto-advances', async () 
   expect(combined).not.toContain('Track Three');  // current — not in queue
   expect(combined).toContain('Track Four');
   expect(combined).toContain('Track Five');
+  expect(combined).toContain('Collab Track');
 });
 
 test('auto-advance fires after a pause/resume cycle', async () => {

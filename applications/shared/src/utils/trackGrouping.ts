@@ -16,6 +16,7 @@ export interface TrackForGrouping {
   sampleRate?: number;
   sample_rate?: number;
   // Additional properties that may be present on tracks
+  album_id?: number;
   album_title?: string;
   album?: string;
   file_path?: string;

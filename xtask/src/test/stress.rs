@@ -101,7 +101,11 @@ pub fn run_endurance_tests(duration_override: Option<Duration>, verbose: bool) -
     let actual_duration = start.elapsed();
 
     println!("\n=== Results ===");
-    println!("Duration: {:.2}s ({:.1} min)", actual_duration.as_secs_f64(), actual_duration.as_secs_f64() / 60.0);
+    println!(
+        "Duration: {:.2}s ({:.1} min)",
+        actual_duration.as_secs_f64(),
+        actual_duration.as_secs_f64() / 60.0
+    );
 
     if !status.success() {
         anyhow::bail!("Endurance tests failed");
@@ -212,7 +216,11 @@ pub fn run_all_stress_tests(verbose: bool) -> Result<()> {
     let overall_duration = overall_start.elapsed();
 
     println!("\n=== Overall Results ===");
-    println!("Total duration: {:.2}s ({:.1} min)", overall_duration.as_secs_f64(), overall_duration.as_secs_f64() / 60.0);
+    println!(
+        "Total duration: {:.2}s ({:.1} min)",
+        overall_duration.as_secs_f64(),
+        overall_duration.as_secs_f64() / 60.0
+    );
     println!("✓ All stress tests passed");
 
     Ok(())

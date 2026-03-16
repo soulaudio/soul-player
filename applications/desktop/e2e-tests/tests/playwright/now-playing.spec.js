@@ -11,8 +11,8 @@
  * sidebar PlayerPanel, which is always visible alongside the now-playing page.
  *
  * Seed data (from playwright-global-setup.js):
- *   Album ID 2001 — "Playwright Album" / "Playwright Artist" — 5 tracks × 2-second WAV files
- *   Track IDs 2001–2005, titles: Track One … Track Five
+ *   Album ID 2001 — "Playwright Album" / "Playwright Artist" — 6 tracks × 2-second WAV files
+ *   Track IDs 2001–2005 + 2006, titles: Track One … Track Five + Collab Track
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -281,10 +281,10 @@ test('now playing page queue list shows all album tracks', async () => {
   const queueList = page.locator('[data-testid="now-playing-queue-list"]');
   await expect(queueList).toBeVisible({ timeout: 10_000 });
 
-  // Album has 5 tracks — all should appear in the list
+  // Album has 6 tracks — all should appear in the list
   const items = page.locator('[data-testid^="now-playing-queue-item-"]');
   const count = await items.count();
-  expect(count).toBe(5);
+  expect(count).toBe(6);
 
   // Verify track names appear in the list
   const listText = await queueList.textContent();
@@ -293,6 +293,7 @@ test('now playing page queue list shows all album tracks', async () => {
   expect(listText).toContain('Track Three');
   expect(listText).toContain('Track Four');
   expect(listText).toContain('Track Five');
+  expect(listText).toContain('Collab Track');
 });
 
 // ----------------------------------------------------------------
@@ -451,9 +452,9 @@ test('clicking a track in the queue does not remount the queue list', async () =
   );
   expect(markerAfter).toBe('true');
 
-  // All 5 tracks should still be listed
+  // All 6 tracks should still be listed
   const count = await page.locator('[data-testid^="now-playing-queue-item-"]').count();
-  expect(count).toBe(5);
+  expect(count).toBe(6);
 });
 
 // ----------------------------------------------------------------

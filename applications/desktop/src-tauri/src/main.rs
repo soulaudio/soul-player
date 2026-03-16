@@ -2007,6 +2007,28 @@ async fn get_user_setting(
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+struct LoggingStatus {
+    /// Full example log path (correct for both debug and release builds, uses OS separators).
+    log_path_example: String,
+    /// Whether file logging is active in the current process session.
+    active: bool,
+}
+
+#[tauri::command]
+fn get_logging_status() -> LoggingStatus {
+    let active = FILE_LOGGING_ACTIVE.load(std::sync::atomic::Ordering::SeqCst);
+    let log_path_example = get_app_data_dir()
+        .join("logs")
+        .join("soul-player.log.YYYY-MM-DD")
+        .to_string_lossy()
+        .into_owned();
+    LoggingStatus {
+        log_path_example,
+        active,
+    }
+}
+
 #[tauri::command]
 async fn set_logging_enabled(
     enabled: bool,
@@ -2585,6 +2607,15 @@ fn get_app_data_dir() -> std::path::PathBuf {
     }
 }
 
+/// Holds the non-blocking log writer guard for the lifetime of the process.
+/// Must be stored (not forgotten) so its Drop impl flushes pending records on exit.
+static LOG_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> =
+    std::sync::OnceLock::new();
+
+/// Tracks whether file logging was successfully initialised in this process session.
+static FILE_LOGGING_ACTIVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Initialize logging system with optional file output
 fn init_logging(enable_file_logging: bool) {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -2606,9 +2637,10 @@ fn init_logging(enable_file_logging: bool) {
         let file_appender = tracing_appender::rolling::daily(logs_dir.clone(), "soul-player.log");
         let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-        // Keep the guard alive for the lifetime of the program
-        // This is necessary to ensure logs are flushed to disk
-        std::mem::forget(guard);
+        // Store the guard in a static so it lives for the process lifetime and its
+        // Drop impl still runs on clean exit, flushing any buffered log records.
+        let _ = LOG_GUARD.set(guard);
+        FILE_LOGGING_ACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
 
         // Set up layers: console + file
         // When file logging is enabled, use info level even in release builds
@@ -3353,6 +3385,7 @@ fn main() {
             get_user_settings,
             set_user_setting,
             get_user_setting,
+            get_logging_status,
             set_logging_enabled,
             reset_to_factory_settings,
             // Artwork

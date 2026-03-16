@@ -7,7 +7,7 @@
 import { memo, useRef, useState, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Play, Pause, Disc3, Users, ListMusic, ListPlus, ImagePlus } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { useTranslation } from 'react-i18next'
 import { ArtworkImage } from './ArtworkImage'
 import { ProgressiveImage } from './ProgressiveImage'
@@ -85,7 +85,7 @@ const MediaCardComponent = ({
   onEditArtwork,
 }: MediaCardProps) => {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const { navigate } = useNavigateWithHistory()
   const { isPlaying, currentTrack } = usePlayerPlayback()
   const commands = usePlayerCommands()
   const backend = useBackend()

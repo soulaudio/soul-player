@@ -233,6 +233,7 @@ export function GenrePage() {
               channels: t.channels,
             }))}
             buildQueue={buildQueue}
+            showAlbumArt={true}
             onBeforePlay={async () => {
               if (genre) {
                 await backend.recordContext({

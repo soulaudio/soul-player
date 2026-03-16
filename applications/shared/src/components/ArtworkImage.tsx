@@ -20,6 +20,8 @@ interface ArtworkImageProps {
   priority?: boolean;
   /** When true and artist artwork fails, show blurred album cover + icon overlay instead of plain icon */
   blurredAlbumFallback?: boolean;
+  /** Size of the fallback icon. Defaults to 'lg' (w-12 h-12). Use 'sm' for small thumbnails. */
+  fallbackIconSize?: 'sm' | 'lg';
 }
 
 // Cache for artwork data URLs
@@ -53,11 +55,12 @@ export function clearAllArtworkCache(): void {
   notifyListeners('*');
 }
 
-export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtPath, alt, className, fallbackClassName, fallbackIcon, shape = 'rounded', priority = false, blurredAlbumFallback = false }: ArtworkImageProps) {
+export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artistId, playlistId, coverArtPath, alt, className, fallbackClassName, fallbackIcon, shape = 'rounded', priority = false, blurredAlbumFallback = false, fallbackIconSize = 'lg' }: ArtworkImageProps) {
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
+  const [visible, setVisible] = useState(false);
   const [isInViewport, setIsInViewport] = useState(priority); // Priority items start as visible
   const containerRef = useRef<HTMLDivElement>(null);
   // For artist blurred album fallback
@@ -78,6 +81,7 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
     setArtworkUrl(null);
     setLoading(true);
     setError(false);
+    setVisible(false);
   }, [trackId, albumId, artistId, playlistId, coverArtPath]);
 
   // Subscribe to cache invalidation events
@@ -317,16 +321,24 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
     setFallbackAttempted(false);
   }, [artistId]);
 
+  // Trigger fade-in on next frame after artworkUrl is set
+  useEffect(() => {
+    if (!artworkUrl) return;
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, [artworkUrl]);
+
   // Determine which icon to use for fallback
   const getFallbackIcon = () => {
     const iconType = fallbackIcon || (artistId ? 'users' : playlistId ? 'playlist' : 'music');
+    const iconClass = fallbackIconSize === 'sm' ? 'w-4 h-4 text-muted-foreground' : 'w-12 h-12 text-muted-foreground';
     switch (iconType) {
       case 'users':
-        return <User className="w-12 h-12 text-muted-foreground" />;
+        return <User className={iconClass} />;
       case 'playlist':
-        return <ListMusic className="w-12 h-12 text-muted-foreground" />;
+        return <ListMusic className={iconClass} />;
       default:
-        return <Music className="w-12 h-12 text-muted-foreground" />;
+        return <Music className={iconClass} />;
     }
   };
 
@@ -370,7 +382,10 @@ export const ArtworkImage = memo(function ArtworkImage({ trackId, albumId, artis
   }
 
   return (
-    <div ref={containerRef} className="w-full h-full">
+    <div
+      ref={containerRef}
+      className={`w-full h-full transition-opacity duration-500 ease-out ${visible ? 'opacity-100' : 'opacity-0'}`}
+    >
       <ProgressiveImage
         src={artworkUrl!}
         alt={alt || 'Album artwork'}

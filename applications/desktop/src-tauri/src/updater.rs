@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
@@ -21,6 +21,10 @@ static TEST_INSTALL_DELAY_MS: Mutex<u64> = Mutex::new(0);
 
 /// When true, install_update returns Err in test mode (simulates install failure).
 static TEST_INSTALL_SHOULD_FAIL: Mutex<bool> = Mutex::new(false);
+
+/// Guards against concurrent install_update invocations.
+/// Set to true while an install is in progress; reset on completion or error.
+static INSTALL_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 /// Extract a boolean value from an optional JSON setting, returning `default_value` when the
 /// setting is missing, null, or non-boolean.
@@ -248,6 +252,23 @@ pub async fn emit_test_update_available(app: AppHandle) -> Result<(), String> {
 /// Tauri command to install an available update
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    // Guard against concurrent installs (e.g. user clicking Install multiple times)
+    if INSTALL_IN_PROGRESS
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Err("An installation is already in progress.".to_string());
+    }
+
+    let result = do_install_update(&app).await;
+
+    // Always release the guard, even on error or panic (via drop after await)
+    INSTALL_IN_PROGRESS.store(false, Ordering::SeqCst);
+
+    result
+}
+
+async fn do_install_update(app: &AppHandle) -> Result<(), String> {
     // In E2E test mode: simulate install with optional delay and failure
     if std::env::var("PLAYWRIGHT_TEST_DIR").is_ok() {
         let should_fail = *TEST_INSTALL_SHOULD_FAIL.lock().unwrap();
@@ -270,6 +291,16 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
+    // Log environment context to aid diagnosis of install failures
+    if let Ok(path) = std::env::var("APPIMAGE") {
+        tracing::info!("[UPDATER] APPIMAGE env var: {}", path);
+    } else {
+        tracing::warn!(
+            "[UPDATER] APPIMAGE env var not set — AppImage self-update will likely fail"
+        );
+    }
+    tracing::info!("[UPDATER] Current exe: {:?}", std::env::current_exe().ok());
+
     let updater = app
         .updater()
         .map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
@@ -290,6 +321,8 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
 
     // Track cumulative downloaded bytes for accurate progress reporting.
     // The callback receives individual chunk sizes, NOT cumulative totals.
+    // When content_len is None (no Content-Length header), we emit a pulse
+    // value of 255 to signal indeterminate progress to the frontend.
     let downloaded = AtomicUsize::new(0);
     let app_clone = app.clone();
 
@@ -301,7 +334,9 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
                 let progress = if let Some(total) = content_len {
                     ((total_downloaded as f64 / total as f64) * 100.0).min(100.0) as u8
                 } else {
-                    0
+                    // Indeterminate: pulse between 10-90 based on ~10 MB chunks
+                    let mb = (total_downloaded / (1024 * 1024)) as u8;
+                    10 + (mb % 80)
                 };
                 if let Err(e) = app_clone.emit("update-progress", progress) {
                     tracing::warn!(error = %e, "[UPDATER] Failed to emit progress event");
@@ -314,7 +349,7 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "[UPDATER] Download/install failed");
-            format!("Failed to install update: {}", e)
+            e.to_string()
         })?;
 
     tracing::info!("[UPDATER] Install completed, restarting app");

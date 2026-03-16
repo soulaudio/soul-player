@@ -16,7 +16,7 @@
  *   - The current track is EXCLUDED from the queue list (it is shown in NowPlayingPanel).
  *   - The remaining upcoming tracks are shown REVERSED: the track furthest in the future
  *     appears at the top; the next-up track appears at the bottom.
- *   - With 5 tracks total and Track One playing, 4 queue-items are visible.
+ *   - With 6 tracks total and Track One playing, 5 queue-items are visible.
  *     .nth(0) → Track Five (furthest), .nth(3) → Track Two (next up).
  *   - Queue indices for skipToQueueIndex() are 0-based over the REMAINING queue
  *     (after play() pops the first track). startPlayback() calls clear_add_to_queue
@@ -26,9 +26,10 @@
  *       index 1 = Track Three
  *       index 2 = Track Four
  *       index 3 = Track Five
+ *       index 4 = Collab Track
  *
  * Seed data (from playwright-global-setup.js):
- *   Album ID 2001 — "Playwright Album" / "Playwright Artist" — 5 tracks × 2-second WAV files
+ *   Album ID 2001 — "Playwright Album" / "Playwright Artist" — 6 tracks × 2-second WAV files
  *   Track IDs 2001–2005, titles: Track One … Track Five
  */
 
@@ -183,7 +184,7 @@ async function waitForTitle(p, expected, timeout = 15_000) {
 
 test('Queue sidebar is visible when album is playing', async () => {
   // QueueSection renders with data-testid="queue-sidebar" automatically
-  // when there are upcoming tracks. Track One is playing so 4 tracks remain.
+  // when there are upcoming tracks. Track One is playing so 5 tracks remain.
   const sidebar = page.locator('[data-testid="queue-sidebar"]');
   await expect(sidebar).toBeVisible({ timeout: 10_000 });
 
@@ -195,28 +196,29 @@ test('Queue sidebar is visible when album is playing', async () => {
 });
 
 // ================================================================
-// Test 2: Queue sidebar shows all 4 upcoming tracks when album is playing
+// Test 2: Queue sidebar shows all 5 upcoming tracks when album is playing
 //
 // QueueSection excludes the current track (Track One) from its list and
-// shows the remaining 4 tracks (Tracks Two through Five).
+// shows the remaining 5 tracks (Tracks Two through Five plus Collab Track).
 // ================================================================
 
-test('Queue sidebar shows 4 upcoming tracks when playing from Track One', async () => {
+test('Queue sidebar shows 5 upcoming tracks when playing from Track One', async () => {
   // Wait for the queue section to appear and populate
   await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
   await page.waitForTimeout(300);
 
   const items = page.locator('[data-testid="queue-item"]');
   const count = await items.count();
-  expect(count).toBe(4);
+  expect(count).toBe(5);
 
-  // The full text of the queue section must contain all 4 upcoming track titles
+  // The full text of the queue section must contain all 5 upcoming track titles
   const sidebar = page.locator('[data-testid="queue-sidebar"]');
   const text = await sidebar.textContent();
   expect(text).toContain('Track Two');
   expect(text).toContain('Track Three');
   expect(text).toContain('Track Four');
   expect(text).toContain('Track Five');
+  expect(text).toContain('Collab Track');
 
   // The current track (Track One) is displayed in NowPlayingPanel — NOT in the queue list
   // The queue-sidebar itself must NOT show "Track One" as a queue-item
@@ -246,12 +248,13 @@ test('Queue sidebar excludes the currently-playing track from the list', async (
   const currentInQueue = allTexts.some(t => t.includes('Track One'));
   expect(currentInQueue).toBe(false);
 
-  // But all the other 4 tracks must be present
+  // But all the other 5 tracks must be present
   const combined = allTexts.join(' ');
   expect(combined).toContain('Track Two');
   expect(combined).toContain('Track Three');
   expect(combined).toContain('Track Four');
   expect(combined).toContain('Track Five');
+  expect(combined).toContain('Collab Track');
 });
 
 // ================================================================
@@ -307,7 +310,7 @@ test('Queue sidebar shows 0 items after stop_playback', async () => {
   // Verify queue is visible while playing
   await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
   const initialCount = await page.locator('[data-testid="queue-item"]').count();
-  expect(initialCount).toBe(4);
+  expect(initialCount).toBe(5);
 
   // Stop playback
   await page.evaluate(async () => {
@@ -335,14 +338,14 @@ test('Queue sidebar shows 0 items after stop_playback', async () => {
 // ================================================================
 // Test 5b: Queue repopulates correctly after restarting playback
 //
-// After stop → restart, the queue should show 4 upcoming tracks again.
+// After stop → restart, the queue should show 5 upcoming tracks again.
 // This ensures the "clear on stop + repopulate on play" cycle works.
 // ================================================================
 
 test('Queue repopulates after stop then restart playback', async () => {
-  // Verify 4 items while playing
+  // Verify 5 items while playing
   await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
-  expect(await page.locator('[data-testid="queue-item"]').count()).toBe(4);
+  expect(await page.locator('[data-testid="queue-item"]').count()).toBe(5);
 
   // Stop playback
   await page.evaluate(async () => {
@@ -363,11 +366,11 @@ test('Queue repopulates after stop then restart playback', async () => {
   // Restart playback from Track One
   await startPlayback(page);
 
-  // Queue must show 4 items again
+  // Queue must show 5 items again
   await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
   await page.waitForTimeout(300);
   const afterRestartCount = await page.locator('[data-testid="queue-item"]').count();
-  expect(afterRestartCount).toBe(4);
+  expect(afterRestartCount).toBe(5);
 });
 
 // ================================================================
@@ -376,16 +379,16 @@ test('Queue repopulates after stop then restart playback', async () => {
 // When Track One finishes and Track Two begins playing:
 //  - Track Two disappears from the queue list (now the current track)
 //  - Track One is no longer in the queue (already played)
-//  - Only Tracks Three, Four, Five remain — 3 items total
+//  - Only Tracks Three, Four, Five, and Collab Track remain — 4 items total
 // ================================================================
 
 test('Queue sidebar shrinks by 1 after advancing to the next track', async () => {
   await page.waitForSelector('[data-testid="queue-sidebar"]', { timeout: 10_000 });
   await page.waitForTimeout(300);
 
-  // Confirm we start with 4 items
+  // Confirm we start with 5 items
   const initialCount = await page.locator('[data-testid="queue-item"]').count();
-  expect(initialCount).toBe(4);
+  expect(initialCount).toBe(5);
 
   // Skip to Track Two via the next button
   await page.click('[data-testid="next-button"]');
@@ -396,18 +399,19 @@ test('Queue sidebar shrinks by 1 after advancing to the next track', async () =>
   // Allow the React store and QueueSection to re-render with the updated queue
   await page.waitForTimeout(500);
 
-  // Now Track Two is playing, so only Tracks Three, Four, Five remain — 3 items
+  // Now Track Two is playing, so only Tracks Three, Four, Five, Collab Track remain — 4 items
   const newCount = await page.locator('[data-testid="queue-item"]').count();
-  expect(newCount).toBe(3);
+  expect(newCount).toBe(4);
 
   // Track Two must no longer appear in the queue list
   const texts = await page.locator('[data-testid="queue-item"]').allTextContents();
   const hasTrackTwo = texts.some(t => t.includes('Track Two'));
   expect(hasTrackTwo).toBe(false);
 
-  // Track Three through Five must still be present
+  // Track Three through Collab Track must still be present
   const combined = texts.join(' ');
   expect(combined).toContain('Track Three');
   expect(combined).toContain('Track Four');
   expect(combined).toContain('Track Five');
+  expect(combined).toContain('Collab Track');
 });

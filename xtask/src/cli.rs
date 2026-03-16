@@ -196,6 +196,52 @@ pub enum TestCommands {
         #[arg(long)]
         suite: Option<String>,
     },
+
+    /// Stress testing commands
+    #[command(subcommand)]
+    Stress(StressCommands),
+}
+
+#[derive(Subcommand)]
+pub enum StressCommands {
+    /// Run lock contention stress tests
+    Contention {
+        /// Show detailed output
+        #[arg(long)]
+        verbose: bool,
+    },
+
+    /// Run endurance stress tests
+    Endurance {
+        /// Test duration in minutes (default: 5)
+        #[arg(long)]
+        duration: Option<u64>,
+
+        /// Show detailed output
+        #[arg(long)]
+        verbose: bool,
+    },
+
+    /// Run corrupted file recovery tests
+    Corrupted {
+        /// Show detailed output
+        #[arg(long)]
+        verbose: bool,
+    },
+
+    /// Run performance benchmarks
+    Bench {
+        /// Show detailed output
+        #[arg(long)]
+        verbose: bool,
+    },
+
+    /// Run all stress tests (quick suite)
+    All {
+        /// Show detailed output
+        #[arg(long)]
+        verbose: bool,
+    },
 }
 
 #[derive(Subcommand)]

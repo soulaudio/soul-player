@@ -184,7 +184,8 @@ function seedDatabase() {
       VALUES (?, ?, ?, ?, ?)
     `).run('3001', 'Favorites', '1', now, now);
 
-    // Seed a genre and link all 5 tracks to it.
+    // Seed a genre and link the first 5 album-2001 tracks to it.
+    // Track 2006 (Collab Track) is added to the genre after it's inserted below.
     // SQLite allows explicit INTEGER PRIMARY KEY inserts even with AUTOINCREMENT,
     // as long as the value hasn't been used before.
     db.prepare(`
@@ -234,6 +235,18 @@ function seedDatabase() {
     // Primary: Playwright Artist (position 0); Featured: Featured Artist (position 1)
     insertTrackArtist.run(String(2006), 2001, 0);
     insertTrackArtist.run(String(2006), 2003, 1);
+    // Add Collab Track to genre 4001 (track now exists)
+    insertTrackGenre.run(2006, 4001);
+
+    // Seed Favorites playlist with all 6 album-2001 tracks
+    // (must run after all tracks including Collab Track 2006 are inserted)
+    const insertPlaylistTrack = db.prepare(
+      'INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)'
+    );
+    for (let i = 0; i < 6; i++) {
+      const tid = i < 5 ? 2001 + i : 2006;
+      insertPlaylistTrack.run('3001', tid, i);
+    }
 
     // Seed a library_sources record so the app skips the onboarding screen.
     // The desktop app uses device_id = 'desktop-local' (hardcoded in library_settings.rs).

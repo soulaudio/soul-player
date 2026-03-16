@@ -15,8 +15,8 @@
  *     through the UI.
  *
  * Seed data (from playwright-global-setup.js):
- *   Album ID 2001 — "Playwright Album" — 5 tracks × 2-second WAV files
- *   Track IDs 2001–2005, titles: Track One … Track Five
+ *   Album ID 2001 — "Playwright Album" — 6 tracks × 2-second WAV files
+ *   Track IDs 2001–2006, titles: Track One … Track Five, Collab Track
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -338,7 +338,7 @@ test('track auto-advances to the next track after the current one finishes', asy
 // ----------------------------------------------------------------
 // Test 7: Queue ends → isPlaying becomes false  (BUG-3 / BUG-6 regression)
 //
-// With 5 tracks × 10 s each waiting for all to auto-advance would take 50+ seconds.
+// With 6 tracks × 10 s each waiting for all to auto-advance would take 60+ seconds.
 // Instead we jump directly to the last track using skipToQueueIndex(), then
 // wait for it to finish. After the queue is exhausted the backend emits
 // TrackChanged(null). The regression was that isPlaying was NOT reset to false, so
@@ -346,25 +346,25 @@ test('track auto-advances to the next track after the current one finishes', asy
 //
 // Queue index note: startPlayback() calls play_queue() which calls pm.play().
 // pm.play() immediately pops Track One from the queue (to emit LoadNext).
-// The REMAINING queue is therefore [T2, T3, T4, T5] at indices 0–3.
-// Track Five is at index 3, not 4 — using 4 returns QueueEmpty.
+// The REMAINING queue is therefore [T2, T3, T4, T5, Collab Track] at indices 0–4.
+// Collab Track is at index 4, not 5 — using 5 returns QueueEmpty.
 // ----------------------------------------------------------------
 
 test('BUG-3/BUG-6: isPlaying resets to false when the queue is exhausted', async () => {
   await startPlayback(page);
 
   // After startPlayback, Track One has been popped by pm.play().
-  // Remaining queue: [Track Two, Track Three, Track Four, Track Five] → index 3 = Track Five.
-  await page.evaluate(async (idx) => window.__TAURI_INTERNALS__.invoke('skip_to_queue_index', { index: idx }), 3);
+  // Remaining queue: [Track Two, Track Three, Track Four, Track Five, Collab Track] → index 4 = Collab Track.
+  await page.evaluate(async (idx) => window.__TAURI_INTERNALS__.invoke('skip_to_queue_index', { index: idx }), 4);
 
-  // Wait for the now-playing title to reflect Track Five (use .text-sm selector)
-  await waitForTitle(page, 'Track Five');
+  // Wait for the now-playing title to reflect Collab Track (use .text-sm selector)
+  await waitForTitle(page, 'Collab Track');
 
-  // Verify we are actually playing Track Five before we wait for it to end
+  // Verify we are actually playing Collab Track before we wait for it to end
   const stateBeforeEnd = await page.evaluate(async () => window.__TAURI_INTERNALS__.invoke('get_playback_state'));
   expect(stateBeforeEnd).toBe('Playing');
 
-  // Track Five is 10 seconds long — wait 11 seconds for it to finish naturally.
+  // Collab Track is 10 seconds long — wait 11 seconds for it to finish naturally.
   // Allowing the track to exhaust cleanly (rather than stopping early via stop_playback)
   // avoids a race condition between the natural end-of-track callback and a manual stop.
   await page.waitForTimeout(11_000);

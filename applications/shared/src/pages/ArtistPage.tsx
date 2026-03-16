@@ -10,6 +10,7 @@ import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
 import { Play, Users, Disc3, Pencil } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
+import { AlbumCard } from '../components/AlbumCard'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { EditArtworkDialog } from '../components/EditArtworkDialog'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
@@ -22,58 +23,9 @@ import { usePlayerCommands, type QueueTrack, type QueueContext } from '../contex
 import { usePlatform } from '../contexts/PlatformContext'
 import { useArtistWithData, useArtistArtwork } from '../hooks/queries/useArtistQueries'
 import { useDeleteTrack } from '../hooks/queries/useTrackMutations'
+import { useTrackNumberDisplay } from '../hooks/useTrackNumberDisplay'
 import { getDeduplicatedTracks } from '../utils/trackGrouping'
 import { debug } from '../utils/debug';
-
-// Album Card for artist page
-function ArtistAlbumCard({
-  album,
-  onClick,
-  isDesktop,
-  priority = false,
-}: {
-  album: BackendAlbum
-  onClick: () => void
-  isDesktop: boolean
-  priority?: boolean
-}) {
-  const { t } = useTranslation()
-
-  const coverUrl = album.cover_art_path
-  const hasDesktopArtwork = isDesktop && typeof album.id === 'number'
-
-  return (
-    <div
-      className="group cursor-pointer pb-2 transition-opacity"
-      onClick={onClick}
-      data-testid={`artist-album-card-${album.id}`}
-    >
-      <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center overflow-hidden shadow group-hover:shadow-md transition-shadow">
-        {hasDesktopArtwork ? (
-          <ArtworkImage
-            albumId={album.id}
-            alt={album.title}
-            className="w-full h-full object-cover"
-            priority={priority}
-          />
-        ) : coverUrl ? (
-          <img
-            src={coverUrl}
-            alt={album.title}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <Disc3 className="w-12 h-12 text-muted-foreground" />
-        )}
-      </div>
-      <p className="font-medium truncate group-hover:opacity-[var(--hover-text-opacity)] transition-opacity">{album.title}</p>
-      <p className="text-sm text-muted-foreground truncate">
-        {album.year && `${album.year} • `}
-        {t('library.tracks', { count: album.track_count || 0 })}
-      </p>
-    </div>
-  )
-}
 
 export function ArtistPage() {
   const { t } = useTranslation()
@@ -93,6 +45,8 @@ export function ArtistPage() {
 
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
   const [artworkVersion, setArtworkVersion] = useState(0)
+
+  const trackNumberDisplay = useTrackNumberDisplay()
 
   // Discography view toggle (grid or list)
   const [discographyView, setDiscographyView] = useState<'grid' | 'list'>(() => {
@@ -252,19 +206,14 @@ export function ArtistPage() {
                   alt={artist.name}
                   className="w-full h-full object-cover"
                 />
-              ) : albums.length > 0 && isDesktop ? (
-                <>
-                  <ArtworkImage
-                    albumId={albums[0].id}
-                    alt={artist.name}
-                    className="w-full h-full object-cover blur-xl scale-125 brightness-50"
-                    fallbackClassName="w-full h-full bg-muted"
-                    priority
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Users className="w-12 h-12 text-white/80 drop-shadow-lg" />
-                  </div>
-                </>
+              ) : isDesktop ? (
+                <ArtworkImage
+                  artistId={artistId}
+                  alt={artist.name}
+                  blurredAlbumFallback
+                  fallbackClassName="w-full h-full flex items-center justify-center"
+                  priority
+                />
               ) : (
                 <Users className="w-16 h-16 text-muted-foreground" />
               )}
@@ -323,6 +272,7 @@ export function ArtistPage() {
                 sampleRate: t.sample_rate,
                 channels: t.channels,
               }))}
+              showAlbumArt={true}
               virtualized={false}
               buildQueue={buildQueue}
               renderMenu={(track) => {
@@ -360,11 +310,9 @@ export function ArtistPage() {
             discographyView === 'grid' ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                 {albums.map((album, index) => (
-                  <ArtistAlbumCard
+                  <AlbumCard
                     key={album.id}
                     album={album}
-                    onClick={() => handleAlbumClick(album)}
-                    isDesktop={isDesktop}
                     priority={index < 20}
                   />
                 ))}
@@ -373,6 +321,7 @@ export function ArtistPage() {
               <DiscographyListView
                 albums={albums}
                 onAlbumClick={handleAlbumClick}
+                trackNumberDisplay={trackNumberDisplay}
               />
             )
           ) : (

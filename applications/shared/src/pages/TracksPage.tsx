@@ -248,6 +248,7 @@ export function TracksPage() {
             channels: t.channels,
           }))}
           buildQueue={buildQueue}
+          showAlbumArt={true}
           virtualized={filteredTracks.length > 100}
           virtualItemSize={56}
           renderMenu={(track) => {

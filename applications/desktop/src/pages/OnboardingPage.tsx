@@ -79,9 +79,9 @@ const THEMES = [
 
 export function OnboardingPage({ onComplete }: OnboardingPageProps) {
   const { t, i18n } = useTranslation();
-  const { setTheme } = useTheme();
+  const { setTheme, currentTheme } = useTheme();
   const [step, setStep] = useState<Step>('theme');
-  const [selectedTheme, setSelectedTheme] = useState<string>('dark');
+  const [selectedTheme, setSelectedTheme] = useState<string>(currentTheme.id);
   const [setupType, setSetupType] = useState<SetupType>(null);
   const [loading, setLoading] = useState(false);
 

@@ -4,7 +4,7 @@
  * Covers the genre detail page layout, track listing, and playback flows:
  *
  *   1. Genre detail page loads with correct title
- *   2. Genre track list shows all 5 seeded tracks
+ *   2. Genre track list shows all 6 seeded tracks
  *   3. Play All button starts playback from the first track
  *   4. Double-clicking a track row starts playback from that track
  *   5. Back button navigates away from the genre page
@@ -20,8 +20,8 @@
  *
  * Seed data (from playwright-global-setup.js):
  *   Genre ID 4001 — "Playwright Genre"
- *   Track IDs 2001–2005, titles: Track One … Track Five (2-second WAV files)
- *   All 5 tracks are linked to genre 4001 via track_genres junction table.
+ *   Track IDs 2001–2005 + 2006 (Collab Track), titles: Track One … Track Five + Collab Track
+ *   All 6 tracks are linked to genre 4001 via track_genres junction table.
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -111,7 +111,7 @@ async function navigateToGenrePage(p) {
 // Helper: start playback of genre 4001 tracks by invoking play_queue directly.
 //
 // This bypasses the GenrePage's handlePlayAll() branching logic and directly
-// puts all 5 seeded tracks into the queue, starting from Track One.
+// puts all 6 seeded tracks into the queue, starting from Track One.
 // ----------------------------------------------------------------
 
 async function startPlayback(p) {
@@ -220,17 +220,17 @@ test('genre detail page loads with correct title', async () => {
 // Test 2: Genre track list shows all 5 seeded tracks
 // ----------------------------------------------------------------
 
-test('genre track list shows all 5 seeded tracks', async () => {
+test('genre track list shows all 6 seeded tracks', async () => {
   await navigateToGenrePage(page);
 
   // Wait for the track list container (rendered by the shared TrackList component)
   await page.waitForSelector('[data-testid="track-list"]', { timeout: 10_000 });
 
   const trackRows = page.locator('[data-testid="track-row"]');
-  await expect(trackRows).toHaveCount(5, { timeout: 10_000 });
+  await expect(trackRows).toHaveCount(6, { timeout: 10_000 });
 
   // Verify each expected track title is present in a row
-  const expectedTitles = ['Track One', 'Track Two', 'Track Three', 'Track Four', 'Track Five'];
+  const expectedTitles = ['Track One', 'Track Two', 'Track Three', 'Track Four', 'Track Five', 'Collab Track'];
   for (const title of expectedTitles) {
     const row = trackRows.filter({ hasText: title });
     await expect(row).toBeVisible({ timeout: 5_000 });
@@ -241,13 +241,13 @@ test('genre track list shows all 5 seeded tracks', async () => {
 // Test 3: Track count badge shows 5 tracks
 // ----------------------------------------------------------------
 
-test('genre track count shows 5 tracks', async () => {
+test('genre track count shows 6 tracks', async () => {
   await navigateToGenrePage(page);
 
   // The genre-track-count element shows "{count} tracks • {duration}"
   const countEl = page.locator('[data-testid="genre-track-count"]');
   await expect(countEl).toBeVisible({ timeout: 5_000 });
-  await expect(countEl).toContainText('5');
+  await expect(countEl).toContainText('6');
 });
 
 // ----------------------------------------------------------------

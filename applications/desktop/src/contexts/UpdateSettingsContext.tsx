@@ -43,6 +43,7 @@ export function UpdateSettingsProvider({ children }: { children: ReactNode }) {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isInstalling, setIsInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState(0);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -122,25 +123,29 @@ export function UpdateSettingsProvider({ children }: { children: ReactNode }) {
   }, [t]);
 
   const handleInstallUpdate = useCallback(async () => {
+    if (isInstalling) return;
     setIsInstalling(true);
     setInstallProgress(0);
+    setInstallError(null);
     try {
       await invoke('install_update');
       toast.success(t('settings.updateInstalledRestarting'));
       setShowUpdateDialog(false);
     } catch (error) {
-      debug.error('Failed to install update:', error);
-      toast.error(t('settings.updateInstallFailed'));
+      const message = typeof error === 'string' ? error : String(error);
+      debug.error('Failed to install update:', message);
+      setInstallError(message);
       setIsInstalling(false);
       setInstallProgress(0);
     }
-  }, [t]);
+  }, [t, isInstalling]);
 
   const handleCloseUpdateDialog = useCallback(() => {
     if (!isInstalling) {
       setShowUpdateDialog(false);
       setUpdateInfo(null);
       setInstallProgress(0);
+      setInstallError(null);
     }
   }, [isInstalling]);
 
@@ -156,6 +161,7 @@ export function UpdateSettingsProvider({ children }: { children: ReactNode }) {
         updateInfo={updateInfo}
         isInstalling={isInstalling}
         progress={installProgress}
+        installError={installError}
       />
     </UpdateSettingsContext.Provider>
   );

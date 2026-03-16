@@ -6,7 +6,7 @@ export type TrackNumberDisplay = 'hide' | 'show' | 'vinyl'
 
 export const TRACK_NUMBER_DISPLAY_EVENT = 'track-number-display-changed'
 export const TRACK_NUMBER_DISPLAY_KEY = 'ui.track_number_display'
-export const TRACK_NUMBER_DISPLAY_DEFAULT: TrackNumberDisplay = 'vinyl'
+export const TRACK_NUMBER_DISPLAY_DEFAULT: TrackNumberDisplay = 'show'
 
 export function useTrackNumberDisplay(): TrackNumberDisplay {
   const backend = useBackend()

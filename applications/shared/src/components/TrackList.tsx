@@ -9,6 +9,7 @@ import type { QueueTrack } from '../contexts/PlayerCommandsContext';
 import { Tooltip } from './ui/Tooltip';
 import { ArtistLinks } from './ArtistLink';
 import { AlbumLink } from './AlbumLink';
+import { ArtworkImage } from './ArtworkImage';
 import { debug } from '../utils/debug';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -75,6 +76,8 @@ interface TrackListProps {
   vinylSides?: boolean;
   /** Optional async callback invoked before playback starts, e.g. to record context */
   onBeforePlay?: (clickedTrack: Track) => Promise<void>;
+  /** Show small album art thumbnail to the left of the track title */
+  showAlbumArt?: boolean;
 }
 
 function formatDuration(seconds?: number): string {
@@ -330,6 +333,7 @@ interface TrackRowProps {
   renderMenu?: (track: Track) => React.ReactNode;
   showTrackNumber: boolean;
   vinylSides: boolean;
+  showAlbumArt: boolean;
   t: TFunction;
 }
 
@@ -348,6 +352,7 @@ const TrackRowComponent = ({
   renderMenu,
   showTrackNumber,
   vinylSides,
+  showAlbumArt,
   t,
 }: TrackRowProps) => {
   const activeVersion = getActiveVersion(group);
@@ -360,7 +365,7 @@ const TrackRowComponent = ({
 
   return (
     <div
-      className={`grid ${gridCols} gap-4 px-4 py-3 hover:bg-foreground/[var(--hover-bg-opacity)] border-b last:border-b-0 transition-colors group ${
+      className={`grid ${gridCols} gap-4 px-4 py-3 hover:px-2 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors group ${
         isCurrentTrack ? 'bg-accent/20' : ''
       } ${isUnavailable ? 'opacity-60' : ''}`}
       data-testid="track-row"
@@ -399,8 +404,47 @@ const TrackRowComponent = ({
       )}
 
       {/* Title (with or without Play button depending on showTrackNumber) */}
-      <div className={`flex items-center min-w-0 ${!showTrackNumber && (isHovered || isCurrentTrack || isUnavailable) ? 'gap-3' : ''}`}>
-        {!showTrackNumber && (isHovered || isCurrentTrack || isUnavailable) && (
+      <div className={`flex items-center min-w-0 ${
+        showAlbumArt
+          ? 'gap-2'
+          : (!showTrackNumber && (isHovered || isCurrentTrack || isUnavailable) ? 'gap-3' : '')
+      }`}>
+        {/* Album art thumbnail (shown when showAlbumArt=true) */}
+        {showAlbumArt && (
+          <div className="relative w-8 h-8 flex-shrink-0 rounded-lg overflow-hidden">
+            <ArtworkImage
+              albumId={activeVersion.albumId}
+              className="w-full h-full object-cover"
+              fallbackClassName="w-full h-full flex items-center justify-center bg-muted"
+              fallbackIcon="music"
+              fallbackIconSize="sm"
+            />
+            {!showTrackNumber && !isUnavailable && (isHovered || isCurrentTrack) && (
+              <button
+                onClick={() => (showPauseButton ? onPause() : onPlay(group))}
+                onMouseDown={(e) => e.preventDefault()}
+                className="absolute inset-0 flex items-center justify-center bg-black/50 transition-colors"
+                aria-label={showPauseButton ? t('playback.pause') : t('playback.play')}
+              >
+                {showPauseButton ? (
+                  <Pause className="w-3 h-3 fill-current text-white" />
+                ) : (
+                  <Play className="w-3 h-3 fill-current text-white" />
+                )}
+              </button>
+            )}
+            {!showTrackNumber && isUnavailable && (
+              <Tooltip content={t('trackList.fileNotFound')} position="right">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                </div>
+              </Tooltip>
+            )}
+          </div>
+        )}
+
+        {/* Play button (when no album art and no track number) */}
+        {!showAlbumArt && !showTrackNumber && (isHovered || isCurrentTrack || isUnavailable) && (
           <>
             {isUnavailable ? (
               <Tooltip content={t('trackList.fileNotFound')} position="right">
@@ -424,6 +468,7 @@ const TrackRowComponent = ({
             )}
           </>
         )}
+
         <span
           className={`truncate ${isCurrentTrack ? 'text-primary font-medium' : ''} ${isUnavailable ? 'line-through' : ''}`}
         >
@@ -502,6 +547,7 @@ export function TrackList({
   showTrackNumber = false,
   vinylSides = false,
   onBeforePlay,
+  showAlbumArt = false,
 }: TrackListProps) {
   const { t } = useTranslation();
   const [hoveredGroupKey, setHoveredGroupKey] = useState<string | null>(null);
@@ -668,6 +714,7 @@ export function TrackList({
                     renderMenu={renderMenu}
                     showTrackNumber={showTrackNumber}
                     vinylSides={vinylSides}
+                    showAlbumArt={showAlbumArt}
                     t={t}
                   />
                 </div>
@@ -732,6 +779,7 @@ export function TrackList({
               renderMenu={renderMenu}
               showTrackNumber={showTrackNumber}
               vinylSides={vinylSides}
+              showAlbumArt={showAlbumArt}
               t={t}
             />
           );

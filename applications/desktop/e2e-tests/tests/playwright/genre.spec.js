@@ -10,8 +10,8 @@
  * Seed data (from playwright-global-setup.js):
  *   Genre ID 4001 — "Playwright Genre"
  *   Album ID 2001 — "Playwright Album"
- *   Track IDs 2001–2005, titles: Track One … Track Five (2-second WAV files)
- *   All 5 tracks are linked to genre 4001 via track_genres junction table.
+ *   Track IDs 2001–2005 + 2006 (Collab Track), titles: Track One … Track Five + Collab Track
+ *   All 6 tracks are linked to genre 4001 via track_genres junction table.
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -64,7 +64,7 @@ test('nav-genres navigates to genres list page', async () => {
 
   const text = await page.textContent('[data-testid="genre-card-4001"]');
   expect(text).toContain('Playwright Genre');
-  expect(text).toMatch(/5\s*tracks?/i);
+  expect(text).toMatch(/6\s*tracks?/i);
 });
 
 // ── Test 2: clicking a genre card navigates to the genre detail page ──────────
@@ -78,10 +78,10 @@ test('clicking a genre card navigates to genre detail page', async () => {
   // Wait for the genre detail page to render
   await page.waitForSelector('[data-testid="genre-detail-page"]', { timeout: 10_000 });
 
-  // Track list with 5 rows must be present
+  // Track list with 6 rows must be present
   await page.waitForSelector('[data-testid="track-list"]', { timeout: 10_000 });
   const rows = await page.$$('[data-testid="track-row"]');
-  expect(rows.length).toBe(5);
+  expect(rows.length).toBe(6);
 });
 
 // ── Test 3: albums page genre filter shows only matching albums ───────────────
@@ -129,7 +129,7 @@ test('tracks page genre filter shows only matching tracks', async () => {
   // After click the chip testid changes to genre-chip-4001-active
   await page.waitForSelector('[data-testid="genre-chip-4001-active"]', { timeout: 5_000 });
 
-  // Should show exactly 5 tracks (all 5 seeded tracks belong to genre 4001)
+  // Should show exactly 6 tracks (all 6 seeded tracks belong to genre 4001)
   const rows = await page.$$('[data-testid="track-row"]');
-  expect(rows.length).toBe(5);
+  expect(rows.length).toBe(6);
 });
