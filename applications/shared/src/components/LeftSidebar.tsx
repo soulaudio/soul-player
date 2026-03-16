@@ -1,18 +1,15 @@
-'use client';
-
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   useCurrentTrack,
   useIsPlaying,
   useVolume,
-  usePlayerModes,
 } from '../stores/player';
 import { usePlayerCommands, usePlaybackEvents, type QueueTrack } from '../contexts/PlayerCommandsContext';
 import { cn } from '../lib/utils';
 import { usePlatform } from '../contexts/PlatformContext';
 import { useBackend } from '../contexts/BackendContext';
-import { useResizableSidebar } from '../hooks/useResizableSidebar';
+import { useSidebarState } from '../contexts/SidebarStateContext';
 import { debug } from '../utils/debug';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,9 +17,8 @@ import {
   QueueSection,
   PlayerPanel,
   SettingsFooter,
-  type ShuffleMode,
-  type RepeatMode,
 } from './sidebar';
+import { CollapsedSidebarStrip } from './CollapsedSidebarStrip';
 
 interface LeftSidebarProps {
   /** Callback when the "Add to Playlist" button is clicked */
@@ -40,16 +36,11 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const currentTrack = useCurrentTrack();
   const isPlaying = useIsPlaying();
   const volume = useVolume();
-  const { shuffleMode, repeatMode, setShuffleMode, setRepeatMode } = usePlayerModes();
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
 
-  // Resizable sidebar hook
-  const { width, isResizing, handleMouseDown, resizableRef } = useResizableSidebar({
-    minWidth: 240,
-    maxWidth: 480,
-    defaultWidth: 288,
-  });
+  // Sidebar state (width, collapsed, resize)
+  const { width, isCollapsed, isResizing, handleMouseDown, expand, resizableRef } = useSidebarState();
 
   const queueScrollRef = useRef<HTMLDivElement>(null);
 
@@ -148,19 +139,17 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     }
   };
 
-  const handleShuffleModeChange = (mode: ShuffleMode) => {
-    setShuffleMode(mode);
-  };
-
-  const handleRepeatModeChange = (mode: RepeatMode) => {
-    setRepeatMode(mode);
-  };
+  // When collapsed — render only the thin strip
+  if (isCollapsed) {
+    return <CollapsedSidebarStrip onExpand={expand} />;
+  }
 
   return (
     <div
       ref={resizableRef}
       className="bg-card border-r border-border flex flex-col h-full relative"
       style={{ width: `${width}px` }}
+      data-collapsed={isCollapsed}
     >
       {/* Resize Handle */}
       <div
@@ -170,6 +159,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         )}
         onMouseDown={handleMouseDown}
         title={t('sidebar.resize', 'Resize sidebar')}
+        data-testid="sidebar-resize-handle"
       >
         <div
           className={cn(
@@ -207,13 +197,9 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         }
         isPlaying={isPlaying}
         volume={volume}
-        shuffleMode={shuffleMode}
-        repeatMode={repeatMode}
         canCreatePlaylists={features.canCreatePlaylists}
         onTrackClick={() => navigate('/now-playing')}
         onAddToPlaylist={onAddToPlaylist}
-        onShuffleModeChange={handleShuffleModeChange}
-        onRepeatModeChange={handleRepeatModeChange}
       />
 
       {/* Settings Footer - bottom of sidebar */}
