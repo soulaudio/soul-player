@@ -28,12 +28,14 @@ export function NowPlayingFloating() {
   if (!isCollapsed || !currentTrack) return null;
 
   return (
+    // Outer: full-width fixed strip at bottom — no overflow possible
     <div
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100vw-24px)] max-w-[820px]"
+      className="fixed bottom-0 left-0 right-0 z-50 flex justify-center px-4 pb-4"
       data-testid="now-playing-floating"
     >
-      <div className="bg-card border border-border rounded-xl shadow-lg px-4 py-3">
-        <div className="flex items-center gap-4">
+      {/* Card: max-width constrained, fills available width */}
+      <div className="w-full max-w-[820px] bg-card border border-border rounded-xl shadow-lg px-4 py-3 overflow-hidden">
+        <div className="flex items-center gap-3 min-w-0">
 
           {/* Album artwork */}
           <ArtworkImage
@@ -44,8 +46,8 @@ export function NowPlayingFloating() {
             fallbackIconSize="sm"
           />
 
-          {/* Track title + artist — fixed width so controls always stay centered */}
-          <div className="w-44 flex-shrink-0 min-w-0">
+          {/* Track title + artist */}
+          <div className="w-36 flex-shrink-0 overflow-hidden">
             <p
               className="text-sm font-semibold truncate"
               data-testid="floating-now-playing-title"
@@ -60,8 +62,8 @@ export function NowPlayingFloating() {
             </p>
           </div>
 
-          {/* Center: controls stacked above progress bar */}
-          <div className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+          {/* Center: controls above progress bar, fills remaining space */}
+          <div className="flex-1 flex flex-col gap-1 min-w-0 overflow-hidden">
             <PlaybackControls
               isPlaying={isPlaying}
               hasCurrentTrack={true}
@@ -73,7 +75,7 @@ export function NowPlayingFloating() {
               onShuffleToggle={handlers.onShuffleToggle}
               onRepeatToggle={handlers.onRepeatToggle}
             />
-            <div data-testid="floating-progress-bar" className="w-full">
+            <div data-testid="floating-progress-bar">
               <ProgressBar />
             </div>
           </div>
