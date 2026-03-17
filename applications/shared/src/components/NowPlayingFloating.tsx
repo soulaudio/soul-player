@@ -9,7 +9,6 @@ import { PlaybackControls } from './sidebar/PlaybackControls';
 import { usePlaybackHandlers } from '../hooks/usePlaybackHandlers';
 import { debug } from '../utils/debug';
 import { Volume2, VolumeX } from 'lucide-react';
-import { cn } from '../lib/utils';
 
 /**
  * NowPlayingFloating — compact vertical card anchored bottom-center,
@@ -96,14 +95,14 @@ export function NowPlayingFloating() {
   if (!isCollapsed || !currentTrack) return null;
 
   const displayVolume = isMuted ? 0 : volume;
-  const subtitle = [currentTrack.artist, currentTrack.album].filter(Boolean).join(' • ');
+  const artist = currentTrack.artist || currentTrack.album || '';
 
   return (
     <div
       className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[min(320px,calc(100vw-32px))]"
       data-testid="now-playing-floating"
     >
-      <div className="bg-card border border-border rounded-xl shadow-lg p-4 space-y-2.5">
+      <div className="bg-card border border-border rounded-xl shadow-lg p-3 space-y-2">
 
         {/* Row 1: artwork + track info — clickable */}
         <button
@@ -129,7 +128,7 @@ export function NowPlayingFloating() {
               className="text-xs text-muted-foreground truncate"
               data-testid="floating-now-playing-artist"
             >
-              {subtitle || currentTrack.artist}
+              {artist}
             </p>
           </div>
         </button>
@@ -154,7 +153,6 @@ export function NowPlayingFloating() {
 
         {/* Row 4: compact inline volume */}
         <div className="flex items-center gap-2">
-          {/* Mute toggle */}
           <button
             onClick={handleMuteToggle}
             className="text-muted-foreground hover:opacity-80 transition-opacity shrink-0"
@@ -162,30 +160,23 @@ export function NowPlayingFloating() {
             data-testid="floating-volume-mute"
           >
             {isMuted || volume === 0
-              ? <VolumeX className="w-3.5 h-3.5" />
-              : <Volume2 className="w-3.5 h-3.5" />
+              ? <VolumeX className="w-3 h-3" />
+              : <Volume2 className="w-3 h-3" />
             }
           </button>
-
-          {/* Slim track */}
           <div
             ref={volumeTrackRef}
-            className="flex-1 h-3 flex items-center cursor-pointer"
+            className="flex-1 h-2.5 flex items-center cursor-pointer"
             onMouseDown={handleVolumeMouseDown}
             data-testid="floating-volume-slider"
           >
-            <div className="relative w-full h-1 bg-muted rounded-full overflow-hidden">
+            <div className="relative w-full h-0.5 bg-muted rounded-full overflow-hidden">
               <div
-                className="absolute inset-y-0 left-0 bg-primary rounded-full"
+                className="absolute inset-y-0 left-0 bg-primary/60 rounded-full"
                 style={{ width: `${displayVolume * 100}%` }}
               />
             </div>
           </div>
-
-          {/* Percentage */}
-          <span className={cn('text-[10px] font-mono w-5 text-right shrink-0', 'text-muted-foreground')}>
-            {Math.round(displayVolume * 100)}
-          </span>
         </div>
 
       </div>

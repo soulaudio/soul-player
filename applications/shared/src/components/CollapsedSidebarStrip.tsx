@@ -47,8 +47,8 @@ export function CollapsedSidebarStrip({ onExpand }: CollapsedSidebarStripProps) 
     <div
       className="group w-3 h-full flex-shrink-0 flex items-center justify-center cursor-ew-resize"
       onMouseDown={handleMouseDown}
-      role="separator"
-      aria-orientation="vertical"
+      onClick={onExpand}
+      role="button"
       aria-label={t('sidebar.expand', 'Expand sidebar')}
       data-testid="collapsed-sidebar-strip"
     >
