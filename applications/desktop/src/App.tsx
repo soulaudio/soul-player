@@ -12,7 +12,6 @@ import {
   TracksPage,
   AlbumPage,
   ArtistPage,
-  NowPlayingPage,
   PlaylistPage,
   GenresListPage,
 } from '@soul-player/shared';
@@ -193,7 +192,6 @@ function App() {
           <Route path="/tracks" element={<TracksPage />} />
           <Route path="/genres" element={<GenresListPage />} />
           <Route path="/genres/:id" element={<GenrePage />} />
-          <Route path="/now-playing" element={<NowPlayingPage />} />
           <Route path="/settings/*" element={<SettingsRouter />} />
         </Routes>
       </MainLayout>

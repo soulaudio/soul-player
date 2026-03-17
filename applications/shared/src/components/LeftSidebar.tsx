@@ -40,7 +40,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const events = usePlaybackEvents();
 
   // Sidebar state (width, collapsed, resize)
-  const { width, isCollapsed, isResizing, handleMouseDown, expand, resizableRef } = useSidebarState();
+  const { width, isCollapsed, isResizing, handleMouseDown, expand, startResizeFromCollapsed, resizableRef } = useSidebarState();
 
   const queueScrollRef = useRef<HTMLDivElement>(null);
 
@@ -141,7 +141,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
 
   // When collapsed — render only the thin strip
   if (isCollapsed) {
-    return <CollapsedSidebarStrip onExpand={expand} />;
+    return <CollapsedSidebarStrip onExpand={expand} onStartResizeDrag={startResizeFromCollapsed} />;
   }
 
   return (
@@ -198,7 +198,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         isPlaying={isPlaying}
         volume={volume}
         canCreatePlaylists={features.canCreatePlaylists}
-        onTrackClick={() => navigate('/now-playing')}
+        onTrackClick={() => currentTrack?.albumId ? navigate(`/albums/${currentTrack.albumId}`) : undefined}
         onAddToPlaylist={onAddToPlaylist}
       />
 

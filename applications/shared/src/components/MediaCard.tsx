@@ -168,6 +168,7 @@ const MediaCardComponent = ({
           artist: t.artist_name || 'Unknown Artist',
           album: t.album_title || null,
           albumId: t.album_id,
+          artistId: t.artist_id || undefined,
           filePath: t.file_path!,
           durationSeconds: t.duration_seconds || null,
           trackNumber: t.track_number || null,

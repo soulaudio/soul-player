@@ -118,6 +118,7 @@ export const QueueTrackSchema = z.object({
   trackNumber: z.number().nullable().optional(),
   coverArtPath: z.string().nullable().optional(),
   albumId: z.number().nullable().optional(),
+  artistId: z.number().optional(),
 }).passthrough(); // Allow additional fields we might not know about
 
 export const PlaybackContextSchema = z.object({

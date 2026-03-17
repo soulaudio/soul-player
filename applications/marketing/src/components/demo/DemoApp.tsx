@@ -14,7 +14,6 @@ import {
   AlbumPage,
   ArtistPage,
   PlaylistPage,
-  NowPlayingPage,
   SettingsPage,
   MockBackendProvider,
   DemoStorage,
@@ -167,7 +166,6 @@ export function DemoApp() {
                           <Route path="/playlists" element={<PlaylistsPage />} />
                           <Route path="/playlists/:id" element={<PlaylistPage />} />
                           <Route path="/tracks" element={<TracksPage />} />
-                          <Route path="/now-playing" element={<NowPlayingPage />} />
                           <Route path="/settings" element={<SettingsPage />} />
                           <Route path="/search" element={<div className="text-center py-20 text-muted-foreground">Search Page (Demo)</div>} />
                         </Routes>

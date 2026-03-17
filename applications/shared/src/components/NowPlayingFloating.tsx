@@ -11,15 +11,12 @@ import { debug } from '../utils/debug';
 import { Volume2, VolumeX } from 'lucide-react';
 
 /**
- * NowPlayingFloating — compact vertical card anchored bottom-center,
- * shown when the sidebar is collapsed and a track is loaded.
+ * NowPlayingFloating — full-width Spotify-style player bar anchored to the
+ * bottom of the viewport, shown when the sidebar is collapsed and a track
+ * is loaded.
  *
- * Layout (320px wide card):
- *   [art 40×40]  Title
- *                Artist • Album        ← clickable → /now-playing
- *   ─── progress ─────────────────
- *   ⇄   ⏮   ▶   ⏭   ↺
- *   🔊  ── vol ──────────────── 80%
+ * Layout (3-column, full width):
+ *   [art · title · artist]   [⇄ ⏮ ▶ ⏭ ↺ / ─── progress ───]   [🔊 ─── vol ─── 80]
  */
 export function NowPlayingFloating() {
   const navigate = useNavigate();
@@ -71,7 +68,6 @@ export function NowPlayingFloating() {
     }
   }, [commands, isMuted, volume, volumeBeforeMute]);
 
-  // Inline volume track click/drag
   const handleVolumeMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       e.preventDefault();
@@ -94,79 +90,102 @@ export function NowPlayingFloating() {
 
   if (!isCollapsed || !currentTrack) return null;
 
+  debug.log('[NowPlayingFloating] rendering with track:', {
+    id: currentTrack.id,
+    title: currentTrack.title,
+    artist: currentTrack.artist,
+  });
+
   const displayVolume = isMuted ? 0 : volume;
+  const title = currentTrack.title || 'Unknown Track';
   const artist = currentTrack.artist || 'Unknown Artist';
 
   return (
     <div
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[min(320px,calc(100vw-32px))]"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border"
       data-testid="now-playing-floating"
     >
-      <div className="bg-card border border-border rounded-xl shadow-lg p-3 space-y-2">
+      <div className="grid grid-cols-[minmax(160px,1fr)_minmax(auto,640px)_minmax(160px,1fr)] items-center h-[72px] px-4 gap-4">
 
-        {/* Row 1: artwork + track info — clickable */}
-        <button
-          className="flex items-center gap-3 w-full text-left hover:opacity-80 transition-opacity"
-          onClick={() => navigate('/now-playing')}
+        {/* Left: artwork + track info */}
+        <div
+          className="flex items-center gap-1.5 min-w-0"
           data-testid="floating-track-info"
         >
-          <ArtworkImage
-            trackId={currentTrack.id}
-            coverArtPath={currentTrack.coverArtPath}
-            alt={currentTrack.title}
-            className="w-10 h-10 rounded-md object-cover flex-shrink-0"
-            fallbackIconSize="sm"
-          />
-          <div className="flex-1 min-w-0">
-            <p
-              className="text-sm font-semibold truncate"
+          <button
+            className="flex-shrink-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            onClick={() => currentTrack.albumId
+              ? navigate(`/albums/${currentTrack.albumId}`)
+              : undefined
+            }
+            aria-label={title}
+          >
+            <ArtworkImage
+              trackId={currentTrack.id}
+              coverArtPath={currentTrack.coverArtPath}
+              alt={title}
+              className="w-10 h-10 rounded-md object-cover"
+              fallbackIconSize="sm"
+            />
+          </button>
+          <div className="flex flex-col min-w-0">
+            <button
+              className="text-sm font-semibold truncate text-foreground text-left hover:text-primary transition-colors"
+              onClick={() => currentTrack.albumId
+                ? navigate(`/albums/${currentTrack.albumId}`)
+                : undefined
+              }
               data-testid="floating-now-playing-title"
             >
-              {currentTrack.title}
-            </p>
-            <p
-              className="text-xs text-foreground/60 truncate"
+              {title}
+            </button>
+            <button
+              className="text-xs text-muted-foreground truncate text-left hover:text-primary transition-colors"
+              onClick={() => currentTrack.artistId
+                ? navigate(`/artists/${currentTrack.artistId}`)
+                : navigate('/artists')
+              }
               data-testid="floating-now-playing-artist"
             >
               {artist}
-            </p>
+            </button>
           </div>
-        </button>
-
-        {/* Row 2: progress bar */}
-        <div data-testid="floating-progress-bar">
-          <ProgressBar />
         </div>
 
-        {/* Row 3: playback controls */}
-        <PlaybackControls
-          isPlaying={isPlaying}
-          hasCurrentTrack={true}
-          shuffleMode={shuffleMode}
-          repeatMode={repeatMode}
-          onPlayPause={handlers.onPlayPause}
-          onPrevious={handlers.onPrevious}
-          onNext={handlers.onNext}
-          onShuffleToggle={handlers.onShuffleToggle}
-          onRepeatToggle={handlers.onRepeatToggle}
-        />
+        {/* Middle: playback controls + progress bar — always centered */}
+        <div className="flex flex-col items-center justify-center gap-0.5 min-w-0">
+          <PlaybackControls
+            isPlaying={isPlaying}
+            hasCurrentTrack={true}
+            shuffleMode={shuffleMode}
+            repeatMode={repeatMode}
+            onPlayPause={handlers.onPlayPause}
+            onPrevious={handlers.onPrevious}
+            onNext={handlers.onNext}
+            onShuffleToggle={handlers.onShuffleToggle}
+            onRepeatToggle={handlers.onRepeatToggle}
+          />
+          <div className="w-full" data-testid="floating-progress-bar">
+            <ProgressBar />
+          </div>
+        </div>
 
-        {/* Row 4: compact inline volume */}
-        <div className="flex items-center gap-2">
+        {/* Right: volume */}
+        <div className="flex items-center gap-2 justify-end min-w-0">
           <button
             onClick={handleMuteToggle}
-            className="text-muted-foreground hover:opacity-80 transition-opacity shrink-0"
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
             aria-pressed={isMuted}
             data-testid="floating-volume-mute"
           >
             {isMuted || volume === 0
-              ? <VolumeX className="w-3.5 h-3.5" />
-              : <Volume2 className="w-3.5 h-3.5" />
+              ? <VolumeX className="w-4 h-4" />
+              : <Volume2 className="w-4 h-4" />
             }
           </button>
           <div
             ref={volumeTrackRef}
-            className="flex-1 h-3 flex items-center cursor-pointer"
+            className="w-24 h-4 flex items-center cursor-pointer"
             onMouseDown={handleVolumeMouseDown}
             data-testid="floating-volume-slider"
           >
@@ -177,7 +196,7 @@ export function NowPlayingFloating() {
               />
             </div>
           </div>
-          <span className="text-[10px] font-mono w-5 text-right shrink-0 text-muted-foreground">
+          <span className="text-[10px] font-mono w-6 text-right shrink-0 text-muted-foreground">
             {Math.round(displayVolume * 100)}
           </span>
         </div>

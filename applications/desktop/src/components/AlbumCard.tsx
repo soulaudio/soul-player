@@ -80,6 +80,7 @@ export function AlbumCard({ album, className = 'w-full', showArtist = true }: Al
         artist: t.artist_name || 'Unknown Artist',
         album: t.album_title || album.title,
         albumId: t.album_id,
+        artistId: t.artist_id || undefined,
         filePath: t.file_path!,
         durationSeconds: t.duration_seconds || null,
         trackNumber: t.track_number || null,

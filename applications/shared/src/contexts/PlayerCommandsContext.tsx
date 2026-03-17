@@ -17,6 +17,7 @@ export interface QueueTrack {
   artist: string;
   album: string | null;
   albumId?: number;
+  artistId?: number;
   filePath: string;
   durationSeconds: number | null;
   trackNumber: number | null;

@@ -30,6 +30,7 @@ export interface CollapsibleSidebarState {
   savedWidth: number;
   handleMouseDown: (e: React.MouseEvent) => void;
   expand: (width?: number) => void;
+  startResizeFromCollapsed: () => void;
   resizableRef: React.RefObject<HTMLDivElement>;
 }
 
@@ -59,6 +60,10 @@ export function useCollapsibleSidebar(): CollapsibleSidebarState {
   savedWidthRef.current = savedWidth;
   isCollapsedRef.current = isCollapsed;
 
+  // Tracks whether collapse happened during an active drag so we can re-expand
+  // without waiting for a React re-render to update isCollapsedRef.
+  const collapsedDuringDragRef = useRef(false);
+
   const expand = useCallback((targetWidth?: number) => {
     const w = targetWidth ?? savedWidthRef.current;
     setWidth(w);
@@ -72,30 +77,53 @@ export function useCollapsibleSidebar(): CollapsibleSidebarState {
     setIsResizing(true);
   }, []);
 
+  // Called from CollapsedSidebarStrip on mousedown — starts a live resize drag
+  // from the collapsed state so the sidebar follows the cursor until mouse release.
+  const startResizeFromCollapsed = useCallback(() => {
+    collapsedDuringDragRef.current = true;
+    setIsResizing(true);
+  }, []);
+
   useEffect(() => {
     if (!isResizing) return;
 
     const onMouseMove = (e: MouseEvent) => {
+      if (collapsedDuringDragRef.current) {
+        // Sidebar collapsed during this drag — re-expand if user drags right past threshold
+        if (e.clientX > COLLAPSE_THRESHOLD + 20) {
+          const w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, e.clientX));
+          collapsedDuringDragRef.current = false;
+          setWidth(w);
+          setIsCollapsed(false);
+          tryWrite(STORAGE_COLLAPSED, 'false');
+          tryWrite(STORAGE_WIDTH, String(w));
+        }
+        return;
+      }
+
       // getBoundingClientRect().left is 0 for the sidebar (always at left edge)
       // but we use it correctly in case layout ever adds left inset
       const sidebarLeft = resizableRef.current?.getBoundingClientRect().left ?? 0;
       const newWidth = e.clientX - sidebarLeft;
 
       if (newWidth < COLLAPSE_THRESHOLD) {
-        // Snap to collapsed — save current width first
+        // Snap to collapsed — save current width first, keep drag active
         const sw = widthRef.current > 0 ? widthRef.current : savedWidthRef.current;
         setSavedWidth(sw);
+        savedWidthRef.current = sw;
         tryWrite(STORAGE_SAVED, String(sw));
         tryWrite(STORAGE_COLLAPSED, 'true');
         setWidth(0);
         setIsCollapsed(true);
-        setIsResizing(false); // triggers useEffect cleanup, removes listeners
+        collapsedDuringDragRef.current = true;
+        // Do NOT setIsResizing(false) — keep drag active so user can re-expand
       } else {
         setWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, newWidth)));
       }
     };
 
     const onMouseUp = () => {
+      collapsedDuringDragRef.current = false;
       if (!isCollapsedRef.current) {
         tryWrite(STORAGE_WIDTH, String(widthRef.current));
       }
@@ -117,5 +145,5 @@ export function useCollapsibleSidebar(): CollapsibleSidebarState {
 
   debug.log('useCollapsibleSidebar', { width, isCollapsed, isResizing, savedWidth });
 
-  return { width, isCollapsed, isResizing, savedWidth, handleMouseDown, expand, resizableRef };
+  return { width, isCollapsed, isResizing, savedWidth, handleMouseDown, expand, startResizeFromCollapsed, resizableRef };
 }

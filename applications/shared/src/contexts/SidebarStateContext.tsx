@@ -9,6 +9,7 @@ const SidebarStateContext = createContext<CollapsibleSidebarState>({
   savedWidth: 288,
   handleMouseDown: () => {},
   expand: () => {},
+  startResizeFromCollapsed: () => {},
   resizableRef: { current: null } as React.RefObject<HTMLDivElement>,
 });
 

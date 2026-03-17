@@ -8,8 +8,8 @@ export function TrackInfo() {
   const currentTrack = useCurrentTrack();
 
   const handleClick = () => {
-    if (currentTrack) {
-      navigate('/now-playing');
+    if (currentTrack?.albumId) {
+      navigate(`/albums/${currentTrack.albumId}`);
     }
   };
 

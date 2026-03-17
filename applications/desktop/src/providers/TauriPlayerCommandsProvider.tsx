@@ -247,6 +247,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           artist: track.artist,
           album: track.album,
           albumId: track.albumId,
+          artistId: track.artistId,
           filePath: track.filePath,
           durationSeconds: track.duration,
           trackNumber: track.trackNumber,
@@ -291,6 +292,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
       artist: backendTrack.artist_name || 'Unknown Artist',
       album: backendTrack.album_title || '',
       albumId: backendTrack.album_id,
+      artistId: backendTrack.artist_id,
       filePath: backendTrack.file_path || '',
       duration: backendTrack.duration_seconds ?? 0,
       trackNumber: backendTrack.track_number,
@@ -432,11 +434,14 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         const unlistenTrackChanged = await listen<{ id: string; title: string; artist: string; album: string; filePath: string; duration: number; addedAt: string; coverArtPath?: string } | null>('playback:track-changed', async (event) => {
           const trackPayload = event.payload;
           if (trackPayload && trackPayload.id) {
+            const { queue } = usePlayerStore.getState();
+            const matchedQueueTrack = queue.find(t => t.id === parseInt(trackPayload.id, 10));
             const track = {
               ...trackPayload,
               id: parseInt(trackPayload.id, 10),
+              albumId: matchedQueueTrack?.albumId,
+              artistId: matchedQueueTrack?.artistId,
             };
-            const { queue } = usePlayerStore.getState();
             const newIndex = queue.findIndex(t => t.id === track.id);
             usePlayerStore.setState({
               currentTrack: track,
@@ -670,6 +675,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           artist: qt.artist || '',
           album: qt.album || '',
           albumId: qt.albumId,
+          artistId: qt.artistId,
           filePath: qt.filePath || '',
           duration: qt.durationSeconds ?? 0,
           trackNumber: qt.trackNumber ?? undefined,
@@ -695,6 +701,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           artist: qt.artist || '',
           album: qt.album || '',
           albumId: qt.albumId,
+          artistId: qt.artistId,
           filePath: qt.filePath || '',
           duration: qt.durationSeconds ?? 0,
           trackNumber: qt.trackNumber ?? undefined,
