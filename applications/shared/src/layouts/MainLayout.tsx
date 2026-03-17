@@ -1,8 +1,8 @@
-'use client';
-
 import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LeftSidebar } from '../components/LeftSidebar';
+import { NowPlayingFloating } from '../components/NowPlayingFloating';
+import { SidebarStateProvider } from '../contexts/SidebarStateContext';
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext';
 
 interface MainLayoutProps {
@@ -14,56 +14,53 @@ interface MainLayoutProps {
 export function MainLayout({ children, onAddToPlaylist }: MainLayoutProps) {
   const navigate = useNavigate();
 
-  // Try to get scroll visibility context (optional - may not exist in all environments)
   let showHeader = true;
   try {
     const context = useScrollVisibility();
     showHeader = context.showHeader;
   } catch {
-    // Context not available, default to always showing header
     showHeader = true;
   }
 
-  // Keyboard shortcuts for navigation (playback shortcuts handled by global shortcuts system)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + 1 for home
       if ((e.metaKey || e.ctrlKey) && e.key === '1') {
         e.preventDefault();
         navigate('/');
       }
-      // Cmd/Ctrl + 2 for albums
       if ((e.metaKey || e.ctrlKey) && e.key === '2') {
         e.preventDefault();
         navigate('/albums');
       }
-      // Cmd/Ctrl + L for albums (L for library)
       if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
         e.preventDefault();
         navigate('/albums');
       }
-      // Cmd/Ctrl + H for home
       if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
         e.preventDefault();
         navigate('/');
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigate]);
 
   return (
-    <div className="flex h-full bg-background text-foreground">
-      {/* Left Sidebar - full height, always visible */}
-      <LeftSidebar onAddToPlaylist={onAddToPlaylist} />
+    <SidebarStateProvider>
+      <div className="flex h-full bg-background text-foreground">
+        {/* Left Sidebar — collapses to CollapsedSidebarStrip when isCollapsed */}
+        <LeftSidebar onAddToPlaylist={onAddToPlaylist} />
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-hidden">
-        <div className={`h-full pl-6 pr-0 transition-all duration-300 ${showHeader ? 'pt-6' : 'pt-0'}`}>
-          {children}
-        </div>
-      </main>
-    </div>
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-hidden">
+          <div className={`h-full pl-6 pr-0 transition-all duration-300 ${showHeader ? 'pt-6' : 'pt-0'}`}>
+            {children}
+          </div>
+        </main>
+
+        {/* Now Playing Floating Bar — visible when sidebar is collapsed + track playing */}
+        <NowPlayingFloating />
+      </div>
+    </SidebarStateProvider>
   );
 }

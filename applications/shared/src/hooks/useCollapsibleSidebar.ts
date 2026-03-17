@@ -45,7 +45,7 @@ export function useCollapsibleSidebar(): CollapsibleSidebarState {
   );
 
   const [width, setWidth] = useState(() => {
-    try { if (localStorage.getItem(STORAGE_COLLAPSED) === 'true') return 0; } catch {}
+    try { if (localStorage.getItem(STORAGE_COLLAPSED) === 'true') return 0; } catch { /* storage unavailable */ }
     return tryReadInt(STORAGE_WIDTH, DEFAULT_WIDTH);
   });
 
