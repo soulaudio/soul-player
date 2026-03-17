@@ -29,46 +29,39 @@ export function NowPlayingFloating() {
 
   return (
     <div
-      className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 max-w-[560px] w-[90vw]"
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100vw-24px)] max-w-[820px]"
       data-testid="now-playing-floating"
     >
-      <div className="bg-card border border-border rounded-xl shadow-lg p-4">
-        <div className="flex gap-4 items-center">
+      <div className="bg-card border border-border rounded-xl shadow-lg px-4 py-3">
+        <div className="flex items-center gap-4">
 
-          {/* Album artwork — ArtworkImage handles URI scheme, caching, and fallback */}
+          {/* Album artwork */}
           <ArtworkImage
             trackId={currentTrack.id}
             coverArtPath={currentTrack.coverArtPath}
             alt={currentTrack.title}
-            className="w-14 h-14 rounded-md object-cover flex-shrink-0"
+            className="w-12 h-12 rounded-md object-cover flex-shrink-0"
             fallbackIconSize="sm"
           />
 
-          {/* Track info + controls */}
-          <div className="flex-1 min-w-0 space-y-2">
+          {/* Track title + artist — fixed width so controls always stay centered */}
+          <div className="w-44 flex-shrink-0 min-w-0">
+            <p
+              className="text-sm font-semibold truncate"
+              data-testid="floating-now-playing-title"
+            >
+              {currentTrack.title}
+            </p>
+            <p
+              className="text-xs text-muted-foreground truncate"
+              data-testid="floating-now-playing-artist"
+            >
+              {currentTrack.artist}
+            </p>
+          </div>
 
-            {/* Track title + artist */}
-            <div>
-              <p
-                className="text-sm font-semibold truncate"
-                data-testid="floating-now-playing-title"
-              >
-                {currentTrack.title}
-              </p>
-              <p
-                className="text-xs text-muted-foreground truncate"
-                data-testid="floating-now-playing-artist"
-              >
-                {currentTrack.artist}
-              </p>
-            </div>
-
-            {/* Seek bar — second ProgressBar instance, safe to mount alongside sidebar's */}
-            <div data-testid="floating-progress-bar">
-              <ProgressBar />
-            </div>
-
-            {/* Playback controls */}
+          {/* Center: controls stacked above progress bar */}
+          <div className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
             <PlaybackControls
               isPlaying={isPlaying}
               hasCurrentTrack={true}
@@ -80,8 +73,11 @@ export function NowPlayingFloating() {
               onShuffleToggle={handlers.onShuffleToggle}
               onRepeatToggle={handlers.onRepeatToggle}
             />
-
+            <div data-testid="floating-progress-bar" className="w-full">
+              <ProgressBar />
+            </div>
           </div>
+
         </div>
       </div>
     </div>

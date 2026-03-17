@@ -45,12 +45,15 @@ export function CollapsedSidebarStrip({ onExpand }: CollapsedSidebarStripProps) 
 
   return (
     <div
-      className="w-1.5 h-full bg-foreground/10 hover:bg-foreground/20 transition-opacity cursor-ew-resize flex-shrink-0"
+      className="group w-3 h-full flex-shrink-0 flex items-center justify-center cursor-ew-resize"
       onMouseDown={handleMouseDown}
       role="separator"
       aria-orientation="vertical"
       aria-label={t('sidebar.expand', 'Expand sidebar')}
       data-testid="collapsed-sidebar-strip"
-    />
+    >
+      {/* Small centered pill — not full height */}
+      <div className="w-1 h-14 rounded-full bg-foreground/15 group-hover:bg-foreground/35 transition-colors" />
+    </div>
   );
 }
