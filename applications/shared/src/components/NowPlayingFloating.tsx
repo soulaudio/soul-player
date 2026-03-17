@@ -95,7 +95,7 @@ export function NowPlayingFloating() {
   if (!isCollapsed || !currentTrack) return null;
 
   const displayVolume = isMuted ? 0 : volume;
-  const artist = currentTrack.artist || currentTrack.album || '';
+  const artist = currentTrack.artist || 'Unknown Artist';
 
   return (
     <div
@@ -125,7 +125,7 @@ export function NowPlayingFloating() {
               {currentTrack.title}
             </p>
             <p
-              className="text-xs text-muted-foreground truncate"
+              className="text-xs text-foreground/60 truncate"
               data-testid="floating-now-playing-artist"
             >
               {artist}
@@ -160,23 +160,26 @@ export function NowPlayingFloating() {
             data-testid="floating-volume-mute"
           >
             {isMuted || volume === 0
-              ? <VolumeX className="w-3 h-3" />
-              : <Volume2 className="w-3 h-3" />
+              ? <VolumeX className="w-3.5 h-3.5" />
+              : <Volume2 className="w-3.5 h-3.5" />
             }
           </button>
           <div
             ref={volumeTrackRef}
-            className="flex-1 h-2.5 flex items-center cursor-pointer"
+            className="flex-1 h-3 flex items-center cursor-pointer"
             onMouseDown={handleVolumeMouseDown}
             data-testid="floating-volume-slider"
           >
-            <div className="relative w-full h-0.5 bg-muted rounded-full overflow-hidden">
+            <div className="relative w-full h-1 bg-muted rounded-full overflow-hidden">
               <div
-                className="absolute inset-y-0 left-0 bg-primary/60 rounded-full"
+                className="absolute inset-y-0 left-0 bg-primary rounded-full"
                 style={{ width: `${displayVolume * 100}%` }}
               />
             </div>
           </div>
+          <span className="text-[10px] font-mono w-5 text-right shrink-0 text-muted-foreground">
+            {Math.round(displayVolume * 100)}
+          </span>
         </div>
 
       </div>

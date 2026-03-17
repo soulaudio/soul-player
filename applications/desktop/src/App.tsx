@@ -197,7 +197,13 @@ function App() {
           <Route path="/settings/*" element={<SettingsRouter />} />
         </Routes>
       </MainLayout>
-      <Toaster richColors position="bottom-right" />
+      <Toaster
+        richColors
+        position="bottom-right"
+        toastOptions={{
+          style: { padding: '8px 12px', fontSize: '12px', minWidth: 0 },
+        }}
+      />
     </FileDropHandler>
     </UpdateSettingsProvider>
   );
