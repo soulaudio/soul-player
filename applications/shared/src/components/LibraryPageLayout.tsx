@@ -384,7 +384,7 @@ export function LibraryPageLayout({
       >
         <div className={`pr-6 pb-20 sm:pb-6 ${
           showSearchBar
-            ? filterPanelVisible ? 'pt-24' : 'pt-14'
+            ? filterPanelVisible ? 'pt-28' : 'pt-[76px]'
             : 'pt-4 sm:pt-2'
         }`}>
           {isLoading ? (
