@@ -67,6 +67,8 @@ async function init() {
                 hasUpdateSettings: true,
                 hasLanguageSettings: true,
                 hasThemeImportExport: true,
+                // UI features
+                hasAutoHideSearch: true,
                 // Audio features
                 hasRealAudioDevices: true,
                 hasRealDeviceSelection: true,

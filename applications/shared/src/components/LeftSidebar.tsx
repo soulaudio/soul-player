@@ -39,8 +39,8 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
   const commands = usePlayerCommands();
   const events = usePlaybackEvents();
 
-  // Sidebar state (width, collapsed, resize)
-  const { width, isCollapsed, isResizing, handleMouseDown, expand, startResizeFromCollapsed, resizableRef } = useSidebarState();
+  // Sidebar state (width, collapsed, resize, mobile)
+  const { width, isCollapsed, isResizing, isMobile, mobileShowContent, handleMouseDown, expand, startResizeFromCollapsed, resizableRef } = useSidebarState();
 
   const queueScrollRef = useRef<HTMLDivElement>(null);
 
@@ -139,35 +139,43 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
     }
   };
 
-  // When collapsed — render only the thin strip
-  if (isCollapsed) {
+  // On mobile, hide sidebar when content is shown
+  if (isMobile && mobileShowContent) return null;
+
+  // When collapsed on desktop — render only the thin strip
+  if (!isMobile && isCollapsed) {
     return <CollapsedSidebarStrip onExpand={expand} onStartResizeDrag={startResizeFromCollapsed} />;
   }
 
   return (
     <div
       ref={resizableRef}
-      className="bg-card border-r border-border flex flex-col h-full relative"
-      style={{ width: `${width}px` }}
+      className={cn(
+        'bg-card border-r border-border flex flex-col h-full relative overflow-hidden',
+        isMobile && 'w-full border-r-0'
+      )}
+      style={isMobile ? undefined : { width: `${width}px` }}
       data-collapsed={isCollapsed}
     >
-      {/* Resize Handle */}
-      <div
-        className={cn(
-          'absolute top-0 right-0 w-1 h-full cursor-ew-resize group z-50',
-          isResizing && 'bg-primary/50'
-        )}
-        onMouseDown={handleMouseDown}
-        title={t('sidebar.resize', 'Resize sidebar')}
-        data-testid="sidebar-resize-handle"
-      >
+      {/* Resize Handle — desktop only */}
+      {!isMobile && (
         <div
           className={cn(
-            'absolute inset-y-0 right-0 w-[3px] bg-primary/0 group-hover:bg-primary/30 transition-colors',
+            'absolute top-0 right-0 w-1 h-full cursor-ew-resize group z-50',
             isResizing && 'bg-primary/50'
           )}
-        />
-      </div>
+          onMouseDown={handleMouseDown}
+          title={t('sidebar.resize', 'Resize sidebar')}
+          data-testid="sidebar-resize-handle"
+        >
+          <div
+            className={cn(
+              'absolute inset-y-0 right-0 w-[3px] bg-primary/0 group-hover:bg-primary/30 transition-colors',
+              isResizing && 'bg-primary/50'
+            )}
+          />
+        </div>
+      )}
 
       {/* Navigation - fixed at top */}
       <NavBar homeEnabled={homeEnabled} />
@@ -198,7 +206,7 @@ export function LeftSidebar({ onAddToPlaylist }: LeftSidebarProps) {
         isPlaying={isPlaying}
         volume={volume}
         canCreatePlaylists={features.canCreatePlaylists}
-        onTrackClick={() => currentTrack?.albumId ? navigate(`/albums/${currentTrack.albumId}`) : undefined}
+        onTrackClick={() => navigate('/now-playing-todo')}
         onAddToPlaylist={onAddToPlaylist}
       />
 

@@ -39,7 +39,8 @@
     "playlists": "プレイリスト",
     "genres": "ジャンル",
     "settings": "設定",
-    "import": "インポート"
+    "import": "インポート",
+    "back": "戻る"
   },
   "nowPlaying": {
     "fromLibrary": "ライブラリから",

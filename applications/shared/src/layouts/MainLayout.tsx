@@ -1,17 +1,84 @@
-import { ReactNode, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { ReactNode, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { LeftSidebar } from '../components/LeftSidebar';
 import { NowPlayingFloating } from '../components/NowPlayingFloating';
 import { SidebarStateProvider } from '../contexts/SidebarStateContext';
 import { useSidebarState } from '../contexts/SidebarStateContext';
-import { useScrollVisibility } from '../contexts/ScrollVisibilityContext';
+
+/** Top-level routes where back button should NOT appear */
+export const ROOT_PATHS = ['/', '/albums', '/artists', '/playlists', '/genres', '/tracks', '/settings'];
+
+/**
+ * Mobile navigation model:
+ * - Sidebar (menu) is the "home" view, shown when mobileShowContent=false
+ * - Clicking a nav item navigates AND sets mobileShowContent=true (batched by React 18)
+ * - Back button sets mobileShowContent=false to return to menu
+ * - key={location.key} on content ensures clean remounts — no stale page content
+ */
 
 // Inner component — must live inside SidebarStateProvider to read context
-function MainContent({ children, showHeader }: { children: ReactNode; showHeader: boolean }) {
-  const { isCollapsed } = useSidebarState();
+function MainContent({ children }: { children: ReactNode }) {
+  const { isMobile, mobileShowContent, setMobileShowContent } = useSidebarState();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const canGoBack = !ROOT_PATHS.includes(location.pathname);
+
+  const handleBack = useCallback(() => {
+    if (isMobile) {
+      setMobileShowContent(false);
+    } else {
+      navigate(-1);
+    }
+  }, [isMobile, setMobileShowContent, navigate]);
+
+  // Backspace keybind for back navigation
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Backspace') return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+      if (isMobile || canGoBack) {
+        e.preventDefault();
+        handleBack();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isMobile, canGoBack, handleBack]);
+
+  // Listen for mobile-back event from title bar
+  useEffect(() => {
+    const onMobileBack = () => handleBack();
+    window.addEventListener('mobile-back', onMobileBack);
+    return () => window.removeEventListener('mobile-back', onMobileBack);
+  }, [handleBack]);
+
+  // Sync mobile content state to DOM so title bar can read it
+  useEffect(() => {
+    if (isMobile && mobileShowContent) {
+      document.documentElement.setAttribute('data-mobile-content', 'true');
+    } else {
+      document.documentElement.removeAttribute('data-mobile-content');
+    }
+    return () => document.documentElement.removeAttribute('data-mobile-content');
+  }, [isMobile, mobileShowContent]);
+
+  // Mobile: full-screen content — hide when menu is showing
+  if (isMobile) {
+    return (
+      <main className={`flex-1 flex flex-col overflow-hidden ${mobileShowContent ? '' : 'hidden'}`}>
+        <div className="flex-1 overflow-hidden pl-6">
+          {children}
+        </div>
+      </main>
+    );
+  }
+
+  // Desktop
   return (
     <main className="flex-1 overflow-hidden">
-      <div className={`h-full pl-6 pr-0 transition-all duration-300 ${showHeader ? 'pt-6' : 'pt-0'} ${isCollapsed ? 'pb-[72px]' : ''}`}>
+      <div className="h-full pl-6 pr-0">
         {children}
       </div>
     </main>
@@ -20,20 +87,12 @@ function MainContent({ children, showHeader }: { children: ReactNode; showHeader
 
 interface MainLayoutProps {
   children: ReactNode;
-  /** Callback when the "Add to Playlist" button is clicked in the sidebar */
   onAddToPlaylist?: () => void;
 }
 
 export function MainLayout({ children, onAddToPlaylist }: MainLayoutProps) {
   const navigate = useNavigate();
 
-  let showHeader = true;
-  try {
-    const context = useScrollVisibility();
-    showHeader = context.showHeader;
-  } catch {
-    showHeader = true;
-  }
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -61,13 +120,8 @@ export function MainLayout({ children, onAddToPlaylist }: MainLayoutProps) {
   return (
     <SidebarStateProvider>
       <div className="flex h-full bg-background text-foreground">
-        {/* Left Sidebar — collapses to CollapsedSidebarStrip when isCollapsed */}
         <LeftSidebar onAddToPlaylist={onAddToPlaylist} />
-
-        {/* Main Content Area — adds bottom padding when player bar is visible */}
-        <MainContent showHeader={showHeader}>{children}</MainContent>
-
-        {/* Now Playing Floating Bar — visible when sidebar is collapsed + track playing */}
+        <MainContent>{children}</MainContent>
         <NowPlayingFloating />
       </div>
     </SidebarStateProvider>

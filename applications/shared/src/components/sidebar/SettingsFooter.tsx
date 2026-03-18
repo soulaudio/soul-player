@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useSidebarState } from '../../contexts/SidebarStateContext';
 
 export interface SettingsFooterProps {
   version?: string;
@@ -13,11 +14,15 @@ export function SettingsFooter({ version }: SettingsFooterProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isMobile, setMobileShowContent } = useSidebarState();
 
   return (
     <div className="border-t border-border px-3 py-2 flex items-center justify-between">
       <button
-        onClick={() => navigate('/settings')}
+        onClick={() => {
+          navigate('/settings');
+          if (isMobile) setMobileShowContent(true);
+        }}
         data-testid="settings-button"
         className={cn(
           'p-1.5 rounded-lg transition-opacity',

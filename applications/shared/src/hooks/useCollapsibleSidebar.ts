@@ -23,11 +23,16 @@ function tryWrite(key: string, value: string): void {
   try { localStorage.setItem(key, value); } catch { /* ignore */ }
 }
 
+const MOBILE_BREAKPOINT = 640; // px — matches Tailwind `sm`
+
 export interface CollapsibleSidebarState {
   width: number;
   isCollapsed: boolean;
   isResizing: boolean;
   savedWidth: number;
+  isMobile: boolean;
+  mobileShowContent: boolean;
+  setMobileShowContent: (show: boolean) => void;
   handleMouseDown: (e: React.MouseEvent) => void;
   expand: (width?: number) => void;
   startResizeFromCollapsed: () => void;
@@ -36,6 +41,22 @@ export interface CollapsibleSidebarState {
 
 export function useCollapsibleSidebar(): CollapsibleSidebarState {
   const resizableRef = useRef<HTMLDivElement>(null);
+
+  // ── Mobile detection ──────────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
+  );
+  const [mobileShowContent, setMobileShowContent] = useState(false);
+
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const onChange = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
+      if (!e.matches) setMobileShowContent(false); // leaving mobile → reset
+    };
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return localStorage.getItem(STORAGE_COLLAPSED) === 'true'; } catch { return false; }
@@ -143,7 +164,7 @@ export function useCollapsibleSidebar(): CollapsibleSidebarState {
     };
   }, [isResizing]);
 
-  debug.log('useCollapsibleSidebar', { width, isCollapsed, isResizing, savedWidth });
+  debug.log('useCollapsibleSidebar', { width, isCollapsed, isResizing, savedWidth, isMobile, mobileShowContent });
 
-  return { width, isCollapsed, isResizing, savedWidth, handleMouseDown, expand, startResizeFromCollapsed, resizableRef };
+  return { width, isCollapsed, isResizing, savedWidth, isMobile, mobileShowContent, setMobileShowContent, handleMouseDown, expand, startResizeFromCollapsed, resizableRef };
 }

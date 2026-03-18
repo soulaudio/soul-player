@@ -3,6 +3,7 @@
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../../lib/utils';
+import { useSidebarState } from '../../contexts/SidebarStateContext';
 
 interface NavItem {
   id: string;
@@ -27,6 +28,7 @@ export function NavBar({ homeEnabled = true }: NavBarProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isMobile, setMobileShowContent } = useSidebarState();
 
   const isActive = (path: string) => {
     if (path === '/') {
@@ -48,7 +50,10 @@ export function NavBar({ homeEnabled = true }: NavBarProps) {
         {visibleNavigationItems.map((item) => (
           <li key={item.id}>
             <button
-              onClick={() => navigate(item.path)}
+              onClick={() => {
+                navigate(item.path);
+                if (isMobile) setMobileShowContent(true);
+              }}
               data-testid={`nav-${item.id}`}
               className={cn(
                 'w-full text-left px-3 py-1 text-xl font-semibold tracking-wide transition-opacity flex items-center justify-between gap-2',

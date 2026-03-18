@@ -178,12 +178,10 @@ export function PlaylistPage() {
   return (
     <div data-testid="playlist-detail-page" className="h-full">
       <DetailPageLayout
-        fallbackBackPath="/playlists"
-        backLabelKey="playlist.backToPlaylists"
         header={
-          <div className="flex items-start gap-6">
+          <div className="flex items-start gap-4 sm:gap-6">
             {/* Playlist Cover */}
-            <div className="group relative w-48 h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+            <div className="group relative w-24 h-24 sm:w-48 sm:h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
               {playlistArtworkUrl ? (
                 <img
                   key={artworkVersion}
@@ -192,7 +190,7 @@ export function PlaylistPage() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <ListMusic className="w-24 h-24 text-primary" />
+                <ListMusic className="w-12 h-12 sm:w-24 sm:h-24 text-primary" />
               )}
               {/* Edit button overlay */}
               {isDesktop && (
@@ -210,7 +208,7 @@ export function PlaylistPage() {
               <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
                 {t('library.playlist', 'Playlist')}
               </p>
-              <h1 data-testid="playlist-title" className="text-4xl font-bold mb-2">{playlist.name}</h1>
+              <h1 data-testid="playlist-title" className="text-xl sm:text-4xl font-bold mb-1 sm:mb-2">{playlist.name}</h1>
               {playlist.description && (
                 <p className="text-muted-foreground mb-2">{playlist.description}</p>
               )}
@@ -225,7 +223,7 @@ export function PlaylistPage() {
                   onClick={handlePlayAll}
                   onMouseDown={(e) => e.preventDefault()}
                   disabled={tracks.length === 0}
-                  className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+                  className="flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
                 >
                   <Play className="w-5 h-5" fill="currentColor" />
                   <span>{t('common.playAll', 'Play All')}</span>

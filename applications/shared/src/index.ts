@@ -153,7 +153,7 @@ export {
 } from './components/ui/Dialog';
 
 // Layouts
-export { MainLayout } from './layouts/MainLayout';
+export { MainLayout, ROOT_PATHS } from './layouts/MainLayout';
 
 // Pages (shared between platforms)
 export { HomePage } from './pages/HomePage';

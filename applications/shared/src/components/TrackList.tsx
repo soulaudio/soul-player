@@ -359,13 +359,14 @@ const TrackRowComponent = ({
   const showPauseButton = isCurrentTrack && isPlaying;
   const isUnavailable = activeVersion.isAvailable === false;
 
+  // Mobile: simplified 2-3 column layout. Desktop: full 7 column layout.
   const gridCols = showTrackNumber
-    ? 'grid-cols-[52px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
-    : 'grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
+    ? 'grid-cols-[40px_1fr_40px] sm:grid-cols-[52px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
+    : 'grid-cols-[1fr_40px] sm:grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
 
   return (
     <div
-      className={`grid ${gridCols} gap-4 px-4 py-3 hover:px-2 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors group ${
+      className={`grid ${gridCols} gap-2 sm:gap-4 px-2 sm:px-4 py-2 sm:py-3 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors group ${
         isCurrentTrack ? 'bg-accent/20' : ''
       } ${isUnavailable ? 'opacity-60' : ''}`}
       data-testid="track-row"
@@ -396,7 +397,7 @@ const TrackRowComponent = ({
               )}
             </button>
           ) : (
-            <div className="flex items-center text-muted-foreground text-sm">
+            <div className="flex items-center pl-2 text-muted-foreground text-sm">
               {formatTrackLabel(activeVersion.trackNumber, activeVersion.discNumber, group.displayIndex, vinylSides)}
             </div>
           )}
@@ -476,9 +477,9 @@ const TrackRowComponent = ({
         </span>
       </div>
 
-      {/* Artist */}
+      {/* Artist — hidden on mobile */}
       <div
-        className="flex items-center text-sm text-muted-foreground truncate"
+        className="hidden sm:flex items-center text-sm text-muted-foreground truncate"
         onClick={(e) => {
           debug.log('[TrackList] Artist cell clicked', {
             artistId: activeVersion.artistId,
@@ -495,9 +496,9 @@ const TrackRowComponent = ({
         />
       </div>
 
-      {/* Album */}
+      {/* Album — hidden on mobile */}
       <div
-        className="flex items-center text-sm text-muted-foreground truncate"
+        className="hidden sm:flex items-center text-sm text-muted-foreground truncate"
         onClick={(e) => {
           debug.log('[TrackList] Album cell clicked', {
             albumId: activeVersion.albumId,
@@ -513,8 +514,8 @@ const TrackRowComponent = ({
         />
       </div>
 
-      {/* Format dropdown */}
-      <div className="flex items-center">
+      {/* Format dropdown — hidden on mobile */}
+      <div className="hidden sm:flex items-center">
         <FormatDropdown
           versions={group.versions}
           activeVersion={activeVersion}
@@ -522,8 +523,8 @@ const TrackRowComponent = ({
         />
       </div>
 
-      {/* Duration */}
-      <div className="flex items-center text-sm text-muted-foreground font-mono">
+      {/* Duration — hidden on mobile */}
+      <div className="hidden sm:flex items-center text-sm text-muted-foreground font-mono">
         {formatDuration(activeVersion.duration)}
       </div>
 
@@ -635,9 +636,9 @@ export function TrackList({
     );
   }
 
-  const gridCols = showTrackNumber
-    ? 'grid-cols-[52px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
-    : 'grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
+  const headerGridCols = showTrackNumber
+    ? 'grid-cols-[40px_1fr_40px] sm:grid-cols-[52px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
+    : 'grid-cols-[1fr_40px] sm:grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
 
   // Virtualized rendering
   if (virtualized) {
@@ -645,26 +646,26 @@ export function TrackList({
       <div className="border rounded-lg overflow-hidden h-full flex flex-col" data-testid="track-list">
         {/* Header */}
         <div className="bg-muted/50 flex-shrink-0">
-          <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium text-muted-foreground`}>
+          <div className={`grid ${headerGridCols} gap-2 sm:gap-4 px-2 sm:px-4 py-2 text-sm font-medium text-muted-foreground`}>
             {showTrackNumber && (
               <Tooltip content={t('trackList.columnTrackNumber')} position="top" delay={700}>
-                <div>#</div>
+                <div className="pl-2">#</div>
               </Tooltip>
             )}
             <Tooltip content={t('trackList.tooltipTitle')} position="top" delay={700}>
               <div>{t('trackList.columnTitle')}</div>
             </Tooltip>
             <Tooltip content={t('trackList.tooltipArtist')} position="top" delay={700}>
-              <div>{t('trackList.columnArtist')}</div>
+              <div className="hidden sm:block">{t('trackList.columnArtist')}</div>
             </Tooltip>
             <Tooltip content={t('trackList.tooltipAlbum')} position="top" delay={700}>
-              <div>{t('trackList.columnAlbum')}</div>
+              <div className="hidden sm:block">{t('trackList.columnAlbum')}</div>
             </Tooltip>
             <Tooltip content={t('trackList.tooltipFormat')} position="top" delay={700}>
-              <div>{t('trackList.columnFormat')}</div>
+              <div className="hidden sm:block">{t('trackList.columnFormat')}</div>
             </Tooltip>
             <Tooltip content={t('trackList.tooltipDuration')} position="top" delay={700}>
-              <div>{t('trackList.columnDuration')}</div>
+              <div className="hidden sm:block">{t('trackList.columnDuration')}</div>
             </Tooltip>
             <div></div>
           </div>
@@ -731,26 +732,26 @@ export function TrackList({
     <div className="border rounded-lg overflow-hidden" data-testid="track-list">
       {/* Header */}
       <div className="bg-muted/50">
-        <div className={`grid ${gridCols} gap-4 px-4 py-2 text-sm font-medium text-muted-foreground`}>
+        <div className={`grid ${headerGridCols} gap-2 sm:gap-4 px-2 sm:px-4 py-2 text-sm font-medium text-muted-foreground`}>
           {showTrackNumber && (
             <Tooltip content={t('trackList.columnTrackNumber')} position="top" delay={700}>
-              <div>#</div>
+              <div className="pl-2">#</div>
             </Tooltip>
           )}
           <Tooltip content={t('trackList.tooltipTitle')} position="top" delay={700}>
             <div>{t('trackList.columnTitle')}</div>
           </Tooltip>
           <Tooltip content={t('trackList.tooltipArtist')} position="top" delay={700}>
-            <div>{t('trackList.columnArtist')}</div>
+            <div className="hidden sm:block">{t('trackList.columnArtist')}</div>
           </Tooltip>
           <Tooltip content={t('trackList.tooltipAlbum')} position="top" delay={700}>
-            <div>{t('trackList.columnAlbum')}</div>
+            <div className="hidden sm:block">{t('trackList.columnAlbum')}</div>
           </Tooltip>
           <Tooltip content={t('trackList.tooltipFormat')} position="top" delay={700}>
-            <div>{t('trackList.columnFormat')}</div>
+            <div className="hidden sm:block">{t('trackList.columnFormat')}</div>
           </Tooltip>
           <Tooltip content={t('trackList.tooltipDuration')} position="top" delay={700}>
-            <div className="text-right">{t('trackList.columnDuration')}</div>
+            <div className="hidden sm:block text-right">{t('trackList.columnDuration')}</div>
           </Tooltip>
           <div></div>
         </div>

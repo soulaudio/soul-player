@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import type { QueueTrack } from '../../contexts/PlayerCommandsContext';
 import { TrackItem } from './TrackItem';
 
@@ -13,7 +12,6 @@ export interface QueueSectionProps {
 }
 
 export function QueueSection({ queue, currentTrackId, scrollRef, onTrackClick }: QueueSectionProps) {
-  const { t } = useTranslation();
   const defaultScrollRef = useRef<HTMLDivElement>(null);
   const actualScrollRef = scrollRef || defaultScrollRef;
 
@@ -35,9 +33,6 @@ export function QueueSection({ queue, currentTrackId, scrollRef, onTrackClick }:
 
   return (
     <div className="flex flex-col flex-1 min-h-0" data-testid="queue-sidebar">
-      <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0">
-        {t('sidebar.queue')}
-      </div>
       <div
         ref={actualScrollRef}
         className="flex-1 overflow-y-auto px-4 pb-2 queue-scrollbar min-h-0"

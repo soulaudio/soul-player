@@ -195,12 +195,10 @@ export function ArtistPage() {
   return (
     <div data-testid="artist-detail-page" className="h-full">
       <DetailPageLayout
-        fallbackBackPath="/artists"
-        backLabelKey="artist.backToArtists"
         header={
-          <div className="flex items-start gap-6">
+          <div className="flex items-start gap-4 sm:gap-6">
             {/* Artist Avatar */}
-            <div className="group relative w-32 h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+            <div className="group relative w-20 h-20 sm:w-32 sm:h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
               {artistArtworkUrl ? (
                 <img
                   key={artworkVersion}
@@ -235,7 +233,7 @@ export function ArtistPage() {
               <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
                 {t('library.artist')}
               </p>
-              <h1 className="text-4xl font-bold mb-2" data-testid="artist-name">{artist.name}</h1>
+              <h1 className="text-xl sm:text-4xl font-bold mb-1 sm:mb-2" data-testid="artist-name">{artist.name}</h1>
               <p className="text-muted-foreground mb-4" data-testid="artist-stats">
                 {t('library.albums', { count: artist.album_count })} • {t('library.tracks', { count: artist.track_count })}
               </p>
@@ -245,7 +243,7 @@ export function ArtistPage() {
                 onMouseDown={(e) => e.preventDefault()}
                 disabled={tracks.filter(t => t.file_path).length === 0}
                 data-testid="artist-play-all-button"
-                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+                className="flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
               >
                 <Play className="w-5 h-5" fill="currentColor" />
                 <span>{t('common.playAll')}</span>

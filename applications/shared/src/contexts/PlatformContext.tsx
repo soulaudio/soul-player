@@ -30,6 +30,8 @@ export interface PlatformContextValue {
     hasUpdateSettings: boolean;
     hasLanguageSettings: boolean;
     hasThemeImportExport: boolean;
+    // UI features
+    hasAutoHideSearch: boolean;
     // Audio features
     hasRealAudioDevices: boolean;
     hasRealDeviceSelection: boolean;
@@ -50,6 +52,7 @@ const defaultFeatures = {
   hasUpdateSettings: false,
   hasLanguageSettings: false,
   hasThemeImportExport: false,
+  hasAutoHideSearch: false,
   hasRealAudioDevices: false,
   hasRealDeviceSelection: false,
 };

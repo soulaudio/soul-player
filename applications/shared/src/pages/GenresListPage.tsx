@@ -42,7 +42,7 @@ export function GenresListPage() {
       pageTestId="genres-page"
     >
       {filteredGenres.length > 0 ? (
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {filteredGenres.map((genre) => (
             <button
               key={genre.id}

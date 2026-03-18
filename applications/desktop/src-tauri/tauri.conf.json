@@ -33,7 +33,7 @@
         "height": 800,
         "label": "main",
         "minHeight": 600,
-        "minWidth": 800,
+        "minWidth": 320,
         "resizable": true,
         "title": "Soul Player",
         "transparent": false,
@@ -159,7 +159,8 @@
         "compression": "lzma",
         "installMode": "currentUser",
         "installerIcon": "icons/icon.ico",
-        "startMenuFolder": "Soul Player"
+        "startMenuFolder": "Soul Player",
+        "installerHooks": "nsis-hooks.nsh"
       },
       "webviewInstallMode": {
         "silent": true,

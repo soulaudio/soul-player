@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { TrackList, type Track, type QueueTrack, getDeduplicatedTracks, TrackMenu, type BackendTrack, AddToPlaylistDialog, LibraryPageLayout, useBackend, usePlayerCommands, debug } from '@soul-player/shared';
-import { ArrowLeft, Play, Guitar, Clock } from 'lucide-react';
+import { Play, Guitar, Clock } from 'lucide-react';
 
 interface Genre {
   id: number;
@@ -177,15 +177,6 @@ export function GenrePage() {
         <>
           {/* Genre Header */}
           <div className="mb-6">
-            <button
-              data-testid="genre-back-button"
-              onClick={() => navigate('/genres')}
-              className="flex items-center gap-2 text-muted-foreground hover:opacity-[var(--hover-text-opacity)] transition-opacity duration-[var(--transition-duration)] mb-4"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>{t('genre.backToGenres', 'Back to Genres')}</span>
-            </button>
-
             <div className="flex items-start gap-6">
               {/* Genre Icon */}
               <div className="w-32 h-32 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl flex items-center justify-center flex-shrink-0">

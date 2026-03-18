@@ -39,7 +39,8 @@
     "playlists": "Wiedergabelisten",
     "genres": "Genres",
     "settings": "Einstellungen",
-    "import": "Importieren"
+    "import": "Importieren",
+    "back": "Zurück"
   },
   "nowPlaying": {
     "fromLibrary": "Aus der Bibliothek",

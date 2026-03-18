@@ -9,7 +9,7 @@ import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { LibraryPageLayout } from '../components/LibraryPageLayout'
-import { SkeletonGrid } from '../components/SkeletonGrid'
+import { SkeletonTrackList } from '../components/SkeletonTrackList'
 import { useBackend, type BackendTrack, type BackendGenre } from '../contexts/BackendContext'
 import { usePlayerCommands, type QueueTrack } from '../contexts/PlayerCommandsContext'
 import { cn } from '../lib/utils'
@@ -122,6 +122,30 @@ export function TracksPage() {
     )
   }, [tracks, deferredSearchQuery])
 
+  // Memoize track transformation + lookup map
+  const { displayTracks, trackMap } = useMemo(() => {
+    const map = new Map<number, BackendTrack>()
+    const display = filteredTracks.map(t => {
+      map.set(t.id, t)
+      return {
+        id: t.id,
+        title: String(t.title || 'Unknown'),
+        artist: t.artist_name,
+        artistId: t.artist_id,
+        artists: t.artists,
+        album: t.album_title,
+        albumId: t.album_id,
+        duration: t.duration_seconds,
+        isAvailable: !!t.file_path,
+        format: t.file_format,
+        bitrate: t.bit_rate,
+        sampleRate: t.sample_rate,
+        channels: t.channels,
+      }
+    })
+    return { displayTracks: display, trackMap: map }
+  }, [filteredTracks])
+
   // Build queue from tracks (optimized: only first 50 tracks for immediate playback)
   const buildQueueFromTracks = useCallback((
     libraryTracks: BackendTrack[],
@@ -229,32 +253,17 @@ export function TracksPage() {
       gridClass="grid-cols-1"
       cacheKey="library-tracks-count"
       pageTestId="tracks-page"
+      customSkeleton={<SkeletonTrackList rows={15} />}
     >
-      {isLoading ? (
-        <SkeletonGrid count={20} type="track" gridClass="grid-cols-1" />
-      ) : errorContent || (filteredTracks.length > 0 ? (
+      {errorContent || (displayTracks.length > 0 ? (
         <TrackList
-          tracks={filteredTracks.map(t => ({
-            id: t.id,
-            title: String(t.title || 'Unknown'),
-            artist: t.artist_name,
-            artistId: t.artist_id,
-            artists: t.artists,
-            album: t.album_title,
-            albumId: t.album_id,
-            duration: t.duration_seconds,
-            isAvailable: !!t.file_path,
-            format: t.file_format,
-            bitrate: t.bit_rate,
-            sampleRate: t.sample_rate,
-            channels: t.channels,
-          }))}
+          tracks={displayTracks}
           buildQueue={buildQueue}
           showAlbumArt={true}
-          virtualized={filteredTracks.length > 100}
+          virtualized={displayTracks.length > 100}
           virtualItemSize={56}
           renderMenu={(track) => {
-            const backendTrack = filteredTracks.find(t => t.id === track.id)
+            const backendTrack = trackMap.get(typeof track.id === 'number' ? track.id : parseInt(String(track.id), 10))
             if (!backendTrack) return null
             return (
               <TrackMenu

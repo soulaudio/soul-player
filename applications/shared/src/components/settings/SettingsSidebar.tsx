@@ -26,13 +26,15 @@ const navigationItems: NavItem[] = [
   { id: 'about',      labelKey: 'settings.sections.about',      path: '/settings/about',      icon: Info     },
 ];
 
-export function SettingsSidebar() {
+export function SettingsSidebar({ horizontal = false }: { horizontal?: boolean }) {
   const { t } = useTranslation();
   const location = useLocation();
 
   return (
     <Tooltip.Provider delayDuration={600}>
-      <nav className="flex flex-col items-center gap-1 bg-muted/40 rounded-xl p-1.5">
+      <nav className={`flex items-center gap-1 rounded-xl p-1.5 ${
+        horizontal ? 'flex-row bg-card border border-border shadow-md' : 'flex-col bg-muted/40'
+      }`}>
         {navigationItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -46,18 +48,18 @@ export function SettingsSidebar() {
                   data-state={isActive ? 'active' : 'inactive'}
                   aria-current={isActive ? 'page' : undefined}
                   className={[
-                    'p-3 rounded-lg transition-all',
+                    `${horizontal ? 'p-2' : 'p-3'} rounded-lg transition-all`,
                     isActive
                       ? 'text-primary-foreground bg-primary shadow-sm'
                       : 'text-muted-foreground bg-background/50 hover:bg-background hover:opacity-80',
                   ].join(' ')}
                 >
-                  <Icon className="w-5 h-5" />
+                  <Icon className={horizontal ? 'w-4 h-4' : 'w-5 h-5'} />
                 </Link>
               </Tooltip.Trigger>
               <Tooltip.Portal>
                 <Tooltip.Content
-                  side="right"
+                  side={horizontal ? 'bottom' : 'right'}
                   sideOffset={8}
                   className="z-50 px-2 py-1 text-xs rounded-md bg-popover text-popover-foreground shadow-md select-none"
                 >

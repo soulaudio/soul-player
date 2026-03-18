@@ -15,10 +15,10 @@ interface SkeletonGridProps {
 }
 
 export function SkeletonGrid({ count = 12, type, gridClass }: SkeletonGridProps) {
-  const defaultGridClass = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'
+  const defaultGridClass = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4'
 
   return (
-    <div className={gridClass || defaultGridClass}>
+    <div className={gridClass ? `grid gap-3 sm:gap-4 ${gridClass}` : defaultGridClass}>
       {Array.from({ length: count }).map((_, i) => (
         <SkeletonCard key={i} type={type} />
       ))}

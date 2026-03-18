@@ -2,10 +2,10 @@
  * LibraryPageLayout - Reusable layout for library pages with search and auto-hide header
  */
 
-import { useEffect, useLayoutEffect, useRef, ReactNode, useCallback, useState, useMemo } from 'react'
+import { useEffect, useRef, ReactNode, useCallback, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, X } from 'lucide-react'
-import { FeatureGate } from '../contexts/PlatformContext'
+import { FeatureGate, useFeatures } from '../contexts/PlatformContext'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
 import { useBackend } from '../contexts/BackendContext'
 import { SkeletonCard } from './SkeletonCard'
@@ -38,6 +38,8 @@ interface LibraryPageLayoutProps {
   filterPanel?: ReactNode
   /** When true, increases content top padding to account for filter panel height */
   filterPanelVisible?: boolean
+  /** Custom skeleton to show while loading (overrides default SkeletonCard grid) */
+  customSkeleton?: ReactNode
   /** The main content (grid, list, etc.) */
   children: ReactNode
 }
@@ -56,24 +58,16 @@ export function LibraryPageLayout({
   pageTestId,
   filterPanel,
   filterPanelVisible = false,
+  customSkeleton,
   children,
 }: LibraryPageLayoutProps) {
   const { t } = useTranslation()
   const backend = useBackend()
+  const { hasAutoHideSearch } = useFeatures()
   const { showHeader: showSearchBar, setShowHeader: setShowSearchBar, scrollContainerRef } = useScrollVisibility()
   useScrollRestoration(scrollContainerRef)
-  const autoHideSearchRef = useRef(true)
+  const autoHideSearchRef = useRef(hasAutoHideSearch)
   const [showGradients, setShowGradients] = useState(true)
-
-  // scrollContainerRef.current is null during render — refs are set in the layout phase
-  // after children's effects run (bottom-up). Delay rendering children until the scroll
-  // container is committed, so VirtualizedGrid always gets a non-null scroll element.
-  // useLayoutEffect fires synchronously before paint, so the browser never sees skeleton
-  // when data is already available.
-  const [scrollReady, setScrollReady] = useState(false)
-  useLayoutEffect(() => {
-    setScrollReady(true)
-  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -81,7 +75,7 @@ export function LibraryPageLayout({
       backend.getUserSetting('ui.show_library_gradients'),
     ])
       .then(([hideSearch, showGrad]) => {
-        const autoHide = hideSearch ?? true
+        const autoHide = hasAutoHideSearch ? (hideSearch ?? true) : false
         autoHideSearchRef.current = autoHide
         if (!autoHide) setShowSearchBar(true)
         setShowGradients(showGrad ?? true)
@@ -89,7 +83,7 @@ export function LibraryPageLayout({
       .catch(() => {/* ignore */})
 
     const searchHandler = (e: Event) => {
-      const val = (e as CustomEvent).detail.autoHide as boolean
+      const val = hasAutoHideSearch ? (e as CustomEvent).detail.autoHide as boolean : false
       autoHideSearchRef.current = val
       if (!val) setShowSearchBar(true)
     }
@@ -346,10 +340,10 @@ export function LibraryPageLayout({
         )}
       </FeatureGate>
 
-      {/* Search bar - auto-hide on scroll when enabled, absolutely positioned */}
+      {/* Search bar — absolute overlay so scrollbar starts at top */}
       <div
-        className={`absolute top-0 left-0 right-0 bg-background z-10 transition-transform duration-300 mr-6 pb-3 ${
-          showSearchBar ? 'translate-y-0' : '-translate-y-full'
+        className={`absolute top-0 left-0 right-0 z-10 bg-background mr-4 sm:mr-6 pt-8 pb-2 transition-all duration-300 ${
+          showSearchBar ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full pointer-events-none'
         }`}
       >
           <div className="flex items-center gap-4">
@@ -382,27 +376,29 @@ export function LibraryPageLayout({
           {filterPanel}
         </div>
 
-      {/* Scrollable Content — padding-top is fixed to header height regardless of whether
-          the header is currently visible. Changing pt on scroll (pt-14 → pt-6) triggers a
-          full layout reflow of all absolute-positioned virtual rows every time the header
-          auto-hides, which causes the visible stutter. Keeping it constant eliminates that.
-          The 32px of extra space at the top when header is hidden is imperceptible. */}
+      {/* Scrollable Content — scrollbar starts at very top */}
       <div
         ref={scrollContainerRef}
         data-testid="scroll-container"
-        className={`flex-1 overflow-y-auto pr-6 pb-6 scrollbar-custom ${
-          filterPanelVisible ? 'pt-28' : 'pt-14'
-        }`}
+        className="flex-1 overflow-y-auto pr-0 scrollbar-custom"
       >
-        {(isLoading || !scrollReady) ? (
-          <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
-            {Array.from({ length: cachedCount }).map((_, index) => (
-              <SkeletonCard key={index} type={itemType} />
-            ))}
-          </div>
-        ) : (
-          children
-        )}
+        <div className={`pr-6 pb-20 sm:pb-6 ${
+          showSearchBar
+            ? filterPanelVisible ? 'pt-24' : 'pt-14'
+            : 'pt-4 sm:pt-2'
+        }`}>
+          {isLoading ? (
+            customSkeleton || (
+              <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
+                {Array.from({ length: cachedCount }).map((_, index) => (
+                  <SkeletonCard key={index} type={itemType} />
+                ))}
+              </div>
+            )
+          ) : (
+            children
+          )}
+        </div>
       </div>
 
       {/* Top gradient overlay — opacity controlled directly via ref to avoid re-renders */}

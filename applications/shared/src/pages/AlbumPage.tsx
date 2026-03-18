@@ -199,13 +199,11 @@ export function AlbumPage() {
   return (
     <div data-testid="album-detail-page" className="h-full">
       <DetailPageLayout
-        fallbackBackPath="/albums"
-        backLabelKey="album.backToAlbums"
         header={
-          <div className="flex items-start gap-6">
+          <div className="flex items-start gap-4 sm:gap-6">
             {/* Album Cover */}
             <div
-              className="group relative w-48 h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center cursor-pointer"
+              className="group relative w-24 h-24 sm:w-48 sm:h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center cursor-pointer"
               onClick={() => setLightboxOpen(true)}
               role="button"
               tabIndex={0}
@@ -237,8 +235,8 @@ export function AlbumPage() {
               <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
                 {t('library.album')}
               </p>
-              <h1 className="text-4xl font-bold mb-2" data-testid="album-title">{album.title}</h1>
-              <p className="text-lg mb-2" data-testid="album-artist">
+              <h1 className="text-xl sm:text-4xl font-bold mb-1 sm:mb-2" data-testid="album-title">{album.title}</h1>
+              <p className="text-sm sm:text-lg mb-1 sm:mb-2" data-testid="album-artist">
                 <ArtistLink
                   artistId={album.artist_id}
                   artistName={album.artist_name}
@@ -259,7 +257,7 @@ export function AlbumPage() {
                   onMouseDown={(e) => e.preventDefault()}
                   disabled={tracks.filter(t => t.file_path).length === 0}
                   data-testid="album-play-all-button"
-                  className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
+                  className="flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base bg-primary text-primary-foreground rounded-full hover:opacity-[var(--hover-button-opacity)] transition-opacity disabled:opacity-[var(--disabled-opacity)]"
                 >
                   <Play className="w-5 h-5" fill="currentColor" />
                   <span>{t('common.playAll')}</span>
