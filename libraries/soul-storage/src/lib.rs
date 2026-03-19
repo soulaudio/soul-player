@@ -60,6 +60,7 @@ pub mod window_state;
 // Library management (watched folders, scanning)
 pub mod library_sources;
 pub mod scan_progress;
+pub mod scanned_directories;
 
 // Background processing
 pub mod fingerprint_queue;

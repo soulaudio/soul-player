@@ -573,6 +573,53 @@ pub fn calculate_file_hash(path: &Path) -> Result<String> {
     Ok(hash_string)
 }
 
+/// Calculate a quick hash of the first 64KB of a file for fast dedup.
+/// This is much faster than hashing the entire file and sufficient
+/// for initial duplicate detection.
+pub fn calculate_quick_hash(path: &Path) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
+    let start = std::time::Instant::now();
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        tracing::error!(
+            file_path = %path.display(),
+            error = %e,
+            "[Metadata] Failed to open file for quick hashing"
+        );
+        e
+    })?;
+    let mut buffer = [0u8; 65536]; // 64KB
+    let bytes_read = file.read(&mut buffer).map_err(|e| {
+        tracing::error!(
+            file_path = %path.display(),
+            error = %e,
+            "[Metadata] Failed to read file for quick hashing"
+        );
+        e
+    })?;
+    let hash = Sha256::digest(&buffer[..bytes_read]);
+    let result = hex::encode(hash);
+
+    let elapsed = start.elapsed();
+    if elapsed.as_millis() > 100 {
+        tracing::warn!(
+            file_path = %path.display(),
+            duration_ms = elapsed.as_millis(),
+            "[Metadata] Slow quick hash calculation"
+        );
+    } else {
+        tracing::debug!(
+            file_path = %path.display(),
+            duration_ms = elapsed.as_millis(),
+            hash = &result[..16],
+            "[Metadata] Quick hash calculation completed"
+        );
+    }
+
+    Ok(result)
+}
+
 /// Convert soul-audio AudioMetadata to ExtractedMetadata
 impl From<soul_audio::AudioMetadata> for ExtractedMetadata {
     fn from(meta: soul_audio::AudioMetadata) -> Self {

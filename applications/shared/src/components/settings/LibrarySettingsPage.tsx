@@ -235,10 +235,10 @@ export function LibrarySettingsPage() {
     }
   };
 
-  const handleRescanAll = async (forceRefresh = false) => {
+  const handleRescanAll = async () => {
     try {
       setScanningSourceId(-1); // Use -1 to indicate "all"
-      await invoke('rescan_all_sources', { forceRefresh });
+      await invoke('rescan_all_sources');
       await loadSettings();
     } catch (err) {
       setError(String(err));
@@ -612,7 +612,7 @@ export function LibrarySettingsPage() {
                     <Tooltip content={t('librarySettings.rescanAllDescription')} position="top">
                       <button
                         data-testid="rescan-all-button"
-                        onClick={() => handleRescanAll(false)}
+                        onClick={() => handleRescanAll()}
                         disabled={scanningSourceId !== null}
                         className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
                       >
@@ -622,21 +622,6 @@ export function LibrarySettingsPage() {
                           <RefreshCw className="w-4 h-4" />
                         )}
                         {t('librarySettings.rescanAll')}
-                      </button>
-                    </Tooltip>
-                    <Tooltip content={t('librarySettings.forceRefreshDescription')} position="top">
-                      <button
-                        data-testid="force-reimport-button"
-                        onClick={() => handleRescanAll(true)}
-                        disabled={scanningSourceId !== null}
-                        className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-500/30 disabled:opacity-[var(--disabled-opacity)]"
-                      >
-                        {scanningSourceId === -1 ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-4 h-4" />
-                        )}
-                        {t('librarySettings.forceRefresh')}
                       </button>
                     </Tooltip>
                   </>

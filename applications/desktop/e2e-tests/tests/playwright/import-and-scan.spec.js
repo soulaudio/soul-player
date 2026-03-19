@@ -325,11 +325,10 @@ test('force-rescan processes all files and completes', async () => {
   expect(sources.length).toBeGreaterThan(0);
   const sourceId = sources[0].id;
 
-  // Force-refresh rescan so all files are re-processed (not skipped as unchanged).
+  // Rescan the source.
   await page.evaluate(async (sid) => {
     await window.__TAURI_INTERNALS__.invoke('rescan_library_source', {
       sourceId: sid,
-      forceRefresh: true,
     });
   }, sourceId);
 

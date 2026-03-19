@@ -14,7 +14,7 @@ use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 use soul_core::types::LibrarySource;
 use sqlx::SqlitePool;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,8 +37,21 @@ pub enum WatcherEvent {
     Renamed(PathBuf, PathBuf),
 }
 
-/// Callback for watcher events
-pub type EventCallback = Box<dyn Fn(WatcherEvent) + Send + Sync>;
+/// Scan lifecycle events emitted by the watcher's event processor.
+/// Platform-agnostic — the Tauri layer converts these to frontend events.
+#[derive(Debug, Clone)]
+pub enum ScanEvent {
+    Started,
+    Progress {
+        processed: i64,
+        total: i64,
+        current_file: Option<String>,
+    },
+    Complete,
+}
+
+/// Callback for scan lifecycle events (platform-agnostic)
+pub type ScanEventCallback = Arc<dyn Fn(ScanEvent) + Send + Sync>;
 
 /// Configuration for the library watcher
 #[derive(Debug, Clone)]
@@ -217,7 +230,11 @@ impl LibraryWatcher {
     }
 }
 
-/// Event processor that handles watcher events and updates the library
+/// Event processor that handles watcher events and updates the library.
+///
+/// Batches events per source and collapses them into a single incremental
+/// scan per flush. With directory-level mtime skipping, a full source scan
+/// is fast for unchanged directories.
 pub struct EventProcessor {
     pool: SqlitePool,
     user_id: String,
@@ -226,6 +243,10 @@ pub struct EventProcessor {
     pending: HashMap<i64, Vec<WatcherEvent>>,
     /// Maximum batch size before forcing a scan
     max_batch_size: usize,
+    /// Sources currently being scanned (prevents overlapping scans)
+    scanning: HashSet<i64>,
+    /// Optional callback for scan lifecycle events
+    scan_callback: Option<ScanEventCallback>,
 }
 
 impl EventProcessor {
@@ -237,12 +258,20 @@ impl EventProcessor {
             device_id: device_id.into(),
             pending: HashMap::new(),
             max_batch_size: 100,
+            scanning: HashSet::new(),
+            scan_callback: None,
         }
     }
 
     /// Set the maximum batch size
     pub fn max_batch_size(mut self, size: usize) -> Self {
         self.max_batch_size = size;
+        self
+    }
+
+    /// Set callback for scan lifecycle events
+    pub fn on_scan_event(mut self, callback: ScanEventCallback) -> Self {
+        self.scan_callback = Some(callback);
         self
     }
 
@@ -263,30 +292,80 @@ impl EventProcessor {
         Ok(())
     }
 
-    /// Flush pending events for a source
+    /// Flush pending events for a source by triggering a single incremental scan.
+    ///
+    /// All batched events are collapsed — with directory-level mtime skipping,
+    /// one scan handles everything efficiently.
     pub async fn flush_source(&mut self, source_id: i64) -> Result<()> {
-        if let Some(events) = self.pending.remove(&source_id) {
-            if events.is_empty() {
-                return Ok(());
+        let events = match self.pending.remove(&source_id) {
+            Some(events) if !events.is_empty() => events,
+            _ => return Ok(()),
+        };
+
+        // Skip if already scanning this source — re-queue events
+        if self.scanning.contains(&source_id) {
+            debug!(
+                "Source {} already scanning, re-queuing {} events",
+                source_id,
+                events.len()
+            );
+            self.pending.insert(source_id, events);
+            return Ok(());
+        }
+
+        info!(
+            "Watcher triggering scan for source {} ({} events collapsed)",
+            source_id,
+            events.len()
+        );
+
+        let source = soul_storage::library_sources::get_by_id(&self.pool, source_id).await?;
+        let Some(source) = source else {
+            warn!("Source {} not found, skipping events", source_id);
+            return Ok(());
+        };
+
+        self.scanning.insert(source_id);
+
+        // Build scanner with progress callback if available
+        let mut scanner = LibraryScanner::new(
+            self.pool.clone(),
+            self.user_id.clone(),
+            self.device_id.clone(),
+        );
+
+        if let Some(ref cb) = self.scan_callback {
+            let cb = cb.clone();
+            scanner = scanner.on_progress(Box::new(move |stats| {
+                cb(ScanEvent::Progress {
+                    processed: stats.processed,
+                    total: stats.total_files,
+                    current_file: stats.current_file.clone(),
+                });
+            }));
+        }
+
+        if let Some(ref cb) = self.scan_callback {
+            cb(ScanEvent::Started);
+        }
+
+        match scanner.scan_source(&source).await {
+            Ok(stats) => {
+                info!(
+                    "Watcher scan complete for {}: {} new, {} updated, {} removed",
+                    source.name, stats.new_files, stats.updated_files, stats.removed_files
+                );
             }
-
-            info!("Flushing {} events for source {}", events.len(), source_id);
-
-            // Get the source
-            let source = soul_storage::library_sources::get_by_id(&self.pool, source_id).await?;
-            let Some(source) = source else {
-                warn!("Source {} not found, skipping events", source_id);
-                return Ok(());
-            };
-
-            // Process events
-            for event in events {
-                if let Err(e) = self.handle_event(&source, event).await {
-                    error!("Failed to handle event: {}", e);
-                }
+            Err(e) => {
+                error!("Watcher scan failed for {}: {}", source.name, e);
             }
         }
 
+        if let Some(ref cb) = self.scan_callback {
+            cb(ScanEvent::Complete);
+        }
+
+        self.scanning.remove(&source_id);
         Ok(())
     }
 
@@ -296,67 +375,6 @@ impl EventProcessor {
 
         for source_id in source_ids {
             self.flush_source(source_id).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Handle a single event
-    async fn handle_event(&self, source: &LibrarySource, event: WatcherEvent) -> Result<()> {
-        let scanner = LibraryScanner::new(
-            self.pool.clone(),
-            self.user_id.clone(),
-            self.device_id.clone(),
-        );
-
-        match event {
-            WatcherEvent::Created(path) | WatcherEvent::Modified(path) => {
-                debug!("Processing created/modified file: {:?}", path);
-
-                // Check if it's an audio file
-                if !is_audio_file(&path) {
-                    return Ok(());
-                }
-
-                // Use the scanner to process this single file
-                // The scanner already handles change detection and updates
-                let stats = scanner.scan_source(source).await?;
-                debug!(
-                    "Scan complete: {} new, {} updated",
-                    stats.new_files, stats.updated_files
-                );
-            }
-            WatcherEvent::Removed(path) => {
-                debug!("Processing removed file: {:?}", path);
-
-                // Check if it's an audio file
-                if !is_audio_file(&path) {
-                    return Ok(());
-                }
-
-                // The next scan will detect the missing file and mark it unavailable
-                // For now, we trigger a full scan which will handle it
-                if source.sync_deletes {
-                    let stats = scanner.scan_source(source).await?;
-                    debug!("Scan complete: {} removed", stats.removed_files);
-                }
-            }
-            WatcherEvent::Renamed(old_path, new_path) => {
-                debug!("Processing renamed file: {:?} -> {:?}", old_path, new_path);
-
-                // Check if either path is an audio file
-                let old_is_audio = is_audio_file(&old_path);
-                let new_is_audio = is_audio_file(&new_path);
-
-                if old_is_audio || new_is_audio {
-                    // Trigger a scan to update paths
-                    let stats = scanner.scan_source(source).await?;
-                    debug!(
-                        "Scan complete: {} new, {} updated, {} relocated",
-                        stats.new_files, stats.updated_files, stats.relocated_files
-                    );
-                }
-            }
         }
 
         Ok(())
@@ -383,20 +401,6 @@ fn convert_event(event: &Event) -> Option<WatcherEvent> {
     }
 }
 
-/// Check if a path is an audio file based on extension
-fn is_audio_file(path: &Path) -> bool {
-    let audio_extensions = [
-        "flac", "mp3", "m4a", "aac", "ogg", "opus", "wav", "aif", "aiff",
-    ];
-
-    path.extension()
-        .map(|ext| {
-            let ext_str = ext.to_string_lossy().to_lowercase();
-            audio_extensions.contains(&ext_str.as_str())
-        })
-        .unwrap_or(false)
-}
-
 /// Run the event processing loop
 ///
 /// This function runs indefinitely, processing events as they arrive.
@@ -406,8 +410,12 @@ pub async fn run_event_loop(
     user_id: String,
     device_id: String,
     mut event_rx: mpsc::Receiver<(i64, WatcherEvent)>,
+    scan_callback: Option<ScanEventCallback>,
 ) {
     let mut processor = EventProcessor::new(pool, user_id, device_id);
+    if let Some(cb) = scan_callback {
+        processor = processor.on_scan_event(cb);
+    }
 
     // Flush interval (process pending events even if batch isn't full)
     let mut flush_interval = tokio::time::interval(Duration::from_secs(5));
@@ -436,13 +444,14 @@ mod tests {
 
     #[test]
     fn test_is_audio_file() {
-        assert!(is_audio_file(Path::new("test.flac")));
-        assert!(is_audio_file(Path::new("test.mp3")));
-        assert!(is_audio_file(Path::new("test.FLAC")));
-        assert!(is_audio_file(Path::new("/path/to/test.m4a")));
-        assert!(!is_audio_file(Path::new("test.txt")));
-        assert!(!is_audio_file(Path::new("test.jpg")));
-        assert!(!is_audio_file(Path::new("test")));
+        // Use the shared scanner function
+        assert!(crate::scanner::is_audio_file(Path::new("test.flac")));
+        assert!(crate::scanner::is_audio_file(Path::new("test.mp3")));
+        assert!(crate::scanner::is_audio_file(Path::new("test.FLAC")));
+        assert!(crate::scanner::is_audio_file(Path::new("/path/to/test.m4a")));
+        assert!(!crate::scanner::is_audio_file(Path::new("test.txt")));
+        assert!(!crate::scanner::is_audio_file(Path::new("test.jpg")));
+        assert!(!crate::scanner::is_audio_file(Path::new("test")));
     }
 
     #[test]

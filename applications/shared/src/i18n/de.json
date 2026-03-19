@@ -504,8 +504,6 @@
     "rescanDescription": "Diesen Ordner nach neuen und geänderten Dateien durchsuchen.",
     "rescanAll": "Alle erneut durchsuchen",
     "rescanAllDescription": "Alle überwachten Ordner nach neuen und geänderten Dateien durchsuchen.",
-    "forceRefresh": "Erneut importieren",
-    "forceRefreshDescription": "Metadaten für alle Dateien neu extrahieren, auch unveränderte. Verwenden Sie dies, um fehlende Künstler-/Albuminformationen zu beheben.",
     "managedLibrary": "Verwaltete Bibliothek",
     "managedLibraryDescription": "Wo importierte Dateien organisiert werden",
     "libraryPath": "Bibliotheksordner",

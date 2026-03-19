@@ -47,8 +47,6 @@ pub struct LibraryScanner {
     progress_callback: Option<ProgressCallback>,
     /// Metadata extractor with fuzzy matching
     metadata_extractor: MetadataExtractor,
-    /// Force re-extraction of metadata even for unchanged files
-    force_metadata_refresh: bool,
     /// Maximum number of concurrent metadata extraction tasks
     concurrency: usize,
 }
@@ -63,7 +61,6 @@ impl LibraryScanner {
             compute_hashes: true,
             progress_callback: None,
             metadata_extractor: MetadataExtractor::new(),
-            force_metadata_refresh: false,
             concurrency: 8,
         }
     }
@@ -71,12 +68,6 @@ impl LibraryScanner {
     /// Set whether to compute content hashes (default: true)
     pub fn compute_hashes(mut self, compute: bool) -> Self {
         self.compute_hashes = compute;
-        self
-    }
-
-    /// Force re-extraction of metadata even for unchanged files
-    pub fn force_metadata_refresh(mut self, force: bool) -> Self {
-        self.force_metadata_refresh = force;
         self
     }
 
@@ -150,15 +141,32 @@ impl LibraryScanner {
         // Start scan progress tracking
         let progress = soul_storage::scan_progress::start(&self.pool, source.id, None).await?;
 
-        // Scan the directory (wrap blocking WalkDir in spawn_blocking to avoid macOS spinning wheel)
+        // ── Directory-level incremental scan ──
+        // Load stored directory mtimes from DB, then only scan directories
+        // whose mtime has changed. Unchanged directories are skipped entirely.
+        let stored_dirs_raw: Vec<soul_storage::scanned_directories::ScannedDirectory> =
+            soul_storage::scanned_directories::get_by_source(&self.pool, source.id).await?;
+        let stored_dirs: HashMap<String, crate::scanner::StoredDirInfo> = stored_dirs_raw
+            .into_iter()
+            .map(|d| {
+                (
+                    d.path.clone(),
+                    crate::scanner::StoredDirInfo {
+                        dir_mtime: d.dir_mtime,
+                        file_count: d.file_count,
+                    },
+                )
+            })
+            .collect();
+
         let source_path_buf = source_path.to_path_buf();
-        let files = match tokio::task::spawn_blocking(move || {
+        let scan_result = match tokio::task::spawn_blocking(move || {
             let scanner = FileScanner::new();
-            scanner.scan_directory(&source_path_buf)
+            scanner.scan_directory_incremental(&source_path_buf, &stored_dirs)
         })
         .await
         {
-            Ok(Ok(files)) => files,
+            Ok(Ok(result)) => result,
             Ok(Err(e)) => {
                 soul_storage::scan_progress::fail(&self.pool, progress.id, &e.to_string()).await?;
                 soul_storage::library_sources::set_scan_status(
@@ -184,31 +192,59 @@ impl LibraryScanner {
             }
         };
 
-        // Update total file count
-        soul_storage::scan_progress::set_total_files(&self.pool, progress.id, files.len() as i64)
-            .await?;
+        let files = scan_result.changed_files;
+        let scanned_dirs_to_persist = scan_result.scanned_dirs;
+        let total_files_in_library =
+            files.len() as i64 + scan_result.unchanged_dir_file_paths.len() as i64;
+
+        // Update total file count (includes all files — changed + unchanged)
+        soul_storage::scan_progress::set_total_files(
+            &self.pool,
+            progress.id,
+            total_files_in_library,
+        )
+        .await?;
 
         let mut stats = ScanStats {
-            total_files: files.len() as i64,
+            total_files: total_files_in_library,
             ..Default::default()
         };
 
         // Emit initial progress so the frontend knows the total immediately.
-        // Without this, libraries with < 10 files never emit any scan-progress
-        // events (flush_progress fires every 10 files), leaving the UI at 0/0.
         if let Some(ref callback) = self.progress_callback {
             callback(&stats);
         }
 
         // Get existing tracks for this source to detect changes
         let existing_tracks = self.get_existing_tracks_map(source.id).await?;
+
+        // Pre-populate seen_paths with files from unchanged directories
+        // to prevent them from being falsely marked as missing during soft-delete.
         let mut seen_paths: HashMap<String, bool> = HashMap::new();
+        let dir_skipped_count = scan_result.unchanged_dir_file_paths.len() as i64;
+        for path in scan_result.unchanged_dir_file_paths {
+            seen_paths.insert(path, true);
+        }
+
+        // Count directory-level skips as processed
+        if dir_skipped_count > 0 {
+            stats.processed += dir_skipped_count;
+            soul_storage::scan_progress::update_counts(
+                &self.pool,
+                progress.id,
+                dir_skipped_count,
+                0,
+                0,
+                0,
+                0,
+            )
+            .await?;
+        }
 
         // ── Phase 1: Filter unchanged files (cheap stat-only pass) ──
         // Separate files into unchanged (skip) and needs-processing buckets.
         // Wrapped in spawn_blocking to avoid blocking the Tokio runtime with
         // synchronous fs::metadata calls on potentially thousands of files.
-        let force_refresh = self.force_metadata_refresh;
         let phase1_result = tokio::task::spawn_blocking(move || {
             let mut files_to_process: Vec<(PathBuf, i64, i64, Option<ExistingTrack>)> = Vec::new();
             let mut skipped_count: i64 = 0;
@@ -244,13 +280,13 @@ impl LibraryScanner {
                     let unchanged = existing.file_size == Some(file_size)
                         && existing.file_mtime == Some(file_mtime);
 
-                    if unchanged && !force_refresh {
+                    if unchanged {
                         // Unchanged — skip
                         processed_count += 1;
                         skipped_count += 1;
                         continue;
                     }
-                    // Changed or force-refresh — need to reprocess
+                    // Changed — need to reprocess
                     files_to_process.push((
                         file_path.clone(),
                         file_size,
@@ -418,6 +454,14 @@ impl LibraryScanner {
             }
         }
 
+        // Persist updated directory mtimes for next incremental scan
+        let dirs_batch: Vec<(String, i64, i64)> = scanned_dirs_to_persist
+            .into_iter()
+            .map(|d| (d.path, d.dir_mtime, d.file_count))
+            .collect();
+        soul_storage::scanned_directories::upsert_batch(&self.pool, source.id, &dirs_batch)
+            .await?;
+
         // Complete the scan
         soul_storage::scan_progress::complete(&self.pool, progress.id).await?;
 
@@ -576,6 +620,7 @@ impl LibraryScanner {
                     source_id,
                     file_size,
                     file_mtime,
+                    None,
                 )
                 .await?;
                 tracing::info!("Relocated track {} to {}", track.id, path_str);

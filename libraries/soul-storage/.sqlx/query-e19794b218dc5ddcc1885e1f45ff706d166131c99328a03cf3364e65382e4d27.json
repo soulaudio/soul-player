@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE tracks\n        SET file_path = ?,\n            library_source_id = ?,\n            file_size = ?,\n            file_mtime = ?,\n            quick_hash = COALESCE(?, quick_hash),\n            is_available = 1,\n            unavailable_since = NULL,\n            updated_at = datetime('now')\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "e19794b218dc5ddcc1885e1f45ff706d166131c99328a03cf3364e65382e4d27"
+}

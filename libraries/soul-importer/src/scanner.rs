@@ -1,11 +1,14 @@
 //! File scanning for audio files
 
 use crate::{ImportError, Result};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-/// Supported audio file extensions
-const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "flac", "ogg", "wav", "aac", "m4a", "opus"];
+/// Supported audio file extensions (shared with watcher module)
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "mp3", "flac", "ogg", "wav", "aac", "m4a", "opus", "dsf", "dff", "dsdiff",
+];
 
 /// Scanner for audio files in directories
 #[derive(Default)]
@@ -93,6 +96,158 @@ impl FileScanner {
         Ok(audio_files)
     }
 
+    /// Scan a directory incrementally, skipping directories whose mtime hasn't changed.
+    ///
+    /// For each subdirectory in the tree:
+    /// - If its mtime matches the stored value → skip (files are unchanged)
+    /// - If its mtime differs or it's new → list audio files in that directory
+    ///
+    /// Returns files that need processing, plus metadata for updating the DB.
+    pub fn scan_directory_incremental(
+        &self,
+        path: &Path,
+        stored_dirs: &HashMap<String, StoredDirInfo>,
+    ) -> Result<IncrementalScanResult> {
+        if !path.exists() {
+            return Err(ImportError::FileNotFound(path.display().to_string()));
+        }
+        if !path.is_dir() {
+            return Err(ImportError::InvalidPath(format!(
+                "{} is not a directory",
+                path.display()
+            )));
+        }
+
+        let mut changed_files = Vec::new();
+        let mut unchanged_dir_count: i64 = 0;
+        let mut scanned_dirs = Vec::new();
+        let mut unchanged_dir_file_paths = Vec::new();
+
+        // Walk directory tree, only looking at directory entries
+        let mut walker = WalkDir::new(path).follow_links(self.follow_links);
+        if let Some(depth) = self.max_depth {
+            walker = walker.max_depth(depth);
+        }
+
+        // Collect all directories first
+        let mut directories: Vec<PathBuf> = Vec::new();
+        for entry in walker.into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_dir() {
+                directories.push(entry.path().to_path_buf());
+            }
+        }
+
+        for dir in &directories {
+            let dir_str = dir.display().to_string();
+
+            // Get directory mtime
+            let dir_mtime = match std::fs::metadata(dir) {
+                Ok(m) => m
+                    .modified()
+                    .map(|t| {
+                        t.duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0)
+                    })
+                    .unwrap_or(0),
+                Err(e) => {
+                    tracing::warn!("Failed to stat directory {:?}: {}", dir, e);
+                    continue;
+                }
+            };
+
+            // Check if directory has changed
+            if let Some(stored) = stored_dirs.get(&dir_str) {
+                if stored.dir_mtime == dir_mtime {
+                    // Mtime unchanged — quick-verify file count as a safety check.
+                    // On some filesystems (NTFS), rapid file additions within the same
+                    // second may not update directory mtime.
+                    let mut actual_count: i64 = 0;
+                    let mut dir_file_paths = Vec::new();
+                    if let Ok(entries) = std::fs::read_dir(dir) {
+                        for entry in entries.filter_map(|e| e.ok()) {
+                            let entry_path = entry.path();
+                            if entry_path.is_file() && is_audio_file(&entry_path) {
+                                dir_file_paths.push(entry_path.display().to_string());
+                                actual_count += 1;
+                            }
+                        }
+                    }
+
+                    if actual_count == stored.file_count {
+                        // Truly unchanged — skip
+                        unchanged_dir_count += 1;
+                        unchanged_dir_file_paths.extend(dir_file_paths);
+                        scanned_dirs.push(ScannedDirInfo {
+                            path: dir_str,
+                            dir_mtime,
+                            file_count: stored.file_count,
+                        });
+                        continue;
+                    }
+                    // File count mismatch despite same mtime — fall through to rescan
+                    tracing::debug!(
+                        "[SCAN] Dir mtime unchanged but file count differs ({} vs {}): {}",
+                        stored.file_count,
+                        actual_count,
+                        dir_str
+                    );
+                }
+            }
+
+            // Changed or new directory — list audio files (non-recursive)
+            let mut file_count: i64 = 0;
+            match std::fs::read_dir(dir) {
+                Ok(entries) => {
+                    for entry in entries.filter_map(|e| e.ok()) {
+                        let entry_path = entry.path();
+                        if !entry_path.is_file() {
+                            continue;
+                        }
+                        // Skip macOS metadata files
+                        if let Some(filename) = entry_path.file_name() {
+                            let filename_str = filename.to_string_lossy();
+                            if filename_str.starts_with("._")
+                                || filename_str == ".DS_Store"
+                                || filename_str == ".localized"
+                                || filename_str == "Icon\r"
+                            {
+                                continue;
+                            }
+                        }
+                        if is_audio_file(&entry_path) {
+                            changed_files.push(entry_path);
+                            file_count += 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read directory {:?}: {}", dir, e);
+                }
+            }
+
+            scanned_dirs.push(ScannedDirInfo {
+                path: dir_str,
+                dir_mtime,
+                file_count,
+            });
+        }
+
+        tracing::info!(
+            "[SCAN] Incremental scan: {} dirs checked, {} unchanged (skipped), {} files to process",
+            directories.len(),
+            unchanged_dir_count,
+            changed_files.len()
+        );
+
+        Ok(IncrementalScanResult {
+            changed_files,
+            unchanged_dir_count,
+            scanned_dirs,
+            unchanged_dir_file_paths,
+        })
+    }
+
     /// Scan multiple directories for audio files
     pub fn scan_directories(&self, paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
         let mut all_files = Vec::new();
@@ -119,6 +274,34 @@ impl FileScanner {
             .cloned()
             .collect()
     }
+}
+
+/// Info about a previously scanned directory, loaded from DB
+#[derive(Debug, Clone)]
+pub struct StoredDirInfo {
+    pub dir_mtime: i64,
+    pub file_count: i64,
+}
+
+/// Info about a directory after scanning, to be persisted to DB
+#[derive(Debug, Clone)]
+pub struct ScannedDirInfo {
+    pub path: String,
+    pub dir_mtime: i64,
+    pub file_count: i64,
+}
+
+/// Result of an incremental directory scan
+pub struct IncrementalScanResult {
+    /// Audio files in directories whose mtime changed or that are new
+    pub changed_files: Vec<PathBuf>,
+    /// Number of directories skipped (unchanged mtime)
+    pub unchanged_dir_count: i64,
+    /// Updated directory info to persist to DB
+    pub scanned_dirs: Vec<ScannedDirInfo>,
+    /// File paths from unchanged directories (for soft-delete correctness —
+    /// these must be included in seen_paths so they aren't falsely marked missing)
+    pub unchanged_dir_file_paths: Vec<String>,
 }
 
 /// Check if a file is a supported audio file
@@ -210,5 +393,109 @@ mod tests {
         assert_eq!(files.len(), 1);
         assert!(files.iter().any(|p| p.ends_with("song1.mp3")));
         assert!(!files.iter().any(|p| p.ends_with("song2.mp3")));
+    }
+
+    #[test]
+    fn test_scan_directory_incremental_detects_new_dir() {
+        let temp = TempDir::new().unwrap();
+        let base = temp.path();
+
+        fs::write(base.join("song1.mp3"), b"fake mp3").unwrap();
+        let subdir = base.join("album");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("song2.flac"), b"fake flac").unwrap();
+
+        // No stored dirs — everything is new
+        let stored = HashMap::new();
+        let scanner = FileScanner::new();
+        let result = scanner.scan_directory_incremental(base, &stored).unwrap();
+
+        assert_eq!(result.unchanged_dir_count, 0);
+        assert!(result.changed_files.len() >= 2);
+        assert!(result.changed_files.iter().any(|p| p.ends_with("song1.mp3")));
+        assert!(result.changed_files.iter().any(|p| p.ends_with("song2.flac")));
+    }
+
+    #[test]
+    fn test_scan_directory_incremental_skips_unchanged() {
+        let temp = TempDir::new().unwrap();
+        let base = temp.path();
+
+        let subdir = base.join("album");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("song1.mp3"), b"fake mp3").unwrap();
+
+        // First scan to get real mtimes
+        let scanner = FileScanner::new();
+        let first_result = scanner
+            .scan_directory_incremental(base, &HashMap::new())
+            .unwrap();
+
+        // Build stored dirs from first scan
+        let stored: HashMap<String, StoredDirInfo> = first_result
+            .scanned_dirs
+            .into_iter()
+            .map(|d| (d.path, StoredDirInfo { dir_mtime: d.dir_mtime, file_count: d.file_count }))
+            .collect();
+
+        // Second scan with stored dirs — nothing changed
+        let second_result = scanner.scan_directory_incremental(base, &stored).unwrap();
+
+        assert_eq!(second_result.changed_files.len(), 0);
+        assert!(second_result.unchanged_dir_count > 0);
+    }
+
+    #[test]
+    fn test_scan_directory_incremental_detects_changed_dir() {
+        let temp = TempDir::new().unwrap();
+        let base = temp.path();
+
+        let subdir = base.join("album");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("song1.mp3"), b"fake mp3").unwrap();
+
+        // Store dirs with a wrong mtime (simulating a change)
+        let mut stored = HashMap::new();
+        stored.insert(
+            subdir.display().to_string(),
+            StoredDirInfo { dir_mtime: 0, file_count: 1 },
+        );
+
+        let scanner = FileScanner::new();
+        let result = scanner.scan_directory_incremental(base, &stored).unwrap();
+
+        // The album dir has a different mtime than 0, so it should be rescanned
+        assert!(result.changed_files.iter().any(|p| p.ends_with("song1.mp3")));
+    }
+
+    #[test]
+    fn test_unchanged_dir_file_paths_populated() {
+        let temp = TempDir::new().unwrap();
+        let base = temp.path();
+
+        let subdir = base.join("album");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("song1.mp3"), b"fake mp3").unwrap();
+        fs::write(subdir.join("song2.flac"), b"fake flac").unwrap();
+
+        // First scan to get real mtimes
+        let scanner = FileScanner::new();
+        let first_result = scanner
+            .scan_directory_incremental(base, &HashMap::new())
+            .unwrap();
+
+        let stored: HashMap<String, StoredDirInfo> = first_result
+            .scanned_dirs
+            .into_iter()
+            .map(|d| (d.path, StoredDirInfo { dir_mtime: d.dir_mtime, file_count: d.file_count }))
+            .collect();
+
+        // Second scan — unchanged dirs should populate file paths
+        let second_result = scanner.scan_directory_incremental(base, &stored).unwrap();
+
+        // Files from unchanged dirs should be in unchanged_dir_file_paths
+        assert!(second_result.unchanged_dir_file_paths.len() >= 2);
+        assert!(second_result.unchanged_dir_file_paths.iter().any(|p| p.ends_with("song1.mp3")));
+        assert!(second_result.unchanged_dir_file_paths.iter().any(|p| p.ends_with("song2.flac")));
     }
 }

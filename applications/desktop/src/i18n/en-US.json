@@ -214,8 +214,6 @@
     "lastScanned": "Last scanned",
     "rescan": "Rescan",
     "rescanAll": "Rescan All",
-    "forceRefresh": "Force Re-import",
-    "forceRefreshDescription": "Re-extract metadata for all files, even unchanged ones. Use this to fix missing artist/album info.",
     "managedLibrary": "Managed Library",
     "managedLibraryDescription": "Where imported files are organized",
     "libraryPath": "Library folder",

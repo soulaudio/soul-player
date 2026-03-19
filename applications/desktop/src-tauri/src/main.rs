@@ -2923,6 +2923,66 @@ fn main() {
                 // with certain ASIO drivers. Tests warm up PM themselves in beforeAll, so
                 // skipping the startup pre-warm pushes any CPAL init to a later, safer time.
                 let is_playwright_test = std::env::var("PLAYWRIGHT_TEST_DIR").is_ok();
+
+                // Start filesystem watcher for automatic library scanning
+                if !is_playwright_test {
+                    let watcher_start = std::time::Instant::now();
+                    let watcher_device_id = library_settings::get_device_id();
+                    let mut watcher = soul_importer::watcher::LibraryWatcher::new(
+                        pool.clone(),
+                        "1".to_string(),
+                        watcher_device_id.clone(),
+                    );
+                    if let Err(e) = watcher.start_watching().await {
+                        tracing::warn!("[Startup] Failed to start library watcher: {}", e);
+                    }
+                    if let Some(rx) = watcher.take_event_receiver() {
+                        let pool_for_watcher = pool.clone();
+                        let app_for_watcher = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let callback: soul_importer::watcher::ScanEventCallback =
+                                std::sync::Arc::new(move |event| {
+                                    match event {
+                                        soul_importer::watcher::ScanEvent::Started => {
+                                            let _ = app_for_watcher.emit("scan-started", ());
+                                        }
+                                        soul_importer::watcher::ScanEvent::Progress {
+                                            processed,
+                                            total,
+                                            current_file,
+                                        } => {
+                                            let _ = app_for_watcher.emit(
+                                                "scan-progress",
+                                                serde_json::json!({
+                                                    "processed": processed,
+                                                    "total": total,
+                                                    "currentFile": current_file
+                                                }),
+                                            );
+                                        }
+                                        soul_importer::watcher::ScanEvent::Complete => {
+                                            let _ = app_for_watcher.emit("scan-complete", ());
+                                        }
+                                    }
+                                });
+                            soul_importer::watcher::run_event_loop(
+                                pool_for_watcher,
+                                "1".to_string(),
+                                watcher_device_id,
+                                rx,
+                                Some(callback),
+                            )
+                            .await;
+                        });
+                    }
+                    tracing::info!(
+                        duration_ms = watcher_start.elapsed().as_millis(),
+                        "[Startup] Library watcher started"
+                    );
+                } else {
+                    tracing::info!("[Startup] Skipping library watcher in test environment");
+                }
+
                 if is_playwright_test {
                     tracing::info!("[Startup] Skipping audio pre-warm in test environment (PLAYWRIGHT_TEST_DIR is set)");
                 } else {

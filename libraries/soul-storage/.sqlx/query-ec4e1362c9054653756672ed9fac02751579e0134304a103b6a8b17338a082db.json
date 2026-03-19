@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT OR REPLACE INTO scanned_directories\n                (library_source_id, path, dir_mtime, file_count, last_scanned_at)\n            VALUES (?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "ec4e1362c9054653756672ed9fac02751579e0134304a103b6a8b17338a082db"
+}

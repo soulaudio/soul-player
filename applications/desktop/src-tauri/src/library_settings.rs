@@ -157,11 +157,9 @@ pub async fn toggle_library_source(
 }
 
 /// Trigger a rescan of a specific library source
-/// If force_refresh is true, re-extracts metadata even for unchanged files
 #[tauri::command]
 pub async fn rescan_library_source(
     source_id: i64,
-    force_refresh: Option<bool>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
@@ -189,7 +187,6 @@ pub async fn rescan_library_source(
         state.user_id.clone(),
         device_id,
     )
-    .force_metadata_refresh(force_refresh.unwrap_or(false))
     .on_progress(Box::new(move |stats| {
         // Emit progress event
         if let Err(e) = app_clone.emit(
@@ -228,10 +225,8 @@ pub async fn rescan_library_source(
 }
 
 /// Trigger a rescan of all enabled library sources
-/// If force_refresh is true, re-extracts metadata even for unchanged files
 #[tauri::command]
 pub async fn rescan_all_sources(
-    force_refresh: Option<bool>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
@@ -253,7 +248,6 @@ pub async fn rescan_all_sources(
         state.user_id.clone(),
         device_id,
     )
-    .force_metadata_refresh(force_refresh.unwrap_or(false))
     .on_progress(Box::new(move |stats| {
         // Emit progress event
         if let Err(e) = app_clone.emit(

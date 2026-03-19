@@ -2,8 +2,6 @@
 //!
 //! Covers scenarios not addressed by the basic e2e/integration tests:
 //!
-//! - **Cache dirty / force_metadata_refresh**: verifies that `force_metadata_refresh(true)`
-//!   re-processes files whose mtime+size haven't changed.
 //! - **Rescan unchanged skip**: a second scan without changes must not re-import files.
 //! - **File modification detection**: changing a file's content between scans must trigger
 //!   a metadata update (FileAction::Updated).
@@ -152,71 +150,6 @@ async fn test_rescan_skips_unchanged_files() {
         assert_eq!(
             stats2.new_files, 0,
             "already-imported files must not be re-imported on an unchanged rescan"
-        );
-    }
-}
-
-/// `force_metadata_refresh(true)` must re-process files even when their mtime
-/// and size have not changed since the last scan.
-///
-/// This is the "cache dirty" mechanism — used when metadata has been corrected
-/// externally (e.g. via a tag editor) without touching the file on disk in a way
-/// that changes its modification time.
-#[tokio::test]
-async fn test_force_metadata_refresh_reprocesses_unchanged_files() {
-    let pool = setup_test_db().await;
-    let temp_dir = TempDir::new().unwrap();
-
-    create_mp3(
-        &temp_dir.path().join("track.mp3"),
-        "Force Refresh Track",
-        "Artist",
-    );
-
-    let source = create_source(
-        &pool,
-        "user1",
-        "device1",
-        &temp_dir.path().display().to_string(),
-        false,
-    )
-    .await;
-
-    // Normal scanner used for scans 1 and 2
-    let scanner_normal = LibraryScanner::new(pool.clone(), "user1", "device1");
-
-    let stats1 = scanner_normal
-        .scan_source(&source)
-        .await
-        .expect("first scan ok");
-
-    // Second scan — no changes, no force refresh
-    let stats2 = scanner_normal
-        .scan_source(&source)
-        .await
-        .expect("second scan ok");
-
-    // Third scan — force refresh enabled
-    let scanner_forced =
-        LibraryScanner::new(pool.clone(), "user1", "device1").force_metadata_refresh(true);
-    let stats3 = scanner_forced
-        .scan_source(&source)
-        .await
-        .expect("third scan ok");
-
-    // Only assert meaningful results when the file was actually imported on the first scan
-    if stats1.new_files > 0 {
-        assert_eq!(
-            stats2.new_files, 0,
-            "unchanged file must be skipped on a normal rescan"
-        );
-        assert_eq!(
-            stats3.updated_files, 1,
-            "force_metadata_refresh must re-process the unchanged file and report it as updated"
-        );
-        assert_eq!(
-            stats3.new_files, 0,
-            "force_metadata_refresh must not duplicate the track"
         );
     }
 }

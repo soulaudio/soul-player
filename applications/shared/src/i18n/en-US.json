@@ -464,8 +464,6 @@
     "rescanDescription": "Scan for new and changed files in this folder.",
     "rescanAll": "Rescan All",
     "rescanAllDescription": "Scan all watched folders for new and changed files.",
-    "forceRefresh": "Force Re-import",
-    "forceRefreshDescription": "Re-extract metadata for all files, even unchanged ones. Use this to fix missing artist/album info.",
     "managedLibrary": "Managed Library",
     "managedLibraryDescription": "Where imported files are organized",
     "libraryPath": "Library folder",

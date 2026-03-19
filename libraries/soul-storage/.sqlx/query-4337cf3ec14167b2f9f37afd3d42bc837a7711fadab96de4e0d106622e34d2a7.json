@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM scanned_directories WHERE library_source_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "4337cf3ec14167b2f9f37afd3d42bc837a7711fadab96de4e0d106622e34d2a7"
+}

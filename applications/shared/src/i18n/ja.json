@@ -464,8 +464,6 @@
     "rescanDescription": "このフォルダの新しいファイルと変更されたファイルをスキャンします。",
     "rescanAll": "すべて再スキャン",
     "rescanAllDescription": "すべての監視フォルダの新しいファイルと変更されたファイルをスキャンします。",
-    "forceRefresh": "強制再インポート",
-    "forceRefreshDescription": "変更がないファイルも含め、すべてのファイルのメタデータを再抽出します。アーティスト/アルバム情報が欠けている場合に使用してください。",
     "managedLibrary": "管理ライブラリ",
     "managedLibraryDescription": "インポートされたファイルが整理される場所",
     "libraryPath": "ライブラリフォルダ",
