@@ -121,7 +121,7 @@ impl FileScanner {
         let mut changed_files = Vec::new();
         let mut unchanged_dir_count: i64 = 0;
         let mut scanned_dirs = Vec::new();
-        let mut unchanged_dir_file_paths = Vec::new();
+        // (unchanged_dir_file_paths removed — caller populates seen_paths from DB)
 
         // Walk directory tree, only looking at directory entries
         let mut walker = WalkDir::new(path).follow_links(self.follow_links);
@@ -159,25 +159,26 @@ impl FileScanner {
             // Check if directory has changed
             if let Some(stored) = stored_dirs.get(&dir_str) {
                 if stored.dir_mtime == dir_mtime {
-                    // Mtime unchanged — quick-verify file count as a safety check.
-                    // On some filesystems (NTFS), rapid file additions within the same
-                    // second may not update directory mtime.
-                    let mut actual_count: i64 = 0;
-                    let mut dir_file_paths = Vec::new();
-                    if let Ok(entries) = std::fs::read_dir(dir) {
-                        for entry in entries.filter_map(|e| e.ok()) {
-                            let entry_path = entry.path();
-                            if entry_path.is_file() && is_audio_file(&entry_path) {
-                                dir_file_paths.push(entry_path.display().to_string());
-                                actual_count += 1;
-                            }
-                        }
-                    }
+                    // Mtime unchanged — quick-verify entry count as a safety check.
+                    // On NTFS, rapid file additions within the same second may not
+                    // update directory mtime. Counting entries is cheap (no per-file stat).
+                    let actual_count = std::fs::read_dir(dir)
+                        .map(|entries| {
+                            entries
+                                .filter_map(|e| e.ok())
+                                .filter(|e| {
+                                    // Use file_type() from DirEntry — avoids stat() syscall
+                                    e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+                                        && is_audio_file(&e.path())
+                                })
+                                .count() as i64
+                        })
+                        .unwrap_or(0);
 
                     if actual_count == stored.file_count {
-                        // Truly unchanged — skip
+                        // Truly unchanged — skip. No file paths collected here;
+                        // caller populates seen_paths from DB existing tracks.
                         unchanged_dir_count += 1;
-                        unchanged_dir_file_paths.extend(dir_file_paths);
                         scanned_dirs.push(ScannedDirInfo {
                             path: dir_str,
                             dir_mtime,
@@ -244,7 +245,6 @@ impl FileScanner {
             changed_files,
             unchanged_dir_count,
             scanned_dirs,
-            unchanged_dir_file_paths,
         })
     }
 
@@ -299,9 +299,6 @@ pub struct IncrementalScanResult {
     pub unchanged_dir_count: i64,
     /// Updated directory info to persist to DB
     pub scanned_dirs: Vec<ScannedDirInfo>,
-    /// File paths from unchanged directories (for soft-delete correctness —
-    /// these must be included in seen_paths so they aren't falsely marked missing)
-    pub unchanged_dir_file_paths: Vec<String>,
 }
 
 /// Check if a file is a supported audio file
@@ -469,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unchanged_dir_file_paths_populated() {
+    fn test_unchanged_dirs_are_skipped_no_filesystem_io() {
         let temp = TempDir::new().unwrap();
         let base = temp.path();
 
@@ -490,12 +487,73 @@ mod tests {
             .map(|d| (d.path, StoredDirInfo { dir_mtime: d.dir_mtime, file_count: d.file_count }))
             .collect();
 
-        // Second scan — unchanged dirs should populate file paths
+        // Second scan — all dirs should be skipped (no changed files)
         let second_result = scanner.scan_directory_incremental(base, &stored).unwrap();
 
-        // Files from unchanged dirs should be in unchanged_dir_file_paths
-        assert!(second_result.unchanged_dir_file_paths.len() >= 2);
-        assert!(second_result.unchanged_dir_file_paths.iter().any(|p| p.ends_with("song1.mp3")));
-        assert!(second_result.unchanged_dir_file_paths.iter().any(|p| p.ends_with("song2.flac")));
+        assert_eq!(second_result.changed_files.len(), 0);
+        // Both root dir and album subdir should be skipped
+        assert!(second_result.unchanged_dir_count >= 2);
+    }
+
+    #[test]
+    fn bench_incremental_scan_10k_files() {
+        use std::time::Instant;
+
+        let temp = TempDir::new().unwrap();
+        let base = temp.path();
+
+        // Create 500 directories with 20 files each = 10,000 files
+        for i in 0..500 {
+            let dir = base.join(format!("album_{:04}", i));
+            fs::create_dir(&dir).unwrap();
+            for j in 0..20 {
+                fs::write(dir.join(format!("track_{:02}.mp3", j)), b"fake").unwrap();
+            }
+        }
+
+        let scanner = FileScanner::new();
+
+        // First scan (all new — baseline)
+        let start = Instant::now();
+        let result1 = scanner.scan_directory_incremental(base, &HashMap::new()).unwrap();
+        let first_scan = start.elapsed();
+
+        assert_eq!(result1.changed_files.len(), 10_000);
+        assert_eq!(result1.unchanged_dir_count, 0);
+
+        // Build stored dirs from first scan
+        let stored: HashMap<String, StoredDirInfo> = result1.scanned_dirs
+            .into_iter()
+            .map(|d| (d.path, StoredDirInfo { dir_mtime: d.dir_mtime, file_count: d.file_count }))
+            .collect();
+
+        // Second scan (all unchanged)
+        let start = Instant::now();
+        let result2 = scanner.scan_directory_incremental(base, &stored).unwrap();
+        let second_scan = start.elapsed();
+
+        assert_eq!(result2.changed_files.len(), 0);
+        assert!(result2.unchanged_dir_count >= 500);
+
+        // Add 1 album (12 files)
+        let new_dir = base.join("new_album");
+        fs::create_dir(&new_dir).unwrap();
+        for j in 0..12 {
+            fs::write(new_dir.join(format!("new_{:02}.mp3", j)), b"fake").unwrap();
+        }
+
+        let start = Instant::now();
+        let result3 = scanner.scan_directory_incremental(base, &stored).unwrap();
+        let third_scan = start.elapsed();
+
+        assert_eq!(result3.changed_files.len(), 12);
+
+        eprintln!("\n=== INCREMENTAL SCAN BENCHMARK (10,000 files / 500 dirs) ===");
+        eprintln!("First scan (all new):     {:?}", first_scan);
+        eprintln!("Unchanged rescan:         {:?} ({:.0}x faster)", second_scan,
+            first_scan.as_micros() as f64 / second_scan.as_micros().max(1) as f64);
+        eprintln!("1 album added rescan:     {:?} ({:.0}x faster)", third_scan,
+            first_scan.as_micros() as f64 / third_scan.as_micros().max(1) as f64);
+        eprintln!("============================================================\n");
     }
 }

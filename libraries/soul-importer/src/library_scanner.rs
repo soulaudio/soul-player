@@ -194,10 +194,19 @@ impl LibraryScanner {
 
         let files = scan_result.changed_files;
         let scanned_dirs_to_persist = scan_result.scanned_dirs;
-        let total_files_in_library =
-            files.len() as i64 + scan_result.unchanged_dir_file_paths.len() as i64;
 
-        // Update total file count (includes all files — changed + unchanged)
+        // Get existing tracks early — needed for total count and seen_paths
+        let existing_tracks = self.get_existing_tracks_map(source.id).await?;
+
+        // Total files = sum of file_count across all scanned directories.
+        // Each ScannedDirInfo has file_count: for unchanged dirs it's the stored count,
+        // for changed dirs it's the freshly counted value.
+        let total_files_in_library: i64 = scanned_dirs_to_persist
+            .iter()
+            .map(|d| d.file_count)
+            .sum();
+
+        // Update total file count
         soul_storage::scan_progress::set_total_files(
             &self.pool,
             progress.id,
@@ -215,18 +224,17 @@ impl LibraryScanner {
             callback(&stats);
         }
 
-        // Get existing tracks for this source to detect changes
-        let existing_tracks = self.get_existing_tracks_map(source.id).await?;
-
-        // Pre-populate seen_paths with files from unchanged directories
-        // to prevent them from being falsely marked as missing during soft-delete.
+        // Pre-populate seen_paths with ALL existing tracks from the DB.
+        // This prevents files in unchanged (skipped) directories from being
+        // falsely marked as missing during the soft-delete pass.
+        // Files from changed directories will be re-confirmed during Phase 1.
         let mut seen_paths: HashMap<String, bool> = HashMap::new();
-        let dir_skipped_count = scan_result.unchanged_dir_file_paths.len() as i64;
-        for path in scan_result.unchanged_dir_file_paths {
-            seen_paths.insert(path, true);
+        for file_path in existing_tracks.keys() {
+            seen_paths.insert(file_path.clone(), true);
         }
 
-        // Count directory-level skips as processed
+        // Count directory-level skips as processed (unchanged files)
+        let dir_skipped_count = (total_files_in_library - files.len() as i64).max(0);
         if dir_skipped_count > 0 {
             stats.processed += dir_skipped_count;
             soul_storage::scan_progress::update_counts(
