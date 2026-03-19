@@ -754,10 +754,11 @@ export function HomePage() {
         .grid-container {
           height: 100%;
           width: 100%;
-          /* Match LibraryPageLayout padding: pr-6 pb-6 pt-6 (MainLayout already provides pl-6) */
-          padding-right: 1.5rem;
-          padding-bottom: 1.5rem;
-          padding-top: 1.5rem;
+          /* Use shared layout spacing variables — defined in index.css :root */
+          padding-left: var(--layout-pl);
+          padding-right: var(--layout-pr);
+          padding-bottom: var(--layout-pb);
+          padding-top: var(--layout-py);
           box-sizing: border-box;
           overflow: hidden;
         }

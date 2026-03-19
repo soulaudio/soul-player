@@ -409,8 +409,14 @@ mod tests {
 
         assert_eq!(result.unchanged_dir_count, 0);
         assert!(result.changed_files.len() >= 2);
-        assert!(result.changed_files.iter().any(|p| p.ends_with("song1.mp3")));
-        assert!(result.changed_files.iter().any(|p| p.ends_with("song2.flac")));
+        assert!(result
+            .changed_files
+            .iter()
+            .any(|p| p.ends_with("song1.mp3")));
+        assert!(result
+            .changed_files
+            .iter()
+            .any(|p| p.ends_with("song2.flac")));
     }
 
     #[test]
@@ -432,7 +438,15 @@ mod tests {
         let stored: HashMap<String, StoredDirInfo> = first_result
             .scanned_dirs
             .into_iter()
-            .map(|d| (d.path, StoredDirInfo { dir_mtime: d.dir_mtime, file_count: d.file_count }))
+            .map(|d| {
+                (
+                    d.path,
+                    StoredDirInfo {
+                        dir_mtime: d.dir_mtime,
+                        file_count: d.file_count,
+                    },
+                )
+            })
             .collect();
 
         // Second scan with stored dirs — nothing changed
@@ -455,14 +469,20 @@ mod tests {
         let mut stored = HashMap::new();
         stored.insert(
             subdir.display().to_string(),
-            StoredDirInfo { dir_mtime: 0, file_count: 1 },
+            StoredDirInfo {
+                dir_mtime: 0,
+                file_count: 1,
+            },
         );
 
         let scanner = FileScanner::new();
         let result = scanner.scan_directory_incremental(base, &stored).unwrap();
 
         // The album dir has a different mtime than 0, so it should be rescanned
-        assert!(result.changed_files.iter().any(|p| p.ends_with("song1.mp3")));
+        assert!(result
+            .changed_files
+            .iter()
+            .any(|p| p.ends_with("song1.mp3")));
     }
 
     #[test]
@@ -484,7 +504,15 @@ mod tests {
         let stored: HashMap<String, StoredDirInfo> = first_result
             .scanned_dirs
             .into_iter()
-            .map(|d| (d.path, StoredDirInfo { dir_mtime: d.dir_mtime, file_count: d.file_count }))
+            .map(|d| {
+                (
+                    d.path,
+                    StoredDirInfo {
+                        dir_mtime: d.dir_mtime,
+                        file_count: d.file_count,
+                    },
+                )
+            })
             .collect();
 
         // Second scan — all dirs should be skipped (no changed files)
@@ -515,16 +543,27 @@ mod tests {
 
         // First scan (all new — baseline)
         let start = Instant::now();
-        let result1 = scanner.scan_directory_incremental(base, &HashMap::new()).unwrap();
+        let result1 = scanner
+            .scan_directory_incremental(base, &HashMap::new())
+            .unwrap();
         let first_scan = start.elapsed();
 
         assert_eq!(result1.changed_files.len(), 10_000);
         assert_eq!(result1.unchanged_dir_count, 0);
 
         // Build stored dirs from first scan
-        let stored: HashMap<String, StoredDirInfo> = result1.scanned_dirs
+        let stored: HashMap<String, StoredDirInfo> = result1
+            .scanned_dirs
             .into_iter()
-            .map(|d| (d.path, StoredDirInfo { dir_mtime: d.dir_mtime, file_count: d.file_count }))
+            .map(|d| {
+                (
+                    d.path,
+                    StoredDirInfo {
+                        dir_mtime: d.dir_mtime,
+                        file_count: d.file_count,
+                    },
+                )
+            })
             .collect();
 
         // Second scan (all unchanged)
@@ -550,10 +589,16 @@ mod tests {
 
         eprintln!("\n=== INCREMENTAL SCAN BENCHMARK (10,000 files / 500 dirs) ===");
         eprintln!("First scan (all new):     {:?}", first_scan);
-        eprintln!("Unchanged rescan:         {:?} ({:.0}x faster)", second_scan,
-            first_scan.as_micros() as f64 / second_scan.as_micros().max(1) as f64);
-        eprintln!("1 album added rescan:     {:?} ({:.0}x faster)", third_scan,
-            first_scan.as_micros() as f64 / third_scan.as_micros().max(1) as f64);
+        eprintln!(
+            "Unchanged rescan:         {:?} ({:.0}x faster)",
+            second_scan,
+            first_scan.as_micros() as f64 / second_scan.as_micros().max(1) as f64
+        );
+        eprintln!(
+            "1 album added rescan:     {:?} ({:.0}x faster)",
+            third_scan,
+            first_scan.as_micros() as f64 / third_scan.as_micros().max(1) as f64
+        );
         eprintln!("============================================================\n");
     }
 }

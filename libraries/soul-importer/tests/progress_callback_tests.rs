@@ -240,4 +240,3 @@ async fn test_progress_callback_multiple_flushes_for_large_library() {
     assert_eq!(last.total_files, 15);
     assert_eq!(last.processed, 15);
 }
-

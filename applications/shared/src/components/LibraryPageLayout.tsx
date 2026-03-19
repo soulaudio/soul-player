@@ -5,7 +5,7 @@
 import { useEffect, useRef, ReactNode, useCallback, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, X } from 'lucide-react'
-import { FeatureGate, useFeatures } from '../contexts/PlatformContext'
+import { FeatureGate, useFeatures, usePlatform } from '../contexts/PlatformContext'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
 import { useBackend } from '../contexts/BackendContext'
 import { SkeletonCard } from './SkeletonCard'
@@ -57,12 +57,13 @@ export function LibraryPageLayout({
   cacheKey,
   pageTestId,
   filterPanel,
-  filterPanelVisible = false,
+  filterPanelVisible: _filterPanelVisible = false,
   customSkeleton,
   children,
 }: LibraryPageLayoutProps) {
   const { t } = useTranslation()
   const backend = useBackend()
+  const { isDesktop } = usePlatform()
   const { hasAutoHideSearch } = useFeatures()
   const { showHeader: showSearchBar, setShowHeader: setShowSearchBar, scrollContainerRef } = useScrollVisibility()
   useScrollRestoration(scrollContainerRef)
@@ -106,6 +107,20 @@ export function LibraryPageLayout({
   // once 50px of net directional scroll has built up, preventing flicker on
   // fast up/down scrolling where individual frames alternate direction.
   const scrollAccumulatorRef = useRef(0)
+
+  // Measure search bar height so content padding stays in sync — no magic numbers
+  const searchBarRef = useRef<HTMLDivElement>(null)
+  const [searchBarHeight, setSearchBarHeight] = useState(0)
+
+  useEffect(() => {
+    const el = searchBarRef.current
+    if (!el) return
+    const update = () => setSearchBarHeight(el.offsetHeight)
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    update()
+    return () => observer.disconnect()
+  }, [])
 
   // Refs for direct DOM gradient manipulation — avoids React re-renders on every scroll frame
   const topGradientRef = useRef<HTMLDivElement>(null)
@@ -342,9 +357,16 @@ export function LibraryPageLayout({
 
       {/* Search bar — absolute overlay so scrollbar starts at top */}
       <div
-        className={`absolute top-0 left-0 right-0 z-10 bg-background mr-4 sm:mr-6 pt-8 pb-2 transition-all duration-300 ${
+        ref={searchBarRef}
+        className={`absolute top-0 left-0 right-0 z-10 bg-background transition-all duration-300 ${
           showSearchBar ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full pointer-events-none'
         }`}
+        style={{
+          paddingLeft: 'var(--layout-pl)',
+          paddingRight: 'var(--layout-pr)',
+          paddingTop: isDesktop ? 'calc(var(--layout-pt-titlebar) + var(--layout-py))' : 'var(--layout-py)',
+          paddingBottom: 'var(--layout-py)',
+        }}
       >
           <div className="flex items-center gap-4">
             <div className="relative flex-1 sm:max-w-md">
@@ -382,11 +404,14 @@ export function LibraryPageLayout({
         data-testid="scroll-container"
         className="flex-1 overflow-y-auto pr-0 scrollbar-custom"
       >
-        <div className={`pr-6 pb-20 sm:pb-6 ${
-          showSearchBar
-            ? filterPanelVisible ? 'pt-28' : 'pt-[76px]'
-            : 'pt-4 sm:pt-2'
-        }`}>
+        <div
+          style={{
+            paddingLeft: 'var(--layout-pl)',
+            paddingRight: 'var(--layout-pr)',
+            paddingBottom: 'var(--layout-pb)',
+            ...(showSearchBar && searchBarHeight > 0 ? { paddingTop: `${searchBarHeight}px` } : { paddingTop: 'var(--layout-py)' }),
+          }}
+        >
           {isLoading ? (
             customSkeleton || (
               <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>

@@ -55,9 +55,8 @@ pub async fn get_by_source(pool: &SqlitePool, source_id: i64) -> Result<Vec<Scan
 
     let mut result = Vec::with_capacity(rows.len());
     for r in rows {
-        let id = r
-            .id
-            .ok_or_else(|| StorageError::MissingField("scanned_directories.id".to_string()))?;
+        let id =
+            r.id.ok_or_else(|| StorageError::MissingField("scanned_directories.id".to_string()))?;
         result.push(ScannedDirectory {
             id,
             library_source_id: r.library_source_id,

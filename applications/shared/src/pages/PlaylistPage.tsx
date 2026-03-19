@@ -179,9 +179,9 @@ export function PlaylistPage() {
     <div data-testid="playlist-detail-page" className="h-full">
       <DetailPageLayout
         header={
-          <div className="flex items-start gap-4 sm:gap-6">
+          <div className="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left gap-4 sm:gap-6">
             {/* Playlist Cover */}
-            <div className="group relative w-24 h-24 sm:w-48 sm:h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+            <div className="group relative w-36 h-36 sm:w-48 sm:h-48 bg-gradient-to-br from-primary/30 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
               {playlistArtworkUrl ? (
                 <img
                   key={artworkVersion}
@@ -205,19 +205,19 @@ export function PlaylistPage() {
 
             {/* Playlist Info */}
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1 hidden sm:block">
                 {t('library.playlist', 'Playlist')}
               </p>
-              <h1 data-testid="playlist-title" className="text-xl sm:text-4xl font-bold mb-1 sm:mb-2">{playlist.name}</h1>
+              <h1 data-testid="playlist-title" className="text-lg sm:text-4xl font-bold mb-0.5 sm:mb-2">{playlist.name}</h1>
               {playlist.description && (
-                <p className="text-muted-foreground mb-2">{playlist.description}</p>
+                <p className="text-sm text-muted-foreground mb-1 sm:mb-2">{playlist.description}</p>
               )}
-              <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
-                <Clock className="w-4 h-4" />
+              <p className="text-xs sm:text-sm text-muted-foreground flex items-center justify-center sm:justify-start gap-1.5 mb-3 sm:mb-4">
+                <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 {tracks.length} {t('library.tracks', 'tracks')} • {formatDuration(totalDuration)}
               </p>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center sm:justify-start gap-3">
                 <button
                   data-testid="playlist-play-all-button"
                   onClick={handlePlayAll}

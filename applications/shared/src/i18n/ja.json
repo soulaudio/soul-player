@@ -563,7 +563,9 @@
     "noTopSongs": "まだ再生履歴がありません",
     "noTopSongsHint": "トラックを再生してトップソングを表示",
     "expandAlbum": "アルバムを展開",
-    "collapseAlbum": "アルバムを折りたたむ"
+    "collapseAlbum": "アルバムを折りたたむ",
+    "showMore": "もっと見る",
+    "showLess": "表示を減らす"
   },
   "album": {
     "notFound": "アルバムが見つかりません",

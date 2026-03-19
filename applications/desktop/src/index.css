@@ -38,6 +38,13 @@
     --font-mono: 'JetBrains Mono', Consolas, monospace;
     --font-size-base: 16px;
 
+    /* Layout spacing — single source of truth for page paddings */
+    --layout-pl: 0.75rem;          /* 12px — horizontal padding (matches floating bar px-3) */
+    --layout-pr: 0.5rem;           /* 8px  — right padding (scrollbar takes ~4px) */
+    --layout-py: 0.75rem;          /* 12px — vertical border padding */
+    --layout-pt-titlebar: 2rem;    /* 32px — desktop title bar height (h-8) */
+    --layout-pb: 5rem;             /* 80px — mobile bottom: room for floating player */
+
     /* Interactions (Tailwind v4 best practices - CSS-first) */
     --hover-text-opacity: 0.8;
     --hover-button-opacity: 0.9;
@@ -292,6 +299,16 @@
 
   .scrollbar-custom::-webkit-scrollbar-corner {
     background: transparent;
+  }
+}
+
+/* Layout spacing overrides at desktop width (sm breakpoint = 640px) */
+@media (min-width: 640px) {
+  :root {
+    --layout-pl: 0rem;    /* 0px — MainLayout pl-6 provides left gap from sidebar */
+    --layout-pr: 1rem;    /* 16px — right padding (scrollbar takes ~4px, visually ~20px) */
+    --layout-py: 1rem;    /* 16px — vertical border padding */
+    --layout-pb: 1.5rem;  /* 24px — desktop bottom padding */
   }
 }
 

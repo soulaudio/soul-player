@@ -448,7 +448,9 @@ mod tests {
         assert!(crate::scanner::is_audio_file(Path::new("test.flac")));
         assert!(crate::scanner::is_audio_file(Path::new("test.mp3")));
         assert!(crate::scanner::is_audio_file(Path::new("test.FLAC")));
-        assert!(crate::scanner::is_audio_file(Path::new("/path/to/test.m4a")));
+        assert!(crate::scanner::is_audio_file(Path::new(
+            "/path/to/test.m4a"
+        )));
         assert!(!crate::scanner::is_audio_file(Path::new("test.txt")));
         assert!(!crate::scanner::is_audio_file(Path::new("test.jpg")));
         assert!(!crate::scanner::is_audio_file(Path::new("test")));

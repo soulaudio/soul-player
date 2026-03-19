@@ -2925,7 +2925,9 @@ fn main() {
                 let is_playwright_test = std::env::var("PLAYWRIGHT_TEST_DIR").is_ok();
 
                 // Start filesystem watcher for automatic library scanning
-                if !is_playwright_test {
+                if is_playwright_test {
+                    tracing::info!("[Startup] Skipping library watcher in test environment");
+                } else {
                     let watcher_start = std::time::Instant::now();
                     let watcher_device_id = library_settings::get_device_id();
                     let mut watcher = soul_importer::watcher::LibraryWatcher::new(
@@ -2979,8 +2981,6 @@ fn main() {
                         duration_ms = watcher_start.elapsed().as_millis(),
                         "[Startup] Library watcher started"
                     );
-                } else {
-                    tracing::info!("[Startup] Skipping library watcher in test environment");
                 }
 
                 if is_playwright_test {

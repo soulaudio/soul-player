@@ -201,10 +201,8 @@ impl LibraryScanner {
         // Total files = sum of file_count across all scanned directories.
         // Each ScannedDirInfo has file_count: for unchanged dirs it's the stored count,
         // for changed dirs it's the freshly counted value.
-        let total_files_in_library: i64 = scanned_dirs_to_persist
-            .iter()
-            .map(|d| d.file_count)
-            .sum();
+        let total_files_in_library: i64 =
+            scanned_dirs_to_persist.iter().map(|d| d.file_count).sum();
 
         // Update total file count
         soul_storage::scan_progress::set_total_files(
@@ -467,8 +465,7 @@ impl LibraryScanner {
             .into_iter()
             .map(|d| (d.path, d.dir_mtime, d.file_count))
             .collect();
-        soul_storage::scanned_directories::upsert_batch(&self.pool, source.id, &dirs_batch)
-            .await?;
+        soul_storage::scanned_directories::upsert_batch(&self.pool, source.id, &dirs_batch).await?;
 
         // Complete the scan
         soul_storage::scan_progress::complete(&self.pool, progress.id).await?;

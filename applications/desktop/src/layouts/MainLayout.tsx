@@ -36,28 +36,40 @@ function BackButton({ isMobileWidth, navigate }: { isMobileWidth: boolean; navig
   const [sidebarWidth, setSidebarWidth] = useState(0);
 
   useEffect(() => {
-    // Read sidebar width from the DOM element with data-collapsed attribute
+    const getSidebar = () =>
+      document.querySelector('[data-collapsed]') as HTMLElement | null;
+
     const update = () => {
-      const sidebar = document.querySelector('[data-collapsed]') as HTMLElement | null;
-      if (sidebar) {
-        setSidebarWidth(sidebar.offsetWidth);
-      } else {
-        // Collapsed — check for the thin strip (3px)
-        setSidebarWidth(3);
-      }
+      const sidebar = getSidebar();
+      setSidebarWidth(sidebar ? sidebar.offsetWidth : 0);
     };
     update();
-    // Watch for sidebar resize
-    const observer = new MutationObserver(update);
+
+    // ResizeObserver fires on any width change (collapse, expand, drag-resize)
     const resizeObserver = new ResizeObserver(update);
-    const el = document.querySelector('[data-collapsed]');
-    if (el) {
-      observer.observe(el, { attributes: true, attributeFilter: ['style'] });
-      resizeObserver.observe(el);
-    }
-    // Also poll briefly in case sidebar mounts late
-    const timer = setTimeout(update, 200);
-    return () => { observer.disconnect(); resizeObserver.disconnect(); clearTimeout(timer); };
+    const sidebar = getSidebar();
+    if (sidebar) resizeObserver.observe(sidebar);
+
+    // MutationObserver on body catches sidebar mount/remount and attribute changes.
+    // When data-collapsed changes, the sidebar animates its width — ResizeObserver
+    // picks up the final size, but we also re-query to ensure we're observing.
+    const mutationObserver = new MutationObserver(() => {
+      const el = getSidebar();
+      if (el) {
+        resizeObserver.observe(el); // no-op if already observing same element
+      }
+      update();
+    });
+    mutationObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['data-collapsed', 'style'],
+      subtree: true,
+    });
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
   }, []);
 
   return (
@@ -181,7 +193,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
       </div>
 
       {/* Scan progress indicator (shows when scanning library sources) */}
-      <ScanProgressIndicator position="footer" />
+      <ScanProgressIndicator position="floating" />
 
       {/* Add to Playlist dialog */}
       {currentTrack && showAddToPlaylist && (

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
-import { Loader2, FolderSync, Check, AlertCircle } from 'lucide-react';
+import { Loader2, FolderSync } from 'lucide-react';
 import { debug } from '@soul-player/shared';
 
 interface ScanProgress {
@@ -233,45 +233,36 @@ export function ScanProgressIndicator({
     );
   }
 
-  // Floating position (top-right notification style)
+  // Floating position (top-right, compact notification)
   return (
-    <div data-testid="scan-progress-indicator" className="fixed top-20 right-4 z-50 w-80">
-      <div className="bg-card border rounded-lg shadow-lg overflow-hidden">
-        <div className="p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <div>
-              <p className="font-medium text-sm">
-                {t('scan.scanning')}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t('scan.filesProgress', { processed: totalProcessed, total: totalFiles })}
-              </p>
+    <div data-testid="scan-progress-indicator" className="fixed top-12 right-4 z-50 w-64">
+      <div className="bg-card/95 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden">
+        <div className="px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium truncate">
+                  {t('scan.scanning')}
+                </span>
+                <span className="text-muted-foreground ml-2 tabular-nums">
+                  {totalProcessed}/{totalFiles}
+                </span>
+              </div>
+              {/* Current file */}
+              {currentFile && (
+                <div className="text-[10px] text-muted-foreground truncate mt-0.5">
+                  {currentFile}
+                </div>
+              )}
+              {/* Progress bar */}
+              <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${totalProgress}%` }}
+                />
+              </div>
             </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${totalProgress}%` }}
-            />
-          </div>
-
-          {/* Stats */}
-          <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
-            {scans.reduce((sum, s) => sum + s.newFiles, 0) > 0 && (
-              <span className="flex items-center gap-1">
-                <Check className="w-3 h-3 text-green-500" />
-                {t('scan.newFiles', { count: scans.reduce((sum, s) => sum + s.newFiles, 0) })}
-              </span>
-            )}
-            {scans.reduce((sum, s) => sum + s.errors, 0) > 0 && (
-              <span className="flex items-center gap-1">
-                <AlertCircle className="w-3 h-3 text-red-500" />
-                {t('scan.errors', { count: scans.reduce((sum, s) => sum + s.errors, 0) })}
-              </span>
-            )}
           </div>
         </div>
       </div>

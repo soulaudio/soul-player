@@ -68,7 +68,7 @@ function MainContent({ children }: { children: ReactNode }) {
   if (isMobile) {
     return (
       <main className={`flex-1 flex flex-col overflow-hidden ${mobileShowContent ? '' : 'hidden'}`}>
-        <div className="flex-1 overflow-hidden pl-6">
+        <div className="flex-1 overflow-hidden">
           {children}
         </div>
       </main>

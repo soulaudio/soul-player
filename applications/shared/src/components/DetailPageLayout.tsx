@@ -5,6 +5,7 @@
 
 import { useEffect, ReactNode } from 'react'
 import { useScrollVisibility } from '../contexts/ScrollVisibilityContext'
+import { usePlatform } from '../contexts/PlatformContext'
 
 interface DetailPageLayoutProps {
   /** Content above the main list (artist avatar, album cover, info, etc.) */
@@ -18,6 +19,7 @@ export function DetailPageLayout({
   children,
 }: DetailPageLayoutProps) {
   const { setShowHeader } = useScrollVisibility()
+  const { isDesktop } = usePlatform()
 
   // Ensure MainLayout top padding is correct when entering a detail page
   useEffect(() => {
@@ -28,7 +30,12 @@ export function DetailPageLayout({
     <div className="h-full flex flex-col overflow-hidden relative">
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto pr-0 scrollbar-custom">
-        <div className="pr-4 sm:pr-6 pt-8 pb-20 sm:pb-6">
+        <div style={{
+          paddingLeft: 'var(--layout-pl)',
+          paddingRight: 'var(--layout-pr)',
+          paddingTop: isDesktop ? 'calc(var(--layout-pt-titlebar) + var(--layout-py))' : 'var(--layout-py)',
+          paddingBottom: 'var(--layout-pb)',
+        }}>
           {/* Header content (cover art, info, etc.) */}
           <div className="mb-6">
             {header}

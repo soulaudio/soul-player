@@ -3,11 +3,11 @@
  * Uses BackendContext for data and PlatformContext for conditional features
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigateWithHistory } from '../hooks/useNavigateWithHistory'
-import { Play, Users, Disc3, Pencil } from 'lucide-react'
+import { Play, Users, Disc3, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
 import { TrackList, type Track } from '../components/TrackList'
 import { TrackMenu } from '../components/TrackMenu'
 import { AlbumCard } from '../components/AlbumCard'
@@ -45,6 +45,13 @@ export function ArtistPage() {
 
   const [editArtworkOpen, setEditArtworkOpen] = useState(false)
   const [artworkVersion, setArtworkVersion] = useState(0)
+  const [showAllTopSongs, setShowAllTopSongs] = useState(false)
+
+  const TOP_SONGS_PREVIEW_COUNT = 5
+  const visibleTopTracks = useMemo(
+    () => showAllTopSongs ? topTracks : topTracks.slice(0, TOP_SONGS_PREVIEW_COUNT),
+    [topTracks, showAllTopSongs]
+  )
 
   const trackNumberDisplay = useTrackNumberDisplay()
 
@@ -88,14 +95,14 @@ export function ArtistPage() {
   )
 
   // Build queue callback for TrackList
-  // Must use topTracks (the displayed list) so the queue order matches display order.
+  // Must use visibleTopTracks (the displayed list) so the queue order matches display order.
   // TrackList passes clickedIndex from the displayed list to playQueue(), so the
   // queue and the index must be aligned on the same array.
   const buildQueue = useCallback(
     (_allTracks: Track[], _clickedTrack: Track, _clickedIndex: number): QueueTrack[] => {
-      return buildQueueFromTracks(topTracks)
+      return buildQueueFromTracks(visibleTopTracks)
     },
-    [buildQueueFromTracks, topTracks]
+    [buildQueueFromTracks, visibleTopTracks]
   )
 
   // Convert BackendTrack to QueueTrack
@@ -196,9 +203,9 @@ export function ArtistPage() {
     <div data-testid="artist-detail-page" className="h-full">
       <DetailPageLayout
         header={
-          <div className="flex items-start gap-4 sm:gap-6">
+          <div className="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left gap-3 sm:gap-6">
             {/* Artist Avatar */}
-            <div className="group relative w-20 h-20 sm:w-32 sm:h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+            <div className="group relative w-28 h-28 sm:w-32 sm:h-32 bg-muted rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
               {artistArtworkUrl ? (
                 <img
                   key={artworkVersion}
@@ -215,7 +222,7 @@ export function ArtistPage() {
                   priority
                 />
               ) : (
-                <Users className="w-16 h-16 text-muted-foreground" />
+                <Users className="w-12 h-12 text-muted-foreground" />
               )}
               {/* Edit button overlay */}
               {isDesktop && (
@@ -230,11 +237,11 @@ export function ArtistPage() {
 
             {/* Artist Info */}
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1 hidden sm:block">
                 {t('library.artist')}
               </p>
-              <h1 className="text-xl sm:text-4xl font-bold mb-1 sm:mb-2" data-testid="artist-name">{artist.name}</h1>
-              <p className="text-muted-foreground mb-4" data-testid="artist-stats">
+              <h1 className="text-lg sm:text-4xl font-bold mb-0.5 sm:mb-2" data-testid="artist-name">{artist.name}</h1>
+              <p className="text-xs sm:text-base text-muted-foreground mb-3 sm:mb-4" data-testid="artist-stats">
                 {t('library.albums', { count: artist.album_count })} • {t('library.tracks', { count: artist.track_count })}
               </p>
 
@@ -254,10 +261,10 @@ export function ArtistPage() {
       >
         {/* Top Songs Section */}
         {topTracks.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">{t('artist.topSongs')}</h2>
+          <div className="mb-6 sm:mb-8">
+            <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4">{t('artist.topSongs')}</h2>
             <TrackList
-              tracks={topTracks.map(t => ({
+              tracks={visibleTopTracks.map(t => ({
                 id: t.id,
                 title: String(t.title || 'Unknown'),
                 artist: t.artist_name,
@@ -276,7 +283,7 @@ export function ArtistPage() {
               virtualized={false}
               buildQueue={buildQueue}
               renderMenu={(track) => {
-                const backendTrack = topTracks.find(t => t.id === track.id)
+                const backendTrack = visibleTopTracks.find(t => t.id === track.id)
                 if (!backendTrack) return null
                 return (
                   <TrackMenu
@@ -296,13 +303,31 @@ export function ArtistPage() {
                 )
               }}
             />
+            {topTracks.length > TOP_SONGS_PREVIEW_COUNT && (
+              <button
+                onClick={() => setShowAllTopSongs(prev => !prev)}
+                className="mt-3 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showAllTopSongs ? (
+                  <>
+                    <ChevronUp className="w-4 h-4" />
+                    {t('artist.showLess')}
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4" />
+                    {t('artist.showMore')}
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
 
         {/* Discography Section */}
         <div className="mb-0">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold">{t('artist.discography')}</h2>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h2 className="text-lg sm:text-2xl font-bold">{t('artist.discography')}</h2>
             <ViewToggle view={discographyView} onViewChange={setDiscographyView} />
           </div>
 

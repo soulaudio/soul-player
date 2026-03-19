@@ -11,6 +11,8 @@ import { useSeekBar } from '../hooks/useSeekBar';
 import { useInterpolatedProgress } from '../hooks/useInterpolatedProgress';
 import { debug } from '../utils/debug';
 import { Volume2, VolumeX, Play, Pause, SkipForward, Heart } from 'lucide-react';
+import { AddToPlaylistDialog } from './AddToPlaylistDialog';
+import { usePlatform } from '../contexts/PlatformContext';
 
 /**
  * NowPlayingFloating — bottom player bar shown in two modes:
@@ -32,8 +34,10 @@ export function NowPlayingFloating() {
   const handlers = usePlaybackHandlers();
   const commands = usePlayerCommands();
 
+  const { features } = usePlatform();
   const [isMuted, setIsMuted] = useState(false);
   const [volumeBeforeMute, setVolumeBeforeMute] = useState(volume);
+  const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const volumeTrackRef = useRef<HTMLDivElement>(null);
 
@@ -101,15 +105,29 @@ export function NowPlayingFloating() {
     if (!mobileShowContent) return null;
 
     return (
-      <MobileMiniPlayer
-        currentTrack={currentTrack}
-        title={title}
-        artist={artist}
-        isPlaying={isPlaying}
-        onPlayPause={handlers.onPlayPause}
-        onNext={handlers.onNext}
-        onOpenNowPlaying={() => navigate('/now-playing-todo')}
-      />
+      <>
+        <MobileMiniPlayer
+          currentTrack={currentTrack}
+          title={title}
+          artist={artist}
+          isPlaying={isPlaying}
+          onPlayPause={handlers.onPlayPause}
+          onNext={handlers.onNext}
+          onOpenNowPlaying={() => navigate('/now-playing-todo')}
+          onTitleClick={currentTrack.albumId ? () => navigate(`/albums/${currentTrack.albumId}`) : undefined}
+          onArtistClick={currentTrack.artistId ? () => navigate(`/artists/${currentTrack.artistId}`) : undefined}
+          onAddToPlaylist={features.canCreatePlaylists ? () => setShowAddToPlaylist(true) : undefined}
+        />
+        {showAddToPlaylist && (
+          <AddToPlaylistDialog
+            open={showAddToPlaylist}
+            onClose={() => setShowAddToPlaylist(false)}
+            mode="track"
+            trackId={currentTrack.id}
+            trackTitle={currentTrack.title}
+          />
+        )}
+      </>
     );
   }
 
@@ -125,16 +143,17 @@ export function NowPlayingFloating() {
   const displayVolume = isMuted ? 0 : volume;
 
   return (
+    <>
     <div
       className="fixed bottom-3 left-3 right-3 z-50 mx-auto max-w-[960px] group/bar"
       data-testid="now-playing-floating"
     >
       <div className="bg-card/85 backdrop-blur-md border border-border rounded-2xl shadow-lg opacity-[0.97] group-hover/bar:opacity-100 transition-opacity">
-      <div className="grid grid-cols-[minmax(160px,1fr)_minmax(auto,640px)_minmax(160px,1fr)] items-center h-[72px] px-5 gap-4">
+      <div className="grid grid-cols-[minmax(180px,1.4fr)_minmax(auto,480px)_minmax(140px,0.8fr)] items-center h-[72px] px-5 gap-4">
 
         {/* Left: artwork + track info + heart — clickable container opens now playing */}
         <div
-          className="flex items-center gap-1.5 min-w-0 max-w-[240px] rounded-lg px-1.5 py-1 -mx-1.5 -my-1 hover:bg-foreground/[0.06] transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 min-w-0 rounded-lg px-1.5 py-1 -mx-1.5 -my-1 hover:bg-foreground/[0.06] transition-colors cursor-pointer"
           onClick={() => navigate('/now-playing-todo')}
           data-testid="floating-track-info"
         >
@@ -148,7 +167,7 @@ export function NowPlayingFloating() {
               fallbackIconSize="sm"
             />
           </div>
-          <div className="flex flex-col min-w-0 w-[180px] text-left">
+          <div className="flex flex-col min-w-0 flex-1 text-left">
             <span
               className="text-sm font-semibold truncate text-foreground hover:underline"
               data-testid="floating-now-playing-title"
@@ -162,12 +181,14 @@ export function NowPlayingFloating() {
               {artist}
             </span>
           </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); }}
-            className="ml-auto p-1.5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-          >
-            <Heart className="w-4 h-4" />
-          </button>
+          {features.canCreatePlaylists && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(true); }}
+              className="ml-auto p-1.5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+            >
+              <Heart className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Middle: playback controls + progress bar — always centered */}
@@ -222,6 +243,16 @@ export function NowPlayingFloating() {
       </div>
       </div>
     </div>
+    {showAddToPlaylist && (
+      <AddToPlaylistDialog
+        open={showAddToPlaylist}
+        onClose={() => setShowAddToPlaylist(false)}
+        mode="track"
+        trackId={currentTrack.id}
+        trackTitle={currentTrack.title}
+      />
+    )}
+    </>
   );
 }
 
@@ -234,6 +265,9 @@ function MobileMiniPlayer({
   onPlayPause,
   onNext,
   onOpenNowPlaying,
+  onTitleClick,
+  onArtistClick,
+  onAddToPlaylist,
 }: {
   currentTrack: { id: number; coverArtPath?: string };
   title: string;
@@ -242,6 +276,9 @@ function MobileMiniPlayer({
   onPlayPause: () => void;
   onNext: () => void;
   onOpenNowPlaying: () => void;
+  onTitleClick?: () => void;
+  onArtistClick?: () => void;
+  onAddToPlaylist?: () => void;
 }) {
   const { progress: seekProgress, duration } = useInterpolatedProgress();
   const { handleSeek } = useSeekBar();
@@ -311,7 +348,7 @@ function MobileMiniPlayer({
         {/* Seekable progress bar — top */}
         <div
           ref={seekBarRef}
-          className="w-full h-2 flex items-start cursor-pointer touch-none"
+          className="w-full h-1.5 flex items-start cursor-pointer touch-none"
           onMouseDown={onMouseDown}
           onClick={onClick}
           onTouchStart={onTouchStart}
@@ -343,21 +380,30 @@ function MobileMiniPlayer({
             />
           </div>
           {/* Track info */}
-          <button
-            className="flex flex-col justify-center min-w-0 flex-1 text-left"
-            onClick={onOpenNowPlaying}
-          >
-            <span className="text-[13px] font-medium leading-tight truncate text-foreground">{title}</span>
-            <span className="text-[11px] leading-tight truncate text-muted-foreground">{artist}</span>
-          </button>
+          <div className="flex flex-col justify-center min-w-0 flex-1">
+            <button
+              className="text-[13px] font-medium leading-tight truncate text-foreground text-left hover:underline"
+              onClick={onTitleClick || onOpenNowPlaying}
+            >
+              {title}
+            </button>
+            <button
+              className="text-[11px] leading-tight truncate text-muted-foreground text-left hover:underline"
+              onClick={onArtistClick || onOpenNowPlaying}
+            >
+              {artist}
+            </button>
+          </div>
           {/* Heart + Playback controls */}
           <div className="flex items-center gap-0.5 shrink-0">
-            <button
-              onClick={(e) => { e.stopPropagation(); }}
-              className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Heart className="w-4 h-4" />
-            </button>
+            {onAddToPlaylist && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onAddToPlaylist(); }}
+                className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Heart className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={onPlayPause}
               className="w-10 h-10 flex items-center justify-center text-foreground"

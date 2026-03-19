@@ -563,7 +563,9 @@
     "noTopSongs": "No play history yet",
     "noTopSongsHint": "Start playing tracks to see top songs",
     "expandAlbum": "Expand album",
-    "collapseAlbum": "Collapse album"
+    "collapseAlbum": "Collapse album",
+    "showMore": "Show more",
+    "showLess": "Show less"
   },
   "album": {
     "notFound": "Album not found",

@@ -361,12 +361,12 @@ const TrackRowComponent = ({
 
   // Mobile: simplified 2-3 column layout. Desktop: full 7 column layout.
   const gridCols = showTrackNumber
-    ? 'grid-cols-[40px_1fr_40px] sm:grid-cols-[52px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
-    : 'grid-cols-[1fr_40px] sm:grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
+    ? 'grid-cols-[32px_1fr_32px] sm:grid-cols-[40px_1fr_minmax(0,0.6fr)_minmax(0,0.6fr)_60px_56px_36px]'
+    : 'grid-cols-[1fr_32px] sm:grid-cols-[1fr_minmax(0,0.6fr)_minmax(0,0.6fr)_60px_56px_36px]';
 
   return (
     <div
-      className={`grid ${gridCols} gap-2 sm:gap-4 px-2 sm:px-4 py-2 sm:py-3 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors group ${
+      className={`grid ${gridCols} gap-1.5 sm:gap-3 px-1 sm:px-3 py-1.5 sm:py-2 rounded-md hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors group ${
         isCurrentTrack ? 'bg-accent/20' : ''
       } ${isUnavailable ? 'opacity-60' : ''}`}
       data-testid="track-row"
@@ -470,11 +470,19 @@ const TrackRowComponent = ({
           </>
         )}
 
-        <span
-          className={`truncate ${isCurrentTrack ? 'text-primary font-medium' : ''} ${isUnavailable ? 'line-through' : ''}`}
-        >
-          {activeVersion.title}
-        </span>
+        <div className="flex flex-col min-w-0">
+          <span
+            className={`truncate text-sm ${isCurrentTrack ? 'text-primary font-medium' : ''} ${isUnavailable ? 'line-through' : ''}`}
+          >
+            {activeVersion.title}
+          </span>
+          {/* Artist below title on mobile (desktop has separate column) */}
+          {activeVersion.artist && (
+            <span className="sm:hidden text-xs text-muted-foreground truncate">
+              {activeVersion.artist}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Artist — hidden on mobile */}
@@ -524,7 +532,7 @@ const TrackRowComponent = ({
       </div>
 
       {/* Duration — hidden on mobile */}
-      <div className="hidden sm:flex items-center text-sm text-muted-foreground font-mono">
+      <div className="hidden sm:flex items-center justify-end text-xs text-muted-foreground tabular-nums">
         {formatDuration(activeVersion.duration)}
       </div>
 
@@ -637,36 +645,22 @@ export function TrackList({
   }
 
   const headerGridCols = showTrackNumber
-    ? 'grid-cols-[40px_1fr_40px] sm:grid-cols-[52px_minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]'
-    : 'grid-cols-[1fr_40px] sm:grid-cols-[minmax(200px,1fr)_minmax(120px,180px)_minmax(120px,180px)_70px_70px_40px]';
+    ? 'grid-cols-[40px_1fr_minmax(0,0.6fr)_minmax(0,0.6fr)_60px_56px_36px]'
+    : 'grid-cols-[1fr_minmax(0,0.6fr)_minmax(0,0.6fr)_60px_56px_36px]';
 
   // Virtualized rendering
   if (virtualized) {
     return (
-      <div className="border rounded-lg overflow-hidden h-full flex flex-col" data-testid="track-list">
-        {/* Header */}
-        <div className="bg-muted/50 flex-shrink-0">
-          <div className={`grid ${headerGridCols} gap-2 sm:gap-4 px-2 sm:px-4 py-2 text-sm font-medium text-muted-foreground`}>
-            {showTrackNumber && (
-              <Tooltip content={t('trackList.columnTrackNumber')} position="top" delay={700}>
-                <div className="pl-2">#</div>
-              </Tooltip>
-            )}
-            <Tooltip content={t('trackList.tooltipTitle')} position="top" delay={700}>
-              <div>{t('trackList.columnTitle')}</div>
-            </Tooltip>
-            <Tooltip content={t('trackList.tooltipArtist')} position="top" delay={700}>
-              <div className="hidden sm:block">{t('trackList.columnArtist')}</div>
-            </Tooltip>
-            <Tooltip content={t('trackList.tooltipAlbum')} position="top" delay={700}>
-              <div className="hidden sm:block">{t('trackList.columnAlbum')}</div>
-            </Tooltip>
-            <Tooltip content={t('trackList.tooltipFormat')} position="top" delay={700}>
-              <div className="hidden sm:block">{t('trackList.columnFormat')}</div>
-            </Tooltip>
-            <Tooltip content={t('trackList.tooltipDuration')} position="top" delay={700}>
-              <div className="hidden sm:block">{t('trackList.columnDuration')}</div>
-            </Tooltip>
+      <div className="overflow-hidden h-full flex flex-col" data-testid="track-list">
+        {/* Header — hidden on mobile */}
+        <div className="flex-shrink-0 hidden sm:block border-b border-border/50 mb-1">
+          <div className={`grid ${headerGridCols} gap-3 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground`}>
+            {showTrackNumber && <div className="pl-2">#</div>}
+            <div>{t('trackList.columnTitle')}</div>
+            <div>{t('trackList.columnArtist')}</div>
+            <div>{t('trackList.columnAlbum')}</div>
+            <div>{t('trackList.columnFormat')}</div>
+            <div className="text-right">{t('trackList.columnDuration')}</div>
             <div></div>
           </div>
         </div>
@@ -729,30 +723,16 @@ export function TrackList({
 
   // Non-virtualized rendering (original behavior)
   return (
-    <div className="border rounded-lg overflow-hidden" data-testid="track-list">
-      {/* Header */}
-      <div className="bg-muted/50">
-        <div className={`grid ${headerGridCols} gap-2 sm:gap-4 px-2 sm:px-4 py-2 text-sm font-medium text-muted-foreground`}>
-          {showTrackNumber && (
-            <Tooltip content={t('trackList.columnTrackNumber')} position="top" delay={700}>
-              <div className="pl-2">#</div>
-            </Tooltip>
-          )}
-          <Tooltip content={t('trackList.tooltipTitle')} position="top" delay={700}>
-            <div>{t('trackList.columnTitle')}</div>
-          </Tooltip>
-          <Tooltip content={t('trackList.tooltipArtist')} position="top" delay={700}>
-            <div className="hidden sm:block">{t('trackList.columnArtist')}</div>
-          </Tooltip>
-          <Tooltip content={t('trackList.tooltipAlbum')} position="top" delay={700}>
-            <div className="hidden sm:block">{t('trackList.columnAlbum')}</div>
-          </Tooltip>
-          <Tooltip content={t('trackList.tooltipFormat')} position="top" delay={700}>
-            <div className="hidden sm:block">{t('trackList.columnFormat')}</div>
-          </Tooltip>
-          <Tooltip content={t('trackList.tooltipDuration')} position="top" delay={700}>
-            <div className="hidden sm:block text-right">{t('trackList.columnDuration')}</div>
-          </Tooltip>
+    <div className="overflow-hidden" data-testid="track-list">
+      {/* Header — hidden on mobile */}
+      <div className="hidden sm:block border-b border-border/50 mb-1">
+        <div className={`grid ${headerGridCols} gap-3 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground`}>
+          {showTrackNumber && <div className="pl-2">#</div>}
+          <div>{t('trackList.columnTitle')}</div>
+          <div>{t('trackList.columnArtist')}</div>
+          <div>{t('trackList.columnAlbum')}</div>
+          <div>{t('trackList.columnFormat')}</div>
+          <div className="text-right">{t('trackList.columnDuration')}</div>
           <div></div>
         </div>
       </div>

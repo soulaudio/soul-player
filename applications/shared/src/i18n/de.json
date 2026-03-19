@@ -682,7 +682,9 @@
     "noTopSongs": "Noch kein Wiedergabeverlauf",
     "noTopSongsHint": "Spielen Sie Titel ab, um Top-Songs zu sehen",
     "expandAlbum": "Album aufklappen",
-    "collapseAlbum": "Album zuklappen"
+    "collapseAlbum": "Album zuklappen",
+    "showMore": "Mehr anzeigen",
+    "showLess": "Weniger anzeigen"
   },
   "album": {
     "notFound": "Album nicht gefunden",

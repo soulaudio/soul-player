@@ -16,7 +16,7 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
       <div className="relative h-full">
         {/* Main content — full width, scrollable */}
         <main className="h-full overflow-y-auto">
-          <div className="pr-6 pb-16">
+          <div style={{ paddingLeft: 'var(--layout-pl)', paddingRight: 'var(--layout-pr)', paddingBottom: 'var(--layout-pb)' }}>
             {children}
           </div>
         </main>

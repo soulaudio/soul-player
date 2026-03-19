@@ -226,10 +226,7 @@ pub async fn rescan_library_source(
 
 /// Trigger a rescan of all enabled library sources
 #[tauri::command]
-pub async fn rescan_all_sources(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn rescan_all_sources(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let device_id = get_device_id();
 
     // Emit scan started event

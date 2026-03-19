@@ -200,10 +200,10 @@ export function AlbumPage() {
     <div data-testid="album-detail-page" className="h-full">
       <DetailPageLayout
         header={
-          <div className="flex items-start gap-4 sm:gap-6">
+          <div className="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left gap-4 sm:gap-6">
             {/* Album Cover */}
             <div
-              className="group relative w-24 h-24 sm:w-48 sm:h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center cursor-pointer"
+              className="group relative w-44 h-44 sm:w-48 sm:h-48 bg-muted rounded-lg overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center cursor-pointer"
               onClick={() => setLightboxOpen(true)}
               role="button"
               tabIndex={0}
@@ -232,26 +232,26 @@ export function AlbumPage() {
 
             {/* Album Info */}
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1 hidden sm:block">
                 {t('library.album')}
               </p>
-              <h1 className="text-xl sm:text-4xl font-bold mb-1 sm:mb-2" data-testid="album-title">{album.title}</h1>
-              <p className="text-sm sm:text-lg mb-1 sm:mb-2" data-testid="album-artist">
+              <h1 className="text-lg sm:text-4xl font-bold mb-0.5 sm:mb-2" data-testid="album-title">{album.title}</h1>
+              <p className="text-sm sm:text-lg mb-0.5 sm:mb-2" data-testid="album-artist">
                 <ArtistLink
                   artistId={album.artist_id}
                   artistName={album.artist_name}
-                  className="text-lg hover:text-primary"
+                  className="text-sm sm:text-lg hover:text-primary"
                 />
                 {album.year && (
                   <span className="text-muted-foreground"> • {album.year}</span>
                 )}
               </p>
-              <p className="text-sm text-muted-foreground flex items-center gap-2 mb-4" data-testid="album-track-count">
-                <Clock className="w-4 h-4" />
+              <p className="text-xs sm:text-sm text-muted-foreground flex items-center justify-center sm:justify-start gap-1.5 mb-3 sm:mb-4" data-testid="album-track-count">
+                <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 {t('library.tracks', { count: tracks.length })} • {formatDuration(totalDuration)}
               </p>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center sm:justify-start gap-3">
                 <button
                   onClick={handlePlayAll}
                   onMouseDown={(e) => e.preventDefault()}
