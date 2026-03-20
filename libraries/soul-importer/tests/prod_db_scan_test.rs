@@ -161,3 +161,58 @@ async fn prod_db_albums_without_artwork_with_available_images() {
 
     pool.close().await;
 }
+
+#[tokio::test]
+#[ignore]
+async fn prod_db_hello_album_investigation() {
+    let pool = match connect_prod_db().await {
+        Some(p) => p,
+        None => return,
+    };
+
+    // Find Hello album
+    let albums: Vec<(i64, String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT id, title, folder_path, cover_art_path FROM albums WHERE LOWER(title) LIKE '%hello%'"
+    ).fetch_all(&pool).await.expect("query");
+
+    println!("'Hello' albums:");
+    for (id, title, folder, cover) in &albums {
+        println!("  id={id} title={title:?} folder={folder:?} cover={cover:?}");
+        // Count tracks
+        let (track_count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE album_id = ? AND is_available = 1")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .expect("count");
+        let (total_count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE album_id = ?")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .expect("count");
+        println!("    available_tracks={track_count} total_tracks={total_count}");
+    }
+
+    // Check albums with 0 available tracks
+    let empty: Vec<(i64, String, Option<String>)> = sqlx::query_as(
+        "SELECT a.id, a.title, a.folder_path FROM albums a
+         WHERE (SELECT COUNT(*) FROM tracks t WHERE t.album_id = a.id AND t.is_available = 1) = 0
+         ORDER BY a.title",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("query");
+
+    println!("\nAlbums with 0 available tracks ({}):", empty.len());
+    for (id, title, folder) in &empty {
+        let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE album_id = ?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .expect("count");
+        println!("  id={id} title={title:?} total_tracks={total} folder={folder:?}");
+    }
+
+    pool.close().await;
+}

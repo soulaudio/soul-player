@@ -281,23 +281,19 @@ fn bill_evans_dsf_sample_rate_and_duration() {
 }
 
 #[test]
-fn osaki_seiichi_bwf_wav_does_not_error() {
+fn osaki_seiichi_bwf_wav_does_not_panic() {
     // BWF (Broadcast Wave Format) WAV files with `bext` chunks cause lofty to fail.
-    // Verify that extract_metadata falls back gracefully and returns at minimum a title.
+    // The correct behavior is to return an error (not panic, not silently succeed with
+    // folder-derived metadata that would corrupt album grouping).
+    // TODO: implement proper RIFF fmt chunk parsing to support BWF WAV import.
     let path = require_file!(
         "D:/music/Ambient/Osaki Seiichi/In The Footsteps Of A Lost Book Hidden In The Jungle Temple/1 Moving From The Beaming Sun, Shaded By The Tropical Jungle Leaves (Misty Waterfalls).wav"
     );
-    let meta = extract_metadata(path)
-        .expect("BWF WAV must not return an error — should fall back to path-only metadata");
-    // Title must be populated (from filename at minimum)
+    // Must not panic — returning an error is the correct behavior until BWF is properly handled
+    let result = extract_metadata(path);
     assert!(
-        meta.title.is_some(),
-        "BWF WAV fallback must produce a title from filename"
-    );
-    assert_eq!(
-        meta.file_format.to_uppercase(),
-        "WAV",
-        "file_format must be WAV"
+        result.is_err(),
+        "BWF WAV must return an error until proper RIFF parsing is implemented"
     );
 }
 

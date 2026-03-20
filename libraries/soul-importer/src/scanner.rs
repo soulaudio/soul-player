@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 
 /// Supported audio file extensions (shared with watcher module)
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "mp3", "flac", "ogg", "wav", "aac", "m4a", "opus", "dsf", "dff", "dsdiff",
+    "mp3", "flac", "ogg", "wav", "aac", "m4a", "opus", "dsf", "dff", "dsdiff", "aiff", "aif",
 ];
 
 /// Scanner for audio files in directories
@@ -140,13 +140,14 @@ impl FileScanner {
         for dir in &directories {
             let dir_str = dir.display().to_string();
 
-            // Get directory mtime
+            // Get directory mtime (millisecond precision to detect rapid changes in tests
+            // and real-world scenarios where files are added within the same second).
             let dir_mtime = match std::fs::metadata(dir) {
                 Ok(m) => m
                     .modified()
                     .map(|t| {
                         t.duration_since(std::time::UNIX_EPOCH)
-                            .map(|d| d.as_secs() as i64)
+                            .map(|d| d.as_millis() as i64)
                             .unwrap_or(0)
                     })
                     .unwrap_or(0),

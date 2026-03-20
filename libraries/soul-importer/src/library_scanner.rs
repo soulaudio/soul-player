@@ -307,13 +307,7 @@ impl LibraryScanner {
                     .unwrap_or(0);
 
                 if let Some(existing) = existing_tracks.get(&path_str) {
-                    // DSD files (.dsf/.dff) always reprocess — metadata parser was
-                    // fixed and old DB entries may have wrong duration/sample rate.
-                    let is_dsd = path_str.ends_with(".dsf")
-                        || path_str.ends_with(".dff")
-                        || path_str.ends_with(".dsdiff");
-                    let unchanged = !is_dsd
-                        && existing.file_size == Some(file_size)
+                    let unchanged = existing.file_size == Some(file_size)
                         && existing.file_mtime == Some(file_mtime);
 
                     if unchanged {
@@ -477,6 +471,13 @@ impl LibraryScanner {
             &stats,
         )
         .await?;
+
+        // ── Artwork refresh for changed directories ──
+        // When only an image is added/changed in a directory, audio files pass Phase 1
+        // unchanged and are skipped — file_processor never runs, cover_art_path stays stale.
+        // Re-run artwork discovery for every album whose folder_path is in a changed dir.
+        self.refresh_artwork_for_changed_dirs(&changed_dir_paths)
+            .await?;
 
         // Handle missing files (soft delete) and clean up orphaned albums/artists
         if source.sync_deletes {
@@ -751,6 +752,61 @@ impl LibraryScanner {
     }
 
     /// Mark files that are no longer present as unavailable
+    /// Re-run artwork discovery for albums in directories that changed during this scan.
+    ///
+    /// Covers the case where only an image file was added/modified — audio files pass
+    /// Phase 1's mtime/size check unchanged, so file_processor never runs for them.
+    /// This pass updates cover_art_path for any album whose folder changed.
+    async fn refresh_artwork_for_changed_dirs(
+        &self,
+        changed_dirs: &std::collections::HashSet<String>,
+    ) -> Result<()> {
+        if changed_dirs.is_empty() {
+            return Ok(());
+        }
+
+        // Fetch all albums that have a folder_path (non-NULL)
+        let rows: Vec<(i64, String, Option<String>)> = sqlx::query_as(
+            "SELECT id, folder_path, cover_art_path FROM albums WHERE folder_path IS NOT NULL",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut updated: i64 = 0;
+        for (album_id, folder_str, current_cover) in rows {
+            if !changed_dirs.contains(&folder_str) {
+                continue;
+            }
+            let new_cover = crate::artwork_discovery::discover_folder_artwork(
+                std::path::Path::new(&folder_str),
+            )
+            .map(|p| p.to_string_lossy().to_string());
+
+            if new_cover != current_cover {
+                soul_storage::albums::update_cover_art_path(
+                    &self.pool,
+                    album_id,
+                    new_cover.as_deref(),
+                )
+                .await?;
+                updated += 1;
+                tracing::debug!(
+                    "[SCAN] Artwork refreshed for album_id={} folder={}",
+                    album_id,
+                    folder_str
+                );
+            }
+        }
+
+        if updated > 0 {
+            tracing::info!(
+                "[SCAN] Refreshed artwork for {} album(s) in changed directories",
+                updated
+            );
+        }
+        Ok(())
+    }
+
     async fn mark_missing_files_unavailable(
         &self,
         _source_id: i64,
