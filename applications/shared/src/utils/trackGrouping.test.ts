@@ -357,6 +357,80 @@ describe('trackGrouping', () => {
     });
   });
 
+  describe('Unicode / non-ASCII titles', () => {
+    /**
+     * Regression tests for the bug where \w in the normaliser stripped all
+     * Unicode characters, causing every Japanese-titled track to collapse
+     * into the same group key — only 2 tracks visible in "(71) ある若者の肖像".
+     *
+     * Root cause: [^\w\s] only keeps ASCII word chars; Japanese kana/kanji
+     * are non-ASCII and were stripped to "".
+     * Fix: use [^\p{L}\p{N}\s] with the Unicode `u` flag.
+     */
+    it('should keep Japanese tracks as distinct groups', () => {
+      // Real scenario: Jun Fukamachi "(71) ある若者の肖像" — 10 tracks with
+      // unique Japanese titles that were all collapsing to the same key.
+      const tracks = [
+        { id: 1, title: 'ひいらぎ',       artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 2, title: '何故',           artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 3, title: '彼女の姿',       artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 4, title: 'お前',           artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 5, title: '散歩',           artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 6, title: '愛が故郷',       artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 7, title: 'お前と夕陽',     artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 8, title: '新しい唄',       artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 9, title: 'Noersiah (ノルシア)', artist: 'Fukamachi, Jun', format: 'MP3' },
+        { id: 10, title: '薔薇',          artist: 'Fukamachi, Jun', format: 'MP3' },
+      ];
+
+      const grouped = groupTracks(tracks);
+
+      // Before fix: all Japanese titles → "" → 2 groups total (Japanese blob + Noersiah)
+      // After fix: 10 distinct titles → 10 groups
+      expect(grouped).toHaveLength(10);
+    });
+
+    it('should treat distinct Japanese titles as separate tracks', () => {
+      const tracks = [
+        { id: 1, title: 'さくら', artist: 'Artist', format: 'FLAC' },
+        { id: 2, title: '雪', artist: 'Artist', format: 'FLAC' },
+        { id: 3, title: '月', artist: 'Artist', format: 'FLAC' },
+      ];
+      const grouped = groupTracks(tracks);
+      expect(grouped).toHaveLength(3);
+    });
+
+    it('should still deduplicate the same Japanese title in two formats', () => {
+      const tracks = [
+        { id: 1, title: 'さくら', artist: 'Artist', format: 'FLAC' },
+        { id: 2, title: 'さくら', artist: 'Artist', format: 'MP3' },
+      ];
+      const grouped = groupTracks(tracks);
+      expect(grouped).toHaveLength(1);
+      expect(grouped[0].bestVersion.format).toBe('FLAC');
+    });
+
+    it('should handle mixed Latin and Japanese titles correctly', () => {
+      const tracks = [
+        { id: 1, title: 'Noersiah (ノルシア)', artist: 'Artist', format: 'MP3' },
+        { id: 2, title: 'ひいらぎ', artist: 'Artist', format: 'MP3' },
+      ];
+      const grouped = groupTracks(tracks);
+      // Both are distinct even after punctuation removal
+      expect(grouped).toHaveLength(2);
+    });
+
+    it('should handle Korean, Chinese, Arabic titles as distinct groups', () => {
+      const tracks = [
+        { id: 1, title: '봄', artist: 'Artist', format: 'MP3' },      // Korean
+        { id: 2, title: '春', artist: 'Artist', format: 'MP3' },      // Chinese
+        { id: 3, title: 'ربيع', artist: 'Artist', format: 'MP3' },    // Arabic
+      ];
+      const grouped = groupTracks(tracks);
+      expect(grouped).toHaveLength(3);
+    });
+  });
+
   describe('AlbumCard handlePlay (FIXED)', () => {
     /**
      * This test verifies AlbumCard.handlePlay correctly deduplicates tracks.

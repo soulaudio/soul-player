@@ -280,16 +280,27 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     }
 
     let probe_start = std::time::Instant::now();
-    let tagged_file = Probe::open(path)
+    let tagged_file_result = Probe::open(path)
         .map_err(|e| {
             tracing::error!(file_path = %path.display(), error = %e, "[Metadata] Failed to open file");
             ImportError::Metadata(format!("Failed to open file: {}", e))
         })?
-        .read()
-        .map_err(|e| {
-            tracing::error!(file_path = %path.display(), error = %e, "[Metadata] Failed to read file");
-            ImportError::Metadata(format!("Failed to read file: {}", e))
-        })?;
+        .read();
+
+    // Some valid audio files (e.g. BWF WAV with bext chunks) cause lofty to emit
+    // "abnormally large data" errors even though the file is playable.  Fall back
+    // to filename-based minimal metadata so the track is still imported.
+    let tagged_file = match tagged_file_result {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::warn!(
+                file_path = %path.display(),
+                error = %e,
+                "[Metadata] lofty failed to read file; falling back to filename-based metadata"
+            );
+            return extract_metadata_from_path_only(path, &ext);
+        }
+    };
     let probe_duration = probe_start.elapsed();
 
     // Find the best tag - prefer one with artist metadata
@@ -516,6 +527,64 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         musicbrainz_recording_id,
         composer,
         album_art,
+    })
+}
+
+/// Minimal metadata from file path alone — used when a tag library fails to parse a valid
+/// audio file (e.g. BWF WAV with bext chunks that lofty rejects as "abnormally large").
+///
+/// Extracts title from filename stem, album/artist from parent/grandparent folders.
+/// Duration and bitrate are left as None (unknown) — the file is still importable.
+fn extract_metadata_from_path_only(path: &Path, ext: &str) -> Result<ExtractedMetadata> {
+    let title = path.file_stem().map(|s| s.to_string_lossy().into_owned());
+    let folder_meta = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .map(|n| parse_folder_name(&n.to_string_lossy()));
+
+    let (album, artist) = match &folder_meta {
+        Some(fm) => (fm.album.clone(), fm.artist.clone()),
+        None => (None, None),
+    };
+
+    // If folder parse didn't yield an artist, try grandparent directory name
+    let artist = artist.or_else(|| {
+        path.parent()
+            .and_then(|p| p.parent())
+            .and_then(|g| g.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+    });
+
+    let artists = match artist {
+        Some(a) => vec![a],
+        None => vec![],
+    };
+
+    let file_format = ext.to_uppercase();
+
+    tracing::warn!(
+        file_path = %path.display(),
+        title = ?title,
+        "[Metadata] Using path-only fallback metadata (tag library failed)"
+    );
+
+    Ok(ExtractedMetadata {
+        title,
+        artists,
+        album_artist: None,
+        album,
+        track_number: None,
+        disc_number: None,
+        year: None,
+        genres: vec![],
+        duration_seconds: None,
+        bitrate: None,
+        sample_rate: None,
+        channels: None,
+        file_format,
+        musicbrainz_recording_id: None,
+        composer: None,
+        album_art: None,
     })
 }
 

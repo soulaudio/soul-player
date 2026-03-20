@@ -85,7 +85,7 @@ function normalizeForGrouping(str: string | undefined): string {
   return (str || '')
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s]/g, '') // Remove punctuation
+    .replace(/[^\p{L}\p{N}\s]/gu, '') // Remove punctuation, keep Unicode letters/digits
     .replace(/\s+/g, ' '); // Normalize whitespace
 }
 
