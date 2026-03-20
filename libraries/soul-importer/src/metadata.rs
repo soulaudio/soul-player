@@ -279,6 +279,21 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         return extract_dsd_metadata(path);
     }
 
+    // BWF WAV: try our RIFF chunk parser first.
+    // Falls through to lofty on failure (standard WAVs lofty handles correctly).
+    if ext == "wav" || ext == "wave" {
+        match extract_wav_metadata(path) {
+            Ok(meta) => return Ok(meta),
+            Err(e) => {
+                tracing::debug!(
+                    file_path = %path.display(),
+                    error = %e,
+                    "[Metadata] WAV custom parser failed, falling through to lofty"
+                );
+            }
+        }
+    }
+
     let probe_start = std::time::Instant::now();
     let tagged_file_result = Probe::open(path)
         .map_err(|e| {
@@ -530,6 +545,339 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         file_format,
         musicbrainz_recording_id,
         composer,
+        album_art,
+    })
+}
+
+/// Extract metadata from WAV/BWF files by walking RIFF chunks directly.
+///
+/// This handles BWF (Broadcast Wave Format) files that contain large `bext` chunks before
+/// the `fmt` chunk, which cause lofty to emit "abnormally large data" errors even though
+/// the file is valid and playable. Standard WAV files are also handled correctly here.
+///
+/// Chunk layout walked:
+/// - `fmt ` → sample_rate, channels, bits_per_sample (must be ≥ 16 bytes)
+/// - `data` → chunk size used to compute duration
+/// - `id3 ` / `ID3 ` → raw bytes parsed as ID3v2 frames (same logic as DSD extractor)
+/// - anything else (`bext`, `JUNK`, `LIST`, …) → skipped
+///
+/// Returns `Err` if the RIFF header is malformed, or if the `fmt` or `data` chunk is missing.
+/// The caller falls back to lofty on any error.
+fn extract_wav_metadata(path: &Path) -> Result<ExtractedMetadata> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let file_format = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_else(|| "wav".to_string());
+
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| ImportError::Metadata(format!("Failed to open WAV file: {}", e)))?;
+
+    // ── RIFF header (12 bytes): "RIFF" + file_size u32 LE + "WAVE" ──────────
+    let mut riff_header = [0u8; 12];
+    file.read_exact(&mut riff_header)
+        .map_err(|e| ImportError::Metadata(format!("WAV: failed to read RIFF header: {}", e)))?;
+    if &riff_header[0..4] != b"RIFF" {
+        return Err(ImportError::Metadata("WAV: not a RIFF file".to_string()));
+    }
+    if &riff_header[8..12] != b"WAVE" {
+        return Err(ImportError::Metadata(
+            "WAV: RIFF type is not WAVE".to_string(),
+        ));
+    }
+
+    // ── Walk chunks ───────────────────────────────────────────────────────────
+    let mut sample_rate: Option<u32> = None;
+    let mut channels: Option<u8> = None;
+    let mut bits_per_sample: Option<u16> = None;
+    let mut data_bytes: Option<u64> = None;
+
+    let mut title: Option<String> = None;
+    let mut artists: Vec<String> = Vec::new();
+    let mut album: Option<String> = None;
+    let mut album_artist: Option<String> = None;
+    let mut track_number: Option<u32> = None;
+    let mut disc_number: Option<u32> = None;
+    let mut year: Option<i32> = None;
+    let mut genres: Vec<String> = Vec::new();
+    let mut album_art: Option<(Vec<u8>, String)> = None;
+
+    loop {
+        let mut chunk_header = [0u8; 8];
+        match file.read_exact(&mut chunk_header) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => {
+                return Err(ImportError::Metadata(format!(
+                    "WAV: error reading chunk header: {}",
+                    e
+                )))
+            }
+        }
+
+        let chunk_id = &chunk_header[0..4];
+        let chunk_size = u32::from_le_bytes(chunk_header[4..8].try_into().unwrap_or([0; 4])) as u64;
+        // RIFF chunks are word-aligned: odd-sized chunks have a 1-byte pad
+        let padded_size = chunk_size + (chunk_size & 1);
+
+        if chunk_id == b"fmt " {
+            if chunk_size < 16 {
+                return Err(ImportError::Metadata(format!(
+                    "WAV: fmt chunk too small ({} bytes, need ≥ 16)",
+                    chunk_size
+                )));
+            }
+            let read_size = chunk_size.min(40) as usize;
+            let mut fmt_data = vec![0u8; read_size];
+            file.read_exact(&mut fmt_data).map_err(|e| {
+                ImportError::Metadata(format!("WAV: failed to read fmt chunk: {}", e))
+            })?;
+            // fmt chunk layout (PCM):
+            //  [0..2]  AudioFormat (u16)
+            //  [2..4]  NumChannels (u16)
+            //  [4..8]  SampleRate  (u32)
+            //  [8..12] ByteRate    (u32)
+            // [12..14] BlockAlign  (u16)
+            // [14..16] BitsPerSample (u16)
+            let ch = u16::from_le_bytes(fmt_data[2..4].try_into().unwrap_or([0; 2]));
+            let sr = u32::from_le_bytes(fmt_data[4..8].try_into().unwrap_or([0; 4]));
+            let bps = u16::from_le_bytes(fmt_data[14..16].try_into().unwrap_or([0; 2]));
+            channels = Some(ch as u8);
+            sample_rate = Some(sr);
+            bits_per_sample = Some(bps);
+            // Seek past any remaining fmt bytes (e.g. extensible format extra fields)
+            let remaining = padded_size - read_size as u64;
+            if remaining > 0 {
+                file.seek(SeekFrom::Current(remaining as i64))
+                    .map_err(|e| {
+                        ImportError::Metadata(format!("WAV: seek past fmt remainder failed: {}", e))
+                    })?;
+            }
+        } else if chunk_id == b"data" {
+            data_bytes = Some(chunk_size);
+            // Seek past audio data — we only need the size
+            file.seek(SeekFrom::Current(padded_size as i64))
+                .map_err(|e| {
+                    ImportError::Metadata(format!("WAV: seek past data chunk failed: {}", e))
+                })?;
+        } else if chunk_id == b"id3 " || chunk_id == b"ID3 " {
+            // Read the raw ID3v2 bytes and parse frames manually
+            let id3_raw_size = chunk_size as usize;
+            if id3_raw_size < 10 {
+                // Too small to be a valid ID3v2 tag — skip
+                file.seek(SeekFrom::Current(padded_size as i64))
+                    .map_err(|e| {
+                        ImportError::Metadata(format!("WAV: seek past id3 chunk failed: {}", e))
+                    })?;
+                continue;
+            }
+
+            // Read just the 10-byte ID3v2 header to get the payload size
+            let mut id3_header = [0u8; 10];
+            file.read_exact(&mut id3_header).map_err(|e| {
+                ImportError::Metadata(format!("WAV: failed to read id3 header: {}", e))
+            })?;
+
+            if &id3_header[0..3] != b"ID3" {
+                // Not an ID3v2 header — skip the rest of this chunk
+                let remaining = padded_size - 10;
+                file.seek(SeekFrom::Current(remaining as i64))
+                    .map_err(|e| {
+                        ImportError::Metadata(format!(
+                            "WAV: seek past non-ID3 id3 chunk failed: {}",
+                            e
+                        ))
+                    })?;
+                continue;
+            }
+
+            // ID3v2 syncsafe size
+            let tag_size = ((id3_header[6] as u32 & 0x7f) << 21)
+                | ((id3_header[7] as u32 & 0x7f) << 14)
+                | ((id3_header[8] as u32 & 0x7f) << 7)
+                | (id3_header[9] as u32 & 0x7f);
+
+            let payload_to_read = (tag_size as u64).min(chunk_size - 10);
+            let mut tag_data = vec![0u8; payload_to_read as usize];
+            file.read_exact(&mut tag_data).map_err(|e| {
+                ImportError::Metadata(format!("WAV: failed to read id3 payload: {}", e))
+            })?;
+
+            // Seek past any chunk padding
+            let consumed = 10 + payload_to_read;
+            let skip = padded_size.saturating_sub(consumed);
+            if skip > 0 {
+                file.seek(SeekFrom::Current(skip as i64)).map_err(|e| {
+                    ImportError::Metadata(format!("WAV: seek past id3 chunk tail failed: {}", e))
+                })?;
+            }
+
+            // Parse ID3v2.3/2.4 frames — identical logic to extract_dsd_metadata
+            let mut pos = 0usize;
+            while pos + 10 <= tag_data.len() {
+                let fid = &tag_data[pos..pos + 4];
+                if fid[0] == 0 {
+                    break; // padding
+                }
+                let fsize =
+                    u32::from_be_bytes(tag_data[pos + 4..pos + 8].try_into().unwrap_or([0; 4]))
+                        as usize;
+                if fsize == 0 || pos + 10 + fsize > tag_data.len() {
+                    break;
+                }
+                let fdata = &tag_data[pos + 10..pos + 10 + fsize];
+
+                let text_val = || -> Option<String> {
+                    if fdata.is_empty() {
+                        return None;
+                    }
+                    // First byte is encoding; rest is text. UTF-16 is handled lossily.
+                    let s = String::from_utf8_lossy(&fdata[1..])
+                        .trim_end_matches('\0')
+                        .to_string();
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s)
+                    }
+                };
+
+                match fid {
+                    b"TIT2" => title = text_val(),
+                    b"TPE1" => {
+                        if let Some(a) = text_val() {
+                            artists = split_artists(&a);
+                        }
+                    }
+                    b"TPE2" => album_artist = text_val(),
+                    b"TALB" => album = text_val(),
+                    b"TRCK" => {
+                        if let Some(s) = text_val() {
+                            track_number = s.split('/').next().and_then(|n| n.parse::<u32>().ok());
+                        }
+                    }
+                    b"TPOS" => {
+                        if let Some(s) = text_val() {
+                            disc_number = s.split('/').next().and_then(|n| n.parse::<u32>().ok());
+                        }
+                    }
+                    b"TYER" | b"TDRC" => {
+                        if year.is_none() {
+                            if let Some(s) = text_val() {
+                                year = s.get(..4).and_then(|y| y.parse::<i32>().ok());
+                            }
+                        }
+                    }
+                    b"TCON" => {
+                        if let Some(g) = text_val() {
+                            genres = g
+                                .split(&[';', ',', '/'][..])
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                        }
+                    }
+                    b"APIC" => {
+                        if fdata.len() > 4 {
+                            let after_enc = &fdata[1..];
+                            if let Some(mime_end) = after_enc.iter().position(|&b| b == 0) {
+                                let mime =
+                                    String::from_utf8_lossy(&after_enc[..mime_end]).to_string();
+                                let after_mime = &after_enc[mime_end + 1..];
+                                if after_mime.len() > 1 {
+                                    let after_type = &after_mime[1..];
+                                    if let Some(desc_end) = after_type.iter().position(|&b| b == 0)
+                                    {
+                                        let pic_data = &after_type[desc_end + 1..];
+                                        if !pic_data.is_empty() {
+                                            album_art = Some((pic_data.to_vec(), mime));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                pos += 10 + fsize;
+            }
+        } else {
+            // Unknown / unneeded chunk (bext, JUNK, LIST, etc.) — skip
+            file.seek(SeekFrom::Current(padded_size as i64))
+                .map_err(|e| {
+                    ImportError::Metadata(format!(
+                        "WAV: seek past chunk {:?} failed: {}",
+                        std::str::from_utf8(chunk_id).unwrap_or("????"),
+                        e
+                    ))
+                })?;
+        }
+    }
+
+    // ── Validate required chunks ──────────────────────────────────────────────
+    let sr =
+        sample_rate.ok_or_else(|| ImportError::Metadata("WAV: fmt chunk missing".to_string()))?;
+    let ch = channels
+        .ok_or_else(|| ImportError::Metadata("WAV: fmt chunk missing (channels)".to_string()))?;
+    let bps = bits_per_sample.ok_or_else(|| {
+        ImportError::Metadata("WAV: fmt chunk missing (bits_per_sample)".to_string())
+    })?;
+    let data_sz =
+        data_bytes.ok_or_else(|| ImportError::Metadata("WAV: data chunk missing".to_string()))?;
+
+    // duration = data_bytes / byte_rate;  byte_rate = sample_rate × channels × (bits/8)
+    let bytes_per_second = sr as f64 * ch as f64 * bps as f64 / 8.0;
+    let duration_seconds = if bytes_per_second > 0.0 {
+        Some(data_sz as f64 / bytes_per_second)
+    } else {
+        None
+    };
+
+    // Folder/filename fallback for missing metadata (mirrors extract_dsd_metadata)
+    if artists.is_empty() || album.is_none() {
+        let parent = path.parent();
+        let folder_name = parent
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned());
+
+        if let Some(name) = folder_name {
+            let parsed = parse_folder_name(&name);
+            if artists.is_empty() {
+                if let Some(ref a) = parsed.artist {
+                    artists = split_artists(a);
+                } else if let Some(grandparent) = parent.and_then(|p| p.parent()) {
+                    if let Some(gp_name) = grandparent.file_name() {
+                        artists = vec![gp_name.to_string_lossy().to_string()];
+                    }
+                }
+            }
+            if album.is_none() {
+                album = parsed.album.or(Some(name));
+            }
+            if year.is_none() {
+                year = parsed.year;
+            }
+        }
+    }
+
+    Ok(ExtractedMetadata {
+        title,
+        artists,
+        album,
+        album_artist,
+        track_number,
+        disc_number,
+        year,
+        genres,
+        duration_seconds,
+        bitrate: None,
+        sample_rate: Some(sr),
+        channels: Some(ch),
+        file_format,
+        musicbrainz_recording_id: None,
+        composer: None,
         album_art,
     })
 }
