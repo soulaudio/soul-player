@@ -31,8 +31,10 @@
 
 mod converter;
 mod dop;
+mod dsd2pcm;
 mod noise_shaper;
 
 pub use converter::{DsdConverter, DsdFormat, DsdSettings};
 pub use dop::{DoP, DopDecoder, DopEncoder};
+pub use dsd2pcm::Dsd2Pcm;
 pub use noise_shaper::{NoiseShaper, NoiseShaperOrder};

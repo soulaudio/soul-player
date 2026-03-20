@@ -7,7 +7,7 @@ use cpal::{
     Device, Stream, StreamConfig,
 };
 use crossbeam_channel::{bounded, Receiver, Sender};
-use soul_playback::{AudioSource, PlaybackConfig, PlaybackManager, QueueTrack};
+use soul_playback::{PlaybackConfig, PlaybackManager, QueueTrack};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -794,6 +794,35 @@ struct AudioCallbackContext<'a> {
     source_set_this_callback: &'a mut bool,
 }
 
+/// Return `true` if `path` has a DSD file extension (.dsf / .dff / .dsdiff).
+fn is_dsd_path(path: &std::path::Path) -> bool {
+    matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("dsf" | "dff" | "dsdiff")
+    )
+}
+
+/// Create an `AudioSource` for `path`, selecting `DsdAudioSource` for DSD files
+/// and `LocalAudioSource` for everything else.
+///
+/// Returns a boxed `AudioSource` that is NOT yet ready (background thread fills
+/// the buffer); callers must poll `is_ready()`.
+fn create_audio_source(
+    path: &std::path::Path,
+    sample_rate: u32,
+) -> Result<Box<dyn soul_playback::AudioSource>> {
+    if is_dsd_path(path) {
+        tracing::info!("[create_audio_source] Opening DSD file: {}", path.display());
+        let src = crate::sources::DsdAudioSource::new(path)
+            .map_err(|e| crate::error::AudioError::PlaybackError(e.to_string()))?;
+        Ok(Box::new(src))
+    } else {
+        let src = crate::sources::LocalAudioSource::new(path, sample_rate)
+            .map_err(|e| crate::error::AudioError::PlaybackError(e.to_string()))?;
+        Ok(Box::new(src))
+    }
+}
+
 /// Load audio source synchronously with timeout
 ///
 /// This runs in a background thread (NOT audio callback or UI thread).
@@ -812,10 +841,8 @@ fn load_source_blocking(
         timeout
     );
 
-    // Create source
-    let source = crate::sources::LocalAudioSource::new(&track.path, sample_rate).map_err(|e| {
-        crate::error::AudioError::PlaybackError(format!("Failed to create source: {}", e))
-    })?;
+    // Create source (DSD or PCM)
+    let source = create_audio_source(&track.path, sample_rate)?;
 
     // Wait for buffer to fill
     while !source.is_ready() && start.elapsed() < timeout {
@@ -829,7 +856,7 @@ fn load_source_blocking(
             elapsed,
             track.title
         );
-        Ok(Box::new(source))
+        Ok(source)
     } else {
         let err_msg = format!(
             "Source load timeout ({:?}) for: {}",
@@ -1943,15 +1970,11 @@ impl DesktopPlayback {
             timeout
         );
 
-        // Create audio source
-        let source = crate::sources::LocalAudioSource::new(&track.path, target_sample_rate)
-            .map_err(|e| {
-                tracing::error!("[load_source_with_timeout] Failed to create source: {}", e);
-                crate::error::AudioError::PlaybackError(format!(
-                    "Failed to create audio source: {}",
-                    e
-                ))
-            })?;
+        // Create audio source (DSD or PCM)
+        let source = create_audio_source(&track.path, target_sample_rate).map_err(|e| {
+            tracing::error!("[load_source_with_timeout] Failed to create source: {}", e);
+            e
+        })?;
 
         // Poll until ready or timeout
         let poll_interval = Duration::from_millis(10);
@@ -1977,7 +2000,7 @@ impl DesktopPlayback {
             track.title
         );
 
-        Ok(Box::new(source))
+        Ok(source)
     }
 
     /// Process playback command with an already-acquired manager lock
@@ -2719,8 +2742,9 @@ impl DesktopPlayback {
                     new_sample_rate
                 );
 
-                // Create the new audio source with the new sample rate (no lock needed)
-                match crate::sources::local::LocalAudioSource::new(&track.path, new_sample_rate) {
+                // Create the new audio source with the new sample rate (no lock needed).
+                // Uses DsdAudioSource for .dsf/.dff/.dsdiff, LocalAudioSource otherwise.
+                match create_audio_source(&track.path, new_sample_rate) {
                     Ok(mut source) => {
                         // CRITICAL: Seek the source to the saved position BEFORE setting it
                         // This prevents the track from restarting when switching devices
@@ -2745,7 +2769,7 @@ impl DesktopPlayback {
                         // Now activate the pre-seeked source - this is the FIRST time we re-acquire manager lock
                         {
                             let mut mgr = self.lock_manager();
-                            mgr.activate_source(Box::new(source), track.clone());
+                            mgr.activate_source(source, track.clone());
                         } // Lock released
 
                         tracing::info!(

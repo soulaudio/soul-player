@@ -48,6 +48,25 @@ pub fn discover_folder_artwork(folder: &Path) -> Option<PathBuf> {
         }
     }
 
+    // Fall back to the immediate parent directory (one level up only).
+    // Handles multi-disc layouts like Album/Disc 1/track.flac where
+    // Album/cover.jpg lives at the album root level.
+    if let Some(parent) = folder.parent() {
+        for name in FILENAMES {
+            for ext in EXTENSIONS {
+                let path = parent.join(format!("{}.{}", name, ext));
+                if path.exists() {
+                    tracing::debug!(
+                        "[ARTWORK] Found artwork in parent dir: {} for folder {}",
+                        path.display(),
+                        folder.display()
+                    );
+                    return Some(path);
+                }
+            }
+        }
+    }
+
     tracing::debug!("[ARTWORK] No artwork found in {}", folder.display());
     None
 }
@@ -110,6 +129,49 @@ mod tests {
         let result = discover_folder_artwork(temp_dir.path());
         assert!(result.is_some());
         assert_eq!(result.unwrap(), artwork_path);
+    }
+
+    #[test]
+    fn test_discover_folder_artwork_parent_dir_fallback() {
+        // Multi-disc layout: Album/Disc 1/track.flac with Album/cover.jpg
+        let temp_dir = TempDir::new().unwrap();
+        let album_dir = temp_dir.path().join("Album");
+        let disc_dir = album_dir.join("Disc 1");
+        fs::create_dir_all(&disc_dir).unwrap();
+        // Create a dummy track file in the disc subdirectory
+        fs::write(disc_dir.join("track.flac"), b"").unwrap();
+        // Place cover art at the album level (one level up)
+        let cover_path = album_dir.join("cover.jpg");
+        fs::write(&cover_path, b"fake image data").unwrap();
+
+        // Should find the cover in the parent directory
+        let result = discover_folder_artwork(&disc_dir);
+        assert!(
+            result.is_some(),
+            "Expected cover.jpg to be found in parent dir"
+        );
+        assert_eq!(result.unwrap(), cover_path);
+    }
+
+    #[test]
+    fn test_discover_folder_artwork_no_grandparent_climb() {
+        // Cover is two levels up — should NOT be found
+        let temp_dir = TempDir::new().unwrap();
+        let album_dir = temp_dir.path().join("Album");
+        let disc_dir = album_dir.join("Disc 1");
+        let track_dir = disc_dir.join("Bonus");
+        fs::create_dir_all(&track_dir).unwrap();
+        // Cover art is at the grandparent (album) level, two levels above track_dir
+        let cover_path = album_dir.join("cover.jpg");
+        fs::write(&cover_path, b"fake image data").unwrap();
+
+        // Should NOT find the grandparent's cover
+        let result = discover_folder_artwork(&track_dir);
+        assert!(
+            result.is_none(),
+            "Should not climb more than 1 level up (found {:?})",
+            result
+        );
     }
 
     #[test]

@@ -79,6 +79,8 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
 
 # Metadata
 lofty = "0.18" # Audio tag reading/writing
+dsf-meta = "0.2" # DSF (DSD Stream File) metadata parsing
+dff-meta = "0.1" # DSDIFF (DFF) metadata parsing
 
 # Server
 axum = { version = "0.7", features = ["ws"] }

@@ -109,3 +109,23 @@ pub async fn get_album_counts(
         })
         .collect::<std::collections::HashMap<_, _>>())
 }
+
+/// Delete artists that have no available tracks (neither as primary nor via track_artists).
+/// Returns the number of artists deleted.
+pub async fn delete_orphaned(pool: &SqlitePool) -> Result<i64> {
+    let result = sqlx::query(
+        "DELETE FROM artists
+         WHERE id NOT IN (
+             SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL AND is_available = 1
+         )
+         AND id NOT IN (
+             SELECT DISTINCT ta.artist_id FROM track_artists ta
+             JOIN tracks t ON ta.track_id = t.id
+             WHERE t.is_available = 1
+         )",
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() as i64)
+}

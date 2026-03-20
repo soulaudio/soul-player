@@ -183,9 +183,15 @@ async fn test_entity_cache_albums_scoped_by_artist() {
     assert_ne!(result1.entity.id, result2.entity.id);
 }
 
-/// Same artist/title in different folders → distinct albums (strict folder isolation).
+/// Same artist/title in different folders → same album (metadata-based matching).
+///
+/// The album cache is keyed by (normalized_title, artist_id) — folder_path is NOT part
+/// of the cache key. This means disc folders (disc1/, disc2/) containing tracks from
+/// the same album are correctly merged into a single album record, rather than creating
+/// one record per folder. The folder_path is still stored in the DB on creation, but
+/// it does not influence the lookup key.
 #[tokio::test]
-async fn test_entity_cache_albums_scoped_by_folder() {
+async fn test_entity_cache_albums_same_artist_different_folders_same_album() {
     let pool = setup_test_db().await;
     let matcher = FuzzyMatcher::new();
 
@@ -225,19 +231,21 @@ async fn test_entity_cache_albums_scoped_by_folder() {
         .unwrap();
     assert_eq!(result1.match_type, MatchType::Exact);
 
-    // Same title + artist in folder2 → new album
+    // Same title + artist in folder2 → same album (folder is not part of the cache key)
+    // This is the correct behaviour: disc1/ and disc2/ tracks belong to the same album.
     let result2 = matcher
         .find_or_create_album_cached(&pool, "Live Album", Some(artist.id), folder2, &mut cache)
         .await
         .unwrap();
-    assert_eq!(
+    assert_ne!(
         result2.match_type,
         MatchType::Created,
-        "Same title/artist in a different folder must be a distinct album"
+        "Same title/artist in a different folder must reuse the existing album (disc folder merging)"
     );
-    assert_eq!(result2.entity.folder_path, folder2);
-
-    assert_ne!(result1.entity.id, result2.entity.id);
+    assert_eq!(
+        result1.entity.id, result2.entity.id,
+        "Both disc folders must share the same album ID"
+    );
 }
 
 /// Tracks with featuring artists ("Artist A feat. Artist B") must share the same album

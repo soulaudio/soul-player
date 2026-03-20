@@ -222,12 +222,36 @@ impl LibraryScanner {
             callback(&stats);
         }
 
-        // Pre-populate seen_paths with ALL existing tracks from the DB.
-        // This prevents files in unchanged (skipped) directories from being
-        // falsely marked as missing during the soft-delete pass.
-        // Files from changed directories will be re-confirmed during Phase 1.
+        // Collect ALL directories found during the scan (changed + unchanged).
+        // Directories that were deleted from disk won't appear here.
+        let all_scanned_dir_paths: std::collections::HashSet<String> = scanned_dirs_to_persist
+            .iter()
+            .map(|d| d.path.clone())
+            .collect();
+        // Directories that were rescanned (changed/new) — files here must be
+        // re-confirmed on disk; they're NOT pre-added to seen_paths.
+        let changed_dir_paths: std::collections::HashSet<String> = scanned_dirs_to_persist
+            .iter()
+            .filter(|d| d.changed)
+            .map(|d| d.path.clone())
+            .collect();
+
         let mut seen_paths: HashMap<String, bool> = HashMap::new();
         for file_path in existing_tracks.keys() {
+            let parent = std::path::Path::new(file_path)
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Skip files whose parent directory no longer exists on disk
+            if !all_scanned_dir_paths.contains(&parent) {
+                continue;
+            }
+            // Skip files in changed directories — must be re-confirmed in Phase 1
+            if changed_dir_paths.contains(&parent) {
+                continue;
+            }
+            // File is in an unchanged directory that still exists — trust it
             seen_paths.insert(file_path.clone(), true);
         }
 
@@ -283,7 +307,13 @@ impl LibraryScanner {
                     .unwrap_or(0);
 
                 if let Some(existing) = existing_tracks.get(&path_str) {
-                    let unchanged = existing.file_size == Some(file_size)
+                    // DSD files (.dsf/.dff) always reprocess — metadata parser was
+                    // fixed and old DB entries may have wrong duration/sample rate.
+                    let is_dsd = path_str.ends_with(".dsf")
+                        || path_str.ends_with(".dff")
+                        || path_str.ends_with(".dsdiff");
+                    let unchanged = !is_dsd
+                        && existing.file_size == Some(file_size)
                         && existing.file_mtime == Some(file_mtime);
 
                     if unchanged {
@@ -448,7 +478,7 @@ impl LibraryScanner {
         )
         .await?;
 
-        // Handle missing files (soft delete)
+        // Handle missing files (soft delete) and clean up orphaned albums/artists
         if source.sync_deletes {
             let removed = self
                 .mark_missing_files_unavailable(source.id, &seen_paths, &existing_tracks)
@@ -457,6 +487,17 @@ impl LibraryScanner {
             if removed > 0 {
                 soul_storage::scan_progress::increment_removed(&self.pool, progress.id, removed)
                     .await?;
+
+                // Clean up albums and artists that no longer have any available tracks
+                let orphaned_albums = soul_storage::albums::delete_orphaned(&self.pool).await?;
+                let orphaned_artists = soul_storage::artists::delete_orphaned(&self.pool).await?;
+                if orphaned_albums > 0 || orphaned_artists > 0 {
+                    tracing::info!(
+                        "[SCAN] Cleaned up {} orphaned albums, {} orphaned artists",
+                        orphaned_albums,
+                        orphaned_artists
+                    );
+                }
             }
         }
 
@@ -717,6 +758,12 @@ impl LibraryScanner {
         existing_tracks: &HashMap<String, ExistingTrack>,
     ) -> Result<i64> {
         let mut removed_count = 0;
+
+        tracing::debug!(
+            "[SCAN] mark_missing_files_unavailable: {} existing tracks, {} seen paths",
+            existing_tracks.len(),
+            seen_paths.len()
+        );
 
         for (file_path, track) in existing_tracks {
             if !seen_paths.contains_key(file_path) {

@@ -183,6 +183,7 @@ impl FileScanner {
                             path: dir_str,
                             dir_mtime,
                             file_count: stored.file_count,
+                            changed: false,
                         });
                         continue;
                     }
@@ -231,6 +232,7 @@ impl FileScanner {
                 path: dir_str,
                 dir_mtime,
                 file_count,
+                changed: true,
             });
         }
 
@@ -289,6 +291,8 @@ pub struct ScannedDirInfo {
     pub path: String,
     pub dir_mtime: i64,
     pub file_count: i64,
+    /// Whether this directory was rescanned (changed/new) vs skipped (unchanged)
+    pub changed: bool,
 }
 
 /// Result of an incremental directory scan

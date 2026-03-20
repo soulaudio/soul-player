@@ -255,6 +255,171 @@ function seedDatabase() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run('1', 'desktop-local', 'Test Music', 'watched', audioDir, 1, now, now);
 
+    // ── DSD seed data ─────────────────────────────────────────────────────────
+    // Artist 5001 / Album 5001 / Tracks 5001 (.dsf) and 5002 (.dff)
+    // Used by dsd-playback.spec.js.
+    //
+    // The DSF/DFF files contain minimal valid headers with real audio data so that
+    // DsdAudioSource can open and play them.  We build them programmatically here
+    // to avoid committing binary assets.
+
+    const DSF_BLOCK_SIZE = 4096;
+    const DSD_RATE = 2_822_400;
+
+    // Build a minimal DSF file: DSD chunk + fmt chunk + data chunk.
+    // 8 blocks × 4096 samples per channel × 2 channels = ~11.6ms of audio — enough
+    // for the decoder thread to fill its ring buffer and report is_ready().
+    function buildDsf(numBlocks) {
+      const channels = 2;
+      const sampleCount = BigInt(numBlocks * DSF_BLOCK_SIZE);
+      const audioDataLen = numBlocks * DSF_BLOCK_SIZE * channels;
+      const totalSize = BigInt(92 + audioDataLen); // 28 + 52 + 12 = 92 header bytes
+
+      const buf = Buffer.alloc(92 + audioDataLen, 0);
+      let o = 0;
+
+      // DSD chunk (28 bytes)
+      buf.write('DSD ', o, 'ascii'); o += 4;
+      buf.writeBigUInt64LE(28n, o); o += 8;
+      buf.writeBigUInt64LE(totalSize, o); o += 8;
+      buf.writeBigUInt64LE(0n, o); o += 8; // no ID3
+
+      // fmt chunk (52 bytes)
+      buf.write('fmt ', o, 'ascii'); o += 4;
+      buf.writeBigUInt64LE(52n, o); o += 8;
+      buf.writeUInt32LE(1, o); o += 4; // format version
+      buf.writeUInt32LE(0, o); o += 4; // format ID (DSD raw)
+      buf.writeUInt32LE(2, o); o += 4; // channel type: stereo
+      buf.writeUInt32LE(channels, o); o += 4;
+      buf.writeUInt32LE(DSD_RATE, o); o += 4;
+      buf.writeUInt32LE(1, o); o += 4; // bits_per_sample = 1 (LSB-first)
+      buf.writeBigUInt64LE(sampleCount, o); o += 8;
+      buf.writeUInt32LE(DSF_BLOCK_SIZE, o); o += 4;
+      buf.writeUInt32LE(0, o); o += 4; // reserved
+
+      // data chunk header (12 bytes)
+      buf.write('data', o, 'ascii'); o += 4;
+      buf.writeBigUInt64LE(BigInt(12 + audioDataLen), o); o += 8;
+
+      // Audio: alternating 0x69 pattern (non-zero DSD data)
+      buf.fill(0x69, o, o + audioDataLen);
+
+      return buf;
+    }
+
+    // Build a minimal DSDIFF (.dff) file.
+    function buildDff(numSamplesPerChannel) {
+      const channels = 2;
+      const audioData = Buffer.alloc(numSamplesPerChannel * channels, 0x96); // non-zero
+
+      // PROP inner chunks
+      const propInner = Buffer.alloc(0);
+      const parts = [];
+      parts.push(Buffer.from('SND ', 'ascii'));
+
+      // FS chunk
+      const fs = Buffer.alloc(12 + 4);
+      fs.write('FS  ', 0, 'ascii');
+      fs.writeBigUInt64BE(4n, 4);
+      fs.writeUInt32BE(DSD_RATE, 12);
+      parts.push(fs);
+
+      // CHNL chunk: 12 hdr + 2 + 4 + 4 = 22
+      const chnl = Buffer.alloc(12 + 10);
+      chnl.write('CHNL', 0, 'ascii');
+      chnl.writeBigUInt64BE(10n, 4);
+      chnl.writeUInt16BE(channels, 12);
+      chnl.write('MLFT', 14, 'ascii');
+      chnl.write('MRGT', 18, 'ascii');
+      parts.push(chnl);
+
+      // CMPR chunk
+      const cmprName = Buffer.from('not compressed');
+      const cmprDataSize = 4 + 1 + cmprName.length + 1; // 20
+      const cmpr = Buffer.alloc(12 + cmprDataSize);
+      cmpr.write('CMPR', 0, 'ascii');
+      cmpr.writeBigUInt64BE(BigInt(cmprDataSize), 4);
+      cmpr.write('DSD ', 12, 'ascii');
+      cmpr.writeUInt8(cmprName.length, 16);
+      cmprName.copy(cmpr, 17);
+      // pad byte at end (already zero from alloc)
+      parts.push(cmpr);
+
+      const propPayload = Buffer.concat(parts);
+
+      // PROP chunk: 12 hdr + propPayload
+      const prop = Buffer.alloc(12 + propPayload.length);
+      prop.write('PROP', 0, 'ascii');
+      prop.writeBigUInt64BE(BigInt(propPayload.length), 4);
+      propPayload.copy(prop, 12);
+
+      // FVER chunk
+      const fver = Buffer.alloc(12 + 4);
+      fver.write('FVER', 0, 'ascii');
+      fver.writeBigUInt64BE(4n, 4);
+      fver.writeUInt32BE(0x01050000, 12);
+
+      // DSD sound data chunk
+      const dsdChunk = Buffer.alloc(12 + audioData.length);
+      dsdChunk.write('DSD ', 0, 'ascii');
+      dsdChunk.writeBigUInt64BE(BigInt(audioData.length), 4);
+      audioData.copy(dsdChunk, 12);
+
+      // FRM8 inner = 'DSD ' form type + fver + prop + dsdChunk
+      const formType = Buffer.from('DSD ', 'ascii');
+      const inner = Buffer.concat([formType, fver, prop, dsdChunk]);
+
+      // FRM8 outer
+      const out = Buffer.alloc(12 + inner.length);
+      out.write('FRM8', 0, 'ascii');
+      out.writeBigUInt64BE(BigInt(inner.length), 4);
+      inner.copy(out, 12);
+
+      return out;
+    }
+
+    // Create DSF and DFF audio files
+    const dsfPath = join(audioDir, 'dsd-track-one.dsf');
+    const dffPath = join(audioDir, 'dsd-track-two.dff');
+    // 512 blocks × 4096 samples = 2 097 152 DSD samples per channel ≈ 0.74s
+    writeFileSync(dsfPath, buildDsf(512));
+    // 524288 samples per channel ≈ 0.19s
+    writeFileSync(dffPath, buildDff(524288));
+
+    // DSD Artist + Album
+    db.prepare('INSERT INTO artists (id, name) VALUES (?, ?)').run(5001, 'DSD Artist');
+    db.prepare('INSERT INTO albums (id, title, artist_id, year) VALUES (?, ?, ?, ?)').run(5001, 'DSD Album', 5001, 2024);
+
+    // Track 5001 — DSF file
+    db.prepare(`
+      INSERT INTO tracks (id, title, artist_id, album_id, track_number, disc_number, duration_seconds, file_format)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(5001, 'DSD Track One', 5001, 5001, 1, 1, 0.74, 'dsf');
+    db.prepare(`
+      INSERT INTO track_sources (track_id, source_id, status, local_file_path)
+      VALUES (?, ?, ?, ?)
+    `).run(5001, 1, 'available', dsfPath);
+
+    // Track 5002 — DFF file
+    db.prepare(`
+      INSERT INTO tracks (id, title, artist_id, album_id, track_number, disc_number, duration_seconds, file_format)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(5002, 'DSD Track Two', 5001, 5001, 2, 1, 0.19, 'dff');
+    db.prepare(`
+      INSERT INTO track_sources (track_id, source_id, status, local_file_path)
+      VALUES (?, ?, ?, ?)
+    `).run(5002, 1, 'available', dffPath);
+
+    // track_artists junction for DSD tracks
+    insertTrackArtist.run(String(5001), 5001, 0);
+    insertTrackArtist.run(String(5002), 5001, 0);
+
+    // Add a DSF file to the import dir so the scan test (test 5) can discover it.
+    writeFileSync(join(importDir, 'dsd-import-01.dsf'), buildDsf(32));
+
+    console.log('[Playwright Setup] ✓ DSD seed data created');
+    // ── end DSD seed ──────────────────────────────────────────────────────────
+
     console.log('[Playwright Setup] ✓ Database seeded');
   } finally {
     db.close();

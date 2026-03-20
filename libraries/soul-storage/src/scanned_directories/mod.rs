@@ -25,7 +25,7 @@
 
 use crate::utils::time::now_timestamp;
 use crate::StorageError;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 type Result<T> = std::result::Result<T, StorageError>;
 
@@ -42,28 +42,24 @@ pub struct ScannedDirectory {
 
 /// Get all scanned directories for a library source
 pub async fn get_by_source(pool: &SqlitePool, source_id: i64) -> Result<Vec<ScannedDirectory>> {
-    let rows = sqlx::query!(
-        r#"
-        SELECT id, library_source_id, path, dir_mtime, file_count, last_scanned_at
-        FROM scanned_directories
-        WHERE library_source_id = ?
-        "#,
-        source_id
+    let rows: Vec<sqlx::sqlite::SqliteRow> = sqlx::query(
+        "SELECT id, library_source_id, path, dir_mtime, file_count, last_scanned_at
+         FROM scanned_directories
+         WHERE library_source_id = ?",
     )
+    .bind(source_id)
     .fetch_all(pool)
     .await?;
 
     let mut result = Vec::with_capacity(rows.len());
     for r in rows {
-        let id =
-            r.id.ok_or_else(|| StorageError::MissingField("scanned_directories.id".to_string()))?;
         result.push(ScannedDirectory {
-            id,
-            library_source_id: r.library_source_id,
-            path: r.path,
-            dir_mtime: r.dir_mtime,
-            file_count: r.file_count,
-            last_scanned_at: r.last_scanned_at,
+            id: r.get("id"),
+            library_source_id: r.get("library_source_id"),
+            path: r.get("path"),
+            dir_mtime: r.get("dir_mtime"),
+            file_count: r.get("file_count"),
+            last_scanned_at: r.get("last_scanned_at"),
         });
     }
     Ok(result)
@@ -82,18 +78,16 @@ pub async fn upsert_batch(
     let now = now_timestamp();
 
     for (path, dir_mtime, file_count) in dirs {
-        sqlx::query!(
-            r#"
-            INSERT OR REPLACE INTO scanned_directories
+        sqlx::query(
+            "INSERT OR REPLACE INTO scanned_directories
                 (library_source_id, path, dir_mtime, file_count, last_scanned_at)
-            VALUES (?, ?, ?, ?, ?)
-            "#,
-            source_id,
-            path,
-            dir_mtime,
-            file_count,
-            now
+             VALUES (?, ?, ?, ?, ?)",
         )
+        .bind(source_id)
+        .bind(path)
+        .bind(dir_mtime)
+        .bind(file_count)
+        .bind(now)
         .execute(pool)
         .await?;
     }
@@ -107,12 +101,10 @@ pub async fn upsert_batch(
 /// `ON DELETE CASCADE` on the foreign key also handles cleanup
 /// when a library source is deleted.
 pub async fn delete_by_source(pool: &SqlitePool, source_id: i64) -> Result<()> {
-    sqlx::query!(
-        "DELETE FROM scanned_directories WHERE library_source_id = ?",
-        source_id
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query("DELETE FROM scanned_directories WHERE library_source_id = ?")
+        .bind(source_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }

@@ -2247,25 +2247,28 @@ pub async fn get_by_library_source(
     pool: &SqlitePool,
     source_id: i64,
 ) -> Result<Vec<TrackFileInfo>> {
-    let rows: Vec<_> = sqlx::query!(
-        r#"
-        SELECT id, file_path, file_size, file_mtime, content_hash
-        FROM tracks
-        WHERE library_source_id = ? AND is_available = 1
-        "#,
-        source_id
+    // Use COALESCE to fall back to track_sources.local_file_path for tracks
+    // created before the file_path column was populated by set_library_source.
+    use sqlx::Row;
+    let rows: Vec<sqlx::sqlite::SqliteRow> = sqlx::query(
+        "SELECT t.id, COALESCE(t.file_path, ts.local_file_path) as file_path,
+                t.file_size, t.file_mtime, t.content_hash
+         FROM tracks t
+         LEFT JOIN track_sources ts ON t.id = ts.track_id
+         WHERE t.library_source_id = ? AND t.is_available = 1",
     )
+    .bind(source_id)
     .fetch_all(pool)
     .await?;
 
     Ok(rows
         .into_iter()
         .map(|r| TrackFileInfo {
-            id: r.id,
-            file_path: r.file_path,
-            file_size: r.file_size,
-            file_mtime: r.file_mtime,
-            content_hash: r.content_hash,
+            id: r.get("id"),
+            file_path: r.get("file_path"),
+            file_size: r.get("file_size"),
+            file_mtime: r.get("file_mtime"),
+            content_hash: r.get("content_hash"),
         })
         .collect())
 }
@@ -2394,17 +2397,18 @@ pub async fn set_library_source(
     file_size: i64,
     file_mtime: i64,
 ) -> Result<()> {
-    sqlx::query!(
-        r#"
-        UPDATE tracks
-        SET library_source_id = ?, file_size = ?, file_mtime = ?, is_available = 1
-        WHERE id = ?
-        "#,
-        source_id,
-        file_size,
-        file_mtime,
-        track_id
+    // Also populate file_path from track_sources.local_file_path if not already set.
+    // The scanner's get_by_library_source reads tracks.file_path for change detection.
+    sqlx::query(
+        "UPDATE tracks
+         SET library_source_id = ?, file_size = ?, file_mtime = ?, is_available = 1,
+             file_path = COALESCE(file_path, (SELECT local_file_path FROM track_sources WHERE track_id = tracks.id LIMIT 1))
+         WHERE id = ?",
     )
+    .bind(source_id)
+    .bind(file_size)
+    .bind(file_mtime)
+    .bind(track_id)
     .execute(pool)
     .await?;
 

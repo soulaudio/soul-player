@@ -3,9 +3,9 @@
 //! Artist matching: exact name or normalized (case-insensitive/whitespace) only.
 //! No Levenshtein / fuzzy matching — each distinct spelling → distinct artist.
 //!
-//! Album matching: exact/normalized title + artist_id + folder_path.
-//! Two tracks with the same album title and artist but in different folders
-//! always belong to different albums (strict folder-based isolation).
+//! Album matching: exact/normalized title + artist_id (metadata-based).
+//! Tracks with the same album title and artist are always the same album,
+//! regardless of folder structure (e.g. disc folders, B-sides subfolders).
 
 use crate::{FuzzyMatch, MatchType, Result};
 use soul_core::types::{
@@ -23,8 +23,8 @@ use std::collections::HashMap;
 pub struct EntityCache {
     /// normalized_name -> (id, original_name)
     artists: HashMap<String, (ArtistId, String)>,
-    /// (normalized_title, artist_id, folder_path) -> (id, original_title)
-    albums: HashMap<(String, Option<ArtistId>, String), (AlbumId, String)>,
+    /// (normalized_title, artist_id) -> (id, original_title)
+    albums: HashMap<(String, Option<ArtistId>), (AlbumId, String)>,
     /// normalized_name -> (id, original_name)
     genres: HashMap<String, (GenreId, String)>,
 }
@@ -45,10 +45,7 @@ impl EntityCache {
         let mut albums = HashMap::with_capacity(all_albums.len());
         for album in all_albums {
             let normalized = normalize_string(&album.title);
-            albums.insert(
-                (normalized, album.artist_id, album.folder_path.clone()),
-                (album.id, album.title),
-            );
+            albums.insert((normalized, album.artist_id), (album.id, album.title));
         }
 
         let mut genres = HashMap::with_capacity(all_genres.len());
@@ -71,20 +68,14 @@ impl EntityCache {
             .map(|(id, name)| (*id, name.as_str()))
     }
 
-    /// Find an album by normalized title, artist_id, and folder_path. Returns `(id, original_title)`.
-    /// All three must match — albums in different folders are always distinct.
+    /// Find an album by normalized title and artist_id. Returns `(id, original_title)`.
     pub fn find_album_by_normalized(
         &self,
         normalized_title: &str,
         artist_id: Option<ArtistId>,
-        folder_path: &str,
     ) -> Option<(AlbumId, &str)> {
         self.albums
-            .get(&(
-                normalized_title.to_string(),
-                artist_id,
-                folder_path.to_string(),
-            ))
+            .get(&(normalized_title.to_string(), artist_id))
             .map(|(id, title)| (*id, title.as_str()))
     }
 
@@ -102,18 +93,10 @@ impl EntityCache {
     }
 
     /// Insert a new album into the cache after creating it in the DB.
-    pub fn insert_album(
-        &mut self,
-        id: AlbumId,
-        title: &str,
-        artist_id: Option<ArtistId>,
-        folder_path: &str,
-    ) {
+    pub fn insert_album(&mut self, id: AlbumId, title: &str, artist_id: Option<ArtistId>) {
         let normalized = normalize_string(title);
-        self.albums.insert(
-            (normalized, artist_id, folder_path.to_string()),
-            (id, title.to_string()),
-        );
+        self.albums
+            .insert((normalized, artist_id), (id, title.to_string()));
     }
 
     /// Insert a new genre into the cache after creating it in the DB.
@@ -318,9 +301,9 @@ impl FuzzyMatcher {
     ) -> Result<FuzzyMatch<Album>> {
         let normalized_title = normalize_string(title);
 
-        // O(1) cache lookup keyed by (normalized_title, artist_id, folder_path)
+        // O(1) cache lookup keyed by (normalized_title, artist_id)
         if let Some((id, original_title)) =
-            cache.find_album_by_normalized(&normalized_title, artist_id, folder_path)
+            cache.find_album_by_normalized(&normalized_title, artist_id)
         {
             let album = soul_storage::albums::get_by_id(pool, id)
                 .await?
@@ -355,7 +338,7 @@ impl FuzzyMatcher {
         )
         .await?;
 
-        cache.insert_album(new_album.id, &new_album.title, artist_id, folder_path);
+        cache.insert_album(new_album.id, &new_album.title, artist_id);
 
         Ok(FuzzyMatch {
             entity: new_album,

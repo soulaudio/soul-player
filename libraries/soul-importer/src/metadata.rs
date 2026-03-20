@@ -270,6 +270,15 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
     tracing::debug!(file_path = %path.display(), "[Metadata] Extracting metadata");
     let start = std::time::Instant::now();
 
+    // Check if this is a DSD file (DSF/DFF) — lofty 0.18 doesn't support these natively
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if ext == "dsf" || ext == "dff" || ext == "dsdiff" {
+        return extract_dsd_metadata(path);
+    }
+
     let probe_start = std::time::Instant::now();
     let tagged_file = Probe::open(path)
         .map_err(|e| {
@@ -506,6 +515,263 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
         file_format,
         musicbrainz_recording_id,
         composer,
+        album_art,
+    })
+}
+
+/// Extract metadata from DSD files (DSF/DFF) that lofty 0.18 doesn't support natively.
+///
+/// DSF files have: DSD chunk (28 bytes) → fmt chunk → data chunk → optional ID3v2 tag.
+/// We parse the binary header for audio properties and read the ID3v2 tag for metadata.
+/// For DFF or when parsing fails, folder/filename metadata is used as fallback.
+fn extract_dsd_metadata(path: &Path) -> Result<ExtractedMetadata> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let file_format = ext.clone();
+
+    tracing::info!(file_path = %path.display(), "[Metadata] DSD file detected, using DSD extractor");
+
+    let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+
+    let mut title = None;
+    let mut artists: Vec<String> = Vec::new();
+    let mut album = None;
+    let mut album_artist = None;
+    let mut track_number = None;
+    let mut disc_number = None;
+    let mut year = None;
+    let mut genres: Vec<String> = Vec::new();
+    let mut duration_seconds = None;
+    let mut sample_rate = None;
+    let mut channels = None;
+    let mut album_art = None;
+
+    if ext == "dsf" {
+        if let Ok(mut file) = std::fs::File::open(path) {
+            let mut header = [0u8; 28];
+            if file.read_exact(&mut header).is_ok() && &header[0..4] == b"DSD " {
+                let id3_offset = u64::from_le_bytes(header[20..28].try_into().unwrap_or([0; 8]));
+
+                // Read fmt chunk for audio properties
+                let mut fmt_id = [0u8; 4];
+                if file.read_exact(&mut fmt_id).is_ok() && &fmt_id == b"fmt " {
+                    let mut fmt_data = [0u8; 48];
+                    if file.read_exact(&mut fmt_data).is_ok() {
+                        // DSF fmt chunk layout (offsets from after "fmt " marker):
+                        // [0..8]   chunk size (u64)
+                        // [8..12]  format version (u32)
+                        // [12..16] format ID (u32)
+                        // [16..20] channel type (u32)
+                        // [20..24] channel count (u32)
+                        // [24..28] sample rate (u32) — e.g. 2822400 for DSD64
+                        // [28..32] bits per sample (u32)
+                        // [32..40] sample count per channel (u64)
+                        let ch = u32::from_le_bytes(fmt_data[20..24].try_into().unwrap_or([0; 4]));
+                        let sr = u32::from_le_bytes(fmt_data[24..28].try_into().unwrap_or([0; 4]));
+                        let samples =
+                            u64::from_le_bytes(fmt_data[32..40].try_into().unwrap_or([0; 8]));
+                        channels = Some(ch as u8);
+                        sample_rate = Some(sr);
+                        if sr > 0 {
+                            duration_seconds = Some(samples as f64 / sr as f64);
+                        }
+                    }
+                }
+
+                // Read ID3v2 tag at the offset (DSF embeds ID3v2 after the data chunk).
+                // Parse ID3v2 frames manually since lofty 0.18 can't read standalone ID3v2 buffers.
+                if id3_offset > 0
+                    && id3_offset < file_size
+                    && file.seek(SeekFrom::Start(id3_offset)).is_ok()
+                {
+                    let mut id3_header = [0u8; 10];
+                    if file.read_exact(&mut id3_header).is_ok() && &id3_header[0..3] == b"ID3" {
+                        let tag_size = ((id3_header[6] as u32 & 0x7f) << 21)
+                            | ((id3_header[7] as u32 & 0x7f) << 14)
+                            | ((id3_header[8] as u32 & 0x7f) << 7)
+                            | (id3_header[9] as u32 & 0x7f);
+
+                        let mut tag_data = vec![0u8; tag_size as usize];
+                        if file.read_exact(&mut tag_data).is_ok() {
+                            // Parse ID3v2.3/2.4 frames (4-byte ID, 4-byte size, 2-byte flags)
+                            let mut pos = 0;
+                            while pos + 10 <= tag_data.len() {
+                                let fid = &tag_data[pos..pos + 4];
+                                if fid[0] == 0 {
+                                    break;
+                                } // padding
+                                let fsize = u32::from_be_bytes(
+                                    tag_data[pos + 4..pos + 8].try_into().unwrap_or([0; 4]),
+                                ) as usize;
+                                if fsize == 0 || pos + 10 + fsize > tag_data.len() {
+                                    break;
+                                }
+                                let fdata = &tag_data[pos + 10..pos + 10 + fsize];
+
+                                // Text frames: first byte is encoding, rest is text
+                                let text_val = || -> Option<String> {
+                                    if fdata.is_empty() {
+                                        return None;
+                                    }
+                                    let encoding = fdata[0];
+                                    let raw = &fdata[1..];
+                                    let s = if encoding == 0 || encoding == 3 {
+                                        // ISO-8859-1 or UTF-8
+                                        String::from_utf8_lossy(raw)
+                                            .trim_end_matches('\0')
+                                            .to_string()
+                                    } else {
+                                        // UTF-16 — simplified
+                                        String::from_utf8_lossy(raw)
+                                            .trim_end_matches('\0')
+                                            .to_string()
+                                    };
+                                    if s.is_empty() {
+                                        None
+                                    } else {
+                                        Some(s)
+                                    }
+                                };
+
+                                match fid {
+                                    b"TIT2" => title = text_val(),
+                                    b"TPE1" => {
+                                        if let Some(a) = text_val() {
+                                            artists = split_artists(&a);
+                                        }
+                                    }
+                                    b"TPE2" => album_artist = text_val(),
+                                    b"TALB" => album = text_val(),
+                                    b"TRCK" => {
+                                        if let Some(s) = text_val() {
+                                            track_number = s
+                                                .split('/')
+                                                .next()
+                                                .and_then(|n| n.parse::<u32>().ok());
+                                        }
+                                    }
+                                    b"TPOS" => {
+                                        if let Some(s) = text_val() {
+                                            disc_number = s
+                                                .split('/')
+                                                .next()
+                                                .and_then(|n| n.parse::<u32>().ok());
+                                        }
+                                    }
+                                    b"TYER" | b"TDRC" => {
+                                        if year.is_none() {
+                                            if let Some(s) = text_val() {
+                                                year =
+                                                    s.get(..4).and_then(|y| y.parse::<i32>().ok());
+                                            }
+                                        }
+                                    }
+                                    b"TCON" => {
+                                        if let Some(g) = text_val() {
+                                            genres = g
+                                                .split(&[';', ',', '/'][..])
+                                                .map(|s| s.trim().to_string())
+                                                .filter(|s| !s.is_empty())
+                                                .collect();
+                                        }
+                                    }
+                                    b"APIC" => {
+                                        // Embedded picture: encoding(1) + mime(null-term) + pic_type(1) + desc(null-term) + data
+                                        if fdata.len() > 4 {
+                                            let after_enc = &fdata[1..];
+                                            if let Some(mime_end) =
+                                                after_enc.iter().position(|&b| b == 0)
+                                            {
+                                                let mime =
+                                                    String::from_utf8_lossy(&after_enc[..mime_end])
+                                                        .to_string();
+                                                let after_mime = &after_enc[mime_end + 1..]; // skip null
+                                                if after_mime.len() > 1 {
+                                                    // skip pic_type byte + description (null-terminated)
+                                                    let after_type = &after_mime[1..];
+                                                    if let Some(desc_end) =
+                                                        after_type.iter().position(|&b| b == 0)
+                                                    {
+                                                        let pic_data = &after_type[desc_end + 1..];
+                                                        if !pic_data.is_empty() {
+                                                            album_art =
+                                                                Some((pic_data.to_vec(), mime));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {} // skip unknown frames
+                                }
+                                pos += 10 + fsize;
+                            }
+                        }
+                    }
+                    if title.is_some() || !artists.is_empty() {
+                        tracing::info!(
+                            file_path = %path.display(),
+                            title = ?title,
+                            artist_count = artists.len(),
+                            "[Metadata] DSD ID3v2 tag parsed successfully"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Folder/filename fallback for missing metadata
+    if artists.is_empty() || album.is_none() {
+        let parent = path.parent();
+        let folder_name = parent
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned());
+
+        if let Some(name) = folder_name {
+            let parsed = parse_folder_name(&name);
+            if artists.is_empty() {
+                if let Some(ref a) = parsed.artist {
+                    artists = split_artists(a);
+                } else if let Some(grandparent) = parent.and_then(|p| p.parent()) {
+                    if let Some(gp_name) = grandparent.file_name() {
+                        artists = vec![gp_name.to_string_lossy().to_string()];
+                    }
+                }
+            }
+            if album.is_none() {
+                album = parsed.album.or(Some(name));
+            }
+            if year.is_none() {
+                year = parsed.year;
+            }
+        }
+    }
+
+    if title.is_none() {
+        title = path.file_stem().map(|s| s.to_string_lossy().to_string());
+    }
+
+    Ok(ExtractedMetadata {
+        title,
+        artists,
+        album,
+        album_artist,
+        track_number,
+        disc_number,
+        year,
+        genres,
+        duration_seconds,
+        bitrate: None,
+        sample_rate,
+        channels,
+        file_format,
+        musicbrainz_recording_id: None,
+        composer: None,
         album_art,
     })
 }

@@ -37,6 +37,10 @@ cpal = { workspace = true }
 # Decoding
 symphonia = { workspace = true }
 
+# DSD container parsing
+dsf-meta = { workspace = true }
+dff-meta = { workspace = true }
+
 # Resampling
 rubato = { workspace = true }
 r8brain-rs = { workspace = true, optional = true }

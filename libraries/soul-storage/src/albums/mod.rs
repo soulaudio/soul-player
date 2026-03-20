@@ -423,3 +423,18 @@ pub async fn get_artwork_source(
 
     Ok(row.and_then(|r| r.artwork_source.map(|source| (source, r.cover_art_path))))
 }
+
+/// Delete albums that have no available tracks.
+/// Returns the number of albums deleted.
+pub async fn delete_orphaned(pool: &SqlitePool) -> Result<i64> {
+    let result = sqlx::query(
+        "DELETE FROM albums
+         WHERE id NOT IN (
+             SELECT DISTINCT album_id FROM tracks WHERE album_id IS NOT NULL AND is_available = 1
+         )",
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() as i64)
+}

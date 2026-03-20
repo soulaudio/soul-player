@@ -272,4 +272,4 @@ pub use playback::{
 };
 // Re-export Receiver for event loops to use without mutex contention
 pub use crossbeam_channel::Receiver;
-pub use sources::{LocalAudioSource, StreamingAudioSource};
+pub use sources::{DsdAudioSource, LocalAudioSource, StreamingAudioSource};
