@@ -25,12 +25,17 @@
 /// Number of FIR taps.
 const FIR_TAPS: usize = 96;
 
-/// Half-band low-pass FIR kernel for 8:1 DSD-to-PCM decimation.
+/// Low-pass FIR decimation filter (96 taps, 8× decimation from DSD to PCM).
 ///
 /// Computed as a windowed-sinc filter with cut-off at 0.5 * (dsd_rate/8) / 2
-/// ≈ 0.0625 × Nyquist of the DSD stream.  Symmetric; 96 coefficients.
+/// ≈ 0.0625 × Nyquist of the DSD stream. Symmetric; 96 coefficients.
 ///
-/// This kernel is used by the reference `dsd2pcm` C library (by Sebastian Gesemann,
+/// **Coefficients are scaled ×0.5 relative to the Gesemann `dsd2pcm.h` reference**
+/// to produce DC gain ≈ 1.024 with ±1.0-bit DSD input, preventing clipping on loud
+/// passages. The reference uses 48 half-taps via a lookup table; our full 96-tap
+/// symmetric array would have DC gain ≈ 2.048 without this normalization.
+///
+/// This kernel is based on the reference `dsd2pcm` C library (by Sebastian Gesemann,
 /// released into the public domain) and is well-tested for DSD64 playback quality.
 #[rustfmt::skip]
 static FIR: [f64; FIR_TAPS] = [
@@ -314,7 +319,9 @@ mod tests {
     #[test]
     fn dsd2pcm_peak_output_bounded_within_unit_range() {
         // Run 1024 arbitrary bytes through the filter; no sample must exceed ±1.3.
-        // Peak ripple from FIR filter can reach ~1.25 in worst case.
+        // The Gesemann reference FIR has ~25% peak ripple, so worst-case alternating
+        // patterns can reach ~1.254× — the ±1.3 bound catches regressions while
+        // allowing for this expected overshoot.
         let mut f = Dsd2Pcm::new();
         // Use pseudo-random but deterministic pattern
         let input: Vec<u8> = (0u8..=255).cycle().take(1024).collect();
