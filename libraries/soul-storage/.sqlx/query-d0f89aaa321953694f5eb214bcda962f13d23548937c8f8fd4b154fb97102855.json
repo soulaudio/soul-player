@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE albums SET folder_path = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d0f89aaa321953694f5eb214bcda962f13d23548937c8f8fd4b154fb97102855"
+}

@@ -424,6 +424,20 @@ pub async fn get_artwork_source(
     Ok(row.and_then(|r| r.artwork_source.map(|source| (source, r.cover_art_path))))
 }
 
+/// Update the folder_path of an album.
+/// Used when a parent directory is discovered after a subfolder scan,
+/// to promote the canonical path to the outermost location.
+pub async fn update_folder_path(pool: &SqlitePool, id: AlbumId, folder_path: &str) -> Result<()> {
+    sqlx::query!(
+        "UPDATE albums SET folder_path = ? WHERE id = ?",
+        folder_path,
+        id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Delete albums that have no available tracks.
 /// Returns the number of albums deleted.
 pub async fn delete_orphaned(pool: &SqlitePool) -> Result<i64> {

@@ -212,6 +212,50 @@ impl FuzzyMatcher {
             }
         }
 
+        // Subfolder / co-disc match — same (title, artist_id) AND one folder is an
+        // ancestor of the other, OR both are siblings under a shared parent folder
+        // whose name matches the album title (multi-disc case).
+        for album in &albums {
+            if normalize_string(&album.title) == normalized_title && album.artist_id == artist_id {
+                if is_subfolder(&album.folder_path, folder_path) {
+                    // Stored is parent, incoming is subfolder → merge into stored
+                    return Ok(FuzzyMatch {
+                        entity: album.clone(),
+                        confidence: 90,
+                        match_type: MatchType::Normalized,
+                    });
+                }
+                if is_subfolder(folder_path, &album.folder_path) {
+                    // Incoming is parent → promote folder_path in DB
+                    soul_storage::albums::update_folder_path(pool, album.id, folder_path).await?;
+                    let mut promoted = album.clone();
+                    promoted.folder_path = folder_path.to_string();
+                    return Ok(FuzzyMatch {
+                        entity: promoted,
+                        confidence: 90,
+                        match_type: MatchType::Normalized,
+                    });
+                }
+                if are_discs_of_same_album(&album.folder_path, folder_path, &normalized_title) {
+                    // Co-disc: siblings under a shared parent whose name == album title
+                    let shared_parent = parent_path(folder_path).to_string();
+                    if shared_parent != album.folder_path {
+                        soul_storage::albums::update_folder_path(pool, album.id, &shared_parent)
+                            .await?;
+                    }
+                    let mut merged = album.clone();
+                    if merged.folder_path != shared_parent {
+                        merged.folder_path = shared_parent;
+                    }
+                    return Ok(FuzzyMatch {
+                        entity: merged,
+                        confidence: 90,
+                        match_type: MatchType::Normalized,
+                    });
+                }
+            }
+        }
+
         // No match — create new album
         let new_album = soul_storage::albums::create(
             pool,
@@ -311,18 +355,120 @@ impl FuzzyMatcher {
                     crate::ImportError::Metadata(format!("Cached album id {} not found in DB", id))
                 })?;
 
-            let confidence = if original_title == title { 100 } else { 95 };
-            let match_type = if confidence == 100 {
-                MatchType::Exact
+            if album.folder_path == folder_path {
+                // Exact folder match — normal cache hit
+                let confidence = if original_title == title { 100 } else { 95 };
+                let match_type = if confidence == 100 {
+                    MatchType::Exact
+                } else {
+                    MatchType::Normalized
+                };
+                return Ok(FuzzyMatch {
+                    entity: album,
+                    confidence,
+                    match_type,
+                });
+            } else if is_subfolder(&album.folder_path, folder_path) {
+                // Stored is parent, incoming is subfolder → merge into stored
+                let confidence = if original_title == title { 100 } else { 95 };
+                let match_type = if confidence == 100 {
+                    MatchType::Exact
+                } else {
+                    MatchType::Normalized
+                };
+                return Ok(FuzzyMatch {
+                    entity: album,
+                    confidence,
+                    match_type,
+                });
+            } else if is_subfolder(folder_path, &album.folder_path) {
+                // Incoming is parent → promote folder_path in DB
+                soul_storage::albums::update_folder_path(pool, id, folder_path).await?;
+                let mut promoted = album;
+                promoted.folder_path = folder_path.to_string();
+                let confidence = if original_title == title { 100 } else { 95 };
+                let match_type = if confidence == 100 {
+                    MatchType::Exact
+                } else {
+                    MatchType::Normalized
+                };
+                return Ok(FuzzyMatch {
+                    entity: promoted,
+                    confidence,
+                    match_type,
+                });
+            } else if are_discs_of_same_album(&album.folder_path, folder_path, &normalized_title) {
+                // Co-disc: siblings under a shared parent folder whose name matches the
+                // album title (e.g. .../The Album/Disc 1 + .../The Album/Disc 2).
+                // Merge into the stored album; optionally promote folder_path to the
+                // parent album folder if the canonical path should move up.
+                let shared_parent = parent_path(folder_path).to_string();
+                if shared_parent != album.folder_path {
+                    soul_storage::albums::update_folder_path(pool, id, &shared_parent).await?;
+                }
+                let mut merged = album;
+                if merged.folder_path != shared_parent {
+                    merged.folder_path = shared_parent;
+                }
+                let confidence = if original_title == title { 100 } else { 95 };
+                let match_type = if confidence == 100 {
+                    MatchType::Exact
+                } else {
+                    MatchType::Normalized
+                };
+                return Ok(FuzzyMatch {
+                    entity: merged,
+                    confidence,
+                    match_type,
+                });
             } else {
-                MatchType::Normalized
-            };
+                // Sibling folders: neither is a subfolder of the other, and they don't
+                // share a parent folder named after the album.
+                //
+                // Distinguish two sub-cases:
+                //   (a) Both basenames begin with the album title → they are independently
+                //       named album variants (e.g. "Hits 2020" / "Hits 2021") → separate albums.
+                //   (b) One or both basenames bear no relation to the title → generic disc /
+                //       utility folders (e.g. "disc1" / "disc2") → merge into the same album.
+                let stored_base = normalize_string(path_basename(&album.folder_path));
+                let new_base = normalize_string(path_basename(folder_path));
+                let both_named_as_album = stored_base.starts_with(&normalized_title)
+                    && new_base.starts_with(&normalized_title);
 
-            return Ok(FuzzyMatch {
-                entity: album,
-                confidence,
-                match_type,
-            });
+                if both_named_as_album {
+                    // Each folder is explicitly named as a variant of the album → separate.
+                    // Do NOT update cache: the existing cache entry remains valid for the stored album.
+                    let new_album = soul_storage::albums::create(
+                        pool,
+                        CreateAlbum {
+                            title: title.to_string(),
+                            artist_id,
+                            year: None,
+                            musicbrainz_id: None,
+                            folder_path: folder_path.to_string(),
+                        },
+                    )
+                    .await?;
+                    return Ok(FuzzyMatch {
+                        entity: new_album,
+                        confidence: 100,
+                        match_type: MatchType::Created,
+                    });
+                } else {
+                    // Generic disc/utility folders → merge into the stored album.
+                    let confidence = if original_title == title { 100 } else { 95 };
+                    let match_type = if confidence == 100 {
+                        MatchType::Exact
+                    } else {
+                        MatchType::Normalized
+                    };
+                    return Ok(FuzzyMatch {
+                        entity: album,
+                        confidence,
+                        match_type,
+                    });
+                }
+            }
         }
 
         // No match — create new album
@@ -560,6 +706,50 @@ async fn find_genre_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Genr
     }))
 }
 
+/// Returns true if `child` is a direct or indirect subfolder of `parent`.
+/// Uses path-separator-aware prefix matching to avoid false positives
+/// (e.g. "/music/Album" must not match "/music/AlbumExtra").
+fn is_subfolder(parent: &str, child: &str) -> bool {
+    let p = parent.trim_end_matches(['/', '\\']);
+    child.starts_with(&format!("{}/", p)) || child.starts_with(&format!("{}\\", p))
+}
+
+/// Returns the parent directory of a path, or the path itself if no separator found.
+fn parent_path(path: &str) -> &str {
+    let p = path.trim_end_matches(['/', '\\']);
+    if let Some(pos) = p.rfind('/').or_else(|| p.rfind('\\')) {
+        &p[..pos]
+    } else {
+        p
+    }
+}
+
+/// Returns the last component (basename) of a path.
+fn path_basename(path: &str) -> &str {
+    let p = path.trim_end_matches(['/', '\\']);
+    if let Some(pos) = p.rfind('/').or_else(|| p.rfind('\\')) {
+        &p[pos + 1..]
+    } else {
+        p
+    }
+}
+
+/// Returns true if two paths are siblings whose shared parent folder name matches the
+/// normalized album title.  This identifies the multi-disc case:
+///   /music/Artist/The Album/Disc 1  +  /music/Artist/The Album/Disc 2
+///   → shared parent "The Album" == normalized title → merge.
+/// Contrast with the sibling-label case:
+///   /music/Various Artists/Hits 2020  +  /music/Various Artists/Hits 2021
+///   → shared parent "Various Artists" != normalized title → do NOT merge.
+fn are_discs_of_same_album(a: &str, b: &str, normalized_title: &str) -> bool {
+    let pa = parent_path(a);
+    let pb = parent_path(b);
+    if pa != pb {
+        return false;
+    }
+    normalize_string(path_basename(pa)) == normalized_title
+}
+
 /// Create a new genre
 async fn create_genre(pool: &SqlitePool, name: &str, canonical_name: &str) -> Result<Genre> {
     let result = sqlx::query("INSERT INTO genres (name, canonical_name) VALUES (?, ?)")
@@ -576,6 +766,31 @@ async fn create_genre(pool: &SqlitePool, name: &str, canonical_name: &str) -> Re
         canonical_name: canonical_name.to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
     })
+}
+
+#[cfg(test)]
+mod is_subfolder_tests {
+    use super::*;
+    #[test]
+    fn forward_slash() {
+        assert!(is_subfolder("/a/b", "/a/b/c"));
+    }
+    #[test]
+    fn backslash() {
+        assert!(is_subfolder("C:\\a\\b", "C:\\a\\b\\c"));
+    }
+    #[test]
+    fn sibling_no_match() {
+        assert!(!is_subfolder("/a/b", "/a/bc"));
+    }
+    #[test]
+    fn exact_no_match() {
+        assert!(!is_subfolder("/a/b", "/a/b"));
+    }
+    #[test]
+    fn child_to_parent_no_match() {
+        assert!(!is_subfolder("/a/b/c", "/a/b"));
+    }
 }
 
 #[cfg(test)]
