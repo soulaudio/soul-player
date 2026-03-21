@@ -45,7 +45,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
 
   // Helper to process file paths and show dialog (or auto-handle based on settings)
   const processFilePaths = useCallback(async (paths: string[]) => {
-    const audioExtensions = ['mp3', 'flac', 'wav', 'ogg', 'oga', 'm4a', 'mp4', 'aac', 'opus', 'wma', 'aiff', 'aif', 'ape', 'wv'];
+    const audioExtensions = ['mp3', 'flac', 'wav', 'ogg', 'oga', 'm4a', 'mp4', 'aac', 'opus', 'wma', 'aiff', 'aif', 'ape', 'wv', 'dsf', 'dff', 'dsdiff'];
 
     try {
       const files: DroppedFile[] = [];
@@ -214,18 +214,20 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
       }
 
       if (audioFiles.length > 0) {
-        const tracks = audioFiles.map((filePath, index) => {
-          const name = filePath.split(/[/\\]/).pop() || 'Unknown';
-          const title = name.replace(/\.[^/.]+$/, '');
+        type FileMeta = { filePath: string; title: string | null; artist: string | null; album: string | null; durationSeconds: number | null; trackNumber: number | null };
+        const metaList = await invoke<FileMeta[]>('get_metadata_for_paths', { paths: audioFiles });
 
+        const tracks = metaList.map((meta, index) => {
+          const name = meta.filePath.split(/[/\\]/).pop() || 'Unknown';
+          const fallbackTitle = name.replace(/\.[^/.]+$/, '');
           return {
             trackId: `dropped-${index}-${Date.now()}`,
-            title,
-            artist: 'Unknown Artist',
-            album: null as string | null,
-            filePath,
-            durationSeconds: null as number | null,
-            trackNumber: null as number | null,
+            title: meta.title ?? fallbackTitle,
+            artist: meta.artist ?? 'Unknown Artist',
+            album: meta.album ?? null,
+            filePath: meta.filePath,
+            durationSeconds: meta.durationSeconds ?? null,
+            trackNumber: meta.trackNumber ?? null,
             coverArtPath: undefined,
           };
         });

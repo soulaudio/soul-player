@@ -642,6 +642,51 @@ pub async fn scan_directory_for_audio(path: String) -> Result<Vec<String>, Strin
     .map_err(|e| e.to_string())
 }
 
+/// Lightweight metadata returned for externally dropped/opened files
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMetadata {
+    pub file_path: String,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub duration_seconds: Option<f64>,
+    pub track_number: Option<u32>,
+}
+
+/// Read tag metadata for a list of file paths (used when playing dropped files)
+#[tauri::command]
+pub async fn get_metadata_for_paths(paths: Vec<String>) -> Result<Vec<FileMetadata>, String> {
+    tokio::task::spawn_blocking(move || {
+        paths
+            .into_iter()
+            .map(|path_str| {
+                let path = std::path::Path::new(&path_str);
+                match soul_importer::metadata::extract_metadata(path) {
+                    Ok(meta) => FileMetadata {
+                        file_path: path_str,
+                        title: meta.title,
+                        artist: meta.artists.into_iter().next(),
+                        album: meta.album,
+                        duration_seconds: meta.duration_seconds,
+                        track_number: meta.track_number,
+                    },
+                    Err(_) => FileMetadata {
+                        file_path: path_str,
+                        title: None,
+                        artist: None,
+                        album: None,
+                        duration_seconds: None,
+                        track_number: None,
+                    },
+                }
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| format!("Metadata task failed: {e}"))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DialogFilter {
     pub name: String,

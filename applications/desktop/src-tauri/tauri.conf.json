@@ -135,6 +135,16 @@
         ],
         "mimeType": "audio/x-wavpack",
         "rank": "Alternate"
+      },
+      {
+        "description": "DSD Audio File",
+        "ext": [
+          "dsf",
+          "dff",
+          "dsdiff"
+        ],
+        "mimeType": "audio/x-dsd",
+        "rank": "Owner"
       }
     ],
     "icon": [

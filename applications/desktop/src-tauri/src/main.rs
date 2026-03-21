@@ -1954,6 +1954,9 @@ fn handle_file_associations(app: AppHandle, files: Vec<PathBuf>) {
                             | "aif"
                             | "ape"
                             | "wv"
+                            | "dsf"
+                            | "dff"
+                            | "dsdiff"
                     )
                 })
                 .unwrap_or(false)
@@ -3428,6 +3431,7 @@ fn main() {
             import::open_folder_dialog,
             import::is_directory,
             import::scan_directory_for_audio,
+            import::get_metadata_for_paths,
             // Sync/doctor
             sync::start_sync,
             sync::get_sync_status,
