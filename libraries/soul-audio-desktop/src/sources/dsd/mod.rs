@@ -21,7 +21,7 @@
 //!
 //! The existing resampler downstream converts this to the device's target rate.
 
-mod container;
-mod source;
+pub mod container;
+pub mod source;
 
 pub use source::DsdAudioSource;

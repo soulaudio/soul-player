@@ -15,13 +15,13 @@ use soul_audio::dsd::Dsd2Pcm;
 use soul_playback::{AudioSource, PlaybackError, Result};
 use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-/// Pre-buffer target: 5 seconds of output audio at target sample rate.
-const BUFFER_SIZE_SECONDS: usize = 5;
+/// Pre-buffer target: 1 second of output audio at target sample rate.
+const BUFFER_SIZE_SECONDS: usize = 1;
 /// Minimum samples in ring buffer before `is_ready()` returns `true`.
 const MIN_BUFFER_SAMPLES: usize = 12_000;
 
@@ -39,7 +39,8 @@ struct SharedState {
     samples_produced: AtomicUsize,
     is_eof: AtomicBool,
     seek_pending: AtomicBool,
-    generation: AtomicUsize, // incremented on seek to invalidate stale ring-buffer data
+    seek_target_samples: AtomicU64, // interleaved output sample count at seek target
+    generation: AtomicUsize,        // incremented on seek to invalidate stale ring-buffer data
 }
 
 impl SharedState {
@@ -48,6 +49,7 @@ impl SharedState {
             samples_produced: AtomicUsize::new(0),
             is_eof: AtomicBool::new(false),
             seek_pending: AtomicBool::new(false),
+            seek_target_samples: AtomicU64::new(0),
             generation: AtomicUsize::new(0),
         })
     }
@@ -233,6 +235,13 @@ impl AudioSource for DsdAudioSource {
     }
 
     fn seek(&mut self, position: Duration) -> Result<()> {
+        // Write the seek target (in interleaved output samples) BEFORE setting seek_pending,
+        // so position() can read a consistent value as soon as seek_pending is true.
+        let target_samples =
+            (position.as_secs_f64() * self.target_rate as f64 * self.channels as f64) as u64;
+        self.shared
+            .seek_target_samples
+            .store(target_samples, Ordering::Release);
         self.shared.seek_pending.store(true, Ordering::Release);
         self.command_tx
             .send(DsdCommand::Seek(position))
@@ -245,6 +254,12 @@ impl AudioSource for DsdAudioSource {
     }
 
     fn position(&self) -> Duration {
+        // While a seek is in flight, return the seek target so the UI doesn't bounce back.
+        if self.shared.seek_pending.load(Ordering::Acquire) {
+            let target = self.shared.seek_target_samples.load(Ordering::Acquire);
+            let frames = target / self.channels as u64;
+            return Duration::from_secs_f64(frames as f64 / self.target_rate as f64);
+        }
         // Derive from samples produced minus ring-buffer backlog.
         let produced = self.shared.samples_produced.load(Ordering::Relaxed) as u64;
         let backlog = self.buffer_consumer.slots() as u64;
@@ -286,9 +301,9 @@ fn decode_loop(
     channels: usize,
 ) {
     // Number of PCM frames decoded per iteration at pcm_rate.
-    const CHUNK_FRAMES: usize = 4096;
-    // Frames fed to the resampler per call (must stay constant).
-    const RESAMPLER_CHUNK: usize = 1024;
+    const CHUNK_FRAMES: usize = 16_384;
+    // Frames fed to the resampler per call (must stay constant; CHUNK_FRAMES % RESAMPLER_CHUNK == 0).
+    const RESAMPLER_CHUNK: usize = 4_096;
 
     let lsbf = container.lsbf();
     let dsd_rate = container.dsd_rate();
@@ -425,6 +440,7 @@ fn decode_loop(
                             shared
                                 .samples_produced
                                 .store(seek_output_samples, Ordering::Release);
+                            shared.seek_pending.store(false, Ordering::Release);
                             shared.generation.fetch_add(1, Ordering::Release);
                             continue 'outer;
                         }
@@ -703,6 +719,233 @@ mod tests {
         let f = write_temp(b"garbage", "mp3");
         let result = DsdAudioSource::new(f.path(), 48_000);
         assert!(result.is_err(), "unknown extension should fail");
+    }
+
+    // ── Quality / correctness tests (TDD for jitter/distortion/faster-slower bugs) ──
+
+    /// Bug: SincInterpolationType::Linear for 7.35× downsampling produces aliasing
+    /// artefacts.  A DSD signal at ~44.1 kHz (above the 24 kHz output Nyquist) MUST
+    /// be rejected by the resampler's anti-aliasing filter.  With Linear interpolation
+    /// the filter has a higher passband ripple and worse stopband rejection, causing the
+    /// above-Nyquist content to alias into the audible band.
+    ///
+    /// Pattern: 32 bytes of 0xFF then 32 bytes of 0x00 repeated → DSD "square wave" at
+    /// `2_822_400 / (32*2) / 8 = 5_512.5 Hz` in the PCM domain? No — let me think
+    /// carefully.  One DSD byte = 8 DSD bits = 1 PCM sample from the FIR.
+    /// So 32 bytes of 0xFF = 32 PCM samples of "high", 32 bytes of 0x00 = 32 PCM samples
+    /// of "low".  Square wave period = 64 PCM samples at pcm_rate 352_800 Hz →
+    /// frequency = 352_800 / 64 = 5_512.5 Hz.  This IS below the output Nyquist (24 kHz),
+    /// so it passes through and is NOT a good test for stopband rejection.
+    ///
+    /// Use period 4 (2 bytes on + 2 bytes off): f = 352_800 / 4 = 88_200 Hz.
+    /// This is ABOVE the output Nyquist (24 kHz) and ABOVE the FIR cutoff (~88 kHz) — the
+    /// FIR already attenuates it, and the resampler should remove any remainder.
+    ///
+    /// With Linear stopband attenuation ~-60 dB (rubato: ok but basic)
+    /// With Cubic stopband attenuation ~-80 dB+
+    ///
+    /// We assert the RMS of the output window is < 0.002 (equivalent to -54 dB full-scale).
+    /// Cubic easily achieves this; Linear might produce RMS > 0.002 for the aliased content.
+    #[test]
+    fn dsd_resampler_strongly_attenuates_above_nyquist_signal() {
+        // Build DSF with 2-byte-on / 2-byte-off pattern → ~88.2 kHz in PCM domain.
+        // This is well above the 24 kHz output Nyquist so the resampler must reject it.
+        let channels: u32 = 2;
+        let dsd_rate: u32 = 2_822_400;
+        let num_blocks = 64usize; // 64 blocks = plenty for warmup
+        let sample_count: u64 = (num_blocks * super::super::container::DSF_BLOCK_SIZE) as u64;
+        let audio_data_len =
+            num_blocks * super::super::container::DSF_BLOCK_SIZE * channels as usize;
+        let total_size: u64 = 92 + audio_data_len as u64;
+
+        let mut buf_data = Vec::new();
+        // DSD chunk
+        buf_data.extend_from_slice(b"DSD ");
+        buf_data.extend_from_slice(&28u64.to_le_bytes());
+        buf_data.extend_from_slice(&total_size.to_le_bytes());
+        buf_data.extend_from_slice(&0u64.to_le_bytes());
+        // fmt chunk
+        buf_data.extend_from_slice(b"fmt ");
+        buf_data.extend_from_slice(&52u64.to_le_bytes());
+        buf_data.extend_from_slice(&1u32.to_le_bytes());
+        buf_data.extend_from_slice(&0u32.to_le_bytes());
+        buf_data.extend_from_slice(&2u32.to_le_bytes());
+        buf_data.extend_from_slice(&channels.to_le_bytes());
+        buf_data.extend_from_slice(&dsd_rate.to_le_bytes());
+        buf_data.extend_from_slice(&1u32.to_le_bytes()); // lsbf
+        buf_data.extend_from_slice(&sample_count.to_le_bytes());
+        buf_data.extend_from_slice(&(super::super::container::DSF_BLOCK_SIZE as u32).to_le_bytes());
+        buf_data.extend_from_slice(&0u32.to_le_bytes());
+        // data chunk
+        buf_data.extend_from_slice(b"data");
+        buf_data.extend_from_slice(&(12u64 + audio_data_len as u64).to_le_bytes());
+        // Audio: 2 bytes 0xFF + 2 bytes 0x00 repeating per channel block
+        for _ in 0..num_blocks {
+            let block: Vec<u8> = (0..super::super::container::DSF_BLOCK_SIZE)
+                .map(|i| if (i / 2) % 2 == 0 { 0xFFu8 } else { 0x00u8 })
+                .collect();
+            buf_data.extend_from_slice(&block); // ch0
+            buf_data.extend_from_slice(&block); // ch1
+        }
+
+        let f = write_temp(&buf_data, "dsf");
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 10_000);
+
+        // Discard warmup (FIR + resampler delay).
+        let mut discard = vec![0.0f32; 4096];
+        src.read_samples(&mut discard).unwrap();
+
+        // Collect steady-state output.
+        let mut window = vec![0.0f32; 4096];
+        let n = src.read_samples(&mut window).unwrap();
+        assert!(n > 0);
+
+        let rms = (window[..n].iter().map(|&x| (x * x) as f64).sum::<f64>() / n as f64).sqrt();
+
+        // The ~88.2 kHz signal must be rejected by the resampler.
+        // Cubic achieves this well; Linear may leak more.
+        // We allow a generous -54 dB (RMS < 0.002) to confirm the test fails before fix.
+        assert!(
+            rms < 0.002,
+            "above-Nyquist signal not rejected: RMS={rms:.6} — resampler stopband too weak (Linear?)"
+        );
+    }
+
+    /// Bug: SincInterpolationType::Linear for 7.35× downsampling produces aliasing
+    /// distortion.  The amplitude variance of a stable DC DSD input (0xFF = all-ones)
+    /// after warmup should be very low (< 0.002 variance) because the input is pure DC.
+    /// With Linear interpolation the passband ripple is higher; with Cubic it is
+    /// essentially zero for DC.  This test documents the required quality floor.
+    #[test]
+    fn dsd_output_variance_low_for_dc_input_after_warmup() {
+        // Build a large enough file to warm up both the FIR (12 bytes) and the
+        // SincFixedIn resampler (output_delay ≈ 17 frames) and collect a stable window.
+        let data = build_dsf(32, 0xFF); // 32 blocks × 4096 = 131072 DSD bytes per channel
+        let f = write_temp(&data, "dsf");
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 8_000);
+
+        // Discard the first 2048 samples (warmup / delay region).
+        let mut discard = vec![0.0f32; 2048];
+        src.read_samples(&mut discard).unwrap();
+
+        // Collect 4096 samples of steady-state output.
+        let mut window = vec![0.0f32; 4096];
+        let n = src.read_samples(&mut window).unwrap();
+        assert!(n > 0, "ring should not be empty");
+
+        // Compute mean and variance of the collected window.
+        let mean = window[..n].iter().copied().sum::<f32>() / n as f32;
+        let variance = window[..n].iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / n as f32;
+
+        // DC input → almost zero variance expected.  Allow generous 0.005 tolerance
+        // so that the Cubic test passes while Linear (higher ripple) would exceed it.
+        assert!(
+            variance < 0.005,
+            "variance {variance:.6} too high — likely Linear interpolation artefacts"
+        );
+    }
+
+    /// Bug: read_samples returns Ok(n) where n < buffer.len() on underrun but
+    /// process_audio returns that count to CPAL, causing timing drift.
+    /// When the ring has ≥ buffer.len() samples, read_samples MUST return Ok(buffer.len()).
+    #[test]
+    fn dsd_read_samples_returns_full_buffer_len_when_data_available() {
+        let data = build_dsf(32, 0xFF); // plenty of data
+        let f = write_temp(&data, "dsf");
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        // Wait for the ring to be well above buffer size.
+        let deadline = std::time::Instant::now() + Duration::from_secs(8);
+        while src.buffer_consumer.slots() < 8192 && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            src.buffer_consumer.slots() >= 8192,
+            "ring not filled enough for test"
+        );
+
+        let mut buf = vec![0.0f32; 512];
+        let n = src.read_samples(&mut buf).unwrap();
+        assert_eq!(
+            n,
+            buf.len(),
+            "read_samples must return buffer.len()={} when ring has enough data, got {}",
+            buf.len(),
+            n
+        );
+    }
+
+    /// Bug: position() should track consumed samples accurately.
+    /// After draining N stereo samples position() must equal N/channels/rate ± 5ms.
+    #[test]
+    fn dsd_position_tracks_consumed_samples_accurately() {
+        let data = build_dsf(32, 0xAA); // 32 blocks of DSD silence-pattern
+        let f = write_temp(&data, "dsf");
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 8_000);
+        assert!(src.is_ready(), "source must be ready");
+
+        let buf_frames = 512usize;
+        let channels = 2usize;
+        let target_rate = 48_000u64;
+        let buf_size = buf_frames * channels;
+        let mut buf = vec![0.0f32; buf_size];
+        let mut total_consumed = 0u64;
+
+        // Drain exactly 50 full buffers.
+        // IMPORTANT: always add n to total_consumed even on the partial final read —
+        // read_samples already committed the read from the ring, so position() reflects
+        // those samples even when n < buf.len().
+        for _ in 0..50 {
+            let n = src.read_samples(&mut buf).unwrap();
+            total_consumed += n as u64;
+            if n < buf.len() {
+                break; // ran out of data — DSD file too small for this test
+            }
+        }
+        assert!(total_consumed > 0);
+
+        let expected_secs = total_consumed as f64 / (target_rate as f64 * channels as f64);
+        let actual_secs = src.position().as_secs_f64();
+        let delta = (actual_secs - expected_secs).abs();
+        assert!(
+            delta < 0.005,
+            "position drift {delta:.4}s > 5ms — expected {expected_secs:.4}s got {actual_secs:.4}s"
+        );
+    }
+
+    /// Bug: "jitter" — ring should never starve (return Ok(0)) while decoding is
+    /// still in progress.  Simulates real-time drain at 48 kHz for 250ms.
+    #[test]
+    fn dsd_ring_never_starves_during_real_time_drain() {
+        // Need a file at least 1 second long to give decoder time to pre-fill.
+        // 32 blocks × 4096 bytes / 352800 Hz ≈ 0.372s — use 128 blocks ≈ 1.49s.
+        let data = build_dsf(128, 0xAA);
+        let f = write_temp(&data, "dsf");
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 8_000);
+        assert!(src.is_ready(), "source must be ready before drain test");
+
+        let buf_size = 512usize; // 256 frames × 2 channels ≈ 5.3ms per callback
+        let mut buf = vec![0.0f32; buf_size];
+        let callback_period = Duration::from_micros(5_333); // ≈ 256 frames @ 48kHz
+        let test_duration = Duration::from_millis(250);
+        let deadline = std::time::Instant::now() + test_duration;
+        let mut underruns = 0u32;
+
+        while std::time::Instant::now() < deadline {
+            let n = src.read_samples(&mut buf).unwrap();
+            if n == 0 {
+                underruns += 1;
+            }
+            std::thread::sleep(callback_period);
+        }
+
+        assert_eq!(
+            underruns, 0,
+            "ring starved {underruns} times during 250ms drain — jitter will occur"
+        );
     }
 
     #[test]
