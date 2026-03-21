@@ -105,13 +105,15 @@ pub fn parse_folder_name(folder_name: &str) -> FolderMetadata {
 /// Decode an ID3v2 text frame value.
 ///
 /// ID3v2 text frames begin with a single encoding byte:
-///   0x00 — ISO-8859-1 (Latin-1): read bytes as-is, lossy to UTF-8
+///   0x00 — ISO-8859-1 (Latin-1): each byte maps directly to the same Unicode code point
 ///   0x01 — UTF-16 with BOM (almost always UTF-16 LE with 0xFF 0xFE BOM)
 ///   0x02 — UTF-16 BE without BOM
 ///   0x03 — UTF-8
 ///
 /// Previously this fell through to `from_utf8_lossy` for UTF-16, producing
 /// garbled null-padded strings (e.g. "O\0s\0a\0k\0i\0" instead of "Osaki").
+/// ISO-8859-1 was also incorrectly decoded via from_utf8_lossy, turning bytes
+/// 0x80–0xFF (é, ü, ñ, etc.) into U+FFFD replacement characters.
 fn decode_id3_text(frame_data: &[u8]) -> Option<String> {
     if frame_data.is_empty() {
         return None;
@@ -119,6 +121,15 @@ fn decode_id3_text(frame_data: &[u8]) -> Option<String> {
     let encoding = frame_data[0];
     let raw = &frame_data[1..];
     let s = match encoding {
+        0 => {
+            // ISO-8859-1: every byte maps 1:1 to the Unicode code point of the same value.
+            // This cannot use from_utf8_lossy (bytes 0x80–0xFF are not valid UTF-8).
+            raw.iter()
+                .copied()
+                .take_while(|&b| b != 0) // strip null terminator
+                .map(|b| char::from(b))
+                .collect()
+        }
         1 => {
             // UTF-16 with BOM — strip 0xFF 0xFE / 0xFE 0xFF BOM if present.
             let (is_be, payload) = if raw.starts_with(&[0xFF, 0xFE]) {
@@ -153,7 +164,7 @@ fn decode_id3_text(frame_data: &[u8]) -> Option<String> {
                 .collect();
             String::from_utf16_lossy(&units)
         }
-        // 0x00 = ISO-8859-1, 0x03 = UTF-8 — both read as UTF-8 lossy.
+        // 0x03 = UTF-8, and any unknown encoding — treat as UTF-8 lossy.
         _ => String::from_utf8_lossy(raw)
             .trim_end_matches('\0')
             .to_string(),

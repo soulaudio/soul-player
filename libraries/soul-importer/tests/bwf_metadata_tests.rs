@@ -303,3 +303,73 @@ fn bwf_wav_utf16_id3_tags_decoded_correctly() {
         meta.artists
     );
 }
+
+#[test]
+fn bwf_wav_latin1_id3_tags_decoded_correctly() {
+    // Files tagged by older rippers (EAC, dBpoweramp default) use ISO-8859-1
+    // for accented characters. Previously from_utf8_lossy turned bytes 0x80–0xFF
+    // into U+FFFD; now they decode to their correct Unicode equivalents.
+    //
+    // "Gymnopédies" in Latin-1: the é = 0xE9
+    // "Erik Satie"  — pure ASCII, used as the artist
+    fn id3_frame_latin1(id: &[u8; 4], text_bytes: &[u8]) -> Vec<u8> {
+        let mut payload = vec![0x00u8]; // encoding = ISO-8859-1
+        payload.extend_from_slice(text_bytes);
+        let size = payload.len() as u32;
+        let mut frame = Vec::new();
+        frame.extend_from_slice(id);
+        frame.extend_from_slice(&size.to_be_bytes());
+        frame.extend_from_slice(&[0u8, 0u8]); // flags
+        frame.extend_from_slice(&payload);
+        frame
+    }
+
+    // "Gymnopédies" with é as Latin-1 byte 0xE9
+    let title_latin1: &[u8] = b"Gymnop\xe9dies";
+    let artist_latin1: &[u8] = b"Erik Satie";
+
+    let mut frames = id3_frame_latin1(b"TIT2", title_latin1);
+    frames.extend(id3_frame_latin1(b"TPE1", artist_latin1));
+
+    let tag_size = frames.len() as u32;
+    let s0 = ((tag_size >> 21) & 0x7F) as u8;
+    let s1 = ((tag_size >> 14) & 0x7F) as u8;
+    let s2 = ((tag_size >> 7) & 0x7F) as u8;
+    let s3 = (tag_size & 0x7F) as u8;
+    let mut id3_tag = Vec::new();
+    id3_tag.extend_from_slice(b"ID3");
+    id3_tag.push(3);
+    id3_tag.push(0);
+    id3_tag.push(0);
+    id3_tag.extend_from_slice(&[s0, s1, s2, s3]);
+    id3_tag.extend_from_slice(&frames);
+
+    let fmt = riff_chunk(b"fmt ", &fmt_chunk(44100, 2, 16));
+    let data = riff_chunk(b"data", &vec![0u8; 44100 * 2 * 2]);
+    let id3_chunk = riff_chunk(b"id3 ", &id3_tag);
+
+    let mut riff_body = Vec::new();
+    riff_body.extend_from_slice(b"WAVE");
+    riff_body.extend_from_slice(&fmt);
+    riff_body.extend_from_slice(&data);
+    riff_body.extend_from_slice(&id3_chunk);
+
+    let mut wav = b"RIFF".to_vec();
+    wav.extend_from_slice(&(riff_body.len() as u32).to_le_bytes());
+    wav.extend_from_slice(&riff_body);
+
+    let f = write_wav_file(&wav);
+    let meta = extract_metadata(f.path()).unwrap();
+
+    assert_eq!(
+        meta.title.as_deref(),
+        Some("Gymnopédies"),
+        "Latin-1 title with accented é should decode correctly, got {:?}",
+        meta.title
+    );
+    assert!(
+        meta.artists.iter().any(|a| a == "Erik Satie"),
+        "Latin-1 artist should decode correctly, got {:?}",
+        meta.artists
+    );
+}
