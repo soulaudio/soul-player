@@ -8,15 +8,19 @@
 use super::container::{ContainerError, DsdMeta, DsdiffContainer, DsfContainer};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use rtrb::{Consumer, Producer, RingBuffer};
+use rubato::{
+    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+};
 use soul_audio::dsd::Dsd2Pcm;
 use soul_playback::{AudioSource, PlaybackError, Result};
+use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-/// Pre-buffer target: 5 seconds at maximum expected DSD64 PCM rate (352 800 Hz stereo).
+/// Pre-buffer target: 5 seconds of output audio at target sample rate.
 const BUFFER_SIZE_SECONDS: usize = 5;
 /// Minimum samples in ring buffer before `is_ready()` returns `true`.
 const MIN_BUFFER_SAMPLES: usize = 12_000;
@@ -114,9 +118,10 @@ impl Container {
 /// Audio source for DSF and DSDIFF files.
 ///
 /// Implements [`AudioSource`] — drop-in replacement for `LocalAudioSource` for DSD files.
-/// Output is stereo interleaved f32 PCM at `dsd_rate / 8` Hz (e.g. 352 800 Hz for DSD64).
+/// Output is stereo interleaved f32 PCM at `target_sample_rate` Hz after resampling
+/// from the raw DSD PCM rate (e.g. 352 800 Hz for DSD64 → 48 000 Hz device rate).
 pub struct DsdAudioSource {
-    pcm_rate: u32,
+    target_rate: u32,
     channels: usize,
     duration: Duration,
     buffer_consumer: Consumer<f32>,
@@ -128,7 +133,11 @@ pub struct DsdAudioSource {
 
 impl DsdAudioSource {
     /// Open a DSF or DSDIFF file and start the background decoder.
-    pub fn new(path: &Path) -> std::result::Result<Self, PlaybackError> {
+    ///
+    /// `target_sample_rate` is the device output rate (e.g. 48 000 Hz). The
+    /// decoder thread resamples DSD PCM (352 800 Hz for DSD64) to this rate so
+    /// the audio callback receives correctly-pitched audio.
+    pub fn new(path: &Path, target_sample_rate: u32) -> std::result::Result<Self, PlaybackError> {
         let container =
             Container::open(path).map_err(|e| PlaybackError::AudioSource(e.to_string()))?;
 
@@ -137,8 +146,8 @@ impl DsdAudioSource {
         let channels = meta.channels as usize;
         let duration = meta.duration;
 
-        // Ring buffer: 5 seconds at the PCM output rate × stereo.
-        let ring_capacity = pcm_rate as usize * BUFFER_SIZE_SECONDS * channels;
+        // Ring buffer: 5 seconds at the TARGET output rate × channels.
+        let ring_capacity = target_sample_rate as usize * BUFFER_SIZE_SECONDS * channels;
         let (producer, consumer) = RingBuffer::<f32>::new(ring_capacity);
 
         let shared = SharedState::new();
@@ -148,12 +157,27 @@ impl DsdAudioSource {
         let decoder_thread = thread::Builder::new()
             .name(format!("dsd-decoder:{}", path.display()))
             .spawn(move || {
-                decode_loop(container, producer, shared_bg, cmd_rx);
+                decode_loop(
+                    container,
+                    producer,
+                    shared_bg,
+                    cmd_rx,
+                    pcm_rate,
+                    target_sample_rate,
+                    channels,
+                );
             })
             .map_err(|e| PlaybackError::AudioSource(e.to_string()))?;
 
-        Ok(Self {
+        tracing::info!(
+            "[DsdAudioSource] Opening: pcm_rate={}Hz → target={}Hz, channels={}",
             pcm_rate,
+            target_sample_rate,
+            channels
+        );
+
+        Ok(Self {
+            target_rate: target_sample_rate,
             channels,
             duration,
             buffer_consumer: consumer,
@@ -220,7 +244,7 @@ impl AudioSource for DsdAudioSource {
         let consumed = produced.saturating_sub(backlog);
         // Convert interleaved sample count to frames, then to time.
         let frames = consumed / self.channels as u64;
-        Duration::from_secs_f64(frames as f64 / self.pcm_rate as f64)
+        Duration::from_secs_f64(frames as f64 / self.target_rate as f64)
     }
 
     fn is_finished(&self) -> bool {
@@ -233,7 +257,7 @@ impl AudioSource for DsdAudioSource {
     }
 
     fn sample_rate(&self) -> Option<u32> {
-        Some(self.pcm_rate)
+        Some(self.target_rate)
     }
 }
 
@@ -250,23 +274,61 @@ fn decode_loop(
     mut producer: Producer<f32>,
     shared: Arc<SharedState>,
     cmd_rx: Receiver<DsdCommand>,
+    pcm_rate: u32,
+    target_sample_rate: u32,
+    channels: usize,
 ) {
-    // Chunk size: decode in batches to amortise ring-buffer overhead.
+    // Number of PCM frames decoded per iteration at pcm_rate.
     const CHUNK_FRAMES: usize = 4096;
+    // Frames fed to the resampler per call (must stay constant).
+    const RESAMPLER_CHUNK: usize = 1024;
 
     let lsbf = container.lsbf();
-    let channels = container.channels();
     let dsd_rate = container.dsd_rate();
 
-    // One Dsd2Pcm filter per channel.
+    // One Dsd2Pcm FIR filter per channel.
     let mut filters: Vec<Dsd2Pcm> = (0..channels).map(|_| Dsd2Pcm::new()).collect();
 
-    // Per-channel DSD byte buffer.
+    // Build the resampler when output rate differs from DSD PCM rate.
+    let needs_resampling = pcm_rate != target_sample_rate;
+    let mut resampler: Option<SincFixedIn<f32>> = if needs_resampling {
+        let ratio = target_sample_rate as f64 / pcm_rate as f64;
+        let params = SincInterpolationParameters {
+            sinc_len: 256,
+            f_cutoff: 0.95,
+            interpolation: SincInterpolationType::Linear,
+            oversampling_factor: 256,
+            window: WindowFunction::BlackmanHarris2,
+        };
+        match SincFixedIn::<f32>::new(ratio, 2.0, params, RESAMPLER_CHUNK, channels) {
+            Ok(r) => {
+                tracing::info!(
+                    "[DSD] Resampler {}Hz→{}Hz, output_delay={} frames",
+                    pcm_rate,
+                    target_sample_rate,
+                    r.output_delay()
+                );
+                Some(r)
+            }
+            Err(e) => {
+                tracing::error!("[DSD] Failed to create resampler: {e}");
+                shared.is_eof.store(true, Ordering::Release);
+                return;
+            }
+        }
+    } else {
+        None
+    };
+
+    // Interleaved PCM accumulation buffer (at pcm_rate, before resampling).
+    let mut input_buf: VecDeque<f32> = VecDeque::with_capacity(RESAMPLER_CHUNK * channels * 4);
+
+    // DSD byte buffers.
     let mut frame = vec![0u8; channels];
-    // Per-channel PCM output (one sample per channel per DSD byte).
     let mut pcm_frame = vec![0.0f32; channels];
-    let mut pcm_chunk: Vec<f32> = vec![0.0; CHUNK_FRAMES * channels];
     let mut chunk_filled = 0usize;
+    // Temporary staging buffer for one CHUNK_FRAMES block.
+    let mut pcm_chunk: Vec<f32> = vec![0.0; CHUNK_FRAMES * channels];
 
     'outer: loop {
         // Drain any pending commands (non-blocking).
@@ -278,10 +340,13 @@ fn decode_loop(
                     if let Err(e) = container.seek(target_sample) {
                         tracing::warn!("[DSD] seek error: {e}");
                     }
-                    // Reset filters to avoid transients.
                     for f in &mut filters {
                         f.reset();
                     }
+                    if let Some(ref mut r) = resampler {
+                        let _ = r.reset();
+                    }
+                    input_buf.clear();
                     chunk_filled = 0;
                     shared.seek_pending.store(false, Ordering::Release);
                     shared.generation.fetch_add(1, Ordering::Release);
@@ -289,55 +354,61 @@ fn decode_loop(
             }
         }
 
-        // Don't decode ahead of the ring buffer.
+        // Don't get too far ahead of the consumer.
         if producer.slots() < channels * CHUNK_FRAMES {
-            // Back off until space is available.
             std::thread::sleep(Duration::from_millis(1));
             continue;
         }
 
-        // Fill the PCM chunk.
+        // Decode one CHUNK_FRAMES block of DSD → interleaved PCM.
         while chunk_filled < CHUNK_FRAMES {
             match container.read_frame(&mut frame) {
                 Ok(true) => {
-                    // Run one DSD byte through each channel's FIR filter.
                     for ch in 0..channels {
                         let src = std::slice::from_ref(&frame[ch]);
                         let dst = std::slice::from_mut(&mut pcm_frame[ch]);
                         filters[ch].translate(src, dst, lsbf);
                     }
-                    // Write interleaved stereo to PCM chunk.
                     for ch in 0..channels {
                         pcm_chunk[chunk_filled * channels + ch] = pcm_frame[ch];
                     }
                     chunk_filled += 1;
                 }
                 Ok(false) => {
-                    // EOF — flush partial chunk then signal.
+                    // EOF — flush remaining samples through resampler then signal.
                     if chunk_filled > 0 {
-                        flush_to_ring(
-                            &pcm_chunk[..chunk_filled * channels],
-                            &mut producer,
-                            &shared,
-                        );
+                        let partial = &pcm_chunk[..chunk_filled * channels];
+                        input_buf.extend(partial.iter().copied());
                         chunk_filled = 0;
                     }
+                    resample_and_flush(
+                        &mut input_buf,
+                        &mut resampler,
+                        channels,
+                        RESAMPLER_CHUNK,
+                        &mut producer,
+                        &shared,
+                        true,
+                    );
                     shared.is_eof.store(true, Ordering::Release);
-                    // Wait for stop command rather than spinning.
+                    // Park until Stop or a seek-to-restart.
                     loop {
-                        if matches!(cmd_rx.recv(), Err(_) | Ok(DsdCommand::Stop)) {
-                            return;
-                        }
-                        if let Ok(DsdCommand::Seek(pos)) = cmd_rx.try_recv() {
-                            // Allow seek-to-restart after EOF.
-                            shared.is_eof.store(false, Ordering::Release);
-                            let target = (pos.as_secs_f64() * dsd_rate as f64) as u64;
-                            let _ = container.seek(target);
-                            for f in &mut filters {
-                                f.reset();
+                        match cmd_rx.recv() {
+                            Err(_) | Ok(DsdCommand::Stop) => return,
+                            Ok(DsdCommand::Seek(pos)) => {
+                                shared.is_eof.store(false, Ordering::Release);
+                                let target = (pos.as_secs_f64() * dsd_rate as f64) as u64;
+                                let _ = container.seek(target);
+                                for f in &mut filters {
+                                    f.reset();
+                                }
+                                if let Some(ref mut r) = resampler {
+                                    let _ = r.reset();
+                                }
+                                input_buf.clear();
+                                shared.generation.fetch_add(1, Ordering::Release);
+                                continue 'outer;
                             }
-                            shared.generation.fetch_add(1, Ordering::Release);
-                            continue 'outer;
                         }
                     }
                 }
@@ -349,12 +420,86 @@ fn decode_loop(
             }
         }
 
-        flush_to_ring(
-            &pcm_chunk[..chunk_filled * channels],
+        // Append decoded chunk to input buffer and resample.
+        input_buf.extend(pcm_chunk[..chunk_filled * channels].iter().copied());
+        chunk_filled = 0;
+        resample_and_flush(
+            &mut input_buf,
+            &mut resampler,
+            channels,
+            RESAMPLER_CHUNK,
             &mut producer,
             &shared,
+            false,
         );
-        chunk_filled = 0;
+    }
+}
+
+/// Drain `input_buf` through the resampler (or directly) into `producer`.
+/// When `flush=true`, processes any leftover samples that don't fill a full chunk.
+fn resample_and_flush(
+    input_buf: &mut VecDeque<f32>,
+    resampler: &mut Option<SincFixedIn<f32>>,
+    channels: usize,
+    chunk_frames: usize,
+    producer: &mut Producer<f32>,
+    shared: &SharedState,
+    flush: bool,
+) {
+    let samples_per_chunk = chunk_frames * channels;
+
+    if let Some(ref mut r) = resampler {
+        while input_buf.len() >= samples_per_chunk {
+            let mut deinterleaved: Vec<Vec<f32>> = vec![Vec::with_capacity(chunk_frames); channels];
+            for _ in 0..chunk_frames {
+                for ch in 0..channels {
+                    deinterleaved[ch].push(input_buf.pop_front().unwrap_or(0.0));
+                }
+            }
+            match r.process(&deinterleaved, None) {
+                Ok(resampled) => {
+                    let n_frames = resampled[0].len();
+                    let mut interleaved = Vec::with_capacity(n_frames * channels);
+                    for fi in 0..n_frames {
+                        for ch in 0..channels {
+                            interleaved.push(resampled[ch][fi]);
+                        }
+                    }
+                    flush_to_ring(&interleaved, producer, shared);
+                }
+                Err(e) => tracing::error!("[DSD] Resampling error: {e}"),
+            }
+        }
+
+        if flush && !input_buf.is_empty() {
+            let remaining = input_buf.len() / channels;
+            if remaining > 0 {
+                let mut deinterleaved: Vec<Vec<f32>> =
+                    vec![Vec::with_capacity(remaining); channels];
+                for _ in 0..remaining {
+                    for ch in 0..channels {
+                        deinterleaved[ch].push(input_buf.pop_front().unwrap_or(0.0));
+                    }
+                }
+                if let Ok(resampled) = r.process_partial(Some(&deinterleaved), None) {
+                    let n_frames = resampled[0].len();
+                    let mut interleaved = Vec::with_capacity(n_frames * channels);
+                    for fi in 0..n_frames {
+                        for ch in 0..channels {
+                            interleaved.push(resampled[ch][fi]);
+                        }
+                    }
+                    flush_to_ring(&interleaved, producer, shared);
+                }
+            }
+        }
+    } else {
+        // No resampling needed — write directly.
+        while !input_buf.is_empty() {
+            let n = input_buf.len();
+            let batch: Vec<f32> = input_buf.drain(..n).collect();
+            flush_to_ring(&batch, producer, shared);
+        }
     }
 }
 
@@ -418,11 +563,11 @@ mod tests {
     // ── DSF integration tests ─────────────────────────────────────────────────
 
     #[test]
-    fn dsf_source_opens_and_has_correct_pcm_rate() {
+    fn dsf_source_opens_and_reports_target_rate() {
         let data = build_dsf(2, 0x69);
         let f = write_temp(&data, "dsf");
-        let src = DsdAudioSource::new(f.path()).unwrap();
-        assert_eq!(src.sample_rate(), Some(352_800));
+        let src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        assert_eq!(src.sample_rate(), Some(48_000));
     }
 
     #[test]
@@ -431,7 +576,7 @@ mod tests {
         let blocks = 2usize;
         let data = build_dsf(blocks, 0x69);
         let f = write_temp(&data, "dsf");
-        let src = DsdAudioSource::new(f.path()).unwrap();
+        let src = DsdAudioSource::new(f.path(), 48_000).unwrap();
         let expected = (blocks * 4096) as f64 / 2_822_400.0;
         let got = src.duration().as_secs_f64();
         assert!(
@@ -444,8 +589,8 @@ mod tests {
     fn dsf_source_reads_samples_after_buffering() {
         let data = build_dsf(4, 0xFF);
         let f = write_temp(&data, "dsf");
-        let mut src = DsdAudioSource::new(f.path()).unwrap();
-        wait_ready(&src, 2000);
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 5000);
         let mut buf = vec![0.0f32; 1024];
         let n = src.read_samples(&mut buf).unwrap();
         assert!(n > 0, "expected samples, got 0");
@@ -455,7 +600,7 @@ mod tests {
     fn dsf_source_is_not_finished_while_buffering() {
         let data = build_dsf(4, 0x69);
         let f = write_temp(&data, "dsf");
-        let src = DsdAudioSource::new(f.path()).unwrap();
+        let src = DsdAudioSource::new(f.path(), 48_000).unwrap();
         // Should not be finished immediately after construction.
         assert!(!src.is_finished());
     }
@@ -465,10 +610,10 @@ mod tests {
         // Very small file: 1 block = 4096 DSD samples per channel.
         let data = build_dsf(1, 0x69);
         let f = write_temp(&data, "dsf");
-        let mut src = DsdAudioSource::new(f.path()).unwrap();
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
 
         // Wait for EOF to be signalled.
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
         while !src.shared.is_eof.load(Ordering::Acquire) {
             if std::time::Instant::now() > deadline {
                 panic!("timed out waiting for EOF");
@@ -491,8 +636,8 @@ mod tests {
     fn dsf_source_seek_does_not_panic() {
         let data = build_dsf(4, 0xFF);
         let f = write_temp(&data, "dsf");
-        let mut src = DsdAudioSource::new(f.path()).unwrap();
-        wait_ready(&src, 2000);
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 5000);
         src.seek(Duration::from_millis(0)).unwrap();
         // Allow decoder thread to process the seek.
         std::thread::sleep(Duration::from_millis(50));
@@ -501,11 +646,11 @@ mod tests {
     // ── DSDIFF integration tests ──────────────────────────────────────────────
 
     #[test]
-    fn dff_source_opens_and_has_correct_pcm_rate() {
+    fn dff_source_opens_and_reports_target_rate() {
         let data = build_dsdiff(8192, 0x69);
         let f = write_temp(&data, "dff");
-        let src = DsdAudioSource::new(f.path()).unwrap();
-        assert_eq!(src.sample_rate(), Some(352_800));
+        let src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        assert_eq!(src.sample_rate(), Some(48_000));
     }
 
     #[test]
@@ -513,7 +658,7 @@ mod tests {
         let samples: u64 = 8192;
         let data = build_dsdiff(samples, 0x69);
         let f = write_temp(&data, "dff");
-        let src = DsdAudioSource::new(f.path()).unwrap();
+        let src = DsdAudioSource::new(f.path(), 48_000).unwrap();
         let expected = samples as f64 / 2_822_400.0;
         let got = src.duration().as_secs_f64();
         assert!(
@@ -526,8 +671,8 @@ mod tests {
     fn dff_source_reads_samples_after_buffering() {
         let data = build_dsdiff(100_000, 0xFF);
         let f = write_temp(&data, "dff");
-        let mut src = DsdAudioSource::new(f.path()).unwrap();
-        wait_ready(&src, 2000);
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 5000);
         let mut buf = vec![0.0f32; 1024];
         let n = src.read_samples(&mut buf).unwrap();
         assert!(n > 0);
@@ -538,7 +683,7 @@ mod tests {
     #[test]
     fn unknown_extension_returns_error() {
         let f = write_temp(b"garbage", "mp3");
-        let result = DsdAudioSource::new(f.path());
+        let result = DsdAudioSource::new(f.path(), 48_000);
         assert!(result.is_err(), "unknown extension should fail");
     }
 
@@ -554,7 +699,7 @@ mod tests {
             h.write_all(&data).unwrap();
             h.flush().unwrap();
         }
-        let src = DsdAudioSource::new(f.path()).unwrap();
-        assert_eq!(src.sample_rate(), Some(352_800));
+        let src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        assert_eq!(src.sample_rate(), Some(48_000));
     }
 }

@@ -813,7 +813,7 @@ fn create_audio_source(
 ) -> Result<Box<dyn soul_playback::AudioSource>> {
     if is_dsd_path(path) {
         tracing::info!("[create_audio_source] Opening DSD file: {}", path.display());
-        let src = crate::sources::DsdAudioSource::new(path)
+        let src = crate::sources::DsdAudioSource::new(path, sample_rate)
             .map_err(|e| crate::error::AudioError::PlaybackError(e.to_string()))?;
         Ok(Box::new(src))
     } else {
