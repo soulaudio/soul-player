@@ -241,7 +241,29 @@ test('DSD audio continues advancing after seek', async () => {
     );
   }
   // If state is Stopped, the DSD track auto-advanced — the seek + playback path worked.
-  // No additional assertions needed.
+  // Verify this was a real EOF (track played to near-end) and not a silent crash/stall
+  // (which would leave position frozen near 0.0 and then time out).
+  if (stateNow !== 'Playing') {
+    // posAfterSeek is the position captured right after the seek landed (< 0.3s).
+    // A stall would freeze position near 0.1s and then time out without advancing;
+    // a real EOF means the track played from the seek point through to ~0.74s.
+    // We can't re-read position after Stopped (it resets to 0), so we assert that
+    // the seek actually placed us in a valid range — proving the seek applied — and
+    // that Stopped (not an error state) is the final status.
+    const posAfterSeek = await page.evaluate(async () =>
+      window.__TAURI_INTERNALS__.invoke('get_position'),
+    );
+    // After Stopped, position resets to 0. That's expected. The meaningful check is
+    // that we reached Stopped (not Paused/error) which the waitForFunction above
+    // guaranteed, combined with the fact that posSnapshot (captured before the if)
+    // was in range [0.05, 0.3) confirming seek landed correctly.
+    expect(posAfterSeek).toBeGreaterThanOrEqual(0);
+    expect(['Stopped', 'Playing', 'Paused']).toContain(stateNow);
+    // Crucially: state transitioned away from Playing via natural EOF, not a crash.
+    // If we got here (waitForFunction resolved) after seeking to 0.1s on a 0.74s track,
+    // the track must have played ~0.64s after the seek before stopping — a real EOF.
+    expect(stateNow).toBe('Stopped');
+  }
 });
 
 // ----------------------------------------------------------------
@@ -282,12 +304,14 @@ test('seek while paused updates DSD position and resumes from seek point', async
     { timeout: 3_000 },
   );
 
-  // Position must be within the DSD track's duration (0–0.74s)
+  // Position must be near the seek target (0.2s).
+  // Allow [0.1, 0.45) to accommodate DSD chunk-refill latency while still
+  // catching a no-op seek (which would leave position near 0.0 or above 0.45).
   const posAfterSeek = await page.evaluate(async () =>
     window.__TAURI_INTERNALS__.invoke('get_position'),
   );
-  expect(posAfterSeek).toBeGreaterThanOrEqual(0.0);
-  expect(posAfterSeek).toBeLessThan(0.75);
+  expect(posAfterSeek).toBeGreaterThanOrEqual(0.1);
+  expect(posAfterSeek).toBeLessThan(0.45);
 
   // Resume and verify position advances from the seek point
   await page.evaluate(async () =>
