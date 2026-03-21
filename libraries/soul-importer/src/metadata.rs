@@ -102,6 +102,69 @@ pub fn parse_folder_name(folder_name: &str) -> FolderMetadata {
     }
 }
 
+/// Decode an ID3v2 text frame value.
+///
+/// ID3v2 text frames begin with a single encoding byte:
+///   0x00 — ISO-8859-1 (Latin-1): read bytes as-is, lossy to UTF-8
+///   0x01 — UTF-16 with BOM (almost always UTF-16 LE with 0xFF 0xFE BOM)
+///   0x02 — UTF-16 BE without BOM
+///   0x03 — UTF-8
+///
+/// Previously this fell through to `from_utf8_lossy` for UTF-16, producing
+/// garbled null-padded strings (e.g. "O\0s\0a\0k\0i\0" instead of "Osaki").
+fn decode_id3_text(frame_data: &[u8]) -> Option<String> {
+    if frame_data.is_empty() {
+        return None;
+    }
+    let encoding = frame_data[0];
+    let raw = &frame_data[1..];
+    let s = match encoding {
+        1 => {
+            // UTF-16 with BOM — strip 0xFF 0xFE / 0xFE 0xFF BOM if present.
+            let (is_be, payload) = if raw.starts_with(&[0xFF, 0xFE]) {
+                (false, &raw[2..])
+            } else if raw.starts_with(&[0xFE, 0xFF]) {
+                (true, &raw[2..])
+            } else {
+                // No BOM — assume LE (most common in practice).
+                (false, raw)
+            };
+            let units: Vec<u16> = payload
+                .chunks(2)
+                .filter(|c| c.len() == 2)
+                .map(|c| {
+                    if is_be {
+                        u16::from_be_bytes([c[0], c[1]])
+                    } else {
+                        u16::from_le_bytes([c[0], c[1]])
+                    }
+                })
+                .take_while(|&u| u != 0) // strip null terminator
+                .collect();
+            String::from_utf16_lossy(&units)
+        }
+        2 => {
+            // UTF-16 BE without BOM.
+            let units: Vec<u16> = raw
+                .chunks(2)
+                .filter(|c| c.len() == 2)
+                .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                .take_while(|&u| u != 0)
+                .collect();
+            String::from_utf16_lossy(&units)
+        }
+        // 0x00 = ISO-8859-1, 0x03 = UTF-8 — both read as UTF-8 lossy.
+        _ => String::from_utf8_lossy(raw)
+            .trim_end_matches('\0')
+            .to_string(),
+    };
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
 /// Parse a string as a year (1900-2099)
 fn parse_year(s: &str) -> Option<i32> {
     s.parse::<i32>()
@@ -730,20 +793,7 @@ fn extract_wav_metadata(path: &Path) -> Result<ExtractedMetadata> {
                 }
                 let fdata = &tag_data[pos + 10..pos + 10 + fsize];
 
-                let text_val = || -> Option<String> {
-                    if fdata.is_empty() {
-                        return None;
-                    }
-                    // First byte is encoding; rest is text. UTF-16 is handled lossily.
-                    let s = String::from_utf8_lossy(&fdata[1..])
-                        .trim_end_matches('\0')
-                        .to_string();
-                    if s.is_empty() {
-                        None
-                    } else {
-                        Some(s)
-                    }
-                };
+                let text_val = || decode_id3_text(fdata);
 
                 match fid {
                     b"TIT2" => title = text_val(),
@@ -977,30 +1027,8 @@ fn extract_dsd_metadata(path: &Path) -> Result<ExtractedMetadata> {
                                 }
                                 let fdata = &tag_data[pos + 10..pos + 10 + fsize];
 
-                                // Text frames: first byte is encoding, rest is text
-                                let text_val = || -> Option<String> {
-                                    if fdata.is_empty() {
-                                        return None;
-                                    }
-                                    let encoding = fdata[0];
-                                    let raw = &fdata[1..];
-                                    let s = if encoding == 0 || encoding == 3 {
-                                        // ISO-8859-1 or UTF-8
-                                        String::from_utf8_lossy(raw)
-                                            .trim_end_matches('\0')
-                                            .to_string()
-                                    } else {
-                                        // UTF-16 — simplified
-                                        String::from_utf8_lossy(raw)
-                                            .trim_end_matches('\0')
-                                            .to_string()
-                                    };
-                                    if s.is_empty() {
-                                        None
-                                    } else {
-                                        Some(s)
-                                    }
-                                };
+                                // Text frames: first byte is encoding, rest is text.
+                                let text_val = || decode_id3_text(fdata);
 
                                 match fid {
                                     b"TIT2" => title = text_val(),

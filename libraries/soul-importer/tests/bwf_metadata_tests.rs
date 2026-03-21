@@ -33,6 +33,45 @@ fn fmt_chunk(sample_rate: u32, channels: u16, bits_per_sample: u16) -> Vec<u8> {
     data
 }
 
+/// Build an ID3v2.3 text frame with UTF-16 LE encoding (encoding byte = 0x01, BOM included).
+fn id3_frame_utf16(id: &[u8; 4], text: &str) -> Vec<u8> {
+    let mut payload: Vec<u8> = vec![0x01]; // encoding = UTF-16
+                                           // Write BOM (LE)
+    payload.extend_from_slice(&[0xFF, 0xFE]);
+    // Encode as UTF-16 LE
+    for c in text.encode_utf16() {
+        payload.extend_from_slice(&c.to_le_bytes());
+    }
+    // Null terminator
+    payload.extend_from_slice(&[0x00, 0x00]);
+    let size = payload.len() as u32;
+    let mut frame = Vec::new();
+    frame.extend_from_slice(id);
+    frame.extend_from_slice(&size.to_be_bytes());
+    frame.extend_from_slice(&[0u8, 0u8]); // flags
+    frame.extend_from_slice(&payload);
+    frame
+}
+
+/// Build a minimal ID3v2.3 tag with UTF-16 encoded title and artist.
+fn minimal_id3_utf16(title: &str, artist: &str) -> Vec<u8> {
+    let mut frames = id3_frame_utf16(b"TIT2", title);
+    frames.extend(id3_frame_utf16(b"TPE1", artist));
+    let tag_size = frames.len() as u32;
+    let s0 = ((tag_size >> 21) & 0x7F) as u8;
+    let s1 = ((tag_size >> 14) & 0x7F) as u8;
+    let s2 = ((tag_size >> 7) & 0x7F) as u8;
+    let s3 = (tag_size & 0x7F) as u8;
+    let mut tag = Vec::new();
+    tag.extend_from_slice(b"ID3");
+    tag.push(3);
+    tag.push(0);
+    tag.push(0);
+    tag.extend_from_slice(&[s0, s1, s2, s3]);
+    tag.extend_from_slice(&frames);
+    tag
+}
+
 /// Build a minimal ID3v2.3 tag containing title and artist.
 fn minimal_id3(title: &str, artist: &str) -> Vec<u8> {
     fn id3_frame(id: &[u8; 4], text: &str) -> Vec<u8> {
@@ -224,5 +263,43 @@ fn bwf_wav_truncated_fmt_returns_error() {
         result.is_err(),
         "truncated fmt should return Err, got {:?}",
         result
+    );
+}
+
+#[test]
+fn bwf_wav_utf16_id3_tags_decoded_correctly() {
+    // Osaki Seiichi uses UTF-16 LE ID3v2 tags inside BWF WAV files.
+    // Previously these were read as raw bytes → garbled null-padded strings.
+    let title = "Moving From The Beaming Sun";
+    let artist = "Osaki Seiichi";
+
+    // Build a WAV with UTF-16 encoded ID3 tags
+    let fmt = riff_chunk(b"fmt ", &fmt_chunk(44100, 2, 16));
+    let data = riff_chunk(b"data", &vec![0u8; 44100 * 2 * 2]); // 1 second
+    let id3 = riff_chunk(b"id3 ", &minimal_id3_utf16(title, artist));
+
+    let mut riff_body = Vec::new();
+    riff_body.extend_from_slice(b"WAVE");
+    riff_body.extend_from_slice(&fmt);
+    riff_body.extend_from_slice(&data);
+    riff_body.extend_from_slice(&id3);
+
+    let mut wav = b"RIFF".to_vec();
+    wav.extend_from_slice(&(riff_body.len() as u32).to_le_bytes());
+    wav.extend_from_slice(&riff_body);
+
+    let f = write_wav_file(&wav);
+    let meta = extract_metadata(f.path()).unwrap();
+
+    assert_eq!(
+        meta.title.as_deref(),
+        Some(title),
+        "UTF-16 title should decode correctly, got {:?}",
+        meta.title
+    );
+    assert!(
+        meta.artists.iter().any(|a| a == artist),
+        "UTF-16 artist should decode correctly, got {:?}",
+        meta.artists
     );
 }
