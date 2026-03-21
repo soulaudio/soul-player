@@ -351,7 +351,7 @@ fn decode_loop(
                         f.reset();
                     }
                     if let Some(ref mut r) = resampler {
-                        let _ = r.reset();
+                        r.reset();
                     }
                     input_buf.clear();
                     chunk_filled = 0;
@@ -406,30 +406,27 @@ fn decode_loop(
                     );
                     shared.is_eof.store(true, Ordering::Release);
                     // Park until Stop or a seek-to-restart.
-                    loop {
-                        match cmd_rx.recv() {
-                            Err(_) | Ok(DsdCommand::Stop) => return,
-                            Ok(DsdCommand::Seek(pos)) => {
-                                shared.is_eof.store(false, Ordering::Release);
-                                let target = (pos.as_secs_f64() * dsd_rate as f64) as u64;
-                                let _ = container.seek(target);
-                                for f in &mut filters {
-                                    f.reset();
-                                }
-                                if let Some(ref mut r) = resampler {
-                                    let _ = r.reset();
-                                }
-                                input_buf.clear();
-                                let seek_output_samples = (pos.as_secs_f64()
-                                    * target_sample_rate as f64
-                                    * channels as f64)
-                                    as usize;
-                                shared
-                                    .samples_produced
-                                    .store(seek_output_samples, Ordering::Release);
-                                shared.generation.fetch_add(1, Ordering::Release);
-                                continue 'outer;
+                    match cmd_rx.recv() {
+                        Err(_) | Ok(DsdCommand::Stop) => return,
+                        Ok(DsdCommand::Seek(pos)) => {
+                            shared.is_eof.store(false, Ordering::Release);
+                            let target = (pos.as_secs_f64() * dsd_rate as f64) as u64;
+                            let _ = container.seek(target);
+                            for f in &mut filters {
+                                f.reset();
                             }
+                            if let Some(ref mut r) = resampler {
+                                r.reset();
+                            }
+                            input_buf.clear();
+                            let seek_output_samples =
+                                (pos.as_secs_f64() * target_sample_rate as f64 * channels as f64)
+                                    as usize;
+                            shared
+                                .samples_produced
+                                .store(seek_output_samples, Ordering::Release);
+                            shared.generation.fetch_add(1, Ordering::Release);
+                            continue 'outer;
                         }
                     }
                 }
