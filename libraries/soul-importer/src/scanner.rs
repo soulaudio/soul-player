@@ -1,6 +1,7 @@
 //! File scanning for audio files
 
 use crate::{ImportError, Result};
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -137,25 +138,72 @@ impl FileScanner {
             }
         }
 
-        for dir in &directories {
-            let dir_str = dir.display().to_string();
+        // Phase 0 (parallel): stat all directories and enumerate audio files.
+        // Each tuple: (dir, dir_mtime, audio_files_in_dir)
+        // Using par_iter() so syscalls on hundreds of directories run concurrently
+        // rather than sequentially — typically 2-4x faster on I/O-bound workloads.
+        let stat_results: Vec<(PathBuf, i64, Vec<PathBuf>)> = directories
+            .par_iter()
+            .filter_map(|dir| {
+                let dir_mtime = match std::fs::metadata(dir) {
+                    Ok(m) => m
+                        .modified()
+                        .map(|t| {
+                            t.duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis() as i64)
+                                .unwrap_or(0)
+                        })
+                        .unwrap_or(0),
+                    Err(e) => {
+                        tracing::warn!("Failed to stat directory {:?}: {}", dir, e);
+                        return None;
+                    }
+                };
 
-            // Get directory mtime (millisecond precision to detect rapid changes in tests
-            // and real-world scenarios where files are added within the same second).
-            let dir_mtime = match std::fs::metadata(dir) {
-                Ok(m) => m
-                    .modified()
-                    .map(|t| {
-                        t.duration_since(std::time::UNIX_EPOCH)
-                            .map(|d| d.as_millis() as i64)
-                            .unwrap_or(0)
-                    })
-                    .unwrap_or(0),
-                Err(e) => {
-                    tracing::warn!("Failed to stat directory {:?}: {}", dir, e);
-                    continue;
-                }
-            };
+                // Enumerate audio files in this directory (non-recursive).
+                // Collecting paths here avoids a second read_dir pass in the
+                // sequential phase for changed directories.
+                let audio_files: Vec<PathBuf> = match std::fs::read_dir(dir) {
+                    Ok(entries) => entries
+                        .filter_map(|e| e.ok())
+                        .filter_map(|e| {
+                            let p = e.path();
+                            if !p.is_file() {
+                                return None;
+                            }
+                            // Skip macOS metadata files
+                            if let Some(filename) = p.file_name() {
+                                let filename_str = filename.to_string_lossy();
+                                if filename_str.starts_with("._")
+                                    || filename_str == ".DS_Store"
+                                    || filename_str == ".localized"
+                                    || filename_str == "Icon\r"
+                                {
+                                    return None;
+                                }
+                            }
+                            if is_audio_file(&p) {
+                                Some(p)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect(),
+                    Err(e) => {
+                        tracing::warn!("Failed to read directory {:?}: {}", dir, e);
+                        vec![]
+                    }
+                };
+
+                Some((dir.clone(), dir_mtime, audio_files))
+            })
+            .collect();
+
+        // Phase 0 (sequential): decide changed/unchanged for each directory.
+        // All filesystem I/O is done above; this loop is pure logic + Vec pushes.
+        for (dir, dir_mtime, audio_files) in stat_results {
+            let dir_str = dir.display().to_string();
+            let actual_count = audio_files.len() as i64;
 
             // Check if directory has changed
             if let Some(stored) = stored_dirs.get(&dir_str) {
@@ -163,19 +211,6 @@ impl FileScanner {
                     // Mtime unchanged — quick-verify entry count as a safety check.
                     // On NTFS, rapid file additions within the same second may not
                     // update directory mtime. Counting entries is cheap (no per-file stat).
-                    let actual_count = std::fs::read_dir(dir)
-                        .map(|entries| {
-                            entries
-                                .filter_map(|e| e.ok())
-                                .filter(|e| {
-                                    // Use file_type() from DirEntry — avoids stat() syscall
-                                    e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
-                                        && is_audio_file(&e.path())
-                                })
-                                .count() as i64
-                        })
-                        .unwrap_or(0);
-
                     if actual_count == stored.file_count {
                         // Truly unchanged — skip. No file paths collected here;
                         // caller populates seen_paths from DB existing tracks.
@@ -198,36 +233,9 @@ impl FileScanner {
                 }
             }
 
-            // Changed or new directory — list audio files (non-recursive)
-            let mut file_count: i64 = 0;
-            match std::fs::read_dir(dir) {
-                Ok(entries) => {
-                    for entry in entries.filter_map(|e| e.ok()) {
-                        let entry_path = entry.path();
-                        if !entry_path.is_file() {
-                            continue;
-                        }
-                        // Skip macOS metadata files
-                        if let Some(filename) = entry_path.file_name() {
-                            let filename_str = filename.to_string_lossy();
-                            if filename_str.starts_with("._")
-                                || filename_str == ".DS_Store"
-                                || filename_str == ".localized"
-                                || filename_str == "Icon\r"
-                            {
-                                continue;
-                            }
-                        }
-                        if is_audio_file(&entry_path) {
-                            changed_files.push(entry_path);
-                            file_count += 1;
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to read directory {:?}: {}", dir, e);
-                }
-            }
+            // Changed or new directory — use the already-collected audio files
+            let file_count = actual_count;
+            changed_files.extend(audio_files);
 
             scanned_dirs.push(ScannedDirInfo {
                 path: dir_str,
