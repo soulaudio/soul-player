@@ -61,7 +61,12 @@ impl LibraryScanner {
             compute_hashes: true,
             progress_callback: None,
             metadata_extractor: MetadataExtractor::new(),
-            concurrency: 8,
+            concurrency: {
+                let cpus = std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(4);
+                (cpus * 2).min(64)
+            },
         }
     }
 
@@ -75,6 +80,11 @@ impl LibraryScanner {
     pub fn concurrency(mut self, max: usize) -> Self {
         self.concurrency = max.max(1);
         self
+    }
+
+    /// Returns the current concurrency limit (for testing).
+    pub fn concurrency_limit(&self) -> usize {
+        self.concurrency
     }
 
     /// Set progress callback
@@ -413,8 +423,8 @@ impl LibraryScanner {
 
                     total_phase2_processed += 1;
 
-                    // Flush progress every 10 files
-                    if total_phase2_processed % 10 == 0 {
+                    // Flush progress every 100 files
+                    if total_phase2_processed % 100 == 0 {
                         self.flush_progress(
                             progress.id,
                             &mut batch_processed,
@@ -445,7 +455,7 @@ impl LibraryScanner {
 
             total_phase2_processed += 1;
 
-            if total_phase2_processed % 10 == 0 && total_phase2_processed < files_to_process_len {
+            if total_phase2_processed % 100 == 0 && total_phase2_processed < files_to_process_len {
                 self.flush_progress(
                     progress.id,
                     &mut batch_processed,

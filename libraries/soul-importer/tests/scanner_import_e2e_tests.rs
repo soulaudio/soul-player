@@ -2573,3 +2573,65 @@ async fn test_sibling_folder_albums_same_title_not_merged() {
         hits_albums.iter().map(|a| &a.folder_path).collect::<Vec<_>>()
     );
 }
+
+// =============================================================================
+// Task 7: Auto-scale concurrency + batch flush 100
+// =============================================================================
+
+#[tokio::test]
+async fn test_scan_auto_concurrency_respects_cap() {
+    use soul_importer::library_scanner::LibraryScanner;
+    let pool = test_helpers::setup_test_db().await;
+    let scanner = LibraryScanner::new(pool, "user1", "device1");
+    assert!(
+        scanner.concurrency_limit() <= 64,
+        "default concurrency must be <= 64, got {}",
+        scanner.concurrency_limit()
+    );
+    // Must be at least 1
+    assert!(
+        scanner.concurrency_limit() >= 1,
+        "default concurrency must be >= 1, got {}",
+        scanner.concurrency_limit()
+    );
+}
+
+#[tokio::test]
+async fn test_scan_batch_size_100_all_tracks_imported() {
+    let pool = test_helpers::setup_test_db().await;
+    let dir = TempDir::new().unwrap();
+
+    // Create 110 files across 110 directories to trigger multiple batch flushes
+    for i in 0..110u32 {
+        let sub = dir.path().join(format!("artist_{:03}", i));
+        fs::create_dir_all(&sub).unwrap();
+        create_flac(
+            &sub,
+            "track.flac",
+            &Tags {
+                title: &format!("Batch Track {}", i),
+                artist: &format!("Artist {}", i),
+                album_artist: None,
+                album: &format!("Album {}", i),
+                track_number: Some(1),
+                track_total: None,
+            },
+            (i % 256) as u8,
+        );
+    }
+
+    let stats = scan_dir(&pool, dir.path()).await;
+
+    assert_eq!(
+        stats.new_files, 110,
+        "expected 110 new files, got {}",
+        stats.new_files
+    );
+    assert_eq!(stats.errors, 0);
+
+    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE is_available = 1")
+        .fetch_one(&pool)
+        .await
+        .expect("count tracks query");
+    assert_eq!(count, 110, "expected 110 tracks in DB, got {}", count);
+}
