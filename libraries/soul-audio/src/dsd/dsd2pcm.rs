@@ -34,27 +34,27 @@ const FIR_TAPS: usize = 96;
 /// released into the public domain) and is well-tested for DSD64 playback quality.
 #[rustfmt::skip]
 static FIR: [f64; FIR_TAPS] = [
-     0.09712270e-3,  0.20983975e-3,  0.26019908e-3,  0.15116659e-3,
-    -0.13468918e-3, -0.55244173e-3, -0.98816539e-3, -0.12618824e-2,
-    -0.11622493e-2, -0.62009880e-3,  0.34761011e-3,  0.15810764e-2,
-     0.27869816e-2,  0.33737032e-2,  0.28894928e-2,  0.12038749e-2,
-    -0.14777073e-2, -0.41861614e-2, -0.65867729e-2, -0.75219003e-2,
-    -0.60048451e-2, -0.19723699e-2,  0.39578564e-2,  0.10578943e-1,
-     0.16015003e-1,  0.18034637e-1,  0.14267756e-1,  0.38497498e-2,
-    -0.10905956e-1, -0.27928580e-1, -0.43498901e-1, -0.53052773e-1,
-    -0.51765988e-1, -0.36243936e-1, -0.64756748e-2,  0.42148618e-1,
-     0.10724680e+0,  0.17809640e+0,  0.24710000e+0,  0.30196200e+0,
-     0.33000000e+0,  0.33000000e+0,  0.30196200e+0,  0.24710000e+0,
-     0.17809640e+0,  0.10724680e+0,  0.42148618e-1, -0.64756748e-2,
-    -0.36243936e-1, -0.51765988e-1, -0.53052773e-1, -0.43498901e-1,
-    -0.27928580e-1, -0.10905956e-1,  0.38497498e-2,  0.14267756e-1,
-     0.18034637e-1,  0.16015003e-1,  0.10578943e-1,  0.39578564e-2,
-    -0.19723699e-2, -0.60048451e-2, -0.75219003e-2, -0.65867729e-2,
-    -0.41861614e-2, -0.14777073e-2,  0.12038749e-2,  0.28894928e-2,
-     0.33737032e-2,  0.27869816e-2,  0.15810764e-2,  0.34761011e-3,
-    -0.62009880e-3, -0.11622493e-2, -0.12618824e-2, -0.98816539e-3,
-    -0.55244173e-3, -0.13468918e-3,  0.15116659e-3,  0.26019908e-3,
-     0.20983975e-3,  0.09712270e-3,  0.00000000e+0,  0.00000000e+0,
+     0.04856135e-3,  0.10491988e-3,  0.13009954e-3,  0.07558330e-3,
+    -0.06734459e-3, -0.27622087e-3, -0.49408270e-3, -0.63094120e-3,
+    -0.58112465e-3, -0.31004940e-3,  0.17380506e-3,  0.79053820e-3,
+     0.13934908e-2,  0.16868516e-2,  0.14447464e-2,  0.60193745e-3,
+    -0.73885365e-3, -0.20930807e-2, -0.32933865e-2, -0.37609502e-2,
+    -0.30024226e-2, -0.98618495e-3,  0.19789282e-2,  0.52894715e-2,
+     0.80075015e-2,  0.90173185e-2,  0.71338780e-2,  0.19248749e-2,
+    -0.54529780e-2, -0.13964290e-1, -0.21749451e-1, -0.26526387e-1,
+    -0.25882994e-1, -0.18121968e-1, -0.32378374e-2,  0.21074309e-1,
+     0.53623400e-1,  0.89048200e-1,  0.12355000e+0,  0.15098100e+0,
+     0.16500000e+0,  0.16500000e+0,  0.15098100e+0,  0.12355000e+0,
+     0.89048200e-1,  0.53623400e-1,  0.21074309e-1, -0.32378374e-2,
+    -0.18121968e-1, -0.25882994e-1, -0.26526387e-1, -0.21749451e-1,
+    -0.13964290e-1, -0.54529780e-2,  0.19248749e-2,  0.71338780e-2,
+     0.90173185e-2,  0.80075015e-2,  0.52894715e-2,  0.19789282e-2,
+    -0.98618495e-3, -0.30024226e-2, -0.37609502e-2, -0.32933865e-2,
+    -0.20930807e-2, -0.73885365e-3,  0.60193745e-3,  0.14447464e-2,
+     0.16868516e-2,  0.13934908e-2,  0.79053820e-3,  0.17380506e-3,
+    -0.31004940e-3, -0.58112465e-3, -0.63094120e-3, -0.49408270e-3,
+    -0.27622087e-3, -0.06734459e-3,  0.07558330e-3,  0.13009954e-3,
+     0.10491988e-3,  0.04856135e-3,  0.00000000e+0,  0.00000000e+0,
      0.00000000e+0,  0.00000000e+0,  0.00000000e+0,  0.00000000e+0,
      0.00000000e+0,  0.00000000e+0,  0.00000000e+0,  0.00000000e+0,
      0.00000000e+0,  0.00000000e+0,  0.00000000e+0,  0.00000000e+0,
@@ -268,5 +268,60 @@ mod tests {
             last < 0.0,
             "all-zeros DSD should produce negative output, got {last}"
         );
+    }
+
+    #[test]
+    fn dsd2pcm_all_ones_steady_state_within_unity() {
+        // 0xFF = all 1-bits = DSD positive DC. After filter warms up, output must be ≤ 1.05.
+        let mut f = Dsd2Pcm::new();
+        let warmup = vec![0xFFu8; FIR_TAPS / 8 + 8]; // enough to fill the ring buffer
+        let mut out = vec![0.0f32; warmup.len()];
+        f.translate(&warmup, &mut out, true);
+        let last = *out.last().unwrap();
+        assert!(
+            last <= 1.05,
+            "all-ones DSD steady-state must be ≤ 1.05, got {last}"
+        );
+    }
+
+    #[test]
+    fn dsd2pcm_all_zeros_steady_state_within_neg_unity() {
+        let mut f = Dsd2Pcm::new();
+        let warmup = vec![0x00u8; FIR_TAPS / 8 + 8];
+        let mut out = vec![0.0f32; warmup.len()];
+        f.translate(&warmup, &mut out, false);
+        let last = *out.last().unwrap();
+        assert!(
+            last >= -1.05,
+            "all-zeros DSD steady-state must be ≥ -1.05, got {last}"
+        );
+    }
+
+    #[test]
+    fn dsd2pcm_dc_gain_approximately_one() {
+        // Steady-state DC output for all-ones input must be close to 1.0 (not ~2.0).
+        let mut f = Dsd2Pcm::new();
+        let input = vec![0xFFu8; FIR_TAPS / 8 + 32];
+        let mut out = vec![0.0f32; input.len()];
+        f.translate(&input, &mut out, true);
+        let last = *out.last().unwrap();
+        assert!(
+            (last - 1.0).abs() < 0.05,
+            "DC gain must be ≈1.0, got {last}"
+        );
+    }
+
+    #[test]
+    fn dsd2pcm_peak_output_bounded_within_unit_range() {
+        // Run 1024 arbitrary bytes through the filter; no sample must exceed ±1.3.
+        // Peak ripple from FIR filter can reach ~1.25 in worst case.
+        let mut f = Dsd2Pcm::new();
+        // Use pseudo-random but deterministic pattern
+        let input: Vec<u8> = (0u8..=255).cycle().take(1024).collect();
+        let mut out = vec![0.0f32; 1024];
+        f.translate(&input, &mut out, true);
+        for (i, &s) in out.iter().enumerate() {
+            assert!(s.abs() <= 1.3, "sample {i} = {s} exceeds ±1.3");
+        }
     }
 }
