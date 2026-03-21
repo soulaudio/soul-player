@@ -13,7 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   testDir: './tests/playwright',
-  testMatch: '{prod-library-screenshots,dsd-audio-quality}.spec.js',
+  testMatch: '{prod-library-screenshots,dsd-audio-quality,dsd-format-comparison,dsd-playback-ui}.spec.js',
   fullyParallel: false,
   workers: 1,
   retries: 0,
