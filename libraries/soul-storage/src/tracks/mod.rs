@@ -75,8 +75,9 @@ pub async fn get_all(
 ) -> Result<Vec<Track>> {
     let start = std::time::Instant::now();
 
-    // Default limit to 1000 if not specified
-    let limit = limit.unwrap_or(1000);
+    // Default limit: no cap (i64::MAX) so the Tracks page shows all tracks.
+    // Callers that want pagination pass an explicit limit.
+    let limit = limit.unwrap_or(i64::MAX);
     let after_id_int: Option<i64> = after_id.as_ref().and_then(|id| id.parse::<i64>().ok());
 
     // Optimized: Single query with LEFT JOIN to fetch tracks, artists, albums, and availability
