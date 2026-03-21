@@ -451,7 +451,7 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
             );
             usePlayerStore.setState({
               currentTrack: track,
-              duration: track.duration || matchedQueueTrack?.duration || 0,
+              duration: track.duration ?? matchedQueueTrack?.duration ?? 0,
               progress: 0,
               ...(newIndex >= 0 ? { queueIndex: newIndex } : {}),
             });
@@ -725,7 +725,13 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           coverArtPath: qt.coverArtPath,
           addedAt: new Date().toISOString(),
         }));
-        usePlayerStore.setState({ queue: tracks, queueIndex: startIndex });
+        usePlayerStore.setState({
+          queue: tracks,
+          queueIndex: startIndex,
+          isPlaying: true,
+          currentTrack: tracks[startIndex] ?? null,
+          duration: tracks[startIndex]?.duration ?? 0,
+        });
       },
 
       async skipToQueueIndex(index: number) {
