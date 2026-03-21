@@ -3699,7 +3699,7 @@ mod tests {
         let command = PlaybackCommand::ActivateSource { source, track: t1 };
 
         let mut load_requested = true;
-        DesktopPlayback::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
+        let _ = DesktopPlayback::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
 
         // Also drain manager's pending_events (activate_source puts StateChanged+TrackChanged there)
         DesktopPlayback::forward_manager_events(
