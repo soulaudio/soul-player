@@ -77,7 +77,7 @@ impl DsdMeta {
 // ── DSF container ─────────────────────────────────────────────────────────────
 
 /// DSF block size — fixed by the DSF specification.
-const DSF_BLOCK_SIZE: usize = 4096;
+pub const DSF_BLOCK_SIZE: usize = 4096;
 
 /// DSF container reader.
 ///

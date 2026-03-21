@@ -223,7 +223,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
       }
 
       if (audioFiles.length > 0) {
-        type FileMeta = { filePath: string; title: string | null; artist: string | null; album: string | null; durationSeconds: number | null; trackNumber: number | null };
+        type FileMeta = { filePath: string; title: string | null; artist: string | null; album: string | null; durationSeconds: number | null; trackNumber: number | null; coverArtDataUrl?: string | null };
         const metaList = await invoke<FileMeta[]>('get_metadata_for_paths', { paths: audioFiles });
 
         const tracks = metaList.map((meta, index) => {
@@ -237,7 +237,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
             filePath: meta.filePath,
             durationSeconds: meta.durationSeconds ?? null,
             trackNumber: meta.trackNumber ?? null,
-            coverArtPath: undefined,
+            coverArtPath: meta.coverArtDataUrl ?? undefined,
           };
         });
 

@@ -652,6 +652,30 @@ pub struct FileMetadata {
     pub album: Option<String>,
     pub duration_seconds: Option<f64>,
     pub track_number: Option<u32>,
+    /// Embedded cover art encoded as a `data:<mime>;base64,<data>` URL, if present.
+    pub cover_art_data_url: Option<String>,
+}
+
+/// Convert `ExtractedMetadata` to `FileMetadata`, encoding cover art as a data URL.
+///
+/// Extracted so it can be unit-tested without spawning a blocking task.
+fn map_extracted_to_file_metadata(
+    file_path: String,
+    meta: soul_importer::metadata::ExtractedMetadata,
+) -> FileMetadata {
+    let cover_art_data_url = meta.album_art.map(|(data, mime)| {
+        let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+        format!("data:{mime};base64,{encoded}")
+    });
+    FileMetadata {
+        file_path,
+        title: meta.title,
+        artist: meta.artists.into_iter().next(),
+        album: meta.album,
+        duration_seconds: meta.duration_seconds,
+        track_number: meta.track_number,
+        cover_art_data_url,
+    }
 }
 
 /// Read tag metadata for a list of file paths (used when playing dropped files)
@@ -663,14 +687,7 @@ pub async fn get_metadata_for_paths(paths: Vec<String>) -> Result<Vec<FileMetada
             .map(|path_str| {
                 let path = std::path::Path::new(&path_str);
                 match soul_importer::metadata::extract_metadata(path) {
-                    Ok(meta) => FileMetadata {
-                        file_path: path_str,
-                        title: meta.title,
-                        artist: meta.artists.into_iter().next(),
-                        album: meta.album,
-                        duration_seconds: meta.duration_seconds,
-                        track_number: meta.track_number,
-                    },
+                    Ok(meta) => map_extracted_to_file_metadata(path_str, meta),
                     Err(_) => FileMetadata {
                         file_path: path_str,
                         title: None,
@@ -678,6 +695,7 @@ pub async fn get_metadata_for_paths(paths: Vec<String>) -> Result<Vec<FileMetada
                         album: None,
                         duration_seconds: None,
                         track_number: None,
+                        cover_art_data_url: None,
                     },
                 }
             })
@@ -685,6 +703,91 @@ pub async fn get_metadata_for_paths(paths: Vec<String>) -> Result<Vec<FileMetada
     })
     .await
     .map_err(|e| format!("Metadata task failed: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soul_importer::metadata::ExtractedMetadata;
+
+    fn make_meta(album_art: Option<(Vec<u8>, String)>) -> ExtractedMetadata {
+        ExtractedMetadata {
+            title: Some("Test Track".to_string()),
+            artists: vec!["Test Artist".to_string()],
+            album: Some("Test Album".to_string()),
+            album_artist: None,
+            track_number: Some(1),
+            disc_number: None,
+            year: None,
+            genres: vec![],
+            duration_seconds: Some(180.0),
+            bitrate: None,
+            sample_rate: None,
+            channels: None,
+            file_format: "mp3".to_string(),
+            musicbrainz_recording_id: None,
+            composer: None,
+            album_art,
+        }
+    }
+
+    /// RED → GREEN: cover art is encoded as a data URL when present in metadata.
+    ///
+    /// Before this fix, `get_metadata_for_paths` dropped the `album_art` field from
+    /// `ExtractedMetadata` entirely — `FileMetadata` had no `cover_art_data_url` field.
+    /// The frontend always received `coverArtPath: undefined` for dropped files.
+    #[test]
+    fn map_extracted_encodes_cover_art_as_data_url() {
+        let art_bytes = vec![0xFF_u8, 0xD8, 0xFF]; // minimal JPEG magic bytes
+        let meta = make_meta(Some((art_bytes.clone(), "image/jpeg".to_string())));
+
+        let result = map_extracted_to_file_metadata("test.mp3".to_string(), meta);
+
+        let expected_b64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &art_bytes);
+        assert_eq!(
+            result.cover_art_data_url,
+            Some(format!("data:image/jpeg;base64,{expected_b64}")),
+            "cover_art_data_url must be a data URI with correct MIME and base64 payload"
+        );
+    }
+
+    /// When no embedded art is present, `cover_art_data_url` must be `None`.
+    #[test]
+    fn map_extracted_returns_none_cover_art_when_absent() {
+        let meta = make_meta(None);
+        let result = map_extracted_to_file_metadata("test.mp3".to_string(), meta);
+        assert!(
+            result.cover_art_data_url.is_none(),
+            "cover_art_data_url must be None when ExtractedMetadata.album_art is None"
+        );
+    }
+
+    /// PNG MIME type is preserved verbatim (not forced to image/jpeg).
+    #[test]
+    fn map_extracted_preserves_mime_type_for_png_art() {
+        let art_bytes = vec![0x89_u8, 0x50, 0x4E, 0x47]; // PNG header
+        let meta = make_meta(Some((art_bytes.clone(), "image/png".to_string())));
+        let result = map_extracted_to_file_metadata("track.flac".to_string(), meta);
+        let url = result.cover_art_data_url.expect("should have cover art");
+        assert!(
+            url.starts_with("data:image/png;base64,"),
+            "MIME type must be image/png, got: {url}"
+        );
+    }
+
+    /// Standard metadata fields are forwarded unchanged.
+    #[test]
+    fn map_extracted_forwards_title_artist_album_duration() {
+        let meta = make_meta(None);
+        let result = map_extracted_to_file_metadata("/music/track.mp3".to_string(), meta);
+        assert_eq!(result.title, Some("Test Track".to_string()));
+        assert_eq!(result.artist, Some("Test Artist".to_string()));
+        assert_eq!(result.album, Some("Test Album".to_string()));
+        assert_eq!(result.duration_seconds, Some(180.0));
+        assert_eq!(result.track_number, Some(1));
+        assert_eq!(result.file_path, "/music/track.mp3");
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
