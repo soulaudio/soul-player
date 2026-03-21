@@ -312,6 +312,65 @@ fn bench_progress_updates(c: &mut Criterion) {
 }
 
 // ---------------------------------------------------------------------------
+// 6. Phase-0 parallel vs sequential stat benchmarks
+// ---------------------------------------------------------------------------
+
+fn bench_phase0_parallel_vs_sequential(c: &mut Criterion) {
+    use std::fs;
+    use tempfile::TempDir;
+
+    // Create 500 directories (enough to show parallelism benefit)
+    let dir = TempDir::new().unwrap();
+    let dirs: Vec<std::path::PathBuf> = (0..500)
+        .map(|i| {
+            let p = dir.path().join(format!("dir_{:05}", i));
+            fs::create_dir_all(&p).unwrap();
+            p
+        })
+        .collect();
+
+    let mut group = c.benchmark_group("phase0_stat");
+    group.sample_size(10);
+
+    group.bench_function("sequential_500_dirs", |b| {
+        b.iter(|| {
+            let _results: Vec<i64> = dirs
+                .iter()
+                .map(|d| {
+                    fs::metadata(d)
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0)
+                })
+                .collect();
+        });
+    });
+
+    group.bench_function("parallel_rayon_500_dirs", |b| {
+        use rayon::prelude::*;
+        b.iter(|| {
+            let _results: Vec<i64> = dirs
+                .par_iter()
+                .map(|d| {
+                    fs::metadata(d)
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0)
+                })
+                .collect();
+        });
+    });
+
+    group.finish();
+}
+
+criterion_group!(perf_benches, bench_phase0_parallel_vs_sequential);
+
+// ---------------------------------------------------------------------------
 // Criterion harness
 // ---------------------------------------------------------------------------
 
@@ -323,4 +382,4 @@ criterion_group!(
     bench_db_writes,
     bench_progress_updates,
 );
-criterion_main!(benches);
+criterion_main!(benches, perf_benches);

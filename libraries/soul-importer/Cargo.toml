@@ -40,6 +40,9 @@ lofty = { workspace = true }
 # Random ID generation
 rand = "0.8"
 
+# Parallel iteration
+rayon = "1"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tempfile = "3.8"

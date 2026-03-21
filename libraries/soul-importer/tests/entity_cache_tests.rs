@@ -183,13 +183,15 @@ async fn test_entity_cache_albums_scoped_by_artist() {
     assert_ne!(result1.entity.id, result2.entity.id);
 }
 
-/// Same artist/title in different folders → same album (metadata-based matching).
+/// Same artist/title in sibling folders at the same depth → separate albums.
 ///
-/// The album cache is keyed by (normalized_title, artist_id) — folder_path is NOT part
-/// of the cache key. This means disc folders (disc1/, disc2/) containing tracks from
-/// the same album are correctly merged into a single album record, rather than creating
-/// one record per folder. The folder_path is still stored in the DB on creation, but
-/// it does not influence the lookup key.
+/// Two sibling folders (neither is a subfolder of the other) that happen to share
+/// the same title+artist must never be merged. Each folder gets its own album record.
+/// The only exception is when `are_discs_of_same_album` applies: siblings whose shared
+/// parent folder is named after the album (e.g. `.../Live Album/Disc 1` + `.../Live Album/Disc 2`).
+///
+/// `/music/disc1` and `/music/disc2` do NOT qualify as disc folders of the same album
+/// because their shared parent (`music`) is not named after the album title.
 #[tokio::test]
 async fn test_entity_cache_albums_same_artist_different_folders_same_album() {
     let pool = setup_test_db().await;
@@ -231,20 +233,20 @@ async fn test_entity_cache_albums_same_artist_different_folders_same_album() {
         .unwrap();
     assert_eq!(result1.match_type, MatchType::Exact);
 
-    // Same title + artist in folder2 → same album (folder is not part of the cache key)
-    // This is the correct behaviour: disc1/ and disc2/ tracks belong to the same album.
+    // Same title + artist in a sibling folder → separate album.
+    // disc1 and disc2 are at the same depth and share no album-named parent → must NOT merge.
     let result2 = matcher
         .find_or_create_album_cached(&pool, "Live Album", Some(artist.id), folder2, &mut cache)
         .await
         .unwrap();
-    assert_ne!(
+    assert_eq!(
         result2.match_type,
         MatchType::Created,
-        "Same title/artist in a different folder must reuse the existing album (disc folder merging)"
+        "Same-depth sibling folders must create a separate album, not merge"
     );
-    assert_eq!(
+    assert_ne!(
         result1.entity.id, result2.entity.id,
-        "Both disc folders must share the same album ID"
+        "Sibling folders must have different album IDs"
     );
 }
 

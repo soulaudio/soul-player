@@ -6886,6 +6886,7 @@ dependencies = [
  "notify 7.0.0",
  "notify-debouncer-full",
  "rand 0.8.5",
+ "rayon",
  "serde",
  "serde_json",
  "sha2",

@@ -422,52 +422,29 @@ impl FuzzyMatcher {
                     match_type,
                 });
             } else {
-                // Sibling folders: neither is a subfolder of the other, and they don't
-                // share a parent folder named after the album.
-                //
-                // Distinguish two sub-cases:
-                //   (a) Both basenames begin with the album title → they are independently
-                //       named album variants (e.g. "Hits 2020" / "Hits 2021") → separate albums.
-                //   (b) One or both basenames bear no relation to the title → generic disc /
-                //       utility folders (e.g. "disc1" / "disc2") → merge into the same album.
-                let stored_base = normalize_string(path_basename(&album.folder_path));
-                let new_base = normalize_string(path_basename(folder_path));
-                let both_named_as_album = stored_base.starts_with(&normalized_title)
-                    && new_base.starts_with(&normalized_title);
-
-                if both_named_as_album {
-                    // Each folder is explicitly named as a variant of the album → separate.
-                    // Do NOT update cache: the existing cache entry remains valid for the stored album.
-                    let new_album = soul_storage::albums::create(
-                        pool,
-                        CreateAlbum {
-                            title: title.to_string(),
-                            artist_id,
-                            year: None,
-                            musicbrainz_id: None,
-                            folder_path: folder_path.to_string(),
-                        },
-                    )
-                    .await?;
-                    return Ok(FuzzyMatch {
-                        entity: new_album,
-                        confidence: 100,
-                        match_type: MatchType::Created,
-                    });
-                } else {
-                    // Generic disc/utility folders → merge into the stored album.
-                    let confidence = if original_title == title { 100 } else { 95 };
-                    let match_type = if confidence == 100 {
-                        MatchType::Exact
-                    } else {
-                        MatchType::Normalized
-                    };
-                    return Ok(FuzzyMatch {
-                        entity: album,
-                        confidence,
-                        match_type,
-                    });
-                }
+                // Sibling folders: neither is a subfolder of the other and they don't share a
+                // parent folder named after the album. Always create a separate album.
+                // Examples: "Hits 2020" / "Hits 2021" (both named after album) OR
+                //           "disc1" / "disc2" (generic names unrelated to album title) —
+                //           in both cases they are independent albums that happen to share
+                //           the same title+artist tag.
+                // Do NOT update cache: the existing entry remains valid for the stored album.
+                let new_album = soul_storage::albums::create(
+                    pool,
+                    CreateAlbum {
+                        title: title.to_string(),
+                        artist_id,
+                        year: None,
+                        musicbrainz_id: None,
+                        folder_path: folder_path.to_string(),
+                    },
+                )
+                .await?;
+                return Ok(FuzzyMatch {
+                    entity: new_album,
+                    confidence: 100,
+                    match_type: MatchType::Created,
+                });
             }
         }
 
