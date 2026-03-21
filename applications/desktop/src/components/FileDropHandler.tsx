@@ -66,8 +66,9 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
       }
 
       if (files.length > 0) {
-        // Check if we should auto-handle based on saved preference
-        const settings = settingsRef.current;
+        // Always fetch fresh settings so external IPC changes (e.g. set_external_file_settings
+        // called by tests or settings page) are reflected immediately.
+        const settings = await invoke<ExternalFileSettings>('get_external_file_settings');
         if (settings && settings.defaultAction !== 'ask') {
           setDroppedFiles(files);
           if (settings.defaultAction === 'play') {
@@ -273,12 +274,10 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
 
     try {
       await invoke('set_external_file_settings', {
-        settings: {
-          defaultAction: action,
-          importDestination: settingsRef.current?.importDestination || 'managed',
-          importToSourceId: settingsRef.current?.importToSourceId || null,
-          showImportNotification: settingsRef.current?.showImportNotification ?? true,
-        },
+        defaultAction: action,
+        importDestination: settingsRef.current?.importDestination || 'managed',
+        importToSourceId: settingsRef.current?.importToSourceId || null,
+        showImportNotification: settingsRef.current?.showImportNotification ?? true,
       });
       // Update local ref
       if (settingsRef.current) {
@@ -338,7 +337,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
 
       {/* Import or Play dialog */}
       {showDialog && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={handleClose}>
+        <div data-testid="file-drop-dialog" className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={handleClose}>
           <div
             className="bg-background border rounded-xl shadow-2xl w-full max-w-md overflow-hidden"
             onClick={(e) => e.stopPropagation()}
@@ -347,6 +346,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
             <div className="flex items-center justify-between p-4 border-b">
               <h2 className="text-lg font-semibold">{t('import.fileDropped')}</h2>
               <button
+                data-testid="file-drop-close"
                 onClick={handleClose}
                 className="p-2 hover:bg-foreground/[var(--hover-bg-opacity)] rounded-full transition-colors duration-[var(--transition-duration)]"
                 disabled={loading}
@@ -360,7 +360,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
               {/* File info */}
               <div className="mb-6 p-4 bg-muted/30 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <div data-testid="file-drop-icon" className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                     {folderCount > 0 ? (
                       <FolderPlus className="w-5 h-5 text-primary" />
                     ) : (
@@ -368,12 +368,12 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">
+                    <p data-testid="file-drop-name" className="font-medium truncate">
                       {droppedFiles.length === 1
                         ? droppedFiles[0].name
                         : `${droppedFiles.length} ${t('common.items')}`}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p data-testid="file-drop-count" className="text-sm text-muted-foreground">
                       {folderCount > 0 && fileCount > 0 ? (
                         <>
                           {folderCount} {folderCount === 1 ? t('common.folder') : t('common.folders')},{' '}
@@ -396,6 +396,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
               {/* Actions */}
               <div className="space-y-3">
                 <button
+                  data-testid="file-drop-play"
                   onClick={handlePlay}
                   disabled={loading}
                   className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-primary bg-primary/5 hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
@@ -412,6 +413,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
                 </button>
 
                 <button
+                  data-testid="file-drop-import"
                   onClick={handleImport}
                   disabled={loading}
                   className="w-full flex items-center gap-3 p-4 rounded-lg border hover:border-primary hover:bg-foreground/[var(--hover-bg-opacity)] transition-colors duration-[var(--transition-duration)] disabled:opacity-[var(--disabled-opacity)]"
@@ -431,6 +433,7 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
               {/* Remember my choice */}
               <label className="flex items-center gap-2 mt-4 cursor-pointer select-none">
                 <button
+                  data-testid="file-drop-remember"
                   type="button"
                   onClick={() => setRememberChoice(!rememberChoice)}
                   className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${

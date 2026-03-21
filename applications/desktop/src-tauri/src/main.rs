@@ -42,7 +42,7 @@ use lazy_workers::{LazyAnalysisWorker, LazyFingerprintWorker, LazyImportManager,
 use playback_lazy::LazyPlaybackManager;
 use serde::{Deserialize, Serialize};
 use soul_playback::{lazy_queue::QueueContext, RepeatMode, ShuffleMode};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 // Playback session state for persistence
@@ -1926,15 +1926,29 @@ async fn scan_library(path: String) -> Result<(), String> {
 }
 
 // File association handler
-fn is_audio_path(path: &PathBuf) -> bool {
+fn is_audio_path(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| {
             matches!(
                 ext.to_lowercase().as_str(),
-                "mp3" | "flac" | "wav" | "ogg" | "oga" | "m4a" | "mp4" | "aac"
-                    | "opus" | "wma" | "aiff" | "aif" | "ape" | "wv"
-                    | "dsf" | "dff" | "dsdiff"
+                "mp3"
+                    | "flac"
+                    | "wav"
+                    | "ogg"
+                    | "oga"
+                    | "m4a"
+                    | "mp4"
+                    | "aac"
+                    | "opus"
+                    | "wma"
+                    | "aiff"
+                    | "aif"
+                    | "ape"
+                    | "wv"
+                    | "dsf"
+                    | "dff"
+                    | "dsdiff"
             )
         })
         .unwrap_or(false)
@@ -1943,7 +1957,7 @@ fn is_audio_path(path: &PathBuf) -> bool {
 fn filter_audio_paths(files: Vec<PathBuf>) -> Vec<String> {
     files
         .into_iter()
-        .filter(is_audio_path)
+        .filter(|p| is_audio_path(p))
         .filter_map(|p| p.to_str().map(String::from))
         .collect()
 }
@@ -1971,6 +1985,18 @@ fn handle_file_associations(app: AppHandle, files: Vec<PathBuf>) {
 async fn get_pending_open_files(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
     let mut pending = state.pending_open_files.lock().await;
     Ok(std::mem::take(&mut *pending))
+}
+
+/// Test helper: write paths directly into pending_open_files so E2E tests can verify
+/// the cold-launch drain path without restarting the binary.
+#[tauri::command]
+async fn test_set_pending_open_files(
+    paths: Vec<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let mut pending = state.pending_open_files.lock().await;
+    *pending = paths;
+    Ok(())
 }
 
 // Settings commands
@@ -3437,6 +3463,7 @@ fn main() {
             import::scan_directory_for_audio,
             import::get_metadata_for_paths,
             get_pending_open_files,
+            test_set_pending_open_files,
             // Sync/doctor
             sync::start_sync,
             sync::get_sync_status,
