@@ -347,3 +347,312 @@ async fn test_featuring_artist_tracks_share_same_album() {
         "The duplicate album must be distinct from the correct one"
     );
 }
+
+// ── Subfolder album merge tests ───────────────────────────────────────────────
+
+#[tokio::test]
+async fn subfolder_bsides_merges_into_parent_album() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    let artist = matcher
+        .find_or_create_artist_cached(&pool, "Tame Impala", &mut cache)
+        .await
+        .unwrap();
+    let aid = Some(artist.entity.id);
+
+    // Root album created first
+    let root = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Currents",
+            aid,
+            "/music/Tame Impala/Currents",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+
+    // B-Sides in subfolder — same title + artist
+    let bsides = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Currents",
+            aid,
+            "/music/Tame Impala/Currents/B-Sides",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+
+    // Must be the SAME album record
+    assert_eq!(
+        root.entity.id, bsides.entity.id,
+        "B-Sides should merge into parent album"
+    );
+}
+
+#[tokio::test]
+async fn subfolder_disc_two_merges_into_parent_album() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    let artist = matcher
+        .find_or_create_artist_cached(&pool, "Artist X", &mut cache)
+        .await
+        .unwrap();
+    let aid = Some(artist.entity.id);
+
+    let disc1 = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "The Album",
+            aid,
+            "/music/Artist X/The Album/Disc 1",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    let disc2 = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "The Album",
+            aid,
+            "/music/Artist X/The Album/Disc 2",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        disc1.entity.id, disc2.entity.id,
+        "Disc 2 must merge with Disc 1"
+    );
+}
+
+#[tokio::test]
+async fn subfolder_discovery_order_independent() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    let artist = matcher
+        .find_or_create_artist_cached(&pool, "Artist Y", &mut cache)
+        .await
+        .unwrap();
+    let aid = Some(artist.entity.id);
+
+    // Subfolder discovered BEFORE root
+    let extras = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Deep Blue",
+            aid,
+            "/music/Artist Y/Deep Blue/Extras",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    let root = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Deep Blue",
+            aid,
+            "/music/Artist Y/Deep Blue",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        root.entity.id, extras.entity.id,
+        "Root discovered after subfolder — must merge"
+    );
+}
+
+#[tokio::test]
+async fn subfolder_album_folder_path_set_to_parent() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    let artist = matcher
+        .find_or_create_artist_cached(&pool, "Artist Z", &mut cache)
+        .await
+        .unwrap();
+    let aid = Some(artist.entity.id);
+
+    // Subfolder first — creates album with subfolder path
+    matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Ocean",
+            aid,
+            "/music/Artist Z/Ocean/Extras",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    // Root second — should update the stored folder_path to the shorter (parent) path
+    let result = matcher
+        .find_or_create_album_cached(&pool, "Ocean", aid, "/music/Artist Z/Ocean", &mut cache)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.entity.folder_path, "/music/Artist Z/Ocean",
+        "folder_path should be promoted to the outermost (shortest) path"
+    );
+}
+
+#[tokio::test]
+async fn sibling_folders_same_title_not_merged() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    let artist = matcher
+        .find_or_create_artist_cached(&pool, "Various Artists", &mut cache)
+        .await
+        .unwrap();
+    let aid = Some(artist.entity.id);
+
+    // Two sibling folders — neither is a subfolder of the other
+    let album_a = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Hits",
+            aid,
+            "/music/Various Artists/Hits 2020",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    let album_b = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Hits",
+            aid,
+            "/music/Various Artists/Hits 2021",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+
+    assert_ne!(
+        album_a.entity.id, album_b.entity.id,
+        "Sibling folders must NOT be merged"
+    );
+}
+
+#[tokio::test]
+async fn different_artist_not_merged() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    let artist_a = matcher
+        .find_or_create_artist_cached(&pool, "Artist A", &mut cache)
+        .await
+        .unwrap();
+    let artist_b = matcher
+        .find_or_create_artist_cached(&pool, "Artist B", &mut cache)
+        .await
+        .unwrap();
+
+    let album_a = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Debut",
+            Some(artist_a.entity.id),
+            "/music/Artist A/Debut/Extras",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    let album_b = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Debut",
+            Some(artist_b.entity.id),
+            "/music/Artist B/Debut",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+
+    assert_ne!(
+        album_a.entity.id, album_b.entity.id,
+        "Different artists must NOT be merged"
+    );
+}
+
+#[tokio::test]
+async fn rescan_idempotent_after_merge() {
+    let pool = setup_test_db().await;
+    let matcher = FuzzyMatcher::new();
+    let mut cache = EntityCache::preload(&pool).await.unwrap();
+
+    let artist = matcher
+        .find_or_create_artist_cached(&pool, "Idempotent Artist", &mut cache)
+        .await
+        .unwrap();
+    let aid = Some(artist.entity.id);
+
+    // First scan
+    let a1 = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Idempotent",
+            aid,
+            "/music/Idempotent Artist/Album",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    let b1 = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Idempotent",
+            aid,
+            "/music/Idempotent Artist/Album/Extras",
+            &mut cache,
+        )
+        .await
+        .unwrap();
+    assert_eq!(a1.entity.id, b1.entity.id, "First scan: must merge");
+
+    // Second scan — fresh cache simulates a new scan session
+    let mut cache2 = EntityCache::preload(&pool).await.unwrap();
+    let a2 = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Idempotent",
+            aid,
+            "/music/Idempotent Artist/Album",
+            &mut cache2,
+        )
+        .await
+        .unwrap();
+    let b2 = matcher
+        .find_or_create_album_cached(
+            &pool,
+            "Idempotent",
+            aid,
+            "/music/Idempotent Artist/Album/Extras",
+            &mut cache2,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        a2.entity.id, b2.entity.id,
+        "Second scan: must not create a new album"
+    );
+    assert_eq!(
+        a1.entity.id, a2.entity.id,
+        "Must be the same album as first scan"
+    );
+}

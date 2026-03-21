@@ -566,6 +566,8 @@ pub fn extract_metadata(path: &Path) -> Result<ExtractedMetadata> {
 fn extract_wav_metadata(path: &Path) -> Result<ExtractedMetadata> {
     use std::io::{Read, Seek, SeekFrom};
 
+    tracing::debug!(file_path = %path.display(), "[Metadata] WAV/BWF custom parser active");
+
     let file_format = path
         .extension()
         .map(|e| e.to_string_lossy().to_lowercase())

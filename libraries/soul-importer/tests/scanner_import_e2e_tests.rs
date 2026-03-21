@@ -2437,3 +2437,139 @@ async fn test_scan_deeply_nested_directories_found() {
     assert!(db_artist_exists(&pool, "Miles Davis").await);
     assert!(db_album_exists(&pool, "Kind of Blue").await);
 }
+
+// ── Subfolder album merge E2E ─────────────────────────────────────────────────
+
+/// Tracks in `Album/` and `Album/B-Sides/` with identical album+artist tags
+/// must be merged into a single album record, not two separate ones.
+#[tokio::test]
+async fn test_subfolder_tracks_merge_into_one_album() {
+    let pool = test_helpers::setup_test_db().await;
+    let temp_dir = TempDir::new().unwrap();
+
+    // Root directory: track_01.flac
+    let root_dir = temp_dir.path().join("Subfolder Artist - Subfolder Album");
+    fs::create_dir_all(&root_dir).unwrap();
+    create_flac(
+        &root_dir,
+        "track_01.flac",
+        &Tags {
+            title: "Track One",
+            artist: "Subfolder Artist",
+            album_artist: Some("Subfolder Artist"),
+            album: "Subfolder Album",
+            track_number: Some(1),
+            track_total: None,
+        },
+        1,
+    );
+
+    // Subfolder: B-Sides — same album+artist
+    let sub_dir = root_dir.join("B-Sides");
+    fs::create_dir_all(&sub_dir).unwrap();
+    create_flac(
+        &sub_dir,
+        "track_02.flac",
+        &Tags {
+            title: "Track Two (B-Side)",
+            artist: "Subfolder Artist",
+            album_artist: Some("Subfolder Artist"),
+            album: "Subfolder Album",
+            track_number: Some(2),
+            track_total: None,
+        },
+        2,
+    );
+
+    scan_dir(&pool, temp_dir.path()).await;
+
+    let all_albums = soul_storage::albums::get_all(&pool).await.unwrap();
+    let matching: Vec<_> = all_albums
+        .iter()
+        .filter(|a| a.title == "Subfolder Album")
+        .collect();
+
+    assert_eq!(
+        matching.len(),
+        1,
+        "subfolder tracks should merge into one album, got {} album(s): {:?}",
+        matching.len(),
+        matching.iter().map(|a| &a.folder_path).collect::<Vec<_>>()
+    );
+
+    let tracks = soul_storage::tracks::get_by_album(&pool, matching[0].id)
+        .await
+        .unwrap();
+    assert_eq!(
+        tracks.len(),
+        2,
+        "both root and B-Sides tracks must be under the single merged album"
+    );
+
+    // The stored folder_path must be the outermost (root) folder, not the subfolder.
+    // When the B-Sides subfolder is discovered after the root folder, the album's
+    // folder_path should remain (or be promoted to) the shorter parent path.
+    assert!(
+        !matching[0].folder_path.contains("B-Sides"),
+        "album folder_path '{}' must not point into 'B-Sides' — it should be the parent folder",
+        matching[0].folder_path
+    );
+}
+
+/// Two completely different albums that happen to share the same title and artist
+/// but live in sibling folders (e.g. a 2020 and 2021 compilation) must NOT be merged.
+///
+/// This is the counterpart to `test_subfolder_tracks_merge_into_one_album`:
+/// subfolder → merge; sibling folder → keep separate.
+#[tokio::test]
+async fn test_sibling_folder_albums_same_title_not_merged() {
+    let pool = test_helpers::setup_test_db().await;
+    let temp_dir = TempDir::new().unwrap();
+
+    // Sibling folder A — /Various/Hits 2020/
+    let dir_a = temp_dir.path().join("Various").join("Hits 2020");
+    fs::create_dir_all(&dir_a).unwrap();
+    create_flac(
+        &dir_a,
+        "track_01.flac",
+        &Tags {
+            title: "Song A",
+            artist: "Various",
+            album_artist: Some("Various"),
+            album: "Hits",
+            track_number: Some(1),
+            track_total: None,
+        },
+        1,
+    );
+
+    // Sibling folder B — /Various/Hits 2021/ (neither is a child of the other)
+    let dir_b = temp_dir.path().join("Various").join("Hits 2021");
+    fs::create_dir_all(&dir_b).unwrap();
+    create_flac(
+        &dir_b,
+        "track_01.flac",
+        &Tags {
+            title: "Song B",
+            artist: "Various",
+            album_artist: Some("Various"),
+            album: "Hits",
+            track_number: Some(1),
+            track_total: None,
+        },
+        2,
+    );
+
+    scan_dir(&pool, temp_dir.path()).await;
+
+    let all_albums = soul_storage::albums::get_all(&pool).await.unwrap();
+    let hits_albums: Vec<_> = all_albums.iter().filter(|a| a.title == "Hits").collect();
+
+    assert_eq!(
+        hits_albums.len(),
+        2,
+        "sibling folders 'Hits 2020' and 'Hits 2021' must produce 2 separate album records, got {}: {:?}",
+        hits_albums.len(),
+        hits_albums.iter().map(|a| &a.folder_path).collect::<Vec<_>>()
+    );
+}
