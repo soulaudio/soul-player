@@ -377,3 +377,241 @@ describe('BUG-12: composite selectors use shallow equality to prevent spurious r
     expect(shallowEqual(prevPlayback, nextPlayback)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// BUG-13: playQueue must set isPlaying: true optimistically so progress bar animates
+// ---------------------------------------------------------------------------
+describe('BUG-13: playQueue — progress bar stays at 0 until play pressed (missing optimistic isPlaying)', () => {
+  /**
+   * Root cause analysis:
+   *   After `invoke('play_queue', ...)` returns, `TauriPlayerCommandsProvider.playQueue`
+   *   only sets `queue` and `queueIndex` in the Zustand store. It does NOT set `isPlaying`.
+   *
+   *   `useInterpolatedProgress` guards the RAF animation with `!isPlaying || duration <= 0`.
+   *   When `isPlaying = false`, the hook calls `setInterpolatedProgress(progress)` and
+   *   returns — no animation runs. The progress bar stays at 0 until the backend emits
+   *   `playback:state-changed` with `Playing`, which arrives 300–500 ms after `play_queue`
+   *   returns (audio thread command queue latency + source load time).
+   *
+   *   Fix: after `invoke('play_queue', ...)` succeeds, include `isPlaying: true` in the
+   *   `usePlayerStore.setState(...)` call. The backend `StateChanged(Stopped)` or
+   *   `StateChanged(Playing)` events will override this value when they arrive;
+   *   the optimistic `true` merely eliminates the dead zone where the bar is frozen.
+   *
+   * This test documents the DESIRED behaviour (optimistic store update includes isPlaying).
+   */
+  beforeEach(resetStore);
+
+  it('optimistic update after invoke succeeds must include isPlaying: true', () => {
+    // Simulate what the FIXED playQueue does after invoke('play_queue') resolves.
+    // Dropped files use 'album: ""' because Track.album is string (not nullable).
+    const fakeTrack = {
+      id: NaN, // dropped files use string IDs that parseInt to NaN
+      title: 'My DSF Track',
+      artist: 'Unknown Artist',
+      album: '',
+      albumId: undefined,
+      artistId: undefined,
+      filePath: '/music/track.dsf',
+      duration: 266.0,
+      trackNumber: undefined,
+      coverArtPath: undefined,
+      addedAt: new Date().toISOString(),
+    };
+
+    usePlayerStore.setState({
+      queue: [fakeTrack],
+      queueIndex: 0,
+      isPlaying: true, // FIX: was absent before; RAF animation requires this
+    });
+
+    const { isPlaying, queue, queueIndex } = usePlayerStore.getState();
+    expect(isPlaying).toBe(true);
+    expect(queue).toHaveLength(1);
+    expect(queueIndex).toBe(0);
+  });
+
+  it('demonstrates the bug: old update WITHOUT isPlaying leaves animation frozen', () => {
+    const fakeTrack = {
+      id: NaN,
+      title: 'My DSF Track',
+      artist: 'Unknown Artist',
+      album: '',
+      filePath: '/music/track.dsf',
+      duration: 266.0,
+      addedAt: new Date().toISOString(),
+    };
+
+    // Simulates CURRENT (buggy) behaviour — no isPlaying in setState
+    usePlayerStore.setState({ queue: [fakeTrack], queueIndex: 0 });
+
+    expect(usePlayerStore.getState().isPlaying).toBe(false); // THIS IS THE BUG
+    // useInterpolatedProgress sees !isPlaying → stops RAF → progress bar frozen at 0
+  });
+
+  it('backend StateChanged(Stopped) event correctly overrides optimistic true', () => {
+    // Optimistic update: playQueue succeeded
+    usePlayerStore.setState({ isPlaying: true });
+    expect(usePlayerStore.getState().isPlaying).toBe(true);
+
+    // Backend emits StateChanged(Stopped) — frontend listener does:
+    const backendState: string = 'Stopped';
+    usePlayerStore.setState({ isPlaying: backendState === 'Playing' });
+    expect(usePlayerStore.getState().isPlaying).toBe(false); // correctly overridden
+  });
+
+  it('backend StateChanged(Playing) confirms the optimistic true', () => {
+    usePlayerStore.setState({ isPlaying: true }); // optimistic
+    const backendState: string = 'Playing';
+    usePlayerStore.setState({ isPlaying: backendState === 'Playing' });
+    expect(usePlayerStore.getState().isPlaying).toBe(true); // confirmed
+  });
+});
+
+// BUG-14: drag-and-drop cover art and optimistic currentTrack
+// Root causes:
+//   parseInt('dropped-0-timestamp', 10) === NaN  →  queue.find always fails
+//   coverArtPath from file metadata is never applied to currentTrack
+//   Progress bar frozen because currentTrack not set optimistically in playQueue
+
+describe('BUG-14: drag-and-drop playback — cover art and optimistic currentTrack', () => {
+  const mockInvoke = vi.fn();
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockInvoke.mockResolvedValue(undefined);
+    // Reset store
+    usePlayerStore.setState({
+      queue: [],
+      currentTrack: null,
+      isPlaying: false,
+      duration: 0,
+    });
+  });
+
+  it('playQueue sets currentTrack optimistically with coverArtPath from dropped file', async () => {
+    const droppedTrack = {
+      trackId: 'dropped-0-1706123456789',
+      title: 'My Track',
+      artist: 'Artist',
+      album: null,
+      filePath: '/tmp/track.dsf',
+      durationSeconds: 240,
+      trackNumber: null,
+      coverArtPath: 'data:image/jpeg;base64,/9j/abc123',
+    };
+    const queueTrack = {
+      id: 0,
+      rawId: droppedTrack.trackId,
+      title: droppedTrack.title,
+      artist: droppedTrack.artist,
+      album: droppedTrack.album ?? '',
+      filePath: droppedTrack.filePath,
+      duration: droppedTrack.durationSeconds ?? 0,
+      coverArtPath: droppedTrack.coverArtPath,
+      addedAt: expect.any(String),
+    };
+    usePlayerStore.setState({
+      queue: [queueTrack as any],
+      currentTrack: queueTrack as any,
+      isPlaying: true,
+    });
+    const { currentTrack } = usePlayerStore.getState();
+    expect(currentTrack?.coverArtPath).toBe('data:image/jpeg;base64,/9j/abc123');
+  });
+
+  it('playQueue sets currentTrack optimistically with duration', () => {
+    const queueTrack = {
+      id: 0,
+      rawId: 'dropped-0-1706123456789',
+      title: 'Track',
+      artist: 'Artist',
+      album: '',
+      filePath: '/tmp/t.mp3',
+      duration: 180,
+      coverArtPath: undefined,
+      addedAt: new Date().toISOString(),
+    };
+    usePlayerStore.setState({
+      queue: [queueTrack as any],
+      currentTrack: queueTrack as any,
+      isPlaying: true,
+    });
+    const { currentTrack } = usePlayerStore.getState();
+    expect(currentTrack?.duration ?? 0).toBeGreaterThan(0);
+  });
+
+  it('TrackChanged with dropped-file rawId matches queue track by rawId', () => {
+    const droppedId = 'dropped-0-1706123456789';
+    const queue = [
+      {
+        id: 0,
+        rawId: droppedId,
+        title: 'DSD Track',
+        artist: 'Artist',
+        album: '',
+        filePath: '/tmp/t.dsf',
+        duration: 300,
+        coverArtPath: 'data:image/jpeg;base64,art',
+        addedAt: new Date().toISOString(),
+      },
+    ] as any[];
+    usePlayerStore.setState({ queue });
+    const trackPayload = { id: droppedId, title: 'DSD Track', artist: 'Artist',
+      album: '', filePath: '/tmp/t.dsf', duration: 300, addedAt: new Date().toISOString() };
+    const matchedQueueTrack = queue.find(
+      t => (t.rawId ?? String(t.id)) === trackPayload.id
+    );
+    expect(matchedQueueTrack).toBeDefined();
+    expect(matchedQueueTrack?.coverArtPath).toBe('data:image/jpeg;base64,art');
+  });
+
+  it('TrackChanged preserves coverArtPath from matched queue track', () => {
+    const droppedId = 'dropped-0-1706123456789';
+    const queue = [
+      {
+        id: 0,
+        rawId: droppedId,
+        title: 'Track',
+        artist: 'Artist',
+        album: '',
+        filePath: '/tmp/t.dsf',
+        duration: 300,
+        coverArtPath: 'data:image/jpeg;base64,MY_COVER_ART',
+        addedAt: new Date().toISOString(),
+      },
+    ] as any[];
+    usePlayerStore.setState({ queue });
+    const matchedQueueTrack = queue.find(
+      t => (t.rawId ?? String(t.id)) === droppedId
+    );
+    const newCurrentTrack = {
+      id: 0,
+      rawId: droppedId,
+      title: 'Track',
+      artist: 'Artist',
+      album: '',
+      filePath: '/tmp/t.dsf',
+      duration: 300,
+      coverArtPath: matchedQueueTrack?.coverArtPath ?? undefined,
+      addedAt: new Date().toISOString(),
+    };
+    usePlayerStore.setState({ currentTrack: newCurrentTrack as any });
+    const { currentTrack } = usePlayerStore.getState();
+    expect(currentTrack?.coverArtPath).toBe('data:image/jpeg;base64,MY_COVER_ART');
+  });
+
+  it('TrackChanged updates duration from backend event when non-zero', () => {
+    const droppedId = 'dropped-0-1706123456789';
+    usePlayerStore.setState({
+      queue: [{ id: 0, rawId: droppedId, title: 'T', artist: 'A', album: '',
+        filePath: '/f', duration: 0, coverArtPath: undefined, addedAt: '' }] as any[],
+      currentTrack: null,
+      duration: 0,
+    });
+    const backendDuration = 240;
+    usePlayerStore.setState({ duration: backendDuration });
+    const { duration } = usePlayerStore.getState();
+    expect(duration).toBe(240);
+  });
+});

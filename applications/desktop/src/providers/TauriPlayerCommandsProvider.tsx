@@ -435,17 +435,23 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           const trackPayload = event.payload;
           if (trackPayload && trackPayload.id) {
             const { queue } = usePlayerStore.getState();
-            const matchedQueueTrack = queue.find(t => t.id === parseInt(trackPayload.id, 10));
+            const matchedQueueTrack = queue.find(
+              t => (t.rawId ?? String(t.id)) === trackPayload.id
+            );
             const track = {
               ...trackPayload,
-              id: parseInt(trackPayload.id, 10),
+              id: matchedQueueTrack?.id ?? (parseInt(trackPayload.id, 10) || 0),
+              rawId: trackPayload.id,
               albumId: matchedQueueTrack?.albumId,
               artistId: matchedQueueTrack?.artistId,
+              coverArtPath: matchedQueueTrack?.coverArtPath ?? trackPayload.coverArtPath,
             };
-            const newIndex = queue.findIndex(t => t.id === track.id);
+            const newIndex = queue.findIndex(
+              t => (t.rawId ?? String(t.id)) === trackPayload.id
+            );
             usePlayerStore.setState({
               currentTrack: track,
-              duration: track.duration || 0,
+              duration: track.duration || matchedQueueTrack?.duration || 0,
               progress: 0,
               ...(newIndex >= 0 ? { queueIndex: newIndex } : {}),
             });
@@ -670,7 +676,8 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
         // Sync queue into Zustand store so the persistence subscription can save it.
         // Without this, queue stays empty in the store and restoreFromDatabase bails on empty queue.
         const tracks = queue.map(qt => ({
-          id: parseInt(qt.trackId, 10),
+          id: parseInt(qt.trackId, 10) || 0,  // NaN → 0 for dropped files
+          rawId: qt.trackId,                  // always preserve original string
           title: qt.title || '',
           artist: qt.artist || '',
           album: qt.album || '',
@@ -682,7 +689,16 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
           coverArtPath: qt.coverArtPath,
           addedAt: new Date().toISOString(),
         }));
-        usePlayerStore.setState({ queue: tracks, queueIndex: startIndex });
+        // Optimistic isPlaying: true so useInterpolatedProgress starts the RAF animation
+        // immediately instead of waiting 300-500ms for the backend StateChanged(Playing) event.
+        // The backend will emit the authoritative state shortly after (overriding if needed).
+        usePlayerStore.setState({
+          queue: tracks,
+          queueIndex: startIndex,
+          isPlaying: true,
+          currentTrack: tracks[startIndex] ?? null,  // optimistic: cover art + duration available immediately
+          duration: tracks[startIndex]?.duration ?? 0,  // so progress bar animates without waiting for TrackChanged
+        });
       },
 
       async playQueueWithContext(context, initialBatch, startIndex, enableShuffle) {
@@ -696,7 +712,8 @@ export function TauriPlayerCommandsProvider({ children }: { children: ReactNode 
 
         // Sync initial batch into store for persistence
         const tracks = initialBatch.map(qt => ({
-          id: parseInt(qt.trackId, 10),
+          id: parseInt(qt.trackId, 10) || 0,
+          rawId: qt.trackId,
           title: qt.title || '',
           artist: qt.artist || '',
           album: qt.album || '',

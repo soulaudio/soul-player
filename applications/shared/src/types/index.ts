@@ -3,6 +3,7 @@
 
 export interface Track {
   id: number;
+  rawId?: string;    // raw string ID for external files (e.g. dropped-0-timestamp)
   title: string;
   artist: string;
   album: string;
