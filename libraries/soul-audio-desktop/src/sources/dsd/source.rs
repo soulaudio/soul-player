@@ -408,7 +408,6 @@ fn decode_loop(
                     if chunk_filled > 0 {
                         let partial = &pcm_chunk[..chunk_filled * channels];
                         input_buf.extend(partial.iter().copied());
-                        chunk_filled = 0;
                     }
                     resample_and_flush(
                         &mut input_buf,
@@ -434,6 +433,7 @@ fn decode_loop(
                                 r.reset();
                             }
                             input_buf.clear();
+                            chunk_filled = 0;
                             let seek_output_samples =
                                 (pos.as_secs_f64() * target_sample_rate as f64 * channels as f64)
                                     as usize;

@@ -1,7 +1,7 @@
 //! Integration tests for DsdAudioSource seek behaviour.
 
 use soul_audio_desktop::sources::dsd::container::DSF_BLOCK_SIZE;
-use soul_audio_desktop::sources::dsd::source::DsdAudioSource;
+use soul_audio_desktop::DsdAudioSource;
 use soul_playback::AudioSource;
 use std::io::Write as IoWrite;
 use std::time::Duration;
