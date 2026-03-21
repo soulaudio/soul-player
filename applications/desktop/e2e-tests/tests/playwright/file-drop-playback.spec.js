@@ -1,20 +1,24 @@
 /**
- * file-drop-playback.spec.js — Playback correctness after file drop / files-opened
+ * file-drop-playback.spec.js — Regression tests for Task 3 file-drop playback bugs
  *
- * Verifies the fixes for Task 3 (rawId / non-integer track ID bugs) that caused:
- *   - Cover art to be wiped on TrackChanged after file-drop
- *   - Progress bar to freeze (position never advancing) after file-drop
+ * Scope: ONLY the fixes introduced in Task 3 (rawId / non-integer track ID bugs):
+ *   - Cover art wiped on TrackChanged after file-drop  →  track title must be non-empty
+ *   - Progress bar freeze (position stuck at 0) after file-drop
+ *   - Duration optimistic-state fix (progress bar animates from first second)
+ *
+ * What is NOT tested here (already covered by file-open-e2e.spec.js):
+ *   G3.1-G3.4  — basic play triggering, queue size, now-playing title visibility
+ *   G2.x       — dialog appearance, file count display
+ *   G6.x       — path parity (drag-drop ≡ files-opened)
  *
  * Strategy:
- *   - Use PLAYWRIGHT_TEST_DIR WAV files (created by global setup)
- *   - Trigger via `files-opened` Tauri event (same as OS open-with / drag-drop path B)
- *   - Click "Play Now" in the file-drop dialog to start playback
- *   - Assert Playing state, advancing position, visible now-playing, and track title
+ *   - Trigger via `files-opened` (Path B) or `tauri://drag-drop` (Path A)
+ *   - Use long WAV (30s) for position-advance tests so there is plenty of room
+ *   - Assert position advances monotonically and now-playing title is populated
  *
  * Seed data (from playwright-global-setup.js):
  *   PLAYWRIGHT_TEST_DIR/audio/test-track.wav       — 10s silent WAV
  *   PLAYWRIGHT_TEST_DIR/audio/test-track-long.wav  — 30s silent WAV
- *   PLAYWRIGHT_TEST_DIR/audio/test-track-med.wav   — 15s silent WAV
  */
 
 import { test, expect, chromium } from '@playwright/test';
@@ -91,20 +95,23 @@ function getTestPaths() {
   return {
     wavPath: join(audioDir, 'test-track.wav'),
     wav2Path: join(audioDir, 'test-track-long.wav'),
-    wav3Path: join(audioDir, 'test-track-med.wav'),
     audioDir,
   };
 }
 
-/** Wait for playback state to reach 'Playing' within timeoutMs. */
+/**
+ * Wait for playback state to reach 'Playing'.
+ * Uses page.waitForFunction so it integrates cleanly with Playwright's
+ * timeout / cancellation infrastructure. Throws on timeout.
+ */
 async function waitForPlayingState(timeoutMs = 8000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const state = await invoke('get_playback_state').catch(() => 'Stopped');
-    if (state === 'Playing') return true;
-    await page.waitForTimeout(150);
-  }
-  return false;
+  await page.waitForFunction(
+    async () => {
+      const state = await window.__TAURI_INTERNALS__.invoke('get_playback_state');
+      return state === 'Playing';
+    },
+    { timeout: timeoutMs }
+  );
 }
 
 test.beforeAll(async () => {
@@ -130,9 +137,14 @@ test.beforeEach(async () => {
   await resetFileSettings();
   await dismissDialog();
   await page.waitForTimeout(200);
+
   // Dismiss any leftover overlay
   await page.keyboard.press('Escape').catch(() => {});
   await page.waitForTimeout(100);
+
+  // Navigate to a known, stable page before each test
+  await page.click('[data-testid="nav-albums"]', { force: true });
+  await page.waitForSelector('[data-testid^="media-card-album-"]', { timeout: 15_000 });
 });
 
 test.afterEach(async () => {
@@ -142,27 +154,28 @@ test.afterEach(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 1: Dropped WAV file triggers playback and progress bar advances
+// Test 1: Progress bar animates — position advances after drop
+//
+// Directly verifies the `duration` optimistic-state fix.  Before the fix,
+// position was stuck at 0 because duration was never set so the bar never
+// moved.  After the fix, position must exceed 0.1 s within 2 s of play start.
 // ---------------------------------------------------------------------------
 
-test('dropped WAV file triggers playback with progress bar animating', async () => {
+test('progress bar animates: position advances within 2s of file-drop play', async () => {
+  test.setTimeout(30_000);
+
   const { wavPath } = getTestPaths();
 
-  // Simulate OS drag-drop (Path A)
+  // Use Path A (drag-drop) to exercise the exact code path the bug affected
   await simulateDragDrop([wavPath]);
-
-  // Dialog should appear — click Play Now
   await waitForDialog();
   await page.click('[data-testid="file-drop-play"]');
 
-  // Dialog must close
   await expect(page.locator('[data-testid="file-drop-dialog"]')).not.toBeVisible({ timeout: 5000 });
 
-  // Wait for Playing state
-  const playing = await waitForPlayingState(8000);
-  expect(playing).toBe(true);
+  await waitForPlayingState(8000);
 
-  // Wait 2s then verify position has advanced past 0.1s
+  // Allow 2 s of wall-clock playback, then assert position has advanced
   await page.waitForTimeout(2000);
   const position = await invoke('get_position').catch(() => 0);
   expect(typeof position).toBe('number');
@@ -170,28 +183,50 @@ test('dropped WAV file triggers playback with progress bar animating', async () 
 });
 
 // ---------------------------------------------------------------------------
-// Test 2: Dropped WAV file — now-playing panel shows within 3s
+// Test 2: Position advances monotonically — progress bar is not frozen
+//
+// Directly tests the progress-bar-freeze bug.  Two samples taken 1.5 s apart
+// must show strictly increasing position.  Uses the long WAV (30s) so there
+// is plenty of room to sample without hitting end-of-track.
 // ---------------------------------------------------------------------------
 
-test('dropped WAV file — now-playing panel shows within 3s', async () => {
-  const { wavPath } = getTestPaths();
+test('position advances monotonically after file-drop (progress bar not frozen)', async () => {
+  test.setTimeout(30_000);
 
-  await simulateFilesOpened([wavPath]);
+  const { wav2Path } = getTestPaths();
+
+  // Use Path B (files-opened) to exercise the other entry point
+  await simulateFilesOpened([wav2Path]);
   await waitForDialog();
   await page.click('[data-testid="file-drop-play"]');
 
   await expect(page.locator('[data-testid="file-drop-dialog"]')).not.toBeVisible({ timeout: 5000 });
 
-  // now-playing-title in the sidebar PlayerPanel must become visible within 5s of click
-  const nowPlayingTitle = page.locator('[data-testid="now-playing-title"]');
-  await expect(nowPlayingTitle).toBeVisible({ timeout: 5000 });
+  await waitForPlayingState(8000);
+
+  // Sample position at t=0 (relative to start of this check)
+  await page.waitForTimeout(500);
+  const pos1 = await invoke('get_position').catch(() => 0);
+
+  // Wait 1.5 s and sample again
+  await page.waitForTimeout(1500);
+  const pos2 = await invoke('get_position').catch(() => 0);
+
+  // Position must have advanced by at least 0.5 s (allows for engine startup jitter)
+  expect(pos2).toBeGreaterThan(pos1 + 0.5);
 });
 
 // ---------------------------------------------------------------------------
-// Test 3: TrackChanged after file-drop does NOT lose cover art / track title
+// Test 3: TrackChanged after file-drop does NOT lose cover art or track title
+//
+// Before the rawId fix, the TrackChanged event carried a non-integer track ID
+// which the store failed to match, wiping cover art and resetting the title to
+// empty.  The title must be non-empty and must not be a raw file path.
 // ---------------------------------------------------------------------------
 
 test('dropped file TrackChanged event does not lose cover art or track title', async () => {
+  test.setTimeout(30_000);
+
   const { wavPath } = getTestPaths();
 
   await simulateFilesOpened([wavPath]);
@@ -201,87 +236,18 @@ test('dropped file TrackChanged event does not lose cover art or track title', a
   await expect(page.locator('[data-testid="file-drop-dialog"]')).not.toBeVisible({ timeout: 5000 });
 
   // Wait for Playing + allow a TrackChanged event to settle
-  const playing = await waitForPlayingState(8000);
-  expect(playing).toBe(true);
+  await waitForPlayingState(8000);
   await page.waitForTimeout(500);
 
-  // now-playing title must be non-empty (cover art wipe bug resets state, making title blank)
-  const nowPlayingTitle = page.locator('[data-testid="now-playing-title"]');
-  if (await nowPlayingTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
-    const titleText = await nowPlayingTitle.textContent();
-    expect(titleText).toBeTruthy();
-    expect(titleText.trim().length).toBeGreaterThan(0);
-    // Title must not be a raw absolute file path (indicates metadata was not applied)
-    expect(titleText.trim()).not.toMatch(/^[A-Z]:\\|^\//);
-  }
+  // now-playing title must be visible and non-empty (unconditional assertion)
+  await expect(page.locator('[data-testid="now-playing-title"]')).toBeVisible({ timeout: 5000 });
+  const titleText = await page.locator('[data-testid="now-playing-title"]').textContent();
+  expect(titleText).toBeTruthy();
+  expect(titleText.trim().length).toBeGreaterThan(0);
+  // Title must not be a raw absolute file path (indicates metadata was not applied)
+  expect(titleText.trim()).not.toMatch(/^[A-Z]:\\|^\//);
 
   // Verify playback state is still Playing (cover art bug also caused engine to stall)
   const state = await invoke('get_playback_state');
   expect(state).toBe('Playing');
-});
-
-// ---------------------------------------------------------------------------
-// Test 4: Multiple dropped files queue all tracks
-// ---------------------------------------------------------------------------
-
-test('multiple dropped files queue all tracks', async () => {
-  const { wavPath, wav2Path, wav3Path } = getTestPaths();
-
-  await simulateFilesOpened([wavPath, wav2Path, wav3Path]);
-  await waitForDialog();
-  await page.click('[data-testid="file-drop-play"]');
-
-  await expect(page.locator('[data-testid="file-drop-dialog"]')).not.toBeVisible({ timeout: 5000 });
-
-  // Wait for Playing
-  const playing = await waitForPlayingState(8000);
-  expect(playing).toBe(true);
-
-  // Queue should contain at least 2 tracks (current track may be at index 0, remaining >= 2)
-  const queueSize = await page.evaluate(async () => {
-    try {
-      const q = await window.__TAURI_INTERNALS__.invoke('get_queue');
-      return Array.isArray(q) ? q.length : -1;
-    } catch {
-      return -1;
-    }
-  });
-
-  // If get_queue is available, verify at least 2 entries remain in the queue
-  if (queueSize >= 0) {
-    expect(queueSize).toBeGreaterThanOrEqual(2);
-  } else {
-    // Fallback: verify playback started (queue IPC may not be available in older binary)
-    const state = await invoke('get_playback_state');
-    expect(['Playing', 'Paused']).toContain(state);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Test 5: Position advances monotonically — progress bar is not frozen
-// ---------------------------------------------------------------------------
-
-test('position advances monotonically after file-drop (progress bar not frozen)', async () => {
-  const { wav2Path } = getTestPaths();
-
-  // Use the long WAV (30s) so we have plenty of room to check position advance
-  await simulateFilesOpened([wav2Path]);
-  await waitForDialog();
-  await page.click('[data-testid="file-drop-play"]');
-
-  await expect(page.locator('[data-testid="file-drop-dialog"]')).not.toBeVisible({ timeout: 5000 });
-
-  const playing = await waitForPlayingState(8000);
-  expect(playing).toBe(true);
-
-  // Sample position at t=0 (relative to start of this check)
-  await page.waitForTimeout(500);
-  const pos1 = await invoke('get_position').catch(() => 0);
-
-  // Wait 1.5s and sample again
-  await page.waitForTimeout(1500);
-  const pos2 = await invoke('get_position').catch(() => 0);
-
-  // Position must have advanced by at least 0.5s (allows for engine startup jitter)
-  expect(pos2).toBeGreaterThan(pos1 + 0.5);
 });
