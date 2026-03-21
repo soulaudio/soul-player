@@ -22,6 +22,9 @@ pub struct AppState {
     /// Key: ArtworkCacheKey (track ID or album ID)
     /// Value: base64 data URL string (e.g., "data:image/jpeg;base64,...")
     pub artwork_cache: Arc<Mutex<lru::LruCache<ArtworkCacheKey, String>>>,
+    /// Files passed via CLI on cold launch, drained by the frontend on first mount.
+    /// Needed because the `files-opened` event fires before React registers its listener.
+    pub pending_open_files: Arc<Mutex<Vec<String>>>,
 }
 
 impl AppState {
@@ -164,6 +167,7 @@ impl AppState {
             library_path,
             artwork_manager: Arc::new(artwork_manager),
             artwork_cache,
+            pending_open_files: Arc::new(Mutex::new(Vec::new())),
         })
     }
 

@@ -185,6 +185,14 @@ export function FileDropHandler({ children }: FileDropHandlerProps) {
         });
         unlistenFunctions.push(unlistenFilesOpened);
         debug.log('[FileDropHandler] files-opened listener registered');
+
+        // Drain any files that were passed on the CLI before this listener was ready.
+        // On cold launch the event fires before React mounts, so Rust stores them here.
+        const pending = await invoke<string[]>('get_pending_open_files');
+        if (isMounted && pending.length > 0) {
+          debug.log('[FileDropHandler] Processing', pending.length, 'pending CLI file(s)');
+          await processFilePaths(pending);
+        }
       } catch (error) {
         debug.error('[FileDropHandler] Failed to set up files-opened listener:', error);
       }

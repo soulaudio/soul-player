@@ -1926,56 +1926,51 @@ async fn scan_library(path: String) -> Result<(), String> {
 }
 
 // File association handler
+fn is_audio_path(path: &PathBuf) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| {
+            matches!(
+                ext.to_lowercase().as_str(),
+                "mp3" | "flac" | "wav" | "ogg" | "oga" | "m4a" | "mp4" | "aac"
+                    | "opus" | "wma" | "aiff" | "aif" | "ape" | "wv"
+                    | "dsf" | "dff" | "dsdiff"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn filter_audio_paths(files: Vec<PathBuf>) -> Vec<String> {
+    files
+        .into_iter()
+        .filter(is_audio_path)
+        .filter_map(|p| p.to_str().map(String::from))
+        .collect()
+}
+
 fn handle_file_associations(app: AppHandle, files: Vec<PathBuf>) {
     if files.is_empty() {
         return;
     }
 
-    // Filter to only audio files
-    let audio_files: Vec<PathBuf> = files
-        .into_iter()
-        .filter(|path| {
-            path.extension()
-                .and_then(|ext| ext.to_str())
-                .map(|ext| {
-                    matches!(
-                        ext.to_lowercase().as_str(),
-                        "mp3"
-                            | "flac"
-                            | "wav"
-                            | "ogg"
-                            | "oga"
-                            | "m4a"
-                            | "mp4"
-                            | "aac"
-                            | "opus"
-                            | "wma"
-                            | "aiff"
-                            | "aif"
-                            | "ape"
-                            | "wv"
-                            | "dsf"
-                            | "dff"
-                            | "dsdiff"
-                    )
-                })
-                .unwrap_or(false)
-        })
-        .collect();
+    let file_paths = filter_audio_paths(files);
 
-    if audio_files.is_empty() {
+    if file_paths.is_empty() {
         return;
     }
 
-    // Emit event to frontend with the files to open
-    let file_paths: Vec<String> = audio_files
-        .iter()
-        .filter_map(|p| p.to_str().map(String::from))
-        .collect();
-
+    // Emit event to frontend (used when app is already running — listener is registered)
     if let Err(e) = app.emit("files-opened", file_paths) {
         tracing::error!("Failed to emit files-opened event: {}", e);
     }
+}
+
+/// Drain files that were passed on the command line before the frontend was ready.
+/// Called once by FileDropHandler on mount — returns and clears the pending list.
+#[tauri::command]
+async fn get_pending_open_files(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    let mut pending = state.pending_open_files.lock().await;
+    Ok(std::mem::take(&mut *pending))
 }
 
 // Settings commands
@@ -3200,10 +3195,19 @@ fn main() {
                     tracing::info!("[Background] Shortcuts and deep links registered");
                 });
 
-                // Handle file associations from command line (Windows/Linux)
+                // Handle file associations from command line (Windows/Linux).
+                // On cold launch the frontend listener isn't registered yet, so we
+                // store the files in pending_open_files instead of emitting an event.
+                // FileDropHandler drains this via get_pending_open_files on mount.
                 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
                 if !command_line_files.is_empty() {
-                    handle_file_associations(app_handle.clone(), command_line_files);
+                    let audio_files = filter_audio_paths(command_line_files);
+                    if !audio_files.is_empty() {
+                        let state = app_handle.state::<AppState>();
+                        let mut pending = state.pending_open_files.lock().await;
+                        *pending = audio_files;
+                        tracing::info!("[Startup] Stored {} file(s) for frontend to pick up via get_pending_open_files", pending.len());
+                    }
                 }
             });
 
@@ -3432,6 +3436,7 @@ fn main() {
             import::is_directory,
             import::scan_directory_for_audio,
             import::get_metadata_for_paths,
+            get_pending_open_files,
             // Sync/doctor
             sync::start_sync,
             sync::get_sync_status,
