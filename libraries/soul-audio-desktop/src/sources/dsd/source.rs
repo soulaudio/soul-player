@@ -192,9 +192,16 @@ impl DsdAudioSource {
 impl AudioSource for DsdAudioSource {
     fn read_samples(&mut self, buffer: &mut [f32]) -> Result<usize> {
         // If a seek completed, flush stale samples from the ring buffer.
+        // NOTE: rtrb ReadChunk must have commit_all() called to advance the read
+        // pointer — dropping without commit is a no-op (infinite loop otherwise).
         let gen = self.shared.generation.load(Ordering::Acquire);
         if gen != self.last_generation {
-            while self.buffer_consumer.read_chunk(1).is_ok() {}
+            let stale = self.buffer_consumer.slots();
+            if stale > 0 {
+                if let Ok(chunk) = self.buffer_consumer.read_chunk(stale) {
+                    chunk.commit_all();
+                }
+            }
             self.last_generation = gen;
         }
 
@@ -348,7 +355,14 @@ fn decode_loop(
                     }
                     input_buf.clear();
                     chunk_filled = 0;
+                    // Reset samples_produced so position() is correct after seek.
+                    let seek_output_samples =
+                        (pos.as_secs_f64() * target_sample_rate as f64 * channels as f64) as usize;
+                    shared
+                        .samples_produced
+                        .store(seek_output_samples, Ordering::Release);
                     shared.seek_pending.store(false, Ordering::Release);
+                    // Increment generation LAST so consumer drains before reading new position.
                     shared.generation.fetch_add(1, Ordering::Release);
                 }
             }
@@ -406,6 +420,13 @@ fn decode_loop(
                                     let _ = r.reset();
                                 }
                                 input_buf.clear();
+                                let seek_output_samples = (pos.as_secs_f64()
+                                    * target_sample_rate as f64
+                                    * channels as f64)
+                                    as usize;
+                                shared
+                                    .samples_produced
+                                    .store(seek_output_samples, Ordering::Release);
                                 shared.generation.fetch_add(1, Ordering::Release);
                                 continue 'outer;
                             }
