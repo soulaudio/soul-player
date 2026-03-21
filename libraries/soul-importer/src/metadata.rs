@@ -127,7 +127,7 @@ fn decode_id3_text(frame_data: &[u8]) -> Option<String> {
             raw.iter()
                 .copied()
                 .take_while(|&b| b != 0) // strip null terminator
-                .map(|b| char::from(b))
+                .map(char::from)
                 .collect()
         }
         1 => {

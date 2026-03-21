@@ -586,4 +586,5 @@ export default async function globalSetup() {
     }
   }
   console.log('[Playwright Setup] ✓ App ready (nav-albums visible)');
+  process.env.SOUL_CDP_URL = CDP_URL;
 }
