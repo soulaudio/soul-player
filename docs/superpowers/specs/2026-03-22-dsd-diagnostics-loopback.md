@@ -115,11 +115,12 @@ pub struct DsdDiagnostics {
 
 ### `SharedState` changes
 
-Add one new atomic field:
+Add two new atomic fields:
 ```rust
-underrun_count: AtomicU64,
+underrun_count: AtomicU64,  // times read_samples returned fewer samples than requested
+buffer_fill:    AtomicUsize, // approximate ring fill; updated by read_samples() after each read
 ```
-Initialised to 0 in `SharedState::new()`.
+Both initialised to 0 in `SharedState::new()`.
 
 ### `DsdAudioSource` struct changes
 
@@ -175,12 +176,14 @@ pub fn diagnostics(&self) -> DsdDiagnostics {
    ```
    Initialised to `None`.
 
-2. After `DsdAudioSource::new(...)` succeeds and before `activate_source` is called, store the handle:
+2. After `DsdAudioSource::new(...)` succeeds and before `activate_source` is called, store the handle. This must be done at **all** call sites where a DSD source is created:
+   - The primary `ActivateSource`/`LoadNext` command handler path
+   - The `change_audio_device` path (device switch while DSD is playing — this path calls `create_audio_source` and `activate_source` directly, bypassing the command handler)
    ```rust
    self.dsd_diagnostics_handle = Some(source.diagnostics_handle());
    ```
 
-3. When a non-DSD source is activated (e.g. `LocalAudioSource`), clear it:
+3. When a non-DSD source is activated (e.g. `LocalAudioSource`) at any of these call sites, clear it:
    ```rust
    self.dsd_diagnostics_handle = None;
    ```
@@ -211,7 +214,7 @@ pub async fn get_dsd_diagnostics(
     playback: tauri::State<'_, LazyPlaybackManager>,
 ) -> Result<Option<DsdDiagnosticsDto>, String> {
     let pb = playback.get().await.map_err(|e| e.to_string())?;
-    let diag = pb.get_dsd_diagnostics().await;
+    let diag = pb.get_dsd_diagnostics();  // synchronous — no .await
     Ok(diag.map(|d| DsdDiagnosticsDto {
         underrun_count:          d.underrun_count,
         buffer_fill_samples:     d.buffer_fill_samples,
@@ -336,8 +339,9 @@ Play for 5s (polling state stays Playing). Assert final `diag.underrun_count ===
 **Test 3: Seek accuracy — three positions**
 For each target in `[15, 30, 45]` seconds: `seek_to({ position: target })`, wait up to 1s for `get_position` to settle. Assert `Math.abs(pos - target) < 0.5`.
 
-**Test 4: Zero underruns after 5 rapid seeks**
-Play track. Fire 5 seeks to `[5, 20, 40, 10, 50]` seconds with 500ms between each. After all seeks, wait 2s for playback to stabilise. Assert `diag.underrun_count === 0`.
+**Test 4: Minimal underruns after 5 rapid seeks**
+Play track. Fire 5 seeks to `[5, 20, 40, 10, 50]` seconds with 500ms between each. After all seeks, wait 2s for playback to stabilise. Assert `diag.underrun_count <= 2`.
+(Each seek flushes the ring buffer; the audio callback may fire during the brief refill window, registering at most one underrun per seek. Requiring exactly 0 is racy. Allowing ≤ 2 confirms no sustained dropout while tolerating seek-induced flush windows.)
 
 **Test 5: Position monotonically advances for 10s**
 Poll `get_position` every 100ms for 10s while Playing. Assert each sample ≥ previous.
@@ -441,7 +445,8 @@ Assert exit code 0 for each.
 | File | Change | Area |
 |------|--------|------|
 | `libraries/soul-audio-desktop/src/sources/dsd/source.rs` | `BUFFER_SIZE_SECONDS` 1→5; `underrun_count` + `buffer_fill` atomics in `SharedState`; `buffer_capacity` field on struct; underrun counting + fill tracking in `read_samples()`; `DsdDiagnostics` struct; `DsdDiagnosticsHandle` type; `diagnostics_handle()` method | 1+2 |
-| `libraries/soul-audio-desktop/src/playback.rs` | `dsd_diagnostics_handle` field; set on DSD source creation; clear on non-DSD; `get_dsd_diagnostics()` method | 2 |
+| `libraries/soul-audio-desktop/src/sources/dsd/mod.rs` | `pub use source::{DsdDiagnostics, DsdDiagnosticsHandle}` re-exports | 2 |
+| `libraries/soul-audio-desktop/src/playback.rs` | `dsd_diagnostics_handle` field; set at **all** DSD source creation sites (LoadNext path + device-switch path); clear on non-DSD; `get_dsd_diagnostics()` method | 2 |
 | `applications/desktop/src-tauri/src/playback.rs` | `DsdDiagnosticsDto`; `get_dsd_diagnostics` Tauri command; Tauri-layer helper method | 2 |
 | `applications/desktop/src-tauri/src/main.rs` | Register `get_dsd_diagnostics` in `invoke_handler` | 2 |
 | `applications/desktop/e2e-tests/playwright-global-setup.js` | `buildDsfLong()`, `buildDffLong()`; Album 5002; Track 5003 (DSF 60s); Track 5004 (DFF 60s); `track_sources` + `track_artists` rows | 3 |
@@ -454,7 +459,7 @@ Assert exit code 0 for each.
 ## Implementation Order (TDD throughout)
 
 1. **Area 1**: Change `BUFFER_SIZE_SECONDS: 1 → 5`; verify app plays without stutter
-2. **Area 2**: Write failing Rust test that an underrun increments the counter → add `underrun_count` atomic, `buffer_capacity` field, both counting sites in `read_samples()`, `diagnostics()` method → green. Add `as_any()` to trait + all implementors. Add Tauri command + register it. Verify `get_dsd_diagnostics` returns data via the running app.
+2. **Area 2**: Write failing Rust test that an underrun increments the counter → add `underrun_count` + `buffer_fill` atomics, `buffer_capacity` field, both counting sites in `read_samples()`, `DsdDiagnosticsHandle` + `diagnostics_handle()`, `DsdDiagnostics` struct → green. Add `DesktopPlayback::dsd_diagnostics_handle` + `get_dsd_diagnostics()` (capturing handle at both DSD source creation sites). Add Tauri command + register in `main.rs`. Verify `get_dsd_diagnostics` returns data via the running app.
 3. **Area 3**: Add `buildDsfLong`/`buildDffLong` wrappers and seed records to global setup; run setup and verify files written.
 4. **Area 4**: Write `dsd-diagnostics.spec.js` (9 tests) → run against app → all green
 5. **Area 5**: Write `analyze_dsd_audio.py` + `dsd-loopback-quality.spec.js` → run → all green (or skipped cleanly if pyaudiowpatch absent)
