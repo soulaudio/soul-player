@@ -333,6 +333,13 @@ impl AudioSource for DsdAudioSource {
     }
 
     fn is_finished(&self) -> bool {
+        // If a seek is in flight, the source is NOT finished — the decoder will
+        // resume from the new position once it processes the seek command.
+        // Returning true here would cause process_audio() to call handle_track_finished()
+        // and advance to the next track before the seek is processed.
+        if self.shared.seek_pending.load(Ordering::Acquire) {
+            return false;
+        }
         self.shared.is_eof.load(Ordering::Acquire) && self.buffer_consumer.slots() == 0
     }
 
@@ -439,9 +446,13 @@ fn decode_loop(
                     shared
                         .samples_produced
                         .store(seek_output_samples, Ordering::Release);
-                    shared.seek_pending.store(false, Ordering::Release);
-                    // Increment generation LAST so consumer drains before reading new position.
+                    // Increment generation BEFORE clearing seek_pending: any concurrent
+                    // read_samples() call will flush the ring while seek_pending is still
+                    // true (correct position is returned from seek_target_samples).
+                    // Only after the flush does seek_pending become false, so position()
+                    // then derives correctly from the updated samples_produced.
                     shared.generation.fetch_add(1, Ordering::Release);
+                    shared.seek_pending.store(false, Ordering::Release);
                 }
             }
         }
@@ -503,8 +514,11 @@ fn decode_loop(
                             shared
                                 .samples_produced
                                 .store(seek_output_samples, Ordering::Release);
-                            shared.seek_pending.store(false, Ordering::Release);
+                            // Same ordering as top-of-loop seek: generation++ before
+                            // seek_pending=false so read_samples() flushes stale ring
+                            // data while seek_pending is still true.
                             shared.generation.fetch_add(1, Ordering::Release);
+                            shared.seek_pending.store(false, Ordering::Release);
                             continue 'outer;
                         }
                     }
@@ -1055,5 +1069,132 @@ mod tests {
         }
         let src = DsdAudioSource::new(f.path(), 48_000).unwrap();
         assert_eq!(src.sample_rate(), Some(48_000));
+    }
+
+    // ── Seek/is_finished correctness tests (TDD for seek bugs) ───────────────
+
+    /// Bug 1: is_finished() returned true when is_eof=true && ring_empty=true even
+    /// if seek_pending=true. This caused process_audio() to call handle_track_finished()
+    /// and advance the track before the decoder could process the seek command.
+    #[test]
+    fn dsd_is_finished_false_when_seek_pending() {
+        // Use a minimal 1-block DSF so the decoder reaches EOF quickly.
+        let data = build_dsf(1, 0x69);
+        let f = write_temp(&data, "dsf");
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+
+        // Wait for EOF to be signalled by the decoder.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !src.shared.is_eof.load(Ordering::Acquire) {
+            if std::time::Instant::now() > deadline {
+                panic!("timed out waiting for EOF");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        // Drain the ring buffer completely.
+        let mut buf = vec![0.0f32; 65536];
+        loop {
+            let n = src.read_samples(&mut buf).unwrap();
+            if n == 0 {
+                break;
+            }
+        }
+
+        // Precondition: with is_eof=true and ring empty, is_finished() should be true.
+        assert!(
+            src.is_finished(),
+            "precondition: source must be finished after EOF + drain"
+        );
+
+        // Simulate a seek arriving while the decoder is at EOF (parked).
+        // In the real code path, seek() sets seek_pending=true atomically.
+        src.shared.seek_pending.store(true, Ordering::Release);
+
+        // is_finished() MUST return false — the decoder will resume decoding once
+        // it processes the seek command; advancing the track here would be wrong.
+        assert!(
+            !src.is_finished(),
+            "is_finished() must return false when seek_pending=true — \
+             otherwise process_audio() advances the track before seek is processed"
+        );
+    }
+
+    /// Bug 2 (observable consequence): After a seek completes (seek_pending goes false),
+    /// position() must reflect the seek target (within 50ms tolerance) when we flush
+    /// the ring with one read_samples() call.
+    ///
+    /// This fails if seek_pending is cleared before generation is incremented, because
+    /// read_samples() won't flush stale pre-seek samples from the ring, and position()
+    /// will return a stale value.
+    #[test]
+    fn dsd_position_correct_after_seek_completes() {
+        // Build a file large enough that decoding is not finished before seek completes.
+        let data = build_dsf(64, 0xFF);
+        let f = write_temp(&data, "dsf");
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 5_000);
+
+        let seek_target_secs = 0.1f64; // seek to 100ms
+        src.seek(Duration::from_secs_f64(seek_target_secs)).unwrap();
+
+        // Wait for decoder to process seek (seek_pending goes false).
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while src.shared.seek_pending.load(Ordering::Acquire) {
+            if std::time::Instant::now() > deadline {
+                panic!("seek did not complete within 3s");
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        // Give decoder time to emit any in-flight store.
+        std::thread::sleep(Duration::from_millis(10));
+
+        // Call read_samples() once to trigger the generation-based ring flush.
+        let mut buf = vec![0.0f32; 512];
+        let _ = src.read_samples(&mut buf);
+
+        // Position must equal seek target within 50ms.
+        let pos = src.position().as_secs_f64();
+        let delta = (pos - seek_target_secs).abs();
+        assert!(
+            delta < 0.05,
+            "position after seek: expected ~{seek_target_secs:.3}s, got {pos:.4}s \
+             (delta {delta:.4}s > 50ms) — seek ordering race suspected"
+        );
+    }
+
+    /// Extended drain test: ring must not starve for 5 full seconds at real-time rate.
+    /// The existing 250ms test is too short to catch slow leaks.
+    #[test]
+    fn dsd_ring_never_starves_during_5s_real_time_drain() {
+        // ~6 seconds of DSD audio: ceil(6 / (4096/2822400)) = ceil(6 / 0.001452) ≈ 4132
+        // Use 517 blocks ≈ 6.0s to ensure the decoder keeps up for the full 5s test window.
+        let data = build_dsf(517, 0xAA);
+        let f = write_temp(&data, "dsf");
+        let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
+        wait_ready(&src, 10_000);
+        assert!(src.is_ready(), "source must be ready before drain test");
+
+        let buf_size = 512usize; // 256 frames × 2 channels ≈ 5.3ms per callback
+        let mut buf = vec![0.0f32; buf_size];
+        let callback_period = Duration::from_micros(5_333); // ≈ 256 frames @ 48kHz
+        let test_duration = Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + test_duration;
+        let mut underruns = 0u32;
+
+        while std::time::Instant::now() < deadline {
+            let n = src.read_samples(&mut buf).unwrap();
+            if n == 0 {
+                underruns += 1;
+            }
+            std::thread::sleep(callback_period);
+        }
+
+        assert_eq!(
+            underruns,
+            0,
+            "ring starved {underruns} times during 5s real-time drain — jitter will occur"
+        );
     }
 }
