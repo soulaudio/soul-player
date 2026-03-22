@@ -20,8 +20,9 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-/// Pre-buffer target: 1 second of output audio at target sample rate.
-const BUFFER_SIZE_SECONDS: usize = 1;
+/// Pre-buffer target: 5 seconds of output audio at target sample rate.
+/// Must be ≥5 to absorb Windows sleep(1ms)≈15ms jitter without underrun.
+const BUFFER_SIZE_SECONDS: usize = 5;
 /// Minimum samples in ring buffer before `is_ready()` returns `true`.
 const MIN_BUFFER_SAMPLES: usize = 12_000;
 
