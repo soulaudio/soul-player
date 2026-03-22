@@ -42,6 +42,8 @@ struct SharedState {
     seek_pending: AtomicBool,
     seek_target_samples: AtomicU64, // interleaved output sample count at seek target
     generation: AtomicUsize,        // incremented on seek to invalidate stale ring-buffer data
+    underrun_count: AtomicU64,      // times read_samples returned fewer samples than requested
+    buffer_fill: AtomicUsize,       // approximate ring fill; updated by read_samples() after each read
 }
 
 impl SharedState {
@@ -52,7 +54,51 @@ impl SharedState {
             seek_pending: AtomicBool::new(false),
             seek_target_samples: AtomicU64::new(0),
             generation: AtomicUsize::new(0),
+            underrun_count: AtomicU64::new(0),
+            buffer_fill: AtomicUsize::new(0),
         })
+    }
+}
+
+// ── Diagnostics ───────────────────────────────────────────────────────────────
+
+/// Snapshot of DSD source health.
+#[derive(Debug, Clone)]
+pub struct DsdDiagnostics {
+    /// Times the audio callback requested samples but the ring buffer was empty or partially drained.
+    pub underrun_count: u64,
+    /// Current PCM samples in ring buffer (interleaved).
+    pub buffer_fill_samples: usize,
+    /// Total ring buffer capacity in interleaved samples.
+    pub buffer_capacity_samples: usize,
+    /// Fill level 0.0–100.0.
+    pub buffer_fill_percent: f32,
+    /// True while the decoder background thread is still producing (false after EOF).
+    pub decoder_running: bool,
+}
+
+/// Cheap, cloneable read handle into a `DsdAudioSource`'s shared state.
+#[derive(Clone)]
+pub struct DsdDiagnosticsHandle {
+    shared: Arc<SharedState>,
+    capacity: usize,
+}
+
+impl DsdDiagnosticsHandle {
+    pub fn read(&self) -> DsdDiagnostics {
+        let fill = self.shared.buffer_fill.load(Ordering::Relaxed);
+        let cap = self.capacity;
+        DsdDiagnostics {
+            underrun_count: self.shared.underrun_count.load(Ordering::Relaxed),
+            buffer_fill_samples: fill,
+            buffer_capacity_samples: cap,
+            buffer_fill_percent: if cap == 0 {
+                0.0
+            } else {
+                fill as f32 / cap as f32 * 100.0
+            },
+            decoder_running: !self.shared.is_eof.load(Ordering::Acquire),
+        }
     }
 }
 
@@ -132,6 +178,7 @@ pub struct DsdAudioSource {
     command_tx: Sender<DsdCommand>,
     _decoder_thread: JoinHandle<()>,
     last_generation: usize,
+    buffer_capacity: usize,
 }
 
 impl DsdAudioSource {
@@ -188,7 +235,16 @@ impl DsdAudioSource {
             command_tx: cmd_tx,
             _decoder_thread: decoder_thread,
             last_generation: 0,
+            buffer_capacity: ring_capacity,
         })
+    }
+
+    /// Return a cheap, cloneable handle for reading diagnostics outside the audio callback.
+    pub fn diagnostics_handle(&self) -> DsdDiagnosticsHandle {
+        DsdDiagnosticsHandle {
+            shared: Arc::clone(&self.shared),
+            capacity: self.buffer_capacity,
+        }
     }
 }
 
@@ -212,6 +268,7 @@ impl AudioSource for DsdAudioSource {
         let to_read = buffer.len().min(available);
 
         if to_read == 0 {
+            self.shared.underrun_count.fetch_add(1, Ordering::Relaxed);
             buffer.fill(0.0);
             return Ok(0);
         }
@@ -229,8 +286,13 @@ impl AudioSource for DsdAudioSource {
         // Fill remainder with silence if ring was partially drained.
         let filled = to_read;
         if filled < buffer.len() {
+            self.shared.underrun_count.fetch_add(1, Ordering::Relaxed);
             buffer[filled..].fill(0.0);
         }
+        // Store updated fill level (samples remaining after this read)
+        self.shared
+            .buffer_fill
+            .store(self.buffer_consumer.slots(), Ordering::Relaxed);
 
         Ok(filled)
     }
@@ -947,6 +1009,36 @@ mod tests {
             underruns, 0,
             "ring starved {underruns} times during 250ms drain — jitter will occur"
         );
+    }
+
+    // ── Diagnostics unit tests ────────────────────────────────────────────────
+
+    #[test]
+    fn underrun_count_increments_on_empty_ring() {
+        let state = SharedState::new();
+        assert_eq!(state.underrun_count.load(Ordering::Relaxed), 0);
+        state.underrun_count.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(state.underrun_count.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn diagnostics_handle_reads_buffer_fill() {
+        let state = SharedState::new();
+        let capacity = 480_000usize;
+        let handle = DsdDiagnosticsHandle {
+            shared: Arc::clone(&state),
+            capacity,
+        };
+        let diag = handle.read();
+        assert_eq!(diag.buffer_fill_samples, 0);
+        assert_eq!(diag.buffer_capacity_samples, capacity);
+        assert_eq!(diag.underrun_count, 0);
+        assert!((diag.buffer_fill_percent - 0.0).abs() < 0.001);
+        state.buffer_fill.store(96_000, Ordering::Relaxed);
+        let diag2 = handle.read();
+        assert_eq!(diag2.buffer_fill_samples, 96_000);
+        let expected_pct = 96_000.0f32 / capacity as f32 * 100.0;
+        assert!((diag2.buffer_fill_percent - expected_pct).abs() < 0.1);
     }
 
     #[test]

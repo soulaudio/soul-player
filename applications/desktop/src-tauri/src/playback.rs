@@ -303,6 +303,16 @@ impl From<&QueueTrack> for FrontendTrackEvent {
     }
 }
 
+/// DSD diagnostics data transfer object for the Tauri IPC layer.
+#[derive(serde::Serialize)]
+pub struct DsdDiagnosticsDto {
+    pub underrun_count: u64,
+    pub buffer_fill_samples: usize,
+    pub buffer_capacity_samples: usize,
+    pub buffer_fill_percent: f32,
+    pub decoder_running: bool,
+}
+
 /// Playback manager for Tauri application
 ///
 /// Wraps DesktopPlayback and handles event emission to frontend.
@@ -1536,6 +1546,21 @@ impl PlaybackManager {
             return 0.0;
         };
         playback.get_position().as_secs_f64()
+    }
+
+    /// Get DSD diagnostics for the currently-playing DSD source, or `None` if not DSD.
+    pub fn get_dsd_diagnostics(&self) -> Option<DsdDiagnosticsDto> {
+        let Ok(playback) = self.playback.lock() else {
+            tracing::error!("Playback mutex poisoned in get_dsd_diagnostics");
+            return None;
+        };
+        playback.get_dsd_diagnostics().map(|d| DsdDiagnosticsDto {
+            underrun_count: d.underrun_count,
+            buffer_fill_samples: d.buffer_fill_samples,
+            buffer_capacity_samples: d.buffer_capacity_samples,
+            buffer_fill_percent: d.buffer_fill_percent,
+            decoder_running: d.decoder_running,
+        })
     }
 
     /// Get current volume (0.0 to 1.0)

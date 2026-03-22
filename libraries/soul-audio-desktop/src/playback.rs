@@ -759,6 +759,10 @@ pub struct DesktopPlayback {
 
     /// Device switch configuration
     device_switch_config: DeviceSwitchConfig,
+
+    /// Handle for reading DSD diagnostics (underrun count, buffer fill).
+    /// Set whenever a DSD source is created; cleared on non-DSD activation.
+    dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
 }
 
 // SAFETY: DesktopPlayback is safe to send between threads because:
@@ -784,6 +788,7 @@ struct AudioCallbackContext<'a> {
     command_tx: &'a Sender<PlaybackCommand>,
     event_tx: &'a Sender<PlaybackEvent>,
     stream_id: std::time::Instant,
+    dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
 
     // Mutable state
     callback_count: &'a mut u32,
@@ -810,16 +815,20 @@ fn is_dsd_path(path: &std::path::Path) -> bool {
 fn create_audio_source(
     path: &std::path::Path,
     sample_rate: u32,
-) -> Result<Box<dyn soul_playback::AudioSource>> {
+) -> Result<(
+    Box<dyn soul_playback::AudioSource>,
+    Option<crate::sources::dsd::DsdDiagnosticsHandle>,
+)> {
     if is_dsd_path(path) {
         tracing::info!("[create_audio_source] Opening DSD file: {}", path.display());
         let src = crate::sources::DsdAudioSource::new(path, sample_rate)
             .map_err(|e| crate::error::AudioError::PlaybackError(e.to_string()))?;
-        Ok(Box::new(src))
+        let handle = src.diagnostics_handle();
+        Ok((Box::new(src), Some(handle)))
     } else {
         let src = crate::sources::LocalAudioSource::new(path, sample_rate)
             .map_err(|e| crate::error::AudioError::PlaybackError(e.to_string()))?;
-        Ok(Box::new(src))
+        Ok((Box::new(src), None))
     }
 }
 
@@ -831,7 +840,10 @@ fn load_source_blocking(
     track: &QueueTrack,
     sample_rate: u32,
     timeout: Duration,
-) -> Result<Box<dyn soul_playback::AudioSource>> {
+) -> Result<(
+    Box<dyn soul_playback::AudioSource>,
+    Option<crate::sources::dsd::DsdDiagnosticsHandle>,
+)> {
     let start = std::time::Instant::now();
 
     tracing::info!(
@@ -842,7 +854,7 @@ fn load_source_blocking(
     );
 
     // Create source (DSD or PCM)
-    let source = create_audio_source(&track.path, sample_rate)?;
+    let (source, diag_handle) = create_audio_source(&track.path, sample_rate)?;
 
     // Wait for buffer to fill
     while !source.is_ready() && start.elapsed() < timeout {
@@ -856,7 +868,7 @@ fn load_source_blocking(
             elapsed,
             track.title
         );
-        Ok(source)
+        Ok((source, diag_handle))
     } else {
         let err_msg = format!(
             "Source load timeout ({:?}) for: {}",
@@ -945,6 +957,8 @@ impl DesktopPlayback {
         // Create CPAL stream with specified device
         tracing::debug!("[Playback] Creating audio stream");
         let stream_start = std::time::Instant::now();
+        let dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>> =
+            Arc::new(Mutex::new(None));
         let (stream_option, actual_device_name, sample_rate) = Self::create_audio_stream(
             manager.clone(),
             command_rx.clone(),
@@ -952,6 +966,7 @@ impl DesktopPlayback {
             event_tx.clone(),
             backend,
             device_name.clone(),
+            dsd_diagnostics_handle.clone(),
         )?;
         let stream_duration = stream_start.elapsed();
 
@@ -1021,6 +1036,7 @@ impl DesktopPlayback {
             resampling_settings,
             device_switch_state: Arc::new(Mutex::new(DeviceSwitchState::Idle)),
             device_switch_config: DeviceSwitchConfig::default(),
+            dsd_diagnostics_handle,
         })
     }
 
@@ -1035,6 +1051,7 @@ impl DesktopPlayback {
         event_tx: Sender<PlaybackEvent>,
         backend: crate::AudioBackend,
         device_name: Option<String>,
+        dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
     ) -> Result<(Option<Stream>, String, u32)> {
         tracing::info!(
             backend = ?backend,
@@ -1168,6 +1185,7 @@ impl DesktopPlayback {
                     rt_priority_handle: None,
                 };
 
+                let dsd_diag_f32 = dsd_diagnostics_handle.clone();
                 device.build_output_stream(
                     &config,
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
@@ -1208,6 +1226,7 @@ impl DesktopPlayback {
                             command_tx: &command_tx,
                             event_tx: &event_tx,
                             stream_id,
+                            dsd_diagnostics_handle: dsd_diag_f32.clone(),
                             callback_count: &mut callback_count,
                             load_requested: &mut load_requested,
                             error_count: &mut error_count,
@@ -1256,6 +1275,7 @@ impl DesktopPlayback {
                     rt_priority_handle: None,
                 };
 
+                let dsd_diag_i32 = dsd_diagnostics_handle.clone();
                 device.build_output_stream(
                     &config,
                     move |data: &mut [i32], _: &cpal::OutputCallbackInfo| {
@@ -1295,6 +1315,7 @@ impl DesktopPlayback {
                             command_tx: &command_tx,
                             event_tx: &event_tx,
                             stream_id,
+                            dsd_diagnostics_handle: dsd_diag_i32.clone(),
                             callback_count: &mut callback_count,
                             load_requested: &mut load_requested,
                             error_count: &mut error_count,
@@ -1345,6 +1366,7 @@ impl DesktopPlayback {
                     rt_priority_handle: None,
                 };
 
+                let dsd_diag_i16 = dsd_diagnostics_handle.clone();
                 device.build_output_stream(
                     &config,
                     move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
@@ -1384,6 +1406,7 @@ impl DesktopPlayback {
                             command_tx: &command_tx,
                             event_tx: &event_tx,
                             stream_id,
+                            dsd_diagnostics_handle: dsd_diag_i16.clone(),
                             callback_count: &mut callback_count,
                             load_requested: &mut load_requested,
                             error_count: &mut error_count,
@@ -1726,7 +1749,13 @@ impl DesktopPlayback {
 
         // Forward pending events from manager to UI
         // Uses the conversion function to translate between event types
-        Self::forward_manager_events(&mut mgr, ctx.event_tx, ctx.command_tx, ctx.load_requested);
+        Self::forward_manager_events(
+            &mut mgr,
+            ctx.event_tx,
+            ctx.command_tx,
+            ctx.load_requested,
+            &ctx.dsd_diagnostics_handle,
+        );
 
         // Stream-restart recovery: if manager is loading but no load has been issued
         // on this stream (load_requested == false), the CPAL stream was recreated while
@@ -1744,7 +1773,7 @@ impl DesktopPlayback {
                         sample_rate,
                         Duration::from_millis(500),
                     ) {
-                        Ok(source) => {
+                        Ok((source, _diag_handle)) => {
                             if let Err(e) = command_tx_clone.send(PlaybackCommand::ActivateSource {
                                 source,
                                 track: pending_track,
@@ -1790,6 +1819,7 @@ impl DesktopPlayback {
         event_tx: &Sender<PlaybackEvent>,
         command_tx: &Sender<PlaybackCommand>,
         load_requested: &mut bool,
+        dsd_diagnostics_handle: &Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
     ) {
         let events = mgr.drain_events();
         for event in events {
@@ -1890,11 +1920,16 @@ impl DesktopPlayback {
                     // Spawn background thread to load the track
                     let command_tx_clone = command_tx.clone();
                     let sample_rate = mgr.get_sample_rate();
+                    let dsd_diag_clone = dsd_diagnostics_handle.clone();
 
                     std::thread::spawn(move || {
                         match load_source_blocking(&track, sample_rate, Duration::from_millis(500))
                         {
-                            Ok(source) => {
+                            Ok((source, diag_handle)) => {
+                                // Store (or clear) the diagnostics handle for the new source.
+                                if let Ok(mut guard) = dsd_diag_clone.lock() {
+                                    *guard = diag_handle;
+                                }
                                 if let Err(e) =
                                     command_tx_clone.send(PlaybackCommand::ActivateSource {
                                         source,
@@ -1961,7 +1996,10 @@ impl DesktopPlayback {
         track: &soul_playback::QueueTrack,
         target_sample_rate: u32,
         timeout: Duration,
-    ) -> Result<Box<dyn soul_playback::AudioSource>> {
+    ) -> Result<(
+        Box<dyn soul_playback::AudioSource>,
+        Option<crate::sources::dsd::DsdDiagnosticsHandle>,
+    )> {
         let start = std::time::Instant::now();
 
         tracing::debug!(
@@ -1971,10 +2009,11 @@ impl DesktopPlayback {
         );
 
         // Create audio source (DSD or PCM)
-        let source = create_audio_source(&track.path, target_sample_rate).map_err(|e| {
-            tracing::error!("[load_source_with_timeout] Failed to create source: {}", e);
-            e
-        })?;
+        let (source, diag_handle) = create_audio_source(&track.path, target_sample_rate)
+            .map_err(|e| {
+                tracing::error!("[load_source_with_timeout] Failed to create source: {}", e);
+                e
+            })?;
 
         // Poll until ready or timeout
         let poll_interval = Duration::from_millis(10);
@@ -2000,7 +2039,7 @@ impl DesktopPlayback {
             track.title
         );
 
-        Ok(source)
+        Ok((source, diag_handle))
     }
 
     /// Process playback command with an already-acquired manager lock
@@ -2298,6 +2337,14 @@ impl DesktopPlayback {
         }
     }
 
+    /// Get DSD diagnostics for the currently-playing DSD source, or `None` if not DSD.
+    pub fn get_dsd_diagnostics(&self) -> Option<crate::sources::dsd::DsdDiagnostics> {
+        self.dsd_diagnostics_handle
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|h| h.read()))
+    }
+
     /// Get current position
     pub fn get_position(&self) -> std::time::Duration {
         if let Ok(mgr) = self.manager.lock() {
@@ -2575,6 +2622,7 @@ impl DesktopPlayback {
             self.event_tx.clone(),
             backend,
             device_name.clone(),
+            self.dsd_diagnostics_handle.clone(),
         );
 
         // Handle stream creation failure with recovery logic
@@ -2745,7 +2793,12 @@ impl DesktopPlayback {
                 // Create the new audio source with the new sample rate (no lock needed).
                 // Uses DsdAudioSource for .dsf/.dff/.dsdiff, LocalAudioSource otherwise.
                 match create_audio_source(&track.path, new_sample_rate) {
-                    Ok(mut source) => {
+                    Ok((mut source, diag_handle)) => {
+                        // Store (or clear) the diagnostics handle for the new source.
+                        if let Ok(mut guard) = self.dsd_diagnostics_handle.lock() {
+                            *guard = diag_handle;
+                        }
+
                         // CRITICAL: Seek the source to the saved position BEFORE setting it
                         // This prevents the track from restarting when switching devices
                         if position > std::time::Duration::ZERO {
@@ -3593,11 +3646,13 @@ mod tests {
         let (command_tx, _command_rx) = bounded(100);
 
         let mut load_requested = false;
+        let dsd_diag_test1 = Arc::new(Mutex::new(None));
         DesktopPlayback::forward_manager_events(
             &mut mgr,
             &event_tx,
             &command_tx,
             &mut load_requested,
+            &dsd_diag_test1,
         );
 
         let forwarded: Vec<_> = event_rx.try_iter().collect();
@@ -3703,11 +3758,13 @@ mod tests {
             DesktopPlayback::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
 
         // Also drain manager's pending_events (activate_source puts StateChanged+TrackChanged there)
+        let dsd_diag_test2 = Arc::new(Mutex::new(None));
         DesktopPlayback::forward_manager_events(
             &mut mgr,
             &event_tx,
             &command_tx,
             &mut load_requested,
+            &dsd_diag_test2,
         );
 
         let events: Vec<_> = event_rx.try_iter().collect();

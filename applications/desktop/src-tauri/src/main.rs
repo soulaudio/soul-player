@@ -903,6 +903,14 @@ async fn get_position(playback: State<'_, LazyPlaybackManager>) -> Result<f64, S
     Ok(playback.get().await?.get_position())
 }
 
+/// Get DSD diagnostics for the currently-playing DSD source, or null if not DSD.
+#[tauri::command]
+async fn get_dsd_diagnostics(
+    playback: State<'_, LazyPlaybackManager>,
+) -> Result<Option<crate::playback::DsdDiagnosticsDto>, String> {
+    Ok(playback.get().await?.get_dsd_diagnostics())
+}
+
 /// Get current volume (0.0 to 1.0)
 #[tauri::command]
 async fn get_volume(playback: State<'_, LazyPlaybackManager>) -> Result<f64, String> {
@@ -3333,6 +3341,7 @@ fn main() {
             get_current_track,
             get_queue_index,
             get_position,
+            get_dsd_diagnostics,
             get_volume,
             save_playback_session,
             restore_playback_session,

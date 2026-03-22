@@ -24,4 +24,4 @@
 pub mod container;
 mod source;
 
-pub use source::DsdAudioSource;
+pub use source::{DsdAudioSource, DsdDiagnostics, DsdDiagnosticsHandle};
