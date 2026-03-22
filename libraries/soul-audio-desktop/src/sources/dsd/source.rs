@@ -30,7 +30,10 @@ const MIN_BUFFER_SAMPLES: usize = 12_000;
 
 #[derive(Debug)]
 enum DsdCommand {
-    Seek(Duration),
+    /// Decoder should seek to the position stored in `SharedState::seek_target_samples`.
+    /// No position is embedded in the command so that rapid seeks always resolve to the
+    /// latest position written to the atomic, even when multiple Seek commands are queued.
+    Seek,
     Stop,
 }
 
@@ -43,7 +46,7 @@ struct SharedState {
     seek_target_samples: AtomicU64, // interleaved output sample count at seek target
     generation: AtomicUsize,        // incremented on seek to invalidate stale ring-buffer data
     underrun_count: AtomicU64,      // times read_samples returned fewer samples than requested
-    buffer_fill: AtomicUsize,       // approximate ring fill; updated by read_samples() after each read
+    buffer_fill: AtomicUsize, // approximate ring fill; updated by read_samples() after each read
 }
 
 impl SharedState {
@@ -306,9 +309,18 @@ impl AudioSource for DsdAudioSource {
             .seek_target_samples
             .store(target_samples, Ordering::Release);
         self.shared.seek_pending.store(true, Ordering::Release);
-        self.command_tx
-            .send(DsdCommand::Seek(position))
-            .map_err(|_| PlaybackError::AudioSource("decoder thread disconnected".into()))?;
+        // Use try_send to avoid blocking the WASAPI audio callback. If the channel is
+        // already full (rapid scrubbing), the existing Seek commands will drain and each
+        // reads seek_target_samples from shared state, so they all converge on the latest
+        // position without any callback stall.
+        match self.command_tx.try_send(DsdCommand::Seek) {
+            Ok(()) | Err(crossbeam_channel::TrySendError::Full(_)) => {}
+            Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
+                return Err(PlaybackError::AudioSource(
+                    "decoder thread disconnected".into(),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -388,7 +400,7 @@ fn decode_loop(
         let params = SincInterpolationParameters {
             sinc_len: 256,
             f_cutoff: 0.95,
-            interpolation: SincInterpolationType::Linear,
+            interpolation: SincInterpolationType::Cubic,
             oversampling_factor: 256,
             window: WindowFunction::BlackmanHarris2,
         };
@@ -427,8 +439,15 @@ fn decode_loop(
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 DsdCommand::Stop => return,
-                DsdCommand::Seek(pos) => {
-                    let target_sample = (pos.as_secs_f64() * dsd_rate as f64) as u64;
+                DsdCommand::Seek => {
+                    // Read the latest seek target from shared atomics. Because the command
+                    // carries no payload, rapid seeks always converge on the last position
+                    // set by seek(), even when multiple Seek commands are queued.
+                    let seek_output_samples =
+                        shared.seek_target_samples.load(Ordering::Acquire) as usize;
+                    let pos_secs =
+                        seek_output_samples as f64 / (target_sample_rate as f64 * channels as f64);
+                    let target_sample = (pos_secs * dsd_rate as f64) as u64;
                     if let Err(e) = container.seek(target_sample) {
                         tracing::warn!("[DSD] seek error: {e}");
                     }
@@ -441,8 +460,6 @@ fn decode_loop(
                     input_buf.clear();
                     chunk_filled = 0;
                     // Reset samples_produced so position() is correct after seek.
-                    let seek_output_samples =
-                        (pos.as_secs_f64() * target_sample_rate as f64 * channels as f64) as usize;
                     shared
                         .samples_produced
                         .store(seek_output_samples, Ordering::Release);
@@ -464,7 +481,12 @@ fn decode_loop(
         }
 
         // Decode one CHUNK_FRAMES block of DSD → interleaved PCM.
+        // Check for pending commands every 1 024 frames (~0.4 ms) so that seeks
+        // break out of the inner loop quickly rather than waiting up to ~6 ms.
         while chunk_filled < CHUNK_FRAMES {
+            if chunk_filled > 0 && chunk_filled.is_multiple_of(1024) && !cmd_rx.is_empty() {
+                break;
+            }
             match container.read_frame(&mut frame) {
                 Ok(true) => {
                     for ch in 0..channels {
@@ -496,9 +518,13 @@ fn decode_loop(
                     // Park until Stop or a seek-to-restart.
                     match cmd_rx.recv() {
                         Err(_) | Ok(DsdCommand::Stop) => return,
-                        Ok(DsdCommand::Seek(pos)) => {
+                        Ok(DsdCommand::Seek) => {
                             shared.is_eof.store(false, Ordering::Release);
-                            let target = (pos.as_secs_f64() * dsd_rate as f64) as u64;
+                            let seek_output_samples =
+                                shared.seek_target_samples.load(Ordering::Acquire) as usize;
+                            let pos_secs = seek_output_samples as f64
+                                / (target_sample_rate as f64 * channels as f64);
+                            let target = (pos_secs * dsd_rate as f64) as u64;
                             let _ = container.seek(target);
                             for f in &mut filters {
                                 f.reset();
@@ -508,9 +534,6 @@ fn decode_loop(
                             }
                             input_buf.clear();
                             chunk_filled = 0;
-                            let seek_output_samples =
-                                (pos.as_secs_f64() * target_sample_rate as f64 * channels as f64)
-                                    as usize;
                             shared
                                 .samples_produced
                                 .store(seek_output_samples, Ordering::Release);
@@ -1175,6 +1198,10 @@ mod tests {
         let mut src = DsdAudioSource::new(f.path(), 48_000).unwrap();
         wait_ready(&src, 10_000);
         assert!(src.is_ready(), "source must be ready before drain test");
+        // Give the decoder 2 s to fill the ring further before drain starts.
+        // In production the ring reaches ~5 s capacity before playback begins;
+        // without this the test races against parallel test threads for CPU.
+        std::thread::sleep(Duration::from_secs(2));
 
         let buf_size = 512usize; // 256 frames × 2 channels ≈ 5.3ms per callback
         let mut buf = vec![0.0f32; buf_size];
@@ -1192,8 +1219,7 @@ mod tests {
         }
 
         assert_eq!(
-            underruns,
-            0,
+            underruns, 0,
             "ring starved {underruns} times during 5s real-time drain — jitter will occur"
         );
     }

@@ -2009,8 +2009,8 @@ impl DesktopPlayback {
         );
 
         // Create audio source (DSD or PCM)
-        let (source, diag_handle) = create_audio_source(&track.path, target_sample_rate)
-            .map_err(|e| {
+        let (source, diag_handle) =
+            create_audio_source(&track.path, target_sample_rate).map_err(|e| {
                 tracing::error!("[load_source_with_timeout] Failed to create source: {}", e);
                 e
             })?;
