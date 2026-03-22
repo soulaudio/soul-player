@@ -378,6 +378,20 @@ function seedDatabase() {
       return out;
     }
 
+    function buildDsfLong(durationSecs) {
+      const BLOCK_SIZE = 4096;
+      const DSD_RATE_LOCAL = 2_822_400;
+      const SAMPLES_PER_BLOCK = BLOCK_SIZE * 8; // 32768
+      const nBlocks = Math.ceil(durationSecs * DSD_RATE_LOCAL / SAMPLES_PER_BLOCK);
+      return buildDsf(nBlocks);
+    }
+
+    function buildDffLong(durationSecs) {
+      const DSD_RATE_LOCAL = 2_822_400;
+      const numSamplesPerChannel = Math.ceil(durationSecs * DSD_RATE_LOCAL);
+      return buildDff(numSamplesPerChannel);
+    }
+
     // Create DSF and DFF audio files
     const dsfPath = join(audioDir, 'dsd-track-one.dsf');
     const dffPath = join(audioDir, 'dsd-track-two.dff');
@@ -385,6 +399,12 @@ function seedDatabase() {
     writeFileSync(dsfPath, buildDsf(512));
     // 524288 samples per channel ≈ 0.19s
     writeFileSync(dffPath, buildDff(524288));
+
+    // DSD Stress Album — 60-second files (~42MB each)
+    const dsfStressPath = join(audioDir, 'dsd-stress-track.dsf');
+    const dffStressPath = join(audioDir, 'dsd-stress-track.dff');
+    writeFileSync(dsfStressPath, buildDsfLong(60));
+    writeFileSync(dffStressPath, buildDffLong(60));
 
     // DSD Artist + Album
     db.prepare('INSERT INTO artists (id, name) VALUES (?, ?)').run(5001, 'DSD Artist');
@@ -413,6 +433,32 @@ function seedDatabase() {
     // track_artists junction for DSD tracks
     insertTrackArtist.run(String(5001), 5001, 0);
     insertTrackArtist.run(String(5002), 5001, 0);
+
+    // Album 5002 — "DSD Stress Album" — 60-second DSF + DFF files
+    // Used by dsd-diagnostics-loopback.spec.js stress / loopback tests.
+    db.prepare('INSERT INTO albums (id, title, artist_id, year) VALUES (?, ?, ?, ?)').run(5002, 'DSD Stress Album', 5001, 2024);
+
+    // Track 5003 — 60-second DSF file
+    db.prepare(`
+      INSERT INTO tracks (id, title, artist_id, album_id, track_number, disc_number, duration_seconds, file_format)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(5003, 'DSD Stress Track DSF', 5001, 5002, 1, 1, 60.0, 'DSF');
+    db.prepare(`
+      INSERT INTO track_sources (track_id, source_id, status, local_file_path)
+      VALUES (?, ?, ?, ?)
+    `).run(5003, 1, 'available', dsfStressPath);
+    insertTrackArtist.run(String(5003), 5001, 0);
+
+    // Track 5004 — 60-second DFF file
+    db.prepare(`
+      INSERT INTO tracks (id, title, artist_id, album_id, track_number, disc_number, duration_seconds, file_format)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(5004, 'DSD Stress Track DFF', 5001, 5002, 2, 1, 60.0, 'DFF');
+    db.prepare(`
+      INSERT INTO track_sources (track_id, source_id, status, local_file_path)
+      VALUES (?, ?, ?, ?)
+    `).run(5004, 1, 'available', dffStressPath);
+    insertTrackArtist.run(String(5004), 5001, 0);
 
     // Add a DSF file to the import dir so the scan test (test 5) can discover it.
     writeFileSync(join(importDir, 'dsd-import-01.dsf'), buildDsf(32));
