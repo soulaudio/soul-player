@@ -1074,7 +1074,14 @@ impl PlaybackManager {
                 );
 
                 let mut previous: Vec<soul_audio_desktop::AsyncDeviceInfo> = Vec::new();
-                let mut poll_interval = tokio::time::interval(Duration::from_secs(2));
+                // Exponential backoff: after BACKOFF_AFTER_STABLE consecutive no-change polls,
+                // double the interval up to MAX_POLL_SECS. Reset to 2s on any device change.
+                let mut poll_interval_secs: u64 = 2;
+                let mut stable_polls: u32 = 0;
+                const BACKOFF_AFTER_STABLE: u32 = 15; // 15 × 2s = 30s before first backoff
+                const MAX_POLL_SECS: u64 = 30;
+                let mut poll_interval =
+                    tokio::time::interval(Duration::from_secs(poll_interval_secs));
                 poll_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
                 // Capture initial state so we don't fire spurious events on first tick
@@ -1094,12 +1101,45 @@ impl PlaybackManager {
                         _ = poll_interval.tick() => {
                             match monitor.enumerate_devices().await {
                                 Ok(current) => {
-                                    for event in soul_audio_desktop::detect_device_changes(&previous, &current) {
-                                        if let Err(send_err) = event_tx_poll.try_send(event) {
-                                            tracing::warn!(
-                                                error = %send_err,
-                                                "[DEVICE_MONITOR] Polling: event channel full, dropping event"
+                                    let changes = soul_audio_desktop::detect_device_changes(&previous, &current);
+                                    if changes.is_empty() {
+                                        stable_polls += 1;
+                                        if stable_polls >= BACKOFF_AFTER_STABLE
+                                            && poll_interval_secs < MAX_POLL_SECS
+                                        {
+                                            poll_interval_secs =
+                                                (poll_interval_secs * 2).min(MAX_POLL_SECS);
+                                            poll_interval = tokio::time::interval(
+                                                Duration::from_secs(poll_interval_secs),
                                             );
+                                            poll_interval.set_missed_tick_behavior(
+                                                tokio::time::MissedTickBehavior::Skip,
+                                            );
+                                            tracing::debug!(
+                                                poll_secs = poll_interval_secs,
+                                                "[DEVICE_MONITOR] Backing off poll interval (stable)"
+                                            );
+                                            stable_polls = 0;
+                                        }
+                                    } else {
+                                        // Device changed — reset to fast polling
+                                        stable_polls = 0;
+                                        if poll_interval_secs > 2 {
+                                            poll_interval_secs = 2;
+                                            poll_interval = tokio::time::interval(
+                                                Duration::from_secs(2),
+                                            );
+                                            poll_interval.set_missed_tick_behavior(
+                                                tokio::time::MissedTickBehavior::Skip,
+                                            );
+                                        }
+                                        for event in changes {
+                                            if let Err(send_err) = event_tx_poll.try_send(event) {
+                                                tracing::warn!(
+                                                    error = %send_err,
+                                                    "[DEVICE_MONITOR] Polling: event channel full, dropping event"
+                                                );
+                                            }
                                         }
                                     }
                                     previous = current;
