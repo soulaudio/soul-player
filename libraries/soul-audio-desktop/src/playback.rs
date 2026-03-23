@@ -21,6 +21,20 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// This is updated by `audio_callback_i32` and read by `send_command` for debugging
 static GLOBAL_I32_CALLBACK_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+// ===== Callback Diagnostics (atomics — no allocation, safe in RT callback) =====
+/// Total audio callbacks fired
+static DIAG_CALLBACKS_TOTAL: AtomicU64 = AtomicU64::new(0);
+/// Callbacks where try_lock() failed (lock contention → silence/noise output)
+static DIAG_LOCK_CONTENTION: AtomicU64 = AtomicU64::new(0);
+/// Callbacks where process_audio returned fewer samples than requested (short fill)
+static DIAG_SHORT_FILL: AtomicU64 = AtomicU64::new(0);
+/// Callbacks where process_audio took longer than 8ms (near the 10ms budget)
+static DIAG_SLOW_CALLBACKS: AtomicU64 = AtomicU64::new(0);
+/// Max observed process_audio duration in microseconds
+static DIAG_MAX_PROCESS_US: AtomicU64 = AtomicU64::new(0);
+/// Last callback count at which we logged diagnostics
+static DIAG_LAST_LOG_AT: AtomicU64 = AtomicU64::new(0);
+
 /// Stream-level fade envelope to prevent clicks/pops at audio stream start
 ///
 /// When a CPAL audio stream first starts, the DAC may be in an undefined state.
@@ -797,6 +811,12 @@ struct AudioCallbackContext<'a> {
     error_fade_samples_remaining: &'a mut usize,
     error_noise_state: &'a mut u32,
     source_set_this_callback: &'a mut bool,
+
+    /// Pre-allocated f32 scratch buffer to avoid heap allocation in the
+    /// real-time audio callback. Sized at stream creation and reused each
+    /// callback invocation. Grows only if the buffer size unexpectedly
+    /// increases (extremely rare).
+    f32_scratch: &'a mut Vec<f32>,
 }
 
 /// Return `true` if `path` has a DSD file extension (.dsf / .dff / .dsdiff).
@@ -1173,6 +1193,9 @@ impl DesktopPlayback {
                 let mut error_noise_state: u32 = 0xDEAD_BEEF;
                 // Track if we set a source this callback to prevent double-loading
                 let mut source_set_this_callback = false;
+                // Pre-allocate f32 scratch buffer to avoid heap allocation in real-time callback.
+                // 4096 samples covers common buffer sizes (e.g. 256, 512, 1024 frames × 2 ch).
+                let mut f32_scratch: Vec<f32> = Vec::with_capacity(4096);
                 tracing::debug!(
                     "[CPAL] Creating F32 stream callback (stream_id: {:?})",
                     stream_id
@@ -1233,6 +1256,7 @@ impl DesktopPlayback {
                             error_fade_samples_remaining: &mut error_fade_samples_remaining,
                             error_noise_state: &mut error_noise_state,
                             source_set_this_callback: &mut source_set_this_callback,
+                            f32_scratch: &mut f32_scratch,
                         };
                         Self::audio_callback::<f32>(ctx, data);
 
@@ -1260,6 +1284,7 @@ impl DesktopPlayback {
                 let mut error_noise_state: u32 = 0xDEAD_BEEF;
                 // Track if we set a source this callback to prevent double-loading
                 let mut source_set_this_callback = false;
+                let mut f32_scratch: Vec<f32> = Vec::with_capacity(4096);
                 tracing::debug!(
                     "[CPAL] Creating I32 stream callback (stream_id: {:?})",
                     stream_id
@@ -1322,6 +1347,7 @@ impl DesktopPlayback {
                             error_fade_samples_remaining: &mut error_fade_samples_remaining,
                             error_noise_state: &mut error_noise_state,
                             source_set_this_callback: &mut source_set_this_callback,
+                            f32_scratch: &mut f32_scratch,
                         };
                         Self::audio_callback::<i32>(ctx, data);
                         // Apply stream start envelope to prevent DAC pop
@@ -1354,6 +1380,7 @@ impl DesktopPlayback {
                 let mut error_noise_state: u32 = 0xDEAD_BEEF;
                 // Track if we set a source this callback to prevent double-loading
                 let mut source_set_this_callback = false;
+                let mut f32_scratch: Vec<f32> = Vec::with_capacity(4096);
                 tracing::debug!(
                     "[CPAL] Creating I16 stream callback (stream_id: {:?})",
                     stream_id
@@ -1413,6 +1440,7 @@ impl DesktopPlayback {
                             error_fade_samples_remaining: &mut error_fade_samples_remaining,
                             error_noise_state: &mut error_noise_state,
                             source_set_this_callback: &mut source_set_this_callback,
+                            f32_scratch: &mut f32_scratch,
                         };
                         Self::audio_callback::<i16>(ctx, data);
                         // Apply stream start envelope to prevent DAC pop
@@ -1677,9 +1705,33 @@ impl DesktopPlayback {
             );
         }
 
+        // Diagnostic: count total callbacks and log stats every ~1000 invocations
+        let total = DIAG_CALLBACKS_TOTAL.fetch_add(1, Ordering::Relaxed) + 1;
+        let last_log = DIAG_LAST_LOG_AT.load(Ordering::Relaxed);
+        if total.wrapping_sub(last_log) >= 1000 {
+            DIAG_LAST_LOG_AT.store(total, Ordering::Relaxed);
+            let contention = DIAG_LOCK_CONTENTION.load(Ordering::Relaxed);
+            let short_fill = DIAG_SHORT_FILL.load(Ordering::Relaxed);
+            let slow = DIAG_SLOW_CALLBACKS.load(Ordering::Relaxed);
+            let max_us = DIAG_MAX_PROCESS_US.load(Ordering::Relaxed);
+            tracing::warn!(
+                "[DIAG] callbacks={} lock_contention={} ({:.1}%) short_fill={} ({:.1}%) slow(>8ms)={} ({:.1}%) max_process_us={} buf_samples={}",
+                total,
+                contention,
+                contention as f64 / total as f64 * 100.0,
+                short_fill,
+                short_fill as f64 / total as f64 * 100.0,
+                slow,
+                slow as f64 / total as f64 * 100.0,
+                max_us,
+                data.len(),
+            );
+        }
+
         // Acquire manager lock using try_lock to avoid blocking the real-time audio thread
         // If the lock is contended, output DAC keepalive noise instead of blocking
         let Ok(mut mgr) = ctx.manager.try_lock() else {
+            DIAG_LOCK_CONTENTION.fetch_add(1, Ordering::Relaxed);
             // Lock contention - output DAC keepalive noise to prevent glitches
             T::fill_silence(data);
             for sample in data.iter_mut() {
@@ -1700,13 +1752,38 @@ impl DesktopPlayback {
                 Self::process_command_with_lock(command, &mut mgr, ctx.event_tx, ctx.command_tx);
         }
 
-        // Process audio into a temporary f32 buffer
-        // Silent pre-warm: audio callback fills silence automatically when no source active
-        // TODO(Phase 2 optimization): Pre-allocate buffer in context to avoid allocation
-        // For now, this works for all formats but should be optimized for real-time safety
-        let mut f32_buffer = vec![0.0f32; data.len()];
-        match mgr.process_audio(&mut f32_buffer) {
+        // Process audio using the pre-allocated f32 scratch buffer.
+        // Avoids heap allocation in the real-time audio callback.
+        // Resize only if the CPAL buffer grew beyond the pre-allocated capacity
+        // (this is extremely rare — CPAL buffer sizes are fixed at stream creation).
+        let needed = data.len();
+        if ctx.f32_scratch.len() < needed {
+            ctx.f32_scratch.resize(needed, 0.0f32);
+        } else {
+            ctx.f32_scratch[..needed].fill(0.0f32);
+        }
+        let f32_buffer = &mut ctx.f32_scratch[..needed];
+        let process_start = std::time::Instant::now();
+        match mgr.process_audio(f32_buffer) {
             Ok(samples_processed) => {
+                // Track process_audio timing
+                let elapsed_us = process_start.elapsed().as_micros() as u64;
+                if elapsed_us > 8000 {
+                    DIAG_SLOW_CALLBACKS.fetch_add(1, Ordering::Relaxed);
+                }
+                let mut prev_max = DIAG_MAX_PROCESS_US.load(Ordering::Relaxed);
+                while elapsed_us > prev_max {
+                    match DIAG_MAX_PROCESS_US.compare_exchange_weak(
+                        prev_max,
+                        elapsed_us,
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    ) {
+                        Ok(_) => break,
+                        Err(x) => prev_max = x,
+                    }
+                }
+
                 // Reset error count on successful processing
                 *ctx.error_count = 0;
 
@@ -1718,6 +1795,7 @@ impl DesktopPlayback {
 
                 // Fill remainder with silence if needed
                 if samples_processed < data.len() {
+                    DIAG_SHORT_FILL.fetch_add(1, Ordering::Relaxed);
                     for sample in &mut data[samples_processed..] {
                         *sample = T::from_f32(0.0);
                     }

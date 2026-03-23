@@ -54,7 +54,9 @@ impl DsdMeta {
     /// Derive PCM output rate and format name from DSD bitstream rate.
     pub fn from_dsd_rate(dsd_rate: u32, channels: u16, lsbf: bool, sample_count: u64) -> Self {
         let pcm_rate = dsd_rate / 8;
-        let duration_secs = sample_count as f64 / dsd_rate as f64;
+        // sample_count is in bytes per channel (each byte = 8 DSD bits).
+        // Duration = bytes × 8 / dsd_rate.
+        let duration_secs = sample_count as f64 * 8.0 / dsd_rate as f64;
         let duration = Duration::from_secs_f64(duration_secs);
         let dsd_format = match dsd_rate {
             2_822_400 => "DSD64".to_string(),
@@ -364,7 +366,7 @@ pub mod tests {
         let data = build_dsf(blocks, 0x69);
         let f = write_temp(&data);
         let c = DsfContainer::open(f.path()).unwrap();
-        let expected_secs = (blocks * DSF_BLOCK_SIZE) as f64 / 2_822_400.0;
+        let expected_secs = (blocks * DSF_BLOCK_SIZE) as f64 * 8.0 / 2_822_400.0;
         let got_secs = c.meta.duration.as_secs_f64();
         assert!(
             (got_secs - expected_secs).abs() < 1e-6,

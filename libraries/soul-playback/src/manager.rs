@@ -717,6 +717,37 @@ impl PlaybackManager {
             }
 
             source.seek(clamped_position)?;
+
+            // Restart fade-in after seek to prevent audible pop.
+            //
+            // After seeking, the source immediately returns full-amplitude audio
+            // at the new position. Without a fade-in, this creates an abrupt
+            // 0→full-amplitude step response — an audible click/pop. All major
+            // players (VLC, MPV, foobar2000) apply a short 5-20ms crossfade at
+            // seek transitions for exactly this reason.
+            //
+            // start_fade is amplitude-triggered: it waits for signal > -60dB
+            // then ramps from 0→1 over 30ms using a raised cosine curve.
+            self.start_fade.start();
+
+            // Reset the audio pipeline so that pre-seek AGC/limiter state does
+            // not undo the start_fade attenuation. The loudness normalizer holds
+            // an integrated-loudness measurement and the output limiter holds a
+            // lookahead ring buffer — both built up during playback before the
+            // seek. If not reset, the normalizer would immediately boost the
+            // fade-in's near-zero samples back to full amplitude, creating the
+            // exact pop we're trying to eliminate.
+            //
+            // This matches what activate_source() does at each track boundary.
+            #[cfg(feature = "volume-leveling")]
+            self.loudness_normalizer.reset();
+
+            #[cfg(feature = "volume-leveling")]
+            self.output_limiter.reset();
+
+            #[cfg(feature = "volume-leveling")]
+            self.headroom_manager.reset();
+
             Ok(())
         } else {
             Err(PlaybackError::NoTrackLoaded)

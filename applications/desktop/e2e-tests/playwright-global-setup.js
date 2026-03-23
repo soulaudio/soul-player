@@ -388,7 +388,10 @@ function seedDatabase() {
 
     function buildDffLong(durationSecs) {
       const DSD_RATE_LOCAL = 2_822_400;
-      const numSamplesPerChannel = Math.ceil(durationSecs * DSD_RATE_LOCAL);
+      // numSamplesPerChannel is bytes per channel (each byte = 8 DSD bits).
+      // DsdMeta::from_dsd_rate computes duration = bytes * 8 / dsd_rate,
+      // so bytes = durationSecs * dsd_rate / 8.
+      const numSamplesPerChannel = Math.ceil(durationSecs * DSD_RATE_LOCAL / 8);
       return buildDff(numSamplesPerChannel);
     }
 
