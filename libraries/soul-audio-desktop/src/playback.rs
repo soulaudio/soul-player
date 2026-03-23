@@ -297,12 +297,6 @@ pub enum PlaybackCommand {
     /// Switch audio output device
     /// Arguments: (backend, `device_name`)
     SwitchDevice(crate::AudioBackend, String),
-
-    /// Activate a loaded source (called after background loading completes)
-    ActivateSource {
-        source: Box<dyn soul_playback::AudioSource>,
-        track: QueueTrack,
-    },
 }
 
 // Manual Debug implementation since AudioSource doesn't implement Debug
@@ -335,9 +329,6 @@ impl std::fmt::Debug for PlaybackCommand {
             Self::SetRepeat(mode) => write!(f, "SetRepeat({:?})", mode),
             Self::SwitchDevice(backend, device) => {
                 write!(f, "SwitchDevice({:?}, {})", backend, device)
-            }
-            Self::ActivateSource { track, .. } => {
-                write!(f, "ActivateSource {{ track: {} }}", track.title)
             }
         }
     }
@@ -376,9 +367,6 @@ impl Clone for PlaybackCommand {
             Self::CycleShuffle => Self::CycleShuffle,
             Self::SetRepeat(mode) => Self::SetRepeat(*mode),
             Self::SwitchDevice(backend, name) => Self::SwitchDevice(*backend, name.clone()),
-            Self::ActivateSource { .. } => {
-                panic!("ActivateSource cannot be cloned (contains Box<dyn AudioSource>)")
-            }
         }
     }
 }
@@ -851,54 +839,6 @@ fn create_audio_source(
         let src = crate::sources::LocalAudioSource::new(path, sample_rate)
             .map_err(|e| crate::error::AudioError::PlaybackError(e.to_string()))?;
         Ok((Box::new(src), None))
-    }
-}
-
-/// Load audio source synchronously with timeout
-///
-/// This runs in a background thread (NOT audio callback or UI thread).
-/// Blocks until source is ready or timeout occurs.
-fn load_source_blocking(
-    track: &QueueTrack,
-    sample_rate: u32,
-    timeout: Duration,
-) -> Result<(
-    Box<dyn soul_playback::AudioSource>,
-    Option<crate::sources::dsd::DsdDiagnosticsHandle>,
-)> {
-    let start = std::time::Instant::now();
-
-    tracing::info!(
-        "[load_source_blocking] Starting load: {} at {}Hz, timeout={:?}",
-        track.title,
-        sample_rate,
-        timeout
-    );
-
-    // Create source (DSD or PCM)
-    let (source, diag_handle) = create_audio_source(&track.path, sample_rate)?;
-
-    // Wait for buffer to fill
-    while !source.is_ready() && start.elapsed() < timeout {
-        std::thread::sleep(Duration::from_millis(10));
-    }
-
-    let elapsed = start.elapsed();
-    if source.is_ready() {
-        tracing::info!(
-            "[load_source_blocking] ✅ Source ready in {:?}: {}",
-            elapsed,
-            track.title
-        );
-        Ok((source, diag_handle))
-    } else {
-        let err_msg = format!(
-            "Source load timeout ({:?}) for: {}",
-            timeout,
-            track.path.display()
-        );
-        tracing::error!("[load_source_blocking] {}", err_msg);
-        Err(crate::error::AudioError::PlaybackError(err_msg))
     }
 }
 
@@ -1608,10 +1548,14 @@ impl DesktopPlayback {
     fn forward_manager_events(
         mgr: &mut PlaybackManager,
         event_tx: &Sender<PlaybackEvent>,
-        command_tx: &Sender<PlaybackCommand>,
+        _command_tx: &Sender<PlaybackCommand>,
         load_requested: &mut bool,
-        dsd_diagnostics_handle: &Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
-        loader_in_flight: &Arc<AtomicBool>,
+        _dsd_diagnostics_handle: &Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
+        pending_source: &mut Option<(
+            Box<dyn soul_playback::AudioSource>,
+            soul_playback::QueueTrack,
+            Option<crate::sources::dsd::DsdDiagnosticsHandle>,
+        )>,
     ) {
         let events = mgr.drain_events();
         for event in events {
@@ -1709,64 +1653,20 @@ impl DesktopPlayback {
                     // This prevents the stream-restart recovery from double-loading.
                     *load_requested = true;
 
-                    // Guard against simultaneous loader spawns. Rapid track cycling can
-                    // emit multiple LoadNext events before any loader completes; each
-                    // spawned thread holds Arc<Mutex<PlaybackManager>>, so an unbounded
-                    // accumulation would prevent clean manager drop.
-                    if loader_in_flight
-                        .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-                        .is_err()
-                    {
-                        tracing::warn!(
-                            "[forward_manager_events] Loader already in flight, skipping: {}",
-                            track.title
-                        );
-                        None // Don't forward this internal event to the app
-                    } else {
-                        let command_tx_clone = command_tx.clone();
-                        let sample_rate = mgr.get_sample_rate();
-                        let dsd_diag_clone = dsd_diagnostics_handle.clone();
-                        let lif = Arc::clone(loader_in_flight);
-
-                        std::thread::Builder::new()
-                            .name(format!("soul-loader:{}", track.title))
-                            .spawn(move || {
-                                match load_source_blocking(
-                                    &track,
-                                    sample_rate,
-                                    Duration::from_millis(500),
-                                ) {
-                                    Ok((source, diag_handle)) => {
-                                        // Store (or clear) the diagnostics handle for the new source.
-                                        if let Ok(mut guard) = dsd_diag_clone.lock() {
-                                            *guard = diag_handle;
-                                        }
-                                        if let Err(e) =
-                                            command_tx_clone.send(PlaybackCommand::ActivateSource {
-                                                source,
-                                                track: track.clone(),
-                                            })
-                                        {
-                                            tracing::error!(
-                                                "[LoadNext] Failed to send ActivateSource: {}",
-                                                e
-                                            );
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(
-                                            "[LoadNext] Failed to load source for {}: {:?}",
-                                            track.title,
-                                            e
-                                        );
-                                    }
-                                }
-                                lif.store(false, Ordering::Release);
-                            })
-                            .ok();
-
-                        None // Don't forward this internal event to the app
+                    let sample_rate = mgr.get_sample_rate();
+                    match create_audio_source(&track.path, sample_rate) {
+                        Ok((source, diag_handle)) => {
+                            *pending_source = Some((source, track, diag_handle));
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "[LoadNext] Failed to create source for {}: {e:?}",
+                                track.title
+                            );
+                        }
                     }
+
+                    None // Don't forward this internal event to the app
                 }
             };
 
@@ -1801,10 +1701,13 @@ impl DesktopPlayback {
         let mut load_requested = false;
         let mut error_count: u32 = 0;
         let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
-        // Prevents simultaneous loader spawns. Only one loader should be in flight
-        // at a time; additional LoadNext events are already guarded by load_requested
-        // but cross-thread (device-switch restart) scenarios need an atomic guard.
-        let loader_in_flight: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+        // Pending source waiting for is_ready(). Set by forward_manager_events on
+        // LoadNext, polled each loop iteration, activated once ready.
+        let mut pending_source: Option<(
+            Box<dyn soul_playback::AudioSource>,
+            soul_playback::QueueTrack,
+            Option<crate::sources::dsd::DsdDiagnosticsHandle>,
+        )> = None;
 
         tracing::info!(
             "[AudioThread] Started (null_mode={}, chunk_samples={})",
@@ -1832,8 +1735,37 @@ impl DesktopPlayback {
                     &command_tx,
                     &mut load_requested,
                     &dsd_diagnostics_handle,
-                    &loader_in_flight,
+                    &mut pending_source,
                 );
+            }
+
+            // Poll pending source readiness (non-blocking).
+            // create_audio_source() starts internal decoder threads; we poll
+            // is_ready() each iteration and activate once the buffer is filled.
+            if let Some((ref source, _, _)) = pending_source {
+                if source.is_ready() {
+                    if let Some((source, track, diag_handle)) = pending_source.take() {
+                        if let Ok(mut g) = dsd_diagnostics_handle.lock() {
+                            *g = diag_handle;
+                        }
+                        let mut mgr = lock_manager_arc(&manager);
+                        if mgr.activate_source(source, track) {
+                            let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                            let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
+                                mgr.get_current_track().cloned(),
+                            ));
+                            let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
+                        }
+                        Self::forward_manager_events(
+                            &mut mgr,
+                            &event_tx,
+                            &command_tx,
+                            &mut load_requested,
+                            &dsd_diagnostics_handle,
+                            &mut pending_source,
+                        );
+                    }
+                }
             }
 
             match &mut ring_producer {
@@ -1850,7 +1782,7 @@ impl DesktopPlayback {
                                 &command_tx,
                                 &mut load_requested,
                                 &dsd_diagnostics_handle,
-                                &loader_in_flight,
+                                &mut pending_source,
                             );
                         }
                     }
@@ -1880,64 +1812,27 @@ impl DesktopPlayback {
                                     &command_tx,
                                     &mut load_requested,
                                     &dsd_diagnostics_handle,
-                                    &loader_in_flight,
+                                    &mut pending_source,
                                 );
                                 // Stream-restart recovery: if manager is loading but we never
                                 // issued a load on this thread, the previous audio thread's
-                                // loader had the old command_tx and the ActivateSource was lost.
-                                // Re-trigger the load with the current command_tx.
+                                // pending_source was lost. Re-create the source inline.
                                 if !load_requested && mgr.is_loading() {
                                     if let Some(pending_track) =
                                         mgr.get_pending_load_track().cloned()
                                     {
-                                        if loader_in_flight
-                                            .compare_exchange(
-                                                false,
-                                                true,
-                                                Ordering::Acquire,
-                                                Ordering::Relaxed,
-                                            )
-                                            .is_ok()
-                                        {
-                                            load_requested = true;
-                                            let tx = command_tx.clone();
-                                            let sr = mgr.get_sample_rate();
-                                            let dsd = dsd_diagnostics_handle.clone();
-                                            let lif = Arc::clone(&loader_in_flight);
-                                            std::thread::Builder::new()
-                                                    .name(format!(
-                                                        "soul-loader-restart:{}",
-                                                        pending_track.title
-                                                    ))
-                                                    .spawn(move || {
-                                                        match load_source_blocking(
-                                                            &pending_track,
-                                                            sr,
-                                                            Duration::from_millis(500),
-                                                        ) {
-                                                            Ok((source, diag)) => {
-                                                                if let Ok(mut g) = dsd.lock() {
-                                                                    *g = diag;
-                                                                }
-                                                                let _ = tx.send(
-                                                                    PlaybackCommand::ActivateSource {
-                                                                        source,
-                                                                        track: pending_track,
-                                                                    },
-                                                                );
-                                                            }
-                                                            Err(e) => tracing::error!(
-                                                                "[AudioThread/Restart] reload failed: {:?}",
-                                                                e
-                                                            ),
-                                                        }
-                                                        lif.store(false, Ordering::Release);
-                                                    })
-                                                    .ok();
-                                        } else {
-                                            tracing::warn!(
-                                                    "[run_audio_thread] Loader already in flight, skip restart spawn"
+                                        load_requested = true;
+                                        let sr = mgr.get_sample_rate();
+                                        match create_audio_source(&pending_track.path, sr) {
+                                            Ok((source, diag_handle)) => {
+                                                pending_source = Some((source, pending_track, diag_handle));
+                                            }
+                                            Err(e) => {
+                                                tracing::error!(
+                                                    "[AudioThread/Restart] reload failed: {:?}",
+                                                    e
                                                 );
+                                            }
                                         }
                                     }
                                 }
@@ -2007,69 +1902,6 @@ impl DesktopPlayback {
         Self::process_command_with_lock(command, &mut mgr, event_tx, command_tx)
     }
 
-    /// Load audio source synchronously with timeout
-    ///
-    /// Creates a LocalAudioSource and polls until ready or timeout expires.
-    /// This replaces the async TrackLoader pattern with direct synchronous loading.
-    ///
-    /// # Arguments
-    /// * `track` - Track to load
-    /// * `target_sample_rate` - Target sample rate for resampling
-    /// * `timeout` - Maximum time to wait for source to become ready
-    ///
-    /// # Returns
-    /// * `Ok(source)` - Ready audio source
-    /// * `Err(_)` - Timeout or load error
-    fn load_source_with_timeout(
-        track: &soul_playback::QueueTrack,
-        target_sample_rate: u32,
-        timeout: Duration,
-    ) -> Result<(
-        Box<dyn soul_playback::AudioSource>,
-        Option<crate::sources::dsd::DsdDiagnosticsHandle>,
-    )> {
-        let start = std::time::Instant::now();
-
-        tracing::debug!(
-            "[load_source_with_timeout] Loading: {} (timeout: {:?})",
-            track.title,
-            timeout
-        );
-
-        // Create audio source (DSD or PCM)
-        let (source, diag_handle) =
-            create_audio_source(&track.path, target_sample_rate).map_err(|e| {
-                tracing::error!("[load_source_with_timeout] Failed to create source: {}", e);
-                e
-            })?;
-
-        // Poll until ready or timeout
-        let poll_interval = Duration::from_millis(10);
-        while !source.is_ready() {
-            if start.elapsed() >= timeout {
-                tracing::error!(
-                    "[load_source_with_timeout] Timeout after {:?} for: {}",
-                    timeout,
-                    track.title
-                );
-                return Err(crate::error::AudioError::PlaybackError(format!(
-                    "Source load timeout ({:?}) for: {}",
-                    timeout, track.title
-                )));
-            }
-            std::thread::sleep(poll_interval);
-        }
-
-        let elapsed = start.elapsed();
-        tracing::info!(
-            "[load_source_with_timeout] Source ready in {:?} for: {}",
-            elapsed,
-            track.title
-        );
-
-        Ok((source, diag_handle))
-    }
-
     /// Process playback command with an already-acquired manager lock
     ///
     /// This variant is used in the audio callback to avoid acquiring the mutex twice
@@ -2106,30 +1938,6 @@ impl DesktopPlayback {
                         // Already playing
                         tracing::debug!("[PlaybackCommand::Play] Already playing");
                     }
-                }
-            }
-            PlaybackCommand::ActivateSource { source, track } => {
-                tracing::info!(
-                    "[PlaybackCommand::ActivateSource] Activating: {}",
-                    track.title
-                );
-                // activate_source() returns false if this is a stale command from a
-                // background loader that was launched before the last stop()/play() cycle.
-                // In that case, suppress the state-change events to avoid confusing the UI.
-                if mgr.activate_source(source, track) {
-                    let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-                    let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
-                        mgr.get_current_track().cloned(),
-                    ));
-                    // Emit QueueUpdated so the frontend refreshes its queue state.
-                    //
-                    // Without this, the React queue stays stale after auto-advance:
-                    // play_queue() emits QueueUpdated at LoadPlaylist time (source_index=0),
-                    // then play() pops T1 with no QueueUpdated, then each auto-advance pops
-                    // the next track with no QueueUpdated — so React's queue still contains
-                    // previously-played tracks. The filter removes only the *current* track,
-                    // causing played tracks to reappear as "upcoming" (ghost track bug).
-                    let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
                 }
             }
             PlaybackCommand::Pause => {
@@ -3740,14 +3548,18 @@ mod tests {
 
         let mut load_requested = false;
         let dsd_diag_test1 = Arc::new(Mutex::new(None));
-        let lif_test1: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+        let mut pending_source_test1: Option<(
+            Box<dyn soul_playback::AudioSource>,
+            soul_playback::QueueTrack,
+            Option<crate::sources::dsd::DsdDiagnosticsHandle>,
+        )> = None;
         DesktopPlayback::forward_manager_events(
             &mut mgr,
             &event_tx,
             &command_tx,
             &mut load_requested,
             &dsd_diag_test1,
-            &lif_test1,
+            &mut pending_source_test1,
         );
 
         let forwarded: Vec<_> = event_rx.try_iter().collect();
@@ -3762,16 +3574,16 @@ mod tests {
         );
     }
 
-    /// Regression test: ActivateSource must emit QueueUpdated so React refreshes the queue.
+    /// Regression test: activate_source must emit QueueUpdated so React refreshes the queue.
     ///
-    /// Without QueueUpdated after ActivateSource, the React queue stays stale:
+    /// Without QueueUpdated after activation, the React queue stays stale:
     /// - play_queue() emits QueueUpdated with [T1..T5] (source_index=0)
-    /// - play() pops T1 with NO QueueUpdated → React queue still [T1..T5]
+    /// - play() pops T1 with NO QueueUpdated -> React queue still [T1..T5]
     /// - Each auto-advance pops the next track with NO QueueUpdated
     /// - React filter removes only the current track, making played tracks ghost as "upcoming"
     ///
-    /// Fix: emit QueueUpdated in the ActivateSource handler so the queue is refreshed
-    /// after every track load (including auto-advance).
+    /// Fix: the proc loop emits QueueUpdated after activate_source() returns true.
+    /// This test simulates that pattern directly.
     #[test]
     fn test_activate_source_emits_queue_updated() {
         use soul_playback::{
@@ -3844,24 +3656,34 @@ mod tests {
         let _ = mgr.play();
         mgr.drain_events(); // discard LoadNext
 
-        // Simulate ActivateSource (what the background loader thread sends back)
+        // Simulate the proc loop's activation pattern:
+        // 1. activate_source() on manager
+        // 2. If returns true, emit StateChanged + TrackChanged + QueueUpdated
         let source = Box::new(SilentSource::new(44100 * 2 * 10));
-        let command = PlaybackCommand::ActivateSource { source, track: t1 };
+        let activated = mgr.activate_source(source, t1);
+        assert!(activated, "activate_source should return true for a valid load");
 
-        let mut load_requested = true;
-        let _ =
-            DesktopPlayback::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
+        // Emit the same events the proc loop emits after activate_source
+        let _ = event_tx.try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+        let _ = event_tx.try_send(PlaybackEvent::TrackChanged(
+            mgr.get_current_track().cloned(),
+        ));
+        let _ = event_tx.try_send(PlaybackEvent::QueueUpdated);
 
-        // Also drain manager's pending_events (activate_source puts StateChanged+TrackChanged there)
+        // Also drain manager's pending_events
         let dsd_diag_test2 = Arc::new(Mutex::new(None));
-        let lif_test2: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+        let mut pending_source_test2: Option<(
+            Box<dyn soul_playback::AudioSource>,
+            soul_playback::QueueTrack,
+            Option<crate::sources::dsd::DsdDiagnosticsHandle>,
+        )> = None;
         DesktopPlayback::forward_manager_events(
             &mut mgr,
             &event_tx,
             &command_tx,
-            &mut load_requested,
+            &mut true,
             &dsd_diag_test2,
-            &lif_test2,
+            &mut pending_source_test2,
         );
 
         let events: Vec<_> = event_rx.try_iter().collect();
@@ -3871,7 +3693,7 @@ mod tests {
             .any(|e| matches!(e, PlaybackEvent::QueueUpdated));
         assert!(
             has_queue_updated,
-            "ActivateSource must emit QueueUpdated so React refreshes the queue. \
+            "activate_source must be followed by QueueUpdated so React refreshes the queue. \
              Without this, previously-played tracks reappear in the sidebar as 'upcoming' \
              (ghost track bug). Events emitted: {:?}",
             events
