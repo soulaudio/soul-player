@@ -234,9 +234,9 @@ impl PlaybackManager {
                 self.stop_fade.reset();
                 self.state = PlaybackState::Playing;
 
-                // Start fade-in if source is ready
+                // Resume fade-in from where it was paused (don't restart the full cycle)
                 if self.sources.is_ready() {
-                    self.start_fade.start();
+                    self.start_fade.unfreeze();
                 }
 
                 tracing::info!("[play] Resumed from pause, state now Playing");

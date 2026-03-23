@@ -251,6 +251,12 @@ impl StartFadeEnvelope {
         // audio_detected stays as-is (already detected if we're fading)
     }
 
+    /// Resume a frozen fade-in (unfreeze after pause). No-op if not active.
+    #[inline]
+    pub(crate) fn unfreeze(&mut self) {
+        self.frozen = false;
+    }
+
     /// Update sample rate and recalculate duration
     ///
     /// Should be called when audio output format changes.

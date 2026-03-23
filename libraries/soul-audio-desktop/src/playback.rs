@@ -15,7 +15,7 @@ use crate::error::Result;
 use audio_thread_priority::{
     demote_current_thread_from_real_time, promote_current_thread_to_real_time, RtPriorityHandle,
 };
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// Global counter for I32 (ASIO) callbacks - used for diagnostics
 /// This is updated by `audio_callback_i32` and read by `send_command` for debugging
@@ -777,6 +777,10 @@ pub struct DesktopPlayback {
     /// Handle for reading DSD diagnostics (underrun count, buffer fill).
     /// Set whenever a DSD source is created; cleared on non-DSD activation.
     dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
+
+    /// Shutdown flag for the audio processing thread.
+    /// Set to `true` to signal the thread to exit gracefully on device switch.
+    audio_shutdown: Arc<AtomicBool>,
 }
 
 // SAFETY: DesktopPlayback is safe to send between threads because:
@@ -791,33 +795,6 @@ unsafe impl Send for DesktopPlayback {}
 unsafe impl Sync for DesktopPlayback {}
 
 // ===== Phase 2: Generic Audio Callback Support =====
-
-/// Context for generic audio callback
-///
-/// Consolidates all callback parameters into a single struct,
-/// reducing function signature complexity from 11 parameters to 1.
-struct AudioCallbackContext<'a> {
-    manager: Arc<Mutex<PlaybackManager>>,
-    command_rx: &'a Receiver<PlaybackCommand>,
-    command_tx: &'a Sender<PlaybackCommand>,
-    event_tx: &'a Sender<PlaybackEvent>,
-    stream_id: std::time::Instant,
-    dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
-
-    // Mutable state
-    callback_count: &'a mut u32,
-    load_requested: &'a mut bool,
-    error_count: &'a mut u32,
-    error_fade_samples_remaining: &'a mut usize,
-    error_noise_state: &'a mut u32,
-    source_set_this_callback: &'a mut bool,
-
-    /// Pre-allocated f32 scratch buffer to avoid heap allocation in the
-    /// real-time audio callback. Sized at stream creation and reused each
-    /// callback invocation. Grows only if the buffer size unexpectedly
-    /// increases (extremely rare).
-    f32_scratch: &'a mut Vec<f32>,
-}
 
 /// Return `true` if `path` has a DSD file extension (.dsf / .dff / .dsdiff).
 fn is_dsd_path(path: &std::path::Path) -> bool {
@@ -979,15 +956,16 @@ impl DesktopPlayback {
         let stream_start = std::time::Instant::now();
         let dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>> =
             Arc::new(Mutex::new(None));
-        let (stream_option, actual_device_name, sample_rate) = Self::create_audio_stream(
-            manager.clone(),
-            command_rx.clone(),
-            command_tx.clone(),
-            event_tx.clone(),
-            backend,
-            device_name.clone(),
-            dsd_diagnostics_handle.clone(),
-        )?;
+        let (stream_option, actual_device_name, sample_rate, audio_shutdown) =
+            Self::create_audio_stream(
+                manager.clone(),
+                command_rx,
+                command_tx.clone(),
+                event_tx.clone(),
+                backend,
+                device_name.clone(),
+                dsd_diagnostics_handle.clone(),
+            )?;
         let stream_duration = stream_start.elapsed();
 
         let is_silent_mode = stream_option.is_none();
@@ -1057,13 +1035,15 @@ impl DesktopPlayback {
             device_switch_state: Arc::new(Mutex::new(DeviceSwitchState::Idle)),
             device_switch_config: DeviceSwitchConfig::default(),
             dsd_diagnostics_handle,
+            audio_shutdown,
         })
     }
 
-    /// Create CPAL audio stream
+    /// Create CPAL audio stream and audio processing thread.
     ///
-    /// Returns (Option<Stream>, `device_name`, `sample_rate`)
-    /// Stream is None for zero-device systems (silent mode)
+    /// Returns `(stream, device_name, sample_rate, audio_shutdown)`.
+    /// `stream` is None for zero-device systems (silent mode).
+    /// `audio_shutdown` — set to `true` to stop the audio processing thread.
     fn create_audio_stream(
         manager: Arc<Mutex<PlaybackManager>>,
         command_rx: Receiver<PlaybackCommand>,
@@ -1072,7 +1052,7 @@ impl DesktopPlayback {
         backend: crate::AudioBackend,
         device_name: Option<String>,
         dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
-    ) -> Result<(Option<Stream>, String, u32)> {
+    ) -> Result<(Option<Stream>, String, u32, Arc<AtomicBool>)> {
         tracing::info!(
             backend = ?backend,
             device_name = ?device_name,
@@ -1120,13 +1100,38 @@ impl DesktopPlayback {
         let device = match device_result {
             Ok(dev) => dev,
             Err(crate::error::AudioError::DeviceNotFound) => {
-                tracing::warn!("[Playback] ========================================");
-                tracing::warn!("[Playback] ZERO-DEVICE SYSTEM DETECTED");
-                tracing::warn!("[Playback] No audio output devices available");
-                tracing::warn!("[Playback] Entering SILENT MODE - library browsing only");
-                tracing::warn!("[Playback] ========================================");
-
-                return Self::create_null_stream(manager, command_rx, event_tx);
+                tracing::warn!("[Playback] Zero-device system — entering silent mode");
+                let null_sr: u32 = 44100;
+                let null_ch: u16 = 2;
+                {
+                    let mut mgr = manager.lock().unwrap();
+                    mgr.set_sample_rate(null_sr);
+                    mgr.set_output_channels(null_ch);
+                }
+                let audio_shutdown = Arc::new(AtomicBool::new(false));
+                let sd = audio_shutdown.clone();
+                std::thread::Builder::new()
+                    .name("soul-audio-null".to_string())
+                    .spawn(move || {
+                        Self::run_audio_thread(
+                            manager,
+                            command_rx,
+                            command_tx,
+                            event_tx,
+                            dsd_diagnostics_handle,
+                            None,
+                            sd,
+                            null_sr,
+                            null_ch,
+                        );
+                    })
+                    .expect("failed to spawn null audio thread");
+                return Ok((
+                    None,
+                    "Silent Mode (No Audio Devices)".to_string(),
+                    null_sr,
+                    audio_shutdown,
+                ));
             }
             Err(e) => return Err(e),
         };
@@ -1171,192 +1176,127 @@ impl DesktopPlayback {
             mgr.set_output_channels(channels);
         }
 
-        tracing::debug!("[CPAL] Building output stream with config: sample_rate={}, channels={}, buffer_size={:?}, format={:?}",
-            config.sample_rate, config.channels, config.buffer_size, sample_format);
+        tracing::debug!(
+            "[CPAL] Building output stream: sample_rate={} channels={} format={:?}",
+            config.sample_rate,
+            config.channels,
+            sample_format
+        );
 
-        // Build stream with the appropriate sample format
+        // Create lock-free ring buffer between audio thread and RT callback.
+        // 8192 f32 samples ≈ 85ms at 48 kHz stereo — enough headroom for the audio
+        // thread to stay ahead of the CPAL callback without introducing noticeable latency.
+        let (ring_producer, ring_consumer) = rtrb::RingBuffer::new(8192_usize);
+
+        // Spawn the audio processing thread — it owns the manager lock while producing
+        // audio and forwarding events. The RT callback never touches the lock.
+        let audio_shutdown = Arc::new(AtomicBool::new(false));
+        {
+            let sd = audio_shutdown.clone();
+            let mgr = manager.clone();
+            let cmd_rx = command_rx;
+            let cmd_tx = command_tx.clone();
+            let ev_tx = event_tx.clone();
+            let dsd = dsd_diagnostics_handle.clone();
+            std::thread::Builder::new()
+                .name("soul-audio-proc".to_string())
+                .spawn(move || {
+                    Self::run_audio_thread(
+                        mgr,
+                        cmd_rx,
+                        cmd_tx,
+                        ev_tx,
+                        dsd,
+                        Some(ring_producer),
+                        sd,
+                        sample_rate,
+                        channels,
+                    );
+                })
+                .expect("failed to spawn audio processing thread");
+        }
+
+        // Build the CPAL stream — callback is RT-safe (ring read only, no locks).
+        let mut ring_consumer = Some(ring_consumer);
         let stream = match sample_format {
             cpal::SampleFormat::F32 => {
-                let manager_clone = manager.clone();
-                // Per-stream callback counter for logging
+                let mut ring = ring_consumer.take().unwrap();
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
-                // Create stream start envelope for click-free startup (30ms fade)
-                let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
-                // Track if we've already requested a load for the current Loading state
-                // This prevents flooding the track loader with duplicate requests
-                let mut load_requested = false;
-                // Error recovery tracking - count consecutive errors and fade samples remaining
-                let mut error_count: u32 = 0;
-                let mut error_fade_samples_remaining: usize = 0;
-                // LFSR state for proper noise generation during error recovery
-                let mut error_noise_state: u32 = 0xDEAD_BEEF;
-                // Track if we set a source this callback to prevent double-loading
-                let mut source_set_this_callback = false;
-                // Pre-allocate f32 scratch buffer to avoid heap allocation in real-time callback.
-                // 4096 samples covers common buffer sizes (e.g. 256, 512, 1024 frames × 2 ch).
-                let mut f32_scratch: Vec<f32> = Vec::with_capacity(4096);
-                tracing::debug!(
-                    "[CPAL] Creating F32 stream callback (stream_id: {:?})",
-                    stream_id
-                );
-
-                // Create drop guard to handle cleanup and thread priority demotion
                 let mut drop_guard = CallbackDropGuard {
                     stream_id,
                     sample_format: "F32",
                     rt_priority_handle: None,
                 };
-
-                let dsd_diag_f32 = dsd_diagnostics_handle.clone();
                 device.build_output_stream(
                     &config,
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                         callback_count += 1;
-
-                        // Promote thread to real-time priority on first callback
                         if callback_count == 1 {
-                            // Extract buffer size - use actual buffer length if size is Default
                             let buffer_frames = match config.buffer_size {
-                                cpal::BufferSize::Fixed(frames) => frames,
-                                cpal::BufferSize::Default => (data.len() / config.channels as usize) as u32,
+                                cpal::BufferSize::Fixed(f) => f,
+                                cpal::BufferSize::Default => {
+                                    (data.len() / config.channels as usize) as u32
+                                }
                             };
                             match promote_current_thread_to_real_time(buffer_frames, sample_rate) {
-                                Ok(handle) => {
+                                Ok(h) => {
                                     tracing::info!(
-                                        buffer_frames = buffer_frames,
-                                        sample_rate = sample_rate,
-                                        "[ThreadPriority] Audio thread promoted to real-time priority (F32 callback)"
+                                        buffer_frames,
+                                        sample_rate,
+                                        "[RT] F32 callback promoted"
                                     );
-                                    drop_guard.rt_priority_handle = Some(handle);
+                                    drop_guard.rt_priority_handle = Some(h);
                                 }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        error = ?e,
-                                        "[ThreadPriority] Failed to promote audio thread priority - continuing with normal priority"
-                                    );
-                                }
+                                Err(e) => tracing::warn!(error = ?e, "[RT] promote failed"),
                             }
                         }
-
-                        // Keep drop guard alive
                         let _ = &drop_guard;
-
-                        // Use generic callback with context
-                        let ctx = AudioCallbackContext {
-                            manager: manager_clone.clone(),
-                            command_rx: &command_rx,
-                            command_tx: &command_tx,
-                            event_tx: &event_tx,
-                            stream_id,
-                            dsd_diagnostics_handle: dsd_diag_f32.clone(),
-                            callback_count: &mut callback_count,
-                            load_requested: &mut load_requested,
-                            error_count: &mut error_count,
-                            error_fade_samples_remaining: &mut error_fade_samples_remaining,
-                            error_noise_state: &mut error_noise_state,
-                            source_set_this_callback: &mut source_set_this_callback,
-                            f32_scratch: &mut f32_scratch,
-                        };
-                        Self::audio_callback::<f32>(ctx, data);
-
-                        // Apply stream start envelope to prevent DAC pop
-                        stream_envelope.process(data);
+                        Self::audio_callback_rt::<f32>(&mut ring, data);
                     },
-                    |err| tracing::error!("[CPAL] Audio stream error callback: {}", err),
+                    |err| tracing::error!("[CPAL] F32 stream error: {}", err),
                     None,
                 )?
             }
             cpal::SampleFormat::I32 => {
-                let manager_clone = manager.clone();
-                // Per-stream callback counter for logging
+                let mut ring = ring_consumer.take().unwrap();
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
-                // Create stream start envelope for click-free startup (30ms fade)
-                let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
-                // Track if we've already requested a load for the current Loading state
-                // This prevents flooding the track loader with duplicate requests
-                let mut load_requested = false;
-                // Error recovery tracking - count consecutive errors and fade samples remaining
-                let mut error_count: u32 = 0;
-                let mut error_fade_samples_remaining: usize = 0;
-                // LFSR state for proper noise generation during error recovery
-                let mut error_noise_state: u32 = 0xDEAD_BEEF;
-                // Track if we set a source this callback to prevent double-loading
-                let mut source_set_this_callback = false;
-                let mut f32_scratch: Vec<f32> = Vec::with_capacity(4096);
-                tracing::debug!(
-                    "[CPAL] Creating I32 stream callback (stream_id: {:?})",
-                    stream_id
-                );
-
-                // Clone event_tx for the error callback
                 let error_event_tx = event_tx.clone();
-
-                // Create drop guard to handle cleanup and thread priority demotion
                 let mut drop_guard = CallbackDropGuard {
                     stream_id,
                     sample_format: "I32",
                     rt_priority_handle: None,
                 };
-
-                let dsd_diag_i32 = dsd_diagnostics_handle.clone();
                 device.build_output_stream(
                     &config,
                     move |data: &mut [i32], _: &cpal::OutputCallbackInfo| {
                         callback_count += 1;
-
-                        // Promote thread to real-time priority on first callback
                         if callback_count == 1 {
-                            // Extract buffer size - use actual buffer length if size is Default
                             let buffer_frames = match config.buffer_size {
-                                cpal::BufferSize::Fixed(frames) => frames,
-                                cpal::BufferSize::Default => (data.len() / config.channels as usize) as u32,
+                                cpal::BufferSize::Fixed(f) => f,
+                                cpal::BufferSize::Default => {
+                                    (data.len() / config.channels as usize) as u32
+                                }
                             };
                             match promote_current_thread_to_real_time(buffer_frames, sample_rate) {
-                                Ok(handle) => {
+                                Ok(h) => {
                                     tracing::info!(
-                                        buffer_frames = buffer_frames,
-                                        sample_rate = sample_rate,
-                                        "[ThreadPriority] Audio thread promoted to real-time priority (I32 callback)"
+                                        buffer_frames,
+                                        sample_rate,
+                                        "[RT] I32 callback promoted"
                                     );
-                                    drop_guard.rt_priority_handle = Some(handle);
+                                    drop_guard.rt_priority_handle = Some(h);
                                 }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        error = ?e,
-                                        "[ThreadPriority] Failed to promote audio thread priority - continuing with normal priority"
-                                    );
-                                }
+                                Err(e) => tracing::warn!(error = ?e, "[RT] promote failed"),
                             }
                         }
-
-                        // Keep drop guard alive - when this closure is dropped, drop_guard is dropped
                         let _ = &drop_guard;
-
-                        let ctx = AudioCallbackContext {
-                            manager: manager_clone.clone(),
-                            command_rx: &command_rx,
-                            command_tx: &command_tx,
-                            event_tx: &event_tx,
-                            stream_id,
-                            dsd_diagnostics_handle: dsd_diag_i32.clone(),
-                            callback_count: &mut callback_count,
-                            load_requested: &mut load_requested,
-                            error_count: &mut error_count,
-                            error_fade_samples_remaining: &mut error_fade_samples_remaining,
-                            error_noise_state: &mut error_noise_state,
-                            source_set_this_callback: &mut source_set_this_callback,
-                            f32_scratch: &mut f32_scratch,
-                        };
-                        Self::audio_callback::<i32>(ctx, data);
-                        // Apply stream start envelope to prevent DAC pop
-                        stream_envelope.process_i32(data);
+                        GLOBAL_I32_CALLBACK_COUNTER.fetch_add(1, Ordering::Relaxed);
+                        Self::audio_callback_rt::<i32>(&mut ring, data);
                     },
                     move |err| {
-                        tracing::error!("[CPAL] !!! AUDIO STREAM ERROR CALLBACK !!!");
-                        tracing::error!(error = ?err, "[CPAL] Stream error occurred");
-                        tracing::error!("[CPAL]   This may cause the stream to be dropped!");
+                        tracing::error!(error = ?err, "[CPAL] I32 stream error");
                         let _ = error_event_tx
                             .try_send(PlaybackEvent::Error("STREAM_ERROR".to_string()));
                     },
@@ -1364,97 +1304,45 @@ impl DesktopPlayback {
                 )?
             }
             cpal::SampleFormat::I16 => {
-                let manager_clone = manager.clone();
-                // Per-stream callback counter for logging
+                let mut ring = ring_consumer.take().unwrap();
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
-                // Create stream start envelope for click-free startup (30ms fade)
-                let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
-                // Track if we've already requested a load for the current Loading state
-                // This prevents flooding the track loader with duplicate requests
-                let mut load_requested = false;
-                // Error recovery tracking - count consecutive errors and fade samples remaining
-                let mut error_count: u32 = 0;
-                let mut error_fade_samples_remaining: usize = 0;
-                // LFSR state for proper noise generation during error recovery
-                let mut error_noise_state: u32 = 0xDEAD_BEEF;
-                // Track if we set a source this callback to prevent double-loading
-                let mut source_set_this_callback = false;
-                let mut f32_scratch: Vec<f32> = Vec::with_capacity(4096);
-                tracing::debug!(
-                    "[CPAL] Creating I16 stream callback (stream_id: {:?})",
-                    stream_id
-                );
-
-                // Create drop guard to handle cleanup and thread priority demotion
                 let mut drop_guard = CallbackDropGuard {
                     stream_id,
                     sample_format: "I16",
                     rt_priority_handle: None,
                 };
-
-                let dsd_diag_i16 = dsd_diagnostics_handle.clone();
                 device.build_output_stream(
                     &config,
                     move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
                         callback_count += 1;
-
-                        // Promote thread to real-time priority on first callback
                         if callback_count == 1 {
-                            // Extract buffer size - use actual buffer length if size is Default
                             let buffer_frames = match config.buffer_size {
-                                cpal::BufferSize::Fixed(frames) => frames,
-                                cpal::BufferSize::Default => (data.len() / config.channels as usize) as u32,
+                                cpal::BufferSize::Fixed(f) => f,
+                                cpal::BufferSize::Default => {
+                                    (data.len() / config.channels as usize) as u32
+                                }
                             };
                             match promote_current_thread_to_real_time(buffer_frames, sample_rate) {
-                                Ok(handle) => {
+                                Ok(h) => {
                                     tracing::info!(
-                                        buffer_frames = buffer_frames,
-                                        sample_rate = sample_rate,
-                                        "[ThreadPriority] Audio thread promoted to real-time priority (I16 callback)"
+                                        buffer_frames,
+                                        sample_rate,
+                                        "[RT] I16 callback promoted"
                                     );
-                                    drop_guard.rt_priority_handle = Some(handle);
+                                    drop_guard.rt_priority_handle = Some(h);
                                 }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        error = ?e,
-                                        "[ThreadPriority] Failed to promote audio thread priority - continuing with normal priority"
-                                    );
-                                }
+                                Err(e) => tracing::warn!(error = ?e, "[RT] promote failed"),
                             }
                         }
-
-                        // Keep drop guard alive
                         let _ = &drop_guard;
-
-                        let ctx = AudioCallbackContext {
-                            manager: manager_clone.clone(),
-                            command_rx: &command_rx,
-                            command_tx: &command_tx,
-                            event_tx: &event_tx,
-                            stream_id,
-                            dsd_diagnostics_handle: dsd_diag_i16.clone(),
-                            callback_count: &mut callback_count,
-                            load_requested: &mut load_requested,
-                            error_count: &mut error_count,
-                            error_fade_samples_remaining: &mut error_fade_samples_remaining,
-                            error_noise_state: &mut error_noise_state,
-                            source_set_this_callback: &mut source_set_this_callback,
-                            f32_scratch: &mut f32_scratch,
-                        };
-                        Self::audio_callback::<i16>(ctx, data);
-                        // Apply stream start envelope to prevent DAC pop
-                        stream_envelope.process_i16(data);
+                        Self::audio_callback_rt::<i16>(&mut ring, data);
                     },
-                    |err| tracing::error!("[CPAL] Audio stream error callback: {}", err),
+                    |err| tracing::error!("[CPAL] I16 stream error: {}", err),
                     None,
                 )?
             }
             _ => {
-                tracing::error!(
-                    "[CPAL] ERROR: Unsupported sample format: {:?}",
-                    sample_format
-                );
                 return Err(crate::error::AudioError::DeviceError(format!(
                     "Unsupported sample format: {:?}",
                     sample_format
@@ -1462,79 +1350,23 @@ impl DesktopPlayback {
             }
         };
 
-        tracing::debug!("[CPAL] Stream built successfully, calling play()...");
-
-        match stream.play() {
-            Ok(()) => {
-                tracing::debug!("[CPAL] stream.play() returned Ok - stream should now be running");
-            }
-            Err(e) => {
-                tracing::error!("[CPAL] ERROR: Failed to start stream: {}", e);
-                tracing::error!("[CPAL] This may indicate:");
-                tracing::error!("  - Sample rate mismatch with driver settings");
-                tracing::error!("  - Buffer size not supported by driver");
-                tracing::error!("  - Another application has exclusive access to the device");
-                tracing::error!("  - Driver requires specific initialization");
-                return Err(e.into());
-            }
-        }
-
-        tracing::debug!("[CPAL] ==========================================");
-        tracing::debug!("[CPAL] Stream created successfully!");
-        tracing::debug!("[CPAL]   Device: {}", actual_device_name);
-        tracing::debug!("[CPAL]   Sample rate: {} Hz", sample_rate);
-        tracing::debug!("[CPAL]   Channels: {}", channels);
-        tracing::debug!("[CPAL]   Sample format: {:?}", sample_format);
-        tracing::debug!("[CPAL]   Buffer size: {:?}", config.buffer_size);
-        tracing::debug!("[CPAL] ==========================================");
-        tracing::debug!("[CPAL] Audio callbacks should start momentarily...");
-
-        Ok((Some(stream), actual_device_name, sample_rate))
-    }
-
-    /// Create a null audio stream for zero-device systems
-    ///
-    /// This enables silent mode for library browsing when no audio devices are available
-    /// (e.g., VMs, broken drivers, disabled audio).
-    ///
-    /// Returns (None, device_name="Silent Mode", sample_rate=44100)
-    fn create_null_stream(
-        manager: Arc<Mutex<PlaybackManager>>,
-        _command_rx: Receiver<PlaybackCommand>,
-        _event_tx: Sender<PlaybackEvent>,
-    ) -> Result<(Option<Stream>, String, u32)> {
-        // Use CD quality as default for silent mode
-        const NULL_SAMPLE_RATE: u32 = 44100;
-        const NULL_CHANNELS: u16 = 2;
-
-        tracing::info!("[Playback] Creating NULL STREAM for silent mode");
-
-        // Set sample rate and channels in manager
-        {
-            let mut mgr = manager.lock().unwrap();
-            mgr.set_sample_rate(NULL_SAMPLE_RATE);
-            mgr.set_output_channels(NULL_CHANNELS);
+        if let Err(e) = stream.play() {
+            tracing::error!(error = %e, "[CPAL] Failed to start stream");
+            return Err(e.into());
         }
 
         tracing::info!(
-            sample_rate = NULL_SAMPLE_RATE,
-            channels = NULL_CHANNELS,
-            "[Playback] Initialized manager for silent mode"
+            device = %actual_device_name,
+            sample_rate,
+            format = ?sample_format,
+            "[CPAL] Stream started"
         );
 
-        tracing::info!("[Playback] ========================================");
-        tracing::info!("[Playback] SILENT MODE ACTIVE");
-        tracing::info!("[Playback]   Audio output: DISABLED");
-        tracing::info!("[Playback]   Library browsing: ENABLED");
-        tracing::info!("[Playback]   Device: Silent Mode (No Audio Devices)");
-        tracing::info!("[Playback]   Sample rate: {} Hz", NULL_SAMPLE_RATE);
-        tracing::info!("[Playback]   Playback controls: Will be ignored");
-        tracing::info!("[Playback] ========================================");
-
         Ok((
-            None,
-            "Silent Mode (No Audio Devices)".to_string(),
-            NULL_SAMPLE_RATE,
+            Some(stream),
+            actual_device_name,
+            sample_rate,
+            audio_shutdown,
         ))
     }
 
@@ -1668,215 +1500,27 @@ impl DesktopPlayback {
         Ok((stream_config, sample_format))
     }
 
-    /// Generic audio callback for all sample formats
+    /// RT-safe audio callback — reads from ring buffer, converts to output format.
     ///
-    /// Uses the Sample trait to support f32, i32, and i16 formats
-    /// with a single implementation, eliminating code duplication.
-    fn audio_callback<T: crate::Sample>(ctx: AudioCallbackContext, data: &mut [T]) {
-        // Reset flag to prevent double-loading
-        *ctx.source_set_this_callback = false;
-
-        // Debug: log callback invocation with per-stream counter
-        if *ctx.callback_count == 1 {
-            tracing::trace!(
-                "[audio_callback<{}>] *** FIRST CALLBACK FOR STREAM {:?} ***",
-                std::any::type_name::<T>(),
-                ctx.stream_id
-            );
-            tracing::trace!(
-                "[audio_callback<{}>]   Buffer size: {} samples ({} frames stereo)",
-                std::any::type_name::<T>(),
-                data.len(),
-                data.len() / 2
-            );
-        } else if *ctx.callback_count <= 5 {
-            tracing::trace!(
-                "[audio_callback<{}>] Stream {:?} call #{}, buffer: {} samples",
-                std::any::type_name::<T>(),
-                ctx.stream_id,
-                *ctx.callback_count,
-                data.len()
-            );
-        } else if *ctx.callback_count == 6 {
-            tracing::trace!(
-                "[audio_callback<{}>] Stream {:?}: further callback logs suppressed",
-                std::any::type_name::<T>(),
-                ctx.stream_id
-            );
-        }
-
-        // Diagnostic: count total callbacks and log stats every ~1000 invocations
-        let total = DIAG_CALLBACKS_TOTAL.fetch_add(1, Ordering::Relaxed) + 1;
-        let last_log = DIAG_LAST_LOG_AT.load(Ordering::Relaxed);
-        if total.wrapping_sub(last_log) >= 1000 {
-            DIAG_LAST_LOG_AT.store(total, Ordering::Relaxed);
-            let contention = DIAG_LOCK_CONTENTION.load(Ordering::Relaxed);
-            let short_fill = DIAG_SHORT_FILL.load(Ordering::Relaxed);
-            let slow = DIAG_SLOW_CALLBACKS.load(Ordering::Relaxed);
-            let max_us = DIAG_MAX_PROCESS_US.load(Ordering::Relaxed);
-            tracing::warn!(
-                "[DIAG] callbacks={} lock_contention={} ({:.1}%) short_fill={} ({:.1}%) slow(>8ms)={} ({:.1}%) max_process_us={} buf_samples={}",
-                total,
-                contention,
-                contention as f64 / total as f64 * 100.0,
-                short_fill,
-                short_fill as f64 / total as f64 * 100.0,
-                slow,
-                slow as f64 / total as f64 * 100.0,
-                max_us,
-                data.len(),
-            );
-        }
-
-        // Acquire manager lock using try_lock to avoid blocking the real-time audio thread
-        // If the lock is contended, output DAC keepalive noise instead of blocking
-        let Ok(mut mgr) = ctx.manager.try_lock() else {
-            DIAG_LOCK_CONTENTION.fetch_add(1, Ordering::Relaxed);
-            // Lock contention - output DAC keepalive noise to prevent glitches
-            T::fill_silence(data);
-            for sample in data.iter_mut() {
-                // Simple LFSR noise to keep DAC active
-                *ctx.error_noise_state ^= *ctx.error_noise_state << 13;
-                *ctx.error_noise_state ^= *ctx.error_noise_state >> 17;
-                *ctx.error_noise_state ^= *ctx.error_noise_state << 5;
-                let noise = ((*ctx.error_noise_state & 0xFFFF) as f32 / 32768.0 - 1.0) * 0.000016; // -96dB
-                *sample = T::from_f32(noise);
-            }
-            return;
-        };
-
-        // Process ONE pending command per callback to bound latency
-        if let Ok(command) = ctx.command_rx.try_recv() {
-            // Ignore command errors in audio callback to avoid allocations
-            let _ =
-                Self::process_command_with_lock(command, &mut mgr, ctx.event_tx, ctx.command_tx);
-        }
-
-        // Process audio using the pre-allocated f32 scratch buffer.
-        // Avoids heap allocation in the real-time audio callback.
-        // Resize only if the CPAL buffer grew beyond the pre-allocated capacity
-        // (this is extremely rare — CPAL buffer sizes are fixed at stream creation).
-        let needed = data.len();
-        if ctx.f32_scratch.len() < needed {
-            ctx.f32_scratch.resize(needed, 0.0f32);
-        } else {
-            ctx.f32_scratch[..needed].fill(0.0f32);
-        }
-        let f32_buffer = &mut ctx.f32_scratch[..needed];
-        let process_start = std::time::Instant::now();
-        match mgr.process_audio(f32_buffer) {
-            Ok(samples_processed) => {
-                // Track process_audio timing
-                let elapsed_us = process_start.elapsed().as_micros() as u64;
-                if elapsed_us > 8000 {
-                    DIAG_SLOW_CALLBACKS.fetch_add(1, Ordering::Relaxed);
+    /// No locks, no allocations, no spawns. The audio processing thread fills
+    /// the ring; this callback only reads from it.
+    #[inline]
+    fn audio_callback_rt<T: crate::Sample>(ring: &mut rtrb::Consumer<f32>, data: &mut [T]) {
+        let available = ring.slots();
+        let to_read = data.len().min(available);
+        if to_read > 0 {
+            if let Ok(chunk) = ring.read_chunk(to_read) {
+                let (s1, s2) = chunk.as_slices();
+                T::from_f32_slice(s1, &mut data[..s1.len()]);
+                if !s2.is_empty() {
+                    T::from_f32_slice(s2, &mut data[s1.len()..s1.len() + s2.len()]);
                 }
-                let mut prev_max = DIAG_MAX_PROCESS_US.load(Ordering::Relaxed);
-                while elapsed_us > prev_max {
-                    match DIAG_MAX_PROCESS_US.compare_exchange_weak(
-                        prev_max,
-                        elapsed_us,
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
-                    ) {
-                        Ok(_) => break,
-                        Err(x) => prev_max = x,
-                    }
-                }
-
-                // Reset error count on successful processing
-                *ctx.error_count = 0;
-
-                // Convert f32 to target format T
-                T::from_f32_slice(
-                    &f32_buffer[..samples_processed],
-                    &mut data[..samples_processed],
-                );
-
-                // Fill remainder with silence if needed
-                if samples_processed < data.len() {
-                    DIAG_SHORT_FILL.fetch_add(1, Ordering::Relaxed);
-                    for sample in &mut data[samples_processed..] {
-                        *sample = T::from_f32(0.0);
-                    }
-                }
-
-                // Emit periodic position updates (~250ms interval)
-                mgr.maybe_emit_position_update(samples_processed);
-            }
-            Err(e) => {
-                // Error in process_audio - output silence to prevent noise/clicks
-                tracing::error!("[audio_callback] process_audio error: {}", e);
-                T::fill_silence(data);
-                *ctx.error_count += 1;
-
-                // After 3 consecutive errors, emit error event and stop
-                if *ctx.error_count >= 3 {
-                    let _ = ctx.event_tx.try_send(PlaybackEvent::Error(format!(
-                        "Audio processing error: {}",
-                        e
-                    )));
-                    mgr.stop();
-                    let _ = ctx
-                        .event_tx
-                        .try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-                    *ctx.error_count = 0; // Reset counter
-                }
+                chunk.commit_all();
             }
         }
-
-        // Forward pending events from manager to UI
-        // Uses the conversion function to translate between event types
-        Self::forward_manager_events(
-            &mut mgr,
-            ctx.event_tx,
-            ctx.command_tx,
-            ctx.load_requested,
-            &ctx.dsd_diagnostics_handle,
-        );
-
-        // Stream-restart recovery: if manager is loading but no load has been issued
-        // on this stream (load_requested == false), the CPAL stream was recreated while
-        // a background loader thread held the old command_tx. That thread's
-        // ActivateSource send failed (old command_rx was dropped). Re-trigger the load
-        // now with the new command_tx so playback can resume.
-        if !*ctx.load_requested && mgr.is_loading() {
-            if let Some(pending_track) = mgr.get_pending_load_track().cloned() {
-                *ctx.load_requested = true;
-                let command_tx_clone = ctx.command_tx.clone();
-                let sample_rate = mgr.get_sample_rate();
-                std::thread::spawn(move || {
-                    match load_source_blocking(
-                        &pending_track,
-                        sample_rate,
-                        Duration::from_millis(500),
-                    ) {
-                        Ok((source, _diag_handle)) => {
-                            if let Err(e) = command_tx_clone.send(PlaybackCommand::ActivateSource {
-                                source,
-                                track: pending_track,
-                            }) {
-                                tracing::error!(
-                                    "[StreamRestart] Failed to send ActivateSource: {}",
-                                    e
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "[StreamRestart] Failed to reload source after stream restart: {:?}",
-                                e
-                            );
-                        }
-                    }
-                });
-                tracing::info!(
-                    "[StreamRestart] Re-triggered load for '{}' after stream restart",
-                    mgr.get_pending_load_track()
-                        .map(|t| t.title.as_str())
-                        .unwrap_or("unknown")
-                );
-            }
+        // Fill underrun with silence
+        for s in &mut data[to_read..] {
+            *s = T::from_f32(0.0);
         }
     }
 
@@ -2040,6 +1684,182 @@ impl DesktopPlayback {
                 let _ = event_tx.try_send(event);
             }
         }
+    }
+
+    /// Audio processing thread — fills the ring buffer and forwards events.
+    ///
+    /// Runs as a regular (non-RT) thread. Owns the command channel receiver so it
+    /// processes all playback commands. Calls `process_audio` to fill the rtrb ring
+    /// that the RT CPAL callback reads from. In null mode (no ring), advances manager
+    /// state on a 10ms timer so events and commands still work without a CPAL stream.
+    fn run_audio_thread(
+        manager: Arc<Mutex<PlaybackManager>>,
+        command_rx: Receiver<PlaybackCommand>,
+        command_tx: Sender<PlaybackCommand>,
+        event_tx: Sender<PlaybackEvent>,
+        dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
+        mut ring_producer: Option<rtrb::Producer<f32>>,
+        shutdown: Arc<AtomicBool>,
+        sample_rate: u32,
+        channels: u16,
+    ) {
+        const CHUNK_FRAMES: usize = 512;
+        let chunk_samples = CHUNK_FRAMES * channels as usize;
+        let mut f32_scratch = vec![0.0f32; chunk_samples];
+        let mut load_requested = false;
+        let mut error_count: u32 = 0;
+        let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
+
+        tracing::info!(
+            "[AudioThread] Started (null_mode={}, chunk_samples={})",
+            ring_producer.is_none(),
+            chunk_samples
+        );
+
+        loop {
+            if shutdown.load(Ordering::Relaxed) {
+                break;
+            }
+
+            // Drain all pending commands before producing audio
+            while let Ok(command) = command_rx.try_recv() {
+                let mut mgr = manager.lock().unwrap();
+                let _ = Self::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
+                Self::forward_manager_events(
+                    &mut mgr,
+                    &event_tx,
+                    &command_tx,
+                    &mut load_requested,
+                    &dsd_diagnostics_handle,
+                );
+            }
+
+            match &mut ring_producer {
+                None => {
+                    // Null mode: advance manager time and forward events on a timer
+                    {
+                        let mut mgr = manager.lock().unwrap();
+                        f32_scratch[..chunk_samples].fill(0.0);
+                        if let Ok(n) = mgr.process_audio(&mut f32_scratch[..chunk_samples]) {
+                            mgr.maybe_emit_position_update(n);
+                            Self::forward_manager_events(
+                                &mut mgr,
+                                &event_tx,
+                                &command_tx,
+                                &mut load_requested,
+                                &dsd_diagnostics_handle,
+                            );
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Some(producer) => {
+                    let free = producer.slots();
+                    if free < chunk_samples {
+                        // Ring is nearly full — wait for the RT callback to consume some
+                        std::thread::sleep(Duration::from_millis(1));
+                        continue;
+                    }
+
+                    let to_process = free.min(chunk_samples);
+                    f32_scratch[..to_process].fill(0.0);
+
+                    let n =
+                        {
+                            let mut mgr = manager.lock().unwrap();
+                            match mgr.process_audio(&mut f32_scratch[..to_process]) {
+                                Ok(n) => {
+                                    error_count = 0;
+                                    mgr.maybe_emit_position_update(n);
+                                    Self::forward_manager_events(
+                                        &mut mgr,
+                                        &event_tx,
+                                        &command_tx,
+                                        &mut load_requested,
+                                        &dsd_diagnostics_handle,
+                                    );
+                                    // Stream-restart recovery: if manager is loading but we never
+                                    // issued a load on this thread, the previous audio thread's
+                                    // loader had the old command_tx and the ActivateSource was lost.
+                                    // Re-trigger the load with the current command_tx.
+                                    if !load_requested && mgr.is_loading() {
+                                        if let Some(pending_track) =
+                                            mgr.get_pending_load_track().cloned()
+                                        {
+                                            load_requested = true;
+                                            let tx = command_tx.clone();
+                                            let sr = mgr.get_sample_rate();
+                                            let dsd = dsd_diagnostics_handle.clone();
+                                            std::thread::spawn(move || match load_source_blocking(
+                                                &pending_track,
+                                                sr,
+                                                Duration::from_millis(500),
+                                            ) {
+                                                Ok((source, diag)) => {
+                                                    if let Ok(mut g) = dsd.lock() {
+                                                        *g = diag;
+                                                    }
+                                                    let _ =
+                                                        tx.send(PlaybackCommand::ActivateSource {
+                                                            source,
+                                                            track: pending_track,
+                                                        });
+                                                }
+                                                Err(e) => tracing::error!(
+                                                    "[AudioThread/Restart] reload failed: {:?}",
+                                                    e
+                                                ),
+                                            });
+                                        }
+                                    }
+                                    n
+                                }
+                                Err(e) => {
+                                    error_count += 1;
+                                    tracing::error!("[AudioThread] process_audio error: {}", e);
+                                    if error_count >= 3 {
+                                        let _ = event_tx.try_send(PlaybackEvent::Error(format!(
+                                            "Audio processing error: {}",
+                                            e
+                                        )));
+                                        mgr.stop();
+                                        let _ = event_tx
+                                            .try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                                        error_count = 0;
+                                    }
+                                    to_process // write silence on error
+                                }
+                            }
+                        };
+
+                    if n == 0 {
+                        // Manager produced nothing (stopped/loading) — avoid busy spin
+                        std::thread::sleep(Duration::from_millis(1));
+                        continue;
+                    }
+
+                    // Apply stream-start fade envelope to prevent DAC pop
+                    stream_envelope.process(&mut f32_scratch[..n]);
+
+                    // Write f32 samples to ring buffer for RT callback to consume
+                    if let Ok(mut chunk) = producer.write_chunk_uninit(n) {
+                        let (s1, s2) = chunk.as_mut_slices();
+                        let n1 = s1.len().min(n);
+                        let n2 = (n - n1).min(s2.len());
+                        for (i, slot) in s1[..n1].iter_mut().enumerate() {
+                            slot.write(f32_scratch[i]);
+                        }
+                        for (i, slot) in s2[..n2].iter_mut().enumerate() {
+                            slot.write(f32_scratch[n1 + i]);
+                        }
+                        // SAFETY: we initialized exactly n1+n2 slots above
+                        unsafe { chunk.commit(n1 + n2) };
+                    }
+                }
+            }
+        }
+
+        tracing::info!("[AudioThread] Stopped");
     }
 
     /// Process playback command (acquires manager lock internally)
@@ -2632,6 +2452,11 @@ impl DesktopPlayback {
             tracing::debug!("[DesktopPlayback] State machine: Idle -> Switching");
         }
 
+        // Signal the audio processing thread to stop before dropping the CPAL stream.
+        // The thread holds the manager lock briefly per chunk; it will exit within a few ms.
+        self.audio_shutdown.store(true, Ordering::Relaxed);
+        tracing::debug!("[DesktopPlayback] Audio processing thread signaled to stop");
+
         // Stop and drop the old stream
         // IMPORTANT: ASIO requires proper cleanup between stream creations
         {
@@ -2704,56 +2529,57 @@ impl DesktopPlayback {
         );
 
         // Handle stream creation failure with recovery logic
-        let (new_stream_option, actual_device_name, new_sample_rate) = match stream_result {
-            Ok(result) => result,
-            Err(e) => {
-                tracing::error!(
-                    error = %e,
-                    "[Playback] Failed to create stream for device switch"
-                );
+        let (new_stream_option, actual_device_name, new_sample_rate, new_shutdown) =
+            match stream_result {
+                Ok(result) => result,
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        "[Playback] Failed to create stream for device switch"
+                    );
 
-                // Transition to Recovering state
-                {
-                    let mut state = self.device_switch_state.lock().unwrap();
-                    *state = DeviceSwitchState::Recovering {
-                        retry_count: 0,
-                        last_error: e.to_string(),
-                        saved_position: position,
-                    };
-                }
+                    // Transition to Recovering state
+                    {
+                        let mut state = self.device_switch_state.lock().unwrap();
+                        *state = DeviceSwitchState::Recovering {
+                            retry_count: 0,
+                            last_error: e.to_string(),
+                            saved_position: position,
+                        };
+                    }
 
-                // Emit failure event
-                let _ = self.event_tx.try_send(PlaybackEvent::DeviceSwitchFailed {
-                    error: e.to_string(),
-                    fallback_attempted: self.device_switch_config.auto_fallback,
-                });
+                    // Emit failure event
+                    let _ = self.event_tx.try_send(PlaybackEvent::DeviceSwitchFailed {
+                        error: e.to_string(),
+                        fallback_attempted: self.device_switch_config.auto_fallback,
+                    });
 
-                // Try fallback to default device if configured
-                if self.device_switch_config.auto_fallback && device_name.is_some() {
-                    tracing::warn!("[Playback] Attempting fallback to default device");
+                    // Try fallback to default device if configured
+                    if self.device_switch_config.auto_fallback && device_name.is_some() {
+                        tracing::warn!("[Playback] Attempting fallback to default device");
 
-                    // Recursive call to switch to default - reset state first
+                        // Recursive call to switch to default - reset state first
+                        {
+                            let mut state = self.device_switch_state.lock().unwrap();
+                            *state = DeviceSwitchState::Idle;
+                        }
+
+                        return self.switch_device_with_reason(
+                            crate::AudioBackend::Default,
+                            None,
+                            DeviceSwitchReason::ErrorRecovery,
+                        );
+                    }
+
+                    // Reset state machine on failure
                     {
                         let mut state = self.device_switch_state.lock().unwrap();
                         *state = DeviceSwitchState::Idle;
                     }
 
-                    return self.switch_device_with_reason(
-                        crate::AudioBackend::Default,
-                        None,
-                        DeviceSwitchReason::ErrorRecovery,
-                    );
+                    return Err(e);
                 }
-
-                // Reset state machine on failure
-                {
-                    let mut state = self.device_switch_state.lock().unwrap();
-                    *state = DeviceSwitchState::Idle;
-                }
-
-                return Err(e);
-            }
-        };
+            };
 
         let is_silent_mode = new_stream_option.is_none();
 
@@ -2796,12 +2622,13 @@ impl DesktopPlayback {
             callbacks_before_store
         );
 
-        // Store new stream
+        // Store new stream and update audio thread shutdown handle
         tracing::debug!("[DesktopPlayback] Storing new stream...");
         {
             let mut stream_guard = self.stream.lock().unwrap();
             *stream_guard = new_stream_option;
         }
+        self.audio_shutdown = new_shutdown;
 
         // Check callbacks immediately after storing
         let callbacks_after_store = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
