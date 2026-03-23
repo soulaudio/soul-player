@@ -1591,6 +1591,7 @@ impl DesktopPlayback {
         command_tx: &Sender<PlaybackCommand>,
         load_requested: &mut bool,
         dsd_diagnostics_handle: &Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
+        loader_in_flight: &Arc<AtomicBool>,
     ) {
         let events = mgr.drain_events();
         for event in events {
@@ -1688,42 +1689,64 @@ impl DesktopPlayback {
                     // This prevents the stream-restart recovery from double-loading.
                     *load_requested = true;
 
-                    // Spawn background thread to load the track
-                    let command_tx_clone = command_tx.clone();
-                    let sample_rate = mgr.get_sample_rate();
-                    let dsd_diag_clone = dsd_diagnostics_handle.clone();
+                    // Guard against simultaneous loader spawns. Rapid track cycling can
+                    // emit multiple LoadNext events before any loader completes; each
+                    // spawned thread holds Arc<Mutex<PlaybackManager>>, so an unbounded
+                    // accumulation would prevent clean manager drop.
+                    if loader_in_flight
+                        .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                        .is_err()
+                    {
+                        tracing::warn!(
+                            "[forward_manager_events] Loader already in flight, skipping: {}",
+                            track.title
+                        );
+                        None // Don't forward this internal event to the app
+                    } else {
+                        let command_tx_clone = command_tx.clone();
+                        let sample_rate = mgr.get_sample_rate();
+                        let dsd_diag_clone = dsd_diagnostics_handle.clone();
+                        let lif = Arc::clone(loader_in_flight);
 
-                    std::thread::spawn(move || {
-                        match load_source_blocking(&track, sample_rate, Duration::from_millis(500))
-                        {
-                            Ok((source, diag_handle)) => {
-                                // Store (or clear) the diagnostics handle for the new source.
-                                if let Ok(mut guard) = dsd_diag_clone.lock() {
-                                    *guard = diag_handle;
+                        std::thread::Builder::new()
+                            .name(format!("soul-loader:{}", track.title))
+                            .spawn(move || {
+                                match load_source_blocking(
+                                    &track,
+                                    sample_rate,
+                                    Duration::from_millis(500),
+                                ) {
+                                    Ok((source, diag_handle)) => {
+                                        // Store (or clear) the diagnostics handle for the new source.
+                                        if let Ok(mut guard) = dsd_diag_clone.lock() {
+                                            *guard = diag_handle;
+                                        }
+                                        if let Err(e) =
+                                            command_tx_clone.send(PlaybackCommand::ActivateSource {
+                                                source,
+                                                track: track.clone(),
+                                            })
+                                        {
+                                            tracing::error!(
+                                                "[LoadNext] Failed to send ActivateSource: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "[LoadNext] Failed to load source for {}: {:?}",
+                                            track.title,
+                                            e
+                                        );
+                                    }
                                 }
-                                if let Err(e) =
-                                    command_tx_clone.send(PlaybackCommand::ActivateSource {
-                                        source,
-                                        track: track.clone(),
-                                    })
-                                {
-                                    tracing::error!(
-                                        "[LoadNext] Failed to send ActivateSource: {}",
-                                        e
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "[LoadNext] Failed to load source for {}: {:?}",
-                                    track.title,
-                                    e
-                                );
-                            }
-                        }
-                    });
+                                lif.store(false, Ordering::Release);
+                            })
+                            .ok();
 
-                    None // Don't forward this internal event to the app
+                        None // Don't forward this internal event to the app
+                    }
                 }
             };
 
@@ -1758,6 +1781,10 @@ impl DesktopPlayback {
         let mut load_requested = false;
         let mut error_count: u32 = 0;
         let mut stream_envelope = StreamStartEnvelope::new(sample_rate, channels);
+        // Prevents simultaneous loader spawns. Only one loader should be in flight
+        // at a time; additional LoadNext events are already guarded by load_requested
+        // but cross-thread (device-switch restart) scenarios need an atomic guard.
+        let loader_in_flight: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 
         tracing::info!(
             "[AudioThread] Started (null_mode={}, chunk_samples={})",
@@ -1784,6 +1811,7 @@ impl DesktopPlayback {
                     &command_tx,
                     &mut load_requested,
                     &dsd_diagnostics_handle,
+                    &loader_in_flight,
                 );
             }
 
@@ -1801,6 +1829,7 @@ impl DesktopPlayback {
                                 &command_tx,
                                 &mut load_requested,
                                 &dsd_diagnostics_handle,
+                                &loader_in_flight,
                             );
                         }
                     }
@@ -1831,6 +1860,7 @@ impl DesktopPlayback {
                                         &command_tx,
                                         &mut load_requested,
                                         &dsd_diagnostics_handle,
+                                        &loader_in_flight,
                                     );
                                     // Stream-restart recovery: if manager is loading but we never
                                     // issued a load on this thread, the previous audio thread's
@@ -1840,30 +1870,55 @@ impl DesktopPlayback {
                                         if let Some(pending_track) =
                                             mgr.get_pending_load_track().cloned()
                                         {
-                                            load_requested = true;
-                                            let tx = command_tx.clone();
-                                            let sr = mgr.get_sample_rate();
-                                            let dsd = dsd_diagnostics_handle.clone();
-                                            std::thread::spawn(move || match load_source_blocking(
-                                                &pending_track,
-                                                sr,
-                                                Duration::from_millis(500),
-                                            ) {
-                                                Ok((source, diag)) => {
-                                                    if let Ok(mut g) = dsd.lock() {
-                                                        *g = diag;
-                                                    }
-                                                    let _ =
-                                                        tx.send(PlaybackCommand::ActivateSource {
-                                                            source,
-                                                            track: pending_track,
-                                                        });
-                                                }
-                                                Err(e) => tracing::error!(
-                                                    "[AudioThread/Restart] reload failed: {:?}",
-                                                    e
-                                                ),
-                                            });
+                                            if loader_in_flight
+                                                .compare_exchange(
+                                                    false,
+                                                    true,
+                                                    Ordering::Acquire,
+                                                    Ordering::Relaxed,
+                                                )
+                                                .is_ok()
+                                            {
+                                                load_requested = true;
+                                                let tx = command_tx.clone();
+                                                let sr = mgr.get_sample_rate();
+                                                let dsd = dsd_diagnostics_handle.clone();
+                                                let lif = Arc::clone(&loader_in_flight);
+                                                std::thread::Builder::new()
+                                                    .name(format!(
+                                                        "soul-loader-restart:{}",
+                                                        pending_track.title
+                                                    ))
+                                                    .spawn(move || {
+                                                        match load_source_blocking(
+                                                            &pending_track,
+                                                            sr,
+                                                            Duration::from_millis(500),
+                                                        ) {
+                                                            Ok((source, diag)) => {
+                                                                if let Ok(mut g) = dsd.lock() {
+                                                                    *g = diag;
+                                                                }
+                                                                let _ = tx.send(
+                                                                    PlaybackCommand::ActivateSource {
+                                                                        source,
+                                                                        track: pending_track,
+                                                                    },
+                                                                );
+                                                            }
+                                                            Err(e) => tracing::error!(
+                                                                "[AudioThread/Restart] reload failed: {:?}",
+                                                                e
+                                                            ),
+                                                        }
+                                                        lif.store(false, Ordering::Release);
+                                                    })
+                                                    .ok();
+                                            } else {
+                                                tracing::warn!(
+                                                    "[run_audio_thread] Loader already in flight, skip restart spawn"
+                                                );
+                                            }
                                         }
                                     }
                                     n
@@ -3631,12 +3686,14 @@ mod tests {
 
         let mut load_requested = false;
         let dsd_diag_test1 = Arc::new(Mutex::new(None));
+        let lif_test1: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
         DesktopPlayback::forward_manager_events(
             &mut mgr,
             &event_tx,
             &command_tx,
             &mut load_requested,
             &dsd_diag_test1,
+            &lif_test1,
         );
 
         let forwarded: Vec<_> = event_rx.try_iter().collect();
@@ -3743,12 +3800,14 @@ mod tests {
 
         // Also drain manager's pending_events (activate_source puts StateChanged+TrackChanged there)
         let dsd_diag_test2 = Arc::new(Mutex::new(None));
+        let lif_test2: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
         DesktopPlayback::forward_manager_events(
             &mut mgr,
             &event_tx,
             &command_tx,
             &mut load_requested,
             &dsd_diag_test2,
+            &lif_test2,
         );
 
         let events: Vec<_> = event_rx.try_iter().collect();
