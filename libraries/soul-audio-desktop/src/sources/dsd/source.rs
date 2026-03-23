@@ -180,6 +180,9 @@ pub struct DsdAudioSource {
     shared: Arc<SharedState>,
     command_tx: Sender<DsdCommand>,
     _decoder_thread: JoinHandle<()>,
+    /// Handle to the decoder thread — used by `read_samples` to unpark the decoder
+    /// immediately after consuming samples (avoids the 5ms park_timeout latency).
+    decoder_thread_handle: std::thread::Thread,
     last_generation: usize,
     buffer_capacity: usize,
 }
@@ -222,6 +225,11 @@ impl DsdAudioSource {
             })
             .map_err(|e| PlaybackError::AudioSource(e.to_string()))?;
 
+        // Capture thread handle before moving into `_decoder_thread` — used to unpark
+        // the decoder immediately after read_samples consumes from the ring, avoiding
+        // the park_timeout latency floor.
+        let decoder_thread_handle = decoder_thread.thread().clone();
+
         tracing::info!(
             "[DsdAudioSource] Opening: pcm_rate={}Hz → target={}Hz, channels={}",
             pcm_rate,
@@ -237,6 +245,7 @@ impl DsdAudioSource {
             shared,
             command_tx: cmd_tx,
             _decoder_thread: decoder_thread,
+            decoder_thread_handle,
             last_generation: 0,
             buffer_capacity: ring_capacity,
         })
@@ -305,6 +314,10 @@ impl AudioSource for DsdAudioSource {
         self.shared
             .buffer_fill
             .store(self.buffer_consumer.slots(), Ordering::Relaxed);
+
+        // Wake the decoder thread so it can refill immediately rather than waiting
+        // for the park_timeout to expire (avoids ~5ms stall after each successful read).
+        self.decoder_thread_handle.unpark();
 
         Ok(filled)
     }
@@ -504,8 +517,10 @@ fn decode_loop(
         }
 
         // Don't get too far ahead of the consumer.
+        // park_timeout avoids the 10-15ms Windows Sleep() floor.
+        // Woken by DsdAudioSource::read_samples() via unpark() after consuming from ring.
         if producer.slots() < channels * CHUNK_FRAMES {
-            std::thread::sleep(Duration::from_millis(1));
+            std::thread::park_timeout(Duration::from_millis(5));
             continue;
         }
 
@@ -705,7 +720,9 @@ fn flush_to_ring(samples: &[f32], producer: &mut Producer<f32>, shared: &SharedS
     while written < samples.len() {
         let slots = producer.slots();
         if slots == 0 {
-            std::thread::sleep(Duration::from_millis(1));
+            // park_timeout: called from the decoder thread, woken by read_samples() unpark.
+            // Avoids the 10-15ms Windows Sleep() timer floor.
+            std::thread::park_timeout(Duration::from_millis(5));
             continue;
         }
         let n = (samples.len() - written).min(slots);

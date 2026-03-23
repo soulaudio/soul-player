@@ -1191,6 +1191,11 @@ impl DesktopPlayback {
         // Spawn the audio processing thread — it owns the manager lock while producing
         // audio and forwarding events. The RT callback never touches the lock.
         let audio_shutdown = Arc::new(AtomicBool::new(false));
+        // OnceLock stores the proc thread handle so the CPAL RT callback can unpark it
+        // immediately after consuming samples, replacing the sleep(1ms) busy-wait.
+        let proc_thread: Arc<std::sync::OnceLock<std::thread::Thread>> =
+            Arc::new(std::sync::OnceLock::new());
+        let proc_thread_for_callback = Arc::clone(&proc_thread);
         {
             let sd = audio_shutdown.clone();
             let mgr = manager.clone();
@@ -1198,7 +1203,7 @@ impl DesktopPlayback {
             let cmd_tx = command_tx.clone();
             let ev_tx = event_tx.clone();
             let dsd = dsd_diagnostics_handle.clone();
-            std::thread::Builder::new()
+            let handle = std::thread::Builder::new()
                 .name("soul-audio-proc".to_string())
                 .spawn(move || {
                     Self::run_audio_thread(
@@ -1214,6 +1219,8 @@ impl DesktopPlayback {
                     );
                 })
                 .expect("failed to spawn audio processing thread");
+            // Store thread handle so CPAL RT callback can unpark the proc thread.
+            let _ = proc_thread.set(handle.thread().clone());
         }
 
         // Build the CPAL stream — callback is RT-safe (ring read only, no locks).
@@ -1223,6 +1230,7 @@ impl DesktopPlayback {
                 let mut ring = ring_consumer.take().unwrap();
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
+                let proc_thread_cb = Arc::clone(&proc_thread_for_callback);
                 let mut drop_guard = CallbackDropGuard {
                     stream_id,
                     sample_format: "F32",
@@ -1253,6 +1261,10 @@ impl DesktopPlayback {
                         }
                         let _ = &drop_guard;
                         Self::audio_callback_rt::<f32>(&mut ring, data);
+                        // Wake the audio proc thread — avoids the 15ms Windows Sleep() floor.
+                        if let Some(t) = proc_thread_cb.get() {
+                            t.unpark();
+                        }
                     },
                     |err| tracing::error!("[CPAL] F32 stream error: {}", err),
                     None,
@@ -1263,6 +1275,7 @@ impl DesktopPlayback {
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
                 let error_event_tx = event_tx.clone();
+                let proc_thread_cb = Arc::clone(&proc_thread_for_callback);
                 let mut drop_guard = CallbackDropGuard {
                     stream_id,
                     sample_format: "I32",
@@ -1294,6 +1307,10 @@ impl DesktopPlayback {
                         let _ = &drop_guard;
                         GLOBAL_I32_CALLBACK_COUNTER.fetch_add(1, Ordering::Relaxed);
                         Self::audio_callback_rt::<i32>(&mut ring, data);
+                        // Wake the audio proc thread — avoids the 15ms Windows Sleep() floor.
+                        if let Some(t) = proc_thread_cb.get() {
+                            t.unpark();
+                        }
                     },
                     move |err| {
                         tracing::error!(error = ?err, "[CPAL] I32 stream error");
@@ -1307,6 +1324,7 @@ impl DesktopPlayback {
                 let mut ring = ring_consumer.take().unwrap();
                 let mut callback_count: u32 = 0;
                 let stream_id = std::time::Instant::now();
+                let proc_thread_cb = Arc::clone(&proc_thread_for_callback);
                 let mut drop_guard = CallbackDropGuard {
                     stream_id,
                     sample_format: "I16",
@@ -1337,6 +1355,10 @@ impl DesktopPlayback {
                         }
                         let _ = &drop_guard;
                         Self::audio_callback_rt::<i16>(&mut ring, data);
+                        // Wake the audio proc thread — avoids the 15ms Windows Sleep() floor.
+                        if let Some(t) = proc_thread_cb.get() {
+                            t.unpark();
+                        }
                     },
                     |err| tracing::error!("[CPAL] I16 stream error: {}", err),
                     None,
@@ -1756,8 +1778,9 @@ impl DesktopPlayback {
                 Some(producer) => {
                     let free = producer.slots();
                     if free < chunk_samples {
-                        // Ring is nearly full — wait for the RT callback to consume some
-                        std::thread::sleep(Duration::from_millis(1));
+                        // Ring is nearly full — park until the CPAL RT callback unparks us.
+                        // park_timeout avoids the 10-15ms Windows Sleep() timer granularity floor.
+                        std::thread::park_timeout(Duration::from_millis(5));
                         continue;
                     }
 
@@ -1833,8 +1856,9 @@ impl DesktopPlayback {
                         };
 
                     if n == 0 {
-                        // Manager produced nothing (stopped/loading) — avoid busy spin
-                        std::thread::sleep(Duration::from_millis(1));
+                        // Manager produced nothing (stopped/loading) — avoid busy spin.
+                        // park_timeout wakes on CPAL unpark or after 5ms timeout.
+                        std::thread::park_timeout(Duration::from_millis(5));
                         continue;
                     }
 
