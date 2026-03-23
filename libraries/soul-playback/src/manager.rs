@@ -586,7 +586,15 @@ impl PlaybackManager {
 
         // Get next track from queue
         tracing::info!("[AUTO-ADVANCE] Getting next track from queue");
-        let next_track = self.get_next_track_from_queue()?;
+        let next_track = match self.get_next_track_from_queue() {
+            Ok(t) => t,
+            Err(e) => {
+                self.state = PlaybackState::Stopped;
+                self.emit_state_changed(PlaybackState::Stopped);
+                tracing::info!("[AUTO-ADVANCE] Queue exhausted: {e:?}");
+                return Err(e);
+            }
+        };
         tracing::info!("[AUTO-ADVANCE] Next track: id={}", next_track.id);
 
         // Save current track to history (either from active source or pending load)
