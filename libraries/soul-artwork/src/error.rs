@@ -31,6 +31,10 @@ pub enum ArtworkError {
     /// Failed to save artwork to file
     #[error("Failed to save artwork: {0}")]
     SaveFailed(String),
+
+    /// DSD format parse error (DSF/DSDIFF)
+    #[error("DSD error: {0}")]
+    Dsd(String),
 }
 
 /// Result type for artwork operations

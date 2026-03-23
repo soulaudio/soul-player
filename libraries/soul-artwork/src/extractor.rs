@@ -127,6 +127,20 @@ impl ArtworkExtractor {
             return Err(ArtworkError::FileNotFound(path.to_path_buf()));
         }
 
+        // DSF and DSDIFF embed artwork in ID3v2 tags that lofty cannot read.
+        // Use dsf-meta / dff-meta directly for these formats.
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext == "dsf" {
+            return Self::extract_from_dsf(path);
+        }
+        if ext == "dff" || ext == "dsdiff" {
+            return Self::extract_from_dff(path);
+        }
+
         // Read the file with lofty
         let tagged_file = lofty::read_from_path(path).map_err(|e| {
             tracing::error!(
@@ -222,6 +236,51 @@ impl ArtworkExtractor {
         );
 
         Ok(Some(ArtworkData::new(data.to_vec(), mime_type)))
+    }
+
+    fn extract_from_dsf(path: &Path) -> Result<Option<ArtworkData>> {
+        let dsf = dsf_meta::DsfFile::open(path)
+            .map_err(|e| ArtworkError::Dsd(format!("DSF open error: {e}")))?;
+        let Some(tag) = dsf.id3_tag().as_ref() else {
+            return Ok(None);
+        };
+        Self::extract_from_id3_tag(tag, path)
+    }
+
+    fn extract_from_dff(path: &Path) -> Result<Option<ArtworkData>> {
+        let dff = match dff_meta::DffFile::open(path) {
+            Ok(f) => f,
+            Err(dff_meta::model::Error::Id3Error(_, partial)) => partial,
+            Err(e) => return Err(ArtworkError::Dsd(format!("DFF open error: {e}"))),
+        };
+        let Some(tag) = dff.id3_tag().as_ref() else {
+            return Ok(None);
+        };
+        Self::extract_from_id3_tag(tag, path)
+    }
+
+    fn extract_from_id3_tag(tag: &id3::Tag, path: &Path) -> Result<Option<ArtworkData>> {
+        use id3::frame::PictureType;
+        let picture = tag
+            .pictures()
+            .find(|p| p.picture_type == PictureType::CoverFront)
+            .or_else(|| tag.pictures().next());
+        let Some(pic) = picture else {
+            tracing::debug!(
+                file_path = %path.display(),
+                "[Artwork] No pictures in DSF/DFF ID3 tag"
+            );
+            return Ok(None);
+        };
+        if pic.data.len() > MAX_ARTWORK_SIZE {
+            return Err(ArtworkError::TooLarge(pic.data.len(), MAX_ARTWORK_SIZE));
+        }
+        let mime_type = if pic.mime_type.is_empty() {
+            "image/jpeg".to_string()
+        } else {
+            pic.mime_type.clone()
+        };
+        Ok(Some(ArtworkData::new(pic.data.clone(), mime_type)))
     }
 }
 

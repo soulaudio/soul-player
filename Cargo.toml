@@ -81,6 +81,7 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
 lofty = "0.18" # Audio tag reading/writing
 dsf-meta = "0.2" # DSF (DSD Stream File) metadata parsing
 dff-meta = "0.1" # DSDIFF (DFF) metadata parsing
+id3 = "1" # ID3 tag reading; used by dsf-meta/dff-meta and soul-artwork
 
 # Server
 axum = { version = "0.7", features = ["ws"] }
