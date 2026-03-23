@@ -877,6 +877,23 @@ fn load_source_blocking(
     }
 }
 
+/// Acquire the inner PlaybackManager lock from a bare Arc, recovering from poisoning.
+/// Mirror of `DesktopPlayback::lock_manager()` for use in static functions.
+fn lock_manager_arc(
+    manager: &Arc<Mutex<PlaybackManager>>,
+) -> std::sync::MutexGuard<'_, PlaybackManager> {
+    match manager.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            tracing::warn!(
+                "[AudioThread] Recovered from poisoned PlaybackManager mutex - \
+                 audio callback may have crashed, state may be inconsistent"
+            );
+            poisoned.into_inner()
+        }
+    }
+}
+
 impl DesktopPlayback {
     /// Create new desktop playback system
     ///
@@ -1745,7 +1762,7 @@ impl DesktopPlayback {
 
             // Drain all pending commands before producing audio
             while let Ok(command) = command_rx.try_recv() {
-                let mut mgr = manager.lock().unwrap();
+                let mut mgr = lock_manager_arc(&manager);
                 let _ = Self::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
                 Self::forward_manager_events(
                     &mut mgr,
@@ -1760,7 +1777,7 @@ impl DesktopPlayback {
                 None => {
                     // Null mode: advance manager time and forward events on a timer
                     {
-                        let mut mgr = manager.lock().unwrap();
+                        let mut mgr = lock_manager_arc(&manager);
                         f32_scratch[..chunk_samples].fill(0.0);
                         if let Ok(n) = mgr.process_audio(&mut f32_scratch[..chunk_samples]) {
                             mgr.maybe_emit_position_update(n);
@@ -1789,7 +1806,7 @@ impl DesktopPlayback {
 
                     let n =
                         {
-                            let mut mgr = manager.lock().unwrap();
+                            let mut mgr = lock_manager_arc(&manager);
                             match mgr.process_audio(&mut f32_scratch[..to_process]) {
                                 Ok(n) => {
                                     error_count = 0;
