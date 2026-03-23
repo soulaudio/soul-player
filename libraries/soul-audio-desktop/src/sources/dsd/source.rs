@@ -138,6 +138,17 @@ impl Container {
         }
     }
 
+    fn read_frames_bulk(
+        &mut self,
+        n: usize,
+        out: &mut Vec<Vec<u8>>,
+    ) -> std::result::Result<usize, ContainerError> {
+        match self {
+            Self::Dsf(c) => c.read_frames_bulk(n, out),
+            Self::Dsdiff(c) => c.read_frames_bulk(n, out),
+        }
+    }
+
     fn seek(&mut self, target_sample: u64) -> std::result::Result<(), ContainerError> {
         match self {
             Self::Dsf(c) => c.seek(target_sample),
@@ -456,9 +467,7 @@ fn decode_loop(
     // Interleaved PCM accumulation buffer (at pcm_rate, before resampling).
     let mut input_buf: VecDeque<f32> = VecDeque::with_capacity(RESAMPLER_CHUNK * channels * 4);
 
-    // DSD byte buffers.
-    let mut frame = vec![0u8; channels];
-    let mut pcm_frame = vec![0.0f32; channels];
+    // Per-iteration state.
     let mut chunk_filled = 0usize;
     // Temporary staging buffer for one CHUNK_FRAMES block.
     let mut pcm_chunk: Vec<f32> = vec![0.0; CHUNK_FRAMES * channels];
@@ -472,6 +481,15 @@ fn decode_loop(
         .map(|_| Vec::with_capacity(RESAMPLER_CHUNK))
         .collect();
     let mut scratch_interleaved: Vec<f32> = Vec::with_capacity(max_output_frames * channels);
+
+    // Pre-allocated raw DSD byte buffers for bulk reads (one slice per channel, CHUNK_FRAMES bytes each).
+    let mut raw_dsd: Vec<Vec<u8>> = (0..channels)
+        .map(|_| vec![0u8; CHUNK_FRAMES])
+        .collect();
+    // Per-channel PCM output scratch for Dsd2Pcm::translate bulk calls.
+    let mut pcm_per_channel: Vec<Vec<f32>> = (0..channels)
+        .map(|_| vec![0.0f32; CHUNK_FRAMES])
+        .collect();
 
     'outer: loop {
         // Drain any pending commands (non-blocking).
@@ -524,31 +542,100 @@ fn decode_loop(
             continue;
         }
 
-        // Decode one CHUNK_FRAMES block of DSD → interleaved PCM.
-        // Check for pending commands every 1 024 frames (~0.4 ms) so that seeks
-        // break out of the inner loop quickly rather than waiting up to ~6 ms.
-        while chunk_filled < CHUNK_FRAMES {
-            if chunk_filled > 0 && chunk_filled.is_multiple_of(1024) && !cmd_rx.is_empty() {
-                break;
+        // Check for pending commands before the bulk read so that seeks interrupt
+        // quickly. Flush any partially-accumulated chunk so samples_produced stays in sync.
+        if !cmd_rx.is_empty() {
+            if chunk_filled > 0 {
+                input_buf.extend(pcm_chunk[..chunk_filled * channels].iter().copied());
+                chunk_filled = 0;
+                resample_and_flush(
+                    &mut input_buf,
+                    &mut resampler,
+                    channels,
+                    RESAMPLER_CHUNK,
+                    &mut producer,
+                    &shared,
+                    false,
+                    &mut warmup_skip_remaining,
+                    &mut scratch_deinterleaved,
+                    &mut scratch_interleaved,
+                );
             }
-            match container.read_frame(&mut frame) {
-                Ok(true) => {
-                    for ch in 0..channels {
-                        let src = std::slice::from_ref(&frame[ch]);
-                        let dst = std::slice::from_mut(&mut pcm_frame[ch]);
-                        filters[ch].translate(src, dst, lsbf);
-                    }
-                    for ch in 0..channels {
-                        pcm_chunk[chunk_filled * channels + ch] = pcm_frame[ch];
-                    }
-                    chunk_filled += 1;
+            continue 'outer;
+        }
+
+        // Bulk-read up to CHUNK_FRAMES DSD frames into per-channel byte slices.
+        let want = CHUNK_FRAMES - chunk_filled;
+        match container.read_frames_bulk(want, &mut raw_dsd) {
+            Ok(0) => {
+                // EOF — flush remaining samples through resampler then signal.
+                if chunk_filled > 0 {
+                    input_buf.extend(pcm_chunk[..chunk_filled * channels].iter().copied());
                 }
-                Ok(false) => {
-                    // EOF — flush remaining samples through resampler then signal.
-                    if chunk_filled > 0 {
-                        let partial = &pcm_chunk[..chunk_filled * channels];
-                        input_buf.extend(partial.iter().copied());
+                resample_and_flush(
+                    &mut input_buf,
+                    &mut resampler,
+                    channels,
+                    RESAMPLER_CHUNK,
+                    &mut producer,
+                    &shared,
+                    true,
+                    &mut warmup_skip_remaining,
+                    &mut scratch_deinterleaved,
+                    &mut scratch_interleaved,
+                );
+                shared.is_eof.store(true, Ordering::Release);
+                // Park until Stop or a seek-to-restart.
+                match cmd_rx.recv() {
+                    Err(_) | Ok(DsdCommand::Stop) => return,
+                    Ok(DsdCommand::Seek) => {
+                        shared.is_eof.store(false, Ordering::Release);
+                        let seek_output_samples =
+                            shared.seek_target_samples.load(Ordering::Acquire) as usize;
+                        let pos_secs = seek_output_samples as f64
+                            / (target_sample_rate as f64 * channels as f64);
+                        // Same unit fix: container seeks by DSD-byte index (dsd_rate/8).
+                        let target = (pos_secs * dsd_rate as f64 / 8.0) as u64;
+                        let _ = container.seek(target);
+                        for f in &mut filters {
+                            f.reset();
+                        }
+                        if let Some(ref mut r) = resampler {
+                            r.reset();
+                            warmup_skip_remaining = resampler_output_delay;
+                        }
+                        input_buf.clear();
+                        chunk_filled = 0;
+                        shared
+                            .samples_produced
+                            .store(seek_output_samples, Ordering::Release);
+                        shared.generation.fetch_add(1, Ordering::Release);
+                        continue 'outer;
                     }
+                }
+            }
+            Ok(n) => {
+                // Batch-translate each channel's raw DSD bytes → PCM.
+                for ch in 0..channels {
+                    filters[ch].translate(
+                        &raw_dsd[ch][..n],
+                        &mut pcm_per_channel[ch][chunk_filled..chunk_filled + n],
+                        lsbf,
+                    );
+                }
+                // Interleave per-channel PCM into the staging buffer.
+                for fi in chunk_filled..chunk_filled + n {
+                    for ch in 0..channels {
+                        pcm_chunk[fi * channels + ch] = pcm_per_channel[ch][fi];
+                    }
+                }
+                chunk_filled += n;
+
+                // Flush when the chunk is full or a short read signals end-of-file.
+                let eof_hit = n < want;
+                if chunk_filled >= CHUNK_FRAMES || eof_hit {
+                    input_buf.extend(pcm_chunk[..chunk_filled * channels].iter().copied());
+                    chunk_filled = 0;
                     resample_and_flush(
                         &mut input_buf,
                         &mut resampler,
@@ -556,67 +643,48 @@ fn decode_loop(
                         RESAMPLER_CHUNK,
                         &mut producer,
                         &shared,
-                        true,
+                        eof_hit,
                         &mut warmup_skip_remaining,
                         &mut scratch_deinterleaved,
                         &mut scratch_interleaved,
                     );
-                    shared.is_eof.store(true, Ordering::Release);
-                    // Park until Stop or a seek-to-restart.
-                    match cmd_rx.recv() {
-                        Err(_) | Ok(DsdCommand::Stop) => return,
-                        Ok(DsdCommand::Seek) => {
-                            shared.is_eof.store(false, Ordering::Release);
-                            let seek_output_samples =
-                                shared.seek_target_samples.load(Ordering::Acquire) as usize;
-                            let pos_secs = seek_output_samples as f64
-                                / (target_sample_rate as f64 * channels as f64);
-                            // Same unit fix: container seeks by DSD-byte index (dsd_rate/8).
-                            let target = (pos_secs * dsd_rate as f64 / 8.0) as u64;
-                            let _ = container.seek(target);
-                            for f in &mut filters {
-                                f.reset();
+                    if eof_hit {
+                        shared.is_eof.store(true, Ordering::Release);
+                        match cmd_rx.recv() {
+                            Err(_) | Ok(DsdCommand::Stop) => return,
+                            Ok(DsdCommand::Seek) => {
+                                shared.is_eof.store(false, Ordering::Release);
+                                let seek_output_samples =
+                                    shared.seek_target_samples.load(Ordering::Acquire) as usize;
+                                let pos_secs = seek_output_samples as f64
+                                    / (target_sample_rate as f64 * channels as f64);
+                                let target = (pos_secs * dsd_rate as f64 / 8.0) as u64;
+                                let _ = container.seek(target);
+                                for f in &mut filters {
+                                    f.reset();
+                                }
+                                if let Some(ref mut r) = resampler {
+                                    r.reset();
+                                    warmup_skip_remaining = resampler_output_delay;
+                                }
+                                input_buf.clear();
+                                chunk_filled = 0;
+                                shared
+                                    .samples_produced
+                                    .store(seek_output_samples, Ordering::Release);
+                                shared.generation.fetch_add(1, Ordering::Release);
+                                continue 'outer;
                             }
-                            if let Some(ref mut r) = resampler {
-                                r.reset();
-                                warmup_skip_remaining = resampler_output_delay;
-                            }
-                            input_buf.clear();
-                            chunk_filled = 0;
-                            shared
-                                .samples_produced
-                                .store(seek_output_samples, Ordering::Release);
-                            // Same ordering as top-of-loop seek: generation++ so
-                            // read_samples() flushes stale ring data. seek_pending is
-                            // cleared by read_samples() after the flush (not here).
-                            shared.generation.fetch_add(1, Ordering::Release);
-                            continue 'outer;
                         }
                     }
                 }
-                Err(e) => {
-                    tracing::error!("[DSD] decode error: {e}");
-                    shared.is_eof.store(true, Ordering::Release);
-                    return;
-                }
+            }
+            Err(e) => {
+                tracing::error!("[DSD] decode error: {e}");
+                shared.is_eof.store(true, Ordering::Release);
+                return;
             }
         }
-
-        // Append decoded chunk to input buffer and resample.
-        input_buf.extend(pcm_chunk[..chunk_filled * channels].iter().copied());
-        chunk_filled = 0;
-        resample_and_flush(
-            &mut input_buf,
-            &mut resampler,
-            channels,
-            RESAMPLER_CHUNK,
-            &mut producer,
-            &shared,
-            false,
-            &mut warmup_skip_remaining,
-            &mut scratch_deinterleaved,
-            &mut scratch_interleaved,
-        );
     }
 }
 

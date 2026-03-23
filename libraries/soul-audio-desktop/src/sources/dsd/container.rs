@@ -164,6 +164,52 @@ impl DsfContainer {
         Ok(true)
     }
 
+    /// Read up to `n` frames in bulk, writing raw DSD bytes per channel into `out`.
+    ///
+    /// `out` must have `self.channels` entries, each with at least `n` bytes capacity.
+    /// Returns the number of frames actually read (may be < n at EOF).
+    ///
+    /// This is dramatically faster than N calls to `read_frame` at DSD64 rates because
+    /// DSF blocks are already channel-separated: we copy slices directly from `block_buf`
+    /// instead of computing per-byte channel indices on every frame.
+    pub fn read_frames_bulk(
+        &mut self,
+        n: usize,
+        out: &mut Vec<Vec<u8>>,
+    ) -> Result<usize, ContainerError> {
+        let mut read = 0;
+        while read < n {
+            if self.samples_done >= self.total_samples {
+                break;
+            }
+            // Load next block if current is exhausted.
+            if self.block_pos >= DSF_BLOCK_SIZE {
+                let buf_len = self.block_buf.len();
+                let bytes_read = self.reader.read(&mut self.block_buf)?;
+                if bytes_read < buf_len {
+                    self.block_buf[bytes_read..].fill(0x69);
+                }
+                self.block_pos = 0;
+                self.blocks_done += 1;
+            }
+            // How many frames can we take from the current block?
+            let remaining_in_block = DSF_BLOCK_SIZE - self.block_pos;
+            let remaining_total = (self.total_samples - self.samples_done) as usize;
+            let batch = (n - read).min(remaining_in_block).min(remaining_total);
+            // DSF block layout: [ch0_4096_bytes][ch1_4096_bytes]...
+            // Copy per-channel slices directly — no per-byte index calculation.
+            for ch in 0..self.channels {
+                let src_start = ch * DSF_BLOCK_SIZE + self.block_pos;
+                out[ch][read..read + batch]
+                    .copy_from_slice(&self.block_buf[src_start..src_start + batch]);
+            }
+            self.block_pos += batch;
+            self.samples_done += batch as u64;
+            read += batch;
+        }
+        Ok(read)
+    }
+
     /// Seek to the nearest block boundary at or before `target_sample`.
     pub fn seek(&mut self, target_sample: u64) -> Result<(), ContainerError> {
         let block_idx = target_sample / DSF_BLOCK_SIZE as u64;
@@ -199,6 +245,8 @@ pub struct DsdiffContainer {
     audio_length: u64,
     bytes_consumed: u64,
     channels: usize,
+    /// Pre-allocated scratch for bulk reads — avoids per-call allocation in read_frames_bulk.
+    read_scratch: Vec<u8>,
 }
 
 impl DsdiffContainer {
@@ -234,6 +282,7 @@ impl DsdiffContainer {
             audio_length,
             bytes_consumed: 0,
             channels: channels as usize,
+            read_scratch: Vec::with_capacity(16_384 * channels as usize),
         })
     }
 
@@ -246,6 +295,36 @@ impl DsdiffContainer {
         self.reader.read_exact(frame)?;
         self.bytes_consumed += self.channels as u64;
         Ok(true)
+    }
+
+    /// Read up to `n` frames in bulk, deinterleaving into per-channel `out` buffers.
+    ///
+    /// DSDIFF is byte-interleaved on disk: [ch0][ch1][ch0][ch1]...
+    /// Uses `self.read_scratch` to avoid per-call allocation.
+    pub fn read_frames_bulk(
+        &mut self,
+        n: usize,
+        out: &mut Vec<Vec<u8>>,
+    ) -> Result<usize, ContainerError> {
+        let max_frames =
+            ((self.audio_length - self.bytes_consumed) / self.channels as u64) as usize;
+        let frames_to_read = n.min(max_frames);
+        if frames_to_read == 0 {
+            return Ok(0);
+        }
+        let byte_count = frames_to_read * self.channels;
+        // Reuse scratch buffer — no per-call allocation.
+        self.read_scratch.resize(byte_count, 0);
+        let read = self.reader.read(&mut self.read_scratch[..byte_count])?;
+        let actual_frames = read / self.channels;
+        self.bytes_consumed += read as u64;
+        // Deinterleave: DSDIFF is [ch0][ch1][ch0][ch1]...
+        for fi in 0..actual_frames {
+            for ch in 0..self.channels {
+                out[ch][fi] = self.read_scratch[fi * self.channels + ch];
+            }
+        }
+        Ok(actual_frames)
     }
 
     /// Seek to the nearest frame boundary at or before `target_sample`.
@@ -607,5 +686,96 @@ pub mod tests {
         let f = write_temp(&data);
         let c = DsdiffContainer::open(f.path()).unwrap();
         assert_eq!(c.meta.dsd_format, "DSD64");
+    }
+
+    // ── Bulk read parity tests ────────────────────────────────────────────────
+
+    /// read_frames_bulk must produce the same bytes as read_frame called in a loop.
+    #[test]
+    fn dsf_bulk_read_matches_frame_by_frame() {
+        // Two blocks, ch0 = 0xAA, ch1 = 0x55 (distinct per channel to catch interleave bugs).
+        let channels: u32 = 2;
+        let dsd_rate: u32 = 2_822_400;
+        let num_blocks = 2usize;
+        let sample_count: u64 = (num_blocks * DSF_BLOCK_SIZE) as u64;
+        let audio_len = num_blocks * DSF_BLOCK_SIZE * channels as usize;
+        let total_size: u64 = 92 + audio_len as u64;
+
+        let mut raw = Vec::new();
+        raw.extend_from_slice(b"DSD ");
+        raw.extend_from_slice(&28u64.to_le_bytes());
+        raw.extend_from_slice(&total_size.to_le_bytes());
+        raw.extend_from_slice(&0u64.to_le_bytes());
+        raw.extend_from_slice(b"fmt ");
+        raw.extend_from_slice(&52u64.to_le_bytes());
+        raw.extend_from_slice(&1u32.to_le_bytes());
+        raw.extend_from_slice(&0u32.to_le_bytes());
+        raw.extend_from_slice(&2u32.to_le_bytes());
+        raw.extend_from_slice(&channels.to_le_bytes());
+        raw.extend_from_slice(&dsd_rate.to_le_bytes());
+        raw.extend_from_slice(&1u32.to_le_bytes());
+        raw.extend_from_slice(&sample_count.to_le_bytes());
+        raw.extend_from_slice(&(DSF_BLOCK_SIZE as u32).to_le_bytes());
+        raw.extend_from_slice(&0u32.to_le_bytes());
+        raw.extend_from_slice(b"data");
+        raw.extend_from_slice(&(12u64 + audio_len as u64).to_le_bytes());
+        for _ in 0..num_blocks {
+            raw.extend(std::iter::repeat(0xAAu8).take(DSF_BLOCK_SIZE));
+            raw.extend(std::iter::repeat(0x55u8).take(DSF_BLOCK_SIZE));
+        }
+
+        let total_frames = num_blocks * DSF_BLOCK_SIZE;
+
+        // Reference: collect bytes via read_frame.
+        let f1 = write_temp(&raw);
+        let mut c1 = DsfContainer::open(f1.path()).unwrap();
+        let mut ref_ch0 = vec![0u8; total_frames];
+        let mut ref_ch1 = vec![0u8; total_frames];
+        let mut frame = [0u8; 2];
+        for i in 0..total_frames {
+            assert!(c1.read_frame(&mut frame).unwrap(), "frame {i} EOF too early");
+            ref_ch0[i] = frame[0];
+            ref_ch1[i] = frame[1];
+        }
+
+        // Bulk: collect bytes via read_frames_bulk in a single call.
+        let f2 = write_temp(&raw);
+        let mut c2 = DsfContainer::open(f2.path()).unwrap();
+        let mut out: Vec<Vec<u8>> = (0..2).map(|_| vec![0u8; total_frames]).collect();
+        let n = c2.read_frames_bulk(total_frames, &mut out).unwrap();
+        assert_eq!(n, total_frames, "bulk read should return all frames");
+
+        assert_eq!(out[0], ref_ch0, "ch0 bulk data mismatch");
+        assert_eq!(out[1], ref_ch1, "ch1 bulk data mismatch");
+    }
+
+    /// read_frames_bulk for DSDIFF must produce the same bytes as read_frame in a loop.
+    #[test]
+    fn dsdiff_bulk_read_matches_frame_by_frame() {
+        let num_frames = 128usize;
+        // ch0 and ch1 are interleaved in DSDIFF, both same pattern for simplicity.
+        let data = build_dsdiff(num_frames as u64, 0x96);
+
+        // Reference via read_frame.
+        let f1 = write_temp(&data);
+        let mut c1 = DsdiffContainer::open(f1.path()).unwrap();
+        let mut ref_ch0 = vec![0u8; num_frames];
+        let mut ref_ch1 = vec![0u8; num_frames];
+        let mut frame = [0u8; 2];
+        for i in 0..num_frames {
+            assert!(c1.read_frame(&mut frame).unwrap(), "frame {i} EOF too early");
+            ref_ch0[i] = frame[0];
+            ref_ch1[i] = frame[1];
+        }
+
+        // Bulk via read_frames_bulk.
+        let f2 = write_temp(&data);
+        let mut c2 = DsdiffContainer::open(f2.path()).unwrap();
+        let mut out: Vec<Vec<u8>> = (0..2).map(|_| vec![0u8; num_frames]).collect();
+        let n = c2.read_frames_bulk(num_frames, &mut out).unwrap();
+        assert_eq!(n, num_frames, "bulk read should return all frames");
+
+        assert_eq!(out[0], ref_ch0, "ch0 bulk data mismatch");
+        assert_eq!(out[1], ref_ch1, "ch1 bulk data mismatch");
     }
 }
