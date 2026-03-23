@@ -47,6 +47,10 @@ struct SharedState {
     generation: AtomicUsize,        // incremented on seek to invalidate stale ring-buffer data
     underrun_count: AtomicU64,      // times read_samples returned fewer samples than requested
     buffer_fill: AtomicUsize, // approximate ring fill; updated by read_samples() after each read
+    /// Pre-seek ring buffer sample count, stored BEFORE generation.fetch_add.
+    /// Used by read_samples() to drain exactly stale samples, not any post-seek
+    /// audio the decoder may have written between the generation bump and the read.
+    stale_sample_count: AtomicUsize,
 }
 
 impl SharedState {
@@ -59,6 +63,7 @@ impl SharedState {
             generation: AtomicUsize::new(0),
             underrun_count: AtomicU64::new(0),
             buffer_fill: AtomicUsize::new(0),
+            stale_sample_count: AtomicUsize::new(0),
         })
     }
 }
@@ -232,6 +237,7 @@ impl DsdAudioSource {
                     pcm_rate,
                     target_sample_rate,
                     channels,
+                    ring_capacity,
                 );
             })
             .map_err(|e| PlaybackError::AudioSource(e.to_string()))?;
@@ -284,14 +290,20 @@ impl AudioSource for DsdAudioSource {
         // seek_pending and the audio callback flushing the ring.
         let gen = self.shared.generation.load(Ordering::Acquire);
         if gen != self.last_generation {
-            let stale = self.buffer_consumer.slots();
+            // Drain exactly the pre-seek stale samples stored by decoder before generation bump.
+            // Using stale_sample_count (not buffer_consumer.slots()) avoids draining valid
+            // post-seek audio the decoder may have written after the generation bump.
+            let stale = self.shared.stale_sample_count.load(Ordering::Relaxed);
             if stale > 0 {
-                if let Ok(chunk) = self.buffer_consumer.read_chunk(stale) {
-                    chunk.commit_all();
+                let to_drain = stale.min(self.buffer_consumer.slots());
+                if to_drain > 0 {
+                    if let Ok(chunk) = self.buffer_consumer.read_chunk(to_drain) {
+                        chunk.commit_all();
+                    }
                 }
             }
             self.last_generation = gen;
-            // Ring is now empty and samples_produced reflects the seek target.
+            // Ring is now drained of stale data and samples_produced reflects the seek target.
             // It is safe to leave the optimistic seek-target path in position().
             self.shared.seek_pending.store(false, Ordering::Release);
         }
@@ -414,6 +426,7 @@ fn decode_loop(
     pcm_rate: u32,
     target_sample_rate: u32,
     channels: usize,
+    ring_capacity: usize,
 ) {
     // Number of PCM frames decoded per iteration at pcm_rate.
     const CHUNK_FRAMES: usize = 16_384;
@@ -475,21 +488,17 @@ fn decode_loop(
     // Pre-allocated scratch buffers for resample_and_flush — reused every call to eliminate
     // ~86 Vec allocations/sec at DSD64 (one per resampler chunk, ~86 chunks/sec).
     let max_output_frames =
-        (RESAMPLER_CHUNK as f64 * target_sample_rate as f64 / pcm_rate as f64 * 1.1) as usize
-            + 64;
+        (RESAMPLER_CHUNK as f64 * target_sample_rate as f64 / pcm_rate as f64 * 1.1) as usize + 64;
     let mut scratch_deinterleaved: Vec<Vec<f32>> = (0..channels)
         .map(|_| Vec::with_capacity(RESAMPLER_CHUNK))
         .collect();
     let mut scratch_interleaved: Vec<f32> = Vec::with_capacity(max_output_frames * channels);
 
     // Pre-allocated raw DSD byte buffers for bulk reads (one slice per channel, CHUNK_FRAMES bytes each).
-    let mut raw_dsd: Vec<Vec<u8>> = (0..channels)
-        .map(|_| vec![0u8; CHUNK_FRAMES])
-        .collect();
+    let mut raw_dsd: Vec<Vec<u8>> = (0..channels).map(|_| vec![0u8; CHUNK_FRAMES]).collect();
     // Per-channel PCM output scratch for Dsd2Pcm::translate bulk calls.
-    let mut pcm_per_channel: Vec<Vec<f32>> = (0..channels)
-        .map(|_| vec![0.0f32; CHUNK_FRAMES])
-        .collect();
+    let mut pcm_per_channel: Vec<Vec<f32>> =
+        (0..channels).map(|_| vec![0.0f32; CHUNK_FRAMES]).collect();
 
     'outer: loop {
         // Drain any pending commands (non-blocking).
@@ -531,6 +540,14 @@ fn decode_loop(
                     shared
                         .samples_produced
                         .store(seek_output_samples, Ordering::Release);
+                    // Snapshot pre-seek ring occupancy BEFORE generation bump.
+                    // producer.slots() = free write slots; ring_capacity - producer.slots() = used = stale.
+                    // This lets read_samples() drain exactly the stale samples, not any post-seek
+                    // audio the decoder may have written between now and when the callback runs.
+                    let stale = ring_capacity - producer.slots();
+                    shared
+                        .stale_sample_count
+                        .store(stale, Ordering::Relaxed);
                     // Increment generation so read_samples() (audio callback) detects
                     // the seek and flushes stale ring data. seek_pending is intentionally
                     // NOT cleared here — it is cleared by read_samples() after the flush,
@@ -1390,6 +1407,17 @@ mod tests {
         assert_eq!(
             underruns, 0,
             "ring starved {underruns} times during 5s real-time drain — jitter will occur"
+        );
+    }
+
+    #[test]
+    fn shared_state_has_stale_sample_count_field() {
+        let state = SharedState::new();
+        assert_eq!(
+            state
+                .stale_sample_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            0
         );
     }
 }
