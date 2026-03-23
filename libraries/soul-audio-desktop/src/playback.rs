@@ -785,8 +785,11 @@ pub struct DesktopPlayback {
     /// Resampling settings (applied when loading tracks)
     resampling_settings: Arc<Mutex<ResamplingSettings>>,
 
-    /// Device switch state machine
-    /// Tracks current state of device switching to prevent race conditions
+    /// Device switch state machine.
+    /// Tracks current state of device switching to prevent race conditions.
+    /// Arc<Mutex<>> is required here: both get_device_switch_state() and is_device_switching()
+    /// are &self methods that read this field, so a plain field cannot be used — exclusive &mut self
+    /// access is not guaranteed at all read sites.
     device_switch_state: Arc<Mutex<DeviceSwitchState>>,
 
     /// Device switch configuration
