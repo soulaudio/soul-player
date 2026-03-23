@@ -1760,10 +1760,14 @@ impl DesktopPlayback {
                 break;
             }
 
-            // Drain all pending commands before producing audio
-            while let Ok(command) = command_rx.try_recv() {
+            // Drain all pending commands under a single lock acquisition.
+            // Processing all commands in one scope reduces lock churn and ensures
+            // events are forwarded once for the entire batch rather than per-command.
+            if command_rx.len() > 0 {
                 let mut mgr = lock_manager_arc(&manager);
-                let _ = Self::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
+                while let Ok(command) = command_rx.try_recv() {
+                    let _ = Self::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
+                }
                 Self::forward_manager_events(
                     &mut mgr,
                     &event_tx,
