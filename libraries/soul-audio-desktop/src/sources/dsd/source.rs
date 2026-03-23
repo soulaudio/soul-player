@@ -513,6 +513,9 @@ fn decode_loop(
                         // rather than the stale seek target. The decoder stays at its current
                         // position; the UI position indicator will jump to the actual position.
                         shared.seek_pending.store(false, Ordering::Release);
+                        // Do NOT update samples_produced or generation — decoder stayed at
+                        // its pre-seek position.
+                        continue;
                     }
                     for f in &mut filters {
                         f.reset();
@@ -603,6 +606,9 @@ fn decode_loop(
                         if let Err(e) = container.seek(target) {
                             tracing::error!("[DSD] seek failed at sample {target}: {e}");
                             shared.seek_pending.store(false, Ordering::Release);
+                            // Do NOT update samples_produced or generation — decoder stayed at
+                            // its pre-seek position.
+                            continue 'outer;
                         }
                         for f in &mut filters {
                             f.reset();
@@ -669,6 +675,9 @@ fn decode_loop(
                                 if let Err(e) = container.seek(target) {
                                     tracing::error!("[DSD] seek failed at sample {target}: {e}");
                                     shared.seek_pending.store(false, Ordering::Release);
+                                    // Do NOT update samples_produced or generation — decoder
+                                    // stayed at its pre-seek position.
+                                    continue 'outer;
                                 }
                                 for f in &mut filters {
                                     f.reset();
