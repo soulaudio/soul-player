@@ -16,6 +16,7 @@ use audio_thread_priority::{
     demote_current_thread_from_real_time, promote_current_thread_to_real_time, RtPriorityHandle,
 };
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::thread::JoinHandle;
 
 /// Global counter for I32 (ASIO) callbacks - used for diagnostics
 /// This is updated by `audio_callback_i32` and read by `send_command` for debugging
@@ -781,6 +782,10 @@ pub struct DesktopPlayback {
     /// Shutdown flag for the audio processing thread.
     /// Set to `true` to signal the thread to exit gracefully on device switch.
     audio_shutdown: Arc<AtomicBool>,
+
+    /// Join handle for the audio processing thread.
+    /// Used to wait for the thread to exit cleanly on device switch or drop.
+    audio_thread: Option<JoinHandle<()>>,
 }
 
 // SAFETY: DesktopPlayback is safe to send between threads because:
@@ -973,7 +978,7 @@ impl DesktopPlayback {
         let stream_start = std::time::Instant::now();
         let dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>> =
             Arc::new(Mutex::new(None));
-        let (stream_option, actual_device_name, sample_rate, audio_shutdown) =
+        let (stream_option, actual_device_name, sample_rate, audio_shutdown, audio_thread) =
             Self::create_audio_stream(
                 manager.clone(),
                 command_rx,
@@ -1053,14 +1058,16 @@ impl DesktopPlayback {
             device_switch_config: DeviceSwitchConfig::default(),
             dsd_diagnostics_handle,
             audio_shutdown,
+            audio_thread: Some(audio_thread),
         })
     }
 
     /// Create CPAL audio stream and audio processing thread.
     ///
-    /// Returns `(stream, device_name, sample_rate, audio_shutdown)`.
+    /// Returns `(stream, device_name, sample_rate, audio_shutdown, audio_thread)`.
     /// `stream` is None for zero-device systems (silent mode).
     /// `audio_shutdown` — set to `true` to stop the audio processing thread.
+    /// `audio_thread` — join handle for the spawned audio processing thread.
     fn create_audio_stream(
         manager: Arc<Mutex<PlaybackManager>>,
         command_rx: Receiver<PlaybackCommand>,
@@ -1069,7 +1076,7 @@ impl DesktopPlayback {
         backend: crate::AudioBackend,
         device_name: Option<String>,
         dsd_diagnostics_handle: Arc<Mutex<Option<crate::sources::dsd::DsdDiagnosticsHandle>>>,
-    ) -> Result<(Option<Stream>, String, u32, Arc<AtomicBool>)> {
+    ) -> Result<(Option<Stream>, String, u32, Arc<AtomicBool>, JoinHandle<()>)> {
         tracing::info!(
             backend = ?backend,
             device_name = ?device_name,
@@ -1127,7 +1134,7 @@ impl DesktopPlayback {
                 }
                 let audio_shutdown = Arc::new(AtomicBool::new(false));
                 let sd = audio_shutdown.clone();
-                std::thread::Builder::new()
+                let null_handle = std::thread::Builder::new()
                     .name("soul-audio-null".to_string())
                     .spawn(move || {
                         Self::run_audio_thread(
@@ -1148,6 +1155,7 @@ impl DesktopPlayback {
                     "Silent Mode (No Audio Devices)".to_string(),
                     null_sr,
                     audio_shutdown,
+                    null_handle,
                 ));
             }
             Err(e) => return Err(e),
@@ -1213,14 +1221,14 @@ impl DesktopPlayback {
         let proc_thread: Arc<std::sync::OnceLock<std::thread::Thread>> =
             Arc::new(std::sync::OnceLock::new());
         let proc_thread_for_callback = Arc::clone(&proc_thread);
-        {
+        let audio_proc_handle = {
             let sd = audio_shutdown.clone();
             let mgr = manager.clone();
             let cmd_rx = command_rx;
             let cmd_tx = command_tx.clone();
             let ev_tx = event_tx.clone();
             let dsd = dsd_diagnostics_handle.clone();
-            let handle = std::thread::Builder::new()
+            let audio_proc_handle = std::thread::Builder::new()
                 .name("soul-audio-proc".to_string())
                 .spawn(move || {
                     Self::run_audio_thread(
@@ -1237,8 +1245,9 @@ impl DesktopPlayback {
                 })
                 .expect("failed to spawn audio processing thread");
             // Store thread handle so CPAL RT callback can unpark the proc thread.
-            let _ = proc_thread.set(handle.thread().clone());
-        }
+            let _ = proc_thread.set(audio_proc_handle.thread().clone());
+            audio_proc_handle
+        };
 
         // Build the CPAL stream — callback is RT-safe (ring read only, no locks).
         let mut ring_consumer = Some(ring_consumer);
@@ -1406,6 +1415,7 @@ impl DesktopPlayback {
             actual_device_name,
             sample_rate,
             audio_shutdown,
+            audio_proc_handle,
         ))
     }
 
@@ -2502,6 +2512,15 @@ impl DesktopPlayback {
         self.audio_shutdown.store(true, Ordering::Relaxed);
         tracing::debug!("[DesktopPlayback] Audio processing thread signaled to stop");
 
+        // Join the old audio thread so it fully exits before we create the new stream.
+        // Without this, the old thread may still hold Arc<Mutex<PlaybackManager>> while
+        // the new thread starts — two threads writing to the same manager.
+        if let Some(handle) = self.audio_thread.take() {
+            tracing::debug!("[DesktopPlayback] Joining old audio thread...");
+            let _ = handle.join(); // ignore panic — already logged if it occurred
+            tracing::debug!("[DesktopPlayback] Old audio thread joined");
+        }
+
         // Stop and drop the old stream
         // IMPORTANT: ASIO requires proper cleanup between stream creations
         {
@@ -2574,7 +2593,7 @@ impl DesktopPlayback {
         );
 
         // Handle stream creation failure with recovery logic
-        let (new_stream_option, actual_device_name, new_sample_rate, new_shutdown) =
+        let (new_stream_option, actual_device_name, new_sample_rate, new_shutdown, new_audio_thread) =
             match stream_result {
                 Ok(result) => result,
                 Err(e) => {
@@ -2674,6 +2693,7 @@ impl DesktopPlayback {
             *stream_guard = new_stream_option;
         }
         self.audio_shutdown = new_shutdown;
+        self.audio_thread = Some(new_audio_thread);
 
         // Check callbacks immediately after storing
         let callbacks_after_store = GLOBAL_I32_CALLBACK_COUNTER.load(Ordering::Relaxed);
@@ -3541,6 +3561,20 @@ impl DesktopPlayback {
     pub fn get_headroom_attenuation_db(&self) -> f64 {
         let mut manager = self.lock_manager();
         manager.get_headroom_attenuation_db()
+    }
+}
+
+impl Drop for DesktopPlayback {
+    fn drop(&mut self) {
+        // Signal the audio processing thread to stop, then wait for it to exit.
+        // This prevents the thread from accessing freed memory if DesktopPlayback
+        // is dropped while audio is still running.
+        self.audio_shutdown.store(true, Ordering::Release);
+        if let Some(handle) = self.audio_thread.take() {
+            tracing::debug!("[DesktopPlayback] Waiting for audio thread to exit...");
+            let _ = handle.join();
+            tracing::debug!("[DesktopPlayback] Audio thread exited cleanly");
+        }
     }
 }
 
