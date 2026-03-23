@@ -1803,7 +1803,8 @@ impl DesktopPlayback {
             if command_rx.len() > 0 {
                 let mut mgr = lock_manager_arc(&manager);
                 while let Ok(command) = command_rx.try_recv() {
-                    let _ = Self::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
+                    let _ =
+                        Self::process_command_with_lock(command, &mut mgr, &event_tx, &command_tx);
                 }
                 Self::forward_manager_events(
                     &mut mgr,
@@ -1847,44 +1848,43 @@ impl DesktopPlayback {
                     let to_process = free.min(chunk_samples);
                     f32_scratch[..to_process].fill(0.0);
 
-                    let n =
-                        {
-                            let mut mgr = lock_manager_arc(&manager);
-                            match mgr.process_audio(&mut f32_scratch[..to_process]) {
-                                Ok(n) => {
-                                    error_count = 0;
-                                    mgr.maybe_emit_position_update(n);
-                                    Self::forward_manager_events(
-                                        &mut mgr,
-                                        &event_tx,
-                                        &command_tx,
-                                        &mut load_requested,
-                                        &dsd_diagnostics_handle,
-                                        &loader_in_flight,
-                                    );
-                                    // Stream-restart recovery: if manager is loading but we never
-                                    // issued a load on this thread, the previous audio thread's
-                                    // loader had the old command_tx and the ActivateSource was lost.
-                                    // Re-trigger the load with the current command_tx.
-                                    if !load_requested && mgr.is_loading() {
-                                        if let Some(pending_track) =
-                                            mgr.get_pending_load_track().cloned()
+                    let n = {
+                        let mut mgr = lock_manager_arc(&manager);
+                        match mgr.process_audio(&mut f32_scratch[..to_process]) {
+                            Ok(n) => {
+                                error_count = 0;
+                                mgr.maybe_emit_position_update(n);
+                                Self::forward_manager_events(
+                                    &mut mgr,
+                                    &event_tx,
+                                    &command_tx,
+                                    &mut load_requested,
+                                    &dsd_diagnostics_handle,
+                                    &loader_in_flight,
+                                );
+                                // Stream-restart recovery: if manager is loading but we never
+                                // issued a load on this thread, the previous audio thread's
+                                // loader had the old command_tx and the ActivateSource was lost.
+                                // Re-trigger the load with the current command_tx.
+                                if !load_requested && mgr.is_loading() {
+                                    if let Some(pending_track) =
+                                        mgr.get_pending_load_track().cloned()
+                                    {
+                                        if loader_in_flight
+                                            .compare_exchange(
+                                                false,
+                                                true,
+                                                Ordering::Acquire,
+                                                Ordering::Relaxed,
+                                            )
+                                            .is_ok()
                                         {
-                                            if loader_in_flight
-                                                .compare_exchange(
-                                                    false,
-                                                    true,
-                                                    Ordering::Acquire,
-                                                    Ordering::Relaxed,
-                                                )
-                                                .is_ok()
-                                            {
-                                                load_requested = true;
-                                                let tx = command_tx.clone();
-                                                let sr = mgr.get_sample_rate();
-                                                let dsd = dsd_diagnostics_handle.clone();
-                                                let lif = Arc::clone(&loader_in_flight);
-                                                std::thread::Builder::new()
+                                            load_requested = true;
+                                            let tx = command_tx.clone();
+                                            let sr = mgr.get_sample_rate();
+                                            let dsd = dsd_diagnostics_handle.clone();
+                                            let lif = Arc::clone(&loader_in_flight);
+                                            std::thread::Builder::new()
                                                     .name(format!(
                                                         "soul-loader-restart:{}",
                                                         pending_track.title
@@ -1914,32 +1914,32 @@ impl DesktopPlayback {
                                                         lif.store(false, Ordering::Release);
                                                     })
                                                     .ok();
-                                            } else {
-                                                tracing::warn!(
+                                        } else {
+                                            tracing::warn!(
                                                     "[run_audio_thread] Loader already in flight, skip restart spawn"
                                                 );
-                                            }
                                         }
                                     }
-                                    n
                                 }
-                                Err(e) => {
-                                    error_count += 1;
-                                    tracing::error!("[AudioThread] process_audio error: {}", e);
-                                    if error_count >= 3 {
-                                        let _ = event_tx.try_send(PlaybackEvent::Error(format!(
-                                            "Audio processing error: {}",
-                                            e
-                                        )));
-                                        mgr.stop();
-                                        let _ = event_tx
-                                            .try_send(PlaybackEvent::StateChanged(mgr.get_state()));
-                                        error_count = 0;
-                                    }
-                                    to_process // write silence on error
-                                }
+                                n
                             }
-                        };
+                            Err(e) => {
+                                error_count += 1;
+                                tracing::error!("[AudioThread] process_audio error: {}", e);
+                                if error_count >= 3 {
+                                    let _ = event_tx.try_send(PlaybackEvent::Error(format!(
+                                        "Audio processing error: {}",
+                                        e
+                                    )));
+                                    mgr.stop();
+                                    let _ = event_tx
+                                        .try_send(PlaybackEvent::StateChanged(mgr.get_state()));
+                                    error_count = 0;
+                                }
+                                to_process // write silence on error
+                            }
+                        }
+                    };
 
                     if n == 0 {
                         // Manager produced nothing (stopped/loading) — avoid busy spin.
@@ -2259,11 +2259,9 @@ impl DesktopPlayback {
             Err(crossbeam_channel::TrySendError::Full(_)) => {
                 tracing::warn!(
                     command = ?command,
-                    "[Playback] Command channel full, dropping command"
+                    "[Playback] Command channel full — audio thread may be busy, command dropped"
                 );
-                // Return Ok to not fail the operation - the command is just dropped
-                // This can happen when switching audio devices and callbacks aren't running yet
-                Ok(())
+                Err(crate::error::AudioError::ChannelFull)
             }
             Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
                 // Only acquire locks and gather debug info on error (rare case)
@@ -2546,7 +2544,9 @@ impl DesktopPlayback {
                 saved_position: position,
                 was_playing,
             };
-            tracing::debug!("[DesktopPlayback] State machine: Idle -> Switching (atomic check+set)");
+            tracing::debug!(
+                "[DesktopPlayback] State machine: Idle -> Switching (atomic check+set)"
+            );
         }
 
         // Emit switch started event for UI feedback
@@ -2642,57 +2642,62 @@ impl DesktopPlayback {
         );
 
         // Handle stream creation failure with recovery logic
-        let (new_stream_option, actual_device_name, new_sample_rate, new_shutdown, new_audio_thread) =
-            match stream_result {
-                Ok(result) => result,
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        "[Playback] Failed to create stream for device switch"
-                    );
+        let (
+            new_stream_option,
+            actual_device_name,
+            new_sample_rate,
+            new_shutdown,
+            new_audio_thread,
+        ) = match stream_result {
+            Ok(result) => result,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "[Playback] Failed to create stream for device switch"
+                );
 
-                    // Transition to Recovering state
-                    {
-                        let mut state = self.device_switch_state.lock().unwrap();
-                        *state = DeviceSwitchState::Recovering {
-                            retry_count: 0,
-                            last_error: e.to_string(),
-                            saved_position: position,
-                        };
-                    }
+                // Transition to Recovering state
+                {
+                    let mut state = self.device_switch_state.lock().unwrap();
+                    *state = DeviceSwitchState::Recovering {
+                        retry_count: 0,
+                        last_error: e.to_string(),
+                        saved_position: position,
+                    };
+                }
 
-                    // Emit failure event
-                    let _ = self.event_tx.try_send(PlaybackEvent::DeviceSwitchFailed {
-                        error: e.to_string(),
-                        fallback_attempted: self.device_switch_config.auto_fallback,
-                    });
+                // Emit failure event
+                let _ = self.event_tx.try_send(PlaybackEvent::DeviceSwitchFailed {
+                    error: e.to_string(),
+                    fallback_attempted: self.device_switch_config.auto_fallback,
+                });
 
-                    // Try fallback to default device if configured
-                    if self.device_switch_config.auto_fallback && device_name.is_some() {
-                        tracing::warn!("[Playback] Attempting fallback to default device");
+                // Try fallback to default device if configured
+                if self.device_switch_config.auto_fallback && device_name.is_some() {
+                    tracing::warn!("[Playback] Attempting fallback to default device");
 
-                        // Recursive call to switch to default - reset state first
-                        {
-                            let mut state = self.device_switch_state.lock().unwrap();
-                            *state = DeviceSwitchState::Idle;
-                        }
-
-                        return self.switch_device_with_reason(
-                            crate::AudioBackend::Default,
-                            None,
-                            DeviceSwitchReason::ErrorRecovery,
-                        );
-                    }
-
-                    // Reset state machine on failure
+                    // Recursive call to switch to default - reset state first
                     {
                         let mut state = self.device_switch_state.lock().unwrap();
                         *state = DeviceSwitchState::Idle;
                     }
 
-                    return Err(e);
+                    return self.switch_device_with_reason(
+                        crate::AudioBackend::Default,
+                        None,
+                        DeviceSwitchReason::ErrorRecovery,
+                    );
                 }
-            };
+
+                // Reset state machine on failure
+                {
+                    let mut state = self.device_switch_state.lock().unwrap();
+                    *state = DeviceSwitchState::Idle;
+                }
+
+                return Err(e);
+            }
+        };
 
         let is_silent_mode = new_stream_option.is_none();
 
