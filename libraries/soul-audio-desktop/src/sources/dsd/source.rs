@@ -508,7 +508,11 @@ fn decode_loop(
                     // so divide dsd_rate by 8 — equivalently use the pcm_rate (352800 for DSD64).
                     let target_sample = (pos_secs * dsd_rate as f64 / 8.0) as u64;
                     if let Err(e) = container.seek(target_sample) {
-                        tracing::warn!("[DSD] seek error: {e}");
+                        tracing::error!("[DSD] seek failed at sample {target_sample}: {e}");
+                        // Clear seek_pending so position() returns actual samples_produced
+                        // rather than the stale seek target. The decoder stays at its current
+                        // position; the UI position indicator will jump to the actual position.
+                        shared.seek_pending.store(false, Ordering::Release);
                     }
                     for f in &mut filters {
                         f.reset();
@@ -596,7 +600,10 @@ fn decode_loop(
                             / (target_sample_rate as f64 * channels as f64);
                         // Same unit fix: container seeks by DSD-byte index (dsd_rate/8).
                         let target = (pos_secs * dsd_rate as f64 / 8.0) as u64;
-                        let _ = container.seek(target);
+                        if let Err(e) = container.seek(target) {
+                            tracing::error!("[DSD] seek failed at sample {target}: {e}");
+                            shared.seek_pending.store(false, Ordering::Release);
+                        }
                         for f in &mut filters {
                             f.reset();
                         }
@@ -659,7 +666,10 @@ fn decode_loop(
                                 let pos_secs = seek_output_samples as f64
                                     / (target_sample_rate as f64 * channels as f64);
                                 let target = (pos_secs * dsd_rate as f64 / 8.0) as u64;
-                                let _ = container.seek(target);
+                                if let Err(e) = container.seek(target) {
+                                    tracing::error!("[DSD] seek failed at sample {target}: {e}");
+                                    shared.seek_pending.store(false, Ordering::Release);
+                                }
                                 for f in &mut filters {
                                     f.reset();
                                 }
