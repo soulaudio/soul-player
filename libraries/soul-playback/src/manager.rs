@@ -442,7 +442,9 @@ impl PlaybackManager {
     pub fn next(&mut self) -> Result<()> {
         self.stop_fade.reset();
 
-        // Save current track to history (if any)
+        // Save current track to history (if any).
+        // Note: intentionally does not save pending_load_track here; that is
+        // handled inside play_next_in_queue() via save_current_to_history().
         if let Some(track) = self.sources.current_track() {
             self.history.push(track.clone());
         }
@@ -503,10 +505,7 @@ impl PlaybackManager {
                     "[previous] Navigating to previous track via source queue: {}",
                     prev_track.id
                 );
-                self.pending_events
-                    .push(PlaybackEvent::LoadNext(prev_track.clone()));
-                self.pending_load_track = Some(prev_track);
-                self.loading = true;
+                self.emit_load_next(prev_track);
             }
 
             return Ok(());
@@ -529,10 +528,7 @@ impl PlaybackManager {
                 "[previous] Navigating to previous track from history: {}",
                 prev_track.id
             );
-            self.pending_events
-                .push(PlaybackEvent::LoadNext(prev_track.clone()));
-            self.pending_load_track = Some(prev_track);
-            self.loading = true;
+            self.emit_load_next(prev_track);
 
             Ok(())
         } else {
@@ -542,6 +538,30 @@ impl PlaybackManager {
                 self.start_fade.start();
             }
             Ok(())
+        }
+    }
+
+    /// Emit a LoadNext event and set the loading state atomically.
+    ///
+    /// This is the single place that must be called whenever the decoder thread
+    /// should load a new track. Calling sites: `play_next_in_queue`, `previous`.
+    fn emit_load_next(&mut self, track: QueueTrack) {
+        self.pending_events
+            .push(PlaybackEvent::LoadNext(track.clone()));
+        self.pending_load_track = Some(track);
+        self.loading = true;
+    }
+
+    /// Save the currently active or pending track to history.
+    ///
+    /// Called before navigating away (next, play_next_in_queue, skip_to_queue_index).
+    /// Handles both the case where a track is playing (from sources) and where a
+    /// LoadNext was emitted but activate_source() was not yet called (pending_load_track).
+    fn save_current_to_history(&mut self) {
+        if let Some(track) = self.sources.current_track() {
+            self.history.push(track.clone());
+        } else if let Some(pending) = self.pending_load_track.take() {
+            self.history.push(pending);
         }
     }
 
@@ -570,13 +590,7 @@ impl PlaybackManager {
         tracing::info!("[AUTO-ADVANCE] Next track: id={}", next_track.id);
 
         // Save current track to history (either from active source or pending load)
-        if let Some(track) = self.sources.current_track() {
-            self.history.push(track.clone());
-        } else if let Some(pending) = self.pending_load_track.take() {
-            // Track was dispatched via LoadNext but activate_source was never called
-            // (e.g. user pressed next again before the track finished loading)
-            self.history.push(pending);
-        }
+        self.save_current_to_history();
 
         // Emit event to load track (handled by desktop layer in Phase 2)
         tracing::info!(
@@ -593,10 +607,7 @@ impl PlaybackManager {
 
         // Remember the track we're loading so it can be saved to history if the
         // user navigates again before activate_source() is called.
-        self.pending_load_track = Some(next_track.clone());
-        self.pending_events
-            .push(PlaybackEvent::LoadNext(next_track));
-        self.loading = true;
+        self.emit_load_next(next_track);
 
         Ok(())
     }
