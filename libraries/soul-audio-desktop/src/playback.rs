@@ -2512,9 +2512,24 @@ impl DesktopPlayback {
         );
         let switch_start = std::time::Instant::now();
 
-        // Check if we can start a new switch
+        // Capture manager state first (before acquiring device_switch_state lock).
+        let (was_playing, position, current_track) = {
+            let mgr = self.lock_manager();
+            let state = mgr.get_state();
+            let pos = mgr.get_position();
+            let track = mgr.get_current_track().cloned();
+            (state == soul_playback::PlaybackState::Playing, pos, track)
+        };
+
+        tracing::debug!(
+            "[DesktopPlayback] Current state: playing={}, position={:?}",
+            was_playing,
+            position
+        );
+
+        // Atomically check-and-transition device switch state (single lock, no TOCTOU).
         {
-            let state = self.device_switch_state.lock().unwrap();
+            let mut state = self.device_switch_state.lock().unwrap();
             if !state.can_start_switch() {
                 tracing::warn!(
                     current_state = ?*state,
@@ -2524,6 +2539,14 @@ impl DesktopPlayback {
                     "Device switch already in progress".to_string(),
                 ));
             }
+            *state = DeviceSwitchState::Switching {
+                target_device: device_name.clone(),
+                target_backend: backend,
+                reason: reason.clone(),
+                saved_position: position,
+                was_playing,
+            };
+            tracing::debug!("[DesktopPlayback] State machine: Idle -> Switching (atomic check+set)");
         }
 
         // Emit switch started event for UI feedback
@@ -2532,35 +2555,6 @@ impl DesktopPlayback {
             target_device: target_device_display.clone(),
             reason: reason.clone(),
         });
-
-        // Step 1: Capture ALL state we need from manager in ONE lock acquisition
-        // This prevents multiple lock/unlock cycles and potential deadlocks
-        let (was_playing, position, current_track) = {
-            let mgr = self.lock_manager();
-            let state = mgr.get_state();
-            let pos = mgr.get_position();
-            let track = mgr.get_current_track().cloned();
-            (state == soul_playback::PlaybackState::Playing, pos, track)
-        }; // Lock explicitly released here
-
-        tracing::debug!(
-            "[DesktopPlayback] Current state: playing={}, position={:?}",
-            was_playing,
-            position
-        );
-
-        // Update state machine: transition to Switching state
-        {
-            let mut state = self.device_switch_state.lock().unwrap();
-            *state = DeviceSwitchState::Switching {
-                target_device: device_name.clone(),
-                target_backend: backend,
-                reason: reason.clone(),
-                saved_position: position,
-                was_playing,
-            };
-            tracing::debug!("[DesktopPlayback] State machine: Idle -> Switching");
-        }
 
         // Signal the audio processing thread to stop before dropping the CPAL stream.
         // The thread holds the manager lock briefly per chunk; it will exit within a few ms.
