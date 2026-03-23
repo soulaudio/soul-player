@@ -215,7 +215,11 @@ mod rapid_play_pause {
 
         let mut manager = PlaybackManager::default();
         let track = create_stress_track("1", 180);
-        manager.add_to_queue_end(track.clone());
+        // Use load_playlist + play() + activate_source to follow the real flow:
+        // load_playlist sets up queue, play() emits LoadNext, activate_source provides audio
+        manager.load_playlist(vec![track.clone()], 0);
+        manager.play().ok(); // emits LoadNext for track "1"
+        manager.drain_events(); // clear LoadNext event
         manager.activate_source(
             Box::new(
                 StressMockSource::new(Duration::from_secs(180), 44100)

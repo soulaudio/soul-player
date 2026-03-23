@@ -81,6 +81,9 @@ pub enum SourceState {
     /// No audio loaded
     Empty,
 
+    /// Track dispatched via LoadNext, waiting for platform to call activate_source().
+    Loading { track: QueueTrack },
+
     /// Single track playing
     Playing {
         source: Box<dyn AudioSource>,
@@ -103,7 +106,7 @@ impl SourceState {
     /// Get immutable reference to current playing source
     pub fn current_source(&self) -> Option<&dyn AudioSource> {
         match self {
-            Self::Empty => None,
+            Self::Empty | Self::Loading { .. } => None,
             Self::Playing { source, .. } => Some(source.as_ref()),
             Self::Transitioning { outgoing, .. } => Some(outgoing.as_ref()),
         }
@@ -112,7 +115,7 @@ impl SourceState {
     /// Get mutable reference to current playing source
     pub fn current_source_mut(&mut self) -> Option<&mut dyn AudioSource> {
         match self {
-            Self::Empty => None,
+            Self::Empty | Self::Loading { .. } => None,
             Self::Playing { source, .. } => Some(source.as_mut()),
             Self::Transitioning { outgoing, .. } => Some(outgoing.as_mut()),
         }
@@ -138,6 +141,7 @@ impl SourceState {
     pub fn current_track(&self) -> Option<&QueueTrack> {
         match self {
             Self::Empty => None,
+            Self::Loading { track } => Some(track),
             Self::Playing { track, .. } => Some(track),
             Self::Transitioning { outgoing_track, .. } => Some(outgoing_track),
         }
@@ -154,7 +158,7 @@ impl SourceState {
     /// Check if source is ready for playback
     pub fn is_ready(&self) -> bool {
         match self {
-            Self::Empty => false,
+            Self::Empty | Self::Loading { .. } => false,
             Self::Playing { source, .. } => source.is_ready(),
             Self::Transitioning { outgoing, .. } => outgoing.is_ready(),
         }
@@ -209,6 +213,7 @@ impl SourceState {
     pub fn take(self) -> (Option<Box<dyn AudioSource>>, Option<QueueTrack>) {
         match self {
             Self::Empty => (None, None),
+            Self::Loading { track } => (None, Some(track)),
             Self::Playing { source, track } => (Some(source), Some(track)),
             Self::Transitioning {
                 outgoing,
