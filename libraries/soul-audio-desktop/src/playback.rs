@@ -36,6 +36,23 @@ static DIAG_MAX_PROCESS_US: AtomicU64 = AtomicU64::new(0);
 /// Last callback count at which we logged diagnostics
 static DIAG_LAST_LOG_AT: AtomicU64 = AtomicU64::new(0);
 
+/// Point-in-time snapshot of all playback state read under a single manager lock.
+///
+/// Prefer this over calling individual getters when multiple fields are needed
+/// together, to avoid inconsistencies from separate lock acquisitions.
+#[derive(Debug, Clone)]
+pub struct PlaybackSnapshot {
+    pub state: soul_playback::PlaybackState,
+    pub current_track: Option<soul_playback::QueueTrack>,
+    pub queue: Vec<soul_playback::QueueTrack>,
+    pub history: Vec<soul_playback::QueueTrack>,
+    pub position: std::time::Duration,
+    pub queue_index: i32,
+    pub shuffle: soul_playback::ShuffleMode,
+    pub repeat: soul_playback::RepeatMode,
+    pub volume: u8,
+}
+
 /// Stream-level fade envelope to prevent clicks/pops at audio stream start
 ///
 /// When a CPAL audio stream first starts, the DAC may be in an undefined state.
@@ -2430,6 +2447,41 @@ impl DesktopPlayback {
         }
     }
 
+    /// Read all playback state under a single manager lock.
+    ///
+    /// Prefer this over calling individual getters when multiple fields are needed
+    /// together, to avoid inconsistencies from separate lock acquisitions.
+    pub fn get_playback_snapshot(&self) -> PlaybackSnapshot {
+        if let Ok(mgr) = self.manager.lock() {
+            PlaybackSnapshot {
+                state: mgr.get_state(),
+                current_track: mgr.get_current_track().cloned(),
+                queue: mgr.get_queue().into_iter().cloned().collect(),
+                history: mgr.get_history().into_iter().cloned().collect(),
+                position: mgr.get_position(),
+                queue_index: mgr.get_queue_index(),
+                shuffle: mgr.get_shuffle_mode(),
+                repeat: mgr.get_repeat(),
+                volume: mgr.get_volume(),
+            }
+        } else {
+            tracing::error!(
+                "[DesktopPlayback] PlaybackManager mutex poisoned in get_playback_snapshot"
+            );
+            PlaybackSnapshot {
+                state: soul_playback::PlaybackState::Stopped,
+                current_track: None,
+                queue: Vec::new(),
+                history: Vec::new(),
+                position: std::time::Duration::ZERO,
+                queue_index: -1,
+                shuffle: soul_playback::ShuffleMode::Off,
+                repeat: soul_playback::RepeatMode::Off,
+                volume: 100,
+            }
+        }
+    }
+
     /// Acquire the inner PlaybackManager lock, recovering from poisoning.
     ///
     /// If the audio callback crashed and left the mutex poisoned, this recovers
@@ -4234,5 +4286,11 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn playback_snapshot_is_send_sync() {
+        fn assert_send_sync<T: Send + Sync + Clone>() {}
+        assert_send_sync::<PlaybackSnapshot>();
     }
 }
