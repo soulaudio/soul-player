@@ -450,6 +450,16 @@ fn decode_loop(
     // Temporary staging buffer for one CHUNK_FRAMES block.
     let mut pcm_chunk: Vec<f32> = vec![0.0; CHUNK_FRAMES * channels];
 
+    // Pre-allocated scratch buffers for resample_and_flush — reused every call to eliminate
+    // ~86 Vec allocations/sec at DSD64 (one per resampler chunk, ~86 chunks/sec).
+    let max_output_frames =
+        (RESAMPLER_CHUNK as f64 * target_sample_rate as f64 / pcm_rate as f64 * 1.1) as usize
+            + 64;
+    let mut scratch_deinterleaved: Vec<Vec<f32>> = (0..channels)
+        .map(|_| Vec::with_capacity(RESAMPLER_CHUNK))
+        .collect();
+    let mut scratch_interleaved: Vec<f32> = Vec::with_capacity(max_output_frames * channels);
+
     'outer: loop {
         // Drain any pending commands (non-blocking).
         while let Ok(cmd) = cmd_rx.try_recv() {
@@ -533,6 +543,8 @@ fn decode_loop(
                         &shared,
                         true,
                         &mut warmup_skip_remaining,
+                        &mut scratch_deinterleaved,
+                        &mut scratch_interleaved,
                     );
                     shared.is_eof.store(true, Ordering::Release);
                     // Park until Stop or a seek-to-restart.
@@ -587,6 +599,8 @@ fn decode_loop(
             &shared,
             false,
             &mut warmup_skip_remaining,
+            &mut scratch_deinterleaved,
+            &mut scratch_interleaved,
         );
     }
 }
@@ -605,31 +619,39 @@ fn resample_and_flush(
     shared: &SharedState,
     flush: bool,
     warmup_skip: &mut usize,
+    scratch_deinterleaved: &mut Vec<Vec<f32>>,
+    scratch_interleaved: &mut Vec<f32>,
 ) {
     let samples_per_chunk = chunk_frames * channels;
 
     if let Some(ref mut r) = resampler {
         while input_buf.len() >= samples_per_chunk {
-            let mut deinterleaved: Vec<Vec<f32>> = vec![Vec::with_capacity(chunk_frames); channels];
+            // Reuse pre-allocated per-channel scratch buffers — eliminates ~86 allocs/sec at DSD64.
+            if scratch_deinterleaved.len() < channels {
+                scratch_deinterleaved.resize_with(channels, Vec::new);
+            }
+            for ch_buf in scratch_deinterleaved.iter_mut().take(channels) {
+                ch_buf.clear();
+            }
             for _ in 0..chunk_frames {
                 for ch in 0..channels {
-                    deinterleaved[ch].push(input_buf.pop_front().unwrap_or(0.0));
+                    scratch_deinterleaved[ch].push(input_buf.pop_front().unwrap_or(0.0));
                 }
             }
-            match r.process(&deinterleaved, None) {
+            match r.process(&scratch_deinterleaved[..channels], None) {
                 Ok(resampled) => {
                     let n_frames = resampled[0].len();
-                    let mut interleaved = Vec::with_capacity(n_frames * channels);
+                    scratch_interleaved.clear();
                     for fi in 0..n_frames {
                         for ch in 0..channels {
-                            interleaved.push(resampled[ch][fi]);
+                            scratch_interleaved.push(resampled[ch][fi]);
                         }
                     }
                     // Skip tainted warmup frames (zeroed delay-line after seek reset).
                     let skip = (*warmup_skip).min(n_frames);
                     *warmup_skip = warmup_skip.saturating_sub(n_frames);
                     if skip < n_frames {
-                        flush_to_ring(&interleaved[skip * channels..], producer, shared);
+                        flush_to_ring(&scratch_interleaved[skip * channels..], producer, shared);
                     }
                 }
                 Err(e) => tracing::error!("[DSD] Resampling error: {e}"),
@@ -639,25 +661,31 @@ fn resample_and_flush(
         if flush && !input_buf.is_empty() {
             let remaining = input_buf.len() / channels;
             if remaining > 0 {
-                let mut deinterleaved: Vec<Vec<f32>> =
-                    vec![Vec::with_capacity(remaining); channels];
+                if scratch_deinterleaved.len() < channels {
+                    scratch_deinterleaved.resize_with(channels, Vec::new);
+                }
+                for ch_buf in scratch_deinterleaved.iter_mut().take(channels) {
+                    ch_buf.clear();
+                }
                 for _ in 0..remaining {
                     for ch in 0..channels {
-                        deinterleaved[ch].push(input_buf.pop_front().unwrap_or(0.0));
+                        scratch_deinterleaved[ch].push(input_buf.pop_front().unwrap_or(0.0));
                     }
                 }
-                if let Ok(resampled) = r.process_partial(Some(&deinterleaved), None) {
+                if let Ok(resampled) =
+                    r.process_partial(Some(&scratch_deinterleaved[..channels]), None)
+                {
                     let n_frames = resampled[0].len();
-                    let mut interleaved = Vec::with_capacity(n_frames * channels);
+                    scratch_interleaved.clear();
                     for fi in 0..n_frames {
                         for ch in 0..channels {
-                            interleaved.push(resampled[ch][fi]);
+                            scratch_interleaved.push(resampled[ch][fi]);
                         }
                     }
                     let skip = (*warmup_skip).min(n_frames);
                     *warmup_skip = warmup_skip.saturating_sub(n_frames);
                     if skip < n_frames {
-                        flush_to_ring(&interleaved[skip * channels..], producer, shared);
+                        flush_to_ring(&scratch_interleaved[skip * channels..], producer, shared);
                     }
                 }
             }
