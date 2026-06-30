@@ -1,3 +1,5 @@
+⚠️ Project put on halt temporarily due to health issues. Still planning to maintain this.
+
 # Soul Player
 
 **Your music. Your way. Your privacy.**
